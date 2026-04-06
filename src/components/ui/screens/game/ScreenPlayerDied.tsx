@@ -4,6 +4,8 @@ import { soundManager } from '../../../../utils/audio/SoundManager';
 import { PLAYER_CHARACTER } from '../../../../content/constants';
 import { useHudStore } from '../../../../hooks/useHudStore';
 
+import { EnemyAttackType } from '../../../../entities/player/CombatTypes';
+
 interface ScreenPlayerDiedProps {
     onContinue: () => void;
     onRespawn: () => void;
@@ -32,16 +34,25 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
     }, [onContinue]);
 
     // Zero-GC: Memoize death details
-    const { deathPhrase, deathDisplayText } = useMemo(() => {
+    const { deathPhrase, deathDisplayText, deathDescription, headerText } = useMemo(() => {
         const phrase = killedByEnemy ? t('ui.killed_by') : t('ui.died_from');
 
-        // If environmental, killerName contains the hazard (Fire, Drowning)
-        // If enemy, killerName is enemy type, deathReason is attack type
-        const displayName = killedByEnemy && deathReason && deathReason !== 'HIT'
-            ? `${killerName.toUpperCase()} (${t(`attacks.${deathReason}.title`)})`
-            : killerName.toUpperCase();
+        // Engine pre-localizes killerName and killerAttackName (BITE, FIRE, etc.)
+        const hasSpecificAttack = killedByEnemy && deathReason && deathReason !== 'HIT' && deathReason !== 'HIDDEN';
+        
+        let displayName = killerName.toUpperCase();
+        if (hasSpecificAttack) {
+            displayName = `${killerName.toUpperCase()} (${t(`attacks.${deathReason}.title`)})`;
+        }
 
-        return { deathPhrase: phrase, deathDisplayText: displayName };
+        const description = (hasSpecificAttack || !killedByEnemy) ? t(`attacks.${deathReason}.description`) : '';
+
+        return { 
+            deathPhrase: phrase, 
+            deathDisplayText: displayName,
+            deathDescription: description,
+            headerText: `${PLAYER_CHARACTER.name} - ${t('ui.kia')}`
+        };
     }, [killedByEnemy, killerName, deathReason]);
 
     return (
@@ -57,17 +68,25 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
             <div className={`relative z-10 max-w-4xl w-full flex flex-col items-center ${isMobileDevice ? 'gap-6' : 'gap-12'} text-center animate-deathFadeIn`}>
                 {/* Header */}
                 <div className="flex flex-col gap-2">
-                    <h2 className={`text-red-600 font-bold tracking-[0.3em] ${isMobileDevice ? 'text-lg' : 'text-xl'} uppercase animate-pulse`}>
-                        {PLAYER_CHARACTER.name} {deathPhrase}
+                    <h2 className={`text-red-600 font-black tracking-[0.4em] ${isMobileDevice ? 'text-lg' : 'text-xl'} uppercase animate-pulse`}>
+                        {headerText}
                     </h2>
                     <div className="h-1 w-24 bg-red-600 mx-auto rounded-full" />
                 </div>
 
                 {/* Killer Name / Death Cause */}
-                <div className="min-h-[100px] flex items-center justify-center px-4 relative w-full">
-                    <p className={`${isMobileDevice ? 'text-3xl' : 'text-4xl md:text-6xl'} font-light italic leading-relaxed text-gray-200 drop-shadow-[0_0_15px_rgba(0,0,0,1)] z-20`}>
+                <div className="flex flex-col items-center justify-center gap-2 px-4 relative w-full">
+                    <span className="text-zinc-500 font-bold uppercase tracking-[0.2em] text-sm">
+                        {deathPhrase}
+                    </span>
+                    <p className={`${isMobileDevice ? 'text-3xl' : 'text-4xl md:text-5xl'} font-light italic leading-relaxed text-gray-100 drop-shadow-[0_0_15px_rgba(0,0,0,1)] z-20`}>
                         {deathDisplayText}
                     </p>
+                    {deathDescription && (
+                        <p className={`${isMobileDevice ? 'text-base' : 'text-lg'} text-gray-400 font-medium italic max-w-2xl mt-4 leading-relaxed tracking-wide opacity-80 animate-fadeIn`}>
+                            "{deathDescription}"
+                        </p>
+                    )}
                 </div>
 
                 {/* Action Buttons */}

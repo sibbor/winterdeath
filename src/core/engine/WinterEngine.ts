@@ -57,7 +57,7 @@ export class WinterEngine {
     // Lifecycle & Timing
     private lastTime: number = 0;
     private requestID: number | null = null;
-    private isRunning: boolean = false;
+    private isRushing: boolean = false;
     private container: HTMLElement | null = null;
 
     /** Engine's global visual clock (Milliseconds). Always ticks regardless of pause state. */
@@ -256,15 +256,15 @@ export class WinterEngine {
     }
 
     public start() {
-        if (!this.isRunning) {
-            this.isRunning = true;
+        if (!this.isRushing) {
+            this.isRushing = true;
             this.lastTime = performance.now();
             this.animate();
         }
     }
 
     public stop() {
-        this.isRunning = false;
+        this.isRushing = false;
         if (this.requestID !== null) {
             cancelAnimationFrame(this.requestID);
             this.requestID = null;
@@ -451,7 +451,7 @@ export class WinterEngine {
      * Main animation loop
      */
     private animate = () => {
-        if (!this.isRunning) return;
+        if (!this.isRushing) return;
         this.requestID = requestAnimationFrame(this.animate);
 
         const now = performance.now();

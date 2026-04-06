@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import { WeaponType, WeaponCategoryColors } from '../../../content/weapons';
+import { WeaponType, WeaponCategoryColors, WeaponCategory } from '../../../content/weapons';
 import { WEAPONS } from '../../../content/constants';
 import { t } from '../../../utils/i18n';
 import { useHudStore } from '../../../hooks/useHudStore';
@@ -46,20 +46,26 @@ const getCachedArray = (length: number): number[] => {
 };
 
 const getStatusIcon = (type: StatusEffectType | string) => {
+    // If it's a number (numeric SMI enum), direct index
+    if (typeof type === 'number') return PERKS[type]?.icon || '❓';
+    // If it's a string (legacy or pet name), lookup by keys
+    const n = type.toUpperCase();
+    if (PERKS[n as any]) return (PERKS as any)[n].icon;
+    return '❓';
+};
+
+const getPassiveIcon = (type: StatusEffectType | string) => {
+    // Special cases for pets (which might still be names)
+    if (typeof type === 'string') {
+        const n = type.toUpperCase();
+        if (n === 'SOTIS' || n === 'PANTER') return '🐱';
+        return getStatusIcon(n);
+    }
+    
+    // Direct enum lookup
     return PERKS[type]?.icon || '❓';
 };
 
-const getPassiveIcon = (name: string) => {
-    const n = name.toUpperCase();
-    
-    // 1. Check direct registry lookup (e.g. 'TRICKSTERS_HASTE')
-    if (PERKS[n]) return PERKS[n].icon;
-    
-    // 2. Special cases (Pets)
-    if (n === 'SOTIS' || n === 'PANTER') return '🐱';
-    
-    return getStatusIcon(name as StatusEffectType);
-};
 
 // ============================================================================
 // SUB-COMPONENTS (Refactored to accept Refs)
@@ -84,12 +90,16 @@ const StatusEffectIcon = React.memo(({ type, isDebuff, isMobileDevice, isLandsca
     const color = isDebuff ? PerkColor.DEBUFF : PerkColor.BUFF;
     const pulseClass = isDebuff ? 'hud-debuff-pulse' : 'hud-buff-pulse';
 
+    const perk = PERKS[type];
+    const tooltip = perk ? `${t(perk.displayName)}: ${t(perk.description)}` : type.toString();
+
     return (
         <div className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-7 h-7 text-[11px]'} flex items-center justify-center bg-black/80 border-2 rounded-sm ${pulseClass} relative cursor-help`}
             style={{ borderColor: color }}
-            data-tooltip={t(`attacks.${type}.title`)}
+            data-tooltip={tooltip}
             onTouchStart={isMobileDevice ? handleActionEnter : undefined}>
             <span>{getStatusIcon(type)}</span>
+
             <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-black/40">
                 <div ref={barRef} className="w-full h-full origin-left will-change-transform" style={{ backgroundColor: color, transform: 'scaleX(1)' }} />
             </div>
@@ -155,14 +165,15 @@ const VitalsPanel = React.memo(({ isMobileDevice, isBossIntro, hpBarRef, hpTextR
 });
 
 const StatusEffectsPanel = React.memo(({ isMobileDevice, isLandscapeMode, handleActionEnter, handleActionLeave }: any) => {
-    const activePassives = useHudStore(s => s.activePassives);
-    const activeBuffs = useHudStore(s => s.activeBuffs);
-    const activeDebuffs = useHudStore(s => s.activeDebuffs);
+    const activePassives = useHudStore(s => s.activePassives, true);
+    const activeBuffs = useHudStore(s => s.activeBuffs, true);
+    const activeDebuffs = useHudStore(s => s.activeDebuffs, true);
 
     return (
         <div className={isMobileDevice && isLandscapeMode ? "absolute top-24 left-0 flex flex-col gap-2 pl-safe pointer-events-auto" : "flex flex-wrap gap-2 mt-1 ml-1 pointer-events-auto"}>
-            {activePassives.map((name, i) => {
-                const perk = PERKS[name.toUpperCase()];
+            {activePassives.map((id, i) => {
+                const perk = PERKS[id];
+                const tooltip = perk ? `${t(perk.displayName)}: ${t(perk.description)}` : id.toString();
                 return (
                     <div key={`p-${i}`}
                         className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-7 h-7 text-[11px]'} flex items-center justify-center bg-black/80 border-2 rounded-full transition-all cursor-help`}
@@ -170,14 +181,15 @@ const StatusEffectsPanel = React.memo(({ isMobileDevice, isLandscapeMode, handle
                             borderColor: PerkColor.PASSIVE,
                             boxShadow: `0 0 8px ${PerkColor.PASSIVE}66` // Add 40% opacity (66 in hex)
                         }}
-                        data-tooltip={perk ? t(perk.displayName) : name}
+                        data-tooltip={tooltip}
                         onMouseEnter={!isMobileDevice ? handleActionEnter : undefined}
                         onMouseLeave={!isMobileDevice ? handleActionLeave : undefined}
                         onTouchStart={isMobileDevice ? handleActionEnter : undefined}>
-                        <span>{getPassiveIcon(name)}</span>
+                        <span>{getPassiveIcon(id)}</span>
                     </div>
                 );
             })}
+
             {activeBuffs.map((type, i) => (
                 <StatusEffectIcon
                     key={`b-${i}`}
@@ -202,8 +214,7 @@ const StatusEffectsPanel = React.memo(({ isMobileDevice, isLandscapeMode, handle
     );
 });
 
-const KillsPanel = React.memo(({ isMobileDevice, isBossIntro, handlePauseInternal }: any) => {
-    const kills = useHudStore(s => s.kills);
+const KillsPanel = React.memo(({ isMobileDevice, isBossIntro, handlePauseInternal, killsTextRef }: any) => {
 
     return (
         <div className={`flex items-start ${isMobileDevice ? 'gap-4' : 'gap-8'} transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
@@ -214,8 +225,8 @@ const KillsPanel = React.memo(({ isMobileDevice, isBossIntro, handlePauseInterna
                 </button>
             )}
             <div className="flex flex-col items-center">
-                <span className={`${isMobileDevice ? 'text-3xl' : 'text-7xl'} font-thin text-white font-mono leading-none hud-kill-text`}>
-                    {kills}
+                <span ref={killsTextRef} className={`${isMobileDevice ? 'text-3xl' : 'text-7xl'} font-thin text-white font-mono leading-none hud-kill-text`}>
+                    0
                 </span>
                 <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-[#ff3333] tracking-widest uppercase opacity-80`}>
                     {t('ui.kills')}
@@ -225,47 +236,20 @@ const KillsPanel = React.memo(({ isMobileDevice, isBossIntro, handlePauseInterna
     );
 });
 
-const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro }: any) => {
-    const scrap = useHudStore(s => s.scrap);
-    const spEarned = useHudStore(s => s.spEarned);
-
-    const [scrapBling, setScrapBling] = useState(false);
-    const [spBling, setSpBling] = useState(false);
-    const prevScrap = useRef(scrap);
-    const prevSp = useRef(spEarned);
-
-    useEffect(() => {
-        if (scrap > prevScrap.current) {
-            setScrapBling(true);
-            const t = setTimeout(() => setScrapBling(false), 600);
-            prevScrap.current = scrap;
-            return () => clearTimeout(t);
-        }
-        prevScrap.current = scrap;
-    }, [scrap]);
-
-    useEffect(() => {
-        if (spEarned > prevSp.current) {
-            setSpBling(true);
-            const t = setTimeout(() => setSpBling(false), 600);
-            prevSp.current = spEarned;
-            return () => clearTimeout(t);
-        }
-        prevSp.current = spEarned;
-    }, [spEarned]);
+const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro, scrapTextRef, spTextRef, scrapBoxRef, spBoxRef }: any) => {
 
     return (
         <div className={`flex flex-col gap-2 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
             {/* SCRAP BOX */}
-            <div className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-2'} border backdrop-blur-sm transition-all ${scrap > 0 ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'bg-black/80 border-white/10'} ${scrapBling ? 'animate-bling-yellow' : ''} w-full flex flex-col items-center`}>
-                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold ${scrap > 0 ? 'text-yellow-500' : 'text-white/20'}`}>{t('ui.scrap')}</span>
-                <span className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono ${scrap > 0 ? 'text-yellow-400' : 'text-white/40'}`}>{scrap}</span>
+            <div ref={scrapBoxRef} className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-2'} border backdrop-blur-sm transition-all bg-black/80 border-white/10 w-full flex flex-col items-center`}>
+                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold text-white/20`}>{t('ui.scrap')}</span>
+                <span ref={scrapTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-white/40`}>0</span>
             </div>
 
             {/* SP BOX */}
-            <div className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-2'} border backdrop-blur-sm transition-all ${spEarned > 0 ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-black/80 border-white/10'} ${spBling ? 'animate-bling' : ''} w-full flex flex-col items-center`}>
-                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold ${spEarned > 0 ? 'text-purple-500' : 'text-white/20'}`}>{t('ui.sp')}</span>
-                <span className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono ${spEarned > 0 ? 'text-purple-400' : 'text-white/40'}`}>{spEarned}</span>
+            <div ref={spBoxRef} className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-2'} border backdrop-blur-sm transition-all bg-black/80 border-white/10 w-full flex flex-col items-center`}>
+                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold text-white/20`}>{t('ui.sp')}</span>
+                <span ref={spTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-white/40`}>0</span>
             </div>
         </div>
     );
@@ -315,7 +299,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
 
     return (
         <div className={`absolute ${isMobileDevice ? 'bottom-4' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-            {!isDriving && wep && wep.category !== 'THROWABLE' && activeWeapon !== WeaponType.RADIO && (
+            {!isDriving && wep && wep.category !== WeaponCategory.THROWABLE && activeWeapon !== WeaponType.RADIO && (
                 <div className={`${isMobileDevice ? 'mb-2' : 'mb-4'} text-center animate-fadeIn flex items-baseline`}>
                     <span ref={ammoTextRef} className={`${isMobileDevice ? 'text-2xl' : 'text-4xl'} font-bold text-white tracking-tighter font-mono`}>
                         {unlimitedAmmo ? '∞' : '--'}
@@ -344,14 +328,20 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
             ) : (
                 <div className={`flex ${isMobileDevice ? 'gap-1.5' : 'gap-3'} pointer-events-auto`}>
                     {weaponSlots.map(({ slot, type }: any) => {
-                        const wData = WEAPONS[type];
+                        const wData = WEAPONS[Number(type)];
                         if (!wData) return null;
 
                         const isActive = activeWeapon === type;
-                        const isThrowable = wData.category === 'THROWABLE';
+                        
+                        // Special fix for Slot 4 (Special) highlight if type matching is ambiguous 
+                        // or if the engine state requires a more explicit check.
+                        const isSpecialSlot = slot === '4';
+                        
+                        const isThrowable = wData.category === WeaponCategory.THROWABLE;
                         const isRadio = type === WeaponType.RADIO;
                         const size = isMobileDevice ? "w-16 h-16" : "w-20 h-20";
-                        const catColor = WeaponCategoryColors[wData.category as keyof typeof WeaponCategoryColors] || 'white';
+                        const catColor = WeaponCategoryColors[wData.category] || 'white';
+
 
                         return (
                             <button key={slot} data-slot={slot}
@@ -426,6 +416,13 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const gasPedalRef = useRef<HTMLDivElement>(null);
     const brakePedalRef = useRef<HTMLDivElement>(null);
     const bossHpBarRef = useRef<HTMLDivElement>(null);
+    const killsTextRef = useRef<HTMLSpanElement>(null);
+    const scrapTextRef = useRef<HTMLSpanElement>(null);
+    const spTextRef = useRef<HTMLSpanElement>(null);
+    const scrapBoxRef = useRef<HTMLDivElement>(null);
+    const spBoxRef = useRef<HTMLDivElement>(null);
+
+    const prevTelemetry = useRef({ kills: 0, scrap: 0, sp: 0 });
 
     // --- FAST HUD UPDATE LISTENER ---
     useEffect(() => {
@@ -499,6 +496,47 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 brakePedalRef.current.style.borderColor = isBrake ? '#ff3333' : 'rgba(255, 255, 255, 0.1)';
                 brakePedalRef.current.style.color = isBrake ? '#fecaca' : 'rgba(255, 255, 255, 0.2)';
             }
+
+            // --- 8. TELEMETRY (Kills, Scrap, SP) ---
+            if (killsTextRef.current && data.kills !== undefined) {
+                killsTextRef.current.innerText = data.kills.toString();
+            }
+
+            if (scrapTextRef.current && data.scrap !== undefined) {
+                scrapTextRef.current.innerText = data.scrap.toString();
+                if (data.scrap > prevTelemetry.current.scrap) {
+                    // Trigger Bling (CSS Class Reflow Trick)
+                    if (scrapBoxRef.current) {
+                        scrapBoxRef.current.classList.remove('hud-bling-pulse');
+                        void scrapBoxRef.current.offsetWidth; // Force Reflow
+                        scrapBoxRef.current.classList.add('hud-bling-pulse');
+                        
+                        // Dynamic styling bypass
+                        scrapBoxRef.current.style.backgroundColor = 'rgba(234, 179, 8, 0.2)';
+                        scrapBoxRef.current.style.borderColor = '#eab308';
+                        scrapBoxRef.current.style.boxShadow = '0 0 15px rgba(234, 179, 8, 0.3)';
+                        scrapTextRef.current.style.color = '#facc15';
+                    }
+                }
+                prevTelemetry.current.scrap = data.scrap;
+            }
+
+            if (spTextRef.current && data.spEarned !== undefined) {
+                spTextRef.current.innerText = data.spEarned.toString();
+                if (data.spEarned > prevTelemetry.current.sp) {
+                    if (spBoxRef.current) {
+                        spBoxRef.current.classList.remove('hud-bling-pulse-purple');
+                        void spBoxRef.current.offsetWidth; // Force Reflow
+                        spBoxRef.current.classList.add('hud-bling-pulse-purple');
+
+                        spBoxRef.current.style.backgroundColor = 'rgba(168, 85, 247, 0.2)';
+                        spBoxRef.current.style.borderColor = '#a855f7';
+                        spBoxRef.current.style.boxShadow = '0 0 15px rgba(168, 85, 247, 0.3)';
+                        spTextRef.current.style.color = '#c084fc';
+                    }
+                }
+                prevTelemetry.current.sp = data.spEarned;
+            }
         };
 
         window.addEventListener('hud-fast-update', handleFastUpdate);
@@ -539,7 +577,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     }, [onTogglePause]);
 
     const wep = WEAPONS[activeWeapon];
-    const catColor = wep ? (WeaponCategoryColors as any)[wep.category] || 'white' : 'white';
+    const catColor = wep ? WeaponCategoryColors[wep.category] || 'white' : 'white';
+
 
     const hudVisible = useHudStore(s => s.hudVisible);
 
@@ -577,8 +616,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     </div>
 
                     <div className="flex flex-col items-end gap-2">
-                        <KillsPanel isMobileDevice={isMobileDevice} isBossIntro={isBossIntro} handlePauseInternal={handlePauseInternal} />
-                        <CurrencyPanel isMobileDevice={isMobileDevice} isBossIntro={isBossIntro} />
+                        <KillsPanel isMobileDevice={isMobileDevice} isBossIntro={isBossIntro} handlePauseInternal={handlePauseInternal} killsTextRef={killsTextRef} />
+                        <CurrencyPanel isMobileDevice={isMobileDevice} isBossIntro={isBossIntro} scrapTextRef={scrapTextRef} spTextRef={spTextRef} scrapBoxRef={scrapBoxRef} spBoxRef={spBoxRef} />
                     </div>
 
                     {isMobileDevice && isLandscapeMode && (
@@ -680,6 +719,14 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         20% { transform: scale(1.1); filter: brightness(2); box-shadow: 0 0 30px rgba(234,179,8,0.8); }
                         100% { transform: scale(1); filter: brightness(1); box-shadow: 0 0 15px rgba(234,179,8,0.3); }
                     }
+                    @keyframes bling-purple {
+                        0% { transform: scale(1); filter: brightness(1); box-shadow: 0 0 0px rgba(168,85,247,0); }
+                        20% { transform: scale(1.1); filter: brightness(2); box-shadow: 0 0 30px rgba(168,85,247,0.8); }
+                        100% { transform: scale(1); filter: brightness(1); box-shadow: 0 0 15px rgba(168,85,247,0.3); }
+                    }
+                    .hud-bling-pulse { animation: bling-yellow 0.4s ease-out; }
+                    .hud-bling-pulse-purple { animation: bling-purple 0.4s ease-out; }
+
                     .animate-bling { animation: bling 0.6s ease-out; }
                     .animate-bling-yellow { animation: bling-yellow 0.6s ease-out; }
                 `}</style>

@@ -1,48 +1,50 @@
 // --- MaterialType ---
 // Used for physics material (footsteps, collisions, sound effects etc.)
-export const MaterialType = {
-    NONE: 'none',
-    GENERIC: 'generic',
-    FLESH: 'flesh',
-    METAL: 'metal',
-    CONCRETE: 'concrete',
-    STONE: 'stone',
-    DIRT: 'dirt',
-    GRAVEL: 'gravel',
-    ASPHALT: 'asphalt',
-    WOOD: 'wood',
-    GLASS: 'glass',
-    PLANT: 'plant',
-    SNOW: 'snow',
-    WATER: 'water'
-} as const;
-export type MATERIAL_TYPE = typeof MaterialType[keyof typeof MaterialType];
+export enum MaterialType {
+    NONE = 0,
+    GENERIC = 1,
+    FLESH = 2,
+    METAL = 3,
+    CONCRETE = 4,
+    STONE = 5,
+    DIRT = 6,
+    GRAVEL = 7,
+    ASPHALT = 8,
+    WOOD = 9,
+    GLASS = 10,
+    PLANT = 11,
+    SNOW = 12,
+    WATER = 13
+}
+export type MATERIAL_TYPE = MaterialType;
+
+import { SoundID } from '../utils/audio/AudioTypes';
 
 // For footstep sounds
-export const FOOTSTEP_MAP: Partial<Record<MATERIAL_TYPE, string>> = {
-    [MaterialType.GENERIC]: 'step_generic',
-    [MaterialType.SNOW]: 'step_snow',
-    [MaterialType.WOOD]: 'step_wood',
-    [MaterialType.METAL]: 'step_metal',
-    [MaterialType.CONCRETE]: 'step',
-    [MaterialType.STONE]: 'step',
-    [MaterialType.DIRT]: 'step_dirt',
-    [MaterialType.GRAVEL]: 'step_gravel',
-    [MaterialType.ASPHALT]: 'step_asphalt',
-    [MaterialType.WATER]: 'step_water'
+export const FOOTSTEP_MAP: Partial<Record<MATERIAL_TYPE, SoundID>> = {
+    [MaterialType.GENERIC]: SoundID.FOOTSTEP_L,
+    [MaterialType.SNOW]: SoundID.FOOTSTEP_L,
+    [MaterialType.WOOD]: SoundID.FOOTSTEP_L,
+    [MaterialType.METAL]: SoundID.FOOTSTEP_L,
+    [MaterialType.CONCRETE]: SoundID.FOOTSTEP_L,
+    [MaterialType.STONE]: SoundID.FOOTSTEP_L,
+    [MaterialType.DIRT]: SoundID.FOOTSTEP_L,
+    [MaterialType.GRAVEL]: SoundID.FOOTSTEP_L,
+    [MaterialType.ASPHALT]: SoundID.FOOTSTEP_L,
+    [MaterialType.WATER]: SoundID.FOOTSTEP_L
 };
 
 // For impact sounds
-export const IMPACT_MAP: Partial<Record<MATERIAL_TYPE, string>> = {
-    [MaterialType.GENERIC]: 'impact_generic',
-    [MaterialType.SNOW]: 'impact_snow',
-    [MaterialType.WOOD]: 'impact_wood',
-    [MaterialType.METAL]: 'impact_metal',
-    [MaterialType.CONCRETE]: 'impact_concrete',
-    [MaterialType.STONE]: 'impact_stone',
-    [MaterialType.DIRT]: 'impact_dirt',
-    [MaterialType.WATER]: 'impact_water',
-    [MaterialType.FLESH]: 'impact_flesh'
+export const IMPACT_MAP: Partial<Record<MATERIAL_TYPE, SoundID>> = {
+    [MaterialType.GENERIC]: SoundID.IMPACT_STONE,
+    [MaterialType.SNOW]: SoundID.FOOTSTEP_L,
+    [MaterialType.WOOD]: SoundID.IMPACT_WOOD,
+    [MaterialType.METAL]: SoundID.IMPACT_METAL,
+    [MaterialType.CONCRETE]: SoundID.IMPACT_STONE,
+    [MaterialType.STONE]: SoundID.IMPACT_STONE,
+    [MaterialType.DIRT]: SoundID.IMPACT_STONE,
+    [MaterialType.WATER]: SoundID.IMPACT_WATER,
+    [MaterialType.FLESH]: SoundID.IMPACT_FLESH
 };
 
 // WeatherType

@@ -4,6 +4,8 @@ import { t } from '../../../utils/i18n';
 
 interface ScreenModalLayoutProps {
     title: string | React.ReactNode;
+    subtitle?: string | React.ReactNode;
+    subtitleClass?: string;
     children: React.ReactNode;
     onClose: () => void;
 
@@ -71,6 +73,8 @@ const BACKGROUND_PATTERN_STYLE: React.CSSProperties = {
 
 const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
     title,
+    subtitle,
+    subtitleClass = "text-zinc-500",
     children,
     onClose,
     onConfirm,
@@ -229,6 +233,11 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
                                     {title}
                                 </h2>
                             ) : title}
+                            {subtitle && (
+                                <div className={`text-sm md:text-xl font-bold uppercase tracking-[0.2em] mt-1 ${subtitleClass}`}>
+                                    {subtitle}
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex items-center gap-4 md:gap-6">

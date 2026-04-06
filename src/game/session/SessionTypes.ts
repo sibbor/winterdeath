@@ -29,23 +29,27 @@ export interface SectorStats {
   distanceTraveled: number;
   chestsOpened: number;
   bigChestsOpened: number;
+  score: number;
+  bossDamageDealt: number;
+  bossDamageTaken: number;
+
 
   // VINTERDÖD FIX: cluesFound is an array of objects {id, content}, not strings
   cluesFound: any[];
 
   discoveredPOIs: string[];
-  seenEnemies: string[];
-  seenBosses: string[];
+  seenEnemies: number[];
+  seenBosses: number[];
   xpGained: number;
   spGained: number;
-  killerType?: string;
+  killerType?: number;
   collectiblesDiscovered: string[];
   aborted: boolean;
   familyFound: boolean;
   familyExtracted: boolean;
   isExtraction: boolean;
-  incomingDamageBreakdown: Record<string, Record<string, number>>;
-  outgoingDamageBreakdown: Record<string, number>;
+  incomingDamageBreakdown: Record<number, Record<number, number>>;
+  outgoingDamageBreakdown: Record<number, number>;
 
   // VINTERDÖD FIX: Standardized wave naming
   waveActive?: boolean;
@@ -85,7 +89,8 @@ export interface GameState {
     throwable: WeaponType;
     special: WeaponType;
   };
-  weaponLevels: Record<WeaponType, number>;
+  weaponLevels: Partial<Record<WeaponType, number>>;
+
   settings: GameSettings;
   deadBossIndices: number[];
   rescuedFamilyIndices: number[];
@@ -106,12 +111,12 @@ export interface GameCanvasProps {
     throwable: WeaponType;
     special: WeaponType;
   };
-  weaponLevels: Record<WeaponType, number>;
+  weaponLevels: Partial<Record<WeaponType, number>>;
   currentSector: number;
   deadBossIndices: number[];
   rescuedFamilyIndices: number[];
   debugMode?: boolean;
-  isRunning: boolean;
+  isGameRunning: boolean;
   isPaused: boolean;
   onDie: (stats: SectorStats, killer: string) => void;
   onSectorEnded: (stats: SectorStats) => void;
@@ -127,8 +132,8 @@ export interface GameCanvasProps {
   onCollectibleDiscovered: (id: string) => void;
   onClueDiscovered: (clue: any) => void;
   onPOIdiscovered: (poi: any) => void;
-  onEnemyDiscovered?: (type: string) => void;
-  onBossDiscovered?: (id: string) => void;
+  onEnemyDiscovered?: (type: number) => void;
+  onBossDiscovered?: (id: number) => void;
   isCollectibleOpen: boolean;
   onCollectibleClose: () => void;
   onDialogueStateChange: (active: boolean) => void;

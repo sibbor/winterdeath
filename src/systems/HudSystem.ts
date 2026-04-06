@@ -4,6 +4,8 @@ import { WeaponType } from '../content/weapons';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { StatusEffectType } from '../content/perks';
 import { InteractionType } from './InteractionTypes';
+import { DiscoveryType } from '../components/ui/hud/HudTypes';
+import { PlayerStatID, PlayerStatusFlags, StatusEffectID, STATUS_EFFECT_MAP } from '../entities/player/PlayerTypes';
 
 // Performance Scratchpads (Zero-GC)
 const _v1 = new THREE.Vector3();
@@ -16,7 +18,8 @@ const _v1 = new THREE.Vector3();
 // to detect a change and re-render, without ever allocating new objects.
 // ============================================================================
 
-const createStatusPool = () => Array.from({ length: 16 }, () => ({ type: '', duration: 0, maxDuration: 0, intensity: 0 }));
+const createStatusPool = () => Array.from({ length: 16 }, () => ({ type: 0 as StatusEffectType, duration: 0, maxDuration: 0, intensity: 0 }));
+
 
 const createDebugInfo = () => ({
     aim: { x: 0, y: 0 },
@@ -36,12 +39,15 @@ const createDebugInfo = () => ({
 });
 
 const createHudBuffer = () => ({
+    statsBuffer: new Float32Array(32),
+    statusFlags: 0,
     isDisoriented: false,
     statusEffects: [] as any[],
     _statusPool: createStatusPool(), // Internal pool to avoid inline {} allocs
-    activePassives: [] as string[],
-    activeBuffs: [] as string[],
-    activeDebuffs: [] as string[],
+    activePassives: [] as StatusEffectType[],
+    activeBuffs: [] as StatusEffectType[],
+    activeDebuffs: [] as StatusEffectType[],
+
     hp: 0,
     maxHp: 0,
     stamina: 0,
@@ -100,7 +106,7 @@ const createHudBuffer = () => ({
     hudVisible: true,
 
     sectorName: '',
-    discovery: { active: false, id: '', type: 'clue' as const, title: '', details: '', timestamp: 0 }
+    discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 }
 });
 
 // Double-buffering
@@ -120,14 +126,18 @@ const _fastUpdateDetail = {
     currentXp: 0,
     nextLevelXp: 0,
     reloadProgress: 0,
-    bossHpP: -1, // -1 means no boss/wave active
+    bossHpP: -1, 
     vehicleSpeed: 0,
-    throttleState: 0
+    throttleState: 0,
+    kills: 0,
+    scrap: 0,
+    spEarned: 0
 };
 
 export const HudSystem = {
-    emitFastUpdate: (state: any, input: any, now: number) => {
+    emitFastUpdate: (state: any, input: any, now: number, props: any) => {
         const wep = WEAPONS[state.activeWeapon];
+        const stats = state.statsBuffer;
 
         // Clamp reloadProgress mellan 0 och 1 för stabil CSS-rendering
         const reloadDuration = (wep?.reloadTime || 1000) + (input.fire ? 1000 : 0);
@@ -157,17 +167,20 @@ export const HudSystem = {
             bossHpP = (target > 0) ? kills / target : 0;
         }
 
-        _fastUpdateDetail.hp = state.hp;
-        _fastUpdateDetail.maxHp = state.maxHp;
-        _fastUpdateDetail.stamina = state.stamina;
-        _fastUpdateDetail.maxStamina = state.maxStamina;
+        _fastUpdateDetail.hp = stats[PlayerStatID.HP];
+        _fastUpdateDetail.maxHp = stats[PlayerStatID.MAX_HP];
+        _fastUpdateDetail.stamina = stats[PlayerStatID.STAMINA];
+        _fastUpdateDetail.maxStamina = stats[PlayerStatID.MAX_STAMINA];
         _fastUpdateDetail.ammo = state.weaponAmmo[state.activeWeapon] || 0;
-        _fastUpdateDetail.currentXp = state.currentXp;
-        _fastUpdateDetail.nextLevelXp = state.nextLevelXp;
+        _fastUpdateDetail.currentXp = stats[PlayerStatID.CURRENT_XP];
+        _fastUpdateDetail.nextLevelXp = stats[PlayerStatID.NEXT_LEVEL_XP];
         _fastUpdateDetail.reloadProgress = reloadProgress;
         _fastUpdateDetail.bossHpP = bossHpP;
         _fastUpdateDetail.vehicleSpeed = state.vehicle.active ? state.vehicle.speed : 0;
         _fastUpdateDetail.throttleState = state.vehicleThrottle || 0;
+        _fastUpdateDetail.kills = state.sessionStats.kills;
+        _fastUpdateDetail.scrap = (props.stats?.statsBuffer?.[PlayerStatID.SCRAP] || 0) + state.statsBuffer[PlayerStatID.SCRAP];
+        _fastUpdateDetail.spEarned = state.sessionStats.spGained;
 
         window.dispatchEvent(new CustomEvent('hud-fast-update', { detail: _fastUpdateDetail }));
     },
@@ -240,17 +253,21 @@ export const HudSystem = {
 
         // Status Effects (Zero-GC Pool Extraction into the active buffer)
         _current.statusEffects.length = 0;
-        const statusEffects = state.statusEffects;
+        const effectDurations = state.effectDurations;
+        const effectIntensities = state.effectIntensities;
         let effectIndex = 0;
-        for (const key in statusEffects) {
-            const effect = statusEffects[key];
-            if (effect && effect.duration > 0) {
+        
+        for (let i = 0; i < StatusEffectID.COUNT; i++) {
+            const duration = effectDurations[i];
+            if (duration > 0) {
                 const poolItem = _current._statusPool[effectIndex];
                 if (poolItem) {
-                    poolItem.type = key;
-                    poolItem.duration = effect.duration;
-                    poolItem.maxDuration = effect.maxDuration || effect.duration; // Fallback to current if max not set
-                    poolItem.intensity = effect.intensity;
+                    const typeKey = STATUS_EFFECT_MAP[i];
+                    poolItem.type = (StatusEffectType as any)[typeKey];
+                    poolItem.duration = duration;
+
+                    poolItem.maxDuration = 0; // Legacy placeholder
+                    poolItem.intensity = effectIntensities[i];
                     _current.statusEffects.push(poolItem);
                     effectIndex++;
                 }
@@ -260,9 +277,10 @@ export const HudSystem = {
         _current.playerPos.x = playerPos.x;
         _current.playerPos.z = playerPos.z;
 
-        _current.isDisoriented = !!statusEffects[StatusEffectType.DISORIENTED] && statusEffects[StatusEffectType.DISORIENTED].duration > 0;
+        _current.isDisoriented = (state.statusFlags & PlayerStatusFlags.DISORIENTED) !== 0;
 
         // --- ZERO-GC COPY: Avoid passing mutable state array references directly to React ---
+        _current.statusFlags = state.statusFlags;
         _current.activePassives.length = 0;
         for (let i = 0; i < (state.activePassives?.length || 0); i++) _current.activePassives.push(state.activePassives[i]);
 
@@ -271,23 +289,27 @@ export const HudSystem = {
 
         _current.activeDebuffs.length = 0;
         for (let i = 0; i < (state.activeDebuffs?.length || 0); i++) _current.activeDebuffs.push(state.activeDebuffs[i]);
-        _current.hp = state.hp;
-        _current.maxHp = state.maxHp;
-        _current.stamina = state.stamina;
-        _current.maxStamina = state.maxStamina;
+        // Zero-GC Buffer Copy
+        _current.statsBuffer.set(state.statsBuffer);
+
+        _current.hp = state.statsBuffer[PlayerStatID.HP];
+        _current.maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
+        _current.stamina = state.statsBuffer[PlayerStatID.STAMINA];
+        _current.maxStamina = state.statsBuffer[PlayerStatID.MAX_STAMINA];
         _current.ammo = state.weaponAmmo[state.activeWeapon] || 0;
         _current.magSize = wep?.magSize || 0;
-        _current.score = state.score;
-        _current.scrap = (props.stats?.scrap || 0) + state.collectedScrap;
+        _current.score = state.statsBuffer[PlayerStatID.SCORE];
+        _current.scrap = (props.stats?.statsBuffer?.[PlayerStatID.SCRAP] || 0) + state.statsBuffer[PlayerStatID.SCRAP];
+
         _current.activeWeapon = state.activeWeapon;
         _current.isReloading = state.isReloading;
         _current.bossSpawned = state.bossSpawned;
         _current.bossDefeated = activeBossObj ? activeBossObj.dead : false;
         _current.familyFound = state.familyFound;
         _current.familySignal = famSignal;
-        _current.level = state.level;
-        _current.currentXp = state.currentXp;
-        _current.nextLevelXp = state.nextLevelXp;
+        _current.level = state.statsBuffer[PlayerStatID.LEVEL];
+        _current.currentXp = state.statsBuffer[PlayerStatID.CURRENT_XP];
+        _current.nextLevelXp = state.statsBuffer[PlayerStatID.NEXT_LEVEL_XP];
         _current.throwableAmmo = state.weaponAmmo[props.loadout.throwable] || 0;
         _current.distanceTraveled = Math.floor(distanceTraveled);
         _current.kills = state.sessionStats.kills;
@@ -307,8 +329,9 @@ export const HudSystem = {
         _current.vehicleSpeed = state.vehicle.speed || 0;
         _current.throttleState = state.vehicleThrottle || 0;
         _current.spEarned = spGained;
-        _current.skillPoints = (props.stats?.skillPoints || 0) + spGained;
-        _current.isDead = state.isDead;
+        _current.skillPoints = (props.stats?.statsBuffer?.[PlayerStatID.SKILL_POINTS] || 0) + state.statsBuffer[PlayerStatID.SKILL_POINTS];
+
+        _current.isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
         _current.killerName = state.killerName;
         _current.killerAttackName = state.killerAttackName;
         _current.killedByEnemy = state.killedByEnemy;

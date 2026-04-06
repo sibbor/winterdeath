@@ -1,8 +1,7 @@
 import * as THREE from 'three';
-import { Enemy, ENEMY_DETECTION, NoiseType, NOISE_RADIUS, AIState, EnemyDeathState } from '../entities/enemies/EnemyTypes';
+import { Enemy, ENEMY_DETECTION, NoiseType, NOISE_RADIUS, AIState, EnemyFlags, EnemyType } from '../entities/enemies/EnemyTypes';
 import { SpatialGrid } from '../core/world/SpatialGrid';
 import { System } from './System';
-import { PerformanceMonitor } from './PerformanceMonitor';
 
 export interface NoiseEvent {
     pos: THREE.Vector3;
@@ -156,17 +155,40 @@ export class EnemyDetectionSystem implements System {
         for (let i = 0; i < enemies.length; i++) {
             const e = enemies[i];
 
-            if (e.dead || e.deathState !== EnemyDeathState.ALIVE) continue;
+            if ((e.statusFlags & EnemyFlags.DEAD) !== 0) continue;
 
             // 2. VISUAL CHECK (Staggered)
             if ((i % 3) === frameIndex) {
-                const visible = this.canSeePlayer(e, playerPos, collisionGrid);
-                if (visible) {
-                    // VINTERDÖD FIX: Removed null check for pre-allocated vector
+                if (this.canSeePlayer(e, playerPos, collisionGrid)) {
                     e.lastKnownPosition.copy(playerPos);
                     e.searchTimer = 0;
                     e.awareness = 1.0;
                     e.lastSeenTime = simTime;
+                    e.state = AIState.CHASE;
+
+                    // --- VINTERDÖD: Discovery Logic ---
+                    const stats = state.sessionStats;
+                    const discovery = state.discoverySets;
+
+                    if ((e.statusFlags & EnemyFlags.BOSS) !== 0) {
+                        const bossId = EnemyType.BOSS;
+                        if (!discovery.seenBosses?.has(bossId)) {
+                            discovery.seenBosses?.add(bossId);
+                            if (stats.seenBosses.indexOf(bossId) === -1) stats.seenBosses.push(bossId);
+                            if (state.callbacks?.onBossDiscovered) {
+                                state.callbacks.onBossDiscovered(bossId);
+                            }
+                        }
+                    } else {
+                        const enemyType = e.type;
+                        if (discovery?.seenEnemies && !discovery.seenEnemies.has(enemyType)) {
+                            discovery.seenEnemies.add(enemyType);
+                            if (stats.seenEnemies.indexOf(enemyType) === -1) stats.seenEnemies.push(enemyType);
+                            if (state.callbacks?.onEnemyDiscovered) {
+                                state.callbacks.onEnemyDiscovered(enemyType);
+                            }
+                        }
+                    }
                 } else {
                     if (e.awareness > 0) {
                         e.awareness = Math.max(0, e.awareness - simDelta * 0.2);
@@ -176,7 +198,7 @@ export class EnemyDetectionSystem implements System {
 
             // 3. AUDIO CHECK - Skip if already in an aggressive state
             const isAggressive = e.state === AIState.CHASE || e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING;
-            
+
             if (!isAggressive) {
                 for (let j = 0; j < this.noiseEvents.length; j++) {
                     const evt = this.noiseEvents[j];

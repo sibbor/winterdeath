@@ -3,9 +3,10 @@ import type React from 'react';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System } from './System';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
+import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { _buoyancyResult } from './WaterSystem';
-import { INITIAL_STATS } from '../content/constants';
+import { DamageID } from '../entities/player/CombatTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3(); // Target Position / Offset
@@ -15,8 +16,8 @@ const _v3 = new THREE.Vector3(); // Direction
 const _animState = {
     isMoving: false,
     isRushing: false,
-    isRolling: false,
-    rollStartTime: 0,
+    isDodging: false,
+    dodgeStartTime: 0,
     staminaRatio: 1.0,
     isSpeaking: false,
     isThinking: false,
@@ -59,9 +60,10 @@ export class FamilySystem implements System {
         const members = this.activeFamilyMembers.current;
         const isCinematicActive = this.isCinematicRef.current.active;
         const state = _session.state;
+        const isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
 
         // --- Mirror player speed for the follow movement ---
-        const playerSpeedValue = (_session.state as any).stats?.speed ?? INITIAL_STATS.speed;
+        const playerSpeedValue = state.statsBuffer[PlayerStatID.SPEED];
 
         // [VINTERDÖD FIX] Om värdet är högt antar vi att det är km/h och konverterar till m/s.
         // Annars (om det är typ 1.0) agerar vi som förr.
@@ -76,7 +78,7 @@ export class FamilySystem implements System {
             followSpeed *= 0.6;
         } else if (state.isRushing) {
             followSpeed *= 1.75;
-        } else if (state.isRolling) {
+        } else if (state.isDodging) {
             followSpeed *= 2.5;
         }
 
@@ -94,6 +96,7 @@ export class FamilySystem implements System {
             const userData = fm.userData;
 
             if (!fm.visible) fm.visible = true;
+
 
             // --- 0. VEHICLE RIDING LOGIC ---
             if (inVehicle) {
@@ -135,7 +138,7 @@ export class FamilySystem implements System {
                     _animState.seed = familyMember.seed;
                     _animState.isMoving = false;
                     _animState.isRushing = false;
-                    _animState.isRolling = false;
+                    _animState.isDodging = false;
                     _animState.isSwimming = false;
                     _animState.isWading = false;
                     _animState.isIdleLong = false;
@@ -164,8 +167,8 @@ export class FamilySystem implements System {
             const ring = familyMember.ring;
             if (ring) {
                 const isFollowing = familyMember.following;
-                // VINTERDÖD FIX: Göm ringen även vid död så de inte skräpar ner i "grief"-läget
-                ring.visible = !(isFollowing || state.isDead);
+                ring.visible = !(isFollowing || isDead);
+
                 if (ring.visible) {
                     const pulse = 1.0 + Math.sin(now * 0.003) * 0.1;
                     ring.scale.set(pulse, pulse, pulse);
@@ -177,7 +180,7 @@ export class FamilySystem implements System {
             let fmIsMoving = false;
             let fmIsRushing = false;
 
-            if (familyMember.following && !isCinematicActive && !state.isDead) {
+            if (familyMember.following && !isCinematicActive && !isDead) {
                 const pRot = this.playerGroup.rotation.y;
                 const cos = Math.cos(pRot);
                 const sin = Math.sin(pRot);
@@ -218,12 +221,11 @@ export class FamilySystem implements System {
                         fm.lookAt(this.playerGroup.position);
                     }
                     familyMember.lastMoveTime = now;
-                    fmIsRushing = state.isRushing || state.isRolling;
+                    fmIsRushing = state.isRushing || state.isDodging;
                 }
             }
 
-            // Return to origin logic
-            else if (!isCinematicActive && !inVehicle && !state.isDead && familyMember.spawnPos) {
+            if (!isCinematicActive && !inVehicle && !isDead && familyMember.spawnPos) {
                 const distSq = fm.position.distanceToSquared(familyMember.spawnPos);
                 if (distSq > 1.0) {
                     fmIsMoving = true;
@@ -259,8 +261,9 @@ export class FamilySystem implements System {
                 _animState.seed = familyMember.seed;
                 _animState.isMoving = fmIsMoving;
                 _animState.isRushing = fmIsRushing;
-                _animState.isRolling = false;
-                _animState.staminaRatio = state.stamina / Math.max(1, state.maxStamina);
+                _animState.isDodging = false;
+                _animState.staminaRatio = state.statsBuffer[PlayerStatID.STAMINA] / Math.max(1, state.statsBuffer[PlayerStatID.MAX_STAMINA]);
+
                 _animState.isIdleLong = isIdleLong;
 
                 // VINTERDÖD FIX: Tracked on familyMember to avoid userData mutations

@@ -2,6 +2,7 @@ import { GameSettings, EnvironmentOverride } from '../core/engine/EngineTypes';
 import { WeaponType } from '../content/weapons';
 import type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState } from '../components/ui/hud/HudTypes';
 import { WeatherType } from '../content/environment';
+import { TriggerType, TriggerAction, SectorTrigger } from '../systems/TriggerTypes';
 
 export type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState };
 
@@ -130,38 +131,9 @@ export interface GameState {
   environmentOverrides?: Record<number, EnvironmentOverride>;
 }
 
-export type TriggerType = 'COLLECTIBLE' | 'CLUE' | 'POI' | 'INTERACTION' | 'STATION' | 'SECTOR_END' | 'SPEAK' | 'THOUGHT' | 'INFO' | 'AMBUSH' | string;
+export type { TriggerType, TriggerAction, SectorTrigger, WeatherType };
 
-export interface TriggerAction {
-  type: string;
-  amount?: number;
-  id?: string;
-  payload?: any;
-  [key: string]: any;
-}
 
-export interface SectorTrigger {
-  id: string;
-  position?: { x: number; z: number };
-  x?: number;
-  z?: number;
-  radius?: number;
-  size?: { width: number; depth: number };
-  type: TriggerType;
-  label?: string;
-  icon?: string;
-  color?: string;
-  content?: string;
-  triggered?: boolean;
-  actions?: TriggerAction[];
-  resetOnExit?: boolean;
-  repeatInterval?: number;
-  lastTriggerTime?: number;
-  rotation?: number;
-  familyId?: number;
-  ownerId?: string;
-  data?: any;
-}
 
 export interface GameCanvasProps {
   stats: PlayerStats;
@@ -176,7 +148,7 @@ export interface GameCanvasProps {
   deadBossIndices: number[];
   rescuedFamilyIndices: number[];
   debugMode?: boolean;
-  isRunning: boolean;
+  isRushing: boolean;
   isPaused: boolean;
   onDie: (stats: SectorStats, killer: string) => void;
   onSectorEnded: (stats: SectorStats) => void;

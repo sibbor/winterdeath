@@ -1,40 +1,73 @@
 import { StatusEffectType } from "../../content/perks";
 
 export enum EnemyAttackType {
-    HIT = 'HIT',
-    BITE = 'BITE',
-    JUMP = 'JUMP',
-    EXPLODE = 'EXPLODE',
-    SMASH = 'SMASH',
-    FREEZE_JUMP = 'FREEZE_JUMP',
-    SCREECH = 'SCREECH',
-    ELECTRIC_BEAM = 'ELECTRIC_BEAM',
-    MAGNETIC_CHAIN = 'MAGNETIC_CHAIN'
+    HIT = 0,
+    BITE = 1,
+    JUMP = 2,
+    EXPLODE = 3,
+    SMASH = 4,
+    FREEZE_JUMP = 5,
+    SCREECH = 6,
+    ELECTRIC_BEAM = 7,
+    MAGNETIC_CHAIN = 8
 }
 
 export enum PlayerDeathState {
-    ALIVE = 'ALIVE',
-    NORMAL = 'NORMAL',
-    GIBBED = 'GIBBED',
-    BURNED = 'BURNED',
-    FREEZED = 'FREEZED',
-    DROWNED = 'DROWNED'
+    ALIVE = 0,
+    NORMAL = 1,
+    GIBBED = 2,
+    BURNED = 3,
+    FREEZED = 4,
+    DROWNED = 5
 }
 
-export enum DamageType {
-    PHYSICAL = 'PHYSICAL',
-    BURN = 'BURN',
-    BLEED = 'BLEED',
-    DROWNING = 'DROWNING',
-    FALL = 'FALL',
-    EXPLOSION = 'EXPLOSION',
-    BITE = 'BITE',
-    ELECTRIC = 'ELECTRIC',
-    BOSS = 'BOSS',
-    VEHICLE_SPLATTER = 'VEHICLE_SPLATTER',
-    VEHICLE_RAM = 'VEHICLE_RAM',
-    VEHICLE_PUSH = 'VEHICLE_PUSH'
+/**
+ * VINTERDÖD: Unified DamageID (Step 3: Phase 7)
+ * Consolidates WeaponType and DamageType into a single SMI enum.
+ * This eliminates polymorphism (was WeaponType | DamageType) and optimizes
+ * the hot-path in ProjectileSystem and EnemyAI.
+ */
+export enum DamageID {
+    NONE = 0,
+
+    // --- WEAPONS (1-20) ---
+    SMG = 1,
+    SHOTGUN = 2,
+    RIFLE = 3,
+    PISTOL = 4,
+    REVOLVER = 5,
+    GRENADE = 6,
+    MOLOTOV = 7,
+    FLASHBANG = 8,
+    MINIGUN = 9,
+    FLAMETHROWER = 10,
+    ARC_CANNON = 11,
+    RADIO = 12,
+    RUSH = 13,
+    VEHICLE = 14,
+
+    // --- ENVIRONMENT & EFFECTS (20+) ---
+    PHYSICAL = 21,
+    BURN = 22,
+    BLEED = 23,
+    DROWNING = 24,
+    FALL = 25,
+    EXPLOSION = 26,
+    BITE = 27,
+    ELECTRIC = 28,
+    BOSS = 29,
+    VEHICLE_SPLATTER = 30,
+    VEHICLE_RAM = 31,
+    VEHICLE_PUSH = 32,
+    FIRE = 33,
+    FALL_DAMAGE = 34,
+    OTHER = 35,
+    BOSS_GENERIC = 36
 }
+
+// Deprecated alias for legacy code during transition
+export type DamageType = DamageID;
+export const DamageType = DamageID;
 
 export interface AttackDefinition {
     type: EnemyAttackType;

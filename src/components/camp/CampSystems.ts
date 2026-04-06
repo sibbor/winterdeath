@@ -51,7 +51,7 @@ export class FamilyAnimationSystem implements System {
             }
 
             PlayerAnimator.update(fm.mesh as any, {
-                isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0,
+                isMoving: false, isRushing: false, isDodging: false, dodgeStartTime: 0, staminaRatio: 1.0,
                 isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed,
                 renderTime: now
             }, now, dt);
@@ -77,8 +77,8 @@ export class CampChatterSystem implements System {
     enabled = true;
 
     update(ctx: any, dt: number, now: number): void {
-        const { isRunning, nextChatterTime, nextWildlifeTime, familyMembers, activeMembers, chatOverlay, activeChats, camera, container } = ctx;
-        if (!isRunning) return;
+        const { isGameRunning, nextChatterTime, nextWildlifeTime, familyMembers, activeMembers, chatOverlay, activeChats, camera, container } = ctx;
+        if (!isGameRunning) return;
 
         // 1. Ambient Wildlife
         if (now > nextWildlifeTime.val) {
@@ -95,7 +95,7 @@ export class CampChatterSystem implements System {
                 const linesKey = (speaker.name || '').toLowerCase();
 
                 // Speakers localized strings
-                let lines = t(`chatter.${linesKey}`) as unknown as string[];
+                let lines = t(`chatter.${linesKey}`) as string[];
                 if (!Array.isArray(lines)) lines = ["..."];
 
                 const text = lines[Math.floor(Math.random() * lines.length)];

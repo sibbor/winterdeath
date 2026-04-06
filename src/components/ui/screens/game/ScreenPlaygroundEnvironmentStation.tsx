@@ -151,7 +151,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                                 onClick={() => { soundManager.playUiClick(); onWeatherChange(w as WeatherType); }}
                                 className={`px-4 py-2 border-2 transition-all duration-200 uppercase font-black tracking-widest text-xs ${currentWeather === w ? 'bg-cyan-600 border-cyan-600 text-black' : 'bg-black border-zinc-800 text-zinc-500 hover:border-zinc-700'}`}
                             >
-                                {w}
+                                {t(`weather.${w}`)}
                             </button>
                         ))}
                     </div>
@@ -167,11 +167,11 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                         <label className="text-cyan-500 uppercase text-[10px] font-bold tracking-widest mb-4 block">{t('ui.fog_calibration')}</label>
                         <div className="flex gap-6 items-end">
                             <div className="flex-none">
-                                <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-2 block">Color</label>
+                                <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-2 block">{t('ui.color')}</label>
                                 <input type="color" value={fogColor} onChange={(e) => setFogColor(e.target.value)} className="w-12 h-12 cursor-pointer bg-black border border-zinc-800" />
                             </div>
                             <div className="flex-1">
-                                <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-2 block">Density: <span className="text-white font-mono">{fogDensity.toFixed(4)}</span></label>
+                                <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-2 block">{t('ui.density')}: <span className="text-white font-mono">{fogDensity.toFixed(4)}</span></label>
                                 <input type="range" min="0" max="0.1" step="0.001" value={fogDensity} onChange={(e) => setFogDensity(parseFloat(e.target.value))} className="w-full accent-cyan-500" />
                             </div>
                         </div>
@@ -186,11 +186,11 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                         <div className={`flex flex-col gap-4 transition-opacity ${skyLightVisible ? 'opacity-100' : 'opacity-20 pointer-events-none'}`}>
                             <div className="flex gap-6 items-end">
                                 <div className="flex-none">
-                                    <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-2 block">Color</label>
+                                    <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-2 block">{t('ui.color')}</label>
                                     <input type="color" value={skyLightColor} onChange={(e) => setSkyLightColor(e.target.value)} className="w-12 h-12 cursor-pointer bg-black border border-zinc-800" />
                                 </div>
                                 <div className="flex-1">
-                                    <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-2 block">Intensity: <span className="text-white font-mono">{skyLightIntensity.toFixed(1)}</span></label>
+                                    <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-2 block">{t('ui.intensity')}: <span className="text-white font-mono">{skyLightIntensity.toFixed(1)}</span></label>
                                     <input type="range" min="0" max="5" step="0.1" value={skyLightIntensity} onChange={(e) => setSkyLightIntensity(parseFloat(e.target.value))} className="w-full accent-yellow-500" />
                                 </div>
                             </div>

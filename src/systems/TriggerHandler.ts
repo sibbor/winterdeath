@@ -1,16 +1,7 @@
 import * as THREE from 'three';
-import { SectorTrigger, TriggerAction } from '../systems/TriggerTypes';
+import { SectorTrigger, TriggerAction, TriggerType, TriggerStatus } from '../systems/TriggerTypes';
 import { RuntimeState } from '../core/RuntimeState';
-
-// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-let _dx = 0;
-let _dz = 0;
-let _distSq = 0;
-let _tx = 0;
-let _tz = 0;
-let _sin = 0;
-let _cos = 0;
-let _maxDimSq = 0;
+import { SoundID } from '../utils/audio/AudioTypes';
 
 export const TriggerHandler = {
     /**
@@ -24,12 +15,12 @@ export const TriggerHandler = {
         callbacks: {
             spawnBubble: (text: string, duration?: number) => void;
             removeVisual: (id: string) => void;
-            onTrigger: (type: string, duration: number) => void;
-            onAction: (action: TriggerAction | string) => void;
+            onTrigger: (type: TriggerType, duration: number) => void;
+            onAction: (action: TriggerAction) => void;
             t: (key: string) => string;
             resolveDynamicPos?: (familyId?: number, ownerId?: string) => THREE.Vector3 | null;
             onDiscovery?: (type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
-            playSound?: (id: string) => void;
+            playSound?: (id: SoundID) => void;
         }
     ) => {
         // OPTIMIZATION: Only fetch triggers within 40 units to save CPU cycles
@@ -43,7 +34,11 @@ export const TriggerHandler = {
             const trig = triggers[i];
 
             // 1. QUICK EXIT: Skip if one-shot and already triggered
-            if (trig.triggered && !trig.resetOnExit && (!trig.repeatInterval || trig.repeatInterval <= 0)) {
+            const sFlags = trig.statusFlags;
+            const isTriggered = (sFlags & TriggerStatus.TRIGGERED) !== 0;
+            const resetOnExit = (sFlags & TriggerStatus.RESET_ON_EXIT) !== 0;
+
+            if (isTriggered && !resetOnExit && (!trig.repeatInterval || trig.repeatInterval <= 0)) {
                 continue;
             }
 
@@ -61,50 +56,48 @@ export const TriggerHandler = {
                 }
             }
 
-            // Calculate squared distance early
-            _dx = playerPos.x - tx;
-            _dz = playerPos.z - tz;
-            _distSq = _dx * _dx + _dz * _dz;
+            // High-performance local primitive math (Unboxed CPU Registers)
+            const dx = playerPos.x - tx;
+            const dz = playerPos.z - tz;
+            const distSq = dx * dx + dz * dz;
 
             // 2. COLLISION CHECK
             if (trig.size) {
-                _maxDimSq = Math.max(trig.size.width, trig.size.depth) * 0.8;
-                _maxDimSq *= _maxDimSq;
+                const maxDim = Math.max(trig.size.width, trig.size.depth) * 0.8;
+                const maxDimSq = maxDim * maxDim;
 
-                if (_distSq <= _maxDimSq) {
+                if (distSq <= maxDimSq) {
+                    let locX = dx;
+                    let locZ = dz;
+
                     if (trig.rotation) {
-                        _sin = Math.sin(-trig.rotation);
-                        _cos = Math.cos(-trig.rotation);
-                        _tx = _dx * _cos - _dz * _sin;
-                        _tz = _dx * _sin + _dz * _cos;
-                    } else {
-                        _tx = _dx;
-                        _tz = _dz;
+                        const s = Math.sin(-trig.rotation);
+                        const c = Math.cos(-trig.rotation);
+                        locX = dx * c - dz * s;
+                        locZ = dx * s + dz * c;
                     }
 
-                    if (Math.abs(_tx) <= trig.size.width * 0.5 && Math.abs(_tz) <= trig.size.depth * 0.5) {
+                    if (Math.abs(locX) <= trig.size.width * 0.5 && Math.abs(locZ) <= trig.size.depth * 0.5) {
                         isInside = true;
                     }
                 }
             } else if (trig.radius) {
-                if (_distSq < (trig.radius * trig.radius)) {
+                if (distSq < (trig.radius * trig.radius)) {
                     isInside = true;
                 }
             }
 
             // 3. STATE MANAGEMENT & EXECUTION
             if (isInside) {
-                console.log("[TriggerHandler] checkTriggers: isInside true for trigger: ", trig);
-                if (!trig.triggered) {
-                    console.log("[TriggerHandler] not triggered - trigger it!", trig);
+                if ((trig.statusFlags & TriggerStatus.TRIGGERED) === 0) {
                     // --- ON ENTER ---
-                    trig.triggered = true;
+                    trig.statusFlags |= TriggerStatus.TRIGGERED;
                     trig.lastTriggerTime = now;
 
-                    // --- O(1) ADVENTURE LOG DISCOVERY ---
+                    // --- ADVENTURE LOG DISCOVERY ---
                     if (trig.id && callbacks.onDiscovery) {
-                        const discType = trig.type === 'POI' ? 'poi' : 'clue';
-                        const titleKey = trig.type === 'POI' ? 'ui.poi_discovered_title' : 'ui.clue_discovered';
+                        const discType = trig.type === TriggerType.POI ? 'poi' : 'clue';
+                        const titleKey = trig.type === TriggerType.POI ? 'ui.poi_discovered_title' : 'ui.clue_discovered';
                         callbacks.onDiscovery(discType, trig.id, titleKey, trig.content || '', trig);
                     }
 
@@ -122,26 +115,26 @@ export const TriggerHandler = {
                         const duration = 2000 + translatedText.length * 50;
                         callbacks.spawnBubble(translatedText, duration);
 
-                        if (trig.type === 'SPEAK') {
-                            callbacks.playSound('voice');
-                            callbacks.onTrigger('SPEAK', duration);
-                        } else if (trig.type === 'THOUGHT') {
-                            callbacks.playSound('ui_hover');
-                            callbacks.onTrigger('THOUGHT', duration);
+                        if (trig.type === TriggerType.SPEAK) {
+                            if (callbacks.playSound) callbacks.playSound(SoundID.VO_PLAYER_COUGH);
+                            callbacks.onTrigger(TriggerType.SPEAK, duration);
+                        } else if (trig.type === TriggerType.THOUGHT) {
+                            if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
+                            callbacks.onTrigger(TriggerType.THOUGHT, duration);
                         } else {
-                            callbacks.playSound('ui_hover');
-                            callbacks.onTrigger(trig.type || 'INFO', duration);
+                            if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
+                            callbacks.onTrigger(trig.type || TriggerType.INFO, duration);
                         }
                     }
                 }
             } else {
                 // --- ON EXIT / COOLDOWN ---
-                if (trig.triggered) {
-                    if (trig.resetOnExit) {
-                        trig.triggered = false;
+                if ((trig.statusFlags & TriggerStatus.TRIGGERED) !== 0) {
+                    if ((trig.statusFlags & TriggerStatus.RESET_ON_EXIT) !== 0) {
+                        trig.statusFlags &= ~TriggerStatus.TRIGGERED;
                     } else if (trig.repeatInterval && trig.repeatInterval > 0) {
-                        if (now - trig.lastTriggerTime > trig.repeatInterval) {
-                            trig.triggered = false;
+                        if (now - (trig.lastTriggerTime || 0) > trig.repeatInterval) {
+                            trig.statusFlags &= ~TriggerStatus.TRIGGERED;
                         }
                     }
                 }

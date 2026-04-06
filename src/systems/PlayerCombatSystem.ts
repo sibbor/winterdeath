@@ -3,6 +3,7 @@ import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { WeaponHandler } from './WeaponHandler';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
+import { PlayerStatusFlags } from '../entities/player/PlayerTypes';
 
 export class PlayerCombatSystem implements System {
     id = 'player_combat';
@@ -45,8 +46,16 @@ export class PlayerCombatSystem implements System {
         this.trajectoryLine.renderOrder = 999;
         scene.add(this.trajectoryLine);
 
-        // --- Cache Laser Sight ---
-        this.laserSight = this.playerGroup.children.find(c => c.userData.isLaserSight) as THREE.Mesh || null;
+        // --- Cache Laser Sight (Zero-GC Array Iteration) ---
+        this.laserSight = null;
+        const children = this.playerGroup.children;
+        const len = children.length;
+        for (let i = 0; i < len; i++) {
+            if (children[i].userData.isLaserSight) {
+                this.laserSight = children[i] as THREE.Mesh;
+                break;
+            }
+        }
     }
 
     update(session: GameSessionLogic, simDelta: number, simTime: number) {
@@ -54,8 +63,8 @@ export class PlayerCombatSystem implements System {
         const state = session.state;
         const input = session.engine.input.state;
 
-        // VINTERDÖD FIX: Kombinera sessionens input-lås med cinematic-läget
-        const isLocked = session.inputDisabled || state.cinematicActive || state.isDead;
+        // Combine session input lock with cinematic and death states
+        const isLocked = session.inputDisabled || state.cinematicActive || (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
 
         // --- CINEMATIC & DEATH LOCK ---
         if (isLocked) {
@@ -64,18 +73,17 @@ export class PlayerCombatSystem implements System {
                 if (this.aimCross) this.aimCross.visible = false;
                 if (this.trajectoryLine) this.trajectoryLine.visible = false;
 
-                // Nollställ inputs internt så man inte håller inne en trigger genom en cinematic
+                // Reset inputs internally to prevent holding a trigger through a cinematic
                 input.fire = false;
                 input.r = false;
 
                 this._wasLocked = true;
             }
-            return; // Spelaren får inte göra några combat-grejer alls
+            return; // Player cannot perform any combat actions
         }
 
-        // Återställning när man vaknar upp / cinematic är över
+        // Restore state when waking up or cinematic ends
         if (this._wasLocked) {
-            if (this.laserSight) this.laserSight.visible = !state.vehicle.active;
             this._wasLocked = false;
         }
 
@@ -92,7 +100,7 @@ export class PlayerCombatSystem implements System {
         this._p4 = !!input['4'];
         this._p5 = !!input['5'];
 
-        WeaponHandler.handleInput(input, state, state.loadout, simTime, false); // Skickar in false eftersom vi redan checkat isLocked ovan
+        WeaponHandler.handleInput(input, state, state.loadout, simTime, false);
 
         WeaponHandler.handleFiring(
             session,
@@ -108,6 +116,7 @@ export class PlayerCombatSystem implements System {
             this.trajectoryLine,
         );
 
+        // Visibility toggle based on vehicle state
         if (this.laserSight) this.laserSight.visible = !state.vehicle.active;
     }
 

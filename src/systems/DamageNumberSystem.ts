@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { System } from './System';
 import { WeaponCategoryColors, WeaponType, WEAPONS } from '../content/weapons';
-import { DamageType } from '../entities/player/CombatTypes';
+import { DamageID } from '../entities/player/CombatTypes';
 
 interface DamageText {
     mesh: THREE.Sprite;
@@ -24,44 +24,44 @@ export class DamageNumberSystem implements System {
 
     /**
      * Resolves the appropriate hex color for a damage number based on its source.
-     * Centralizing this here allows for easy adjustments to the visual design.
+     * VINTERDÖD FIX: Uses numeric DamageID (SMI) for O(1) jump-table performance.
      */
-    public static getColorForType(type: string, isHighImpact: boolean): string {
+    public static getColorForType(type: DamageID, isHighImpact: boolean): string {
         // High Impact (Crits/Heavy) fallback
         if (isHighImpact) return '#ff0000';
 
         switch (type) {
-            case DamageType.BURN:
-            case WeaponType.MOLOTOV:
-            case WeaponType.FLAMETHROWER:
+            case DamageID.BURN:
+            case DamageID.MOLOTOV:
+            case DamageID.FLAMETHROWER:
                 return '#ffaa00';
 
-            case DamageType.ELECTRIC:
-            case WeaponType.ARC_CANNON:
+            case DamageID.ELECTRIC:
+            case DamageID.ARC_CANNON:
                 return '#00ffff';
 
-            case DamageType.DROWNING:
+            case DamageID.DROWNING:
                 return '#3b82f6';
 
-            case DamageType.FALL:
-            case DamageType.PHYSICAL:
-            case WeaponType.RUSH:
+            case DamageID.FALL:
+            case DamageID.PHYSICAL:
+            case DamageID.RUSH:
                 return '#e887a7';
 
-            case DamageType.VEHICLE_PUSH:
-            case DamageType.VEHICLE_RAM:
-            case WeaponType.VEHICLE:
+            case DamageID.VEHICLE:
+            case DamageID.VEHICLE_PUSH:
+            case DamageID.VEHICLE_RAM:
                 return '#cccccc';
 
-            case DamageType.VEHICLE_SPLATTER:
+            case DamageID.VEHICLE_SPLATTER:
                 return '#ff0000';
 
-
-            default:
-                const weaponData = (WEAPONS as any)[type];
-                if (weaponData && weaponData.category) {
-                    return (WeaponCategoryColors as any)[weaponData.category] || DEFAULT_COLOR;
+            default: {
+                const weaponData = WEAPONS[type];
+                if (weaponData) {
+                    return WeaponCategoryColors[weaponData.category] || DEFAULT_COLOR;
                 }
+            }
         }
 
         return DEFAULT_COLOR;
@@ -82,7 +82,7 @@ export class DamageNumberSystem implements System {
         const ctx = canvas.getContext('2d')!;
 
         // Font setup (done once)
-        ctx.font = 'bold 64px Arial';
+        ctx.font = 'bold 64px "Courier New", monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.lineWidth = 5;

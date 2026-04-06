@@ -5,7 +5,8 @@ import { soundManager } from '../utils/audio/SoundManager';
 import { WorldLootSystem } from './WorldLootSystem';
 import { getCollectibleById } from '../content/collectibles';
 import { FXSystem } from './FXSystem';
-import { InteractionType } from './InteractionTypes';
+import { InteractionType, InteractionShape } from './InteractionTypes';
+import { TriggerType, TriggerStatus } from './TriggerTypes';
 import type React from 'react';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -15,7 +16,6 @@ const _v3 = new THREE.Vector3();
 const _traverseStack: THREE.Object3D[] = [];
 
 // Shared object for detection returns to eliminate garbage allocation
-// VINTERDÖD FIX: Protected V8 Shapes (No nulls for strings)
 const _detectionResult = {
     type: InteractionType.NONE,
     position: new THREE.Vector3(),
@@ -24,8 +24,9 @@ const _detectionResult = {
     label: ''
 };
 
+// Object Pools to eliminate GC spikes on interactions
 interface ActiveAnimation {
-    obj: THREE.Group;
+    obj: THREE.Group | null;
     startX: number;
     startY: number;
     startZ: number;
@@ -35,21 +36,28 @@ interface ActiveAnimation {
 }
 
 interface ActiveChestAnimation {
-    lid: THREE.Object3D;
+    lid: THREE.Object3D | null;
     startR: number;
     targetR: number;
     progress: number;
     duration: number;
 }
 
+const MAX_ANIMATIONS = 10;
+
 export class PlayerInteractionSystem implements System {
     id = 'player_interaction';
     public onCollectibleDiscovered?: (collectibleId: string) => void;
     private lastDetectionTime: number = 0;
 
-    // Zero-GC Arrays
+    // Zero-GC Arrays & Pools
     private activeAnimations: ActiveAnimation[] = [];
     private activeChests: ActiveChestAnimation[] = [];
+
+    private animPool: ActiveAnimation[] = [];
+    private chestPool: ActiveChestAnimation[] = [];
+
+    private readonly EMPTY_ARRAY: any[] = []; // Immutable fallback
 
     constructor(
         private playerGroup: THREE.Group,
@@ -60,6 +68,12 @@ export class PlayerInteractionSystem implements System {
         onCollectibleDiscovered?: (collectibleId: string) => void
     ) {
         this.onCollectibleDiscovered = onCollectibleDiscovered;
+
+        // Pre-allocate animation pools to keep GC at zero
+        for (let i = 0; i < MAX_ANIMATIONS; i++) {
+            this.animPool.push({ obj: null, startX: 0, startY: 0, startZ: 0, progress: 0, duration: 0, collectibleId: '' });
+            this.chestPool.push({ lid: null, startR: 0, targetR: 0, progress: 0, duration: 0 });
+        }
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
@@ -70,16 +84,13 @@ export class PlayerInteractionSystem implements System {
         if (now - this.lastDetectionTime > 100) {
             this.lastDetectionTime = now;
 
-            // VINTERDÖD FIX: Reset the global scratchpad before every detection pass
             _detectionResult.type = InteractionType.NONE;
             _detectionResult.id = '';
             _detectionResult.object = null;
             _detectionResult.label = '';
-            _detectionResult.position.set(0, 0, 0);
 
-            // Fetch local vicinity from SpatialGrid
-            const nearbyTriggers = state.collisionGrid ? state.collisionGrid.getNearbyTriggers(this.playerGroup.position, 15.0) : state.triggers;
-            const nearbyInteractables = state.collisionGrid ? state.collisionGrid.getNearbyInteractables(this.playerGroup.position, 15.0) : (state.sectorState.ctx?.interactables || []);
+            const nearbyTriggers = state.collisionGrid ? state.collisionGrid.getNearbyTriggers(this.playerGroup.position, 15.0) : state.triggers || this.EMPTY_ARRAY;
+            const nearbyInteractables = state.collisionGrid ? state.collisionGrid.getNearbyInteractables(this.playerGroup.position, 15.0) : (state.sectorState.ctx?.interactables || this.EMPTY_ARRAY);
 
             this.detectInteraction(
                 this.playerGroup.position,
@@ -88,7 +99,6 @@ export class PlayerInteractionSystem implements System {
                 nearbyInteractables
             );
 
-            // VINTERDÖD FIX: Explicit check against InteractionType.NONE
             if (_detectionResult.type !== InteractionType.NONE) {
                 state.interaction.active = true;
                 state.interaction.type = _detectionResult.type;
@@ -118,9 +128,7 @@ export class PlayerInteractionSystem implements System {
                     if (!isExit) {
                         this.handleInteraction(
                             state.interaction.type,
-                            this.playerGroup.position,
                             state.chests,
-                            state.triggers,
                             state,
                             session
                         );
@@ -138,11 +146,11 @@ export class PlayerInteractionSystem implements System {
         }
 
         // 3. Update Active Animations (Synced with Game Loop)
-        const animLen = this.activeAnimations.length;
-        for (let i = animLen - 1; i >= 0; i--) {
+        for (let i = this.activeAnimations.length - 1; i >= 0; i--) {
             const anim = this.activeAnimations[i];
-            anim.progress += dt / anim.duration;
+            if (!anim.obj) continue;
 
+            anim.progress += dt / anim.duration;
             if (anim.progress > 1) anim.progress = 1;
 
             // Smooth braking (ease-out)
@@ -173,7 +181,6 @@ export class PlayerInteractionSystem implements System {
                         child.scale.setScalar(Math.max(0.001, fxScale));
                     }
                 } else if (!child.name.startsWith('collectible') && !child.isLight) {
-                    // Actual item geometry
                     child.position.x = targetX;
                     child.position.z = targetZ;
                     child.position.y = (1.5 * easeOut) + Math.sin(anim.progress * Math.PI * 4) * 0.1;
@@ -190,11 +197,9 @@ export class PlayerInteractionSystem implements System {
 
             anim.obj.matrixWorldNeedsUpdate = true;
 
-            // Sync emitters (smoke/sparks) with the rising beam
             if (anim.obj.userData.effects) {
                 const effects = anim.obj.userData.effects;
-                const effLen = effects.length;
-                for (let k = 0; k < effLen; k++) {
+                for (let k = 0; k < effects.length; k++) {
                     const eff = effects[k];
                     if (!eff.originalOffset) {
                         eff.originalOffset = eff.offset ? eff.offset.clone() : new THREE.Vector3();
@@ -206,7 +211,6 @@ export class PlayerInteractionSystem implements System {
             }
 
             if (anim.progress >= 1) {
-                // Finalize: Hide lights and meshes using iterative stack (Zero-GC)
                 _traverseStack.length = 0;
                 _traverseStack.push(anim.obj);
 
@@ -222,7 +226,7 @@ export class PlayerInteractionSystem implements System {
 
                 anim.obj.userData.effects = [];
 
-                // Swap-and-pop removal from pool
+                // Remove from scene registry
                 const collIdx = this.collectibles.indexOf(anim.obj);
                 if (collIdx > -1) {
                     this.collectibles[collIdx] = this.collectibles[this.collectibles.length - 1];
@@ -233,6 +237,11 @@ export class PlayerInteractionSystem implements System {
                     this.onCollectibleDiscovered(anim.collectibleId);
                 }
 
+                // Free the pool object
+                anim.obj = null;
+                this.animPool.push(anim);
+
+                // Swap-and-pop active list
                 this.activeAnimations[i] = this.activeAnimations[this.activeAnimations.length - 1];
                 this.activeAnimations.pop();
             }
@@ -241,13 +250,16 @@ export class PlayerInteractionSystem implements System {
         // 4. Update Active Chests (Synced with Game Loop, Zero-GC)
         for (let i = this.activeChests.length - 1; i >= 0; i--) {
             const anim = this.activeChests[i];
+            if (!anim.lid) continue;
 
             anim.progress += dt / anim.duration;
 
             if (anim.progress >= 1) {
                 anim.lid.rotation.x = anim.targetR;
 
-                // Swap-and-pop
+                anim.lid = null;
+                this.chestPool.push(anim);
+
                 this.activeChests[i] = this.activeChests[this.activeChests.length - 1];
                 this.activeChests.pop();
             } else {
@@ -257,10 +269,6 @@ export class PlayerInteractionSystem implements System {
         }
     }
 
-    /**
-     * Scans the environment for the closest interactable object.
-     * Priority: Collectibles > Chests > Vehicles > Mission Objects
-     */
     private detectInteraction(
         playerPos: THREE.Vector3,
         triggers: any[],
@@ -278,75 +286,75 @@ export class PlayerInteractionSystem implements System {
             return;
         }
 
-        // --- Priority 2: Spatial Grid Objects (Chests, Collectibles, Vehicles) ---
-        if (nearbyInteractables) {
-            const len = nearbyInteractables.length;
-            for (let i = 0; i < len; i++) {
-                const obj = nearbyInteractables[i];
-                if (!obj || !obj.userData?.isInteractable) continue;
-                if (obj.userData.interactionType === InteractionType.COLLECTIBLE && obj.userData.pickedUp) continue;
+        // --- Priority 2: Spatial Grid Objects ---
+        const iLen = nearbyInteractables.length;
+        for (let i = 0; i < iLen; i++) {
+            const obj = nearbyInteractables[i];
+            if (!obj || !obj.userData?.isInteractable) continue;
+            if (obj.userData.interactionType === InteractionType.COLLECTIBLE && obj.userData.pickedUp) continue;
 
-                obj.updateMatrixWorld(true);
-                obj.getWorldPosition(_v1);
+            obj.updateMatrixWorld(true);
+            const els = obj.matrixWorld.elements;
+            _v1.set(els[12], els[13], els[14]);
 
-                if (obj.userData.vehicleDef && obj.userData.interactionType === 'VEHICLE') {
+            if (obj.userData.vehicleDef && obj.userData.interactionType === InteractionType.VEHICLE) {
+                _v3.copy(playerPos);
+                obj.worldToLocal(_v3);
+
+                const def = obj.userData.vehicleDef;
+                const margin = obj.userData.interactionMargin ?? 3.0;
+
+                const halfX = def.size.x * 0.5;
+                const halfZ = def.size.z * 0.5;
+                const clampX = Math.max(-halfX, Math.min(halfX, _v3.x));
+                const clampZ = Math.max(-halfZ, Math.min(halfZ, _v3.z));
+                _v2.set(clampX, _v3.y, clampZ);
+
+                if (_v3.distanceToSquared(_v2) <= margin * margin) {
+                    _detectionResult.position.copy(_v1);
+                    _detectionResult.position.y += 1.0;
+                    _detectionResult.type = InteractionType.VEHICLE;
+                    _detectionResult.object = obj;
+                    _detectionResult.label = 'ui.enter_vehicle';
+                    return;
+                }
+            } else {
+                let inRange = false;
+                const shape = obj.userData.interactionShape as InteractionShape;
+                const margin = obj.userData.interactionMargin ?? 3.0;
+
+                if (shape === InteractionShape.BOX || obj.userData.interactionSize) {
                     _v3.copy(playerPos);
                     obj.worldToLocal(_v3);
-                    const def = obj.userData.vehicleDef;
-                    const margin = obj.userData.interactionMargin ?? 3.0;
+                    const size = obj.userData.interactionSize || obj.userData.chestData?.collider?.size;
 
-                    // VINTERDÖD FIX: Zero-GC Rounded Box Interaction (Clamping)
-                    const halfX = def.size.x * 0.5;
-                    const halfZ = def.size.z * 0.5;
-                    const clampX = Math.max(-halfX, Math.min(halfX, _v3.x));
-                    const clampZ = Math.max(-halfZ, Math.min(halfZ, _v3.z));
-                    _v2.set(clampX, _v3.y, clampZ);
+                    if (size) {
+                        const halfX = size.x * 0.5;
+                        const halfZ = size.z * 0.5;
+                        const clampX = Math.max(-halfX, Math.min(halfX, _v3.x));
+                        const clampZ = Math.max(-halfZ, Math.min(halfZ, _v3.z));
+                        _v2.set(clampX, _v3.y, clampZ);
 
-                    if (_v3.distanceToSquared(_v2) <= margin * margin) {
-                        _detectionResult.position.copy(_v1);
-                        _detectionResult.position.y += 1.0;
-                        _detectionResult.type = InteractionType.VEHICLE;
-                        _detectionResult.object = obj;
-                        _detectionResult.label = 'ui.enter_vehicle';
-                        return;
-                    }
-                } else {
-                    let inRange = false;
-                    const shape = obj.userData.interactionShape;
-                    const margin = obj.userData.interactionMargin ?? 3.0;
-
-                    if (shape === 'box' || obj.userData.interactionSize) {
-                        _v3.copy(playerPos);
-                        obj.worldToLocal(_v3);
-                        const size = obj.userData.interactionSize || obj.userData.chestData?.collider?.size;
-                        if (size) {
-                            const halfX = size.x * 0.5;
-                            const halfZ = size.z * 0.5;
-                            const clampX = Math.max(-halfX, Math.min(halfX, _v3.x));
-                            const clampZ = Math.max(-halfZ, Math.min(halfZ, _v3.z));
-                            _v2.set(clampX, _v3.y, clampZ);
-
-                            if (_v3.distanceToSquared(_v2) <= margin * margin) {
-                                inRange = true;
-                            }
-                        }
-                    } else {
-                        const r = obj.userData.interactionRadius || 4.0;
-                        if (playerPos.distanceToSquared(_v1) < r * r) {
+                        if (_v3.distanceToSquared(_v2) <= margin * margin) {
                             inRange = true;
                         }
                     }
-
-                    if (inRange) {
-                        if (obj.userData.interactionType === InteractionType.CHEST && obj.userData.chestData?.opened) continue;
-
-                        _detectionResult.position.copy(_v1);
-                        _detectionResult.type = (obj.userData.interactionType as any) ?? InteractionType.SECTOR_SPECIFIC;
-                        _detectionResult.id = obj.userData.interactionId || '';
-                        _detectionResult.object = obj;
-                        _detectionResult.label = obj.userData.interactionLabel || '';
-                        return;
+                } else {
+                    const r = obj.userData.interactionRadius || 4.0;
+                    if (playerPos.distanceToSquared(_v1) < r * r) {
+                        inRange = true;
                     }
+                }
+
+                if (inRange) {
+                    if (obj.userData.interactionType === InteractionType.CHEST && obj.userData.chestData?.opened) continue;
+
+                    _detectionResult.position.copy(_v1);
+                    _detectionResult.type = (obj.userData.interactionType as InteractionType) ?? InteractionType.SECTOR_SPECIFIC;
+                    _detectionResult.id = obj.userData.interactionId || '';
+                    _detectionResult.object = obj;
+                    _detectionResult.label = obj.userData.interactionLabel || '';
+                    return;
                 }
             }
         }
@@ -355,11 +363,12 @@ export class PlayerInteractionSystem implements System {
         const tLen = triggers.length;
         for (let i = 0; i < tLen; i++) {
             const t = triggers[i];
-            if (t.type === 'INTERACT' || t.type === 'TERMINAL') {
+            if (!((t.statusFlags & TriggerStatus.ACTIVE) !== 0)) continue;
+
+            if (t.type === TriggerType.INTERACTION || t.type === TriggerType.STATION) {
                 let tx = t.position.x;
                 let tz = t.position.z;
 
-                // Handle dynamic positioning (Family or Owner objects)
                 if (t.familyId !== undefined && this.activeFamilyMembers) {
                     const members = this.activeFamilyMembers.current;
                     for (let mIdx = 0; mIdx < members.length; mIdx++) {
@@ -410,57 +419,34 @@ export class PlayerInteractionSystem implements System {
 
     private handleInteraction(
         type: InteractionType,
-        playerPos: THREE.Vector3,
         chests: any[],
-        triggers: any[],
         state: any,
         session: GameSessionLogic
     ) {
-        // VINTERDÖD FIX: Explicit check
         if (type === InteractionType.NONE) return;
 
-        console.log('[PlayerInteractionSystem] handleInteraction', type);
-
-        // Vehicle
         if (type === InteractionType.VEHICLE && _detectionResult.object) {
             state.vehicle.active = true;
             state.vehicle.mesh = _detectionResult.object;
             state.vehicle.type = _detectionResult.object.userData.vehicleDef?.type || '';
-
-            // Safe reset
-            _detectionResult.type = InteractionType.NONE;
-            _detectionResult.object = null;
         }
-
-        // Collectible
         else if (type === InteractionType.COLLECTIBLE) {
             this.pickupCollectible(session);
         }
-
-        // Chest
         else if (type === InteractionType.CHEST) {
             this.openChest(session, chests, state);
         }
-
-        // Section specific:
         else if (type === InteractionType.SECTOR_SPECIFIC) {
             state.interaction.active = true;
             state.interaction.targetId = _detectionResult.id || '';
             state.interaction.type = InteractionType.SECTOR_SPECIFIC;
             state.interaction.label = _detectionResult.label || '';
 
-            // VINTERDÖD FIX: Use the standard interactionRequest system
-            // SectorSystem will pick this up on its next update and call onInteract
             state.interactionRequest.active = true;
             state.interactionRequest.type = InteractionType.SECTOR_SPECIFIC;
             state.interactionRequest.id = _detectionResult.id || '';
             state.interactionRequest.object = _detectionResult.object || null;
         }
-
-        // Clear result immediately to prevent the 100ms throttle "shadow" prompt
-        _detectionResult.type = InteractionType.NONE;
-        _detectionResult.id = '';
-        _detectionResult.object = null;
     }
 
     private pickupCollectible(session: GameSessionLogic) {
@@ -471,27 +457,28 @@ export class PlayerInteractionSystem implements System {
         if (!getCollectibleById(collectibleId)) return;
 
         collectible.userData.pickedUp = true;
-        soundManager.playUiPickup();
+        soundManager.playPickupCollectible();
 
         collectible.matrixAutoUpdate = true;
         for (let i = 0; i < collectible.children.length; i++) {
             collectible.children[i].matrixAutoUpdate = true;
         }
 
-        this.activeAnimations.push({
-            obj: collectible,
-            startX: collectible.position.x,
-            startY: collectible.position.y,
-            startZ: collectible.position.z,
-            progress: 0,
-            duration: 1.2,
-            collectibleId: collectibleId
-        });
+        // Get pool object
+        if (this.animPool.length > 0) {
+            const pooled = this.animPool.pop()!;
+            pooled.obj = collectible;
+            pooled.startX = collectible.position.x;
+            pooled.startY = collectible.position.y;
+            pooled.startZ = collectible.position.z;
+            pooled.progress = 0;
+            pooled.duration = 1.2;
+            pooled.collectibleId = collectibleId;
+            this.activeAnimations.push(pooled);
+        }
 
-        // Effect burst on pickup
         for (let i = 0; i < 15; i++) {
             _v1.set((Math.random() - 0.5) * 2, 10 + Math.random() * 10, (Math.random() - 0.5) * 2);
-            // v1 vector is safely copied inside FXSystem
             FXSystem.spawnPart(session.engine.scene, session.state.particles, collectible.position.x, 0.1, collectible.position.z, 'spark', 1, undefined, _v1);
         }
     }
@@ -502,12 +489,9 @@ export class PlayerInteractionSystem implements System {
 
         let chestData = null;
 
-        // 1. Direct Metadata Lookup (Fastest & most robust)
         if (detectionObj.userData.chestData) {
             chestData = detectionObj.userData.chestData;
-        }
-        // 2. Registry Search (Fallback)
-        else {
+        } else {
             for (let i = 0; i < chests.length; i++) {
                 if (chests[i].mesh === detectionObj) {
                     chestData = chests[i];
@@ -521,7 +505,6 @@ export class PlayerInteractionSystem implements System {
             c.opened = true;
             soundManager.playOpenChest();
 
-            // Re-sync with state.chests if this was a loose object
             let inRegistry = false;
             for (let i = 0; i < chests.length; i++) {
                 if (chests[i] === c) { inRegistry = true; break; }
@@ -535,22 +518,22 @@ export class PlayerInteractionSystem implements System {
                 glowRing.visible = false;
             }
 
-            // Spawn magic sparkles
             FXSystem.spawnPart(session.engine.scene, state.particles, c.mesh.position.x, 1.0, c.mesh.position.z, 'spark', 15);
 
-            // VINTERDÖD FIX: Zero-GC Hinge animation for the lid
             const lid = c.mesh.children[1];
             if (lid) {
                 c.mesh.matrixAutoUpdate = true;
                 lid.matrixAutoUpdate = true;
 
-                this.activeChests.push({
-                    lid: lid,
-                    startR: lid.rotation.x,
-                    targetR: -Math.PI * 0.6,
-                    progress: 0,
-                    duration: 0.4 // seconds
-                });
+                if (this.chestPool.length > 0) {
+                    const pooled = this.chestPool.pop()!;
+                    pooled.lid = lid;
+                    pooled.startR = lid.rotation.x;
+                    pooled.targetR = -Math.PI * 0.6;
+                    pooled.progress = 0;
+                    pooled.duration = 0.4;
+                    this.activeChests.push(pooled);
+                }
             }
 
             if (c.type === 'big') state.bigChestsOpened++;

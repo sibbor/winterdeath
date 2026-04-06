@@ -9,6 +9,7 @@ import { NaturePropGenerator } from '../../core/world/generators/NaturePropGener
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { POI_TYPE } from '../../content/pois';
+import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
 
 const LOCATIONS = {
     SPAWN: {
@@ -353,17 +354,17 @@ export const Sector2: SectorDef = {
                 position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA,
                 familyId: 2,
                 radius: 8,
-                type: 'EVENT',
+                type: TriggerType.EVENT,
                 content: '',
-                triggered: false,
-                actions: [{ type: 'START_CINEMATIC', payload: { scriptId: 2 } }]
+                statusFlags: TriggerStatus.ACTIVE,
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { scriptId: 2 } }]
             },
-            { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_AMBIENT, radius: 8, type: 'SPEAK', content: "clues.2.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's3_poi_mast', position: LOCATIONS.TRIGGERS.POI_MAST, radius: 50, type: 'POI', content: "pois.2.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's3_poi_farm', position: LOCATIONS.POIS.FARM, radius: 20, type: 'POI', content: "pois.2.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's3_tractor', position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: 'SPEAK', content: "clues.2.2.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's3_poi_farmhouse', position: LOCATIONS.POIS.FARMHOUSE, radius: 20, type: 'POI', content: "pois.2.2.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's3_poi_barn', position: LOCATIONS.POIS.BARN, radius: 20, type: 'POI', content: "pois.2.3.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
+            { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_AMBIENT, radius: 8, type: TriggerType.SPEAK, content: "clues.2.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's3_poi_mast', position: LOCATIONS.TRIGGERS.POI_MAST, radius: 50, type: TriggerType.POI, content: "pois.2.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's3_poi_farm', position: LOCATIONS.POIS.FARM, radius: 20, type: TriggerType.POI, content: "pois.2.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's3_tractor', position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: TriggerType.SPEAK, content: "clues.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's3_poi_farmhouse', position: LOCATIONS.POIS.FARMHOUSE, radius: 20, type: TriggerType.POI, content: "pois.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's3_poi_barn', position: LOCATIONS.POIS.BARN, radius: 20, type: TriggerType.POI, content: "pois.2.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
         ]);
     },
 

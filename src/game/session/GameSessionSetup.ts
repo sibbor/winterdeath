@@ -1,11 +1,11 @@
 import React, { useEffect, useImperativeHandle, useCallback, useRef } from 'react';
 import * as THREE from 'three';
 import { GameCanvasProps, SectorStats } from '../../game/session/SessionTypes';
-import { MapItem } from '../../components/ui/hud/HudTypes';
+import { MapItem, DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { SectorContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
-import { NoiseType } from '../../entities/enemies/EnemyTypes';
+import { NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
@@ -13,11 +13,14 @@ import { FXSystem } from '../../systems/FXSystem';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
-import { FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, DEFAULT_SPEED } from '../../content/constants';
+import { FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, PLAYER_BASE_SPEED } from '../../content/constants';
 import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
+import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
+import { PlayerDeathState, DamageID } from '../../entities/player/CombatTypes';
+import { SoundID } from '../../utils/audio/AudioTypes';
+import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
 import { soundManager } from '../../utils/audio/SoundManager';
-import { PlayerDeathState } from '../../entities/player/CombatTypes';
 import { WEAPONS } from '../../content/weapons';
 import { PlayerMovementSystem } from '../../systems/PlayerMovementSystem';
 import { VehicleMovementSystem } from '../../systems/VehicleMovementSystem';
@@ -35,6 +38,10 @@ import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { RuntimeState } from '../../core/RuntimeState';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
+import { BOSS_NAME_KEYS } from '../../utils/ui/Mappers';
+
+import { InteractionType } from '../../systems/InteractionTypes';
+
 
 const seededRandom = (seed: number) => {
     let s = seed % 2147483647;
@@ -68,7 +75,7 @@ export interface SetupContext {
         spawnPart: (x: number, y: number, z: number, type: string, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => void;
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: string) => void;
         showDamageText: (x: number, y: number, z: number, text: string, color?: string) => void;
-        spawnZombie: (forcedType?: string, forcedPos?: THREE.Vector3) => void;
+        spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => void;
         concludeSector: (isExtraction: boolean) => void;
         handleTriggerAction: (action: any, scene: THREE.Scene) => void;
         onSectorLoaded?: () => void;
@@ -78,8 +85,9 @@ export interface SetupContext {
         onAction: (action: any) => void;
         collectedCluesRef: any;
 
-        onDiscovery?: (type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
+        onDiscovery?: (type: DiscoveryType, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
         gainSp: (amount: number) => void;
+        gainScrap: (amount: number) => void;
     }
 }
 
@@ -168,9 +176,10 @@ export class GameSessionSetup {
                 for (let i = 0; i < triggers.length; i++) {
                     const trig = triggers[i];
                     // Intro triggers usually carry a scriptId or are of type SPEAK/INTERACTION at the family spawn
-                    if (trig.type === 'SPEAK' || (trig.actions && trig.actions.some((a: any) => a.type === 'START_CINEMATIC'))) {
-                        trig.triggered = true;
+                    if (trig.type === TriggerType.SPEAK || (trig.actions && trig.actions.some((a: any) => a.type === TriggerActionType.START_CINEMATIC))) {
+                        trig.statusFlags |= TriggerStatus.TRIGGERED;
                     }
+
                 }
             }
 
@@ -289,16 +298,16 @@ export class GameSessionSetup {
     private static createSectorContext(ctx: SetupContext, currentSector: any, textures: any, flickeringLights: any[], burningObjects: any[], mapItems: MapItem[], rng: () => number, playerGroup: THREE.Group, yielder: () => Promise<void>): SectorContext {
         const { engine, state, props, callbacks } = ctx;
 
-        const spawnHorde = (count: number, type?: string, pos?: THREE.Vector3) => {
+        const spawnHorde = (count: number, type?: EnemyType, pos?: THREE.Vector3) => {
             const startPos = pos || playerGroup.position;
-            const newEnemies = EnemyManager.spawnHorde(engine.scene, startPos, count, state.bossSpawned, state.enemies.length);
+            const newEnemies = EnemyManager.spawnHorde(engine.scene, startPos, count, state.bossSpawned, state.enemies.length, type);
             if (newEnemies) {
                 const len = newEnemies.length;
                 for (let i = 0; i < len; i++) state.enemies.push(newEnemies[i]);
             }
         };
 
-        const realSpawnZombie = (forcedType?: string, forcedPos?: THREE.Vector3) => {
+        const realSpawnZombie = (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => {
             const playerPos = playerGroup.position;
             const enemy = EnemyManager.spawn(engine.scene, playerPos, forcedType, forcedPos, state.bossSpawned, state.enemies.length);
             if (enemy) state.enemies.push(enemy);
@@ -319,14 +328,14 @@ export class GameSessionSetup {
                 const idStr = String(bossId);
                 let seen = false;
                 for (let j = 0; j < props.stats.seenBosses.length; j++) {
-                    if (props.stats.seenBosses[j] === idStr) {
+                    if (props.stats.seenBosses[j] === bossId) {
                         seen = true;
                         break;
                     }
                 }
 
                 if (!seen && callbacks.onDiscovery) {
-                    callbacks.onDiscovery('boss', idStr, 'ui.boss_encountered', `bosses.${idStr}.name`);
+                    callbacks.onDiscovery(DiscoveryType.BOSS as any, String(bossId), 'ui.boss_encountered', BOSS_NAME_KEYS[bossId] || 'bosses.unknown');
                 }
             }
             return boss;
@@ -336,7 +345,7 @@ export class GameSessionSetup {
             scene: engine.scene, engine, obstacles: state.obstacles, collisionGrid: state.collisionGrid, chests: state.chests,
             flickeringLights, burningObjects, rng, triggers: state.triggers, mapItems, debugMode: props.debugMode,
             textures: textures, spawnZombie: realSpawnZombie, spawnHorde, spawnBoss,
-            cluesFound: props.stats.cluesFound || [], collectiblesDiscovered: props.stats.collectiblesDiscovered || [],
+            cluesFound: (props.stats.cluesFound || []) as string[], collectiblesDiscovered: (props.stats.collectiblesDiscovered || []) as string[],
             collectibles: [], dynamicLights: [], interactables: [], sectorId: props.currentSector, smokeEmitters: [],
             sectorState: state.sectorState, state: state, yield: yielder,
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => ctx.session.makeNoise(pos, type, radius),
@@ -357,7 +366,9 @@ export class GameSessionSetup {
             onTrigger: callbacks.onTrigger,
             onAction: (action: any) => {
                 if (action.type === 'HEAL') {
-                    state.hp = Math.min(state.maxHp, state.hp + action.amount);
+                    const hp = state.statsBuffer[PlayerStatID.HP];
+                    const maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
+                    state.statsBuffer[PlayerStatID.HP] = Math.min(maxHp, hp + action.amount);
                     soundManager.playUiConfirm();
                 }
                 if (action.type === 'SOUND' && action.id) soundManager.playEffect(action.id);
@@ -378,7 +389,7 @@ export class GameSessionSetup {
                     statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName);
                 }
             },
-            onDiscovery: (type: 'clue' | 'poi' | 'collectible' | 'enemy' | 'boss', id: string, titleKey: string, detailsKey: string, payload?: any) => {
+            onDiscovery: (type: DiscoveryType, id: string, titleKey: string, detailsKey: string, payload?: any) => {
                 // O(1) Optimization: Avoid React overhead if already found in this session or prior
                 const sets = state.discoverySets;
                 if (!sets) return;
@@ -386,32 +397,41 @@ export class GameSessionSetup {
                 const stats = state.sessionStats;
                 let alreadyFound = false;
 
-                if (type === 'clue') {
+                if (type === DiscoveryType.CLUE) {
                     alreadyFound = sets.clues.has(id);
                     if (!alreadyFound) {
                         sets.clues.add(id);
                         stats.cluesFound.push(payload || { id });
                     }
-                } else if (type === 'poi') {
+                } else if (type === DiscoveryType.POI) {
                     alreadyFound = sets.pois.has(id);
                     if (!alreadyFound) {
                         sets.pois.add(id);
                         stats.discoveredPOIs.push(id);
                     }
-                } else if (type === 'collectible') {
+                } else if (type === DiscoveryType.COLLECTIBLE) {
                     alreadyFound = sets.collectibles.has(id);
                     if (!alreadyFound) {
                         sets.collectibles.add(id);
                         stats.collectiblesDiscovered.push(id);
+                        // Add payload info if available for the UI
+                        if (payload) {
+                            // Enrich for the discovery screen
+                        }
                     }
                 }
 
                 // First time discovery awards SP (Plan overhaul)
                 if (!alreadyFound) {
+                    // Update session stats (for end-of-sector report)
                     const tracker = session.getSystem('damage_tracker_system') as any;
                     if (tracker) tracker.recordSp(session, 1);
 
+                    // Update live DOD buffer (for HUD)
+                    callbacks.gainSp(1);
+
                     if (callbacks.onDiscovery) {
+                        // Pass specific payload if it's a collectible for the UI logic in App.tsx
                         callbacks.onDiscovery(type, id, titleKey, detailsKey, payload);
                     }
                 }
@@ -455,11 +475,13 @@ export class GameSessionSetup {
 
     private static finalizeStateLimits(state: RuntimeState, mapItems: MapItem[], flickeringLights: any[], scene: THREE.Scene, sectorCtx: SectorContext) {
         state.mapItems = mapItems;
-        state.maxHp = isNaN(state.maxHp) ? 100 : Math.max(100, state.maxHp);
-        state.hp = state.maxHp;
-        state.maxStamina = isNaN(state.maxStamina) ? 100 : Math.max(100, state.maxStamina);
-        state.stamina = state.maxStamina;
-        state.speed = isNaN(state.speed) ? DEFAULT_SPEED : Math.max(10.0, state.speed);
+
+        const sb = state.statsBuffer;
+        sb[PlayerStatID.MAX_HP] = (sb[PlayerStatID.MAX_HP] <= 0) ? 100 : Math.max(100, sb[PlayerStatID.MAX_HP]);
+        sb[PlayerStatID.HP] = sb[PlayerStatID.MAX_HP];
+        sb[PlayerStatID.MAX_STAMINA] = (sb[PlayerStatID.MAX_STAMINA] <= 0) ? 100 : Math.max(100, sb[PlayerStatID.MAX_STAMINA]);
+        sb[PlayerStatID.STAMINA] = sb[PlayerStatID.MAX_STAMINA];
+        sb[PlayerStatID.SPEED] = (sb[PlayerStatID.SPEED] <= 0) ? PLAYER_BASE_SPEED : Math.max(10.0, sb[PlayerStatID.SPEED]);
 
         const activeEffects: any[] = [];
         scene.traverse((child) => {
@@ -569,7 +591,7 @@ export class GameSessionSetup {
         session.addSystem(new PlayerCombatSystem(playerGroup));
         session.addSystem(new PlayerInteractionSystem(
             playerGroup, callbacks.concludeSector, sectorCtx.collectibles, refs.activeFamilyMembers, engine.scene,
-            (id) => callbacks.onDiscovery && callbacks.onDiscovery('collectible', id, 'ui.collectible_discovered', `collectibles.${id}.title`)
+            (id) => callbacks.onDiscovery && callbacks.onDiscovery(DiscoveryType.COLLECTIBLE, id, 'ui.collectible_discovered', `collectibles.${id}.title`)
         ));
 
         const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
@@ -612,25 +634,27 @@ export class GameSessionSetup {
             setInteraction: (interaction: any) => {
                 if (interaction) {
                     state.interaction.active = true;
-                    state.interaction.type = 'plant_explosive';
+                    state.interaction.type = InteractionType.PLANT_EXPLOSIVE;
                     state.hasCurrentInteraction = true;
                     state.currentInteractionPayload = interaction;
                 } else {
                     state.interaction.active = false;
-                    state.interaction.type = '';
+                    state.interaction.type = InteractionType.NONE;
                     state.hasCurrentInteraction = false;
                 }
             },
 
-            playSound: (id: string) => soundManager.playEffect(id),
+            playSound: (id: SoundID) => soundManager.playEffect(id),
             playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => soundManager.playTone(freq, type, duration, vol || 0.1),
             cameraShake: (amount: number) => engine.camera.shake(amount), scene: engine.scene,
             setCameraOverride: (params: any) => { refs.cameraOverrideRef.current = params; engine.camera.setCinematic(!!params); },
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
-            spawnZombie: callbacks.spawnZombie, spawnHorde: sectorCtx.spawnHorde, setOverlay: ui.setOverlay
+            spawnZombie: (type: EnemyType, pos?: THREE.Vector3) => callbacks.spawnZombie(type, pos),
+            spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => sectorCtx.spawnHorde(count, type, pos),
+            setOverlay: ui.setOverlay
         }));
 
-        session.addSystem(new WorldLootSystem(playerGroup, engine.scene));
+        session.addSystem(new WorldLootSystem(playerGroup, engine.scene, { gainScrap: callbacks.gainScrap }));
         session.addSystem(new FamilySystem(playerGroup, refs.activeFamilyMembers, refs.cinematicRef, {
             setFoundMemberName: (n: string) => ui.setFoundMemberName && ui.setFoundMemberName(n),
             startCinematic: callbacks.startCinematic
@@ -690,19 +714,33 @@ export class GameSessionSetup {
         scene.add(mesh);
     }
 
+    // --- HELPER METHOD: Define this in the same class ---
+    private static clearDynamicNodes(parent: THREE.Object3D) {
+        const children = parent.children;
+        for (let i = children.length - 1; i >= 0; i--) {
+            const child = children[i];
+            const ud = child.userData;
+            if (ud && (ud.isDynamic || ud.isEnemy || ud.isCorpse)) {
+                parent.remove(child);
+            } else {
+                this.clearDynamicNodes(child);
+            }
+        }
+    }
+
     /**
-     * Resurrects player with full HP, stamina, ammo etc.
+     * Respawns the player with full HP, stamina, ammo etc.
      * Enemies are respawned. Chests already opened remain open.
-     */
+     * */
     static respawnPlayer(session: GameSessionLogic, engine: WinterEngine, state: RuntimeState, refs: any, props: any, setDeathPhase: (phase: string) => void) {
         const scene = engine.scene;
 
-        // 1. Reset player state
-        state.isDead = false;
+        // --- 1. RESET PLAYER STATE (DOD / Zero-GC) ---
+        state.statusFlags &= ~PlayerStatusFlags.DEAD;
         refs.deathPhaseRef.current = 'NONE';
         state.playerDeathState = PlayerDeathState.ALIVE;
-        state.hp = state.maxHp;
-        state.stamina = state.maxStamina;
+        state.statsBuffer[PlayerStatID.HP] = state.statsBuffer[PlayerStatID.MAX_HP];
+        state.statsBuffer[PlayerStatID.STAMINA] = state.statsBuffer[PlayerStatID.MAX_STAMINA];
         state.isReloading = false;
         state.isInteractionOpen = false;
         state.vehicle.active = false;
@@ -710,14 +748,11 @@ export class GameSessionSetup {
         state.vehicle.speed = 0;
         state.vehicle.engineState = 'OFF';
 
+        // Reset buffs/debuffs (Zero-GC: Filling contiguous arrays with 0)
+        state.effectDurations.fill(0);
+        state.effectIntensities.fill(0);
 
-        // Reset buffs/debuffs (Zero-GC: Emptying arrays)
-        state.activeBuffs.length = 0;
-        state.activeDebuffs.length = 0;
-        state.statusEffects = {};
-        state.activePassives.length = 0;
-
-        // VINTERDÖD FIX: Reset simulation timers to prevent lockout
+        // Reset simulation timers to prevent lockout
         state.simTime = 0;
         state.lastShotTime = 0;
         state.reloadEndTime = 0;
@@ -728,35 +763,67 @@ export class GameSessionSetup {
         state.lastActionTime = 0;
         state.bossDefeatedTime = 0;
         state.lastDrownTick = 0;
-
+        state.isInteractionOpen = false;
+        state.eDepressed = false;
+        state.interaction.active = false;
         state.discovery.active = false;
 
+        // Empty pools:
+        state.enemies.length = 0;
+        state.bloodDecals.length = 0;
+
+        // Purge ghost cells to prevent immediate collision conflicts with new spawns
+        if (state.collisionGrid) {
+            state.collisionGrid.clearEnemies();
+        }
+
+        // Weapons:
+        for (const key in state.weaponAmmo) {
+            state.weaponAmmo[key as any] = WEAPONS[key as any]?.magSize || 0;
+        }
+
+        // --- 2. SECTOR SPECIFC RESET ---
+        // Clear stale grid state and reset sector spawns 
+        // Note: Do not entirely clear the collision grid to retain static world obstacles/chests
+        if (state.sectorState) {
+            for (const key in state.sectorState.spawns) {
+                state.sectorState.spawns[key] = false;
+            }
+            state.sectorState.zombiesKilled = 0;
+            state.sectorState.zombiesKillTarget = 0;
+            state.sectorState.busEventState = 0; // Reset Sector 1 pincer
+        }
+
+        // --- 3. PASSIVES, BUFFS & DEBUFFS ---
         const statsSystem = engine.getSystem('player_stats_system') as any;
         if (statsSystem && statsSystem.updatePassives) {
             statsSystem.updatePassives(session);
         }
 
-        HudStore.update({ ...HudStore.getState(), isDead: false, hp: state.maxHp });
+        // --- 4. SYSTEM CLEARING ---
+        ProjectileSystem.clear(scene, state.projectiles, state.fireZones);
+        FXSystem.reset();
+        //EnemyManager.clear();
 
-        for (const key in state.weaponAmmo) {
-            const wepType = key as any;
-            if (state.weaponAmmo[wepType] !== undefined) {
-                state.weaponAmmo[wepType] = WEAPONS[wepType]?.magSize || 0;
-            }
+        // --- 5. CLEAR DYNAMIC OBJECTS ---
+        this.clearDynamicNodes(scene);
+
+        // --- 6. SECTOR DATA ---
+        const currentSectorData = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
+
+        // 6.1 RESPAWN ZOMBIES
+        const sCtx = refs.sectorContextRef.current;
+        if (sCtx && currentSectorData.setupZombies) {
+            currentSectorData.setupZombies(sCtx);
         }
 
-        state.isInteractionOpen = false;
-        state.eDepressed = false;
-        state.interaction.active = false;
-
-
-        // 2. Move player to spawn point
-        const currentSectorData = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
+        // 6.2 PLAYER & FAMILY MEMBER POSITIONING
         if (refs.playerGroupRef.current) {
             const spawn = currentSectorData.playerSpawn;
             refs.playerGroupRef.current.position.set(spawn.x, spawn.y || 0, spawn.z);
             engine.camera.snapToTarget();
 
+            // Family members:  
             const members = refs.activeFamilyMembers.current || [];
             const fSpawn = currentSectorData.familySpawn;
 
@@ -766,9 +833,7 @@ export class GameSessionSetup {
                     if (!fm.rescued && fm.following) {
                         fm.following = false;
                         fm.found = false;
-                    }
-
-                    if (fm.rescued) {
+                    } else if (fm.rescued) {
                         fm.following = true;
                         fm.found = true;
                     }
@@ -788,32 +853,10 @@ export class GameSessionSetup {
             }
         }
 
-        // 3. Clear projectiles and fire
-        ProjectileSystem.clear(scene, state.projectiles, state.fireZones);
-        FXSystem.reset();
+        // --- 7. FIX THE UI ---
+        HudStore.patch({ isDead: false, hp: state.statsBuffer[PlayerStatID.MAX_HP] });
+        //HudStore.update({ ...HudStore.getState(), isDead: false, hp: state.statsBuffer[PlayerStatID.MAX_HP] });
 
-        // 4. Clear dynamic objects and enemies from the scene
-        const toRemove: THREE.Object3D[] = [];
-        scene.traverse(obj => {
-            if (obj.userData?.isDynamic || obj.userData?.isEnemy || obj.userData?.isCorpse) {
-                toRemove.push(obj);
-            }
-        });
-        for (let i = 0; i < toRemove.length; i++) {
-            if (toRemove[i].parent) toRemove[i].parent.remove(toRemove[i]);
-        }
-
-        EnemyManager.clear();
-        state.enemies.length = 0;
-        state.bloodDecals.length = 0;
-
-        // 5. Respawn zombies
-        const sCtx = refs.sectorContextRef.current;
-        if (sCtx && currentSectorData.setupZombies) {
-            currentSectorData.setupZombies(sCtx);
-        }
-
-        // 6. Fix UI
         setDeathPhase('NONE');
     }
 
@@ -849,9 +892,10 @@ export class GameSessionSetup {
         state.triggers.length = 0;
         state.bloodDecals.length = 0;
 
-        state.isDead = false;
-        state.hp = state.maxHp;
-        state.stamina = state.maxStamina;
+        state.statusFlags &= ~PlayerStatusFlags.DEAD;
+        state.statsBuffer[PlayerStatID.HP] = state.statsBuffer[PlayerStatID.MAX_HP];
+        state.statsBuffer[PlayerStatID.STAMINA] = state.statsBuffer[PlayerStatID.MAX_STAMINA];
+
 
         // VINTERDÖD FIX: Reset simulation timers to prevent lockout
         state.simTime = 0;

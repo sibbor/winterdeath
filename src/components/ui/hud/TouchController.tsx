@@ -101,7 +101,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
             const t = touches[i];
 
             // Uppdatera vänster spak
-            if (t.identifier === leftTouchId.current) {
+            if (t.identifier === leftTouchId.current && inputState?.joystickMove) {
                 let dx = t.clientX - leftCenter.current.x;
                 let dy = t.clientY - leftCenter.current.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
@@ -120,7 +120,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
             }
 
             // Uppdatera höger spak
-            if (t.identifier === rightTouchId.current) {
+            if (t.identifier === rightTouchId.current && inputState?.joystickAim) {
                 let dx = t.clientX - rightCenter.current.x;
                 let dy = t.clientY - rightCenter.current.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
@@ -148,20 +148,22 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
             const t = touches[i];
             if (t.identifier === leftTouchId.current) {
                 leftTouchId.current = null;
-                inputState.joystickMove.set(0, 0);
+                if (inputState?.joystickMove) inputState.joystickMove.set(0, 0);
                 if (leftStickContainerRef.current) leftStickContainerRef.current.style.display = 'none';
             }
             if (t.identifier === rightTouchId.current) {
                 rightTouchId.current = null;
-                inputState.joystickAim.set(0, 0);
-                inputState.fire = false;
+                if (inputState?.joystickAim) {
+                    inputState.joystickAim.set(0, 0);
+                    inputState.fire = false;
+                }
                 if (rightStickContainerRef.current) rightStickContainerRef.current.style.display = 'none';
             }
         }
     }, [inputState]);
 
     return (
-        <div className={`absolute inset-0 pointer-events-none z-[40] overflow-hidden select-none touch-none transition-opacity duration-1000 ${hudVisible ? 'opacity-100' : 'opacity-0'}`}>
+        <div className={`absolute inset-0 pointer-events-none z-[100] overflow-hidden select-none touch-none transition-opacity duration-1000 ${hudVisible ? 'opacity-100' : 'opacity-0'}`}>
             <div
                 className="absolute inset-0 pointer-events-auto"
                 style={{ touchAction: 'none' }}
@@ -170,48 +172,48 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 onTouchEnd={handleTouchEnd}
                 onTouchCancel={handleTouchEnd}
             >
-            {/* VÄNSTER JOYSTICK */}
-            <div
-                ref={leftStickContainerRef}
-                className="absolute rounded-full border-2 border-white/20 bg-white/5 pointer-events-none will-change-transform"
-                style={{ width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, display: 'none' }}
-            >
+                {/* VÄNSTER JOYSTICK */}
                 <div
-                    ref={leftStickKnobRef}
-                    className="absolute rounded-full bg-white/40 shadow-[0_0_15px_rgba(255,255,255,0.3)] will-change-transform"
-                    style={{ left: STICK_RADIUS - 25, top: STICK_RADIUS - 25, width: 50, height: 50 }}
-                />
-            </div>
+                    ref={leftStickContainerRef}
+                    className="absolute rounded-full border-2 border-white/20 bg-white/5 pointer-events-none will-change-transform"
+                    style={{ width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, display: 'none' }}
+                >
+                    <div
+                        ref={leftStickKnobRef}
+                        className="absolute rounded-full bg-white/40 shadow-[0_0_15px_rgba(255,255,255,0.3)] will-change-transform"
+                        style={{ left: STICK_RADIUS - 25, top: STICK_RADIUS - 25, width: 50, height: 50 }}
+                    />
+                </div>
 
-            {/* HÖGER JOYSTICK */}
-            <div
-                ref={rightStickContainerRef}
-                className="absolute rounded-full border-2 border-red-500/20 bg-red-900/5 pointer-events-none will-change-transform"
-                style={{ width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, display: 'none' }}
-            >
+                {/* HÖGER JOYSTICK */}
                 <div
-                    ref={rightStickKnobRef}
-                    className="absolute rounded-full bg-red-500/40 shadow-[0_0_15px_rgba(220,38,38,0.3)] will-change-transform"
-                    style={{ left: STICK_RADIUS - 25, top: STICK_RADIUS - 25, width: 50, height: 50 }}
-                />
-            </div>
+                    ref={rightStickContainerRef}
+                    className="absolute rounded-full border-2 border-red-500/20 bg-red-900/5 pointer-events-none will-change-transform"
+                    style={{ width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, display: 'none' }}
+                >
+                    <div
+                        ref={rightStickKnobRef}
+                        className="absolute rounded-full bg-red-500/40 shadow-[0_0_15px_rgba(220,38,38,0.3)] will-change-transform"
+                        style={{ left: STICK_RADIUS - 25, top: STICK_RADIUS - 25, width: 50, height: 50 }}
+                    />
+                </div>
 
-            {/* Action Buttons */}
-            <div className={`absolute pointer-events-auto flex z-40 pr-safe pb-safe ${isLandscapeMode ? 'bottom-2 right-4 flex-col gap-2' : 'bottom-24 right-4 flex-col gap-2'}`}>
-                <div className="flex justify-end">
-                    <button data-action="f" className="w-12 h-12 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
-                        <img src="/assets/icons/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain pointer-events-none" />
-                    </button>
+                {/* Action Buttons */}
+                <div className={`absolute pointer-events-auto flex z-40 pr-safe pb-safe ${isLandscapeMode ? 'bottom-2 right-4 flex-col gap-2' : 'bottom-24 right-4 flex-col gap-2'}`}>
+                    <div className="flex justify-end">
+                        <button data-action="f" className="w-12 h-12 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
+                            <img src="/assets/icons/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain pointer-events-none" />
+                        </button>
+                    </div>
+                    <div className="flex items-end gap-2">
+                        <button data-action="r" className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
+                            <img src="/assets/icons/ui/icon_reload.png" alt="R" className="w-full h-full object-contain pointer-events-none" />
+                        </button>
+                        <button data-action="space" className="w-20 h-20 md:w-24 md:h-24 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 shadow-[0_0_20px_rgba(255,0,0,0.4)] opacity-80 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
+                            <img src="/assets/icons/ui/icon_dodge.png" alt="Dodge" className="w-full h-full object-contain pointer-events-none" />
+                        </button>
+                    </div>
                 </div>
-                <div className="flex items-end gap-2">
-                    <button data-action="r" className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
-                        <img src="/assets/icons/ui/icon_reload.png" alt="R" className="w-full h-full object-contain pointer-events-none" />
-                    </button>
-                    <button data-action="space" className="w-20 h-20 md:w-24 md:h-24 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 shadow-[0_0_20px_rgba(255,0,0,0.4)] opacity-80 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
-                        <img src="/assets/icons/ui/icon_dash.png" alt="Dash" className="w-full h-full object-contain pointer-events-none" />
-                    </button>
-                </div>
-            </div>
             </div>
         </div>
     );

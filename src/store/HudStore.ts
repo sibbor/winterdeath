@@ -1,4 +1,4 @@
-import { HudState } from '../components/ui/hud/HudTypes';
+import { HudState, DiscoveryType } from '../components/ui/hud/HudTypes';
 import { WeaponType } from '../content/weapons';
 import { InteractionType } from '../systems/InteractionTypes';
 
@@ -9,6 +9,8 @@ import { InteractionType } from '../systems/InteractionTypes';
 // preventing "cannot read property x of null" errors.
 // ============================================================================
 const INITIAL_HUD_STATE: HudState = {
+    statsBuffer: new Float32Array(32), // Safety buffer size
+    statusFlags: 0,
     hp: 100,
     maxHp: 100,
     stamina: 100,
@@ -58,7 +60,7 @@ const INITIAL_HUD_STATE: HudState = {
     interactionPrompt: { active: false, type: InteractionType.NONE, label: '', x: 0, y: 0, targetId: '' },
     hudVisible: false,
     sectorName: '',
-    discovery: { active: false, id: '', type: 'clue', title: '', details: '', timestamp: 0 },
+    discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 },
 
     // Nested structures pre-allocated to lock Hidden Class "Shapes"
     sectorStats: {},
@@ -84,23 +86,38 @@ type Listener = (state: HudState) => void;
 
 class HudStoreClass {
     private state: HudState = INITIAL_HUD_STATE;
+    // Standby buffer for Zero-GC patch mutations. Pre-allocated to match structure.
+    private standbyState: HudState = Object.assign({}, INITIAL_HUD_STATE);
     private listeners: Listener[] = [];
 
     /**
-     * Updates the store with new HUD data.
+     * Updates the store with a completely new HUD buffer.
      * Called at 60/120 FPS by the WinterEngine loop.
-     * * PERFORMANCE: Since we use Double-Buffering in the HudSystem, we simply
+     * PERFORMANCE: Since we use Double-Buffering in the HudSystem, we simply
      * swap the reference here. React's useSyncExternalStore will detect the
      * reference change (=== check) and trigger the UI update.
      */
     public update(nextState: HudState): void {
         this.state = nextState;
+        this.notifyListeners();
+    }
 
-        // Zero-GC Loop: Caching length to minimize property access overhead
-        const len = this.listeners.length;
-        for (let i = 0; i < len; i++) {
-            this.listeners[i](this.state);
-        }
+    /**
+     * Zero-GC alternative to the spread operator (...state).
+     * Mutates a standby buffer and swaps pointers to trigger React renders
+     * without allocating new objects in memory. Perfect for one-off events.
+     */
+    public patch(changes: Partial<HudState>): void {
+        // 1. Copy current state and apply changes into the standby buffer (in-place mutation)
+        Object.assign(this.standbyState, this.state, changes);
+
+        // 2. Pointer swap (Ping-Pong) to give React a "new" root object
+        const temp = this.state;
+        this.state = this.standbyState;
+        this.standbyState = temp;
+
+        // 3. Trigger UI update
+        this.notifyListeners();
     }
 
     /**
@@ -134,6 +151,16 @@ class HudStoreClass {
                 this.listeners.pop();
             }
         };
+    }
+
+    /**
+     * Internal zero-GC loop to notify all subscribers.
+     */
+    private notifyListeners(): void {
+        const len = this.listeners.length;
+        for (let i = 0; i < len; i++) {
+            this.listeners[i](this.state);
+        }
     }
 }
 

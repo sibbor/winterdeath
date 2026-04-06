@@ -2,7 +2,9 @@ import React from 'react';
 import { t } from '../../../../utils/i18n';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { BOSSES } from '../../../../content/constants';
-import { SectorStats } from '../../../../game/session/SessionTypes';;
+import { SectorStats } from '../../../../game/session/SessionTypes';
+import { DamageID } from '../../../../entities/player/CombatTypes';
+import { DAMAGE_ID_KEYS, ATTACK_TYPE_KEYS } from '../../../../utils/ui/Mappers';
 
 interface ScreenBossKilledProps {
     sectorIndex: number;
@@ -42,7 +44,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                                     .sort((a, b) => (b[1] as any) - (a[1] as any))
                                     .map(([weapon, amount]) => (
                                         <div key={weapon} className="flex justify-between items-center text-[10px]">
-                                            <span className="text-gray-400 uppercase font-bold">{t(`weapons.${weapon.toLowerCase()}`)}</span>
+                                            <span className="text-gray-400 uppercase font-bold">{t(DAMAGE_ID_KEYS[Number(weapon)] || 'ui.unknown')}</span>
                                             <span className="text-white font-mono">{Math.floor(amount as any).toLocaleString()}</span>
                                         </div>
                                     ))}
@@ -57,11 +59,11 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                         <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest mb-4 border-b border-red-900/30 pb-1">{t('ui.damage_taken')}</span>
                             <div className="space-y-1">
-                                {(stats.incomingDamageBreakdown?.['Boss'] ? Object.entries(stats.incomingDamageBreakdown['Boss']) : [])
+                                {(stats.incomingDamageBreakdown?.[DamageID.BOSS] ? Object.entries(stats.incomingDamageBreakdown[DamageID.BOSS]) : [])
                                     .sort((a, b) => (b[1] as any) - (a[1] as any))
                                     .map(([attack, amount]) => (
                                         <div key={attack} className="flex justify-between items-center text-[10px]">
-                                            <span className="text-gray-400 uppercase font-bold">{attack}</span>
+                                            <span className="text-gray-400 uppercase font-bold">{t(ATTACK_TYPE_KEYS[Number(attack)]) || attack}</span>
                                             <span className="text-white font-mono">{Math.floor(amount as any).toLocaleString()}</span>
                                         </div>
                                     ))}

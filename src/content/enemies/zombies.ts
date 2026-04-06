@@ -1,10 +1,17 @@
-import { ZombieTypeData, EnemyType } from '../../entities/enemies/EnemyTypes';
+import { ZombieTypeData, EnemyType } from '../../entities/enemies/EnemyBase';
 import { EnemyAttackType } from '../../entities/player/CombatTypes';
 import { StatusEffectType } from '../perks';
 
 /*
 Zombie data:
 Calculations, animations and sound effects are handled in the game loop.
+
+- hp = health points
+- speed = speed in km/h
+- score = score for killing the zombie
+- color = color of the zombie
+- scale = scale of the zombie
+- widthScale = width scale of the zombie
 
 Description of 'attack':
 
@@ -107,6 +114,30 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
                 radius: 10.0,
                 chargeTime: 2000,
                 cooldown: 0,
+                effect: StatusEffectType.DISORIENTED,
+            }
+        ]
+    },
+    [EnemyType.BOSS]: {
+        hp: 2500,
+        speed: 25.0,
+        score: 2000,
+        color: 0xff0000,
+        scale: 4.0,
+        widthScale: 1.0,
+        attacks: [
+            {
+                type: EnemyAttackType.HIT,
+                damage: 40,
+                cooldown: 1500,
+            },
+            {
+                type: EnemyAttackType.SMASH,
+                damage: 80,
+                range: 5.0,
+                radius: 8.0,
+                chargeTime: 1200,
+                cooldown: 5000,
                 effect: StatusEffectType.DISORIENTED,
             }
         ]

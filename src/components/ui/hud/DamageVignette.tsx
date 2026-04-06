@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { HudStore } from '../../../store/HudStore';
+import { PlayerStatID, PlayerStatusFlags } from '../../../entities/player/PlayerTypes';
 
 const DamageVignette: React.FC = () => {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -10,8 +11,13 @@ const DamageVignette: React.FC = () => {
             const state = HudStore.getState();
             if (!containerRef.current || !gradientRef.current) return;
 
+            const stats = state.statsBuffer;
+            const hp = stats[PlayerStatID.HP];
+            const maxHp = stats[PlayerStatID.MAX_HP];
+            const isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
+
             // Threshold is currently hardcoded to 0.3 globally for vignette
-            const isCritical = state.hp > 0 && state.hp <= state.maxHp * 0.3 && !state.isDead;
+            const isCritical = hp > 0 && hp <= maxHp * 0.3 && !isDead;
             
             if (!isCritical) {
                 containerRef.current.style.opacity = '0';
@@ -20,8 +26,8 @@ const DamageVignette: React.FC = () => {
 
             containerRef.current.style.opacity = '1';
 
-            const criticalHpTarget = state.maxHp * 0.3;
-            const criticalSeverity = 1 - (state.hp / criticalHpTarget);
+            const criticalHpTarget = maxHp * 0.3;
+            const criticalSeverity = 1 - (hp / criticalHpTarget);
             const dynamicOpacity = 0.4 + (criticalSeverity * 0.4);
 
             gradientRef.current.style.background = `radial-gradient(circle, transparent 40%, rgba(220,38,38,${dynamicOpacity}) 100%)`;

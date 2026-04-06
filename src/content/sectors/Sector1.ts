@@ -12,6 +12,7 @@ import { soundManager } from '../../utils/audio/SoundManager';
 import { CAMERA_HEIGHT } from '../constants';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
+import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
 
 const LOCATIONS = {
     SPAWN: {
@@ -288,15 +289,15 @@ export const Sector1: SectorDef = {
         if (!ctx.isWarmup) {
             // Triggers produce no GPU state — skip during preloader ghost-render
             SectorBuilder.addTriggers(ctx, [
-                { id: 's2_start', position: LOCATIONS.TRIGGERS.START, radius: 10, type: 'THOUGHT', content: "clues.1.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-                { id: 's2_combat', position: LOCATIONS.TRIGGERS.COMBAT, radius: 10, type: 'SPEAK', content: "clues.1.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-                { id: 's2_cave_lights', position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: 'SPEAK', content: "clues.1.2.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-                { id: 's2_cave_loot', position: LOCATIONS.TRIGGERS.CAVE_LOOT_1, radius: 15, type: 'SPEAK', content: "clues.1.3.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-                { id: 's2_cave_loot_more', position: LOCATIONS.TRIGGERS.CAVE_LOOT_2, radius: 15, type: 'SPEAK', content: "clues.1.4.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-                { id: 's2_poi_campfire', position: LOCATIONS.POIS.CAMPFIRE, radius: 10, type: 'POI', content: "pois.1.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-                { id: 's2_poi_train_tunnel', position: LOCATIONS.POIS.TRAIN_TUNNEL, radius: 15, type: 'POI', content: "pois.1.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-                { id: 's2_poi_cave_entrance', position: LOCATIONS.POIS.CAVE_ENTRANCE, radius: 15, type: 'POI', content: "pois.1.2.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-                { id: 's2_poi_mountain_vault', position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: 'POI', content: "pois.1.3.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
+                { id: 's2_start', position: LOCATIONS.TRIGGERS.START, radius: 10, type: TriggerType.THOUGHT, content: "clues.1.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+                { id: 's2_combat', position: LOCATIONS.TRIGGERS.COMBAT, radius: 10, type: TriggerType.SPEAK, content: "clues.1.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+                { id: 's2_cave_lights', position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: TriggerType.SPEAK, content: "clues.1.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+                { id: 's2_cave_loot', position: LOCATIONS.TRIGGERS.CAVE_LOOT_1, radius: 15, type: TriggerType.SPEAK, content: "clues.1.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+                { id: 's2_cave_loot_more', position: LOCATIONS.TRIGGERS.CAVE_LOOT_2, radius: 15, type: TriggerType.SPEAK, content: "clues.1.4.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+                { id: 's2_poi_campfire', position: LOCATIONS.POIS.CAMPFIRE, radius: 10, type: TriggerType.POI, content: "pois.1.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+                { id: 's2_poi_train_tunnel', position: LOCATIONS.POIS.TRAIN_TUNNEL, radius: 15, type: TriggerType.POI, content: "pois.1.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+                { id: 's2_poi_cave_entrance', position: LOCATIONS.POIS.CAVE_ENTRANCE, radius: 15, type: TriggerType.POI, content: "pois.1.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+                { id: 's2_poi_mountain_vault', position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: TriggerType.POI, content: "pois.1.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
             ]);
         }
 
@@ -333,11 +334,12 @@ export const Sector1: SectorDef = {
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
         // --- REVERB ---
         const insideCave = playerPos.z < -80;
-        if (soundManager.core) {
+        if (soundManager.ctx) {
             if (insideCave) soundManager.setReverb(0.35);
             else soundManager.setReverb(0);
         }
 
+        /*
         // --- FAMILY FOLLOW ---
         const familyMembers = (events as any).scene.children.filter((c: any) =>
             c.userData.type === 'family' || c.userData.isFamilyMember
@@ -362,7 +364,7 @@ export const Sector1: SectorDef = {
             if (body) {
                 PlayerAnimator.update(body, {
                     isMoving: familyObj.following,
-                    isRushing: false, isRolling: false, rollStartTime: 0,
+                    isRushing: false, isDodging: false, dodgeStartTime: 0,
                     staminaRatio: 1.0,
                     isSpeaking: familyObj.isSpeaking || false,
                     isThinking: familyObj.isThinking || false,
@@ -371,6 +373,7 @@ export const Sector1: SectorDef = {
                 }, now, delta);
             }
         }
+        */
 
         // --- SECTOR-SPECIFIC NARRATIVE SYSTEM ---
         if (!sectorState.jordanEventState) sectorState.jordanEventState = 0;
@@ -457,7 +460,7 @@ export const Sector1: SectorDef = {
                     const body = jordan.userData.cachedBody || jordan.children.find((c: any) => c.userData.isBody);
                     if (body) {
                         PlayerAnimator.update(body, {
-                            isMoving: true, isRushing: false, isRolling: false, rollStartTime: 0,
+                            isMoving: true, isRushing: false, isDodging: false, dodgeStartTime: 0,
                             staminaRatio: 1.0, isSpeaking: gameState.speakingUntil > now,
                             isThinking: false, isIdleLong: false, isSwimming: false, isWading: false,
                             seed: jordan.userData.seed || 0, renderTime: now

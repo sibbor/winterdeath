@@ -3,9 +3,12 @@ import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { soundManager } from '../utils/audio/SoundManager';
 import { FXSystem } from './FXSystem';
-import { PlayerDeathState, DamageType, EnemyAttackType } from '../entities/player/CombatTypes';
+import { PlayerDeathState, DamageID, EnemyAttackType } from '../entities/player/CombatTypes';
 import { PERKS, StatusEffectType, PerkCategory } from '../content/perks';
 import { MaterialType } from '../content/environment';
+import { StatusEffectID, PlayerStatID, PlayerStatusFlags, STATUS_EFFECT_MAP } from '../entities/player/PlayerTypes';
+import { SoundID } from '../utils/audio/AudioTypes';
+import { EnemyType, EnemyFlags } from '../entities/enemies/EnemyTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -27,7 +30,9 @@ export class PlayerStatsSystem implements System {
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
-        if (session.state.isDead) return;
+        const state = session.state;
+        if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
+        if ((state.statusFlags & PlayerStatusFlags.STUNNED) !== 0) return;
 
         this.updatePassives(session);
         this.checkAdrenalinePatch(session, now);
@@ -37,44 +42,39 @@ export class PlayerStatsSystem implements System {
 
     private checkAdrenalinePatch(session: GameSessionLogic, now: number) {
         const state = session.state;
-        const perk = PERKS[StatusEffectType.ADRENALINE_PATCH];
+        const perkID = StatusEffectType.ADRENALINE_PATCH;
+        const perk = PERKS[perkID];
         if (!perk) return;
 
-        // Trigger at < 25% HP and off cooldown
-        if (state.hp > 0 && state.hp < state.maxHp * 0.25) {
+        const hp = state.statsBuffer[PlayerStatID.HP];
+        const maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
+
+        if (hp > 0 && hp < maxHp * 0.25) {
             if (now - state.lastAdrenalinePatchTime > (perk.cooldown || 60000)) {
                 state.lastAdrenalinePatchTime = now;
 
-                // Add the absolute buff
-                state.statusEffects[perk.id] = {
-                    duration: perk.duration || 3000,
-                    maxDuration: perk.duration || 3000,
-                    intensity: perk.intensity || 1,
-                    damage: perk.damage || 0,
-                    lastTick: now
-                };
+                const sID = StatusEffectID.ADRENALINE_PATCH;
+                state.effectDurations[sID] = perk.duration || 3000;
+                state.effectIntensities[sID] = perk.intensity || 1;
 
-                soundManager.playEffect('adrenaline_boost');
-                console.log(`[BUFF] Gained: ${perk.id} (Adrenaline Patch) | Duration: ${perk.duration}ms`);
-
-                // Discovery
-                if (!state.discoveredPerks.includes(perk.id)) {
-                    state.discoveredPerks.push(perk.id);
-                    session.triggerDiscovery('perk', perk.id, perk.displayName, perk.description);
+                soundManager.playEffect(SoundID.ADRENALINE_BOOST);
+                
+                if (!state.discoveredPerks.includes(perkID)) {
+                    state.discoveredPerks.push(perkID);
+                    session.triggerDiscovery('perk', perkID, perk.displayName, perk.description);
                 }
             }
         }
     }
 
-    // Cached Base Multipliers
     private cachedFamilyMultipliers = {
         speed: 1.0, reloadTime: 1.0, fireRate: 1.0, damageResist: 1.0, range: 1.0
     };
 
-    // Updates passive buffs from family members
     public updatePassives(session: GameSessionLogic) {
         this.cachedFamilyMultipliers = { speed: 1.0, reloadTime: 1.0, fireRate: 1.0, damageResist: 1.0, range: 1.0 };
         const family = this.activeFamilyMembers.current;
+        const state = session.state;
 
         let pIdx = 0;
         for (let i = 0; i < family.length; i++) {
@@ -99,16 +99,8 @@ export class PlayerStatsSystem implements System {
             }
 
             if (passiveId) {
-                const alreadyHas = this.cachedPassives.includes(passiveId);
                 this.cachedPassives[pIdx++] = passiveId;
-
-                // Discovery Trigger
-                const state = session.state;
                 const perk = PERKS[passiveId];
-
-                if (!alreadyHas) {
-                    console.log(`[PASSIVE] Sync: Gained ${passiveId} from family member`);
-                }
 
                 if (perk && !state.discoveredPerks.includes(passiveId)) {
                     state.discoveredPerks.push(passiveId);
@@ -116,117 +108,86 @@ export class PlayerStatsSystem implements System {
                 }
             }
         }
-
         this.cachedPassives.length = pIdx;
+        
+        // --- SYNC TO STATE (Zero-GC) ---
+        state.activePassives.length = 0;
+        for (let i = 0; i < pIdx; i++) state.activePassives.push(this.cachedPassives[i]);
     }
+
 
     private updateBuffsAndDebuffs(session: GameSessionLogic, dt: number, now: number) {
         const state = session.state;
+        const stats = state.statsBuffer;
 
-        // 1. Copy the pre-calculated values (O(1) operation)
-        state.multipliers.speed = this.cachedFamilyMultipliers.speed;
-        state.multipliers.reloadTime = this.cachedFamilyMultipliers.reloadTime;
-        state.multipliers.fireRate = this.cachedFamilyMultipliers.fireRate;
-        state.multipliers.damageResist = this.cachedFamilyMultipliers.damageResist;
-        state.multipliers.range = this.cachedFamilyMultipliers.range;
+        stats[PlayerStatID.MULTIPLIER_SPEED] = this.cachedFamilyMultipliers.speed;
+        stats[PlayerStatID.MULTIPLIER_RELOAD] = this.cachedFamilyMultipliers.reloadTime;
+        stats[PlayerStatID.MULTIPLIER_FIRERATE] = this.cachedFamilyMultipliers.fireRate;
+        stats[PlayerStatID.MULTIPLIER_DMG_RESIST] = this.cachedFamilyMultipliers.damageResist;
+        stats[PlayerStatID.MULTIPLIER_RANGE] = this.cachedFamilyMultipliers.range;
 
-        // Sync UI-array from cache
-        for (let i = 0; i < this.cachedPassives.length; i++) {
-            state.activePassives[i] = this.cachedPassives[i];
-        }
-        state.activePassives.length = this.cachedPassives.length;
+        state.statusFlags &= ~PlayerStatusFlags.DISORIENTED;
+        state.activeBuffs.length = 0;
+        state.activeDebuffs.length = 0;
+        
+        for (let i = 0; i < StatusEffectID.COUNT; i++) {
+            if (state.effectDurations[i] <= 0) continue;
 
-        state.isDisoriented = false;
-        let buffIdx = 0;
-        let debuffIdx = 0;
-
-        // 2. Apply only what changes often (Status Effects)
-        const effects = state.statusEffects;
-        for (const key in effects) {
-            const type = key as StatusEffectType;
-            const effect = effects[type];
-            if (!effect) continue;
-
-            if (effect.duration <= 0) {
-                // Check if it was active last frame to log expiration
-                const wasActive = state.activeBuffs.includes(type) || state.activeDebuffs.includes(type);
-                if (wasActive) {
-                    console.log(`[STATUS] Expired: ${type}`);
-                }
-                continue;
-            }
-
-            effect.duration -= dt * 1000;
-
-            const perk = PERKS[type];
-            if (perk) {
-                if (perk.category === PerkCategory.BUFF) {
-                    state.activeBuffs[buffIdx++] = type;
-                } else {
-                    state.activeDebuffs[debuffIdx++] = type;
-                }
-
-                // Apply intensity (e.g. speed multiplier) if defined
-                if (perk.intensity !== undefined) {
-                    state.multipliers.speed *= perk.intensity;
-                }
-            } else {
-                console.warn(`[DEBUG] Unknown status effect type: ${type} - check PERKS registry`);
-                state.activeDebuffs[debuffIdx++] = type;
-            }
-
-            if (type === StatusEffectType.DISORIENTED) {
-                state.isDisoriented = true;
+            const duration = state.effectDurations[i];
+            state.effectDurations[i] = Math.max(0, duration - dt * 1000);
+            
+            // Map index to multipliers and state flags
+            if (i === StatusEffectID.ADRENALINE_PATCH) {
+                stats[PlayerStatID.MULTIPLIER_SPEED] *= state.effectIntensities[i];
+            } else if (i === StatusEffectID.DISORIENTED) {
+                state.statusFlags |= PlayerStatusFlags.DISORIENTED;
                 session.engine.camera.shake(0.05);
             }
-        }
 
-        state.activeBuffs.length = buffIdx;
-        state.activeDebuffs.length = debuffIdx;
+            // HUD Synchronization: Report all non-passive effects to the Active Buff/Debuff arrays
+            const perk = PERKS[i];
+            if (perk) {
+                if (perk.category === PerkCategory.BUFF) {
+                    state.activeBuffs.push(i);
+                } else if (perk.category === PerkCategory.DEBUFF) {
+                    state.activeDebuffs.push(i);
+                }
+            }
+        }
     }
 
     private applyStatusTicks(session: GameSessionLogic, dt: number, now: number) {
         const state = session.state;
-        const effects = state.statusEffects;
 
-        for (const key in effects) {
-            const type = key as StatusEffectType;
-            const effect = effects[type];
-            if (!effect || effect.duration <= 0) continue;
+        // Tick DoT every 1 second
+        if (Math.floor(now / 1000) !== Math.floor((now - dt * 1000) / 1000)) {
+            for (let i = 0; i < StatusEffectID.COUNT; i++) {
+                if (state.effectDurations[i] <= 0) continue;
 
-            // Tick DoT every 1 second
-            if (now - (effect.lastTick || 0) >= 1000) {
-                // Use intensity as damage per second
-                const dmg = effect.damage || 0;
-                if (dmg > 0) {
-                    const dmgType = type === StatusEffectType.BURNING ? DamageType.BURN :
-                        (type === StatusEffectType.BLEEDING ? DamageType.BLEED :
-                            (type === StatusEffectType.ELECTRIFIED ? DamageType.ELECTRIC : DamageType.PHYSICAL));
+                // Map index to fixed damage logic
+                let dmg = 0;
+                let dmgID = DamageID.PHYSICAL;
+                let effectKey: StatusEffectType | undefined;
 
-                    // Track source if available
-                    const attacker = effect.sourceType ? { type: effect.sourceType, isBoss: effect.sourceType === 'Boss' } : null;
+                if (i === StatusEffectID.BURNING) {
+                    dmg = 5; dmgID = DamageID.BURN; effectKey = StatusEffectType.BURNING;
+                } else if (i === StatusEffectID.BLEEDING) {
+                    dmg = 3; dmgID = DamageID.BLEED; effectKey = StatusEffectType.BLEEDING;
+                } else if (i === StatusEffectID.ELECTRIFIED) {
+                    dmg = 2; dmgID = DamageID.ELECTRIC; effectKey = StatusEffectType.ELECTRIFIED;
+                }
 
-                    // Use the effect name (e.g., 'BLEEDING') for the breakdown to match user requirements
-                    // but we can prepend the source attack if we want to be super detailed.
-                    // For now, let's stick to the requested format: "Bleeding", "Burning" etc.
-                    const attackName = type;
-
-                    this.handlePlayerHit(session, dmg, attacker, dmgType, true, undefined, undefined, undefined, attackName);
-
-                    // Visuals for status (Zero-GC: Use local constants or scratchpads if needed, but these are low-frequency)
-                    if (type === StatusEffectType.BLEEDING) {
+                if (dmg > 0 && effectKey) {
+                    this.handlePlayerHit(session, dmg, null, dmgID, true, effectKey);
+                    
+                    // Visuals
+                    if (i === StatusEffectID.BLEEDING) {
                         FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.8 + Math.random(), this.playerGroup.position.z, 'blood', 3);
-                    } else if (type === StatusEffectType.BURNING) {
-                        // Attach high-quality fire to player head, same as enemies
+                    } else if (i === StatusEffectID.BURNING) {
                         _v1.set(this.playerGroup.position.x + (Math.random() - 0.5) * 0.5, this.playerGroup.position.y + 1.8, this.playerGroup.position.z + (Math.random() - 0.5) * 0.5);
                         FXSystem.spawnPart(session.engine.scene, state.particles, _v1.x, _v1.y, _v1.z, 'flame', 1);
-
-                        //FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.8, this.playerGroup.position.z, 'enemy_effect_flame', 1);
-                    } else if (type === StatusEffectType.ELECTRIFIED) {
-                        FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.8, this.playerGroup.position.z, 'spark', 4);
                     }
                 }
-                effect.lastTick = now;
             }
         }
     }
@@ -235,238 +196,148 @@ export class PlayerStatsSystem implements System {
         session: GameSessionLogic,
         damage: number,
         attacker: any,
-        type: string | DamageType,
+        type: DamageID,
         isDoT: boolean = false,
         effectType?: StatusEffectType,
         effectDuration?: number,
-        effectDamage?: number,
-        specificAttackType?: string // e.g. "BITTEN" or "HIT"
+        effectIntensity?: number,
+        specificAttackType?: string
     ) {
         const state = session.state;
         const now = state.simTime;
 
-        if (state.isDead || state.sectorState?.isInvincible) return;
+        if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0 || state.sectorState?.isInvincible) return;
 
-        // --- VEHICLE IMMUNITY ---
-        // If the player is inside a vehicle, they are shielded from direct enemy attacks
-        if (state.vehicle.active && attacker) {
-            soundManager.playImpact(MaterialType.METAL);
-            state.hurtShake = 0.4; // Subtle feedback even though no damage is taken
+        if (state.effectDurations[StatusEffectID.REFLEX_SHIELD] > 0 || state.effectDurations[StatusEffectID.ADRENALINE_PATCH] > 0) {
             return;
         }
 
-        // --- NEW: TACTICAL IMMUNITY BUFFS ---
-        const reflexShield = state.statusEffects[StatusEffectType.REFLEX_SHIELD];
-        const adrenalinePatch = state.statusEffects[StatusEffectType.ADRENALINE_PATCH];
+        let actualDmg = damage * state.statsBuffer[PlayerStatID.MULTIPLIER_DMG_RESIST];
+        const isBite = type === DamageID.BITE;
 
-        if ((reflexShield && reflexShield.duration > 0) || (adrenalinePatch && adrenalinePatch.duration > 0)) {
-            // Visual feedback for negated hit? 
-            // (Standard invulnerableCheck below handles I-frames, but this is absolute)
-            return;
-        }
-
-        // Apply Damage Resistance Multiplier (Nathalie)
-        let actualDmg = damage * state.multipliers.damageResist;
-
-        //if (PerformanceMonitor.getInstance().consoleLoggingEnabled) {
-        //console.log(`[PLAYER] HIT | HP: ${state.hp.toFixed(0)} | -${actualDmg.toFixed(1)} (${type}) from ${attacker?.type || 'Other'}${isDoT ? ' [DoT]' : ''} | Effect: ${effectType || 'None'} (${effectDuration || 0}ms)`);
-        //}
-
-
-        const isBite = type === DamageType.BITE;
-
-        // I-frames logic (Skip for DoT damage)
         if (!isDoT) {
             if (!isBite && now < (state.invulnerableUntil || 0)) return;
             if (isBite && now < (state.lastBiteTime || 0) + 50) return;
         }
 
-        // Apply health reduction
-        state.hp -= actualDmg;
+        state.statsBuffer[PlayerStatID.HP] -= actualDmg;
 
-        // --- NEW: Centralized Damage Tracking ---
-        const damageTracker = session.getSystem('damage_tracker_system') as any;
-        const sourceName = attacker ? (attacker.isBoss ? 'Boss' : attacker.type) : 'Other';
-        const attackName = specificAttackType || (type === DamageType.BITE ? EnemyAttackType.BITE : (isDoT ? type : EnemyAttackType.HIT));
-
-        if (damageTracker) {
-            damageTracker.recordIncomingDamage(session, actualDmg, sourceName, attackName, attacker?.isBoss);
+        let attackIndex = isBite ? EnemyAttackType.BITE : EnemyAttackType.HIT;
+        if (isDoT && effectType !== undefined) {
+            attackIndex = effectType as any;
         }
 
-        // --- NEW: Register Status Effects ---
-        if (effectType) {
-            // console.log(`[DEBUG] Registering effect: ${effectType} für ${effectDuration}ms`);
-            if (!state.statusEffects[effectType]) {
-                state.statusEffects[effectType] = { duration: 0, maxDuration: 0, intensity: 1, damage: 0, lastTick: 0 };
-            }
+        // Damage Telemetry
+        const damageTracker = session.getSystem('damage_tracker_system') as any;
+        if (damageTracker) {
+            let sourceKey = type; // Use the direct DamageID (SMI)
 
-            const perk = PERKS[effectType];
-
-            // Set/Overwrite the duration, maxDuration and intensity/damage
-            // Prioritize PERKS database if available, otherwise use passed values
-            state.statusEffects[effectType]!.duration = perk?.duration || effectDuration || 0;
-            state.statusEffects[effectType]!.maxDuration = perk?.duration || effectDuration || 0;
-            state.statusEffects[effectType]!.intensity = perk?.intensity !== undefined ? perk.intensity : (effectType === StatusEffectType.STUNNED ? 0 : 1);
-            state.statusEffects[effectType]!.damage = perk?.damage || effectDamage || 0;
-
-            console.log(`[STATUS] Gained: ${effectType} | Duration: ${state.statusEffects[effectType]!.duration}ms | Dmg: ${state.statusEffects[effectType]!.damage}`);
-
-            // Track source for DoT
             if (attacker) {
-                state.statusEffects[effectType]!.sourceType = attacker.isBoss ? 'Boss' : attacker.type;
-                state.statusEffects[effectType]!.sourceAttack = specificAttackType || effectType;
+                const isBossAttacker = (attacker.statusFlags & EnemyFlags.BOSS) !== 0;
+                if (isBossAttacker && attacker.bossId !== undefined) {
+                    sourceKey = DamageID.BOSS;
+                    // For bosses, attackIndex is their identity in telemetry grouping
+                    // but we also want the killerAttackName to be correct.
+                    // Wait, if I use attackIndex = attacker.bossId here, I overwrite BITE/HIT.
+                    // Let's use a separate local for telemetry recording.
+                } else {
+                    sourceKey = DamageID.PHYSICAL;
+                }
             }
 
-            // Initialization for ticks
-            if (state.statusEffects[effectType]!.lastTick === 0) {
-                state.statusEffects[effectType]!.lastTick = now;
+            let telemetryAttackIndex = attackIndex;
+            if (attacker && (attacker.statusFlags & EnemyFlags.BOSS) !== 0 && attacker.bossId !== undefined) {
+                telemetryAttackIndex = attacker.bossId;
+            }
+
+            damageTracker.recordIncomingDamage(session, actualDmg, sourceKey, telemetryAttackIndex, (attacker?.statusFlags & EnemyFlags.BOSS) !== 0);
+        }
+
+        if (effectType !== undefined) {
+            const perk = PERKS[effectType];
+            if (perk) {
+                // VINTERDÖD FIX: Numeric SMI indexing on Float32Array (effectType is 0-13)
+                state.effectDurations[effectType] = perk.duration || effectDuration || 0;
+                state.effectIntensities[effectType] = effectIntensity !== undefined ? effectIntensity : (perk.intensity || 1);
             }
         }
 
         if (!isDoT) {
-            if (isBite) {
-                state.lastBiteTime = now;
-            } else {
-                state.invulnerableUntil = now + 400;
-            }
+            if (isBite) state.lastBiteTime = now;
+            else state.invulnerableUntil = now + 400;
             soundManager.playDamageGrunt();
             state.hurtShake = 1.0;
         }
 
         state.lastDamageTime = now;
 
-        // Visuals
         if (state.particles && !isDoT) {
-            let pType = 'blood_splat';
-            let pCount = 5;
-            let pScale = 3.0;
-            let pColor: number | undefined = undefined;
-
-            switch (type) {
-                case DamageType.BITE:
-                case DamageType.PHYSICAL:
-                case DamageType.BLEED:
-                    pType = 'blood_splat';
-                    break;
-                case DamageType.BURN:
-                    pType = 'fire';
-                    pCount = 8;
-                    pScale = 2.0;
-                    break;
-                case DamageType.EXPLOSION:
-                    pType = 'explosion';
-                    pCount = 15;
-                    pScale = 1.5;
-                    break;
-                case DamageType.DROWNING:
-                    pType = 'splash';
-                    break;
-                case DamageType.FALL:
-                    pType = 'impact_splat';
-                    pColor = 0x888888;
-                    pScale = 3.5;
-                    break;
-                case DamageType.ELECTRIC:
-                    pType = 'spark';
-                    pCount = 10;
-                    pScale = 1.2;
-                    break;
-                default:
-                    pType = 'blood_splat';
-                    break;
-            }
-
-            FXSystem.spawnPart(
-                session.engine.scene,
-                state.particles,
-                this.playerGroup.position.x,
-                1.3,
-                this.playerGroup.position.z,
-                pType,
-                pCount,
-                undefined,
-                undefined,
-                pColor,
-                pScale
-            );
+            FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.3, this.playerGroup.position.z, 'blood_splat', 5);
         }
 
-        // Death check
-        if (state.hp <= 0) {
-            this.executePlayerDeath(session, attacker, type, attackName, now);
+        if (state.statsBuffer[PlayerStatID.HP] <= 0) {
+            let finalAttackName = specificAttackType || 'HIT';
+            if (isDoT && effectType !== undefined) {
+                finalAttackName = StatusEffectType[effectType] || 'DOT';
+            }
+            this.executePlayerDeath(session, attacker, type, finalAttackName, attackIndex, now);
         }
     }
 
-    private executePlayerDeath(session: GameSessionLogic, attacker: any, type: string | DamageType, attackName: string, now: number) {
+    private executePlayerDeath(session: GameSessionLogic, attacker: any, type: DamageID, attackName: string, attackIndex: number, now: number) {
         const state = session.state;
-        state.isDead = true;
+        state.statusFlags |= PlayerStatusFlags.DEAD;
         state.deathStartTime = now;
 
-        //if (PerformanceMonitor.getInstance().consoleLoggingEnabled) {
-        console.log(`[PLAYER] DIED from ${type} | Attacker: ${attacker?.type || 'Other'}`);
-        //}
+        state.killerType = type;
 
-        // Setup killer name for UI
-        state.killerType = type as string;
-
-        // Determine Death State for Visuals
         state.playerDeathState = PlayerDeathState.NORMAL;
 
-        // Use DamageType enum for clean comparisons
-        if (type === DamageType.EXPLOSION) {
-            state.playerDeathState = PlayerDeathState.GIBBED;
-        } else if (type === DamageType.BURN) {
-            state.playerDeathState = PlayerDeathState.BURNED;
-        } else if (type === DamageType.DROWNING) {
-            state.playerDeathState = PlayerDeathState.DROWNED;
-        }
+        if (type === DamageID.EXPLOSION) state.playerDeathState = PlayerDeathState.GIBBED;
+        else if (type === DamageID.BURN) state.playerDeathState = PlayerDeathState.BURNED;
+        else if (type === DamageID.DROWNING) state.playerDeathState = PlayerDeathState.DROWNED;
 
-        if (attacker && attacker.isBoss && attacker.bossId !== undefined) {
-            state.killerName = this.t(`bosses.${attacker.bossId}.name`);
+        if (attacker && (attacker.statusFlags & EnemyFlags.BOSS) !== 0 && attacker.bossId !== undefined) {
+            state.killerName = this.t(`enemies.bosses.${attacker.bossId}.name`);
             state.killedByEnemy = true;
+            // For bosses, the specific attack name is often generic or uses the boss identity
+            state.killerAttackName = attackName; 
         } else if (attacker) {
-            state.killerName = this.t(`enemies.${attacker.type}.name`);
+            const enemyNameKey = EnemyType[attacker.type] || 'other';
+            state.killerName = this.t(`enemies.zombies.${enemyNameKey}.name`);
             state.killedByEnemy = true;
-        } else if (type === DamageType.DROWNING) {
-            state.killerName = this.t('ui.drowning');
-            state.killedByEnemy = false;
-        } else if (type === DamageType.BURN) {
-            state.killerName = this.t('ui.burning');
-            state.killedByEnemy = false;
-        } else if (type === DamageType.FALL) {
-            state.killerName = this.t('ui.falling');
-            state.killedByEnemy = false;
+            
+            // Map numeric attack type to Enum String for UI translation (e.g. "BITE")
+            const attackEnumName = EnemyAttackType[attackIndex] || attackName;
+            state.killerAttackName = attackEnumName;
         } else {
-            state.killerName = this.t('ui.unknown_threat');
+            let envKey = 'ui.unknown_threat';
+            if (type === DamageID.DROWNING) envKey = 'ui.drowning';
+            else if (type === DamageID.BURN) envKey = 'ui.burning';
+            else if (type === DamageID.BLEED) envKey = 'ui.bleeding';
+            else if (type === DamageID.ELECTRIC) envKey = 'ui.electrified';
+            else if (type === DamageID.FALL) envKey = 'ui.falling';
+            else if (type === DamageID.EXPLOSION) envKey = 'ui.explosion';
+            
+            state.killerName = this.t(envKey);
             state.killedByEnemy = false;
+            state.killerAttackName = 'HIDDEN'; // Environment doesn't show attack title in parens
         }
-
-        state.killerAttackName = attackName;
 
         const input = session.engine.input.state;
         _v1.set(0, 0, 0);
-
-        // Calculate death vector based on movement input
-        if (input.w) _v1.z -= 1;
-        if (input.s) _v1.z += 1;
-        if (input.a) _v1.x -= 1;
-        if (input.d) _v1.x += 1;
+        if (input.w) _v1.z -= 1; if (input.s) _v1.z += 1;
+        if (input.a) _v1.x -= 1; if (input.d) _v1.x += 1;
 
         if (_v1.lengthSq() > 0) {
             state.deathVel.copy(_v1).normalize().multiplyScalar(15);
+        } else if (attacker && attacker.mesh) {
+            state.deathVel.subVectors(this.playerGroup.position, attacker.mesh.position).normalize().multiplyScalar(12);
         } else {
-            if (attacker && attacker.mesh) {
-                _v2.copy(attacker.mesh.position);
-                state.deathVel.subVectors(this.playerGroup.position, _v2).normalize().multiplyScalar(12);
-            } else {
-                state.deathVel.set(0, 0, 12);
-            }
+            state.deathVel.set(0, 0, 12);
         }
-
         state.deathVel.y = 4;
     }
 
-    clear() {
-    }
-
+    clear() { }
 }

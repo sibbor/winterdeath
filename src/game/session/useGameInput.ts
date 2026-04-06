@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GameCanvasProps } from '../../game/session/SessionTypes';
 import { soundManager } from '../../utils/audio/SoundManager';
 import { FLASHLIGHT } from '../../content/constants';
+import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 
 export const useGameInput = (
     refs: any,
@@ -40,11 +41,11 @@ export const useGameInput = (
     // 2. Gameplay actions (Flashlight, Rolling)
     useEffect(() => {
         const isInputEnabled = !props.isPaused &&
-            props.isRunning &&
+            props.isGameRunning &&
             !refs.cinematicRef.current.active &&
             !p.isClueOpen &&
             !p.disableInput &&
-            !refs.stateRef.current?.isDead &&
+            !(refs.stateRef.current?.statusFlags & PlayerStatusFlags.DEAD) &&
             !refs.bossIntroTimerRef.current;
 
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -75,7 +76,7 @@ export const useGameInput = (
                 soundManager.playUiClick();
             }
 
-            if (state.isDead) return;
+            if (state.statusFlags & PlayerStatusFlags.DEAD) return;
             state.lastActionTime = state.simTime;
         };
 
@@ -87,17 +88,18 @@ export const useGameInput = (
             const engine = refs.engineRef.current;
             if (!state || !engine) return;
 
-            if (state.isDead) return;
+            if (state.statusFlags & PlayerStatusFlags.DEAD) return;
 
-            // Rolling (Space)
+            // Dodging (Space)
             if (key === ' ') {
                 const inp = engine.input.state;
-                if (!state.isRushing && !state.isRolling && state.spaceDepressed) {
-                    if (state.stamina >= 5) {
-                        state.stamina -= 5;
+                if (!(state.statusFlags & PlayerStatusFlags.RUSHING) && !(state.statusFlags & PlayerStatusFlags.DODGING) && state.spaceDepressed) {
+                    const SB = state.statsBuffer;
+                    if (SB[PlayerStatID.STAMINA] >= 5) {
+                        SB[PlayerStatID.STAMINA] -= 5;
                         state.lastStaminaUseTime = state.simTime;
-                        state.isRolling = true;
-                        state.rollStartTime = state.simTime;
+                        state.statusFlags |= PlayerStatusFlags.DODGING;
+                        state.dodgeStartTime = state.simTime;
                         state.invulnerableUntil = state.simTime + 400;
 
                         let dx = 0; let dz = 0;
@@ -107,19 +109,19 @@ export const useGameInput = (
                         if (inp.d) dx += 1;
 
                         if (dx !== 0 || dz !== 0) {
-                            state.rollDir.set(dx, 0, dz).normalize();
+                            state.dodgeDir.set(dx, 0, dz).normalize();
                             if (engine.camera.angle !== 0) {
-                                state.rollDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), engine.camera.angle);
+                                state.dodgeDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), engine.camera.angle);
                             }
                         } else if (refs.playerGroupRef.current) {
-                            state.rollDir.set(0, 0, 1).applyQuaternion(refs.playerGroupRef.current.quaternion).normalize();
+                            state.dodgeDir.set(0, 0, 1).applyQuaternion(refs.playerGroupRef.current.quaternion).normalize();
                         }
 
                         soundManager.playDash();
                     }
                 }
                 state.spaceDepressed = false;
-                state.isRushing = false;
+                state.statusFlags &= ~PlayerStatusFlags.RUSHING;
             }
         };
 
@@ -130,7 +132,7 @@ export const useGameInput = (
             window.removeEventListener('keyup', handleKeyUp);
         };
     }, [
-        props.isPaused, props.isRunning, props.isCollectibleOpen, p.disableInput,
+        props.isPaused, props.isGameRunning, props.isCollectibleOpen, p.disableInput,
         props.onPauseToggle, p.onClueClose, refs
     ]);
 
@@ -147,7 +149,7 @@ export const useGameInput = (
 
     useEffect(() => {
         const handleLockChange = () => {
-            if (!document.pointerLockElement && props.isRunning && !props.isPaused) {
+            if (!document.pointerLockElement && props.isGameRunning && !props.isPaused) {
 
                 // Ignore if we JUST unpaused (lock takes a frame or two to acquire)
                 if (performance.now() - unpauseTimeRef.current < 500) {
@@ -159,7 +161,7 @@ export const useGameInput = (
                     return;
                 }
 
-                const isExpected = refs.cinematicRef.current.active || refs.bossIntroTimerRef.current || refs.stateRef.current?.isDead;
+                const isExpected = refs.cinematicRef.current.active || refs.bossIntroTimerRef.current || (refs.stateRef.current?.statusFlags & PlayerStatusFlags.DEAD);
                 if (!isExpected) {
                     props.onPauseToggle(true);
                 }
@@ -168,6 +170,6 @@ export const useGameInput = (
 
         document.addEventListener('pointerlockchange', handleLockChange);
         return () => document.removeEventListener('pointerlockchange', handleLockChange);
-    }, [props.isRunning, props.isPaused, props.onPauseToggle, refs]);
+    }, [props.isGameRunning, props.isPaused, props.onPauseToggle, refs]);
 
 };

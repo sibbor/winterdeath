@@ -2,20 +2,22 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { t } from '../../../utils/i18n';
 import { soundManager } from '../../../utils/audio/SoundManager';
+import { DiscoveryType } from './HudTypes';
+import { DISCOVERY_TYPE_KEYS } from '../../../utils/ui/Mappers';
 
 interface DiscoveryPopupProps {
   onOpenAdventureLog: (tab?: string, itemId?: string) => void;
 }
 
 // STATIC MAP: Undviker att allokera ett nytt objekt i minnet vid varje interaktion
-const TAB_MAP: Record<string, string> = {
-  clue: 'clues',
-  poi: 'poi',
-  collectible: 'collectibles',
-  enemy: 'enemy',
-  boss: 'boss',
-  perk: 'perks'
-};
+// STATIC MAP: SMI-indexed mapping to Adventure Log tabs
+const TAB_MAP: Record<number, string> = {};
+TAB_MAP[DiscoveryType.CLUE] = 'clues';
+TAB_MAP[DiscoveryType.POI] = 'poi';
+TAB_MAP[DiscoveryType.COLLECTIBLE] = 'collectibles';
+TAB_MAP[DiscoveryType.ENEMY] = 'enemy';
+TAB_MAP[DiscoveryType.BOSS] = 'boss';
+TAB_MAP[DiscoveryType.PERK] = 'perks';
 
 // ZERO-GC: Statisk variabel utanför komponenten som överlever unmounts (t.ex. vid paus)
 let lastProcessedTimestamp = 0;
@@ -51,7 +53,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
       if (!prevVisible) return prevVisible; // Avbryt om den redan är stängd
 
       soundManager.playUiConfirm();
-      const tab = TAB_MAP[activeDiscovery?.type || 'clue'] || 'clues';
+      const tab = TAB_MAP[activeDiscovery?.type] || 'clues';
 
       // Skickar med både tab och ID precis som du lade till!
       onOpenAdventureLog(tab, activeDiscovery?.id);
@@ -80,12 +82,12 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
 
   const getIcon = () => {
     switch (activeDiscovery.type) {
-      case 'clue': return <span className="text-xl">🔍</span>;
-      case 'poi': return <span className="text-xl">📍</span>;
-      case 'collectible': return <span className="text-xl">📦</span>;
-      case 'enemy': return <span className="text-xl">🧟</span>;
-      case 'boss': return <span className="text-xl">💀</span>;
-      case 'perk': return <span className="text-xl">✨</span>;
+      case DiscoveryType.CLUE: return <span className="text-xl">🔍</span>;
+      case DiscoveryType.POI: return <span className="text-xl">📍</span>;
+      case DiscoveryType.COLLECTIBLE: return <span className="text-xl">📦</span>;
+      case DiscoveryType.ENEMY: return <span className="text-xl">🧟</span>;
+      case DiscoveryType.BOSS: return <span className="text-xl">💀</span>;
+      case DiscoveryType.PERK: return <span className="text-xl">✨</span>;
       default: return null;
     }
   };

@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { t } from '../../../../utils/i18n';
-import { SectorStats } from '../../../../game/session/SessionTypes';;
+import { SectorStats } from '../../../../game/session/SessionTypes';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
-import { BOSSES } from '../../../../content/constants';
-import { getCollectibleById, getCollectiblesBySector } from '../../../../content/collectibles';
+import { SECTORS } from '../../../../systems/SectorSystem';
+import { DamageID } from '../../../../entities/player/CombatTypes';
+import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
+import { ENEMY_TYPE_KEYS, ATTACK_TYPE_KEYS } from '../../../../utils/ui/Mappers';
 
 interface ScreenSectorReportProps {
     stats: SectorStats;
@@ -20,15 +22,30 @@ const formatTime = (ms: number) => {
     const totalSec = Math.floor(ms / 1000);
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
-    return `${m}:${s.toString().padStart(2, '0')} min`;
+    return `${m}:${s.toString().padStart(2, '0')}${t('report.time.unit_min')}`;
 };
 
 const formatDistance = (meters: number) => {
-    if (meters >= 1000) return `${(meters / 1000).toFixed(2)} km`;
-    return `${Math.floor(meters)} m`;
+    if (meters >= 1000) return `${(meters / 1000).toFixed(2)}${t('report.distance.unit_km')}`;
+    return `${Math.floor(meters)}${t('report.distance.unit_m')}`;
 };
 
+/**
+ * [VINTERDÖD] Redesigned Sector Report
+ * Features a paged layout for better clarity and hierarchy.
+ */
 const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRestartSector, onRespawn, onNextSector, currentSector, isMobileDevice }) => {
+    const [activeTab, setActiveTab] = useState<0 | 1>(0);
+
+    const sectorDef = SECTORS[currentSector];
+    const sectorName = sectorDef?.name ? t(sectorDef.name) : `${t('ui.sector_label')} ${currentSector}`;
+
+    // Sector Status Aggregation
+    const isFailed = !!deathDetails;
+    const isAborted = stats.aborted && !deathDetails;
+
+    const statusKey = isFailed ? 'ui.failed' : (isAborted ? 'ui.aborted' : 'ui.completed');
+    const statusColorClass = isFailed ? 'text-red-500' : (isAborted ? 'text-yellow-500' : 'text-green-500');
 
     const accuracy = stats.shotsFired > 0
         ? ((stats.shotsHit || 0) / stats.shotsFired * 100).toFixed(1)
@@ -36,66 +53,79 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
     const totalKills = (Object.values(stats.killsByType || {}) as number[]).reduce((a, b) => a + b, 0);
 
-    const rawBossId = BOSSES[currentSector]?.name;
-    const bossName = t(rawBossId);
-
-    // Check both for fallback string "Boss" AND the boss's actual data ID
-    const bossKilled = !!stats.killsByType && (
-        (stats.killsByType['Boss'] as number) > 0 ||
-        (stats.killsByType[rawBossId] as number) > 0 ||
-        (stats.killsByType['GÅRDSHERREN'] as number) > 0
-    );
-
-    // Family Status Logic
-    let familyStatusKey = 'ui.family_member_missing';
-    let familyBoxClass = 'border-red-600 bg-red-900/20';
-    let familyTitleColor = 'text-red-500';
-
-    if (stats.familyFound || bossKilled) {
-        familyStatusKey = 'ui.family_member_rescued';
-        familyBoxClass = 'border-green-500 bg-green-900/20';
-        familyTitleColor = 'text-green-500';
-    }
-
-    // Boss Status Logic
+    const bossKills = (stats.killsByType?.[EnemyType.BOSS] as number) || (stats.killsByType?.['Boss'] as any) || 0;
+    const bossKilled = bossKills > 0;
+    const familyStatusKey = (stats.familyFound || bossKilled) ? 'ui.family_member_rescued' : 'ui.family_member_missing';
     const bossStatusKey = bossKilled ? 'ui.boss_dead' : 'ui.boss_alive';
-    const bossBoxClass = bossKilled
-        ? 'border-green-500 bg-green-900/20'
-        : 'border-red-600 bg-red-900/20';
-    const bossTitleColor = bossKilled ? 'text-green-500' : 'text-red-500';
 
-    // Validation Flags
-    const showRespawn = !!deathDetails || !!stats.aborted;
+    // Buttons logic
+    const showRespawn = isFailed || isAborted;
     const isFinished = !showRespawn;
-    const isLastSector = currentSector >= 3; // Sector3.ts is the final sector
+    const isLastSector = currentSector >= 3;
 
     let confirmLabel: string | undefined;
     let confirmAction: (() => void) | undefined;
     let hideConfirm = false;
 
     if (showRespawn) {
-        confirmLabel = t('ui.respawn') !== 'ui.respawn' ? t('ui.respawn') : 'RESPAWN';
+        confirmLabel = t('ui.respawn');
         confirmAction = onRespawn;
     } else if (isFinished) {
         if (!isLastSector) {
-            confirmLabel = t('ui.next_sector') !== 'ui.next_sector' ? t('ui.next_sector') : 'NEXT SECTOR';
+            confirmLabel = t('ui.next_sector');
             confirmAction = onNextSector;
         } else {
-            hideConfirm = true; // No "Next Sector" if we beat the final boss!
+            hideConfirm = true;
         }
     }
 
-    // Helper for Stat Blocks (Time elapsed style)
-    const StatBlock = ({ label, value, color }: { label: string, value: string | number, color: string }) => (
-        <div>
-            <span className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{label}</span>
-            <span className={`text-2xl font-semibold ${color}`}>{value}</span>
+    // --- REUSABLE SUB-COMPONENTS ---
+
+    const StatBox = ({ label, value, colorClass = 'text-white', borderColor = 'border-blue-500', bgColor = 'bg-blue-900/20' }: { label: string, value: string | number, colorClass?: string, borderColor?: string, bgColor?: string }) => (
+        <div className={`${bgColor} p-4 border-l-4 ${borderColor} shadow-lg flex flex-col justify-center min-h-[80px]`}>
+            <span className={`block text-[10px] uppercase font-black tracking-widest mb-1 opacity-70 ${colorClass}`}>{label}</span>
+            <span className={`text-2xl font-bold uppercase ${colorClass}`}>{value}</span>
         </div>
     );
 
+    const SmallStat = ({ label, value, colorClass = 'text-slate-400' }: { label: string, value: string | number, colorClass?: string }) => (
+        <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">{label}</span>
+            <span className={`text-lg font-bold ${colorClass}`}>{value}</span>
+        </div>
+    );
+
+    const TabButton = ({ index, label }: { index: 0 | 1, label: string }) => (
+        <button
+            onClick={() => setActiveTab(index)}
+            className={`px-6 py-2 text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === index ? 'border-white text-white' : 'border-transparent text-gray-500 hover:text-gray-300'}`}
+        >
+            {label}
+        </button>
+    );
+
+    const LineItem = ({ title, val, isHeal = false }: { title: string, val: number, isHeal?: boolean, key?: string | number }) => (
+        <div className="flex justify-between text-sm py-1 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors px-1 rounded">
+            <span className="text-white/80">{title}</span>
+            <span className={isHeal ? "text-green-400 font-mono" : "text-white font-mono"}>{Math.round(val)}</span>
+        </div>
+    );
+
+    const incomingData = Object.values(stats.incomingDamageBreakdown || {}) as any[];
+    const totalIncoming = incomingData.reduce((acc: number, enemyMap: any) => {
+        const enemyVals = Object.values(enemyMap || {}) as number[];
+        const sum = enemyVals.reduce((s: number, v: number) => s + (v || 0), 0);
+        return acc + sum;
+    }, 0);
+
+    const outgoingData = Object.values(stats.outgoingDamageBreakdown || {}) as number[];
+    const totalOutgoing = outgoingData.reduce((acc: number, val: number) => acc + (val || 0), 0);
+
     return (
         <ScreenModalLayout
-            title={t('ui.sector_report')}
+            title={sectorName.toUpperCase()}
+            subtitle={`${t('ui.sector_report')}  |  ${t(statusKey)}`.toUpperCase()}
+            subtitleClass={statusColorClass}
             isMobileDevice={isMobileDevice}
             onClose={onReturnCamp}
             onCancel={onReturnCamp}
@@ -104,239 +134,131 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
             confirmLabel={!hideConfirm ? confirmLabel : undefined}
             showCloseButton={true}
         >
-            {/* Aborted Banner */}
-            {stats.aborted && !deathDetails && (
-                <div className={`mb-4 md:mb-6 w-full border-4 border-yellow-900 bg-yellow-900/20 ${isMobileDevice ? 'p-3' : 'p-6'} text-center`}>
-                    <h3 className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold text-yellow-500 uppercase tracking-widest`}>{t('ui.sector_aborted')}</h3>
-                </div>
-            )}
+            {/* Header / Pager */}
+            <div className="flex justify-center mb-8 border-b border-gray-800">
+                <TabButton index={0} label={t('ui.summary')} />
+                <TabButton index={1} label={t('ui.details')} />
+            </div>
 
-            {/* Responsive Grid Layout */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8 mb-6">
+            {activeTab === 0 ? (
+                /* PAGE 1: OVERVIEW SUMMARY */
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-4">
 
-                {/* 1. Performance (Blue) */}
-                <div className="flex flex-col space-y-6">
-                    <h3 className="text-white font-light uppercase text-2xl border-b border-white py-2 tracking-tighter">{t('ui.performance')}</h3>
-                    <div className="space-y-4 px-2">
-                        {/* XP Box */}
-                        <div className="bg-blue-900/20 p-4 border-l-4 border-blue-500 shadow-lg">
-                            <span className="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">{t('ui.xp_earned')}</span>
-                            <span className="text-4xl font-semibold text-white">+{stats.xpGained}</span>
-                        </div>
-
-                        {/* SP Box */}
-                        <div className="bg-purple-900/20 p-4 border-l-4 border-purple-500 shadow-lg">
-                            <span className="block text-xs font-bold text-purple-400 uppercase tracking-widest mb-1">{t('ui.sp_earned')}</span>
-                            <span className="text-4xl font-semibold text-white">+{stats.spGained || 0}</span>
-                        </div>
-
-                        <div className="pt-2 space-y-4">
-                            <StatBlock label={t('ui.time_elapsed')} value={formatTime(stats.timeElapsed)} color="text-blue-400" />
-                            <div className="border-b border-gray-800"></div>
-                            <StatBlock label={t('ui.distance_traveled')} value={formatDistance(stats.distanceTraveled || 0)} color="text-blue-400" />
-                        </div>
-                    </div>
-                </div>
-
-                {/* 2. Scavenging (Yellow) */}
-                <div className="flex flex-col space-y-6">
-                    <h3 className="text-white font-light uppercase text-2xl border-b border-white py-2 tracking-tighter">{t('ui.scavenging')}</h3>
-                    <div className="space-y-4 flex flex-col px-2">
-                        {/* Scrap Box */}
-                        <div className="bg-yellow-900/20 p-4 border-l-4 border-yellow-500 shadow-lg">
-                            <span className="block text-xs font-bold text-yellow-400 uppercase tracking-widest mb-1">{t('ui.scrap_earned')}</span>
-                            <span className="text-4xl font-semibold text-white">+{stats.scrapLooted}</span>
-                        </div>
-
-                        {/* Chests info */}
-                        <div className="mt-4 pt-2 border-t border-gray-800/30">
-                            <StatBlock label={t('ui.chests')} value={stats.chestsOpened + stats.bigChestsOpened} color="text-yellow-400" />
-                        </div>
-
-                        {/* Grid Layout: Collectibles Found (L) / Clues Found (R) */}
-                        <div className="grid grid-cols-2 gap-4 border-b border-gray-800 pb-4">
-                            <StatBlock
-                                label={t('ui.log_collectibles')}
-                                value={`${stats.collectiblesDiscovered?.length || 0} / ${getCollectiblesBySector(currentSector).length}`}
-                                color="text-yellow-400"
+                    {/* COL 1: PRESTATION */}
+                    <div className="space-y-6">
+                        <h3 className="text-white font-light uppercase text-xl border-b border-gray-800 pb-2 tracking-tighter">{t('ui.performance')}</h3>
+                        <div className="pt-4 space-y-3">
+                            <StatBox
+                                label={t('ui.family_member')}
+                                value={t(familyStatusKey)}
+                                colorClass={stats.familyFound || bossKilled ? 'text-green-400' : 'text-red-400'}
+                                borderColor={stats.familyFound || bossKilled ? 'border-green-500' : 'border-red-600'}
+                                bgColor={stats.familyFound || bossKilled ? 'bg-green-900/10' : 'bg-red-900/10'}
                             />
-                            <StatBlock label={t('ui.clues_found')} value={stats.cluesFound?.length || 0} color="text-yellow-400" />
+                            <StatBox
+                                label={t('ui.boss_status')}
+                                value={t(bossStatusKey)}
+                                colorClass={bossKilled ? 'text-green-400' : 'text-red-400'}
+                                borderColor={bossKilled ? 'border-green-500' : 'border-red-600'}
+                                bgColor={bossKilled ? 'bg-green-900/10' : 'bg-red-900/10'}
+                            />
                         </div>
 
-                        {/* Two column list for Clues and Collectibles */}
-                        <div className="grid grid-cols-2 gap-4 pt-2">
-                            {/* Collectibles List */}
-                            <div className="overflow-y-auto custom-scrollbar text-left max-h-48">
-                                {stats.collectiblesDiscovered && stats.collectiblesDiscovered.length > 0 ? (
-                                    <ul className="space-y-2">
-                                        {stats.collectiblesDiscovered.map((id, i) => {
-                                            const def = getCollectibleById(id);
-                                            return (
-                                                <li key={i} className="text-xs font-bold uppercase tracking-widest text-yellow-200">
-                                                    {def ? t(`collectibles.${def.sector - 1}.${def.index}.title`) : id}
-                                                </li>
-                                            );
-                                        })}
-                                    </ul>
-                                ) : (
-                                    <span className="text-gray-600 font-mono text-xs uppercase">{t('ui.none')}</span>
-                                )}
+                        <div className="space-y-3">
+                            <StatBox label={t('report.stats.xp')} value={`+${stats.xpGained}`} colorClass="text-blue-400" borderColor="border-blue-500" bgColor="bg-blue-900/10" />
+                            <StatBox label={t('report.stats.sp')} value={`+${stats.spGained || 0}`} colorClass="text-purple-400" borderColor="border-purple-500" bgColor="bg-purple-900/10" />
+                        </div>
+                    </div>
+
+                    {/* COL 2: PLUNDRING */}
+                    <div className="space-y-6">
+                        <h3 className="text-white font-light uppercase text-xl border-b border-gray-800 pb-2 tracking-tighter">{t('ui.scavenging')}</h3>
+                        <div className="space-y-3">
+                            <StatBox label={t('report.stats.scrap')} value={`+${stats.scrapLooted}`} colorClass="text-yellow-500" borderColor="border-yellow-500" bgColor="bg-yellow-900/10" />
+                            <StatBox label={t('report.stats.chests')} value={stats.chestsOpened + stats.bigChestsOpened} colorClass="text-yellow-400" borderColor="border-yellow-600" bgColor="bg-yellow-900/10" />
+                        </div>
+                    </div>
+
+                    {/* COL 3: EXPLORATION */}
+                    <div className="space-y-6">
+                        <h3 className="text-white font-light uppercase text-xl border-b border-gray-800 pb-2 tracking-tighter">{t('ui.exploration')}</h3>
+                        <div className="space-y-3">
+                            <StatBox label={t('ui.collectible')} value={`${stats.collectiblesDiscovered?.length || 0} / 2`} colorClass="text-orange-400" borderColor="border-orange-500" bgColor="bg-orange-900/10" />
+                            <StatBox label={t('ui.clues_found')} value={stats.cluesFound?.length || 0} colorClass="text-orange-300" borderColor="border-orange-600" bgColor="bg-orange-900/10" />
+                            <StatBox label={t('ui.pois_discovered')} value={stats.discoveredPOIs?.length || 0} colorClass="text-orange-200" borderColor="border-orange-700" bgColor="bg-orange-900/10" />
+                        </div>
+                        <div className="pt-2 grid grid-cols-2 gap-4">
+                            <SmallStat label={t('ui.time_elapsed')} value={formatTime(stats.timeElapsed)} colorClass="text-blue-300" />
+                            <SmallStat label={t('ui.distance_traveled')} value={formatDistance(stats.distanceTraveled || 0)} colorClass="text-blue-300" />
+                        </div>
+                    </div>
+
+                    {/* COL 4: STRID */}
+                    <div className="space-y-6">
+                        <h3 className="text-white font-light uppercase text-xl border-b border-gray-800 pb-2 tracking-tighter">{t('ui.combat')}</h3>
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-2 gap-4">
+                                <SmallStat label={t('report.stats.shots')} value={stats.shotsFired} colorClass="text-red-300" />
+                                <SmallStat label={t('report.stats.accuracy')} value={`${accuracy}%`} colorClass="text-red-300" />
                             </div>
-
-                            {/* Clues List */}
-                            <div className="overflow-y-auto custom-scrollbar text-left max-h-48">
-                                {stats.cluesFound && stats.cluesFound.length > 0 ? (
-                                    <ul className="space-y-2">
-                                        {stats.cluesFound.slice(0, 3).map((clueObj, i) => {
-                                            // VINTERDÖD FIX: clueObj är nu ett objekt {id, content}, inte en sträng!
-                                            const clueKey = clueObj?.content || clueObj;
-                                            return (
-                                                <li key={i} className="text-xs font-bold uppercase tracking-widest text-yellow-200">
-                                                    {typeof clueKey === 'string' ? t(clueKey) : 'UNKNOWN CLUE'}
-                                                </li>
-                                            );
-                                        })}
-                                        {stats.cluesFound.length > 3 && <li className="text-xs text-gray-500 font-bold uppercase tracking-widest">...</li>}
-                                    </ul>
-                                ) : (
-                                    <span className="text-gray-600 font-mono text-xs uppercase">{t('ui.none')}</span>
-                                )}
+                            <div className="grid grid-cols-2 gap-4 pt-2">
+                                <StatBox label={t('report.stats.kills')} value={totalKills} colorClass="text-red-500" borderColor="border-red-500" bgColor="bg-red-900/10" />
+                                <StatBox label={t('report.stats.throwables')} value={stats.throwablesThrown || 0} colorClass="text-red-400" borderColor="border-red-600" bgColor="bg-red-900/10" />
                             </div>
                         </div>
                     </div>
                 </div>
-
-                {/* 3. Combat (Red) */}
-                <div className="flex flex-col space-y-6">
-                    <h3 className="text-white font-light uppercase text-2xl border-b border-white py-2 tracking-tighter">{t('ui.combat')}</h3>
-                    <div className="space-y-6 px-2">
-
-                        {/* Damage Stats Row */}
-                        <div className="grid grid-cols-2 gap-4 border-b border-gray-800 pb-4">
-                            <StatBlock label={t('ui.damage_dealt')} value={stats.damageDealt.toLocaleString()} color="text-red-400" />
-                            <StatBlock label={t('ui.damage_taken')} value={Math.floor(stats.damageTaken)} color="text-red-400" />
+            ) : (
+                /* PAGE 2: DETAILED COMBAT BREAKDOWN */
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="bg-black/40 backdrop-blur-md rounded-xl p-5 border border-white/10 shadow-2xl">
+                        <div className="flex justify-between items-end mb-4 border-b border-red-500/30 pb-2">
+                            <h3 className="text-2xl font-black uppercase tracking-tighter text-red-500">{t('report.damage.incoming')}</h3>
+                            <span className="text-xl font-mono text-red-400 font-bold">{Math.round(totalIncoming)}</span>
                         </div>
+                        <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                            {Object.entries(stats.incomingDamageBreakdown || {}).map(([enemyId, damageMap]) => {
+                                const enemyMapTyped = damageMap as Record<string, number>;
+                                const enemyDmg = Object.values(enemyMapTyped || {}).reduce((s: number, v: number) => s + (v || 0), 0);
+                                if (enemyDmg <= 0) return null;
 
-                        {/* Shooting Stats Row */}
-                        <div className="grid grid-cols-2 gap-4 border-b border-gray-800 pb-4">
-                            <StatBlock label={t('ui.shots_fired')} value={stats.shotsFired} color="text-red-400" />
-                            <StatBlock label={t('ui.accuracy')} value={`${accuracy}%`} color="text-red-400" />
-                        </div>
+                                let attackerName = t('report.labels.unknown');
+                                const id = parseInt(enemyId);
+                                if (id === DamageID.BOSS) attackerName = t('report.labels.boss');
+                                else if (ENEMY_TYPE_KEYS[id]) attackerName = t(ENEMY_TYPE_KEYS[id]);
+                                else if (id === DamageID.PHYSICAL) attackerName = t('report.labels.physical');
+                                else attackerName = t(`report.damage.source.${enemyId}`, { defaultValue: enemyId });
 
-                        {/* Main Stats Grid: Zombies Killed (L) / Throwables Used (R) */}
-                        <div className="grid grid-cols-2 gap-4 border-b border-gray-800 pb-4">
-                            <StatBlock label={t('ui.kill_confirmed')} value={totalKills} color="text-red-400" />
-                            <StatBlock label={t('ui.throwables_used')} value={stats.throwablesThrown || 0} color="text-red-400" />
-                        </div>
-                    </div>
-
-                    {/* Kill Breakdown List */}
-                    {totalKills > 0 && (
-                        <div className="flex flex-col min-h-0 px-2 overflow-y-auto custom-scrollbar max-h-32">
-                            {(Object.entries(stats.killsByType) as [string, number][]).map(([type, count]) => (
-                                <div key={type} className="flex justify-between text-gray-400 pb-1 border-b border-gray-800/30 border-dashed text-xs font-bold uppercase tracking-widest">
-                                    {type === 'Boss' ? (
-                                        <span className="text-red-300">{bossName} (BOSS)</span>
-                                    ) : (
-                                        <span className="text-white">{type}</span>
-                                    )}
-                                    <span className="font-mono text-red-500">{count}</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* 4. Outcome (Green) */}
-                <div className="flex flex-col space-y-6">
-                    <h3 className="text-white font-light uppercase text-2xl border-b border-white py-2 tracking-tighter">{t('ui.outcome')}</h3>
-                    <div className="space-y-6 px-2">
-
-                        {/* Family Member Box */}
-                        <div className={`p-4 border-l-4 shadow-lg ${familyBoxClass}`}>
-                            <span className={`block text-xs font-bold uppercase tracking-widest mb-1 opacity-90 ${familyTitleColor}`}>{t('ui.family_member')}</span>
-                            <span className="text-3xl font-semibold uppercase text-white">{t(familyStatusKey)}</span>
-                        </div>
-
-                        {/* Boss Status Box */}
-                        <div className={`p-4 border-l-4 shadow-lg ${bossBoxClass}`}>
-                            <span className={`block text-xs font-bold uppercase tracking-widest mb-1 opacity-90 ${bossTitleColor}`}>{t('ui.boss_status')}</span>
-                            <span className="text-3xl font-semibold uppercase text-white">{t(bossStatusKey)}</span>
-                        </div>
-
-                    </div>
-                </div>
-
-                {/* 5. Damage Breakdown (Full Width) */}
-                <div className="lg:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-8 border-t border-gray-800 pt-8 mt-4">
-                    {/* Incoming Breakdown */}
-                    <div className="flex flex-col h-full">
-                        <h4 className="text-red-500 font-bold uppercase text-sm tracking-widest mb-4 flex items-center gap-2">
-                            <div className="w-2 h-2 bg-red-500"></div>
-                            {t('ui.incoming_damage_breakdown')}
-                        </h4>
-                        <div className="space-y-2 overflow-y-auto max-h-48 custom-scrollbar pr-2 flex-1">
-                            {Object.keys(stats.incomingDamageBreakdown || {}).length > 0 ? (
-                                Object.entries(stats.incomingDamageBreakdown!).map(([source, attacks]) => (
-                                    <div key={source} className="mb-3">
-                                        <div className="text-xs font-black text-white uppercase tracking-tighter mb-1 border-b border-gray-800 pb-1">
-                                            {source === 'Boss' ? bossName : (source === 'Other' ? t('ui.other') : (t(`enemies.${source.toUpperCase()}.name`) !== `enemies.${source.toUpperCase()}.name` ? t(`enemies.${source.toUpperCase()}.name`) : source))}
-                                        </div>
-                                        {Object.entries(attacks).map(([attack, amount]) => {
-                                            const attackKey = attack.toUpperCase();
-                                            const localizedAttack = t(`attacks.${attackKey}.title`) !== `attacks.${attackKey}.title` ? t(`attacks.${attackKey}.title`) : attack;
-                                            return (
-                                                <div key={attack} className="flex justify-between text-[10px] font-mono text-gray-400 ml-2">
-                                                    <span>{localizedAttack}</span>
-                                                    <span className="text-red-400">-{Math.floor(amount as any)}</span>
-                                                </div>
-                                            );
+                                return (
+                                    <div key={enemyId} className="mb-2 last:mb-0">
+                                        {Object.entries(enemyMapTyped).map(([attackId, dmg]) => {
+                                            if (dmg <= 0) return null;
+                                            const atkName = t(ATTACK_TYPE_KEYS[parseInt(attackId)] || `report.labels.unknown`);
+                                            const label = `${attackerName} > ${atkName}`.toUpperCase();
+                                            return <LineItem key={attackId} title={label} val={dmg} />;
                                         })}
                                     </div>
-                                ))
-                            ) : (
-                                <div className="text-xs text-gray-700 font-mono uppercase italic">{t('ui.none')}</div>
-                            )}
+                                );
+                            })}
                         </div>
-                        {Object.keys(stats.incomingDamageBreakdown || {}).length > 0 && (
-                            <div className="flex justify-between items-center pt-2 border-t border-gray-800 mt-4 px-2">
-                                <span className="text-xs font-black text-white uppercase">{t('ui.total')}</span>
-                                <span className="text-xl font-black text-red-500">-{Math.floor(stats.damageTaken || 0)}</span>
-                            </div>
-                        )}
                     </div>
 
-                    {/* Outgoing Breakdown */}
-                    <div className="flex flex-col h-full">
-                        <h4 className="text-green-500 font-bold uppercase text-sm tracking-widest mb-4 flex items-center gap-2">
-                            <div className="w-2 h-2 bg-green-500"></div>
-                            {t('ui.outgoing_damage_breakdown')}
-                        </h4>
-                        <div className="space-y-1 overflow-y-auto max-h-48 custom-scrollbar pr-2 flex-1">
-                            {Object.keys(stats.outgoingDamageBreakdown || {}).length > 0 ? (
-                                Object.entries(stats.outgoingDamageBreakdown!)
-                                    .sort((a, b) => (b[1] as any) - (a[1] as any))
-                                    .map(([weapon, amount]) => (
-                                        <div key={weapon} className="flex justify-between items-center py-1 border-b border-gray-800/30 border-dashed">
-                                            <span className="text-xs font-bold text-white uppercase tracking-tighter">
-                                                {t(`weapons.${weapon.toLowerCase()}`) !== `weapons.${weapon.toLowerCase()}` ? t(`weapons.${weapon.toLowerCase()}`) : weapon}
-                                            </span>
-                                            <span className="text-sm font-mono text-green-400">+{Math.floor(amount as any)}</span>
-                                        </div>
-                                    ))
-                            ) : (
-                                <div className="text-xs text-gray-700 font-mono uppercase italic">{t('ui.none')}</div>
-                            )}
+                    <div className="bg-black/40 backdrop-blur-md rounded-xl p-5 border border-white/10 shadow-2xl">
+                        <div className="flex justify-between items-end mb-4 border-b border-green-500/30 pb-2">
+                            <h3 className="text-2xl font-black uppercase tracking-tighter text-green-500">{t('report.damage.outgoing')}</h3>
+                            <span className="text-xl font-mono text-green-400 font-bold">{Math.round(totalOutgoing)}</span>
                         </div>
-                        {Object.keys(stats.outgoingDamageBreakdown || {}).length > 0 && (
-                            <div className="flex justify-between items-center pt-2 border-t border-gray-800 mt-4 px-2">
-                                <span className="text-xs font-black text-white uppercase">{t('ui.total')}</span>
-                                <span className="text-xl font-black text-green-500">+{Math.floor(stats.damageDealt || 0)}</span>
-                            </div>
-                        )}
+                        <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                            {Object.entries(stats.outgoingDamageBreakdown || {}).map(([weaponId, damage]) => {
+                                const dmgVal = (damage as number) || 0;
+                                if (dmgVal <= 0) return null;
+                                const name = t(`weapon.${weaponId}.name`, { defaultValue: weaponId });
+                                return <LineItem key={weaponId} title={name.toUpperCase()} val={dmgVal} />;
+                            })}
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
         </ScreenModalLayout>
     );
 };

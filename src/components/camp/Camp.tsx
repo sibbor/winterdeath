@@ -18,6 +18,9 @@ import { CampEffectsSystem, FamilyAnimationSystem, CampChatterSystem } from './C
 const _v1 = new THREE.Vector3();
 const _campCtx: any = { dynamicLights: [] };
 
+/** Safe O(1) WEAPONS lookup — guards against undefined entries (NONE=0, env DamageIDs, etc.) */
+const weaponName = (id: number): string => WEAPONS[id]?.displayName ?? '';
+
 // Import UI Components
 import CampHUD from '../ui/hud/CampHUD';
 
@@ -42,13 +45,13 @@ interface CampProps {
     isMobileDevice?: boolean;
     weather: WeatherType;
     hasCheckpoint?: boolean;
-    isRunning?: boolean;
+    isGameRunning?: boolean;
     activeOverlay: string | null;
     setActiveOverlay: (type: any) => void;
     onInteractionStateChange: (type: string | null) => void;
 }
 
-const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, settings, onCampLoaded, isMobileDevice, weather, hasCheckpoint, isRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
+const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, settings, onCampLoaded, isMobileDevice, weather, hasCheckpoint, isGameRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
     const monitor = PerformanceMonitor.getInstance();
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -99,12 +102,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
     useEffect(() => { activeOverlayRef.current = activeOverlay; }, [activeOverlay]);
 
     useEffect(() => {
-        if (isRunning) {
+        if (isGameRunning) {
             soundManager.resume();
             soundManager.startCampfire();
         }
         return () => soundManager.stopCampfire();
-    }, [isRunning]);
+    }, [isGameRunning]);
 
     // Idle Timer
     useEffect(() => {
@@ -139,7 +142,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         // Reset & Setup Scene via CampWorld
         const setup = async () => {
             if (currentSetupId !== setupCounterRef.current) return;
-            
+
             // ARCHITECTURAL UNIFICATION: Provide a minimal RuntimeState for the Camp
             // This allows the Engine to use the same Dual-Clock logic everywhere.
             const campState: any = {
@@ -149,9 +152,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 lastRenderDelta: 0.016,
                 playerPos: camera.threeCamera.position, // Center of interaction
                 dynamicLights: [],
-                isRolling: false,
+                isDodging: false,
                 isDead: false,
-                isRushing: false,
                 staminaRatio: 1.0,
                 hp: 100,
                 maxHp: 100
@@ -230,7 +232,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         let lastRaycastTime = 0
 
         const onMM = (e: MouseEvent) => {
-            if (!isRunning) return;
+            if (!isGameRunning) return;
 
             mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -239,7 +241,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         };
 
         const onCL = () => {
-            if (!isRunning || activeOverlayRef.current) return;
+            if (!isGameRunning || activeOverlayRef.current) return;
             const hovered = hoveredRef.current;
             if (hovered) {
                 if (hovered.startsWith('family_') || hovered.startsWith('player_')) {
@@ -262,7 +264,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         };
 
         const onTS = (e: TouchEvent) => {
-            if (!isRunning || !containerRef.current) return;
+            if (!isGameRunning || !containerRef.current) return;
             const rect = containerRef.current.getBoundingClientRect();
             const touch = e.touches[0];
             mouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
@@ -329,13 +331,19 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             _campCtx.camera = camera.threeCamera;
             _campCtx.container = container;
             _campCtx.envState = envStateRef.current;
-            _campCtx.dynamicLights = envStateRef.current?.fireLight ? [envStateRef.current.fireLight] : [];
+            
+            // ARCHITECTURAL FIX: LightSystem prioritizes 'state.dynamicLights'.
+            // By updating the campState directly, we ensure the lights are picked up even before React re-renders.
+            if (campState) {
+                campState.dynamicLights = envStateRef.current?.fireLight ? [envStateRef.current.fireLight] : [];
+            }
+            
             _campCtx.playerPos = camera.threeCamera.position;
             _campCtx.familyMembers = familyMembers;
             _campCtx.activeMembers = sceneActiveMembersRef.current;
             _campCtx.activeChats = activeChats.current;
             _campCtx.chatOverlay = chatOverlayRef.current;
-            _campCtx.isRunning = isRunning;
+            _campCtx.isGameRunning = isGameRunning;
             _campCtx.nextChatterTime = { val: nextChatterTime.current, set: (v: number) => nextChatterTime.current = v };
             _campCtx.nextWildlifeTime = { val: nextWildlifeTime.current, set: (v: number) => nextWildlifeTime.current = v };
             _campCtx.hoveredId = hoveredRef.current
@@ -354,7 +362,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             monitor.begin('raycasting');
             const isMobileLabels = isMobileDevice && !isIdleRef.current;
 
-            if (isRunning && !activeOverlayRef.current) {
+            if (isGameRunning && !activeOverlayRef.current) {
                 if (mouseMoved && (now - lastRaycastTime > 100)) {
                     lastRaycastTime = now;
                     mouseMoved = false;
@@ -377,7 +385,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                             } else {
                                 toolTipText = t(`stations.${target.userData.name || newHover}`);
                                 if (newHover === 'armory') {
-                                    toolTipSubText = `${t(WEAPONS[currentLoadout.primary].displayName)} | ${t(WEAPONS[currentLoadout.secondary].displayName)} | ${t(WEAPONS[currentLoadout.throwable].displayName)} | ${t(WEAPONS[currentLoadout.special].displayName)}`;
+                                    toolTipSubText = `${t(weaponName(currentLoadout.primary))} | ${t(weaponName(currentLoadout.secondary))} | ${t(weaponName(currentLoadout.throwable))} | ${t(weaponName(currentLoadout.special))}`;
                                 } else if (newHover === 'skills') {
                                     toolTipSubText = `${t('camp_tooltips.vitality')}: ${stats.maxHp} | ${t('camp_tooltips.adrenaline')}: ${stats.maxStamina} | ${t('camp_tooltips.reflexes')}: ${Math.round(stats.speed * 100)}`;
                                 } else if (newHover === 'adventure_log') {
@@ -456,7 +464,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             window.removeEventListener('resize', onResize);
             if (engineRef.current) engineRef.current.clearUpdateContext();
         };
-    }, [isRunning, stats, currentLoadout, currentSector]);
+    }, [isGameRunning, stats, currentLoadout, currentSector]);
 
     const closeModal = () => { soundManager.playUiClick(); setActiveOverlay(null); };
 
@@ -497,7 +505,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             {!activeOverlay && (
                 <CampHUD
                     stats={stats} hoveredStation={hoveredStation} currentSectorName={t(SECTOR_THEMES[currentSector]?.name || '')} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
-                    currentLoadoutNames={{ pri: t(WEAPONS[currentLoadout.primary].displayName), sec: t(WEAPONS[currentLoadout.secondary].displayName), thr: t(WEAPONS[currentLoadout.throwable].displayName) }}
+                    currentLoadoutNames={{ pri: t(weaponName(currentLoadout.primary)), sec: t(weaponName(currentLoadout.secondary)), thr: t(weaponName(currentLoadout.throwable)) }}
                     onOpenStats={() => onInteractionStateChange('ADVENTURE_LOG')}
                     onOpenArmory={() => onInteractionStateChange('STATION_ARMORY')}
                     onOpenSkills={() => onInteractionStateChange('STATION_SKILLS')}

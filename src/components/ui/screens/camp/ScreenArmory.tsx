@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { PlayerStats } from '../../../../entities/player/PlayerTypes';;
+import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
 import { WeaponType, WeaponCategory, WeaponCategoryColors } from '../../../../content/weapons';
 import { t } from '../../../../utils/i18n';
 import { WEAPONS, SCRAP_COST_BASE } from '../../../../content/constants';
 import { soundManager } from '../../../../utils/audio/SoundManager';
+import { WEAPON_CATEGORY_KEYS } from '../../../../utils/ui/Mappers';
 import { useOrientation } from '../../../../hooks/useOrientation';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 
@@ -33,8 +34,12 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
         soundManager.playUiClick();
         const level = tempWeaponLevels[weapon] || 1;
         const cost = SCRAP_COST_BASE * level;
-        if (tempStats.scrap >= cost) {
-            setTempStats({ ...tempStats, scrap: tempStats.scrap - cost });
+        const scrap = tempStats.statsBuffer[PlayerStatID.SCRAP];
+        if (scrap >= cost) {
+            const newStats = { ...tempStats };
+            newStats.statsBuffer = new Float32Array(tempStats.statsBuffer);
+            newStats.statsBuffer[PlayerStatID.SCRAP] -= cost;
+            setTempStats(newStats);
             setTempWeaponLevels({ ...tempWeaponLevels, [weapon]: level + 1 });
         }
     };
@@ -53,15 +58,15 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
     };
 
     const hasChanges = useMemo(() => {
-        if (tempStats.scrap !== stats.scrap) return true;
+        if (tempStats.statsBuffer[PlayerStatID.SCRAP] !== stats.statsBuffer[PlayerStatID.SCRAP]) return true;
         if (tempLoadout.primary !== currentLoadout.primary) return true;
         if (tempLoadout.secondary !== currentLoadout.secondary) return true;
         if (tempLoadout.throwable !== currentLoadout.throwable) return true;
         if (tempLoadout.special !== currentLoadout.special) return true;
 
         // Deep compare weapon levels if any upgrade happened
-        const keys = Object.keys(WEAPONS) as WeaponType[];
-        for (const k of keys) {
+        const weaponIds = Object.keys(WEAPONS).map(Number) as unknown as WeaponType[];
+        for (const k of weaponIds) {
             if ((tempWeaponLevels[k] || 1) !== (weaponLevels[k] || 1)) return true;
         }
         return false;
@@ -78,7 +83,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
     const scrapHeader = (
         <div className={`px-4 py-1.5 border bg-black border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] flex flex-col items-start gap-0`}>
             <span className={`text-[9px] block uppercase font-bold text-yellow-500 leading-tight opacity-70`}>{t('ui.scrap')}</span>
-            <span className={`text-xl md:text-2xl font-bold font-mono text-yellow-400 leading-none`}>{tempStats.scrap}</span>
+            <span className={`text-xl md:text-2xl font-bold font-mono text-yellow-400 leading-none`}>{tempStats.statsBuffer[PlayerStatID.SCRAP]}</span>
         </div>
     );
 
@@ -114,7 +119,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                         {[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL].map(cat => {
                             const isActive = activeTab === cat;
                             const catColor = WeaponCategoryColors[cat as keyof typeof WeaponCategoryColors] || '#ffffff';
-                            const catKey = 'categories.' + cat.toLowerCase();
+                            const catKey = WEAPON_CATEGORY_KEYS[cat];
 
                             return (
                                 <button key={cat} onClick={() => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
@@ -125,12 +130,12 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                         } 
                                         ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
                                     `}
-                                    style={isActive ? {
-                                        backgroundColor: darkenColor(catColor, 20),
-                                        '--pulse-color': catColor
-                                    } as any : {}}
-                                >
-                                    <span>{t(catKey)}</span>
+                                style={isActive ? {
+                                    backgroundColor: darkenColor(catColor, 20),
+                                    '--pulse-color': catColor
+                                } as React.CSSProperties : {}}
+                            >
+                                <span>{t(catKey as string)}</span>
                                     {isActive && effectiveLandscape && <span className="text-white font-bold ml-2">→</span>}
                                 </button>
                             );
@@ -145,7 +150,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                             const level = tempWeaponLevels[weapon.name] || 1;
                             const cost = SCRAP_COST_BASE * level;
                             const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;
-                            const canAfford = tempStats.scrap >= cost;
+                            const canAfford = tempStats.statsBuffer[PlayerStatID.SCRAP] >= cost;
                             const categoryColor = WeaponCategoryColors[weapon.category as keyof typeof WeaponCategoryColors];
                             const isEquippable = weapon.category !== WeaponCategory.TOOL;
                             const isUpgradeable = isEquippable;

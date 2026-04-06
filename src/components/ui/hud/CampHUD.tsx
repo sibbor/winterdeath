@@ -1,8 +1,9 @@
 
 import React from 'react';
-import { PlayerStats } from '../../../entities/player/PlayerTypes';;
+import { PlayerStats, PlayerStatID } from '../../../entities/player/PlayerTypes';
 import { t } from '../../../utils/i18n';
 import { soundManager } from '../../../utils/audio/SoundManager';
+
 
 interface CampHUDProps {
     stats: PlayerStats;
@@ -84,26 +85,30 @@ const CampHUD: React.FC<CampHUDProps> = ({
                     className={`bg-slate-900/95 p-4 border-l-4 border-blue-500 shadow-2xl cursor-pointer pointer-events-auto hover:bg-slate-800 transition-colors w-[320px]`}
                     onClick={onOpenStats}
                 >
-                    <h1 className="text-4xl font-semibold text-white tracking-tighter leading-none uppercase" style={{ fontSize: '2.25rem' }}>{getRank(stats.level)}</h1>
+                    <h1 className="text-4xl font-semibold text-white tracking-tighter leading-none uppercase" style={{ fontSize: '2.25rem' }}>{getRank(stats.statsBuffer[PlayerStatID.LEVEL])}</h1>
                     <div className="flex items-center gap-4 mt-2">
-                        <span className="text-blue-400 font-bold text-sm">{t('ui.lvl')} {stats.level}</span>
-                        <div className="flex-1 h-1.5 bg-blue-900"><div className="h-full bg-blue-400" style={{ width: `${(stats.currentXp / stats.nextLevelXp) * 100}%` }} /></div>
+                        <span className="text-blue-400 font-bold text-sm">{t('ui.lvl')} {stats.statsBuffer[PlayerStatID.LEVEL]}</span>
+                        <div className="flex-1 h-1.5 bg-blue-900">
+                            <div className="h-full bg-blue-400" style={{ width: `${(stats.statsBuffer[PlayerStatID.CURRENT_XP] / stats.statsBuffer[PlayerStatID.NEXT_LEVEL_XP]) * 100}%` }} />
+                        </div>
                     </div>
                 </div>
+
 
                 <div className="flex gap-4 pointer-events-auto">
                     {/* Clicking SP now opens the Upgrade screen (via onOpenSkills theoretically, but here mapped to onOpenSkills call) */}
                     <div onClick={() => { if (debugMode) onDebugSkill(); else onOpenSkills(); }}
-                        className={`px-4 py-2 border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 hover:border-purple-500 ${stats.skillPoints > 0 ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-black border-slate-700'}`}>
-                        <span className={`text-[10px] block uppercase font-bold ${stats.skillPoints > 0 ? 'text-purple-500' : 'text-slate-500'}`}>{t('ui.sp')}</span>
-                        <span className={`text-2xl font-bold font-mono ${stats.skillPoints > 0 ? 'text-purple-400' : 'text-white'}`}>{stats.skillPoints}</span>
+                        className={`px-4 py-2 border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 hover:border-purple-500 ${stats.statsBuffer[PlayerStatID.SKILL_POINTS] > 0 ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-black border-slate-700'}`}>
+                        <span className={`text-[10px] block uppercase font-bold ${stats.statsBuffer[PlayerStatID.SKILL_POINTS] > 0 ? 'text-purple-500' : 'text-slate-500'}`}>{t('ui.sp')}</span>
+                        <span className={`text-2xl font-bold font-mono ${stats.statsBuffer[PlayerStatID.SKILL_POINTS] > 0 ? 'text-purple-400' : 'text-white'}`}>{stats.statsBuffer[PlayerStatID.SKILL_POINTS]}</span>
                     </div>
 
                     <div onClick={() => { if (debugMode) onDebugScrap(); else onOpenArmory(); }}
-                        className={`px-4 py-2 border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 hover:border-yellow-500 ${stats.scrap > 0 ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-black border-slate-700'}`}>
-                        <span className={`text-[10px] block uppercase font-bold ${stats.scrap > 0 ? 'text-yellow-500' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
-                        <span className={`text-2xl font-bold font-mono ${stats.scrap > 0 ? 'text-yellow-400' : 'text-white'}`}>{stats.scrap}</span>
+                        className={`px-4 py-2 border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 hover:border-yellow-500 ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-black border-slate-700'}`}>
+                        <span className={`text-[10px] block uppercase font-bold ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'text-yellow-500' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
+                        <span className={`text-2xl font-bold font-mono ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'text-yellow-400' : 'text-white'}`}>{stats.statsBuffer[PlayerStatID.SCRAP]}</span>
                     </div>
+
                 </div>
             </div>
 

@@ -294,16 +294,16 @@ const App: React.FC = () => {
         });
     }, []);
 
-    const handleEnemyDiscoveredAction = useCallback((type: string) => {
-        if (!type) return;
+    const handleEnemyDiscoveredAction = useCallback((type: number) => {
+        if (!type && type !== 0) return;
         setGameState(prev => {
             if (prev.stats.seenEnemies.includes(type)) return prev;
             return { ...prev, stats: { ...prev.stats, seenEnemies: [...prev.stats.seenEnemies, type] } };
         });
     }, []);
 
-    const handleBossDiscoveredAction = useCallback((id: string) => {
-        if (!id) return;
+    const handleBossDiscoveredAction = useCallback((id: number) => {
+        if (!id && id !== 0) return;
         setGameState(prev => {
             if (prev.stats.seenBosses.includes(id)) return prev;
             return { ...prev, stats: { ...prev.stats, seenBosses: [...prev.stats.seenBosses, id] } };
@@ -724,7 +724,7 @@ const App: React.FC = () => {
                             onCampLoaded={handleSceneReady}
                             isMobileDevice={isMobileDevice}
                             weather={gameState.weather}
-                            isRunning={!isInitialBoot}
+                            isGameRunning={!isInitialBoot}
                             activeOverlay={activeOverlay}
                             setActiveOverlay={setActiveOverlay}
                             onPauseToggle={handlePauseToggle}
@@ -752,7 +752,7 @@ const App: React.FC = () => {
                                     currentSector={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector}
                                     currentSectorData={SectorSystem.getSector(gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector)}
                                     debugMode={gameState.debugMode}
-                                    isRunning={gameState.screen === GameScreen.SECTOR && !activeOverlay && !isLoadingSector}
+                                    isGameRunning={gameState.screen === GameScreen.SECTOR && !activeOverlay && !isLoadingSector}
                                     isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE || gameState.screen === GameScreen.RECAP || gameState.screen === GameScreen.DEATH}
                                     disableInput={activeOverlay === 'COLLECTIBLE' || isLoadingSector || activeOverlay === 'ADVENTURE_LOG'}
                                     onDie={handleDie}

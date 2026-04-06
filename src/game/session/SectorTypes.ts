@@ -5,6 +5,7 @@ import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorEnvironment, EnvironmentalZone as AtmosphereZone } from '../../core/engine/EngineTypes';
 import { TriggerAction } from '../../systems/TriggerTypes';
+import { SoundID } from '../../utils/audio/AudioTypes';
 
 export type { AtmosphereZone };
 
@@ -36,8 +37,8 @@ export interface SectorContext {
     rng: () => number;
     debugMode: boolean; // Controls visualization of triggers/POIs
     textures: any; // Dynamic textures passed from App/Canvas
-    spawnZombie: (type: EnemyType | string, pos?: THREE.Vector3) => void;
-    spawnHorde: (count: number, type?: EnemyType | string, pos?: THREE.Vector3) => void;
+    spawnZombie: (type: EnemyType, pos?: THREE.Vector3) => void;
+    spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
     spawnBoss: (type: string, pos?: THREE.Vector3) => void;
     smokeEmitters: any[];
     cluesFound: string[];
@@ -76,7 +77,7 @@ export interface SectorDef {
 
     // Common Events
     intro?: { text: string, sound?: string, delay?: number };
-    ambientLoop?: string;
+    ambientLoop?: SoundID | string;
 
     // Spawns
     playerSpawn: SpawnPoint;
@@ -108,12 +109,12 @@ export interface SectorDef {
         sectorState: SectorState,
         events: {
             onAction: (action: any) => void;
-            spawnZombie: (type?: EnemyType | string, pos?: THREE.Vector3) => void;
-            spawnHorde: (count: number, type?: EnemyType | string, pos?: THREE.Vector3) => void;
+            spawnZombie: (type?: EnemyType, pos?: THREE.Vector3) => void;
+            spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
             setNotification: (n: any) => void;
             setInteraction: (interaction: { id: string, text: string, action: () => void, position?: THREE.Vector3 } | null) => void;
             setOverlay: (type: string | null) => void; // VINTERDÖD FIX: Added missing UI overlay command
-            playSound: (id: string) => void;
+            playSound: (id: SoundID) => void;
             playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => void;
             cameraShake: (amount: number) => void;
             t: (key: string) => string;

@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { SectorTrigger } from '../systems/TriggerTypes';
 import { SectorState, SectorStats } from '../game/session/SessionTypes';
 import { PlayerStats } from '../entities/player/PlayerTypes';
-import { PlayerDeathState, ActiveStatusEffect } from '../entities/player/CombatTypes';
+import { PlayerDeathState, ActiveStatusEffect, DamageID } from '../entities/player/CombatTypes';
+
 import { StatusEffectType } from '../content/perks';
 import { WeaponType } from '../content/weapons';
 import { Obstacle } from './world/CollisionResolution';
@@ -20,7 +21,7 @@ export interface PreallocatedInitialAim {
 
 export interface PreallocatedDiscoveryState {
     active: boolean;
-    id: string;
+    id: string | number;
     type: string;
     title: string;
     details: string;
@@ -62,7 +63,7 @@ export interface RuntimeState {
     renderTime: number;
     
     // --- SUB-STATES (Preallocated & Zero-GC) ---
-    player: PreallocatedPlayerState;     // hp, stamina, rollDir, isDead, isSwimming
+    player: PreallocatedPlayerState;     // hp, stamina, dodgeDir, isDead, isSwimming
     combat: PreallocatedCombatState;     // activeWeapon, ammo, reloadEndTime, multipliers
     movement: PreallocatedMovementState; // distanceSinceLastStep, isRushing, isWading
     enemies: PreallocatedEnemyManager;   // enemies array, bossSpawned, killerType
@@ -73,30 +74,21 @@ export interface RuntimeState {
 }
 */
 
-export interface RuntimeState {
-    isDead: boolean;
-    score: number;
-    collectedScrap: number;
-    hp: number;
-    maxHp: number;
-    stamina: number;
-    maxStamina: number;
-    speed: number;
+export interface RuntimeState extends PlayerStats {
     startTime: number;
-    level: number;
-    currentXp: number;
-    nextLevelXp: number;
     activeWeapon: WeaponType;
     loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
-    weaponLevels: Record<WeaponType, number>;
+    weaponLevels: Partial<Record<WeaponType, number>>;
+
     weaponAmmo: Record<WeaponType, number>;
     isReloading: boolean;
     reloadEndTime: number;
 
-    // --- ZERO-GC VECTORS ---
-    rollStartTime: number;
-    rollDir: THREE.Vector3;
-    isRolling: boolean;
+    // --- ZERO-GC VECTORS & STATE ---
+    dodgeStartTime: number;
+    dodgeDir: THREE.Vector3;
+    isDodging: boolean;
+    dodgeSmokeSpawned: boolean;
 
     invulnerableUntil: number;
     spacePressTime: number;
@@ -107,12 +99,13 @@ export interface RuntimeState {
     wasFiring: boolean;
     throwChargeStart: number;
     lastShotTime: number;
+    lastRushEndTime: number;
+    lastDodgeEndTime: number;
     lastReflexShieldTime: number;
     lastAdrenalinePatchTime: number;
     lastHeartbeat: number;
 
     // --- OBJECT POOLS ---
-    // NOTE: Always clear using .length = 0, never reassign to []
     enemies: Enemy[];
     particles: ParticleState[];
     activeEffects: any[];
@@ -122,33 +115,18 @@ export interface RuntimeState {
     chests: any[];
     bloodDecals: any[];
 
-    // --- TELEMETRY & PROGRESSION (Zero-GC) ---
+    // --- TELEMETRY & PROGRESSION ---
     sessionStats: SectorStats;
-
-    // O(1) Discovery Lookups (Built at start of session)
     discoverySets: {
         clues: Set<string>;
         pois: Set<string>;
         collectibles: Set<string>;
-        seenEnemies: Set<string>;
+        seenEnemies: Set<number>;
+        seenBosses: Set<number>;
     };
 
-    applyDamage: (enemy: any, amount: number, type: string, isHighImpact?: boolean) => boolean;
+    applyDamage: (enemy: any, amount: number, type: DamageID, isHighImpact?: boolean) => boolean;
 
-    // --- COMBAT & STATUS (Zero-GC) ---
-    isDisoriented: boolean;
-    multipliers: {
-        speed: number;
-        reloadTime: number;
-        fireRate: number;
-        damageResist: number;
-        range: number;
-    };
-    activePassives: string[];
-    activeBuffs: StatusEffectType[];
-    activeDebuffs: StatusEffectType[];
-    statusEffects: Partial<Record<StatusEffectType, ActiveStatusEffect>>;
-    playerDeathState: PlayerDeathState;
 
     bossesDefeated: number[];
     familyFound: boolean;
@@ -164,7 +142,8 @@ export interface RuntimeState {
     speakBounce: number;
     cameraShake: number;
     hurtShake: number;
-    discoveredPerks: string[];
+    discoveredPerks: StatusEffectType[];
+    playerDeathState: PlayerDeathState;
 
     // --- SECTOR & WORLD ---
     sectorState: SectorState;
@@ -180,8 +159,9 @@ export interface RuntimeState {
     sectorName: string;
     initialAim: PreallocatedInitialAim;
     deathStartTime: number;
-    killerType: string;
+    killerType: DamageID; // Numerisk SMI
     killerName: string;
+
     killerAttackName: string;
     killedByEnemy: boolean;
     playerBloodSpawned: boolean;

@@ -65,10 +65,10 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
         }
 
         // VINTERDÖD FIX: Standardized click-to-lock logic.
-        if (gameProps.isRunning && !gameProps.isMobileDevice && input && !input.state.locked && !state?.isDead) {
+        if (gameProps.isRushing && !gameProps.isMobileDevice && input && !input.state.locked && !state?.isDead) {
             callbacks.requestPointerLock();
         }
-    }, [gameProps.isRunning, gameProps.isMobileDevice, callbacks, refs, uiState.currentLine]);
+    }, [gameProps.isRushing, gameProps.isMobileDevice, callbacks, refs, uiState.currentLine]);
 
     const handlePauseTouch = useCallback(() => {
         callbacks.onPauseToggle(true);
@@ -94,8 +94,8 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
 
             {/* Mobile Touch Controls 
                 VINTERDÖD FIX: Removed strict refs.engineRef.current check to prevent React Ref-Render trap. 
-                Assuming engine inputs are initialized safely before isRunning is set to true. */}
-            {gameProps.isMobileDevice && gameProps.isRunning && !gameProps.isPaused && !uiState.cinematicActive && !uiState.bossIntroActive && (
+                Assuming engine inputs are initialized safely before isRushing is set to true. */}
+            {gameProps.isMobileDevice && gameProps.isRushing && !gameProps.isPaused && !uiState.cinematicActive && !uiState.bossIntroActive && (
                 <TouchController
                     inputState={refs.engineRef.current?.input?.state || {}}
                     onPause={handlePauseTouch}

@@ -1,6 +1,7 @@
-import { PlayerStats } from '../../entities/player/PlayerTypes';
+import { PlayerStats, PlayerStatID } from '../../entities/player/PlayerTypes';
 import { SectorStats } from '../../game/session/SessionTypes';
 import { LEVEL_CAP } from '../../content/constants';
+
 
 /**
  * Aggregates sector performance into overall player statistics.
@@ -14,8 +15,14 @@ export const aggregateStats = (
     aborted: boolean,
     newUniqueAchievements: number = 0 // Number of NEW Boss + Family rewards to award
 ): PlayerStats => {
-    // Shallow clone the base object to respect React state immutability
-    const s = { ...prevStats };
+    // VINTERDÖD FIX: Clone BOTH the object and the statsBuffer to ensure React immutability
+    const s = { 
+        ...prevStats,
+        statsBuffer: new Float32Array(prevStats.statsBuffer) 
+    };
+
+    const sb = s.statsBuffer;
+
 
     // Shallow clone arrays/objects we will mutate to avoid mutating prevStats directly
     s.collectiblesDiscovered = s.collectiblesDiscovered ? s.collectiblesDiscovered.slice() : [];
@@ -34,8 +41,9 @@ export const aggregateStats = (
     }
 
     // 2. Resource Collection
-    s.scrap = (s.scrap || 0) + (sectorStats.scrapLooted || 0);
-    s.totalScrapCollected = (s.totalScrapCollected || 0) + (sectorStats.scrapLooted || 0);
+    sb[PlayerStatID.SCRAP] += (sectorStats.scrapLooted || 0);
+    sb[PlayerStatID.TOTAL_SCRAP_COLLECTED] += (sectorStats.scrapLooted || 0);
+    sb[PlayerStatID.SCORE] += (sectorStats.score || 0);
 
     // 3. Combat & Performance
     let sectorKills = 0;
@@ -46,14 +54,11 @@ export const aggregateStats = (
             s.killsByType[type] = (s.killsByType[type] || 0) + count;
         }
     }
-    s.kills = (s.kills || 0) + sectorKills;
+    sb[PlayerStatID.TOTAL_KILLS] += sectorKills;
 
-    s.totalBulletsFired = (s.totalBulletsFired || 0) + (sectorStats.shotsFired || 0);
-    s.totalBulletsHit = (s.totalBulletsHit || 0) + (sectorStats.shotsHit || 0);
-    s.totalThrowablesThrown = (s.totalThrowablesThrown || 0) + (sectorStats.throwablesThrown || 0);
-    s.totalDamageDealt = (s.totalDamageDealt || 0) + (sectorStats.damageDealt || 0);
-    s.totalDamageTaken = (s.totalDamageTaken || 0) + (sectorStats.damageTaken || 0);
-    s.totalDistanceTraveled = (s.totalDistanceTraveled || 0) + (sectorStats.distanceTraveled || 0);
+    sb[PlayerStatID.TOTAL_DAMAGE_DEALT] += (sectorStats.damageDealt || 0);
+    sb[PlayerStatID.TOTAL_DAMAGE_TAKEN] += (sectorStats.damageTaken || 0);
+    sb[PlayerStatID.TOTAL_DISTANCE_TRAVELED] += (sectorStats.distanceTraveled || 0);
 
     if (died) {
         s.deaths = (s.deaths || 0) + 1;
@@ -86,15 +91,11 @@ export const aggregateStats = (
     // 5. Discovery & Unique Items (SP Rewards)
     if (sectorStats.cluesFound) {
         for (let i = 0; i < sectorStats.cluesFound.length; i++) {
-            const c = sectorStats.cluesFound[i] as any; // Tvinga TypeScript att acceptera båda
+            const c = sectorStats.cluesFound[i] as any;
             const id = typeof c === 'string' ? c : c.id;
 
             if (typeof id === 'string') {
-                let found = false;
-                for (let j = 0; j < s.cluesFound.length; j++) {
-                    if (s.cluesFound[j] === id) { found = true; break; }
-                }
-                if (!found) s.cluesFound.push(id);
+                if (!s.cluesFound.includes(id)) s.cluesFound.push(id);
             }
         }
     }
@@ -102,11 +103,7 @@ export const aggregateStats = (
     if (sectorStats.discoveredPOIs) {
         for (let i = 0; i < sectorStats.discoveredPOIs.length; i++) {
             const poi = sectorStats.discoveredPOIs[i];
-            let found = false;
-            for (let j = 0; j < s.discoveredPOIs.length; j++) {
-                if (s.discoveredPOIs[j] === poi) { found = true; break; }
-            }
-            if (!found) s.discoveredPOIs.push(poi);
+            if (!s.discoveredPOIs.includes(poi)) s.discoveredPOIs.push(poi);
         }
     }
 
@@ -114,22 +111,14 @@ export const aggregateStats = (
     if (sectorStats.seenEnemies) {
         for (let i = 0; i < sectorStats.seenEnemies.length; i++) {
             const enemyId = sectorStats.seenEnemies[i];
-            let found = false;
-            for (let j = 0; j < s.seenEnemies.length; j++) {
-                if (s.seenEnemies[j] === enemyId) { found = true; break; }
-            }
-            if (!found) s.seenEnemies.push(enemyId);
+            if (!s.seenEnemies.includes(enemyId)) s.seenEnemies.push(enemyId);
         }
     }
 
     if (sectorStats.seenBosses) {
         for (let i = 0; i < sectorStats.seenBosses.length; i++) {
             const bossId = sectorStats.seenBosses[i];
-            let found = false;
-            for (let j = 0; j < s.seenBosses.length; j++) {
-                if (s.seenBosses[j] === bossId) { found = true; break; }
-            }
-            if (!found) s.seenBosses.push(bossId);
+            if (!s.seenBosses.includes(bossId)) s.seenBosses.push(bossId);
         }
     }
 
@@ -137,14 +126,9 @@ export const aggregateStats = (
     if (sectorStats.collectiblesDiscovered) {
         for (let i = 0; i < sectorStats.collectiblesDiscovered.length; i++) {
             const collectible = sectorStats.collectiblesDiscovered[i];
-            let found = false;
-            for (let j = 0; j < s.collectiblesDiscovered.length; j++) {
-                if (s.collectiblesDiscovered[j] === collectible) { found = true; break; }
-            }
-            if (!found) {
+            if (!s.collectiblesDiscovered.includes(collectible)) {
                 s.collectiblesDiscovered.push(collectible);
-                s.skillPoints++;
-                s.totalSkillPointsEarned++;
+                sb[PlayerStatID.SKILL_POINTS]++;
             }
         }
     }
@@ -152,24 +136,21 @@ export const aggregateStats = (
     // 6. Mission Achievement & Session SP
     const sessionSp = (sectorStats.spGained || 0);
     if (sessionSp > 0 || newUniqueAchievements > 0) {
-        const totalAdd = sessionSp + newUniqueAchievements;
-        s.skillPoints += totalAdd;
-        s.totalSkillPointsEarned += totalAdd;
+        sb[PlayerStatID.SKILL_POINTS] += (sessionSp + newUniqueAchievements);
     }
 
     // 7. Experience & Leveling
     let gainedXp = (sectorStats.xpGained || 0);
-    while (gainedXp > 0 && s.level < LEVEL_CAP) {
-        const needed = s.nextLevelXp - s.currentXp;
+    while (gainedXp > 0 && sb[PlayerStatID.LEVEL] < LEVEL_CAP) {
+        const needed = sb[PlayerStatID.NEXT_LEVEL_XP] - sb[PlayerStatID.CURRENT_XP];
         if (gainedXp >= needed) {
-            s.level++;
-            s.skillPoints++;
-            s.totalSkillPointsEarned++;
+            sb[PlayerStatID.LEVEL]++;
+            sb[PlayerStatID.SKILL_POINTS]++;
             gainedXp -= needed;
-            s.currentXp = 0;
-            s.nextLevelXp = Math.floor(s.nextLevelXp * 1.2);
+            sb[PlayerStatID.CURRENT_XP] = 0;
+            sb[PlayerStatID.NEXT_LEVEL_XP] = Math.floor(sb[PlayerStatID.NEXT_LEVEL_XP] * 1.2);
         } else {
-            s.currentXp += gainedXp;
+            sb[PlayerStatID.CURRENT_XP] += gainedXp;
             gainedXp = 0;
         }
     }

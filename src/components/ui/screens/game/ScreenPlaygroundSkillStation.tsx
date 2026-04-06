@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { PlayerStats } from '../../../../entities/player/PlayerTypes';
+import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
 import { SectorState } from '../../../../game/session/SessionTypes';;
 import { t } from '../../../../utils/i18n';
 import { soundManager } from '../../../../utils/audio/SoundManager';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 
 const SKILLS_CONFIG = [
-    { id: 'maxHp', labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', value: 20 },
-    { id: 'maxStamina', labelKey: 'skills.adrenaline', descKey: 'skills.adrenaline_desc', value: 20 },
-    { id: 'speed', labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', value: 0.1 }
+    { id: PlayerStatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', value: 20 },
+    { id: PlayerStatID.MAX_STAMINA, labelKey: 'skills.adrenaline', descKey: 'skills.adrenaline_desc', value: 20 },
+    { id: PlayerStatID.SPEED, labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', value: 0.1 }
 ];
 
 interface ScreenPlaygroundSkillStationProps {
@@ -23,13 +23,16 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
     const [tempStats, setTempStats] = useState({ ...stats });
     const [tempSectorState, setTempSectorState] = useState({ ...sectorState });
 
-    const handleUpgradeSkill = (skillId: string, value: number) => {
+    const handleUpgradeSkill = (skillId: PlayerStatID, value: number) => {
         soundManager.playUiClick();
-        const newVal = (tempStats as any)[skillId] + value;
-        setTempStats({
-            ...tempStats,
-            [skillId]: newVal
-        });
+        
+        // Zero-GC: Clone the buffer for the state update to trigger React re-render
+        const newStats = { ...tempStats };
+        const newBuffer = new Float32Array(tempStats.statsBuffer);
+        newBuffer[skillId] += value;
+        newStats.statsBuffer = newBuffer;
+        
+        setTempStats(newStats);
     };
 
     const handleConfirm = () => {
@@ -53,8 +56,8 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                     <label className="text-zinc-500 uppercase text-xs font-bold tracking-widest">{t('ui.stat_calibration')}</label>
                     <div className="flex flex-col gap-2">
                         {SKILLS_CONFIG.map(skill => {
-                            const val = (tempStats as any)[skill.id];
-                            const displayVal = skill.id === 'speed' ? val.toFixed(2) : Math.round(val);
+                            const val = tempStats.statsBuffer[skill.id];
+                            const displayVal = skill.id === PlayerStatID.SPEED ? val.toFixed(2) : Math.round(val);
 
                             return (
                                 <div key={skill.id} className="bg-zinc-900/40 border border-zinc-800 p-4 flex justify-between items-center group hover:bg-zinc-800/40 transition-all rounded-lg">

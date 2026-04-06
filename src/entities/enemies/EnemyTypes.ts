@@ -1,5 +1,15 @@
 import * as THREE from 'three';
 import { AttackDefinition } from '../../entities/player/CombatTypes';
+import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
+import {
+    EnemyType, NoiseType, AIState, EnemyDeathState, EnemyEffectType, EnemyFlags, ZombieTypeData
+} from './EnemyBase';
+
+// Re-export for backward compatibility
+export {
+    EnemyType, NoiseType, AIState, EnemyDeathState, EnemyEffectType, EnemyFlags
+};
+export type { ZombieTypeData };
 
 // Enemy Detection & AI Perception
 export const ENEMY_DETECTION = {
@@ -9,124 +19,87 @@ export const ENEMY_DETECTION = {
     SEARCH_DURATION: 5.0
 };
 
-export enum NoiseType {
-    NONE = 'NONE',
-    PLAYER_WALK = 'PLAYER_WALK',
-    PLAYER_RUSH = 'PLAYER_RUSH',
-    PLAYER_ROLLING = 'PLAYER_DODGE',
-    PLAYER_SWIM = 'PLAYER_SWIM',
-    BULLET_HIT = 'BULLET_HIT',
-    GUNSHOT = 'GUNSHOT',
-    GRENADE = 'GRENADE',
-    MOLOTOV = 'MOLOTOV',
-    FLASHBANG = 'FLASHBANG',
-    VEHICLE_IDLE = 'VEHICLE_IDLE',
-    VEHICLE_DRIVE = 'VEHICLE_DRIVE',
-    OTHER = 'OTHER'
-}
-
-export const NOISE_RADIUS: Record<string, number> = {
-    [NoiseType.PLAYER_WALK]: 10,
-    [NoiseType.PLAYER_RUSH]: 20,
-    [NoiseType.PLAYER_ROLLING]: 15,
-    [NoiseType.PLAYER_SWIM]: 15,
-    [NoiseType.BULLET_HIT]: 5,
-    [NoiseType.GUNSHOT]: 60,
-    [NoiseType.MOLOTOV]: 50,
-    [NoiseType.FLASHBANG]: 60,
-    [NoiseType.GRENADE]: 80,
-    [NoiseType.VEHICLE_IDLE]: 25,
-    [NoiseType.VEHICLE_DRIVE]: 60,
-    [NoiseType.OTHER]: 30,
-};
-
-// Search timers (seconds) for different noise types
-export const SEARCH_TIMERS: Record<string, number> = {
-    [NoiseType.NONE]: 0,
-    [NoiseType.PLAYER_WALK]: 2.0,
-    [NoiseType.PLAYER_RUSH]: 2.0,
-    [NoiseType.PLAYER_ROLLING]: 2.0,
-    [NoiseType.PLAYER_SWIM]: 2.0,
-    [NoiseType.GUNSHOT]: 5.0,
-    [NoiseType.GRENADE]: 8.0,
-    [NoiseType.MOLOTOV]: 8.0,
-    [NoiseType.FLASHBANG]: 8.0,
-    [NoiseType.OTHER]: 3.0
-};
-
-export const DEFAULT_ATTACK_RANGE = 1.5;
-
 /**
- * States for the Enemy AI State Machine
+ * Optimized Registry: Indexed by NoiseType (SMI)
+ * Contiguous TypedArray for L1/L2 cache locality.
  */
-export enum AIState {
-    IDLE = 'IDLE',
-    WANDER = 'WANDER',
-    SEARCH = 'SEARCH',
-    CHASE = 'CHASE',
-    ATTACK_CHARGE = 'ATTACK_CHARGE',
-    ATTACKING = 'ATTACKING'
-}
+export const NOISE_RADIUS = new Uint8Array([
+    0,   // NONE
+    10,  // PLAYER_WALK
+    20,  // PLAYER_RUSH
+    15,  // PLAYER_DODGING
+    15,  // PLAYER_SWIM
+    5,   // BULLET_HIT
+    60,  // GUNSHOT
+    80,  // GRENADE
+    50,  // MOLOTOV
+    60,  // FLASHBANG
+    25,  // VEHICLE_IDLE
+    60,  // VEHICLE_DRIVE
+    30   // OTHER
+]);
 
-/**
- * Standardized death states for enemies
- */
-export enum EnemyDeathState {
-    ALIVE = 'ALIVE',
-    DEAD = 'DEAD',
-    SHOT = 'SHOT',
-    GIBBED = 'GIBBED',
-    EXPLODED = 'EXPLODED',
-    BURNED = 'BURNED',
-    ELECTROCUTED = 'ELECTROCUTED',
-    GENERIC = 'GENERIC',
-    DROWNED = 'DROWNED',
-    FALL = 'FALL'
-}
+export const SEARCH_TIMERS = new Float32Array([
+    0,   // NONE
+    2.0, // PLAYER_WALK
+    2.0, // PLAYER_RUSH
+    2.0, // PLAYER_ROLLING
+    2.0, // PLAYER_SWIM
+    0.5, // BULLET_HIT
+    5.0, // GUNSHOT
+    8.0, // GRENADE
+    8.0, // MOLOTOV
+    8.0, // FLASHBANG
+    3.0, // VEHICLE_IDLE
+    5.0, // VEHICLE_DRIVE
+    3.0  // OTHER
+]);
 
-/**
- * Standardized effect types for semantic visual feedback
- */
-export enum EnemyEffectType {
-    STUN = 'STUN',
-    FLAME = 'FLAME',
-    SPARK = 'SPARK'
-}
 
-/**
- * Standardized enemy type identifiers
- */
-export enum EnemyType {
-    WALKER = 'WALKER',
-    RUNNER = 'RUNNER',
-    TANK = 'TANK',
-    BOMBER = 'BOMBER',
-    BOSS = 'BOSS'
-}
+// --- BASE STAT ARRAYS (O(1) Cache-Friendly) ---
+// VINTERDÖD: Flat arrays for direct indexing by EnemyType.
+// Initialized from ZOMBIE_TYPES registry. Pre-allocated to 32 bits for SMI safety.
 
-/**
- * Static data definitions for different zombie types
- */
-export interface ZombieTypeData {
-    hp: number;
-    speed: number;
-    score: number;
-    color: number;
-    scale: number;
-    widthScale: number;
-    attacks: AttackDefinition[];
-}
+export const ENEMY_MAX_HP = new Float32Array(32);
+export const ENEMY_HP = ENEMY_MAX_HP;
+
+export const ENEMY_BASE_SPEED = new Float32Array(32);
+export const ENEMY_SPEED = ENEMY_BASE_SPEED;
+
+export const ENEMY_SCORE = new Uint32Array(32);
+export const ENEMY_COLOR = new Uint32Array(32);
+export const ENEMY_SCALE = new Float32Array(32);
+export const ENEMY_WIDTH_SCALE = new Float32Array(32);
+
+export const ENEMY_ATTACK_RANGE = new Float32Array(32);
+
+// --- INITIALIZATION (Module Level) ---
+Object.keys(ZOMBIE_TYPES).forEach(key => {
+    const typeSMI = Number(key);
+    const data = (ZOMBIE_TYPES as any)[key];
+
+    ENEMY_MAX_HP[typeSMI] = data.hp;
+    ENEMY_BASE_SPEED[typeSMI] = data.speed;
+    ENEMY_SCORE[typeSMI] = data.score;
+    ENEMY_COLOR[typeSMI] = data.color;
+    ENEMY_SCALE[typeSMI] = data.scale;
+    ENEMY_WIDTH_SCALE[typeSMI] = data.widthScale;
+
+    // Derived detection ranges (default logic)
+    if (typeSMI === EnemyType.WALKER) ENEMY_ATTACK_RANGE[typeSMI] = 1.5;
+    else if (typeSMI === EnemyType.RUNNER) ENEMY_ATTACK_RANGE[typeSMI] = 2.0;
+    else if (typeSMI === EnemyType.TANK) ENEMY_ATTACK_RANGE[typeSMI] = 2.5;
+    else if (typeSMI === EnemyType.BOMBER) ENEMY_ATTACK_RANGE[typeSMI] = 3.5;
+    else if (typeSMI === EnemyType.BOSS) ENEMY_ATTACK_RANGE[typeSMI] = 5.0;
+});
 
 /**
  * The core Enemy entity structure used across all systems.
- * Designed for Zero-GC updates by pre-allocating essential Vectors and removing Optionals (?).
- * * Strict V8 Shape Locking: All properties MUST be initialized when spawned. 
- * Use 0, false, null, or pre-allocated objects instead of undefined.
+ * Designed for Zero-GC updates by pre-allocating essential Vectors and removing Optionals.
  */
 export interface Enemy {
-    // Unique identifier for tracking and debugging
     id: string;
-    poolId: number; // For amortized AI queries
+    poolId: number;
 
     // Component References
     mesh: THREE.Group;
@@ -134,103 +107,86 @@ export interface Enemy {
     ashPile: THREE.Object3D | null;
 
     // Identity & Stats
-    type: EnemyType | string;
-    isBoss: boolean;
+    type: EnemyType;
+    statusFlags: number; // SMI bitmask (EnemyFlags)
+
+    // Dynamic Instance State (Shape-Locked SMI properties)
     hp: number;
     maxHp: number;
     speed: number;
     score: number;
     color: number;
 
-    // Transform & Scaling (Used for dynamic hitbox: originalScale * widthScale)
+    // Transform & Scaling
     originalScale: number;
     widthScale: number;
+    hitRadius: number;
+    combatRadius: number;
 
     // AI State Machine
     state: AIState;
-    idleTimer: number;       // Seconds before switching from IDLE to WANDER
-    searchTimer: number;     // Seconds spent searching at last known position
-    attackCooldowns: Record<string, number>; // Individual timers for different attacks
+    idleTimer: number;
+    searchTimer: number;
+    attackCooldowns: Float32Array; // SMI-friendly cooldown array
     abilityCooldown: number;
 
     // AI Knowledge & Sensors
-    spawnPos: THREE.Vector3;           // Anchor point for WANDER behavior
-    lastSeenTime: number;              // Timestamp of the last sighting
-    lastKnownPosition: THREE.Vector3;  // Memory of where the player was last detected via sound/sight
-    hearingThreshold: number;          // Range multiplier for sound detection (0.0 to 1.0+)
-    awareness: number;                 // 0.0 to 1.0 representation of alertness
-    lastHeardNoiseType: NoiseType;     // Type of the most recent noise sensed
+    spawnPos: THREE.Vector3;
+    lastSeenTime: number;
+    lastKnownPosition: THREE.Vector3;
+    hearingThreshold: number;
+    awareness: number;
+    lastHeardNoiseType: NoiseType;
 
     // Interaction & Boss States
-    bossId: number;          // Link to the BOSSES content data (-1 if not a boss)
-    dead: boolean;           // Logic-level removal flag
-    hitTime: number;         // Timestamp of the most recent damage event
-    hitRenderTime: number;   // Visual timestamp of the most recent damage event
-    lastStepTime: number;    // Timestamp of the last footstep sound
-    lastTackleTime: number;  // Timestamp of the last physical collision with the player
-    lastVehicleHit: number;  // Timestamp of the last vehicle collision
-    fleeing: boolean;        // Flag for retreat behavior
+    bossId: number;
+    hitTime: number;
+    hitRenderTime: number;
+    lastStepTime: number;
+    lastTackleTime: number;
+    lastVehicleHit: number;
 
     // Combat
     attacks: AttackDefinition[];
-    currentAttackIndex: number; // -1 when not attacking
-    attackTimer: number;     // Multi-purpose timer for charging/attacking states
+    currentAttackIndex: number;
+    attackTimer: number;
 
-    // Status Effects (Timers are delta-based for consistency)
-    isBurning: boolean;
-    burnTimer: number;       // Internal tick interval for fire damage
-    afterburnTimer: number;  // Duration remaining for the burning state
-
-    isBlinded: boolean;
-    blindTimer: number;      // Seconds remaining for the blind effect
-    blindUntil: number;      // Timestamp fallback for blind recovery
-
-    slowTimer: number;       // Seconds remaining for movement speed penalty
-    stunTimer: number;       // Seconds remaining for hard stun lock
-
-    // Grappling & Close Combat Logic
-    isGrappling: boolean;
-    grappleTimer: number;    // Seconds remaining for the biting/grapple state
-
-    // Bomber-specific Logic
-    explosionTimer: number;  // Seconds remaining before self-destruct
+    // Status Effect Remaining Durations & Last Tick Timers
+    burnTickTimer: number;
+    lastBurnTick: number;
+    burnDuration: number;
+    blindDuration: number;
+    slowDuration: number;
+    stunDuration: number;
+    grappleDuration: number;
+    explosionTimer: number;
 
     // --- PHYSICS & ANIMATION (Zero-GC) ---
-    // Pre-allocated vectors to prevent frame-time memory allocation
-    velocity: THREE.Vector3;     // Primary movement vector
-    knockbackVel: THREE.Vector3; // Force applied from hits/explosions
-    deathVel: THREE.Vector3;     // Trajectory used during the falling animation
+    velocity: THREE.Vector3;
+    knockbackVel: THREE.Vector3;
+    deathVel: THREE.Vector3;
 
-    // Death, Animation & Cleanup
-    lastDamageType: string;        // Type of damage
-    lastHitWasHighImpact: boolean; // High-impacted
-    deathTimer: number;            // Timestamp recording the moment of death
+    // Death & Cleanup
+    lastDamageType: number; // Migrated to Unified DamageID
+    lastHitWasHighImpact: boolean;
+    deathTimer: number;
 
-    // Zero-GC tracking for blood trail decals
     hasLastTrailPos: boolean;
     lastTrailPos: THREE.Vector3;
 
-    fallForward: boolean;          // Determines the direction of the fall animation
-    bloodSpawned: boolean;         // Boolean to ensure only one blood pool is spawned
-    lastKnockback: number;         // Timestamp of the last force application
-    deathState: EnemyDeathState;   // Type of death
+    fallForward: boolean;
+    bloodSpawned: boolean;
+    lastKnockback: number;
+    deathState: EnemyDeathState;
 
-    // --- WATER STATE ---
-    isInWater: boolean;    // Inside any water body bounds
-    isWading: boolean;     // Shallow water (flatDepth 0.4-1.25) — slowed but alive
-    isDrowning: boolean;   // Deep water (flatDepth > 1.25) — panicking and taking damage
-    swimDistance: number;  // Current meters swum in deep water
-    maxSwimDistance: number; // Randomized limit (1.0-5.0m) before drowning triggers
-    drownTimer: number;    // Seconds spent in drowning state
-    drownDmgTimer: number; // Throttle timer for per-frame damage ticks
-
-    // --- AIRBORNE / FALL DAMAGE ---
-    isAirborne: boolean;   // True while enemy is launched into the air
-    fallStartY: number;    // Peak Y reached while airborne (for fall damage calculation)
+    // --- WATER STATE & AIRBORNE ---
+    swimDistance: number;
+    maxSwimDistance: number;
+    drownTimer: number;
+    drownDmgTimer: number;
+    fallStartY: number;
 
     // --- DAMAGE TRACKING (Zero-GC) ---
-    _accumulatedDamage: number;    // Tracks damage between floating text ticks
-    _lastDamageTextTime: number;   // Timestamp of the last floating text spawn
-
-    discovered: boolean;           // Whether the enemy has been discovered by the player
+    _accumulatedDamage: number;
+    _lastDamageTextTime: number;
 }

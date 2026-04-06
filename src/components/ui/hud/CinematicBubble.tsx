@@ -22,6 +22,22 @@ interface TextToken {
 const CONTAINER_HIDDEN = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out bottom-[-20%] opacity-0";
 const CONTAINER_VISIBLE = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out bottom-[calc(12%+25px)] opacity-100";
 
+// ZERO-GC: Static speaker color mapping (O(1) lookup)
+const SPEAKER_COLORS: Record<string, string> = {
+    'robert': '#' + PLAYER_CHARACTER.color.toString(16).padStart(6, '0'),
+    'narrator': '#ef4444',
+    'okänd': '#9ca3af',
+    'unknown': '#9ca3af',
+    'radio': '#9ca3af',
+    'röst': '#9ca3af',
+    'mannen': '#9ca3af'
+};
+
+// Map family members
+FAMILY_MEMBERS.forEach(m => {
+    SPEAKER_COLORS[m.name.toLowerCase()] = '#' + m.color.toString(16).padStart(6, '0');
+});
+
 const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(({ isMobileDevice, onComplete }, ref) => {
     // ============================================================================
     // ZERO-GC PRIMITIVE SELECTORS
@@ -160,22 +176,9 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
     }, [translatedText, isVisible, fullTextLength, onComplete, updateDOMText]);
 
     const getSpeakerColor = (speakerName: string) => {
+        if (!speakerName) return '#000000';
         const lower = speakerName.toLowerCase();
-
-        if (lower === 'robert')
-            return '#' + PLAYER_CHARACTER.color.toString(16).padStart(6, '0');
-
-        const member = FAMILY_MEMBERS.find(m => lower.includes(m.name.toLowerCase()));
-        if (member)
-            return '#' + member.color.toString(16).padStart(6, '0');
-
-        if (lower === 'narrator')
-            return '#ef4444';
-
-        if (['okänd', 'unknown', 'röst', 'radio', 'mannen'].some(k => lower.includes(k)))
-            return '#9ca3af';
-
-        return '#000000';
+        return SPEAKER_COLORS[lower] || '#000000';
     };
 
     const bgColor = useMemo(() => getSpeakerColor(speakerName), [speakerName]);

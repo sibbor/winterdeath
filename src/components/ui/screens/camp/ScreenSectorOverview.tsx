@@ -91,7 +91,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
 
     const handleSelect = (index: number) => {
-        if ((!debugMode && (index >= 0 && !deadBossIndices.includes(index)))) return;
+        if (!debugMode && (index > 0 && index !== 4 && !deadBossIndices.includes(index - 1))) return;
         soundManager.playUiClick();
         setSelectedSectorIndex(index);
         onSelectSector(index);
@@ -124,7 +124,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
             onClose={onClose}
             onConfirm={handleDeploy}
             confirmLabel={t('ui.deploy_sector')}
-            canConfirm={!(!debugMode && (selectedSectorIndex > 0 && !deadBossIndices.includes(selectedSectorIndex - 1)))}
+            canConfirm={!(!debugMode && (selectedSectorIndex > 0 && selectedSectorIndex !== 4 && !deadBossIndices.includes(selectedSectorIndex - 1)))}
             showCancel={true}
             titleColorClass="text-red-600"
             tabs={SECTOR_THEMES.map((_, i) => i)}
@@ -138,7 +138,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                     <div className={`${!effectiveLandscape ? 'flex gap-2 overflow-x-auto pb-4 px-10 snap-x snap-mandatory pt-2 scrollbar-hide' : 'flex flex-col gap-4 pt-4 pr-10'}`}>
                         {SECTOR_THEMES.map((map, i) => {
                             const isSel = selectedSectorIndex === i;
-                            const locked = !debugMode && (i > 0 && !deadBossIndices.includes(i - 1));
+                            const locked = !debugMode && (i > 0 && i !== 4 && !deadBossIndices.includes(i - 1));
                             const pulseColor = '#ef4444';
 
                             return (

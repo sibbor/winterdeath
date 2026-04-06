@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Obstacle } from './CollisionResolution';
-import { Enemy, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
+import { Enemy, EnemyDeathState, EnemyFlags } from '../../entities/enemies/EnemyTypes';
 import { MaterialType } from '../../content/environment';
 
 // Prime number for optimal spatial hash distribution without collisions
@@ -12,7 +12,7 @@ export class SpatialGrid {
     private enemyCells: Enemy[][];
     private cellSize: number;
 
-    // --- ZERO-GC SCRATCHPADS ---
+    // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
     private obstacleQueryResults: Obstacle[] = [];
     private enemyQueryResults: Enemy[] = [];
     private triggerQueryResults: any[] = [];
@@ -35,6 +35,9 @@ export class SpatialGrid {
     private triggerCells: any[][];
     private interactableCells: THREE.Object3D[][];
     private dynamicTriggers: any[] = []; // Triggers with familyId/ownerId
+
+    // Hook for external heightmap resolution
+    private terrainHeightFn: ((x: number, z: number) => number) | null = null;
 
     constructor(cellSize: number = 15) {
         this.cellSize = cellSize;
@@ -73,12 +76,31 @@ export class SpatialGrid {
         }
     }
 
+    // --- TERRAIN MANAGEMENT ---
+
+    /**
+     * Registers a fast mathematical callback to evaluate terrain height.
+     */
+    setTerrainProvider(fn: (x: number, z: number) => number) {
+        this.terrainHeightFn = fn;
+    }
+
+    /**
+     * O(1) Mathematical lookup for ground height at a specific world coordinate.
+     */
+    getGroundHeight(x: number, z: number): number {
+        if (this.terrainHeightFn) {
+            return this.terrainHeightFn(x, z);
+        }
+        return 0; // Default flat ground
+    }
+
     // --- OBSTACLE MANAGEMENT ---
 
     addObstacle(obstacle: Obstacle) {
         const pos = obstacle.position;
 
-        // VINTERDÖD HIGH-PERFORMANCE: Pre-resolve properties for the 60FPS loops
+        // High-performance: Pre-resolve properties for the 60FPS loops
         if (!obstacle.radius) obstacle.radius = 2.0;
         if (!obstacle.materialId) {
             obstacle.materialId = obstacle.mesh?.userData?.material || MaterialType.CONCRETE;
@@ -95,7 +117,7 @@ export class SpatialGrid {
     updateObstacle(obstacle: Obstacle, oldPos?: THREE.Vector3, oldRadius?: number) {
         if (!obstacle || !obstacle.position) return;
 
-        // OPTIMIZATION: If the old position is known, we avoid iterating the entire grid
+        // Optimization: If the old position is known, we avoid iterating the entire grid
         if (oldPos && oldRadius !== undefined) {
             this.computeHashesInRange(oldPos.x, oldPos.z, oldRadius);
             for (let i = 0; i < this._hashCount; i++) {
@@ -225,6 +247,19 @@ export class SpatialGrid {
 
     // --- ENEMY MANAGEMENT ---
 
+    /**
+     * Selectively purges only enemy cells to prevent ghost collisions.
+     * Uses the touched-cells array to avoid O(N) iteration over the entire hash grid.
+     * Zero-GC implementation.
+     */
+    clearEnemies() {
+        const len = this._touchedEnemyCells.length;
+        for (let i = 0; i < len; i++) {
+            this._touchedEnemyCells[i].length = 0;
+        }
+        this._touchedEnemyCells.length = 0;
+    }
+
     updateEnemyGrid(enemies: Enemy[]) {
         for (let i = 0; i < this._touchedEnemyCells.length; i++) {
             this._touchedEnemyCells[i].length = 0;
@@ -233,7 +268,7 @@ export class SpatialGrid {
 
         for (let i = 0; i < enemies.length; i++) {
             const e = enemies[i];
-            if (e.dead || e.deathState !== EnemyDeathState.ALIVE) continue;
+            if ((e.statusFlags & EnemyFlags.DEAD) !== 0 || e.deathState !== EnemyDeathState.ALIVE) continue;
 
             const hitRadius = 1.0 * (e.originalScale || 1.0) * (e.widthScale || 1.0);
 
@@ -316,7 +351,7 @@ export class SpatialGrid {
     // --- INTERACTABLE MANAGEMENT ---
 
     addInteractable(obj: THREE.Object3D) {
-        // VINTERDÖD FIX: Read the newly structured Data-Driven Interaction Shape
+        // Read the newly structured data-driven interaction shape
         let radius = obj.userData.interactionRadius || 4.0;
 
         if (obj.userData.interactionShape === 'box') {
@@ -396,5 +431,6 @@ export class SpatialGrid {
         }
         this._touchedEnemyCells.length = 0;
         this.dynamicTriggers.length = 0;
+        this.terrainHeightFn = null;
     }
 }

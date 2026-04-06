@@ -7,20 +7,17 @@ import { VehicleDef } from '../content/vehicles';
 import { VehicleManager } from './VehicleManager';
 import { _buoyancyResult } from './WaterSystem';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
+import { KMH_TO_MS } from '../content/constants';
 
 // --- PERFORMANCE SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
 const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
 
-// Constants
-const KMH_TO_MS = 1.0 / 3.6;
-
 export class VehicleMovementSystem implements System {
     id = 'vehicle_movement';
 
     constructor(private playerGroup: THREE.Group) {
-
     }
 
     update(session: GameSessionLogic, delta: number, now: number) {

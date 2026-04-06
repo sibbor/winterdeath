@@ -6,6 +6,8 @@ import { VEGETATION_TYPE } from '../../content/environment';
 import { POI_TYPE } from '../../content/pois';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
+import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
+import { SoundID } from '../../utils/audio/AudioTypes';
 
 const LOCATIONS = {
     SPAWN: {
@@ -147,11 +149,11 @@ export const Sector3: SectorDef = {
                 id: 's4_dialogue_1',
                 position: LOCATIONS.TRIGGERS.DIALOGUE_1,
                 radius: 15,
-                type: 'EVENT',
+                type: TriggerType.EVENT,
                 content: '',
-                triggered: false,
+                statusFlags: TriggerStatus.ACTIVE,
                 // VINTERDÖD FIX: Points to index 3 (Sector 4), starts at line 0 automatically.
-                actions: [{ type: 'START_CINEMATIC', payload: { scriptId: 3 } }]
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { scriptId: 3 } }]
             },
 
             // Dialogue Part 2 (RV40)
@@ -159,12 +161,12 @@ export const Sector3: SectorDef = {
                 id: 's4_dialogue_2',
                 position: LOCATIONS.TRIGGERS.DIALOGUE_2,
                 radius: 15,
-                type: 'EVENT',
+                type: TriggerType.EVENT,
                 content: '',
-                triggered: false,
+                statusFlags: TriggerStatus.ACTIVE,
                 // VINTERDÖD FIX: Points to Sector 4 script, but we must start at line 6 (index 6 in the array)
                 // We pass 'lineIndex' to the payload so the cinematic system knows where to begin.
-                actions: [{ type: 'START_CINEMATIC', payload: { scriptId: 3, lineIndex: 6 } }]
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { scriptId: 3, lineIndex: 6 } }]
             },
 
             // Dialogue Part 3 (Final Boss/Nathalie)
@@ -173,17 +175,17 @@ export const Sector3: SectorDef = {
                 position: LOCATIONS.TRIGGERS.FOUND_NATHALIE,
                 familyId: 3,
                 radius: 12,
-                type: 'EVENT',
+                type: TriggerType.EVENT,
                 content: '',
-                triggered: false,
+                statusFlags: TriggerStatus.ACTIVE,
                 // Starts the final dialogue at line 14. 
                 // The dialog script will then fire ['FAMILY_MEMBER_FOUND', 'SPAWN_BOSS']
-                actions: [{ type: 'START_CINEMATIC', payload: { scriptId: 3, lineIndex: 14 } }]
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { scriptId: 3, lineIndex: 14 } }]
             },
 
-            { id: 's4_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: 'THOUGHT', content: "clues.3.0.reaction", triggered: false, actions: [{ type: 'PLAY_SOUND', payload: { id: 'ambient_metal' } }, { type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's4_poi_shed', position: LOCATIONS.TRIGGERS.SHED_SIGHT, radius: 25, type: 'POI', content: "pois.3.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's4_poi_scrapyard', position: { x: 0, z: -100 }, radius: 100, type: 'POI', content: "pois.3.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
+            { id: 's4_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: TriggerType.THOUGHT, content: "clues.3.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.PLAY_SOUND, payload: { id: SoundID.AMBIENT_METAL } }, { type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's4_poi_shed', position: LOCATIONS.TRIGGERS.SHED_SIGHT, radius: 25, type: TriggerType.POI, content: "pois.3.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's4_poi_scrapyard', position: { x: 0, z: -100 }, radius: 100, type: TriggerType.POI, content: "pois.3.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
         ]);
     },
 

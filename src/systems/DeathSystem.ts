@@ -2,7 +2,7 @@ import type React from 'react';
 import * as THREE from 'three';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System } from './System';
-import { PlayerDeathState, DamageType } from '../entities/player/CombatTypes';
+import { PlayerDeathState, DamageType, DamageID } from '../entities/player/CombatTypes';
 import { PLAYER_CHARACTER } from '../content/constants';
 import { MATERIALS } from '../utils/assets';
 import { soundManager } from '../utils/audio/SoundManager';
@@ -10,6 +10,8 @@ import { HudSystem } from './HudSystem';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { HudStore } from '../store/HudStore';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
+import { PlayerStatusFlags, PlayerStatID } from '../entities/player/PlayerTypes';
+
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -22,8 +24,8 @@ const _traverseStack: THREE.Object3D[] = []; // Shared stack to avoid closures d
 const _deathAnimState = {
     isMoving: false,
     isRushing: false,
-    isRolling: false,
-    rollStartTime: 0,
+    isDodging: false,
+    dodgeStartTime: 0,
     staminaRatio: 0,
     isSpeaking: false,
     isThinking: false,
@@ -37,8 +39,8 @@ const _deathAnimState = {
 const _griefAnimState = {
     isMoving: false,
     isRushing: false,
-    isRolling: false,
-    rollStartTime: 0,
+    isDodging: false,
+    dodgeStartTime: 0,
     staminaRatio: 1.0,
     isSpeaking: false,
     isThinking: true,
@@ -90,7 +92,8 @@ export class DeathSystem implements System {
 
     update(session: GameSessionLogic, delta: number, now: number) {
         const state = session.state;
-        if (!state.isDead) return; // Skip immediately when alive — ~0 cost
+        if (!(state.statusFlags & PlayerStatusFlags.DEAD)) return; // Skip immediately when alive — ~0 cost
+
 
         const playerGroup = this.playerGroupRef.current;
         const playerMesh = this.playerMeshRef.current;
@@ -106,12 +109,11 @@ export class DeathSystem implements System {
         if (this.deathPhaseRef.current === 'NONE') {
             this.deathPhaseRef.current = 'ANIMATION';
             this.setDeathPhase('ANIMATION');
-            soundManager.playPlayerDeath(PLAYER_CHARACTER.name);
+            soundManager.playPlayerDeath();
 
             // Fetch HUD data once for death state to avoid GC hits
+            // HUD data now respects the statsBuffer and statusFlags automatically.
             const hudData = HudSystem.getHudData(state, pgPos, fmMesh, input, now, props, this.distanceTraveledRef.current, camera) as any;
-            hudData.hp = 0;
-            hudData.isDead = true;
             HudStore.update(hudData);
 
         } else if (this.deathPhaseRef.current === 'ANIMATION') {
@@ -133,7 +135,8 @@ export class DeathSystem implements System {
 
             const isExploded = state.playerDeathState === PlayerDeathState.GIBBED;
             const isBurning = state.playerDeathState === PlayerDeathState.BURNED;
-            const isBiting = state.killerType === DamageType.BITE;
+            const isBiting = state.killerType === DamageID.BITE;
+
 
             if (pgPos.y <= 0.0) {
                 pgPos.y = 0.0;
@@ -308,6 +311,7 @@ export class DeathSystem implements System {
                 _griefAnimState.seed = fm.seed || 0;
                 _griefAnimState.isMoving = isWalking;
                 _griefAnimState.renderTime = state.renderTime;
+                _griefAnimState.staminaRatio = state.statsBuffer[PlayerStatID.STAMINA] / Math.max(1, state.statsBuffer[PlayerStatID.MAX_STAMINA]);
                 PlayerAnimator.update(body, _griefAnimState, now, delta);
             }
         }

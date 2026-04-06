@@ -3,7 +3,7 @@ import { FXSystem } from './FXSystem';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { MATERIALS } from '../utils/assets';
 
-// --- ZERO-GC SCRATCHPADS ---
+// --- ZERO-GC SCRATCHPADS & GLOBALS ---
 // Dedicated memory spaces solely for weapon calculations
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -73,13 +73,9 @@ export const WeaponFX = {
     },
 
     updateFireZoneVisuals: (pos: THREE.Vector3, radius: number, delta: number, ctx: any) => {
-        // KEEP: const fireDensity = 10;
-        // KEEP: const targetFlameCount = (radius * radius * fireDensity) * delta;
-
         // [PERFORMANCE] Reduced density and added performance cap for overlapping zones
         const fireDensity = 6.0;
         const targetFlameCount = Math.min(25, (radius * radius * fireDensity) * delta);
-
 
         let flameCount = Math.floor(targetFlameCount);
         if (Math.random() < (targetFlameCount - flameCount)) flameCount++;
@@ -97,7 +93,6 @@ export const WeaponFX = {
             const centerFocus = 1.0 - normalizedDist;
 
             // Genom att multiplicera centerFocus med sig själv får vi en brant kurva.
-            // I mitten (1 * 1) = 1. Halvvägs ut (0.5 * 0.5) = 0.25.
             const coreIntensity = centerFocus * centerFocus;
 
             // Skala: 0.8 på kanten, upp till 4.5 i exakta mitten (0.8 + 3.7).
@@ -145,7 +140,6 @@ export const WeaponFX = {
 
         const req = FXSystem._getSpawnRequest();
         req.scene = null as any;
-        req.particlesList = null as any;
         req.x = start.x; req.y = start.y; req.z = start.z;
         req.type = 'flamethrower_fire';
 
@@ -173,7 +167,6 @@ export const WeaponFX = {
 
         const req = FXSystem._getSpawnRequest();
         req.scene = null as any;
-        req.particlesList = null as any;
         req.x = start.x; req.y = start.y; req.z = start.z;
         req.type = 'fire';
 
@@ -234,7 +227,6 @@ export const WeaponFX = {
             if (isMain && Math.random() > 0.5) {
                 const reqS = FXSystem._getSpawnRequest();
                 reqS.scene = null as any;
-                reqS.particlesList = null as any;
                 reqS.x = v_node.x; reqS.y = v_node.y; reqS.z = v_node.z;
                 reqS.type = 'enemy_effect_stun';
                 reqS.scale = 0.3;
@@ -252,7 +244,6 @@ export const WeaponFX = {
         for (let i = 0; i < 3; i++) {
             const req = FXSystem._getSpawnRequest();
             req.scene = null as any;
-            req.particlesList = null as any;
             req.x = pos.x + (Math.random() - 0.5);
             req.y = pos.y + 1.5 + (Math.random() - 0.5);
             req.z = pos.z + (Math.random() - 0.5);

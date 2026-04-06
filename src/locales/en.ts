@@ -14,6 +14,8 @@ export const en = {
     ui: {
         scrap: "SCRAP",
         scrap_earned: "Scrap Earned",
+        aborted: "ABORTED",
+        sector_label: "SECTOR",
         game_title_1: "WINTER",
         game_title_2: "DEATH",
         sp: "SP",
@@ -64,10 +66,17 @@ export const en = {
         sector: "SECTOR",
         play_sector: "GO TO BRIEFING",
         close: "CLOSE",
+        next_sector: "NEXT SECTOR",
         deploy_sector: "HEAD TO SECTOR",
         back_to_overview: "BACK TO OVERVIEW",
         sector_briefing: "SECTOR BRIEFING",
         sector_report: "SECTOR REPORT",
+        exploration: "EXPLORATION",
+        completed: "COMPLETED",
+        failed: "FAILED",
+        summary: "SUMMARY",
+        details: "COMBAT DETAILS",
+        pois_discovered: "Locations Found",
         settings: "SETTINGS",
         language: "LANGUAGE",
         language_sub: "English / Svenska",
@@ -134,7 +143,7 @@ export const en = {
         killed_by: "killed by",
         died_from: "died from",
         time_elapsed: "TIME ELAPSED",
-        distance_traveled: "DISTANCE TRAVELED",
+        distance_traveled: "DISTANCE",
         chests: "CHESTS LOOTED",
         damage_dealt: "DAMAGE DEALT",
         damage_taken: "DAMAGE TAKEN",
@@ -244,26 +253,36 @@ export const en = {
         spawn: "SPAWN",
         apply: "APPLY",
         reset: "RESET",
-        playground_armory: "PLAYGROUND ARMORY",
-        station_armory: "ARMORY",
-        station_spawner: "ENEMIES",
-        station_environment: "WEATHER",
-        background_color: "BACKGROUND COLOR",
-        ground_color: "GROUND COLOR",
-        fov: "FIELD OF VIEW",
-        weather_density: "WEATHER DENSITY",
-        randomized_wind: "RANDOMIZED WIND",
-        sky_light_settings: "SKY LIGHT SETTINGS",
-        fog_settings: "FOG SETTINGS",
-        playground_stats: "SKILL STATION",
-        temp_effects: "TEMPORARY EFFECTS",
-        invincible: "INVINCIBLE",
-        unlimited_ammo: "UNLIMITED AMMO",
-        unlimited_throwables: "UNLIMITED THROWABLES",
-        no_reload: "NO RELOADING",
-        TERMINAL_SKILLS: "SKILL STATION",
         other: "Other",
-        radius: "Radius"
+        radius: "Radius",
+        color: "COLOR",
+        density: "DENSITY",
+        intensity: "INTENSITY",
+        fog_calibration: "FOG CALIBRATION",
+        skylight_calibration: "SKY LIGHT CALIBRATION",
+        sky_light: "SKY LIGHT",
+        fog: "FOG",
+        background: "BACKGROUND",
+        ground: "GROUND",
+        skills: "SKILLS",
+        stat_calibration: "STAT CALIBRATION",
+        temporary_modifiers: "TEMPORARY MODIFIERS",
+        playground_disclaimer: "These settings only affect the current playground session and are not saved to your career progress.",
+        playground_only: "PLAYGROUND ONLY",
+        stress_test: "STRESS TEST",
+        mass_spawning: "MASS SPAWNING",
+        randomize: "RANDOMIZE",
+        clear_all: "CLEAR ALL",
+        horde_composition: "HORDE COMPOSITION",
+        boss_spawner: "BOSS SPAWNER",
+        spawn_parameters: "SPAWN PARAMETERS",
+        spread: "SPREAD"
+    },
+    location: {
+        near: "NEARBY",
+        forest: "FOREST",
+        farm: "FARM",
+        village: "VILLAGE"
     },
     camp_tooltips: {
         equipped: "EQUIPPED",
@@ -285,6 +304,13 @@ export const en = {
         special: "SPECIAL",
         tool: "TOOL"
     },
+    weather: {
+        none: "NONE",
+        rain: "RAIN",
+        snow: "SNOW",
+        ash: "ASH",
+        ember: "EMBER"
+    },
     stations: {
         armory: "ARMORY",
         sectors: "SECTOR OVERVIEW",
@@ -293,23 +319,46 @@ export const en = {
         stats: "STATISTICS"
     },
     enemies: {
-        WALKER: {
-            name: "Walker",
-            description: "Standard reanimated combatant. Low threat individually, dangerous in swarms. Aim for the head."
+        zombies: {
+            WALKER: {
+                name: "Walker",
+                description: "Standard reanimated combatant. Low threat individually, dangerous in swarms. Aim for the head."
+            },
+            RUNNER: {
+                name: "Runner",
+                description: "Hyper-aggressive mutation. Closing speed is extreme. Prioritize targets immediately."
+            },
+            TANK: {
+                name: "Tank",
+                description: "Heavily armored juggernaut. Absorbs significant small-arms fire. Explosives recommended."
+            },
+            BOMBER: {
+                name: "Bomber",
+                description: "Unstable biological payload. Explodes on proximity. Keep safe distance."
+            }
         },
-        RUNNER: {
-            name: "Runner",
-            description: "Hyper-aggressive mutation. Closing speed is extreme. Prioritize targets immediately."
+        bosses: {
+            0: {
+                name: "The Yard Master",
+                lore: "Entity identified at Gånghester Station. A former neighbor mutated into a hulking brute. He wields a heavy railway tool, his massive strength causing the initial fracture of Robert’s family.",
+                death: "The creature that forced the family apart is dead. It was this monstrosity that made Nathalie and Esmeralda to flee into the dark woods, leaving Loke behind in the chaos. Loke is safe now, but the trail of the others leads deep into the freezing forest."
+            },
+            1: {
+                name: "The Vault Stalker",
+                lore: "A predatory horror residing in the concrete labyrinths of the Cold War shelter. It thrives in the dark, feeding on the terror of the survivors trapped within. It strikes with lethal precision at the sound of a closing door.",
+                death: "As the massive steel door slammed shut, sending a thunderous echo through the tunnels, the Stalker struck. Robert, Loke, and Jordan stood their ground. The caves are silent once more, and Jordan is finally back in Robert's arms."
+            },
+            2: {
+                name: "The Frequency",
+                lore: "A screeching technician-turned-horror. Along with another beast, it pursued Esmeralda and Nathalie through the brush. It uses the Haglared Mast to amplify its bio-toxic screams, coordinating the surrounding horde.",
+                death: "The interference clears. Nathalie’s brave gamble—luring the other beast away to give Esmeralda a chance to reach the control room—has paid off. Esmeralda is safe, the radio equipment is repaired, and a static-filled voice finally answers the call."
+            },
+            3: {
+                name: "The Metal Crusher",
+                lore: "A catastrophic bio-mechanical threat at the scrapyard. It pursued Nathalie relentlessly until she was cornered in a cramped office. It is a towering mass of rusted chassis and mutated flesh.",
+                death: "The final barrier has been broken. Nathalie is rescued from the ruins of the scrapyard office. The long night in the snow is over; but it's only the beginning."
+            },
         },
-        TANK: {
-            name: "Tank",
-            description: "Heavily armored juggernaut. Absorbs significant small-arms fire. Explosives recommended."
-        },
-        BOMBER: {
-            name: "Bomber",
-            description: "Unstable biological payload. Explodes on proximity. Keep safe distance."
-        },
-        unknown: "Unknown biological anomaly."
     },
     attacks: {
         BITE: { title: "Biting", description: "Sharp teeth sinking into flesh. Highly infectious." },
@@ -517,28 +566,6 @@ export const en = {
                 audio: "Zombies groaning and attacking."
             }
         ],
-    },
-    bosses: {
-        0: {
-            name: "The Yard Master",
-            lore: "Entity identified at Gånghester Station. A former neighbor mutated into a hulking brute. He wields a heavy railway tool, his massive strength causing the initial fracture of Robert’s family.",
-            death: "The creature that forced the family apart is dead. It was this monstrosity that made Nathalie and Esmeralda flee into the dark woods, leaving Loke behind in the chaos. Loke is safe now, but the trail of the others leads deep into the freezing forest."
-        },
-        1: {
-            name: "The Vault Stalker",
-            lore: "A predatory horror residing in the concrete labyrinths of the Cold War shelter. It thrives in the dark, feeding on the terror of the survivors trapped within. It strikes with lethal precision at the sound of a closing door.",
-            death: "As the massive steel door slammed shut, sending a thunderous echo through the tunnels, the Stalker struck. Robert, Loke, and Jordan stood their ground. The caves are silent once more, and Jordan is finally back in Robert's arms."
-        },
-        2: {
-            name: "The Frequency",
-            lore: "A screeching technician-turned-horror. Along with another beast, it pursued Esmeralda and Nathalie through the brush. It uses the Haglared Mast to amplify its bio-toxic screams, coordinating the surrounding horde.",
-            death: "The interference clears. Nathalie’s brave gamble—luring the other beast away to give Esmeralda a chance to reach the control room—has paid off. Esmeralda is safe, the radio equipment is repaired, and a static-filled voice finally answers the call."
-        },
-        3: {
-            name: "The Metal Crusher",
-            lore: "A catastrophic bio-mechanical threat at the scrapyard. It pursued Nathalie relentlessly until she was cornered in a cramped office. It is a towering mass of rusted chassis and mutated flesh.",
-            death: "The final barrier has been broken. Nathalie is rescued from the ruins of the scrapyard office. The long night in the snow is over; but it's only the beginning."
-        },
     },
     family: {
         dad: "Dad",
@@ -793,4 +820,29 @@ export const en = {
         "3_25": "(Whispering) /1... 2... 3, run!/",
         "3_26": "COME GET SOME, YOU BASTARD!"
     },
+    report: {
+        time: {
+            unit_min: " min"
+        },
+        distance: {
+            unit_m: " m",
+            unit_km: " km"
+        },
+        labels: {
+            physical: "PHYSICAL",
+            boss: "BOSS",
+            player: "YOU",
+            unknown: "UNKNOWN"
+        },
+        stats: {
+            xp: "XP",
+            sp: "SP",
+            scrap: "SCRAP",
+            chests: "CHESTS",
+            shots: "SHOTS",
+            accuracy: "ACCURACY",
+            kills: "KILLS",
+            throwables: "THROWABLES"
+        }
+    }
 };

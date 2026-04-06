@@ -3,6 +3,7 @@ import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { soundManager } from '../utils/audio/SoundManager';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
+import { DamageID } from '../entities/player/CombatTypes';
 import { VehicleDef } from '../content/vehicles';
 import { FLASHLIGHT } from '../content/constants';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
@@ -14,6 +15,15 @@ const _toEnemy = new THREE.Vector3();
 const _knockDir = new THREE.Vector3();
 const _forward = new THREE.Vector3();
 const _dismountDir = new THREE.Vector3();
+
+// Zero-GC context bridge for EnemyManager physics
+const _vehicleKnockbackCtx: any = {
+    collisionGrid: null,
+    applyDamage: null,
+    scene: null,
+    engine: null,
+    particles: null
+};
 
 export const VehicleManager = {
 
@@ -39,7 +49,6 @@ export const VehicleManager = {
             }
 
             // 2. Collision Logic (OPTIMIZED)
-            // Vi kollar BARA fysik/kollisioner på det fordon som spelaren faktiskt kör just nu!
             if (state.vehicle.engineState !== 'OFF') {
                 const vel = vehicle.userData.velocity as THREE.Vector3;
                 VehicleManager.handleEnemyCollisions(vehicle, vel, def, session, now);
@@ -75,27 +84,12 @@ export const VehicleManager = {
         vel.set(0, 0, 0);
         angVel.set(0, 0, 0);
 
-        // Hide player
         playerGroup.visible = false;
 
-        // --- SPATIAL GRID OPTIMIZATION: REMOVE ON ENTER ---
-        // Player is inside, so we don't need the grid to prompt "Press E to Enter" anymore.
-        // We pass the position so the grid doesn't have to search all 4093 cells to remove it!
         if (state.collisionGrid) {
-            // Find radius
-            let r = vehicle.userData.interactionRadius || 4.0;
-            const size = def.size;
-            r = Math.max(r, Math.sqrt((size.x / 2) ** 2 + (size.z / 2) ** 2) + 2.0);
-
-            // Removing an interactable is done by updateInteractable without adding it back if it's not needed,
-            // but we don't have a direct `remove` in the grid yet. 
-            // A simple hack without adding a method: We fake an update to move it far away, 
-            // or even better, just leave it out of detection by turning off the flag:
             vehicle.userData.isInteractable = false;
         }
 
-
-        // Attach headlight
         const headlight = playerGroup.getObjectByName(FLASHLIGHT.name) as THREE.SpotLight;
         if (headlight) {
             const lights = vehicle.userData.lights;
@@ -192,17 +186,8 @@ export const VehicleManager = {
             lights.brake.fakeGlow.visible = false;
         }
 
-        // --- SPATIAL GRID OPTIMIZATION: UPDATE ON EXIT ---
         if (state.collisionGrid) {
-            // Player left the vehicle, it's now interactable again from the outside.
-            // We don't know exactly where the vehicle was in the grid BEFORE the drive, 
-            // but since we turned off `isInteractable`, we just turn it back on and push it to the grid!
             vehicle.userData.isInteractable = true;
-
-            // To ensure it gets mapped to its NEW position, we add it back.
-            // If it was still lingering in an old cell, it's fine, because detectInteraction 
-            // checks distance dynamically anyway, but properly removing from old cell requires `oldPos`.
-            // The cleanest Zero-GC approach: Just run the generic fallback update once upon exit.
             state.collisionGrid.updateInteractable(vehicle);
         }
     },
@@ -220,17 +205,36 @@ export const VehicleManager = {
         const state = session.state;
         const hitRadius = (def.size.x > def.size.z ? def.size.x : def.size.z) * 0.5 + 1.0;
 
+        // --- THE PLOW OFFSET ---
+        // Project the knockback center slightly in front of the vehicle
+        // so enemies are pushed forward and sideways, not pulled in from behind.
+        _knockDir.copy(vel).normalize();
+        if (_knockDir.lengthSq() < 0.01) {
+            const elements = vehicle.matrixWorld.elements;
+            _forward.set(elements[8], elements[9], elements[10]).normalize();
+            _knockDir.copy(_forward);
+        }
+
+        _toEnemy.copy(vehicle.position).addScaledVector(_knockDir, 1.0);
+
         // --- SPATIAL GRID ENEMY LOOKUP ---
-        const enemies = state.collisionGrid.getNearbyEnemies(vehicle.position, hitRadius);
+        // Look around the *front* of the vehicle
+        const enemies = state.collisionGrid.getNearbyEnemies(_toEnemy, hitRadius);
         const eLen = enemies.length;
+
+        let hitAnyone = false;
+        let isHeavyHit = false;
+        const speedMS = Math.sqrt(speedSq);
+        const speedKmh = speedMS * 3.6;
+
+        // Mass ratio determines how easily the vehicle bowls over enemies
+        const massRatio = (def.mass * 0.001);
 
         for (let i = 0; i < eLen; i++) {
             const e = enemies[i];
             if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
-            _toEnemy.subVectors(e.mesh.position, vehicle.position);
-            _toEnemy.y = 0;
-            const distSq = _toEnemy.lengthSq();
+            const distSq = e.mesh.position.distanceToSquared(_toEnemy);
             const collisionRad = (hitRadius * 0.7) + e.widthScale * e.originalScale;
 
             if (distSq > collisionRad * collisionRad) continue;
@@ -238,22 +242,40 @@ export const VehicleManager = {
             const lastHit = e.lastVehicleHit;
             if (now - lastHit < HIT_COOLDOWN_MS) continue;
             e.lastVehicleHit = now;
+            hitAnyone = true;
 
-            const speedMS = Math.sqrt(speedSq);
+            // --- DATA-DRIVEN KNOCKBACK ---
+            // If going > 20 km/h, the force explodes. Otherwise, it's a gentle push.
+            const forceMult = speedKmh > 20 ? (speedKmh * 0.5) : 5.0;
+            const maxForce = forceMult * massRatio;
+            const maxDamage = (speedKmh * def.collisionDamageMultiplier * 0.8) * massRatio;
 
-            _knockDir.copy(_toEnemy).normalize();
-            if (_knockDir.lengthSq() < 0.01) {
-                const elements = vehicle.matrixWorld.elements;
-                _forward.set(elements[8], elements[9], elements[10]).normalize();
-                _knockDir.copy(_forward);
-            }
+            // Prepare context for EnemyManager
+            _vehicleKnockbackCtx.collisionGrid = state.collisionGrid;
+            _vehicleKnockbackCtx.applyDamage = state.callbacks?.applyDamage;
+            _vehicleKnockbackCtx.scene = session.engine.scene;
+            _vehicleKnockbackCtx.engine = session.engine;
+            _vehicleKnockbackCtx.particles = state.particles;
 
-            if (typeof (EnemyManager as any).applyVehicleHit === 'function') {
-                const isHeavyHit = (EnemyManager as any).applyVehicleHit(e, _knockDir, speedMS, def, state, session, now);
-                if (isHeavyHit) {
-                    vehicle.userData.suspVelY += 2.0;
-                    soundManager.playVehicleImpact(speedMS > 15 ? 'heavy' : 'light');
-                }
+            // Execute the highly optimized knockback
+            EnemyManager.knockbackEnemies(
+                _vehicleKnockbackCtx,
+                _toEnemy,
+                hitRadius,
+                maxForce,
+                maxDamage,
+                DamageID.VEHICLE
+            );
+
+            if (speedKmh > 30) isHeavyHit = true;
+        }
+
+        if (hitAnyone) {
+            if (isHeavyHit) {
+                vehicle.userData.suspVelY += 2.0;
+                soundManager.playVehicleImpact('heavy');
+            } else {
+                soundManager.playVehicleImpact('light');
             }
         }
     },

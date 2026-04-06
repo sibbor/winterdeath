@@ -10,8 +10,10 @@ import { Sector1 } from '../content/sectors/Sector1';
 import { Sector2 } from '../content/sectors/Sector2';
 import { Sector3 } from '../content/sectors/Sector3';
 import { Sector4 } from '../content/sectors/Sector4';
+import { InteractionType } from './InteractionTypes';
+import { SoundID } from '../utils/audio/AudioTypes';
 
-const SECTORS: Record<number, SectorDef> = {
+export const SECTORS: Record<number, SectorDef> = {
     0: Sector0,
     1: Sector1,
     2: Sector2,
@@ -37,14 +39,14 @@ export class SectorSystem implements System {
             spawnPart: (x: number, y: number, z: number, type: string, count: number) => void;
             startCinematic: (target: THREE.Object3D, id: number, params?: any) => void;
             setInteraction: (interaction: any | null) => void;
-            playSound: (id: string) => void;
+            playSound: (id: SoundID) => void;
             playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => void;
             cameraShake: (amount: number) => void;
             scene: THREE.Scene;
             setCameraOverride: (params: any | null) => void;
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => void;
-            spawnZombie: (type: string, pos?: THREE.Vector3) => void;
-            spawnHorde: (count: number, type?: string, pos?: THREE.Vector3) => void;
+            spawnZombie: (type: EnemyType, pos?: THREE.Vector3) => void;
+            spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
             setOverlay: (type: string | null) => void;
         }
     ) {
@@ -95,7 +97,7 @@ export class SectorSystem implements System {
         if (!this.cachedEvents) {
             // Created exactly once per sector load to prevent per-frame Object instantiation
             this.cachedEvents = {
-                spawnZombie: (forcedType?: string, forcedPos?: THREE.Vector3) => {
+                spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => {
                     const newEnemy = EnemyManager.spawn(
                         scene, pPos, forcedType, forcedPos,
                         state.bossSpawned, state.enemies.length
@@ -173,7 +175,7 @@ export class SectorSystem implements System {
                     // Future expansion: hook into engine.water for global level changes
                 },
                 makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
-                spawnHorde: (count: number, type?: EnemyType | string, pos?: THREE.Vector3) => {
+                spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => {
                     if (this.callbacks.spawnHorde) {
                         this.callbacks.spawnHorde(count, type, pos);
                     } else {
@@ -188,7 +190,7 @@ export class SectorSystem implements System {
         const events = this.cachedEvents;
 
         // 3. Process Interaction Requests
-        if (state.interactionRequest.active && state.interactionRequest.type === 'sector_specific') {
+        if (state.interactionRequest.active && state.interactionRequest.type === InteractionType.SECTOR_SPECIFIC) {
             const req = state.interactionRequest;
             this.currentSector.onInteract(req.id, req.object, state, events);
             req.active = false;

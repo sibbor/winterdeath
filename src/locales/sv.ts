@@ -15,10 +15,10 @@ export const sv = {
         begin: "BÖRJA",
         level: "NIVÅ",
         level_up: "NIVÅ UPP!",
-        xp: "EP",
+        xp: "XP",
         collectible_discovered: "SAMLAROBJEKT HITTAT",
-        xp_earned: "Intjänad EP",
-        sp_earned: "Intjänad FP",
+        xp_earned: "Intjänad XP",
+        sp_earned: "Intjänad SP",
         scrap_scavenged: "Insamlat Skrot",
         sectors_completed: "Klarade Sektorer",
         chests_opened: "Öppnade Kistor",
@@ -48,7 +48,7 @@ export const sv = {
         family_member_rescued: "RÄDDAD",
         boss_alive: "LEVANDE",
         boss_dead: "DÖD",
-        total_xp: "TOTAL EP",
+        total_xp: "TOTAL XP",
         status: "STATUS",
         not_completed: "EJ KLARAD",
         sector_cleared: "SEKTOR SÄKRAD",
@@ -58,12 +58,20 @@ export const sv = {
         found: "HITTAD",
         locked: "LÅST",
         sector: "SEKTOR",
+        sector_label: "SEKTOR",
         play_sector: "GÅ TILL GENOMGÅNG",
         close: "STÄNG",
+        next_sector: "NÄSTA SEKTOR",
         deploy_sector: "GÅ TILL SEKTOR",
         back_to_overview: "TILLBAKA TILL ÖVERSIKT",
         sector_briefing: "SEKTORGENOMGÅNG",
         sector_report: "SEKTORRAPPORT",
+        exploration: "UTFORSKNING",
+        completed: "KLARAD",
+        failed: "MISSLYCKAD",
+        summary: "ÖVERSIKT",
+        details: "STRIDSDETALJER",
+        pois_discovered: "Platser funna",
         settings: "INSTÄLLNINGAR",
         language: "SPRÅK",
         language_sub: "Engelska / Svenska",
@@ -103,7 +111,7 @@ export const sv = {
         paused: "PAUSAD",
         continue: "FORTSÄTT",
         end_sector: "AVBRYT SEKTOR",
-        sector_aborted: "SEKTOR AVBRUTEN",
+        aborted: "AVBRUTEN",
         teleport: "TELEPORTERA",
         chest: "KISTA",
         large_chest: "STOR KISTA",
@@ -122,13 +130,13 @@ export const sv = {
         boss_slained: "MÅL ELIMINERAT",
         view_report: "VISA RAPPORT",
         return_camp: "TILL LÄGRET",
-        respawn: "ÅTERUPPLIVA",
-        kia: "STUPAD I STRID",
-        killed_by: "dödades av",
+        respawn: "ÅTERUPPSTÅ",
+        kia: "S.I.S.",
+        killed_by: "dödad av",
         killed_by_short: "DÖDAD AV",
-        died_from: "dog av",
-        time_elapsed: "TID",
-        distance_traveled: "STRÄCKA",
+        died_from: "omkom av",
+        time_elapsed: "TID FÖRFLUTEN",
+        distance_traveled: "AVSTÅND",
         chests: "KISTOR PLUNDRADE",
         damage_dealt: "SKADA GJORD",
         damage_taken: "SKADA TAGEN",
@@ -139,12 +147,12 @@ export const sv = {
         starting: "STARTAR",
         confirm_reset: "Är du säker på att du vill återställa allt?",
         reset_confirm_title: "Radera sparfil",
-        reset_confirm_desc: "Detta kommer permanent radera din sparfil och återställa alla framsteg (Nivåer, EP, Familj, Bossar). Detta går inte att ångra.",
+        reset_confirm_desc: "Detta kommer permanent radera din sparfil och återställa alla framsteg (Nivåer, XP, Familj, Bossar). Detta går inte att ångra.",
         yes_delete: "RADERA DATA",
         no_cancel: "BEHÅLL DATA",
         available_skill_points: "TILLGÄNGLIGA FÄRDIGHETSPOÄNG",
-        next_sp_hint: "NÄSTA FP OM {xp} EP",
-        sp_hint_rankup: "Få Färdighetspoäng genom att hitta ledtrådar, rädda familjemedlemmar, döda bossar eller nå nästa nivå ({xp} EP krävs)",
+        next_sp_hint: "NÄSTA SP OM {xp} XP",
+        sp_hint_rankup: "Få Färdighetspoäng genom att hitta ledtrådar, rädda familjemedlemmar, döda bossar eller nå nästa nivå ({xp} XP krävs)",
         sp_hint_max: "Få Färdighetspoäng genom att hitta ledtrådar, rädda familjemedlemmar eller döda bossar.",
         upgrade: "UPPGRADERA",
         confirm_upgrades: "BEKRÄFTA",
@@ -206,13 +214,9 @@ export const sv = {
         log_perks: "FÖRMÅGOR",
         passive_abilities: "PASSIVA FÖRMÅGOR",
         buffs: "BUFFAR",
-        debuffs: "DEBUFFAR",
+        electrified: "Elektrifiering",
+        explosion: "Explosion",
         unknown_threat: "Okänt hot",
-        drowning: "Drunkning",
-        bleeding: "Blödning",
-        burning: "Brand",
-        falling: "Fallskada",
-        unknown_sector: "Okänd sektor",
         health: "Hälsa",
         speed: "Hastighet",
         speed_unit: "km/t",
@@ -234,8 +238,6 @@ export const sv = {
         enemy_spawner: "ZOMBIESPAWNER",
         enemy_type: "FIENDETYP",
         count: "ANTAL",
-        spawn_location: "SPAWNPLATS",
-        spawn: "SKAPA",
         apply: "VERKSTÄLL",
         reset: "ÅTERSTÄLL",
         playground_armory: "LEKPLATS VAPENFÖRRÅD",
@@ -249,7 +251,7 @@ export const sv = {
         randomized_wind: "RANDOMISERAD VIND",
         sky_light_settings: "HIMMELSLJUS",
         fog_settings: "DIMINSTÄLLNINGAR",
-        playground_stats: "FÄRDIGHETSSTATION",
+        station_skills: "FÄRDIGHETSSTATION",
         temp_effects: "TILLFÄLLIGA EFFEKTER",
         invincible: "OÖVERVINNERLIG",
         unlimited_ammo: "OÄNDLIG AMMO",
@@ -257,7 +259,66 @@ export const sv = {
         no_reload: "INGEN OMLADDNING",
         TERMINAL_SKILLS: "FÄRDIGHETSSTATION",
         other: "Övrigt",
-        radius: "Radie"
+        radius: "Radie",
+        color: "FÄRG",
+        density: "DENSITET",
+        intensity: "INTENSITET",
+        fog_calibration: "DIMKALIBRERING",
+        skylight_calibration: "HIMMELSLJUS",
+        sky_light: "HIMMELSLJUS",
+        fog: "DIMMA",
+        background: "BAKGRUND",
+        ground: "MARKEN",
+        skills: "FÄRDIGHETER",
+        stat_calibration: "STATISTIK",
+        temporary_modifiers: "TEMPORÄRA MODIFERARE",
+        playground_disclaimer: "Dessa inställningar påverkar endast den nuvarande sessionen och sparas inte i din karriär.",
+        playground_only: "ENDAST LEKPLATS",
+        stress_test: "STRESSTEST",
+        mass_spawning: "MASS-SPAWNING",
+        randomize: "SLUMPA",
+        clear_all: "RENSA ALLA",
+        horde_composition: "HORDSAMMANSÄTTNING",
+        boss_spawner: "BOSSSPAWNER",
+        spawn_parameters: "SPAWNPARAMETRAR",
+        spread: "SPRIDNING",
+        spawn_location: "SPAWNPLATS",
+        spawn: "SKAPA",
+        report: {
+            damage: {
+                incoming: "INKOMMANDE SKADA",
+                outgoing: "UTGÅENDE SKADA",
+            },
+            time: {
+                unit_min: " min"
+            },
+            distance: {
+                unit_m: " m",
+                unit_km: " km"
+            },
+            labels: {
+                physical: "FYSISK",
+                boss: "BOSS",
+                player: "DU",
+                unknown: "OKÄND"
+            },
+            stats: {
+                xp: "XP",
+                sp: "SP",
+                scrap: "SKROT",
+                chests: "KISTOR",
+                shots: "SKOTT",
+                accuracy: "PRICKSÄKERHET",
+                kills: "DÖDADE",
+                throwables: "KASTVAPEN"
+            }
+        }
+    },
+    location: {
+        near: "I NÄRHETEN",
+        forest: "SKOGEN",
+        farm: "GÅRDEN",
+        village: "BYN"
     },
     camp_tooltips: {
         equipped: "VALD UTRUSTNING",
@@ -279,41 +340,22 @@ export const sv = {
         special: "SPECIAL",
         tool: "VERKTYG"
     },
-    stations: {
-        armory: "VAPENFÖRRÅD",
-        sectors: "SEKTORÖVERSIKT",
-        skills: "FÄRDIGHETER",
-        adventure_log: "ÄVENTYRLOGG",
-        stats: "STATISTIK"
-    },
-    enemies: {
-        WALKER: {
-            name: "Vandrare",
-            description: "Standard reanimerad kombattant. Lågt hot individuellt, farlig i svärmar. Sikta mot huvudet."
-        },
-        RUNNER: {
-            name: "Löpare",
-            description: "Hyperaggressiv mutation. Extremt snabb. Prioritera omedelbart."
-        },
-        TANK: {
-            name: "Tank",
-            description: "Kraftigt bepansrad juggernaut. Absorberar betydande mängder eld från lätta vapen. Explosivämnen rekommenderas."
-        },
-        BOMBER: {
-            name: "Bombare",
-            description: "Instabil biologisk last. Exploderar vid närhet. Håll säkert avstånd."
-        },
-        unknown: "Okänd biologisk anomali."
+    weather: {
+        none: "INGET",
+        rain: "REGN",
+        snow: "SNÖ",
+        ash: "ASKA",
+        ember: "GLÖD"
     },
     attacks: {
-        BITE: { title: "Biter", description: "Vassa tänder som sjunker in i köttet. Hög infektionsrisk." },
-        HIT: { title: "slag", description: "En trubbig stöt från en odöd hand." },
+        BITE: { title: "Bett", description: "Vassa tänder som sjunker in i köttet. Hög infektionsrisk." },
+        HIT: { title: "Slag", description: "En trubbig stöt från en odöd hand." },
         BLEEDING: { title: "Blödning", description: "Kontinuerlig blodförlust från ett öppet sår." },
         CLAW: { title: "Klo", description: "Vassa naglar som slits genom kläder och hud." },
         LUNGE: { title: "Utfall", description: "Ett snabbt hopp som överraskar offret." },
         PUNCH: { title: "Knytnävsslag", description: "Ett massivt slag från en muterad jätte." },
         GROUND_POUND: { title: "Markslag", description: "En chockvåg som skadar allt i närheten." },
-        EXPLODE: { title: "explosion", description: "Våldsam biologisk detonation vid dödsögonblicket." },
+        EXPLODE: { title: "Explosion", description: "Våldsam biologisk detonation vid dödsögonblicket." },
         JUMP: { title: "Utfall", description: "Ett snabbt hopp som överraskar offret." },
         FREEZE_JUMP: { title: "Frosthopp", description: "En iskall krasch som fryser allt i dess väg." },
         FIRE_ZONE: { title: "Eld", description: "Extrem hetta från brinnande biologiska rester." },
@@ -329,6 +371,13 @@ export const sv = {
         DROWNING: { title: "Drunkning", description: "Lungor som fylls med iskallt vatten." },
         FALL: { title: "Fallskada", description: "Den plötsliga smällen i slutet av ett fall." },
         BURN: { title: "Eld", description: "Direktkontakt med extrem hetta." }
+    },
+    stations: {
+        armory: "VAPENFÖRRÅD",
+        sectors: "SEKTORÖVERSIKT",
+        skills: "FÄRDIGHETER",
+        adventure_log: "ÄVENTYRLOGG",
+        stats: "STATISTIK"
     },
     skills: {
         vitality: "VITALITET",
@@ -402,6 +451,18 @@ export const sv = {
         }
     },
     weapons: {
+        3: { name: "SMG" },
+        4: { name: "Hagelgevär" },
+        5: { name: "Automatkarbin" },
+        1: { name: "Pistol" },
+        2: { name: "Revolver" },
+        6: { name: "Granat" },
+        7: { name: "Molotov" },
+        8: { name: "Blixtgranat" },
+        9: { name: "Minigun" },
+        10: { name: "Eldkastare" },
+        11: { name: "Arc-Kanon" },
+        12: { name: "Radio" },
         smg: "SMG",
         shotgun: "Hagelgevär",
         rifle: "Automatkarbin",
@@ -424,7 +485,7 @@ export const sv = {
         "Håll inne Space för att RUSA, knuffa bort fiender och röra dig snabbare.",
         "Färdighetspoäng höjer karaktärens förmågor.",
         "Tjäna färdighetspoäng genom att rädda familjemedlemmar, hitta samlarobjekt och döda bossar.",
-        "Bossar släpper massiva mängder EP och skrot.",
+        "Bossar släpper massiva mängder XP och skrot.",
         "Kastvapen är effektiva mot horder.",
         "Håll dig i rörelse. Att stå stilla är en dödsdom.",
         "Automatisk omladdning är långsammare än manuell [R].",
@@ -510,6 +571,26 @@ export const sv = {
                 audio: "Zombier stönar och attackerar."
             }
         ],
+    },
+    enemies: {
+        zombies: {
+            WALKER: {
+                name: "Vandrare",
+                description: "Standard reanimerad kombattant. Lågt hot individuellt, farlig i svärmar. Sikta mot huvudet."
+            },
+            RUNNER: {
+                name: "Löpare",
+                description: "Hyperaggressiv mutation. Extremt snabb. Prioritera omedelbart."
+            },
+            TANK: {
+                name: "Tank",
+                description: "Kraftigt bepansrad juggernaut. Absorberar betydande mängder eld från lätta vapen. Explosivämnen rekommenderas."
+            },
+            BOMBER: {
+                name: "Bombare",
+                description: "Instabil biologisk last. Exploderar vid närhet. Håll säkert avstånd."
+            }
+        }
     },
     bosses: {
         0: {

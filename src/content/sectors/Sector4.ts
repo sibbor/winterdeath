@@ -33,7 +33,7 @@ export const Sector4: SectorDef = {
     environment: {
         bgColor: 0x020208,
         fog: {
-            density: 200,
+            density: 0.02,
             color: 0x020208,
             height: 10
         },
@@ -41,7 +41,7 @@ export const Sector4: SectorDef = {
         ambientColor: 0x404050,
         groundColor: 0x111111,
         fov: 50,
-        skyLight: { visible: true, color: 0x6688ff, intensity: 10.0, position: { x: 50, y: 35, z: 50 } },
+        skyLight: { visible: true, color: 0x6688ff, intensity: 1.0, position: { x: 50, y: 35, z: 50 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: {

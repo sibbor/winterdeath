@@ -13,13 +13,19 @@ import { TriggerHandler } from '../../systems/TriggerHandler';
 import { CAMERA_HEIGHT, HEALTH_CRITICAL_THRESHOLD } from '../../content/constants';
 import { soundManager } from '../../utils/audio/SoundManager';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
-import { WeaponType, WEAPONS } from '../../content/weapons';
-import { EnemyDeathState } from '../../entities/enemies/EnemyTypes';
-import { DamageType } from '../../entities/player/CombatTypes';
+import { WeaponType, WEAPONS, WeaponBehavior } from '../../content/weapons';
+import { EnemyDeathState, NoiseType } from '../../entities/enemies/EnemyTypes';
+import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
+import { DamageType, DamageID } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
-import { NoiseType } from '../../entities/enemies/EnemyTypes';
+import { DiscoveryType } from '../../components/ui/hud/HudTypes';
+import { ENEMY_TYPE_KEYS } from '../../utils/ui/Mappers';
+
 import { VehicleManager } from '../../systems/VehicleManager';
 import { InteractionType } from '../../systems/InteractionTypes';
+import { SoundID } from '../../utils/audio/AudioTypes';
+
+
 
 interface LoopContext {
     engine: WinterEngine;
@@ -36,9 +42,10 @@ interface LoopContext {
         t: (k: string) => string;
         spawnBubble: (text: string, duration?: number) => void;
         onAction: (action: any) => void;
-        onDiscovery?: (type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
+        onDiscovery?: (type: DiscoveryType, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
         onDeathStateChange?: (val: boolean) => void;
         gainSp: (amount: number) => void;
+        gainScrap: (amount: number) => void;
     };
 }
 
@@ -159,6 +166,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         now: 0,
         playerPos: null,
         session: null,
+        fireZones: null,
         makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
         explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, refs.sectorContextRef.current, force),
         trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
@@ -170,11 +178,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
             if (type === 'hit') state.sessionStats.shotsHit += amt;
         },
-        addFireZone: (z: any) => state.fireZones.push(z),
         onPlayerHit: (dmg: number, attacker: any, type: DamageType, isDoT: boolean = false, effect?: any, dur?: number, intense?: number, attackName?: string) => {
             if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type, isDoT, effect, dur, intense, attackName);
         },
-        applyDamage: (enemy: any, amount: number, type: DamageType | WeaponType | string, isHighImpact: boolean = false) => {
+        applyDamage: (enemy: any, amount: number, type: DamageID, isHighImpact: boolean = false) => {
             if (enemy.deathState !== EnemyDeathState.ALIVE || amount <= 0) return false;
 
 
@@ -184,10 +191,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
                 if (!enemy.isBoss && callbacks.onDiscovery) {
                     const sets = state.discoverySets;
-                    if (!sets.seenEnemies.has(enemy.type)) {
+                    if (sets && !sets.seenEnemies.has(enemy.type)) {
                         sets.seenEnemies.add(enemy.type);
-                        state.sessionStats.seenEnemies.push(enemy.type);
-                        callbacks.onDiscovery('enemy', enemy.type, 'ui.enemy_encountered', `enemies.${enemy.type}.name`);
+                        if (state.sessionStats) state.sessionStats.seenEnemies.push(enemy.type);
+                        callbacks.onDiscovery(DiscoveryType.ENEMY, String(enemy.type), 'ui.enemy_encountered', ENEMY_TYPE_KEYS[enemy.type]);
                     }
                 }
             }
@@ -195,7 +202,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             // Damage
             const actualDmg = Math.max(0, Math.min(enemy.hp, amount));
             enemy.hp -= actualDmg;
-            enemy.lastDamageType = type as string;
+            enemy.lastDamageType = type;
             enemy.hitTime = _gameContext.now;
             enemy.lastHitWasHighImpact = isHighImpact;
 
@@ -203,16 +210,17 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (actualDmg > 0) {
                 const damageTracker = session.getSystem('damage_tracker_system') as any;
                 if (damageTracker) {
-                    damageTracker.recordOutgoingDamage(session, actualDmg, type as string, enemy.isBoss);
+                    damageTracker.recordOutgoingDamage(session, actualDmg, type, enemy.isBoss);
                 }
             }
 
             // Resolve color using the centralized system
-            const weaponData = (WEAPONS as any)[type];
-            const color = DamageNumberSystem.getColorForType(type as string, isHighImpact);
+            const weaponData = WEAPONS[type];
+            const color = DamageNumberSystem.getColorForType(type, !!isHighImpact);
 
             // Throttle text spawning for performance (Zero-GC Accumulation)
-            const isContinuous = weaponData?.behavior === 'CONTINUOUS' || type === DamageType.BURN || type === 'BURN' || type === DamageType.DROWNING;
+            const isContinuous = weaponData?.behavior === WeaponBehavior.CONTINUOUS || type === DamageID.BURN || type === DamageID.DROWNING;
+
             const textThrottle = isContinuous ? 250 : 0;
 
             enemy._accumulatedDamage += amount;
@@ -328,8 +336,11 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         const now = performance.now();
 
-        // Death Trigger Bridge
-        if (state.isDead && refs.deathPhaseRef.current === 'NONE') {
+        // --- VINTERDÖD FIX: Bitwise Death Check ---
+        const sf = state.statusFlags;
+        const isDead = (sf & PlayerStatusFlags.DEAD) !== 0;
+
+        if (isDead && refs.deathPhaseRef.current === 'NONE') {
             refs.deathPhaseRef.current = 'DEAD';
             callbacks.onDeathStateChange?.(true);
         }
@@ -360,11 +371,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
             if (!playerGroup || playerGroup.children.length === 0) {
                 if (now % 5000 < 16) console.error("[GameSessionLoop] ERROR: playerGroup missing or empty!");
-                return; if (!propsRef.current.isRunning || (propsRef.current.isPaused && !isCinematic && !isBossIntro)) {
-                    soundManager.stopRadioStatic();
-                    lastTime = now;
-                    return;
-                }
+                return;
             }
 
             // --- DISCOVERY QUEUE PROCESSOR (Zero-GC) ---
@@ -429,7 +436,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (refs.playerMeshRef.current) {
                 _animStateScratch.isMoving = false;
                 _animStateScratch.isRushing = false;
-                _animStateScratch.isRolling = false;
+                _animStateScratch.isDodging = false;
                 // Use realDt for animations during Boss Intro
                 PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, realDt);
             }
@@ -441,7 +448,11 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         // 4. Throttled logic (Health warnings, burning effects)
         if (frame % 5 === 0) {
             // Heart beat sound
-            if (state.hp < state.maxHp * HEALTH_CRITICAL_THRESHOLD && !state.isDead) {
+            const sb = state.statsBuffer;
+            const hp = sb[PlayerStatID.HP];
+            const maxHp = sb[PlayerStatID.MAX_HP];
+
+            if (hp < maxHp * HEALTH_CRITICAL_THRESHOLD && !isDead) {
                 if (now - state.lastHeartbeat > 800) {
                     state.lastHeartbeat = now;
                     soundManager.playHeartbeat();
@@ -510,7 +521,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             return;
         }
 
-        if (!propsRef.current.isRunning || (propsRef.current.isPaused && !isCinematic && !isBossIntro)) {
+        if (!propsRef.current.isGameRunning || (propsRef.current.isPaused && !isCinematic && !isBossIntro)) {
             soundManager.stopRadioStatic();
             lastTime = now;
             return;
@@ -583,19 +594,20 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
 
             if (refs.playerMeshRef.current) {
-                const safeStamina = state.stamina ?? 100;
-                const safeMaxStamina = state.maxStamina ?? 100;
-                _animStateScratch.staminaRatio = safeStamina / safeMaxStamina;
+                const sb = state.statsBuffer;
+                const sf = state.statusFlags;
+
+                _animStateScratch.staminaRatio = sb[PlayerStatID.STAMINA] / sb[PlayerStatID.MAX_STAMINA];
                 _animStateScratch.isMoving = isMoving;
-                _animStateScratch.isRushing = state.isRushing;
-                _animStateScratch.isRolling = state.isRolling;
-                _animStateScratch.rollStartTime = state.rollStartTime;
+                _animStateScratch.isRushing = (sf & PlayerStatusFlags.RUSHING) !== 0;
+                _animStateScratch.isDodging = (sf & PlayerStatusFlags.DODGING) !== 0;
+                _animStateScratch.dodgeStartTime = state.dodgeStartTime;
                 _animStateScratch.isSpeaking = state.speakBounce > 0 || now < state.speakingUntil;
                 _animStateScratch.isThinking = now < state.thinkingUntil;
                 _animStateScratch.isIdleLong = (now - state.lastActionTime > 20000);
                 _animStateScratch.isWading = state.isWading;
                 _animStateScratch.isSwimming = state.isSwimming;
-                _animStateScratch.isDead = state.isDead;
+                _animStateScratch.isDead = (sf & PlayerStatusFlags.DEAD) !== 0;
                 _animStateScratch.deathStartTime = state.deathStartTime;
                 _animStateScratch.renderTime = state.renderTime;
                 _animStateScratch.seed = 0;
@@ -769,11 +781,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         if (activeCallbacks.explodeEnemy) _gameContext.explodeEnemy = activeCallbacks.explodeEnemy;
         if (activeCallbacks.trackStats) _gameContext.trackStats = activeCallbacks.trackStats;
-        if (activeCallbacks.addFireZone) _gameContext.addFireZone = activeCallbacks.addFireZone;
+        _gameContext.fireZones = state.fireZones;
 
         _gameContext.now = simTime;
         _gameContext.playerPos = playerGroup.position;
         _gameContext.session = session;
+        _gameContext.fireZones = state.fireZones;
 
         refs.gameContextRef.current = _gameContext;
 
@@ -786,11 +799,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             playerGroup.position,
             state.enemies,
             state.collisionGrid,
-            state.isDead,
+            (state.statusFlags & PlayerStatusFlags.DEAD) !== 0,
             _fxCallbacks.onPlayerHit,
             _fxCallbacks.spawnPart,
             _fxCallbacks.spawnDecal,
             _gameContext.applyDamage,
+            activeCallbacks.spawnBubble,
             engine.water
         );
         monitor.end('enemies');
@@ -805,15 +819,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _triggerOptionsScratch.onTrigger = activeCallbacks.onTrigger;
         _triggerOptionsScratch.onAction = activeCallbacks.onAction;
         _triggerOptionsScratch.onDiscovery = activeCallbacks.onDiscovery || callbacks.onDiscovery;
-        _triggerOptionsScratch.playSound = (id: string) => soundManager.playEffect(id);
-        _triggerOptionsScratch.isFamilyFollowing = (familyId: number) => {
-            const members = refs.activeFamilyMembers.current;
-            if (!members) return false;
-            for (let i = 0; i < members.length; i++) {
-                if (members[i].id === familyId && members[i].following) return true;
-            }
-            return false;
-        };
+        _triggerOptionsScratch.playSound = (id: SoundID) => soundManager.playSound(id);
+        _triggerOptionsScratch.activeFamilyMembers = refs.activeFamilyMembers.current;
         TriggerHandler.checkTriggers(playerGroup.position, state, now, _triggerOptionsScratch as any);
         monitor.end('triggers');
 
@@ -872,6 +879,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         );
 
         // 20. High-frequency HUD update (Zero-GC, bypasses React)
-        HudSystem.emitFastUpdate(state, engine.input.state, simTime);
+        HudSystem.emitFastUpdate(state, engine.input.state, simTime, propsRef.current);
     };
 }

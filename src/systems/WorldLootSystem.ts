@@ -3,9 +3,9 @@ import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { soundManager } from '../utils/audio/SoundManager';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
+import { PlayerStatID } from '../entities/player/PlayerTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-const _v1 = new THREE.Vector3();
 const _tempQuat = new THREE.Quaternion();
 const _m4 = new THREE.Matrix4();
 const _hiddenMatrix = new THREE.Matrix4().makeTranslation(0, -1000, 0);
@@ -25,33 +25,43 @@ export interface ScrapItem {
     needsUpdate: boolean;
 }
 
-interface SpawnRequest {
-    x: number;
-    z: number;
-}
-
 export class WorldLootSystem implements System {
     id = 'world_loot';
 
     private static MAX_SCRAP = 300;
     private instancedMesh: THREE.InstancedMesh;
 
+    // --- ZERO-GC DATA STRUCTURES ---
     private pool: ScrapItem[] = [];
-    private freeIndices: number[] = [];
 
-    private spawnQueue: SpawnRequest[] = [];
-    private requestPool: SpawnRequest[] = [];
+    // Fast iteration lists using contiguous typed memory
+    private activeIndices = new Uint16Array(WorldLootSystem.MAX_SCRAP);
+    private activeCount = 0;
+
+    private freeIndices = new Uint16Array(WorldLootSystem.MAX_SCRAP);
+    private freeCount = 0;
+
+    // Ring-buffer for spawn requests (Zero Object Allocation)
+    private spawnQueueX = new Float32Array(512);
+    private spawnQueueZ = new Float32Array(512);
+    private spawnHead = 0;
+    private spawnTail = 0;
 
     private lastSoundTime = 0;
     private static instance: WorldLootSystem | null = null;
 
-    constructor(private playerGroup: THREE.Group, scene: THREE.Scene) {
+    constructor(
+        private playerGroup: THREE.Group,
+        scene: THREE.Scene,
+        private callbacks?: { gainScrap: (val: number) => void }
+    ) {
         this.instancedMesh = new THREE.InstancedMesh(GEOMETRY.scrap, MATERIALS.scrap, WorldLootSystem.MAX_SCRAP);
         this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.instancedMesh.count = WorldLootSystem.MAX_SCRAP;
         this.instancedMesh.frustumCulled = false;
         scene.add(this.instancedMesh);
 
+        // Pre-allocate the physical data objects
         for (let i = 0; i < WorldLootSystem.MAX_SCRAP; i++) {
             this.pool.push({
                 velocity: new THREE.Vector3(),
@@ -67,28 +77,45 @@ export class WorldLootSystem implements System {
                 active: false,
                 needsUpdate: false
             });
-            this.freeIndices.push(i);
+
+            // Push to free list
+            this.freeIndices[this.freeCount++] = i;
             this.instancedMesh.setMatrixAt(i, _hiddenMatrix);
         }
-        this.instancedMesh.instanceMatrix.needsUpdate = true;
 
-        for (let i = 0; i < 50; i++) this.requestPool.push({ x: 0, z: 0 });
+        this.instancedMesh.instanceMatrix.needsUpdate = true;
         WorldLootSystem.instance = this;
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
-        const batchSize = Math.min(this.spawnQueue.length, 10);
-        for (let i = 0; i < batchSize; i++) {
-            const req = this.spawnQueue.pop();
-            if (req) {
-                this.spawnSingle(req.x, req.z, now);
-                this.requestPool.push(req);
+        // 1. Process pending spawns from ring buffer
+        const pendingSpawns = this.spawnHead - this.spawnTail;
+        if (pendingSpawns > 0) {
+            const batchSize = Math.min(pendingSpawns, 10);
+            for (let i = 0; i < batchSize; i++) {
+                const idx = this.spawnTail % 512;
+                this.spawnSingle(this.spawnQueueX[idx], this.spawnQueueZ[idx], now);
+                this.spawnTail++;
+            }
+
+            // Reset pointers if empty to prevent integer wrap-around over time
+            if (this.spawnHead === this.spawnTail) {
+                this.spawnHead = 0;
+                this.spawnTail = 0;
             }
         }
 
+        // 2. Physics & Collection update
         const collected = this.updateLoot(this.playerGroup.position, dt, now);
+
+        // 3. Callback execution
         if (collected > 0) {
-            session.state.collectedScrap += collected;
+            if (this.callbacks?.gainScrap) {
+                this.callbacks.gainScrap(collected);
+            } else {
+                session.state.statsBuffer[PlayerStatID.SCRAP] += collected;
+                session.state.statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += collected;
+            }
         }
     }
 
@@ -101,12 +128,21 @@ export class WorldLootSystem implements System {
         const magnetSpeed = 30.0;
         const magnetismDelay = 600;
 
-        const len = this.pool.length;
-        for (let i = 0; i < len; i++) {
-            const item = this.pool[i];
-            if (!item.active) continue;
+        const px = playerPos.x;
+        const py = playerPos.y;
+        const pz = playerPos.z;
 
-            const distSq = item.position.distanceToSquared(playerPos);
+        // Iterate backwards to safely swap-and-pop active items
+        for (let i = this.activeCount - 1; i >= 0; i--) {
+            const poolIdx = this.activeIndices[i];
+            const item = this.pool[poolIdx];
+
+            // Inlined vector math (Huge V8 CPU cache win)
+            const dx = px - item.position.x;
+            const dy = py - item.position.y;
+            const dz = pz - item.position.z;
+            const distSq = dx * dx + dy * dy + dz * dz;
+
             const canMagnetize = (now - item.spawnTime) > magnetismDelay;
 
             // 1. State logic
@@ -118,19 +154,28 @@ export class WorldLootSystem implements System {
 
             // 2. Magnetize (physics)
             if (item.magnetized) {
-                _v1.subVectors(playerPos, item.position).normalize();
                 const dist = Math.max(0.1, Math.sqrt(distSq));
                 const pullStrength = 1.0 + (20.0 / (dist + 1.0));
 
-                item.position.addScaledVector(_v1, magnetSpeed * pullStrength * delta);
+                const speed = magnetSpeed * pullStrength * delta;
+                const invDist = 1.0 / dist;
+
+                item.position.x += dx * invDist * speed;
+                item.position.y += dy * invDist * speed;
+                item.position.z += dz * invDist * speed;
+
                 item.rotation.y += 10.0 * delta;
 
                 const ns = Math.max(0.4, item.scale.x - 1.5 * delta);
                 item.scale.set(ns, ns, ns);
                 item.needsUpdate = true;
+
             } else if (!item.grounded) {
                 item.velocity.y -= 35 * delta;
-                item.position.addScaledVector(item.velocity, delta);
+
+                item.position.x += item.velocity.x * delta;
+                item.position.y += item.velocity.y * delta;
+                item.position.z += item.velocity.z * delta;
 
                 if (item.position.y <= 0.3) {
                     item.position.y = 0.3;
@@ -150,15 +195,17 @@ export class WorldLootSystem implements System {
             // 3. Collection
             if (distSq < collectionRangeSq) {
                 collectedAmount += item.value;
-                this.deactivateItem(item);
+                this.deactivateItem(item, i);
+                gpuNeedsUpdate = true;
+
                 if (now - this.lastSoundTime > 40) {
-                    soundManager.playUiPickup();
+                    soundManager.playPickupCollectible();
                     this.lastSoundTime = now;
                 }
-                gpuNeedsUpdate = true;
                 continue;
             }
 
+            // 4. Transform Matrix
             if (item.needsUpdate) {
                 this.updateInstanceMatrix(item);
                 item.needsUpdate = !item.grounded;
@@ -179,13 +226,23 @@ export class WorldLootSystem implements System {
         this.instancedMesh.setMatrixAt(item.index, _m4);
     }
 
-    private deactivateItem(item: ScrapItem) {
+    private deactivateItem(item: ScrapItem, activeArrayIdx: number) {
         item.active = false;
         item.magnetized = false;
         item.grounded = false;
         item.needsUpdate = false;
-        this.freeIndices.push(item.index);
+
+        // Push to free list
+        this.freeIndices[this.freeCount++] = item.index;
+
+        // Hide mesh
         this.instancedMesh.setMatrixAt(item.index, _hiddenMatrix);
+
+        // Swap-and-pop active index to maintain dense packing
+        this.activeCount--;
+        if (activeArrayIdx !== this.activeCount) {
+            this.activeIndices[activeArrayIdx] = this.activeIndices[this.activeCount];
+        }
     }
 
     public static spawnScrapExplosion(scene: THREE.Scene, _legacy: any[], x: number, z: number, amount: number) {
@@ -194,17 +251,23 @@ export class WorldLootSystem implements System {
         const count = Math.min(Math.ceil(amount / 5), 15);
 
         for (let i = 0; i < count; i++) {
-            const req = sys.requestPool.pop() || { x: 0, z: 0 };
-            req.x = x;
-            req.z = z;
-            sys.spawnQueue.push(req);
+            // Write to ring buffer safely preventing bounds overflow
+            if (sys.spawnHead - sys.spawnTail < 512) {
+                const idx = sys.spawnHead % 512;
+                sys.spawnQueueX[idx] = x;
+                sys.spawnQueueZ[idx] = z;
+                sys.spawnHead++;
+            }
         }
     }
 
     private spawnSingle(x: number, z: number, now: number) {
-        if (this.freeIndices.length === 0) return;
-        const idx = this.freeIndices.pop()!;
-        const item = this.pool[idx];
+        if (this.freeCount === 0) return; // Prevent spawning if pool is fully exhausted
+
+        // Get an unused item from the free list
+        const poolIdx = this.freeIndices[--this.freeCount];
+        const item = this.pool[poolIdx];
+
         const angle = Math.random() * Math.PI * 2;
         const horizontalForce = 4 + Math.random() * 6;
 
@@ -225,12 +288,25 @@ export class WorldLootSystem implements System {
 
         this.updateInstanceMatrix(item);
         this.instancedMesh.instanceMatrix.needsUpdate = true;
+
+        // Add to active iteration list
+        this.activeIndices[this.activeCount++] = poolIdx;
     }
 
     public clear() {
-        this.pool = [];
-        this.spawnQueue = [];
-        this.freeIndices = [];
-        WorldLootSystem.instance = null;
+        this.activeCount = 0;
+        this.freeCount = 0;
+
+        // Fully reset and hide everything
+        for (let i = 0; i < WorldLootSystem.MAX_SCRAP; i++) {
+            this.pool[i].active = false;
+            this.freeIndices[this.freeCount++] = i;
+            this.instancedMesh.setMatrixAt(i, _hiddenMatrix);
+        }
+
+        this.instancedMesh.instanceMatrix.needsUpdate = true;
+
+        this.spawnHead = 0;
+        this.spawnTail = 0;
     }
 }

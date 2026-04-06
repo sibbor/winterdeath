@@ -1,11 +1,10 @@
 import * as THREE from 'three';
-import { FootprintSystem } from '../../systems/FootprintSystem';
 
 export interface AnimState {
     isMoving: boolean;
     isRushing: boolean;
-    isRolling: boolean;
-    rollStartTime: number;
+    isDodging: boolean;
+    dodgeStartTime: number;
     staminaRatio: number;
     isDead?: boolean;
     deathStartTime?: number;
@@ -21,9 +20,6 @@ export interface AnimState {
     seed: number;
 }
 
-// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-const _v1 = new THREE.Vector3();
-
 export const PlayerAnimator = {
     update: (
         mesh: THREE.Mesh,
@@ -37,7 +33,6 @@ export const PlayerAnimator = {
         let scaleY = 1.0;
         let scaleXZ = 1.0;
         let rotationX = 0;
-        let rotationY = 0;
         let rotationZ = 0;
         let positionY = 0;
 
@@ -45,7 +40,7 @@ export const PlayerAnimator = {
         const breatheSpeed = 0.003 + ((1.0 - animState.staminaRatio) * 0.012);
         const breatheAmp = 0.02 + ((1.0 - animState.staminaRatio) * 0.06);
 
-        // Variables needed later for footprints
+        // Variables needed later for movement
         let moveSpeed = 0;
         let wadingFactor = 1.0;
         let bob = 0;
@@ -56,15 +51,15 @@ export const PlayerAnimator = {
         if (animState.isDead) {
             // High-speed death animation (350ms)
             const deathDuration = 350;
-            const progress = Math.min(1, Math.max(0, (now - (animState.deathStartTime || now)) / deathDuration));
+            const progress = Math.min(1.0, Math.max(0.0, (now - (animState.deathStartTime || now)) / deathDuration));
 
             rotationX = -Math.PI / 2 * progress;
             positionY = -0.8 * progress; // Sink into snow/ground
         }
 
-        // Rolling animation
-        else if (animState.isRolling) {
-            const progress = Math.min(1.0, Math.max(0, (now - animState.rollStartTime) / 300));
+        // Dodging animation
+        else if (animState.isDodging) {
+            const progress = Math.min(1.0, Math.max(0.0, (now - animState.dodgeStartTime) / 300));
             rotationX = progress * Math.PI * 2;
             const squashFactor = Math.sin(progress * Math.PI);
             scaleY = 1.0 - (squashFactor * 0.4);
@@ -91,7 +86,7 @@ export const PlayerAnimator = {
 
             if (animState.isBacking) {
                 // Lean backwards, bouncy steps
-                rotationX = -0.15; // Lean backwards!
+                rotationX = -0.15;
                 scaleY = 1.0 + (Math.abs(bob) * 0.15 * rushFactor); // More vertical bounce
                 scaleXZ = 1.0 - (Math.abs(bob) * 0.05 * rushFactor);
                 rotationZ = Math.cos(now * moveSpeed * wadingFactor) * 0.08; // Exaggerated wobble
@@ -191,39 +186,6 @@ export const PlayerAnimator = {
                     child.position.z = 0.5;
                 }
             }
-        }
-
-        // --- 5. Optimized Footprints (Zero-GC) ---
-        if (animState.isMoving && !animState.isSwimming && !animState.isRolling && !animState.isDead) {
-
-            // We reuse the `bob` and speed variables calculated in step 2!
-            const moveFreq = moveSpeed * wadingFactor;
-            const sway = Math.cos(animState.renderTime * moveFreq);
-            const lastSway = mesh.userData.lastSway || 0;
-            const threshold = 0.8;
-
-            let triggered = false;
-            let isRight = false;
-
-            if (lastSway < threshold && sway >= threshold) {
-                triggered = true; isRight = true;
-            } else if (lastSway > -threshold && sway <= -threshold) {
-                triggered = true; isRight = false;
-            }
-
-            if (triggered) {
-                // Fast World Position fallback (assuming mesh.parent is the Scene or a static group)
-                if (mesh.parent) {
-                    _v1.set(mesh.position.x, mesh.position.y, mesh.position.z);
-                    _v1.applyMatrix4(mesh.parent.matrixWorld);
-                } else {
-                    _v1.copy(mesh.position);
-                }
-            }
-
-            mesh.userData.lastSway = sway;
-        } else {
-            mesh.userData.lastSway = 0;
         }
     }
 };

@@ -12,3 +12,9 @@ export enum InteractionType {
   PLANT_EXPLOSIVE = 5,
   KNOCK_ON_PORT = 6
 }
+
+export enum InteractionShape {
+  BOX = 0,
+  SPHERE = 1,
+  CYLINDER = 2
+}

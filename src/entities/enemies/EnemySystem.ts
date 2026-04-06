@@ -4,14 +4,17 @@ import { GameSessionLogic } from '../../game/session/GameSessionLogic';
 import { EnemyManager } from '../enemies/EnemyManager';
 import { FXSystem } from '../../systems/FXSystem';
 import { WorldLootSystem } from '../../systems/WorldLootSystem';
+import { DamageID } from '../player/CombatTypes';
+import { PlayerStatusFlags } from '../player/PlayerTypes';
 
 // --- TYPE DEFINITIONS ---
 interface Callbacks {
     gainXp: (amount: number) => void;
     onBossKilled: (id: number) => void;
-    onPlayerHit: (damage: number, attacker: any, type: string, isDoT?: boolean, effect?: any, effectDuration?: number, effectIntensity?: number, attackName?: string) => void;
+    onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, effectDuration?: number, effectIntensity?: number, attackName?: string) => void;
     onDiscovery?: (type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
 }
+
 
 export class EnemySystem implements System {
     id = 'enemy_system';
@@ -32,7 +35,8 @@ export class EnemySystem implements System {
             spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => {
                 if (this.currentSession) this.spawnDecal(this.currentSession, x, z, s, mat, type);
             },
-            applyDamage: (enemy: any, amount: number, type: string, isHighImpact: boolean = false) => {
+            applyDamage: (enemy: any, amount: number, type: DamageID, isHighImpact: boolean = false) => {
+
                 if (!this.currentSession) return;
 
                 const state = this.currentSession.state;
@@ -70,6 +74,8 @@ export class EnemySystem implements System {
         const state = session.state;
         const scene = session.engine.scene;
 
+        if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
+
         if (!state.bossIntroActive) {
             EnemyManager.update(
                 dt,
@@ -78,13 +84,14 @@ export class EnemySystem implements System {
                 session.playerPos || this.playerGroup.position,
                 state.enemies,
                 state.collisionGrid,
-                state.isDead,
+                (state.statusFlags & PlayerStatusFlags.DEAD) !== 0,
                 this.callbacks.onPlayerHit,
                 this.updateCallbacks.spawnPart,
                 this.updateCallbacks.spawnDecal,
                 this.updateCallbacks.applyDamage,
                 session.engine.water
             );
+
         }
 
         EnemyManager.cleanupDeadEnemies(

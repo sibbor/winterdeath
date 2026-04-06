@@ -10,7 +10,8 @@ export { WEAPONS } from './weapons';
 
 // 20% HP
 export const HEALTH_CRITICAL_THRESHOLD = 0.2;
-export const DEFAULT_SPEED = 25.0; // kph
+export const PLAYER_BASE_SPEED = 25.0; // km/h, km/tim, kph
+export const KMH_TO_MS = 1.0 / 3.6;
 
 export const CAMERA_HEIGHT = 50;
 
@@ -96,44 +97,46 @@ export const SCRAP_COST_BASE = 50;
 export const LEVEL_CAP = 20;
 
 export const INITIAL_STATS: PlayerStats = {
-    level: 1,
-    xp: 0,
-    currentXp: 0,
-    nextLevelXp: 1500,
-    hp: 100,
-    maxHp: 100,
-    stamina: 100,
-    maxStamina: 100,
-    speed: DEFAULT_SPEED, // kph
-    skillPoints: 0,
-    rescuedFamilyIds: [],
-    discoveredPerks: [],
-    kills: 0,
-    scrap: 0,
-    sectorsCompleted: 0,
-    familyFoundCount: 0,
-    totalSkillPointsEarned: 0,
+    statsBuffer: new Float32Array([
+        100, 100, 100, 100, // HP, MAX_HP, STAMINA, MAX_STAMINA (0-3)
+        0, 1, 0, 1500,      // XP, LEVEL, CURRENT_XP, NEXT_LEVEL_XP (4-7)
+        0, 0, PLAYER_BASE_SPEED, // SKILL_POINTS, SCRAP, SPEED (8-10)
+        0, 0, 0, 0, 0,      // TOTALS (11-15: SCRAP, DAMAGE_DEALT, DAMAGE_TAKEN, DISTANCE, KILLS)
+        0,                  // SCORE (16)
+        1.0, 1.0, 1.0, 1.0, 1.0 // MULTIPLIERS (17-21: SPEED, RELOAD, FIRERATE, DMG_RESIST, RANGE)
+    ]),
+    effectDurations: new Float32Array(14), // StatusEffectID.COUNT
+    effectIntensities: new Float32Array(14), // StatusEffectID.COUNT
+    statusFlags: 0,
+    activePassives: [],
+    activeBuffs: [],
+    activeDebuffs: [],
+
     killsByType: {},
-    totalScrapCollected: 0,
+    deaths: 0,
+    sectorsCompleted: 0,
+    totalSkillPointsEarned: 0,
     totalBulletsFired: 0,
     totalBulletsHit: 0,
     totalThrowablesThrown: 0,
-    totalDamageDealt: 0,
-    totalDamageTaken: 0,
-    totalDistanceTraveled: 0,
-    cluesFound: [],
-    seenEnemies: [],
-    seenBosses: [],
-    discoveredPOIs: [],
-    deaths: 0,
-    mostUsedWeapon: '',
     chestsOpened: 0,
     bigChestsOpened: 0,
-    incomingDamageBreakdown: {},
-    outgoingDamageBreakdown: {},
+
     collectiblesDiscovered: [],
     viewedCollectibles: [],
-    deathsByEnemyType: {}
+    cluesFound: [],
+    discoveredPOIs: [],
+    seenEnemies: [],
+    seenBosses: [],
+    discoveredPerks: [],
+
+    prologueSeen: false,
+    rescuedFamilyIds: [],
+    familyFoundCount: 0,
+    mostUsedWeapon: '',
+    deathsByEnemyType: {},
+    incomingDamageBreakdown: {},
+    outgoingDamageBreakdown: {},
 };
 
 export const PLAYER_CHARACTER = {

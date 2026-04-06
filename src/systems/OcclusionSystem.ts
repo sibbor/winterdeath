@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { Enemy } from '../entities/enemies/EnemyManager';
+import { Enemy, EnemyFlags } from '../entities/enemies/EnemyTypes';
+
 
 // --- SHARED GHOST GEOMETRY (one capsule for all entities) ---
 const _capsuleGeo = new THREE.CapsuleGeometry(0.35, 1.25, 4, 8);
@@ -137,7 +138,8 @@ export class OcclusionSystem implements System {
         const enemies = state.enemies;
         for (let i = 0; i < enemies.length; i++) {
             const enemy: Enemy = enemies[i];
-            if (!enemy || !enemy.mesh || enemy.dead) continue;
+            if (!enemy || !enemy.mesh || (enemy.statusFlags & EnemyFlags.DEAD) !== 0) continue;
+
 
             if (!this.ghostedEnemies.has(enemy.mesh)) {
                 // OBS: Säkerställ att enemy.mesh faktiskt ligger i scene-grafen!
@@ -151,8 +153,9 @@ export class OcclusionSystem implements System {
         // FIX 2: Bytte ut felkällan (.length jämförelsen) mot ett robust Set-upplägg
         if (this.ghostedEnemies.size > 0) {
             const activeSet: Set<THREE.Object3D> = new Set();
+            const enemies = state.enemies;
             for (let i = 0; i < enemies.length; i++) {
-                if (!enemies[i].dead && enemies[i].mesh) {
+                if (((enemies[i].statusFlags & EnemyFlags.DEAD) === 0) && enemies[i].mesh) {
                     activeSet.add(enemies[i].mesh);
                 }
             }

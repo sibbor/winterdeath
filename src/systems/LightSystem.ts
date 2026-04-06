@@ -14,6 +14,9 @@ export interface LogicalLight {
     flickerSpeed?: number;
     flickerSpread?: number;
     castShadow?: boolean;
+    shadowBias?: number;
+    shadowNormalBias?: number;
+    shadowMapSize?: number;
 
     // Zero-GC data
     _sqDist?: number;
@@ -127,7 +130,29 @@ export class LightSystem implements System {
 
                 let currentIntensity = logicLight.intensity;
 
+                // --- VINTERDÖD FLICKER LOGIC ---
+                // Low-cost sine-based flicker for fires and damaged lights
+                if (logicLight.flickerSpeed !== undefined) {
+                    const speed = logicLight.flickerSpeed;
+                    const spread = logicLight.flickerSpread || 0;
+                    const rate = logicLight.flickerRate || 1;
+                    
+                    // Simple pulse + optional noise jump
+                    currentIntensity += Math.sin(now * speed) * spread;
+                    
+                    if (Math.random() < rate) {
+                         currentIntensity += (Math.random() - 0.5) * spread * 0.5;
+                    }
+                }
 
+                // --- VINTERDÖD SHADOW CONFIG ---
+                if (proxy.castShadow) {
+                    if (logicLight.shadowBias !== undefined) proxy.shadow.bias = logicLight.shadowBias;
+                    if (logicLight.shadowNormalBias !== undefined) proxy.shadow.normalBias = logicLight.shadowNormalBias;
+                    if (logicLight.shadowMapSize !== undefined) {
+                        proxy.shadow.mapSize.set(logicLight.shadowMapSize, logicLight.shadowMapSize);
+                    }
+                }
 
                 proxy.intensity = Math.max(0, currentIntensity);
             } else {

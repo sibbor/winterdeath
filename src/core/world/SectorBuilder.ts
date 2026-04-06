@@ -11,7 +11,7 @@ import { GeneratorUtils } from './generators/GeneratorUtils';
 import { EffectManager } from '../../systems/EffectManager';
 import { getCollectibleById } from '../../content/collectibles';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
-import { SectorTrigger, TriggerType, TriggerAction } from '../../systems/TriggerTypes';
+import { SectorTrigger, TriggerType, TriggerAction, TriggerStatus } from '../../systems/TriggerTypes';
 import { WaterBodyType, WaterBody } from '../../systems/WaterSystem';
 import { GEOMETRY } from '../../utils/assets';
 import { WinterEngine } from '../engine/WinterEngine';
@@ -421,9 +421,8 @@ export const SectorBuilder = {
             size: { width, depth },
             type: type,
             content: content,
-            triggered: false,
+            statusFlags: TriggerStatus.ACTIVE | (resetOnExit ? TriggerStatus.RESET_ON_EXIT : TriggerStatus.NONE),
             actions: actions || [],
-            resetOnExit: resetOnExit,
             rotation: rotation
         };
         ctx.triggers.push(trigger);
@@ -1225,13 +1224,22 @@ export const SectorBuilder = {
         return poi;
     },
 
-    addTriggers: (ctx: SectorContext, triggers: any[]) => {
+    addTriggers: (ctx: SectorContext, triggers: SectorTrigger[]) => {
         for (let i = 0; i < triggers.length; i++) {
-            const trigger = triggers[i] as any;
+            const trigger = triggers[i];
+            
+            // Re-initialize statusFlags if they are missing or still in boolean format
+            if (trigger.statusFlags === undefined) {
+                let flags = TriggerStatus.ACTIVE;
+                if ((trigger as any).triggered) flags |= TriggerStatus.TRIGGERED;
+                if ((trigger as any).resetOnExit) flags |= TriggerStatus.RESET_ON_EXIT;
+                trigger.statusFlags = flags;
+            }
+
             ctx.triggers.push(trigger);
             ctx.collisionGrid.addTrigger(trigger);
 
-            if (trigger.type === 'POI') {
+            if (trigger.type === TriggerType.POI) {
                 ctx.mapItems.push({
                     id: trigger.id || `poi_${trigger.position.x}_${trigger.position.z}`,
                     x: trigger.position.x, z: trigger.position.z,
@@ -1240,7 +1248,7 @@ export const SectorBuilder = {
                 });
             }
 
-            if (trigger.type === 'EVENT' && trigger.familyId !== undefined) {
+            if (trigger.type === TriggerType.EVENT && trigger.familyId !== undefined) {
                 ctx.mapItems.push({
                     id: trigger.id || `family_${trigger.familyId}`,
                     x: trigger.position.x, z: trigger.position.z,

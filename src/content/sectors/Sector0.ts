@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
+import { SoundID } from '../../utils/audio/AudioTypes';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { InteractionType } from '../../systems/InteractionTypes';
@@ -12,6 +13,7 @@ import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
 import { POI_TYPE } from '../../content/pois';
+import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
 
 const LOCATIONS = {
     SPAWN: {
@@ -112,7 +114,7 @@ export const Sector0: SectorDef = {
         },
     },
     groundType: 'SNOW',
-    ambientLoop: 'ambient_wind_loop',
+    ambientLoop: SoundID.AMBIENT_WIND,
 
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
     familySpawn: LOCATIONS.SPAWN.FAMILY,
@@ -662,31 +664,31 @@ export const Sector0: SectorDef = {
     setupContent: async (ctx: SectorContext) => {
         if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
         SectorBuilder.addTriggers(ctx, [
-            { id: 's1_start_tracks', position: LOCATIONS.TRIGGERS.START_TRACKS, radius: 10, type: 'THOUGHT', content: "clues.0.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's1_blood_stains', position: LOCATIONS.TRIGGERS.BLOOD_STAINS, radius: 10, type: 'THOUGHT', content: "clues.0.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's1_they_must_be_scared', position: LOCATIONS.TRIGGERS.CHAOS_HERE, radius: 8, type: 'THOUGHT', content: "clues.0.2.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's1_still_tracking', position: LOCATIONS.TRIGGERS.STILL_TRACKING, radius: 15, type: 'THOUGHT', content: "clues.0.3.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's1_town_center', position: LOCATIONS.TRIGGERS.TOWN_CENTER, radius: 80, type: 'THOUGHT', content: "clues.0.4.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's1_start_tracks', position: LOCATIONS.TRIGGERS.START_TRACKS, radius: 10, type: TriggerType.THOUGHT, content: "clues.0.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's1_blood_stains', position: LOCATIONS.TRIGGERS.BLOOD_STAINS, radius: 10, type: TriggerType.THOUGHT, content: "clues.0.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's1_they_must_be_scared', position: LOCATIONS.TRIGGERS.CHAOS_HERE, radius: 8, type: TriggerType.THOUGHT, content: "clues.0.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's1_still_tracking', position: LOCATIONS.TRIGGERS.STILL_TRACKING, radius: 15, type: TriggerType.THOUGHT, content: "clues.0.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's1_town_center', position: LOCATIONS.TRIGGERS.TOWN_CENTER, radius: 80, type: TriggerType.THOUGHT, content: "clues.0.4.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
 
-            { id: 's1_poi_building_on_fire', position: LOCATIONS.POIS.SMU, size: { width: 60, depth: 60 }, type: 'POI', content: "pois.0.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's1_poi_church', position: LOCATIONS.POIS.CHURCH, size: { width: 30, depth: 30 }, type: 'POI', content: "pois.0.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's1_poi_cafe', position: LOCATIONS.POIS.CAFE, size: { width: 25, depth: 25 }, type: 'POI', content: "pois.0.2.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's1_poi_pizzeria', position: LOCATIONS.POIS.PIZZERIA, size: { width: 25, depth: 25 }, type: 'POI', content: "pois.0.3.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's1_poi_grocery', position: LOCATIONS.POIS.GROCERY, size: { width: 25, depth: 40 }, type: 'POI', content: "pois.0.4.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's1_poi_gym', position: LOCATIONS.POIS.GYM, size: { width: 45, depth: 25 }, type: 'POI', content: "pois.0.5.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's1_poi_train_yard', position: LOCATIONS.POIS.TRAIN_YARD, size: { width: 130, depth: 90 }, type: 'POI', content: "pois.0.6.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+            { id: 's1_poi_building_on_fire', position: LOCATIONS.POIS.SMU, size: { width: 60, depth: 60 }, type: TriggerType.POI, content: "pois.0.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's1_poi_church', position: LOCATIONS.POIS.CHURCH, size: { width: 30, depth: 30 }, type: TriggerType.POI, content: "pois.0.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's1_poi_cafe', position: LOCATIONS.POIS.CAFE, size: { width: 25, depth: 25 }, type: TriggerType.POI, content: "pois.0.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's1_poi_pizzeria', position: LOCATIONS.POIS.PIZZERIA, size: { width: 25, depth: 25 }, type: TriggerType.POI, content: "pois.0.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's1_poi_grocery', position: LOCATIONS.POIS.GROCERY, size: { width: 25, depth: 40 }, type: TriggerType.POI, content: "pois.0.4.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's1_poi_gym', position: LOCATIONS.POIS.GYM, size: { width: 45, depth: 25 }, type: TriggerType.POI, content: "pois.0.5.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's1_poi_train_yard', position: LOCATIONS.POIS.TRAIN_YARD, size: { width: 130, depth: 90 }, type: TriggerType.POI, content: "pois.0.6.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
 
             // THE NATIVE BUS EVENT TRIGGER
-            { id: 's1_event_tunnel_blocked', position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: 'SPEAK', content: "clues.0.5.reaction", triggered: false, actions: [] },
+            { id: 's1_event_tunnel_blocked', position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: TriggerType.SPEAK, content: "clues.0.5.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [] },
             {
                 id: 'found_loke',
                 position: LOCATIONS.SPAWN.FAMILY,
                 familyId: 0,
                 radius: 5,
-                type: 'EVENT',
+                type: TriggerType.EVENT,
                 content: '',
-                triggered: false,
-                actions: [{ type: 'START_CINEMATIC', payload: { familyId: 0 } }]
+                statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: 0 } }]
             }
         ]);
     },
@@ -723,10 +725,10 @@ export const Sector0: SectorDef = {
         }
 
         const buildingPOIs = [
-            { name: 'church', pos: LOCATIONS.POIS.CHURCH, count: 6, type: 'MIXED' },
+            { name: 'church', pos: LOCATIONS.POIS.CHURCH, count: 6, isMixed: true },
             { name: 'cafe', pos: LOCATIONS.POIS.CAFE, count: 4, type: EnemyType.WALKER },
             { name: 'grocery', pos: LOCATIONS.POIS.GROCERY, count: 5, type: EnemyType.RUNNER },
-            { name: 'gym', pos: LOCATIONS.POIS.GYM, count: 3, type: 'MIXED' },
+            { name: 'gym', pos: LOCATIONS.POIS.GYM, count: 3, isMixed: true },
             { name: 'pizzeria', pos: LOCATIONS.POIS.PIZZERIA, count: 4, type: EnemyType.WALKER },
         ];
 
@@ -735,9 +737,10 @@ export const Sector0: SectorDef = {
             if (dist < 45 && !sectorState.spawns[poi.name]) {
                 sectorState.spawns[poi.name] = true;
                 for (let i = 0; i < poi.count; i++) {
-                    let type = EnemyType.WALKER;
-                    if (poi.type === 'MIXED') type = Math.random() > 0.8 ? EnemyType.RUNNER : EnemyType.WALKER;
+                    let type: EnemyType = EnemyType.WALKER;
+                    if (poi.isMixed) type = Math.random() > 0.8 ? EnemyType.RUNNER : EnemyType.WALKER;
                     else if (poi.type === EnemyType.RUNNER) type = Math.random() > 0.3 ? EnemyType.RUNNER : EnemyType.WALKER;
+                    else if (poi.type !== undefined) type = poi.type;
 
                     const offX = (Math.random() - 0.5) * 20;
                     const offZ = (Math.random() - 0.5) * 20;
@@ -751,10 +754,10 @@ export const Sector0: SectorDef = {
             sectorState.spawns.town_forest = true;
             for (let i = 0; i < 8; i++) {
                 let type = EnemyType.WALKER;
-                const roll = Math.random();
-                if (roll > 0.8) type = EnemyType.TANK;
-                else if (roll > 0.9) type = EnemyType.BOMBER;
-                else if (roll > 0.7) type = EnemyType.RUNNER;
+                const rand = Math.random();
+                if (rand > 0.8) type = EnemyType.TANK;
+                else if (rand > 0.9) type = EnemyType.BOMBER;
+                else if (rand > 0.7) type = EnemyType.RUNNER;
 
                 const offX = (Math.random() - 0.5) * 40;
                 const offZ = (Math.random() - 0.5) * 40;
@@ -798,7 +801,7 @@ export const Sector0: SectorDef = {
             sectorState.busEventState = 2;
             sectorState.busEventTimer = now;
 
-            if (events.playSound) events.playSound('explosion');
+            if (events.playSound) events.playSound(SoundID.EXPLOSION);
             if (events.cameraShake) events.cameraShake(1.0);
 
             gameState.triggers.push({
@@ -834,7 +837,7 @@ export const Sector0: SectorDef = {
             sectorState.busEventState = 4;
             sectorState.busEventTimer = now;
 
-            if (events.playSound) events.playSound('explosion');
+            if (events.playSound) events.playSound(SoundID.EXPLOSION);
             if (events.cameraShake) events.cameraShake(5.0);
 
             if (events.makeNoise) {
@@ -990,7 +993,7 @@ export const Sector0: SectorDef = {
                     sectorState.busRing = null;
                 }
 
-                if (events.playSound) events.playSound('explosion');
+                if (events.playSound) events.playSound(SoundID.EXPLOSION);
                 if (events.cameraShake) events.cameraShake(5);
 
                 // --- 1. USE NATIVE GAME ENGINE EXPLOSION (NO CRASHES) ---
@@ -1139,7 +1142,7 @@ export const Sector0: SectorDef = {
                                 data.hasLanded[i] = 1;
                                 if (now - sectorState.lastMetalImpactTime > 80) {
                                     sectorState.lastMetalImpactTime = now;
-                                    events.playSound('impact_metal');
+                                    events.playSound(SoundID.IMPACT_METAL);
                                 }
                             }
                         }

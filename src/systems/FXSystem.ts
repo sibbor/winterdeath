@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { soundManager } from '../utils/audio/SoundManager';
+import { MaterialType } from '../content/environment';
 
 // --- TYPES & INTERFACES ---
 
@@ -30,7 +31,6 @@ export interface ParticleState {
 
 interface SpawnRequest {
     scene: THREE.Scene;
-    particlesList: ParticleState[];
     x: number; y: number; z: number;
     type: string;
     customMesh?: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
@@ -65,7 +65,7 @@ const MAX_PARTICLE_REQUESTS = 2200; // Buffer for essential + ambient
 // Pre-allocate pools to prevent mid-combat GC spikes
 for (let i = 0; i < MAX_PARTICLE_REQUESTS; i++) {
     REQUEST_POOL.push({
-        scene: null as any, particlesList: [],
+        scene: null as any,
         x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3(),
         hasCustomVel: false, color: undefined, scale: undefined, life: undefined, material: undefined
     });
@@ -73,7 +73,7 @@ for (let i = 0; i < MAX_PARTICLE_REQUESTS; i++) {
 
 for (let i = 0; i < MAX_DECALS; i++) {
     DECAL_REQUEST_POOL.push({
-        scene: null as any, particlesList: [],
+        scene: null as any,
         x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3(),
         hasCustomVel: false, color: undefined, scale: undefined, life: undefined, material: undefined
     });
@@ -115,16 +115,38 @@ const ESSENTIAL_TYPES: Record<string, boolean> = {
     muzzle: true, muzzle_flash: true, muzzle_spark: true, muzzle_smoke: true
 };
 
-// Cached material to avoid Zero-GC violations
 let _whiteGoreMaterial: THREE.Material | null = null;
 
-// TTL mapped object for faster V8 property access
 const PARTICLE_TTL: Record<string, number> = {
     blood: 120, debris: 200, large_fire: 60, large_smoke: 60, flame: 60, fire: 60,
     smoke: 60, spark: 60, enemy_effect_flame: 60, enemy_effect_spark: 60,
     electric_beam: 15, ground_impact: 40, shockwave: 40, frost_nova: 40,
     screech_wave: 30, magnetic_sparks: 60, impact: 30, default: 30
 };
+
+// VINTERDÖD FIX: Pre-allocate state pool to prevent massive GC spike on first grenade
+const _INITIAL_STATE_POOL: ParticleState[] = [];
+const _INITIAL_STATE_FREE: number[] = [];
+for (let i = 0; i < 5000; i++) {
+    _INITIAL_STATE_POOL.push({
+        pos: new THREE.Vector3(),
+        rot: new THREE.Euler(),
+        scaleVec: new THREE.Vector3(1, 1, 1),
+        vel: new THREE.Vector3(),
+        rotVel: new THREE.Vector3(),
+        life: 0,
+        maxLife: 0,
+        type: '',
+        isPooled: false,
+        isInstanced: false,
+        isPhysics: false,
+        landed: false,
+        inUse: false,
+        color: undefined,
+        _poolIdx: i
+    });
+    _INITIAL_STATE_FREE.push(i);
+}
 
 export const FXSystem = {
 
@@ -146,8 +168,8 @@ export const FXSystem = {
 
     MESH_POOL: [] as THREE.Mesh<THREE.BufferGeometry, THREE.Material>[],
     FREE_MESH_INDICES: [] as number[],
-    PARTICLE_STATE_POOL: [] as ParticleState[],
-    FREE_STATE_INDICES: [] as number[],
+    PARTICLE_STATE_POOL: _INITIAL_STATE_POOL,
+    FREE_STATE_INDICES: _INITIAL_STATE_FREE,
 
     _instancedMeshes: {} as Record<string, THREE.InstancedMesh>,
     _instancedCounts: {} as Record<string, number>,
@@ -226,7 +248,7 @@ export const FXSystem = {
             return req;
         }
         return {
-            scene: null as any, particlesList: [],
+            scene: null as any,
             x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3(),
             hasCustomVel: false, color: undefined, scale: undefined, life: undefined, material: undefined
         };
@@ -234,7 +256,7 @@ export const FXSystem = {
 
     // --- SPAWNING ---
 
-    _spawnDecalImmediate: (req: SpawnRequest) => {
+    _spawnDecalImmediate: (req: SpawnRequest, decalList: THREE.Mesh[]) => {
         const geo = req.type === 'splatter' ? GEOMETRY.splatterDecal : GEOMETRY.decal;
         const d = FXSystem.getPooledMesh(req.scene, geo, req.material || MATERIALS.bloodDecal, 'decal');
         d.position.set(req.x, 0.2 + Math.random() * 0.05, req.z);
@@ -249,10 +271,10 @@ export const FXSystem = {
         }
 
         d.renderOrder = (req.material === MATERIALS.scorchDecal) ? -1 : 50;
-        (req.particlesList as unknown as THREE.Mesh[]).push(d);
+        decalList.push(d);
     },
 
-    _spawnPartImmediate: (req: SpawnRequest) => {
+    _spawnPartImmediate: (req: SpawnRequest, particlesList: ParticleState[]) => {
         if (isNaN(req.x)) return;
 
         const t = req.type;
@@ -265,12 +287,9 @@ export const FXSystem = {
         p.isInstanced = isInstanced;
         p.isPhysics = !!PHYSICS_TYPES[t];
 
-        // Fast color resolution
         p.color = req.color ?? (isInstanced ? (PARTICLE_COLORS[t] ?? 0x888888) : undefined);
-
         p.pos.set(req.x, req.y, req.z);
 
-        // --- ROTATION & ORIENTATION ---
         if (t === 'electric_flash' && req.hasCustomVel) {
             _v1.set(req.x + req.customVel.x, req.y + req.customVel.y, req.z + req.customVel.z);
             _dummyMatrix.lookAt(p.pos, _v1, _UP);
@@ -282,7 +301,6 @@ export const FXSystem = {
             p.rot.set(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2);
         }
 
-        // --- SCALING ---
         const s = req.scale || 1.0;
         let fs = 1.0;
         if (t === 'flash') {
@@ -329,7 +347,6 @@ export const FXSystem = {
             p.scaleVec.set(fs, fs, fs);
         }
 
-        // --- VELOCITY ---
         if (t === 'electric_flash') {
             p.vel.set(0, 0, 0);
         } else if (req.hasCustomVel) {
@@ -348,7 +365,6 @@ export const FXSystem = {
             );
         }
 
-        // --- LIFETIME ---
         if (t === 'electric_flash') {
             p.life = req.life !== undefined ? req.life : (2 + Math.random() * 2);
         } else {
@@ -358,13 +374,12 @@ export const FXSystem = {
         p.maxLife = p.life;
         p.rotVel.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
 
-        req.particlesList.push(p);
+        particlesList.push(p);
     },
 
     // --- INTERFACE ---
 
     preload: (scene: THREE.Scene) => {
-        // 1. Initiera material (som du redan gör)
         if (!MATERIALS['_blackSmoke']) MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
         if (!MATERIALS['flame']) MATERIALS['flame'] = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.9, depthWrite: false });
         if (!MATERIALS['large_fire']) MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.9, depthWrite: false });
@@ -372,74 +387,48 @@ export const FXSystem = {
         const types = Object.keys(INSTANCED_TYPES);
         const dummyMatrix = new THREE.Matrix4();
 
-        // Vi sätter en dummy-position långt under marken
         dummyMatrix.makeTranslation(0, -1000, 0);
 
         for (let i = 0; i < types.length; i++) {
             const type = types[i];
             const imesh = FXSystem._getInstancedMesh(scene, type);
 
-            // Tvinga fram en instans även om den är osynlig/långt borta
-            // Detta gör att Three.js kompilerar shadern NU istället för vid explosionen
             imesh.setMatrixAt(0, dummyMatrix);
             imesh.instanceMatrix.needsUpdate = true;
-            imesh.count = 1; // Aktivera minst en partikel
+            imesh.count = 1;
 
             if (imesh.parent !== scene) scene.add(imesh);
 
-            // VINTERDÖD OPTIMERING: 
-            // Förhindra att partiklar "poppar in" genom att låta frustumCulled vara false 
-            // på de mest kritiska effekterna (explosioner/shockwaves)
             if (type === 'shockwave' || type === 'explosion' || type === 'debris') {
                 imesh.frustumCulled = false;
             }
         }
     },
-    /*
-    preload: (scene: THREE.Scene) => {
-        if (!MATERIALS['_blackSmoke']) MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
-        if (!MATERIALS['flame']) MATERIALS['flame'] = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.9, depthWrite: false });
-        if (!MATERIALS['large_fire']) MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.9, depthWrite: false });
-
-        const types = Object.keys(INSTANCED_TYPES);
-        for (let i = 0; i < types.length; i++) {
-            const imesh = FXSystem._getInstancedMesh(scene, types[i]);
-            if (imesh.parent !== scene) scene.add(imesh);
-        }
-    },
-    */
 
     spawnDecal: (scene: THREE.Scene, decalList: THREE.Mesh[], x: number, z: number, scale: number, material?: THREE.Material, type: string = 'decal') => {
-        // --- SPATIAL MERGING FOR DECALS ---
-        // If a decal of the same material already exists very close, just grow it!
-        // This prevents Z-fighting and saves rendering overhead.
-        const mergeRadiusSq = (scale * 0.4) * (scale * 0.4); // Adaptive merge distance based on scale
+        const mergeRadiusSq = (scale * 0.4) * (scale * 0.4);
 
         for (let i = 0; i < decalList.length; i++) {
             const existingDecal = decalList[i];
 
-            // Check if it's the same material (e.g., blood vs scorch mark)
             if (existingDecal.material === material || (!material && existingDecal.material === MATERIALS.bloodDecal)) {
                 const dx = existingDecal.position.x - x;
                 const dz = existingDecal.position.z - z;
                 const distSq = dx * dx + dz * dz;
 
                 if (distSq < mergeRadiusSq) {
-                    // It's close! Don't spawn a new one, just increase the target scale of the existing one.
-                    // Cap the maximum growth to prevent a single bullet hole covering the map
                     const maxScale = scale * 2.5;
                     if (existingDecal.userData.targetScale < maxScale) {
                         existingDecal.userData.targetScale = Math.min(maxScale, existingDecal.userData.targetScale + (scale * 0.3));
                     }
-                    return; // EARLY OUT! ZERO-GC.
+                    return;
                 }
             }
         }
 
-        // --- NORMAL SPAWN (If no merge occurred) ---
         let req = DECAL_REQUEST_POOL.pop();
-        if (!req) req = { scene, particlesList: decalList as any, x, y: 0, z, type, customVel: new THREE.Vector3(), hasCustomVel: false };
-        else { req.scene = scene; req.particlesList = decalList as any; req.x = x; req.z = z; req.type = type; }
+        if (!req) req = { scene, x, y: 0, z, type, customVel: new THREE.Vector3(), hasCustomVel: false };
+        else { req.scene = scene; req.x = x; req.z = z; req.type = type; }
 
         req.scale = scale;
         req.material = material;
@@ -449,7 +438,6 @@ export const FXSystem = {
     spawnPart: (scene: THREE.Scene, particlesList: ParticleState[], x: number, y: number, z: number, type: string, count: number, customMesh?: any, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => {
         const isEssential = !!ESSENTIAL_TYPES[type];
 
-        // --- SPATIAL THROTTLING (ZERO-GC) ---
         if (!isEssential) {
             if (_lastSpawnX[type] === undefined) {
                 _lastSpawnX[type] = -999;
@@ -460,9 +448,7 @@ export const FXSystem = {
             const lastZ = _lastSpawnZ[type];
             const distSq = (x - lastX) * (x - lastX) + (z - lastZ) * (z - lastZ);
 
-            // If spawning at basically the same spot in the same frame burst, 
-            // reduce count or skip to save performance during high-intensity moments.
-            if (distSq < 0.04) { // 0.2 units distance
+            if (distSq < 0.04) {
                 if (count > 2) count = Math.ceil(count * 0.5);
                 else if (Math.random() < 0.7) return;
             }
@@ -473,7 +459,7 @@ export const FXSystem = {
 
         for (let i = 0; i < count; i++) {
             let req = FXSystem._getSpawnRequest();
-            req.scene = scene; req.particlesList = particlesList; req.x = x; req.y = y; req.z = z;
+            req.scene = scene; req.x = x; req.y = y; req.z = z;
             req.type = type; req.customMesh = customMesh; req.color = color; req.scale = scale; req.life = life;
 
             if (customVel) {
@@ -488,7 +474,6 @@ export const FXSystem = {
                 FXSystem.essentialQueue.push(req);
             } else {
                 if (FXSystem.ambientQueue.length >= AMBIENT_QUEUE_HARD_CAP) {
-                    // Recycle request immediately if we can't queue it (Zero-GC save!)
                     REQUEST_POOL.push(req);
                     continue;
                 }
@@ -500,14 +485,9 @@ export const FXSystem = {
         }
     },
 
-    // --- MAIN UPDATE LOOP ---
     update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], renderDelta: number, frame: number, renderTime: number, callbacks: any) => {
         const safeDelta = renderDelta > 0.1 ? 0.1 : renderDelta;
 
-        // ==========================================
-        // 1. UPDATE EXISTING PARTICLES (Physics & Death)
-        // Frees up pool indices BEFORE we try to spawn new ones!
-        // ==========================================
         const decay = safeDelta * 44;
         const airFriction = 1.0 - (5.0 * safeDelta);
         const shrinkRate = 1.0 - (10.0 * safeDelta);
@@ -529,7 +509,6 @@ export const FXSystem = {
             }
 
             if (!p.landed) {
-                // Inlined position update
                 const pPos = p.pos;
                 pPos.x += p.vel.x * safeDelta;
                 pPos.y += p.vel.y * safeDelta;
@@ -538,7 +517,6 @@ export const FXSystem = {
                 if (p.isPhysics) {
                     p.vel.y -= 25 * safeDelta;
                     if (p.type !== 'blood' && p.type !== 'splash') {
-                        // Inlined rotation update
                         p.rot.x += p.rotVel.x * 10 * safeDelta;
                         p.rot.z += p.rotVel.z * 10 * safeDelta;
                     }
@@ -547,7 +525,6 @@ export const FXSystem = {
                         if (!p.inUse) continue;
                     }
                 } else {
-                    // Inlined velocity friction
                     p.vel.x *= safeAirFriction;
                     p.vel.y *= safeAirFriction;
                     p.vel.z *= safeAirFriction;
@@ -622,17 +599,12 @@ export const FXSystem = {
             }
         }
 
-        // ==========================================
-        // 2. PROCESS QUEUES (Spawn new particles)
-        // Now has maximum pool slots available
-        // ==========================================
         const eQueue = FXSystem.essentialQueue;
         const eLen = eQueue.length;
         for (let i = FXSystem._essentialQueueHead; i < eLen; i++) {
             const req = eQueue[i];
             req.scene = scene;
-            req.particlesList = particlesList;
-            FXSystem._spawnPartImmediate(req);
+            FXSystem._spawnPartImmediate(req, particlesList);
             REQUEST_POOL.push(req);
         }
         eQueue.length = 0;
@@ -644,8 +616,7 @@ export const FXSystem = {
         for (let i = FXSystem._ambientQueueHead; i < pEnd; i++) {
             const req = aQueue[i];
             req.scene = scene;
-            req.particlesList = particlesList;
-            FXSystem._spawnPartImmediate(req);
+            FXSystem._spawnPartImmediate(req, particlesList);
             REQUEST_POOL.push(req);
         }
         FXSystem._ambientQueueHead = pEnd;
@@ -659,7 +630,7 @@ export const FXSystem = {
         const dEnd = FXSystem._decalQueueHead + 10 < dLen ? FXSystem._decalQueueHead + 10 : dLen;
         for (let i = FXSystem._decalQueueHead; i < dEnd; i++) {
             const req = dQueue[i];
-            FXSystem._spawnDecalImmediate(req);
+            FXSystem._spawnDecalImmediate(req, decalList);
             DECAL_REQUEST_POOL.push(req);
         }
         FXSystem._decalQueueHead = dEnd;
@@ -675,17 +646,12 @@ export const FXSystem = {
                 const growthStep = targetScale * 3.0 * safeDelta;
                 const newScale = m.scale.x + growthStep;
                 const finalScale = newScale > targetScale ? targetScale : newScale;
-                // Inlined scale update
                 m.scale.x = finalScale;
                 m.scale.y = finalScale;
                 m.scale.z = finalScale;
             }
         }
 
-        // ==========================================
-        // 3. FINALIZE INSTANCED BATCHES (Write to GPU)
-        // Combines both old updated AND newly spawned particles
-        // ==========================================
         const iKeys = FXSystem._instancedMeshKeys;
         const iLen = iKeys.length;
         for (let k = 0; k < iLen; k++) {
@@ -702,12 +668,11 @@ export const FXSystem = {
         if (decalList.length > MAX_DECALS) {
             console.warn(`[FXSystem] MAX_DECALS (${MAX_DECALS}) exceeded. Earliest decals will be force-recycled.`);
         }
-        while (decalList.length > MAX_DECALS) {
-            const oldDecal = decalList[0];
-            if (oldDecal) FXSystem.recycleMesh(oldDecal as any, 'decal');
 
-            decalList[0] = decalList[decalList.length - 1];
-            decalList.pop();
+        // VINTERDÖD FIX: Use shift() instead of swap-and-pop to correctly remove the OLDEST decals.
+        while (decalList.length > MAX_DECALS) {
+            const oldDecal = decalList.shift();
+            if (oldDecal) FXSystem.recycleMesh(oldDecal as any, 'decal');
         }
     },
 
@@ -731,7 +696,7 @@ export const FXSystem = {
         } else if (p.type === 'gore') {
             p.landed = true;
             if (Math.random() < 0.40) callbacks.spawnDecal(p.pos.x, p.pos.z, 0.8 + Math.random() * 0.5, MATERIALS.bloodDecal);
-            soundManager.playImpact('flesh');
+            soundManager.playImpact(MaterialType.FLESH);
             p.vel.set(0, 0, 0);
         } else if (p.type === 'debris') {
             if (p.vel.y < -8) {

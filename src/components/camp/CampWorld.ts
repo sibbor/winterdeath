@@ -394,15 +394,15 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false)
         color: CAMP_SCENE.campfireLight.color,
         intensity: CAMP_SCENE.campfireLight.intensity,
         distance: CAMP_SCENE.campfireLight.distance,
-        //flickerRate: 0.08,    // Subtle staccato
-        //flickerSpeed: 0.012,  // Smooth pulse speed
-        //flickerSpread: 6.0,   // Smooth pulse amplitude (15% of 40)
+        flickerRate: 0.1,      // Subtle staccato
+        flickerSpeed: 0.05,    // Smooth pulse speed
+        flickerSpread: 15.0,    // Smooth pulse amplitude (15% of base)
 
         // Shadow Specs
-        //castShadow: CAMP_SCENE.campfireLight.castShadow,
-        //shadowBias: CAMP_SCENE.campfireLight.bias,
-        //shadowNormalBias: CAMP_SCENE.campfireLight.normalBias,
-        //shadowMapSize: CAMP_SCENE.campfireLight.shadowMapSizeWidth
+        castShadow: true,
+        shadowBias: -0.005,
+        shadowNormalBias: 0.02,
+        shadowMapSize: 512
     };
 
     return fireLightData;

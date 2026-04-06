@@ -321,8 +321,48 @@ export const createProceduralDiffuse = () => {
         ctx.fillRect(0, 0, w, h);
     });
 
+    const treeLeaves = drawAlpha(512, 512, (ctx, s) => {
+        const w = ctx.canvas.width; const h = ctx.canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        
+        const colors = [
+            '#1a2e1a', // Darkest shadow green
+            '#2d4c2d', // Medium green
+            '#3b5c3b', // Base leaf green
+            '#4a6b4a', // Lighter leaf green
+            '#223322'  // Deep forest green
+        ];
+
+        const leafCount = Math.floor(4000 * s * s);
+        for (let i = 0; i < leafCount; i++) {
+            const x = Math.random() * w;
+            const y = Math.random() * h;
+            const size = (4 + Math.random() * 8) * s;
+            const angle = Math.random() * Math.PI * 2;
+            
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+            ctx.globalAlpha = 0.8 + Math.random() * 0.2;
+            
+            // Draw a simple leaf shape (ellipse)
+            ctx.beginPath();
+            ctx.ellipse(0, 0, size, size * 0.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Sub-pixel shadow for "grittiness"
+            if (Math.random() > 0.7) {
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillRect(-size * 0.2, -size * 0.2, size * 1.5, 1 * s);
+            }
+            
+            ctx.restore();
+        }
+    });
+
     // Final cache population
-    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, map, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint, scorchAlpha };
+    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, map, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint, scorchAlpha, treeLeaves };
 
     return cachedTextures;
 };

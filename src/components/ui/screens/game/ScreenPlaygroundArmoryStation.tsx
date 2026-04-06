@@ -67,10 +67,12 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
         if (tempSectorState.unlimitedThrowables !== sectorState.unlimitedThrowables) return true;
         if (tempSectorState.noReload !== sectorState.noReload) return true;
 
-        const keys = Object.keys(WEAPONS) as WeaponType[];
-        for (const k of keys) {
+        const weapons = Object.values(WEAPONS).filter(Boolean);
+        for (const w of weapons) {
+            const k = w.name;
             if ((tempWeaponLevels[k] || 1) !== (weaponLevels[k] || 1)) return true;
         }
+
         return false;
     }, [tempStats, tempLoadout, tempWeaponLevels, tempSectorState, stats, currentLoadout, weaponLevels, sectorState]);
 
@@ -144,7 +146,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                                         }
                                     `}
                                 >
-                                    <span className="text-[10px] md:text-sm uppercase tracking-widest">{cat}</span>
+                                    <span className="text-[10px] md:text-sm uppercase tracking-widest">{t(`categories.${WeaponCategory[cat].toLowerCase()}`)}</span>
                                 </button>
                             );
                         })}

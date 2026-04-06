@@ -47,7 +47,8 @@ export class ZombieRenderer {
         }
     }
 
-    private createInstances(type: string, material: THREE.Material) {
+    private createInstances(type: EnemyType | string, material: THREE.Material) {
+
         const mesh = new THREE.InstancedMesh(GEOMETRY.zombie, material, this.maxInstances);
         mesh.castShadow = true;
         mesh.receiveShadow = true;

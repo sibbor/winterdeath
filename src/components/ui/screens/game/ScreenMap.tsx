@@ -5,6 +5,8 @@ import { soundManager } from '../../../../utils/audio/SoundManager';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { useHudStore } from '../../../../hooks/useHudStore';
 import { HudStore } from '../../../../store/HudStore';
+import { DamageID } from '../../../../entities/player/CombatTypes';
+
 
 interface ScreenMapProps {
     onClose: () => void;
@@ -221,7 +223,8 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
 
             // Update Family
             if (familyRef.current) {
-                if (state.activeWeapon === 'Radio' && state.familyPos) {
+                if (state.activeWeapon === DamageID.RADIO && state.familyPos) {
+
                     const posF = getMapPercent(state.familyPos.x, state.familyPos.z, bounds);
                     familyRef.current.style.display = 'block';
                     familyRef.current.style.left = `${posF.x}%`;

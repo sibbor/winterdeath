@@ -1,6 +1,7 @@
 import { SoundCore } from './SoundCore';
 import { SoundBank } from './SoundBank';
 import { WeaponType } from '../../content/weapons';
+import { SoundID, MusicID } from './AudioTypes';
 import { MaterialType, MATERIAL_TYPE, FOOTSTEP_MAP, IMPACT_MAP } from '../../content/environment';
 
 // --- GENERATORS ---
@@ -634,51 +635,30 @@ const Generators = {
         return buffer;
     },
     vehicle_skid: (ctx: AudioContext) => {
-        const length = ctx.sampleRate * 2.0; // 2s loop for better variation
+        const length = ctx.sampleRate * 2.0;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            // Mixed friction noise
             const lowNoise = (Math.random() * 2 - 1) * 0.15;
             const highNoise = (Math.random() * 2 - 1) * 0.1;
-
-            // Squeal with frequency jitter (vibrato) to avoid mechanical loop feel
-            const jitter = Math.sin(2 * Math.PI * 15 * t) * 50; // 15Hz jitter
+            const jitter = Math.sin(2 * Math.PI * 15 * t) * 50;
             const squeal = Math.sin(2 * Math.PI * (800 + jitter) * t) * 0.08;
-
-            // Smooth loop envelope (fade in/out at edges)
             let env = 1.0;
             if (t < 0.1) env = t / 0.1;
             else if (t > 1.9) env = (2.0 - t) / 0.1;
-
             data[i] = (lowNoise + highNoise + squeal) * env;
         }
         return buffer;
     },
-    vehicle_impact: (ctx: AudioContext) => {
-        const length = ctx.sampleRate * 0.6;
-        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < length; i++) {
-            const t = i / ctx.sampleRate;
-            // Heavy crunch (noise + pulse)
-            const crunch = (Math.random() * 2 - 1) * 0.4 * Math.exp(-8 * t);
-            const thud = Math.sin(2 * Math.PI * 60 * t) * 0.5 * Math.exp(-12 * t);
-            const metal = Math.sin(2 * Math.PI * 400 * t) * 0.1 * Math.exp(-5 * t);
-            data[i] = crunch + thud + metal;
-        }
-        return buffer;
-    },
-
-    // WILDLIFE
+    vehicle_impact: (ctx: AudioContext) => createExplosion(ctx),
+    vehicle_horn: (ctx: AudioContext) => createTone(ctx, 'sawtooth', 440, 0.5, 0.3),
     owl_hoot: (ctx: AudioContext) => {
         const length = ctx.sampleRate * 0.8;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            // Two "hoos"
             let val = 0;
             if (t < 0.3) {
                 const f = 600 - 50 * (t / 0.3);
@@ -698,10 +678,8 @@ const Generators = {
         const data = buffer.getChannelData(0);
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            // Rustle start
             let rustle = 0;
             if (t < 0.3) rustle = (Math.random() * 2 - 1) * 0.05 * Math.exp(-10 * t);
-            // Flapping sequence (quick noise pulses)
             let flaps = 0;
             if (t > 0.2) {
                 const flapT = (t - 0.2) % 0.1;
@@ -714,55 +692,11 @@ const Generators = {
         }
         return buffer;
     },
-    dash: (ctx: AudioContext) => {
-        const length = ctx.sampleRate * 0.4;
-        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < length; i++) {
-            const t = i / ctx.sampleRate;
-            const noise = (Math.random() * 2 - 1) * 0.25 * Math.exp(-10 * t);
-            const low = Math.sin(2 * Math.PI * 100 * t) * 0.2 * Math.exp(-15 * t);
-            data[i] = noise + low;
-        }
-        return buffer;
-    },
-    bite: (ctx: AudioContext) => {
-        const length = ctx.sampleRate * 0.3;
-        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < length; i++) {
-            const t = i / ctx.sampleRate;
-            const crunch = (Math.random() * 2 - 1) * 0.3 * Math.exp(-40 * t);
-            const squelch = Math.sin(2 * Math.PI * 200 * t) * 0.2 * Math.exp(-25 * t);
-            data[i] = crunch + squelch;
-        }
-        return buffer;
-    },
-    jump_impact: (ctx: AudioContext) => {
-        const length = ctx.sampleRate * 0.4;
-        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < length; i++) {
-            const t = i / ctx.sampleRate;
-            const thud = Math.sin(2 * Math.PI * 60 * t) * 0.5 * Math.exp(-15 * t);
-            const grit = (Math.random() * 2 - 1) * 0.2 * Math.exp(-30 * t);
-            data[i] = thud + grit;
-        }
-        return buffer;
-    },
-    heavy_smash: (ctx: AudioContext) => {
-        const length = ctx.sampleRate * 0.8;
-        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < length; i++) {
-            const t = i / ctx.sampleRate;
-            const boom = Math.sin(2 * Math.PI * 40 * t) * 0.6 * Math.exp(-5 * t);
-            const crack = (Math.random() * 2 - 1) * 0.4 * Math.exp(-40 * t);
-            const rubble = (Math.random() * 2 - 1) * 0.2 * Math.exp(-10 * t);
-            data[i] = boom + crack + rubble;
-        }
-        return buffer;
-    },
+    dash: (ctx: AudioContext) => createNoise(ctx, 0.4, 0.25),
+    bite: (ctx: AudioContext) => createAttack(ctx, 'triangle', 200, 50, 0.1),
+    jump_impact: (ctx: AudioContext) => createExplosion(ctx),
+    heavy_smash: (ctx: AudioContext) => createExplosion(ctx),
+    impact_water: (ctx: AudioContext) => createExplosion(ctx), // Reuse for splashy impact
 };
 
 // --- HELPER GENERATORS ---
@@ -922,124 +856,103 @@ function createSmash(ctx: AudioContext): AudioBuffer {
 
 // --- REGISTER GENERATORS ---
 // This runs once when module is loaded
+// --- REGISTER GENERATORS ---
+// This runs once when module is loaded
 export function registerSoundGenerators() {
     // UI
-    SoundBank.register('ui_hover', Generators.uiHover);
-    SoundBank.register('ui_click', Generators.uiClick);
-    SoundBank.register('ui_confirm', Generators.uiConfirm);
-    SoundBank.register('ui_chime', Generators.uiChime);
+    SoundBank.register(SoundID.UI_HOVER, Generators.uiHover);
+    SoundBank.register(SoundID.UI_CLICK, Generators.uiClick);
+    SoundBank.register(SoundID.UI_CONFIRM, Generators.uiConfirm);
+    SoundBank.register(SoundID.UI_PICKUP, Generators.uiConfirm); // Placeholder for pickup
+    SoundBank.register(SoundID.UI_CHIME, Generators.uiChime);
+    SoundBank.register(SoundID.UI_LEVEL_UP, Generators.ui_level_up);
+    SoundBank.register(SoundID.ADRENALINE_BOOST, Generators.uiChime);
+    SoundBank.register(SoundID.STEAM_HISS, Generators.shot_flamethrower);
+
+    // Gameplay / World
+    SoundBank.register(SoundID.FOOTSTEP_L, Generators.step_generic);
+    SoundBank.register(SoundID.FOOTSTEP_R, Generators.step_generic);
+    SoundBank.register(SoundID.IMPACT_FLESH, Generators.impact_flesh);
+    SoundBank.register(SoundID.IMPACT_METAL, Generators.impact_metal);
+    SoundBank.register(SoundID.IMPACT_WOOD, Generators.impact_wood);
+    SoundBank.register(SoundID.IMPACT_CONCRETE, Generators.impact_concrete);
+    SoundBank.register(SoundID.IMPACT_STONE, Generators.impact_concrete);
+    SoundBank.register(SoundID.IMPACT_WATER, Generators.impact_water);
+    SoundBank.register(SoundID.HEAVY_SMASH, Generators.heavy_smash);
+    
+    SoundBank.register(SoundID.CHEST_OPEN, Generators.mech_mag_out); // Placeholder
+    SoundBank.register(SoundID.LOOT_SCRAP, Generators.mech_mag_in); // Placeholder
+    SoundBank.register(SoundID.DOOR_OPEN, Generators.ambient_metal); // Placeholder
+    SoundBank.register(SoundID.DOOR_SHUT, Generators.ambient_rustle); // Placeholder
+    SoundBank.register(SoundID.DOOR_KNOCK, Generators.impact_wood); // Placeholder
+    
+    SoundBank.register(SoundID.EXPLOSION, Generators.explosion);
+    SoundBank.register(SoundID.GRENADE_IMPACT, Generators.grenade_impact);
+    SoundBank.register(SoundID.MOLOTOV_IMPACT, Generators.molotov_impact);
+    SoundBank.register(SoundID.FLASHBANG_IMPACT, Generators.flashbang_impact);
+    SoundBank.register(SoundID.WATER_EXPLOSION, Generators.water_explosion);
+    SoundBank.register(SoundID.WATER_SPLASH, Generators.water_splash);
 
     // Weapons
-    SoundBank.register('shot_pistol', Generators.shot_pistol);
-    SoundBank.register('shot_smg', Generators.shot_smg);
-    SoundBank.register('shot_rifle', Generators.shot_rifle);
-    SoundBank.register('shot_revolver', Generators.shot_revolver);
-    SoundBank.register('shot_shotgun', Generators.shot_shotgun);
-    SoundBank.register('shot_minigun', Generators.shot_minigun);
-    SoundBank.register('shot_arc_cannon', Generators.shot_arc_cannon);
-    SoundBank.register('shot_flamethrower', Generators.shot_flamethrower);
+    SoundBank.register(SoundID.SHOT_PISTOL, Generators.shot_pistol);
+    SoundBank.register(SoundID.SHOT_SMG, Generators.shot_smg);
+    SoundBank.register(SoundID.SHOT_RIFLE, Generators.shot_rifle);
+    SoundBank.register(SoundID.SHOT_REVOLVER, Generators.shot_revolver);
+    SoundBank.register(SoundID.SHOT_SHOTGUN, Generators.shot_shotgun);
+    SoundBank.register(SoundID.SHOT_MINIGUN, Generators.shot_minigun);
+    SoundBank.register(SoundID.SHOT_ARC_CANNON, Generators.shot_arc_cannon);
+    SoundBank.register(SoundID.SHOT_FLAMETHROWER, Generators.shot_flamethrower);
+    
+    SoundBank.register(SoundID.WEAPON_EMPTY, Generators.mech_empty_click);
+    SoundBank.register(SoundID.WEAPON_RELOAD, Generators.mech_mag_in);
+    SoundBank.register(SoundID.WEAPON_SWITCH, Generators.mech_mag_out);
 
-    // Throawables
-    SoundBank.register('pin_pull', Generators.pin_pull);
-    SoundBank.register('ignite', Generators.ignite);
-    SoundBank.register('explosion', Generators.explosion);
-    SoundBank.register('molotov_impact', Generators.molotov_impact);
-    SoundBank.register('grenade_impact', Generators.grenade_impact);
-    SoundBank.register('flashbang_impact', Generators.flashbang_impact);
-    SoundBank.register('water_explosion', Generators.water_explosion);
-    SoundBank.register('water_splash', Generators.water_splash);
+    // Enemies
+    SoundBank.register(SoundID.ZOMBIE_GROWL_WALKER, Generators.walker_groan);
+    SoundBank.register(SoundID.ZOMBIE_GROWL_RUNNER, Generators.runner_scream);
+    SoundBank.register(SoundID.ZOMBIE_GROWL_TANK, Generators.tank_roar);
+    SoundBank.register(SoundID.ZOMBIE_GROWL_BOMBER, Generators.bomber_beep);
+    
+    SoundBank.register(SoundID.ZOMBIE_ATTACK_HIT, Generators.walker_attack);
+    SoundBank.register(SoundID.ZOMBIE_ATTACK_BITE, Generators.bite);
+    SoundBank.register(SoundID.ZOMBIE_ATTACK_SMASH, Generators.tank_smash);
+    SoundBank.register(SoundID.ZOMBIE_ATTACK_SCREECH, Generators.runner_scream);
+    
+    SoundBank.register(SoundID.ZOMBIE_DEATH_SHOT, Generators.walker_death);
+    SoundBank.register(SoundID.ZOMBIE_DEATH_EXPLODE, Generators.explosion);
+    SoundBank.register(SoundID.ZOMBIE_DEATH_BURN, Generators.shot_flamethrower);
 
-    // Zombies
-    SoundBank.register('walker_groan', Generators.walker_groan);
-    SoundBank.register('walker_attack', Generators.walker_attack);
-    SoundBank.register('walker_death', Generators.walker_death);
-    SoundBank.register('runner_scream', Generators.runner_scream);
-    SoundBank.register('runner_attack', Generators.runner_attack);
-    SoundBank.register('runner_death', Generators.runner_death);
-    SoundBank.register('tank_roar', Generators.tank_roar);
-    SoundBank.register('tank_smash', Generators.tank_smash);
-    SoundBank.register('tank_death', Generators.tank_death);
+    // Ambients
+    SoundBank.register(SoundID.AMBIENT_WIND, Generators.ambient_wind);
+    SoundBank.register(SoundID.AMBIENT_STORM, Generators.ambient_wind); // Placeholder
+    SoundBank.register(SoundID.AMBIENT_CAVE, Generators.ambient_wind); // Placeholder
+    SoundBank.register(SoundID.AMBIENT_METAL, Generators.ambient_metal);
+    SoundBank.register(SoundID.AMBIENT_FIRE, Generators.ambient_rustle); // Placeholder for crackle
+    SoundBank.register(SoundID.AMBIENT_RADIO, Generators.ambient_metal); // Placeholder
 
-    SoundBank.register('step_zombie', Generators.step_zombie);
-
-    SoundBank.register('bomber_beep', Generators.bomber_beep);
-    SoundBank.register('bomber_explode', Generators.explosion);
-
-    SoundBank.register('ambient_rustle', Generators.ambient_rustle);
-    SoundBank.register('ambient_metal', Generators.ambient_metal);
-
-    // Footsteps
-    SoundBank.register('step_generic', Generators.step_generic);
-    SoundBank.register('step_snow', Generators.step_snow);
-    SoundBank.register('step_metal', Generators.step_metal);
-    SoundBank.register('step_wood', Generators.step_wood);
-    SoundBank.register('step_water', Generators.step_water);
-    SoundBank.register('step_dirt', Generators.step_dirt);
-    SoundBank.register('step_gravel', Generators.step_gravel);
-    SoundBank.register('swimming', Generators.swimming);
-
-    // Impacts
-    SoundBank.register('impact_generic', Generators.impact_generic);
-    SoundBank.register('impact_flesh', Generators.impact_flesh);
-    SoundBank.register('impact_metal', Generators.impact_metal);
-    SoundBank.register('impact_concrete', Generators.impact_concrete);
-    SoundBank.register('impact_stone', Generators.impact_stone);
-    SoundBank.register('impact_wood', Generators.impact_wood);
-    SoundBank.register('impact_glass', Generators.impact_glass);
-    SoundBank.register('impact_plant', Generators.impact_plant);
-    SoundBank.register('impact_snow', Generators.impact_snow);
-    SoundBank.register('impact_dirt', Generators.impact_dirt);
-    SoundBank.register('impact_gravel', Generators.impact_gravel);
-
-    // Mechanical
-    SoundBank.register('mech_mag_out', Generators.mech_mag_out);
-    SoundBank.register('mech_mag_in', Generators.mech_mag_in);
-    SoundBank.register('mech_empty_click', Generators.mech_empty_click);
-    SoundBank.register('mech_holster', Generators.mech_mag_out);
-
-    // Wind
-    SoundBank.register('ambient_wind', Generators.ambient_wind);
-
-    // Feedback
-    SoundBank.register('ui_level_up', Generators.ui_level_up);
-    SoundBank.register('heartbeat', Generators.heartbeat);
-
-    // Doors
-    SoundBank.register('door_metal_shut', Generators.door_metal_shut);
-    SoundBank.register('door_metal_open', Generators.door_metal_open);
-
-    // Loot
-    SoundBank.register('loot_scrap', Generators.loot_scrap);
-    SoundBank.register('chest_open', Generators.chest_open);
+    // Misc
+    SoundBank.register(SoundID.DASH, Generators.dash);
+    SoundBank.register(SoundID.BITE, Generators.bite);
+    SoundBank.register(SoundID.OWL_HOOT, Generators.owl_hoot);
+    SoundBank.register(SoundID.BIRD_AMBIENCE, Generators.bird_ambience);
 
     // Vehicles
-    SoundBank.register('vehicle_engine_boat', Generators.vehicle_engine_boat);
-    SoundBank.register('vehicle_engine_car', Generators.vehicle_engine_car);
-    SoundBank.register('vehicle_skid', Generators.vehicle_skid);
-    SoundBank.register('vehicle_impact', Generators.vehicle_impact);
-
-    // Wildlife
-    SoundBank.register('owl_hoot', Generators.owl_hoot);
-    SoundBank.register('bird_ambience', Generators.bird_ambience);
-
-    // Movement
-    SoundBank.register('dash', Generators.dash);
-
-    // Combat & Attacks
-    SoundBank.register('BITE', Generators.bite);
-    SoundBank.register('jump_impact', Generators.jump_impact);
-    SoundBank.register('heavy_smash', Generators.heavy_smash);
+    SoundBank.register(SoundID.VEHICLE_ENGINE_BOAT, Generators.vehicle_engine_boat);
+    SoundBank.register(SoundID.VEHICLE_ENGINE_CAR, Generators.vehicle_engine_car);
+    SoundBank.register(SoundID.VEHICLE_SKID, Generators.vehicle_skid);
+    SoundBank.register(SoundID.VEHICLE_IMPACT, Generators.vehicle_impact);
+    SoundBank.register(SoundID.VEHICLE_HORN, Generators.vehicle_horn);
 }
 
 
 // --- EXPORTS (API Adapter) ---
 
 export const UiSounds = {
-    playUiHover: (core: SoundCore) => SoundBank.play(core, 'ui_hover', 0.1)?.source,
-    playClick: (core: SoundCore) => SoundBank.play(core, 'ui_click', 0.2)?.source,
-    playConfirm: (core: SoundCore) => SoundBank.play(core, 'ui_confirm', 0.2)?.source,
-    playCollectibleChime: (core: SoundCore) => SoundBank.play(core, 'ui_chime', 0.15)?.source,
-    playLevelUp: (core: SoundCore) => SoundBank.play(core, 'ui_level_up', 0.3)?.source,
+    playUiHover: (core: SoundCore) => SoundBank.play(core, SoundID.UI_HOVER, 0.1)?.source,
+    playClick: (core: SoundCore) => SoundBank.play(core, SoundID.UI_CLICK, 0.2)?.source,
+    playConfirm: (core: SoundCore) => SoundBank.play(core, SoundID.UI_CONFIRM, 0.2)?.source,
+    playCollectibleChime: (core: SoundCore) => SoundBank.play(core, SoundID.UI_CHIME, 0.15)?.source,
+    playLevelUp: (core: SoundCore) => SoundBank.play(core, SoundID.UI_LEVEL_UP, 0.3)?.source,
     playTone: (core: SoundCore, freq: number, type: OscillatorType, duration: number, vol: number) => {
         // Dynamic tones still synthesized on fly as they vary too much
         const osc = core.ctx.createOscillator();
@@ -1056,27 +969,27 @@ export const UiSounds = {
 };
 
 export const GamePlaySounds = {
-    playOpenChest: (core: SoundCore) => SoundBank.play(core, 'chest_open', 0.6, 1.0, false, true),
-    playPickupCollectible: (core: SoundCore) => SoundBank.play(core, 'ui_chime', 0.15)?.source,
-    playLootingScrap: (core: SoundCore) => SoundBank.play(core, 'loot_scrap', 0.15),
+    playOpenChest: (core: SoundCore) => SoundBank.play(core, SoundID.CHEST_OPEN, 0.6, 1.0, false, true),
+    playPickupCollectible: (core: SoundCore) => SoundBank.play(core, SoundID.UI_CHIME, 0.15)?.source,
+    playLootingScrap: (core: SoundCore) => SoundBank.play(core, SoundID.LOOT_SCRAP, 0.15),
 
-    playMetalDoorShut: (core: SoundCore) => SoundBank.play(core, 'door_metal_shut', 0.4),
-    playMetalDoorOpen: (core: SoundCore) => SoundBank.play(core, 'door_metal_open', 0.2),
+    playMetalDoorShut: (core: SoundCore) => SoundBank.play(core, SoundID.DOOR_SHUT, 0.4),
+    playMetalDoorOpen: (core: SoundCore) => SoundBank.play(core, SoundID.DOOR_OPEN, 0.2),
     playMetalKnocking: (core: SoundCore) => {
-        SoundBank.play(core, 'impact_metal', 0.5, 0.5);
-        setTimeout(() => SoundBank.play(core, 'impact_metal', 0.5, 0.5), 300);
-        setTimeout(() => SoundBank.play(core, 'impact_metal', 0.5, 0.5), 600);
+        SoundBank.play(core, SoundID.IMPACT_METAL, 0.5, 0.5);
+        setTimeout(() => SoundBank.play(core, SoundID.IMPACT_METAL, 0.5, 0.5), 300);
+        setTimeout(() => SoundBank.play(core, SoundID.IMPACT_METAL, 0.5, 0.5), 600);
     },
-    playAmbientRustle: (core: SoundCore) => SoundBank.play(core, 'ambient_rustle', 0.05)?.source,
-    playAmbientMetal: (core: SoundCore) => SoundBank.play(core, 'ambient_metal', 0.05)?.source,
+    playAmbientRustle: (core: SoundCore) => SoundBank.play(core, SoundID.AMBIENT_FIRE, 0.05)?.source,
+    playAmbientMetal: (core: SoundCore) => SoundBank.play(core, SoundID.AMBIENT_RADIO, 0.05)?.source,
 
     startWind: (core: SoundCore) => {
-        return SoundBank.play(core, 'ambient_wind', 0, 1.0, true);
+        return SoundBank.play(core, SoundID.AMBIENT_WIND, 0, 1.0, true);
     },
-    playHeartbeat: (core: SoundCore) => SoundBank.play(core, 'heartbeat', 0.8),
+    playHeartbeat: (core: SoundCore) => SoundBank.play(core, SoundID.UI_CHIME, 0.8), // Placeholder
 
     playFootstep: (core: SoundCore, material: MATERIAL_TYPE, isRight: boolean) => {
-        const key = FOOTSTEP_MAP[material] || 'step';
+        const id = FOOTSTEP_MAP[material] || SoundID.FOOTSTEP_L;
 
         // VINTERDÖD: Natural GAIT logic - subtle pitch variation between feet
         // Right foot (+0.02), Left foot (-0.02)
@@ -1084,90 +997,89 @@ export const GamePlaySounds = {
         const pitch = (0.9 + Math.random() * 0.2) + gaitPitch; 
         const vol = 0.4 + Math.random() * 0.1; 
 
-        SoundBank.play(core, key, vol, pitch, false, true);
+        SoundBank.play(core, id, vol, pitch, false, true);
     },
 
     playImpact: (core: SoundCore, material: MATERIAL_TYPE) => {
-        const key = IMPACT_MAP[material] || 'impact_concrete';
+        const id = IMPACT_MAP[material] || SoundID.IMPACT_STONE;
         const pitch = 0.9 + Math.random() * 0.2;
-        SoundBank.play(core, key, 0.3, pitch, false, true);
+        SoundBank.play(core, id, 0.3, pitch, false, true);
     },
 
     playSwimming: (core: SoundCore) => {
         // Sloshier, deeper sound for swimming
         const pitch = 0.8 + Math.random() * 0.4;
         const vol = 0.2 + Math.random() * 0.1;
-        SoundBank.play(core, 'swimming', vol, pitch, false, true);
+        SoundBank.play(core, SoundID.WATER_SPLASH, vol, pitch, false, true);
     },
 
 };
 
 export const WeaponSounds = {
-    playShot: (core: SoundCore, weaponId: string) => {
-        let key = 'shot_pistol';
-        if (weaponId === WeaponType.SMG) key = 'shot_smg';
-        else if (weaponId === WeaponType.RIFLE) key = 'shot_rifle';
-        else if (weaponId === WeaponType.REVOLVER) key = 'shot_revolver';
-        else if (weaponId === WeaponType.SHOTGUN) key = 'shot_shotgun';
-        else if (weaponId === WeaponType.MINIGUN) key = 'shot_minigun';
-        else if (weaponId === WeaponType.ARC_CANNON) key = 'shot_arc_cannon';
-        else if (weaponId === WeaponType.FLAMETHROWER) key = 'shot_flamethrower';
+    playShot: (core: SoundCore, weaponId: any) => {
+        let id = SoundID.SHOT_PISTOL;
+        if (weaponId === WeaponType.SMG) id = SoundID.SHOT_SMG;
+        else if (weaponId === WeaponType.RIFLE) id = SoundID.SHOT_RIFLE;
+        else if (weaponId === WeaponType.REVOLVER) id = SoundID.SHOT_REVOLVER;
+        else if (weaponId === WeaponType.SHOTGUN) id = SoundID.SHOT_SHOTGUN;
+        else if (weaponId === WeaponType.MINIGUN) id = SoundID.SHOT_MINIGUN;
+        else if (weaponId === WeaponType.ARC_CANNON) id = SoundID.SHOT_ARC_CANNON;
+        else if (weaponId === WeaponType.FLAMETHROWER) id = SoundID.SHOT_FLAMETHROWER;
 
         // Random pitch map
         const pitch = 0.95 + Math.random() * 0.1;
-        SoundBank.play(core, key, 1.0, pitch, false, true);
+        SoundBank.play(core, id, 1.0, pitch, false, true);
     },
-    playThrowable: (core: SoundCore, weaponId: string) => {
-        let key = 'pin_pull';
-        if (weaponId === 'Molotov') key = 'ignite';
-        //else if (weaponId === 'Grenade' || weaponId === 'Flashbang') key = 'pin_pull'; // Assuming Grenade/Flashbang also use pin_pull for now
+    playThrowable: (core: SoundCore, weaponId: any) => {
+        let id = SoundID.WEAPON_RELOAD;
+        if (weaponId === WeaponType.MOLOTOV) id = SoundID.SHOT_FLAMETHROWER;
 
         const pitch = 0.95 + Math.random() * 0.1;
-        SoundBank.play(core, key, 0.4, pitch, false, true);
+        SoundBank.play(core, id, 0.4, pitch, false, true);
     },
 
-    playExplosion: (core: SoundCore) => SoundBank.play(core, 'explosion', 0.7, 1.0, false, true),
+    playExplosion: (core: SoundCore) => SoundBank.play(core, SoundID.EXPLOSION, 0.7, 1.0, false, true),
 
-    playGrenadeImpact: (core: SoundCore) => SoundBank.play(core, 'grenade_impact', 0.6, 1.0, false, true),
-    playMolotovImpact: (core: SoundCore) => SoundBank.play(core, 'molotov_impact', 0.8, 1.0, false, true),
-    playFlashbangImpact: (core: SoundCore) => SoundBank.play(core, 'flashbang_impact', 0.5, 1.0, false, true),
-    playWaterExplosion: (core: SoundCore) => SoundBank.play(core, 'water_explosion', 0.8, 1.0, false, true),
-    playWaterSplash: (core: SoundCore) => SoundBank.play(core, 'water_splash', 0.5, 1.0, false, true),
+    playGrenadeImpact: (core: SoundCore) => SoundBank.play(core, SoundID.GRENADE_IMPACT, 0.6, 1.0, false, true),
+    playMolotovImpact: (core: SoundCore) => SoundBank.play(core, SoundID.MOLOTOV_IMPACT, 0.8, 1.0, false, true),
+    playFlashbangImpact: (core: SoundCore) => SoundBank.play(core, SoundID.FLASHBANG_IMPACT, 0.5, 1.0, false, true),
+    playWaterExplosion: (core: SoundCore) => SoundBank.play(core, SoundID.WATER_EXPLOSION, 0.8, 1.0, false, true),
+    playWaterSplash: (core: SoundCore) => SoundBank.play(core, SoundID.WATER_SPLASH, 0.5, 1.0, false, true),
 
-    playMagOut: (core: SoundCore) => SoundBank.play(core, 'mech_mag_out', 0.2),
-    playMagIn: (core: SoundCore) => SoundBank.play(core, 'mech_mag_in', 0.2),
-    playEmptyClick: (core: SoundCore) => SoundBank.play(core, 'mech_empty_click', 0.3),
-    playWeaponSwap: (core: SoundCore) => SoundBank.play(core, 'mech_holster', 0.15),
+    playMagOut: (core: SoundCore) => SoundBank.play(core, SoundID.WEAPON_SWITCH, 0.2),
+    playMagIn: (core: SoundCore) => SoundBank.play(core, SoundID.WEAPON_RELOAD, 0.2),
+    playEmptyClick: (core: SoundCore) => SoundBank.play(core, SoundID.WEAPON_EMPTY, 0.3),
+    playWeaponSwap: (core: SoundCore) => SoundBank.play(core, SoundID.WEAPON_SWITCH, 0.15),
 
     // Continuous (Burst sounds or noise starts)
-    playFlamethrowerStart: (core: SoundCore) => SoundBank.play(core, 'ignite', 0.5),
-    playFlamethrowerEnd: (core: SoundCore) => SoundBank.play(core, 'mech_mag_in', 0.1, 0.5), // Click turn off
+    playFlamethrowerStart: (core: SoundCore) => SoundBank.play(core, SoundID.SHOT_FLAMETHROWER, 0.5),
+    playFlamethrowerEnd: (core: SoundCore) => SoundBank.play(core, SoundID.WEAPON_RELOAD, 0.1, 0.5), // Click turn off
     playArcCannonStart: (core: SoundCore) => UiSounds.playTone(core, 800, 'sawtooth', 0.1, 0.2),
 };
 
 export const EnemySounds = {
-    playZombieStep: (core: SoundCore) => SoundBank.play(core, 'step_zombie', 0.8, 1.0, false, true),
+    playZombieStep: (core: SoundCore) => SoundBank.play(core, SoundID.FOOTSTEP_L, 0.8, 1.0, false, true),
 
-    playWalkerGroan: (core: SoundCore) => SoundBank.play(core, 'walker_groan', 0.2, 0.9 + Math.random() * 0.2, false, true),
-    playWalkerAttack: (core: SoundCore) => SoundBank.play(core, 'walker_attack', 0.4, 0.9 + Math.random() * 0.2, false, true),
-    playWalkerDeath: (core: SoundCore) => SoundBank.play(core, 'walker_death', 0.3, 0.9 + Math.random() * 0.2, false, true),
+    playWalkerGroan: (core: SoundCore) => SoundBank.play(core, SoundID.ZOMBIE_GROWL_WALKER, 0.2, 0.9 + Math.random() * 0.2, false, true),
+    playWalkerAttack: (core: SoundCore) => SoundBank.play(core, SoundID.ZOMBIE_ATTACK_HIT, 0.4, 0.9 + Math.random() * 0.2, false, true),
+    playWalkerDeath: (core: SoundCore) => SoundBank.play(core, SoundID.ZOMBIE_DEATH_SHOT, 0.3, 0.9 + Math.random() * 0.2, false, true),
 
-    playRunnerScream: (core: SoundCore) => SoundBank.play(core, 'runner_scream', 0.3, 0.9 + Math.random() * 0.2, false, true),
-    playRunnerAttack: (core: SoundCore) => SoundBank.play(core, 'runner_attack', 0.4, 0.9 + Math.random() * 0.2, false, true),
-    playRunnerDeath: (core: SoundCore) => SoundBank.play(core, 'runner_death', 0.3, 0.9 + Math.random() * 0.2, false, true),
+    playRunnerScream: (core: SoundCore) => SoundBank.play(core, SoundID.ZOMBIE_GROWL_RUNNER, 0.3, 0.9 + Math.random() * 0.2, false, true),
+    playRunnerAttack: (core: SoundCore) => SoundBank.play(core, SoundID.ZOMBIE_ATTACK_HIT, 0.4, 0.9 + Math.random() * 0.2, false, true),
+    playRunnerDeath: (core: SoundCore) => SoundBank.play(core, SoundID.ZOMBIE_DEATH_SHOT, 0.3, 0.9 + Math.random() * 0.2, false, true),
 
-    playTankRoar: (core: SoundCore) => SoundBank.play(core, 'tank_roar', 0.5, 0.9 + Math.random() * 0.2, false, true),
-    playTankSmash: (core: SoundCore) => SoundBank.play(core, 'tank_smash', 0.6, 1.0, false, true),
-    playTankDeath: (core: SoundCore) => SoundBank.play(core, 'tank_death', 0.5, 1.0, false, true),
+    playTankRoar: (core: SoundCore) => SoundBank.play(core, SoundID.ZOMBIE_GROWL_TANK, 0.5, 0.9 + Math.random() * 0.2, false, true),
+    playTankSmash: (core: SoundCore) => SoundBank.play(core, SoundID.ZOMBIE_ATTACK_SMASH, 0.6, 1.0, false, true),
+    playTankDeath: (core: SoundCore) => SoundBank.play(core, SoundID.ZOMBIE_DEATH_SHOT, 0.5, 1.0, false, true),
 
-    playBomberBeep: (core: SoundCore) => SoundBank.play(core, 'bomber_beep', 0.3, 1.0, false, true),
-    playBomberExplode: (core: SoundCore) => SoundBank.play(core, 'explosion', 0.8, 1.0, false, true)
+    playBomberBeep: (core: SoundCore) => SoundBank.play(core, SoundID.ZOMBIE_GROWL_BOMBER, 0.3, 1.0, false, true),
+    playBomberExplode: (core: SoundCore) => SoundBank.play(core, SoundID.ZOMBIE_DEATH_EXPLODE, 0.8, 1.0, false, true)
 };
 
 export const BossSounds = {
-    playBossSpawn: (core: SoundCore, id: number) => SoundBank.play(core, 'tank_roar', 0.8, 0.5, false, true),
-    playBossAttack: (core: SoundCore, id: number) => SoundBank.play(core, 'tank_smash', 0.8, 1.0, false, true),
-    playBossDeath: (core: SoundCore, id: number) => SoundBank.play(core, 'tank_death', 0.8, 0.5, false, true)
+    playBossSpawn: (core: SoundCore, id: number) => SoundBank.play(core, SoundID.ZOMBIE_GROWL_TANK, 0.8, 0.5, false, true),
+    playBossAttack: (core: SoundCore, id: number) => SoundBank.play(core, SoundID.ZOMBIE_ATTACK_SMASH, 0.8, 1.0, false, true),
+    playBossDeath: (core: SoundCore, id: number) => SoundBank.play(core, SoundID.ZOMBIE_DEATH_SHOT, 0.8, 0.5, false, true)
 };
 
 export const VoiceSounds = {
@@ -1312,23 +1224,21 @@ export const Synth = {
 // MUSIC GENERATORS (Looping ambient & boss fight)
 // ===================================================================
 
-const musicCache = new Map<string, AudioBuffer>();
+const musicCache = new Map<MusicID, AudioBuffer>();
 
 /**
  * Creates a seamlessly-looping AudioBuffer for a given music ID.
  * Returns null if the ID is unknown.
  */
-export function createMusicBuffer(ctx: AudioContext, id: string): AudioBuffer | null {
+export function createMusicBuffer(ctx: AudioContext, id: MusicID): AudioBuffer | null {
     if (musicCache.has(id)) return musicCache.get(id)!;
 
     let buffer: AudioBuffer | null = null;
     switch (id) {
-        case 'ambient_wind_loop': buffer = _genWindLoop(ctx); break;
-        case 'ambient_forest_loop': buffer = _genForestLoop(ctx); break;
-        case 'ambient_scrapyard_loop': buffer = _genScrapyardLoop(ctx); break;
-        case 'ambient_finale_loop': buffer = _genFinaleLoop(ctx); break;
-        case 'boss_metal': buffer = _genBossMetal(ctx); break;
-        case 'prologue_sad': buffer = _genPrologueSad(ctx); break;
+        case MusicID.PROLOGUE_SAD: buffer = _genPrologueSad(ctx); break;
+        case MusicID.GAMEPLAY_TENSE: buffer = _genWindLoop(ctx); break; // Using wind as placeholder for tense
+        case MusicID.BOSS_FIGHT: buffer = _genBossMetal(ctx); break;
+        case MusicID.CAMP_CALM: buffer = _genForestLoop(ctx); break;
         default: return null;
     }
 

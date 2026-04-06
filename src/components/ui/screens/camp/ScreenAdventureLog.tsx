@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { PlayerStats } from '../../../../entities/player/PlayerTypes';
+import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
 import { t } from '../../../../utils/i18n';
 import { COLLECTIBLES } from '../../../../content/collectibles';
 import { CLUES } from '../../../../content/clues';
@@ -11,6 +11,9 @@ import { ZOMBIE_TYPES, BOSSES } from '../../../../content/constants';
 import { SECTOR_THEMES } from '../../../../content/sectors/sector_themes';
 import { soundManager } from '../../../../utils/audio/SoundManager';
 import { PERKS, PerkCategory, PerkColor } from '../../../../content/perks';
+import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
+import { DamageID, EnemyAttackType } from '../../../../entities/player/CombatTypes';
+import { ENEMY_TYPE_KEYS, DAMAGE_ID_KEYS, ATTACK_TYPE_KEYS, WEAPON_CATEGORY_KEYS, BOSS_NAME_KEYS } from '../../../../utils/ui/Mappers';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
@@ -113,15 +116,18 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 break;
             }
             case 'enemy': {
-                stats.seenEnemies = Object.keys(ZOMBIE_TYPES);
+                const allTypes = Object.values(EnemyType).filter(v => typeof v === 'number') as number[];
+                stats.seenEnemies = [...new Set([...(stats.seenEnemies || []), ...allTypes])];
                 if (!stats.killsByType) stats.killsByType = {};
-                Object.keys(ZOMBIE_TYPES).forEach(k => {
-                    if (stats.killsByType![k] === undefined) stats.killsByType![k] = 0;
+                allTypes.forEach(typeSmi => {
+                    if (stats.killsByType![typeSmi] === undefined) stats.killsByType![typeSmi] = 0;
                 });
                 break;
             }
             case 'boss': {
-                stats.bossesDefeated = Object.keys(BOSSES).map(id => parseInt(id));
+                const allBossIds = [0, 1, 2, 3];
+                stats.seenBosses = [...new Set([...(stats.seenBosses || []), ...allBossIds])];
+                stats.bossesDefeated = [...new Set([...(stats.bossesDefeated || []), ...allBossIds])];
                 break;
             }
         }
@@ -209,15 +215,23 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
 };
 
 const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
-    const getRank = (level: number) => {
-        const rankKey = Math.min(Math.max(0, level - 1), 19);
-        const translated = t(`ranks.${rankKey}`);
-        return translated;
+    const sb = stats.statsBuffer;
+    const level       = Math.floor(sb[PlayerStatID.LEVEL]);
+    const currentXp   = Math.floor(sb[PlayerStatID.CURRENT_XP]);
+    const nextLevelXp = Math.floor(sb[PlayerStatID.NEXT_LEVEL_XP]);
+    const totalKills  = Math.floor(sb[PlayerStatID.TOTAL_KILLS]);
+    const dmgDealt    = Math.floor(sb[PlayerStatID.TOTAL_DAMAGE_DEALT]);
+    const dmgTaken    = Math.floor(sb[PlayerStatID.TOTAL_DAMAGE_TAKEN]);
+    const scrapTotal  = Math.floor(sb[PlayerStatID.TOTAL_SCRAP_COLLECTED]);
+
+    const getRank = (lvl: number) => {
+        const rankKey = Math.min(Math.max(0, lvl - 1), 19);
+        return t(`ranks.${rankKey}`);
     };
 
     const accuracy = stats.totalBulletsFired > 0
         ? ((stats.totalBulletsHit || 0) / stats.totalBulletsFired * 100).toFixed(1)
-        : "0.0";
+        : '0.0';
 
     const killsLabel = t('ui.kills');
     const displayKillsLabel = killsLabel.charAt(0).toUpperCase() + killsLabel.slice(1).toLowerCase();
@@ -229,13 +243,13 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Rea
                 {/* RANK BOX */}
                 <div className="bg-blue-900/20 border-2 border-blue-500/50 p-6 flex flex-col items-center text-center">
                     <span className="text-blue-400 text-sm font-bold uppercase tracking-widest mb-2">{t('ui.current_rank')}</span>
-                    <h1 className="text-4xl font-semibold text-white uppercase tracking-tighter mb-4">{getRank(stats.level)}</h1>
+                    <h1 className="text-4xl font-semibold text-white uppercase tracking-tighter mb-4">{getRank(level)}</h1>
                     <div className="w-full bg-black h-4 border border-blue-900 relative">
-                        <div className="h-full bg-blue-500" style={{ width: `${(stats.currentXp / stats.nextLevelXp) * 100}%` }}></div>
+                        <div className="h-full bg-blue-500" style={{ width: `${nextLevelXp > 0 ? (currentXp / nextLevelXp) * 100 : 0}%` }}></div>
                     </div>
                     <div className="flex justify-between w-full mt-2 text-xs font-mono text-blue-300">
-                        <span>{t('ui.lvl')} {stats.level}</span>
-                        <span>{stats.currentXp} / {stats.nextLevelXp} {t('ui.xp')}</span>
+                        <span>{t('ui.lvl')} {level}</span>
+                        <span>{currentXp} / {nextLevelXp} {t('ui.xp')}</span>
                     </div>
                 </div>
 
@@ -255,14 +269,14 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Rea
                 <div className="bg-black border border-gray-800 p-6">
                     <h3 className="text-xl font-semibold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.performance')}</h3>
                     <div className="space-y-3 text-sm">
-                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.xp_earned')}</span><span className="text-blue-400 font-mono font-bold text-lg">{stats.currentXp + ((stats.level - 1) * 1000)}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.xp_earned')}</span><span className="text-blue-400 font-mono font-bold text-lg">{currentXp + ((level - 1) * 1000)}</span></div>
                         <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.sp_earned')}</span><span className="text-purple-400 font-mono font-bold text-lg">{stats.totalSkillPointsEarned}</span></div>
-                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.scrap_scavenged')}</span><span className="text-yellow-500 font-mono text-lg">{stats.totalScrapCollected}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.scrap_scavenged')}</span><span className="text-yellow-500 font-mono text-lg">{scrapTotal.toLocaleString()}</span></div>
                         <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.sectors_completed')}</span><span className="text-white font-mono text-lg">{stats.sectorsCompleted}</span></div>
                         <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.chests_opened')}</span><span className="text-white font-mono text-lg">{stats.chestsOpened + stats.bigChestsOpened}</span></div>
                         <div className="h-px bg-gray-800 my-2"></div>
-                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.incoming_damage')}</span><span className="text-white font-mono text-lg">{Math.floor(stats.totalDamageTaken)}</span></div>
-                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.outgoing_damage')}</span><span className="text-white font-mono text-lg">{stats.totalDamageDealt.toLocaleString()}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.incoming_damage')}</span><span className="text-white font-mono text-lg">{dmgTaken.toLocaleString()}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.outgoing_damage')}</span><span className="text-white font-mono text-lg">{dmgDealt.toLocaleString()}</span></div>
                         <div className="h-px bg-gray-800 my-2"></div>
                         <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.shots_fired')}</span><span className="text-white font-mono text-lg">{stats.totalBulletsFired.toLocaleString()}</span></div>
                         <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.shots_hit')}</span><span className="text-white font-mono text-lg">{(stats.totalBulletsHit || 0).toLocaleString()}</span></div>
@@ -274,7 +288,7 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Rea
                 <div className="bg-black border border-gray-800 p-6 flex-1">
                     <h3 className="text-xl font-semibold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.combat')}</h3>
                     <div className="space-y-3 text-sm">
-                        <div className="flex justify-between items-end"><span className="text-gray-500">{displayKillsLabel}</span><span className="text-white font-mono text-lg">{stats.kills}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{displayKillsLabel}</span><span className="text-white font-mono text-lg">{totalKills}</span></div>
                         <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.deaths')}</span><span className="text-white font-mono text-lg">{stats.deaths}</span></div>
                         <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.throwables_thrown')}</span><span className="text-white font-mono text-lg">{stats.totalThrowablesThrown || 0}</span></div>
                     </div>
@@ -284,7 +298,7 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Rea
                         {stats.killsByType && Object.entries(stats.killsByType).map(([type, count]) => (
                             <div key={type} className="flex justify-between items-end text-xs py-1 border-b border-gray-900">
                                 <span className="text-gray-400 font-medium">
-                                    {type.charAt(0).toUpperCase() + type.slice(1).toLowerCase()}
+                                    {t(ENEMY_TYPE_KEYS[Number(type)])}
                                 </span>
                                 <span className="text-white font-mono text-lg">{count as number}</span>
                             </div>
@@ -298,14 +312,19 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Rea
 
 const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape }) => {
 
-    const getEnemyDescription = (type: string) => {
-        return t(`enemies.${type}.description`);
+    const getEnemyDescription = (type: number) => {
+        const key = ENEMY_TYPE_KEYS[type];
+        if (!key) return '';
+        // Map "enemies.WALKER.name" -> "enemies.WALKER.description"
+        const base = key.substring(0, key.lastIndexOf('.'));
+        return t(`${base}.description`);
     };
 
     return (
         <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'} pb-12`}>
             {Object.entries(ZOMBIE_TYPES).map(([key, data]) => {
-                const isSeen = (stats.seenEnemies || EMPTY_ARRAY).includes(key) || (stats.killsByType && stats.killsByType[key] > 0);
+                const typeSmi = EnemyType[key as keyof typeof EnemyType];
+                const isSeen = (stats.seenEnemies || EMPTY_ARRAY).includes(typeSmi) || (stats.killsByType && stats.killsByType[typeSmi] > 0);
                 if (!isSeen) return null;
                 const itemColor = `#${data.color.toString(16).padStart(6, '0')}`;
 
@@ -313,17 +332,17 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                     <Card key={key} id={`log-item-${key}`} isLocked={!isSeen} color={itemColor}>
                         <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
                             <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: isSeen ? itemColor : '#4b5563' }}>
-                                {isSeen ? key : '???'}
+                                {isSeen ? t(ENEMY_TYPE_KEYS[typeSmi]) : '???'}
                             </h3>
                             {isSeen && (
                                 <div className="flex gap-4">
                                     <div className="flex flex-col items-end">
                                         <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{t('ui.kills')}</span>
-                                        <span className="text-xl font-semibold text-white">{stats.killsByType?.[key] || 0}</span>
+                                        <span className="text-xl font-semibold text-white">{stats.killsByType?.[typeSmi] || 0}</span>
                                     </div>
                                     <div className="flex flex-col items-end pl-4 border-l border-gray-800">
                                         <span className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest leading-tight text-right">{t('ui.killed_by_short')}</span>
-                                        <span className="text-xl font-semibold text-red-500">{stats.deathsByEnemyType?.[key] || 0}</span>
+                                        <span className="text-xl font-semibold text-red-500">{stats.deathsByEnemyType?.[typeSmi] || 0}</span>
                                     </div>
                                 </div>
                             )}
@@ -350,13 +369,14 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                     </div>
                                     <div className="grid grid-cols-1 gap-2">
                                         {data.attacks.map((attack, idx) => {
-                                            const attackKey = attack.type.toUpperCase();
+                                            const attackSmi = attack.type;
+                                            const attackKey = EnemyAttackType[attackSmi];
                                             const hasDesc = t(`attacks.${attackKey}.description`) !== `attacks.${attackKey}.description`;
                                             return (
                                                 <div key={idx} className="flex flex-col bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                                                            {t(`attacks.${attackKey}.title`) !== `attacks.${attackKey}.title` ? t(`attacks.${attackKey}.title`) : attack.type}
+                                                            {t(ATTACK_TYPE_KEYS[attackSmi]) || attack.type}
                                                         </span>
                                                         <div className="flex gap-2">
                                                             <div className="flex items-center gap-1">
@@ -380,7 +400,7 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                     </div>
 
                                     <p className="text-sm text-gray-300 italic leading-relaxed pl-2 py-3">
-                                        "{getEnemyDescription(key)}"
+                                        "{getEnemyDescription(typeSmi)}"
                                     </p>
                                 </div>
                             )}
@@ -394,8 +414,12 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
 
 const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
 
-    const getBossDescription = (bossNameKey: string) => {
-        return t(`bosses.${bossNameKey.split('.')[1]}.lore`);
+    const getBossDescription = (bossId: number) => {
+        const key = BOSS_NAME_KEYS[bossId];
+        if (!key) return '';
+        // Map "bosses.0.name" -> "bosses.0.lore"
+        const base = key.substring(0, key.lastIndexOf('.'));
+        return t(`${base}.lore`);
     };
 
     return (
@@ -407,7 +431,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= bossIdx;
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorIndex}`) : '???';
 
-                const isSeen = boss && ((stats.seenBosses || EMPTY_ARRAY).includes(boss.name) || (stats.bossesDefeated || EMPTY_ARRAY).includes(bossIdx));
+                const isSeen = boss && ((stats.seenBosses || EMPTY_ARRAY).includes(bossIdx) || (stats.bossesDefeated || EMPTY_ARRAY).includes(bossIdx));
                 const isDefeated = (stats.bossesDefeated || EMPTY_ARRAY).includes(bossIdx);
                 const isBossUnlocked = boss && (isSeen || isDefeated || isDebug);
 
@@ -431,7 +455,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                             </div>
                                             <div className="flex flex-col items-end">
                                                 <span className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest leading-tight text-right">{t('ui.killed_by_short')}</span>
-                                                <span className="text-xl font-semibold text-red-500">{stats.deathsByEnemyType?.[boss.name] || 0}</span>
+                                                <span className="text-xl font-semibold text-red-500">{stats.deathsByEnemyType?.[EnemyType.BOSS] || 0}</span>
                                             </div>
                                         </div>
 
@@ -448,7 +472,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                                 <div></div>
                                             </div>
                                             <div className="space-y-4">
-                                                <p className="text-gray-400 text-sm leading-relaxed">{getBossDescription(boss.name)}</p>
+                                                <p className="text-gray-400 text-sm leading-relaxed">{getBossDescription(bossIdx)}</p>
 
                                                 {boss.attacks && boss.attacks.length > 0 && (
                                                     <div className="space-y-2 mt-4">
@@ -459,14 +483,15 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                                         </div>
                                                         <div className="grid grid-cols-1 gap-2">
                                                             {boss.attacks.map((attack, idx) => {
-                                                                const attackKey = attack.type.toUpperCase();
+                                                                const attackSmi = attack.type;
+                                                                const attackKey = EnemyAttackType[attackSmi];
                                                                 const hasDesc = t(`attacks.${attackKey}.description`) !== `attacks.${attackKey}.description`;
                                                                 return (
                                                                     <div key={idx} className="flex flex-col bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
                                                                         <div className="flex justify-between items-center">
                                                                             <div className="flex flex-col">
                                                                                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                                                                                    {t(`attacks.${attackKey}.title`) !== `attacks.${attackKey}.title` ? t(`attacks.${attackKey}.title`) : attack.type}
+                                                                                    {t(ATTACK_TYPE_KEYS[attackSmi]) || attack.type}
                                                                                 </span>
                                                                             </div>
                                                                             <div className="flex gap-4">
@@ -604,7 +629,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                                 </span>
                                             </div>
                                             <p className={`text-lg italic leading-relaxed border-l-4 pl-4 py-1 ${isFound ? 'text-gray-200' : 'text-zinc-800'}`} style={{ borderColor: isFound ? typeColor : '#333' }}>
-                                                {isFound ? `"${t(`clues.${clue.sector - 1}.${clue.index}.reaction`)}"` : '???'}
+                                                {isFound ? `"${t(`clues.${clue.sector}.${clue.index}.reaction`)}"` : '???'}
                                             </p>
                                         </div>
                                     </div>

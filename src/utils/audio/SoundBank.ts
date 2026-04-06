@@ -1,4 +1,5 @@
 import { SoundCore } from './SoundCore';
+import { SoundID, MAX_SOUND_ID } from './AudioTypes';
 
 /**
  * Generator function signature for procedural sound synthesis.
@@ -10,31 +11,36 @@ type SoundGenerator = (ctx: AudioContext, ...args: any[]) => AudioBuffer;
  * Acts as a centralized cache to prevent redundant synthesis overhead.
  */
 export class SoundBank {
-    private static buffers: Map<string, AudioBuffer> = new Map();
-    private static generators: Map<string, SoundGenerator> = new Map();
+    private static buffers: (AudioBuffer | null)[] = new Array(MAX_SOUND_ID).fill(null);
+    private static generators: (SoundGenerator | null)[] = new Array(MAX_SOUND_ID).fill(null);
 
     /**
      * Registers a sound generator function.
      * Use this to define how a sound (e.g., 'white_noise', 'sine_wave') is synthesized.
      */
-    static register(key: string, generator: SoundGenerator) {
-        this.generators.set(key, generator);
+    static register(id: SoundID, generator: SoundGenerator) {
+        if (id >= MAX_SOUND_ID) {
+            console.error(`SoundBank: SoundID [${id}] out of bounds (MAX: ${MAX_SOUND_ID})`);
+            return;
+        }
+        this.generators[id] = generator;
     }
 
     /**
      * Executes a generator and caches the resulting AudioBuffer.
      * Prevents duplicate generation if the buffer already exists.
      */
-    static preload(core: SoundCore, key: string) {
-        if (this.buffers.has(key)) return;
+    static preload(core: SoundCore, id: SoundID) {
+        if (id >= MAX_SOUND_ID) return;
+        if (this.buffers[id]) return;
 
-        const generator = this.generators.get(key);
+        const generator = this.generators[id];
         if (generator) {
             try {
                 const buffer = generator(core.ctx);
-                this.buffers.set(key, buffer);
+                this.buffers[id] = buffer;
             } catch (e) {
-                console.error(`SoundBank: Failed to synthesize [${key}]:`, e);
+                console.error(`SoundBank: Failed to synthesize [${id}]:`, e);
             }
         }
     }
@@ -44,18 +50,23 @@ export class SoundBank {
      * Call this during the game's initial loading screen.
      */
     static preloadAll(core: SoundCore) {
-        for (const key of this.generators.keys()) this.preload(core, key);
+        for (let i = 0; i < MAX_SOUND_ID; i++) {
+            if (this.generators[i]) this.preload(core, i as SoundID);
+        }
     }
 
     /**
      * Async version of preloadAll that yields to the main thread.
      */
     static async preloadAllAsync(core: SoundCore, yieldToMain: () => Promise<void>) {
-        const keys = Array.from(this.generators.keys());
-        for (let i = 0; i < keys.length; i++) {
-            this.preload(core, keys[i]);
-            // Yield every 5 sounds to keep the UI responsive
-            if (i % 5 === 0) await yieldToMain();
+        let count = 0;
+        for (let i = 0; i < MAX_SOUND_ID; i++) {
+            if (this.generators[i]) {
+                this.preload(core, i as SoundID);
+                count++;
+                // Yield every 5 sounds to keep the UI responsive
+                if (count % 5 === 0) await yieldToMain();
+            }
         }
     }
 
@@ -63,11 +74,12 @@ export class SoundBank {
      * Retrieves a cached AudioBuffer. 
      * If the buffer isn't found, it attempts lazy-generation on the spot.
      */
-    static get(core: SoundCore, key: string): AudioBuffer | undefined {
-        let buffer = this.buffers.get(key);
+    static get(core: SoundCore, id: SoundID): AudioBuffer | null {
+        if (id >= MAX_SOUND_ID) return null;
+        let buffer = this.buffers[id];
         if (!buffer) {
-            this.preload(core, key);
-            buffer = this.buffers.get(key);
+            this.preload(core, id);
+            buffer = this.buffers[id];
         }
         return buffer;
     }
@@ -79,14 +91,14 @@ export class SoundBank {
      */
     static play(
         core: SoundCore,
-        key: string,
+        id: SoundID,
         volume: number = 1.0,
         playbackRate: number = 1.0,
         loop: boolean = false,
         useReverb: boolean = false
     ): { source: AudioBufferSourceNode; gain: GainNode } | null {
 
-        const buffer = this.get(core, key);
+        const buffer = this.get(core, id);
         if (!buffer) return null;
 
         // Ensure the AudioContext is active (Browser security policy)
@@ -101,7 +113,6 @@ export class SoundBank {
         gain.gain.value = volume;
 
         // Path: Source -> Local Gain -> Master Gain (Dry)
-        // Reverb connection is handled inside core.track()
         source.connect(gain);
         gain.connect(core.masterGain);
 
@@ -118,6 +129,6 @@ export class SoundBank {
      * Useful during major scene transitions to clear up the heap.
      */
     static clear() {
-        this.buffers.clear();
+        this.buffers.fill(null);
     }
 }

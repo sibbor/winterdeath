@@ -13,8 +13,8 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 
 const _animState = {
-    isMoving: false, isRushing: false, isRolling: false,
-    rollStartTime: 0, staminaRatio: 1.0,
+    isMoving: false, isRushing: false, isDodging: false,
+    dodgeStartTime: 0, staminaRatio: 1.0,
     isSpeaking: false, isThinking: false, isIdleLong: false,
     isSwimming: false, isWading: false,
     seed: 0,

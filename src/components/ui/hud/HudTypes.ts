@@ -1,6 +1,7 @@
 import { WeaponType } from '../../../content/weapons';
 import { SectorState, GameScreen } from '../../../game/session/SessionTypes';
 import { InteractionType } from '../../../systems/InteractionTypes';
+import { StatusEffectType } from '../../../content/perks';
 
 // ============================================================================
 // HUD & ZERO-GC TYPES
@@ -38,7 +39,7 @@ export interface MapItem {
 }
 
 export interface StatusEffectData {
-  type: string;
+  type: StatusEffectType;
   duration: number;
   maxDuration: number;
   intensity: number;
@@ -77,7 +78,14 @@ export interface DialogueLineData {
   speaker: string;
 }
 
-export type DiscoveryType = 'clue' | 'poi' | 'collectible' | 'enemy' | 'boss';
+export enum DiscoveryType {
+  CLUE = 0,
+  POI = 1,
+  COLLECTIBLE = 2,
+  ENEMY = 3,
+  BOSS = 4,
+  PERK = 5
+}
 
 export interface DiscoveryEvent {
   active: boolean;
@@ -89,6 +97,10 @@ export interface DiscoveryEvent {
 }
 
 export interface HudState {
+  // --- DOD BUFFERS (Zero-GC / O(1)) ---
+  statsBuffer: Float32Array;
+  statusFlags: number;
+
   hp: number;
   maxHp: number;
   stamina: number;
@@ -134,9 +146,9 @@ export interface HudState {
   // Status & Buffs
   statusEffects: StatusEffectData[];
   isDisoriented: boolean;
-  activePassives: string[];
-  activeBuffs: string[];
-  activeDebuffs: string[];
+  activePassives: StatusEffectType[];
+  activeBuffs: StatusEffectType[];
+  activeDebuffs: StatusEffectType[];
 
   // Death details
   killerName: string;

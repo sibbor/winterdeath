@@ -7,7 +7,7 @@ export class SoundCore {
   masterGain: GainNode;
 
   // Using Sets for O(1) access and zero-allocation removal
-  activeSources: Set<AudioBufferSourceNode> = new Set();
+  activeSources: Set<AudioScheduledSourceNode> = new Set();
   activeTimeouts: Set<number> = new Set();
 
   convolver: ConvolverNode;
@@ -110,7 +110,7 @@ export class SoundCore {
    * Tracks an active audio source to allow global stopping.
    * Routes the signal to dry/wet paths.
    */
-  track(source: AudioBufferSourceNode, useReverb: boolean = false) {
+  track(source: AudioScheduledSourceNode, useReverb: boolean = false) {
     this.resume(); // Ensure context is active
     this.activeSources.add(source);
 

@@ -1,5 +1,7 @@
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System } from './System';
+import { EnemyType } from '../entities/enemies/EnemyTypes';
+import { DamageID } from '../entities/player/CombatTypes';
 
 export class DamageTrackerSystem implements System {
     id = 'damage_tracker_system';
@@ -14,24 +16,23 @@ export class DamageTrackerSystem implements System {
 
     /**
      * Records damage taken by the player.
-     * V8-Opt: Keys are pre-allocated.
+     * V8-Opt: Keys are pre-allocated in GameSessionLogic.
      */
     recordIncomingDamage(
         session: GameSessionLogic,
         amount: number,
-        sourceName: string,
-        attackName: string,
+        sourceName: DamageID,
+        attackType: number,
         isBoss: boolean = false
     ) {
         const stats = session.state.sessionStats;
         stats.damageTaken += amount;
+        if (isBoss) stats.bossDamageTaken += amount;
 
         const breakdown = stats.incomingDamageBreakdown;
-        const source = breakdown[sourceName];
+        const source = (breakdown as any)[sourceName];
         if (source) {
-            // attackName can be dynamic from enemy logic, but we pre-allocated common ones.
-            // If it's missing, we add it (V8 dictionary penalty once, better than missing data).
-            source[attackName] = (source[attackName] || 0) + amount;
+            source[attackType] = (source[attackType] || 0) + amount;
         }
     }
 
@@ -46,6 +47,7 @@ export class DamageTrackerSystem implements System {
     ) {
         const stats = session.state.sessionStats;
         stats.damageDealt += amount;
+        if (isBoss) stats.bossDamageDealt += amount;
 
         const breakdown = stats.outgoingDamageBreakdown;
         // Weapon keys are pre-allocated for all known types
@@ -73,18 +75,20 @@ export class DamageTrackerSystem implements System {
     /**
      * Records an enemy kill.
      */
-    recordKill(session: GameSessionLogic, enemyType: string, isBoss: boolean = false) {
+    recordKill(session: GameSessionLogic, enemyType: number | string, isBoss: boolean = false, bossId?: number) {
         const stats = session.state.sessionStats;
         stats.kills++;
         
-        // Generic generic boss tracker
-        if (isBoss) {
+        let key = typeof enemyType === 'number' ? EnemyType[enemyType] : enemyType;
+        
+        if (isBoss && bossId !== undefined) {
+            key = `Boss_${bossId}`;
+            // Also update the legacy generic boss stat for backward compatibility if needed
             stats.killsByType['Boss'] = (stats.killsByType['Boss'] || 0) + 1;
         }
 
-        // Specific type tracker (Pre-allocated keys)
-        if (stats.killsByType[enemyType] !== undefined) {
-            stats.killsByType[enemyType]++;
+        if (key && stats.killsByType[key] !== undefined) {
+            stats.killsByType[key]++;
         }
     }
 

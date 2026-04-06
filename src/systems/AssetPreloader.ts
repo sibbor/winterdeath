@@ -123,8 +123,9 @@ export const AssetPreloader = {
                         const music = ['ambient_wind_loop', 'ambient_forest_loop', 'ambient_scrapyard_loop', 'ambient_finale_loop', 'boss_metal', 'prologue_sad'];
 
                         for (let i = 0; i < music.length; i++) {
-                            createMusicBuffer(soundManager.core.ctx, music[i]);
+                            createMusicBuffer(soundManager.core.ctx, music[i] as any);
                         }
+
                     } catch (e) {
                         console.warn("[AssetPreloader] Music buffering deferred.");
                     }
@@ -142,7 +143,11 @@ export const AssetPreloader = {
                     if (tex) engine.renderer.initTexture(tex);
                 }
 
-                const uiAssetsSet = new Set<string>(['/assets/icons/ui/icon_dash.png', '/assets/icons/ui/icon_reload.png', '/assets/icons/ui/icon_flashlight.png']);
+                const uiAssetsSet = new Set<string>([
+                    '/assets/icons/ui/icon_dodge.png',
+                    '/assets/icons/ui/icon_reload.png',
+                    '/assets/icons/ui/icon_flashlight.png'
+                ]);
 
                 for (const key in WEAPONS) {
                     const w = (WEAPONS as any)[key];

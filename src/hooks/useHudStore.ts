@@ -8,42 +8,64 @@ import { HudState } from '../components/ui/hud/HudTypes';
  * and prevent re-subscriptions when using inline anonymous functions.
  * * @param selector A function that extracts the desired data from HudState.
  */
-export function useHudStore<T>(selector: (state: HudState) => T): T {
-    // 1. Keep a mutable reference to the LATEST selector function.
-    // This prevents the "inline function trap" (e.g., useHudStore(s => s.hp))
-    // from causing infinite re-renders or GC thrashing.
-    const selectorRef = useRef(selector);
+/**
+ * Optimized shallow equality check for arrays and objects. 
+ * Prevents re-renders when engine double-buffering swaps between identical collections.
+ */
+export function shallowEqual(a: any, b: any): boolean {
+    if (Object.is(a, b)) return true;
+    if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return false;
 
-    // 2. Cache the computed result and the state it was based on
-    const currentResultRef = useRef<T | null>(null);
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) return false;
+
+    for (let i = 0; i < keysA.length; i++) {
+        if (!Object.prototype.hasOwnProperty.call(b, keysA[i]) || !Object.is(a[keysA[i]], b[keysA[i]])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Optimized hook for accessing HudStore state with selector support.
+ * Uses a ref-based selector pattern and shallow equality to eliminate GC 
+ * and persistent re-renders from double-buffering.
+ */
+export function useHudStore<T>(selector: (state: HudState) => T, shallow: boolean = false): T {
+    const selectorRef = useRef(selector);
+    const lastResultRef = useRef<T | null>(null);
     const lastStateRef = useRef<HudState | null>(null);
 
-    // Sync the latest selector safely outside the render phase
     useEffect(() => {
         selectorRef.current = selector;
     });
 
-    // 3. Stable snapshot getter with ZERO dependencies.
-    // NOTE: We intentionally do NOT cache on state reference equality.
-    // The direct interaction-clear paths in GameSessionLoop mutate the HudStore
-    // state object in-place before calling HudStore.update(), so the reference
-    // never changes. Skipping the re-computation would permanently return the
-    // stale type ('chest', 'collectible', etc.) and the prompt would never hide.
-    // React's useSyncExternalStore handles duplicate-value suppression itself via
-    // Object.is(), so re-renders are only triggered when the selector's returned
-    // primitive value actually changes.
     const getSnapshot = useCallback(() => {
         const state = HudStore.getState();
-        currentResultRef.current = selectorRef.current(state);
-        lastStateRef.current = state;
-        return currentResultRef.current as T;
-    }, []);
+        
+        // Optimization: If state hasn't changed at all, avoid re-running selector
+        if (state === lastStateRef.current) return lastResultRef.current as T;
 
-    // 4. Stable subscription reference
+        const nextResult = selectorRef.current(state);
+
+        // --- SHALLOW EQUALITY BYPASS ---
+        // If we are using shallow compare (for arrays/objects) and the content is the same,
+        // we return the OLD reference to trick useSyncExternalStore into skipping re-render.
+        if (shallow && lastResultRef.current !== null && shallowEqual(nextResult, lastResultRef.current)) {
+            lastStateRef.current = state;
+            return lastResultRef.current;
+        }
+
+        lastResultRef.current = nextResult;
+        lastStateRef.current = state;
+        return nextResult;
+    }, [shallow]);
+
     const subscribe = useCallback((onStoreChange: () => void) => {
         return HudStore.subscribe(onStoreChange);
     }, []);
 
-    // 5. Connect to React's highly optimized external store hook
     return useSyncExternalStore(subscribe, getSnapshot);
 }

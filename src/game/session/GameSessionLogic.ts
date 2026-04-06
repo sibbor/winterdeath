@@ -7,13 +7,17 @@ import { SectorTrigger } from '../../systems/TriggerTypes';
 import { WeaponType } from '../../content/weapons';
 import { RuntimeState } from '../../core/RuntimeState';
 import { System } from '../../systems/System';
-import { PlayerDeathState } from '../../entities/player/CombatTypes';
-import { WEAPONS, ZOMBIE_TYPES, BOSSES, DEFAULT_SPEED } from '../../content/constants';
+import { PlayerDeathState, DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
+
+import { WEAPONS, ZOMBIE_TYPES, BOSSES, PLAYER_BASE_SPEED } from '../../content/constants';
 import { Enemy } from '../../entities/enemies/EnemyManager';
 import { ScrapItem } from '../../systems/WorldLootSystem';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { Obstacle } from '../../core/world/CollisionResolution';
 import { ParticleState } from '../../systems/FXSystem';
+import { PlayerStatID, PlayerStatusFlags, PlayerStatsUtils } from '../../entities/player/PlayerTypes';
+import { StatusEffectType } from '../../content/perks';
+import { InteractionType } from '../../systems/InteractionTypes';
 
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
@@ -44,24 +48,33 @@ export class GameSessionLogic {
         // Pre-allocate Enemies
         for (const key in ZOMBIE_TYPES) {
             killsByType[key] = 0;
-            incomingDamageBreakdown[key] = { HIT: 0, BITE: 0, JUMP: 0, SMASH: 0, EXPLODE: 0 };
+            // Standardize attack keys to match EnemyAttackType names
+            incomingDamageBreakdown[key] = {
+                BITE: 0, HIT: 0, JUMP: 0, SMASH: 0, EXPLODE: 0,
+                SCREECH: 0, LUNGE: 0, CLAW: 0, SWIPE: 0, PUNCH: 0
+            };
         }
-        killsByType['Boss'] = 0; // Legacy generic boss tracker
+        killsByType['Boss'] = 0;
         killsByType[WeaponType.RUSH] = 0;
         killsByType[WeaponType.VEHICLE] = 0;
-        incomingDamageBreakdown['Environment'] = { Burning: 0, Drowning: 0, Falling: 0 };
 
-        // Pre-allocate Bosses
-        for (const id in BOSSES) {
-            const boss = BOSSES[id];
-            killsByType[boss.id] = 0;
-            incomingDamageBreakdown[boss.id] = {};
-            if (boss.attacks) {
-                for (let i = 0; i < boss.attacks.length; i++) {
-                    incomingDamageBreakdown[boss.id][boss.attacks[i].type] = 0;
-                }
-            }
+        // --- BOSS DATA (Bitmask compliant) ---
+        // Pre-allocate slots for potential boss encounters (0-3) using special DamageID.BOSS grouping
+        incomingDamageBreakdown[DamageID.BOSS] = {};
+        for (let i = 0; i < 4; i++) {
+            // BOSS damage is grouped by DamageID.BOSS, but we can also use specific boss IDs as keys if needed
+            // For now, follow the user's focus on DamageID.
+            incomingDamageBreakdown[DamageID.BOSS][i] = 0;
         }
+
+        // Environment & DoTs (Standard DamageIDs)
+        incomingDamageBreakdown[DamageID.PHYSICAL] = { 0: 0 };
+        incomingDamageBreakdown[DamageID.BURN] = { 0: 0 };
+        incomingDamageBreakdown[DamageID.BLEED] = { 0: 0 };
+        incomingDamageBreakdown[DamageID.DROWNING] = { 0: 0 };
+        incomingDamageBreakdown[DamageID.FALL] = { 0: 0 };
+        incomingDamageBreakdown[DamageID.EXPLOSION] = { 0: 0 };
+        incomingDamageBreakdown[DamageID.ELECTRIC] = { 0: 0 };
 
         return {
             kills: 0,
@@ -79,7 +92,9 @@ export class GameSessionLogic {
             distanceTraveled: 0,
             chestsOpened: 0,
             bigChestsOpened: 0,
+            score: 0,
             cluesFound: [],
+
             discoveredPOIs: [],
             seenEnemies: [],
             seenBosses: [],
@@ -91,7 +106,9 @@ export class GameSessionLogic {
             familyExtracted: false,
             isExtraction: false,
             incomingDamageBreakdown,
-            outgoingDamageBreakdown
+            outgoingDamageBreakdown,
+            bossDamageDealt: 0,
+            bossDamageTaken: 0
         };
     }
 
@@ -109,18 +126,43 @@ export class GameSessionLogic {
             clues: new Set<string>(props.stats.cluesFound || []),
             pois: new Set<string>(props.stats.discoveredPOIs || []),
             collectibles: new Set<string>(props.stats.collectiblesDiscovered || []),
-            seenEnemies: new Set<string>(props.stats.seenEnemies || [])
+            seenEnemies: new Set<number>(props.stats.seenEnemies || []),
+            seenBosses: new Set<number>(props.stats.seenBosses || [])
         };
 
+        const buffers = PlayerStatsUtils.initBuffers();
+        const statsBuffer = buffers.statsBuffer;
+
+        // --- O(1) DOD STAT INITIALIZATION ---
+        statsBuffer[PlayerStatID.HP] = props.stats.statsBuffer[PlayerStatID.MAX_HP];
+        statsBuffer[PlayerStatID.MAX_HP] = props.stats.statsBuffer[PlayerStatID.MAX_HP];
+        statsBuffer[PlayerStatID.STAMINA] = props.stats.statsBuffer[PlayerStatID.MAX_STAMINA];
+        statsBuffer[PlayerStatID.MAX_STAMINA] = props.stats.statsBuffer[PlayerStatID.MAX_STAMINA];
+        statsBuffer[PlayerStatID.SPEED] = props.stats.statsBuffer[PlayerStatID.SPEED] || PLAYER_BASE_SPEED;
+        statsBuffer[PlayerStatID.LEVEL] = props.stats.statsBuffer[PlayerStatID.LEVEL];
+        statsBuffer[PlayerStatID.XP] = props.stats.statsBuffer[PlayerStatID.XP];
+        statsBuffer[PlayerStatID.CURRENT_XP] = props.stats.statsBuffer[PlayerStatID.CURRENT_XP];
+        statsBuffer[PlayerStatID.NEXT_LEVEL_XP] = props.stats.statsBuffer[PlayerStatID.NEXT_LEVEL_XP];
+        statsBuffer[PlayerStatID.SKILL_POINTS] = props.stats.statsBuffer[PlayerStatID.SKILL_POINTS];
+        statsBuffer[PlayerStatID.SCRAP] = props.stats.statsBuffer[PlayerStatID.SCRAP];
+
+        // --- INITIALIZE MULTIPLIERS (1.0) ---
+        statsBuffer[PlayerStatID.MULTIPLIER_SPEED] = 1.0;
+        statsBuffer[PlayerStatID.MULTIPLIER_RELOAD] = 1.0;
+        statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] = 1.0;
+        statsBuffer[PlayerStatID.MULTIPLIER_DMG_RESIST] = 1.0;
+        statsBuffer[PlayerStatID.MULTIPLIER_RANGE] = 1.0;
+
         return {
-            isDead: false, score: 0, collectedScrap: 0,
-            hp: props.stats.maxHp, maxHp: props.stats.maxHp,
-            stamina: props.stats.maxStamina, maxStamina: props.stats.maxStamina,
-            speed: props.stats.speed || DEFAULT_SPEED,
+            // --- PERSISTENT DATA (DOD & Legacy) ---
+            ...props.stats,
+
+            // --- DOD BUFFER OVERRIDES (Phase 9) ---
+            ...buffers,
+            statusFlags: PlayerStatusFlags.NONE,
+
+            // --- SESSION STATE ---
             startTime: performance.now(),
-            level: props.stats.level,
-            currentXp: props.stats.currentXp,
-            nextLevelXp: props.stats.nextLevelXp,
             activeWeapon: props.loadout.primary,
             loadout: props.loadout,
             weaponLevels: props.weaponLevels,
@@ -128,17 +170,18 @@ export class GameSessionLogic {
                 [props.loadout.primary]: WEAPONS[props.loadout.primary]?.magSize || 0,
                 [props.loadout.secondary]: WEAPONS[props.loadout.secondary]?.magSize || 0,
                 [props.loadout.throwable]: WEAPONS[props.loadout.throwable]?.magSize || 0,
-                [props.loadout.special || 'NONE']: WEAPONS[props.loadout.special]?.magSize || 0
-            } as Record<WeaponType, number>,
-            isReloading: false, reloadEndTime: 0,
+                [props.loadout.special]: WEAPONS[props.loadout.special]?.magSize || 0
+            } as any,
+            isReloading: false,
+            reloadEndTime: 0,
 
-            // --- ZERO-GC VECTORS ---
-            rollStartTime: 0,
-            rollDir: new THREE.Vector3(),
-            isRolling: false,
+            // --- ZERO-GC VECTORS & STATE ---
+            dodgeStartTime: 0,
+            dodgeDir: new THREE.Vector3(),
+            isDodging: false,
+            dodgeSmokeSpawned: false,
 
             invulnerableUntil: 0,
-            lastHeartbeat: 0,
             spacePressTime: 0,
             spaceDepressed: false,
             eDepressed: false,
@@ -147,10 +190,13 @@ export class GameSessionLogic {
             wasFiring: false,
             throwChargeStart: 0,
             lastShotTime: 0,
+            lastRushEndTime: 0,
+            lastDodgeEndTime: 0,
             lastReflexShieldTime: 0,
             lastAdrenalinePatchTime: 0,
+            lastHeartbeat: 0,
 
-            // --- POOLS ---
+            // --- OBJECT POOLS ---
             enemies: [] as Enemy[],
             particles: [] as ParticleState[],
             activeEffects: [] as any[],
@@ -160,9 +206,11 @@ export class GameSessionLogic {
             chests: [] as any[],
             bloodDecals: [] as any[],
 
+            // --- TELEMETRY & PROGRESSION ---
             sessionStats,
             discoverySets,
-            discovery: { active: false, id: '', type: '', title: '', details: '', timestamp: 0 },
+
+            applyDamage: (enemy: any, amount: number, type: DamageID, isHighImpact?: boolean) => false,
 
 
             bossesDefeated: [],
@@ -170,24 +218,25 @@ export class GameSessionLogic {
             familyAlreadyRescued: !!props.familyAlreadyRescued,
             familyExtracted: false,
             bossPermanentlyDefeated: !!props.bossPermanentlyDefeated,
-            isInteractionOpen: false, bossSpawned: false,
+            isInteractionOpen: false,
+            bossSpawned: false,
             lastDamageTime: 0,
-            lastStaminaUseTime: 0,
             lastBiteTime: 0,
-            noiseLevel: 0, speakBounce: 0,
-            cameraShake: 0, hurtShake: 0,
-            discoveredPerks: props.stats.discoveredPerks || [],
+            lastStaminaUseTime: 0,
+            noiseLevel: 0,
+            speakBounce: 0,
+            cameraShake: 0,
+            hurtShake: 0,
+            playerDeathState: PlayerDeathState.ALIVE,
 
+            // --- SECTOR & WORLD ---
             sectorState: {
                 envOverride: props.environmentOverrides ? props.environmentOverrides[props.currentSector] : undefined
             },
             triggers: [] as SectorTrigger[],
             obstacles: [] as Obstacle[],
             collisionGrid: new SpatialGrid(),
-
-            // --- SECTOR & WORLD ---
             busUnlocked: false,
-            bossIntroActive: false,
             clueActive: false,
             bossDefeatedTime: 0,
             lastActionTime: 0,
@@ -196,7 +245,7 @@ export class GameSessionLogic {
             sectorName: '',
             initialAim: { active: false, x: 0, y: 0 },
             deathStartTime: 0,
-            killerType: '',
+            killerType: DamageID.NONE,
             killerName: '',
             killerAttackName: '',
             killedByEnemy: false,
@@ -204,11 +253,9 @@ export class GameSessionLogic {
             playerAshSpawned: false,
             lastDrownTick: 0,
             lastStepRight: false,
-            distanceSinceLastStep: 1.5, // Prime the first step
+            distanceSinceLastStep: 1.5,
             minStepDistance: 1.7,
             deathVel: new THREE.Vector3(),
-
-            // Zero-GC: Pre-allocated vectors with boolean flags instead of null
             hasLastTrailPos: false,
             lastTrailPos: new THREE.Vector3(),
 
@@ -218,12 +265,31 @@ export class GameSessionLogic {
             isWading: false,
             isSwimming: false,
 
-            // --- COLLECTIBLES ---
-            sessionCollectiblesDiscovered: [],
-            collectiblesDiscovered: props.stats.collectiblesDiscovered || [],
-            mapItems: [],
+            // --- PERFORMANCE MONITORING ---
+            renderCpuTime: 0,
+            drawCalls: 0,
+            triangles: 0,
 
-            // --- VEHICLES ---
+            // --- INTERACTION & DISCOVERY ---
+            interaction: {
+                active: false,
+                type: InteractionType.NONE,
+                label: '',
+                targetId: ''
+            },
+            interactionRequest: {
+                active: false,
+                type: InteractionType.NONE,
+                id: '',
+                object: null
+            },
+            hasInteractionTarget: false,
+            interactionTargetPos: new THREE.Vector3(),
+            hasNearestCollectible: false,
+            nearestCollectibleId: '',
+            bossIntroActive: false,
+            sessionCollectiblesDiscovered: [],
+            mapItems: [],
             vehicle: {
                 active: false,
                 mesh: null,
@@ -236,62 +302,28 @@ export class GameSessionLogic {
                 suspY: 0,
                 suspVelY: 0
             },
-
-            // --- INTERACTION ---
-            interaction: {
-                active: false,
-                type: '',
-                label: '',
-                targetId: ''
-            },
-
-            // VINTERDÖD FIX: Pre-allokera request-structen
-            interactionRequest: {
-                active: false,
-                type: '',
-                id: '',
-                object: null
-            },
-            hasInteractionTarget: false,
-            interactionTargetPos: new THREE.Vector3(),
-            renderCpuTime: 0,
-            drawCalls: 0,
-            triangles: 0,
             flashlightOn: false,
-            hasNearestCollectible: false,
-            nearestCollectibleId: '',
             hasCurrentInteraction: false,
             currentInteractionPayload: {},
-            stats: props.stats,
-
-            // --- COMBAT & STATUS INITIALIZATION ---
-            multipliers: {
-                speed: 1.0,
-                reloadTime: 1.0,
-                fireRate: 1.0,
-                damageResist: 1.0,
-                range: 1.0
-            },
-            isDisoriented: false,
-            activePassives: [],
-            activeBuffs: [],
-            activeDebuffs: [],
-            statusEffects: {} as any,
-            callbacks: {},
-
-            // --- COMBAT & STATUS ---
-            applyDamage: (enemy: any, amount: number, type: string, isHighImpact?: boolean) => false,
-            playerDeathState: PlayerDeathState.ALIVE,
-
-            // --- CINEMATIC STATE ---
+            discovery: { active: false, id: '', type: '', title: '', details: '', timestamp: 0 },
             cinematicActive: false,
             cinematicLine: { active: false, speaker: '', text: '' },
+            callbacks: {
+                onEnemyDiscovered: props.onEnemyDiscovered,
+                onBossDiscovered: props.onBossDiscovered,
+                onCollectibleDiscovered: props.onCollectibleDiscovered,
+                onClueDiscovered: props.onClueDiscovered,
+                onPOIdiscovered: props.onPOIdiscovered,
+                onUpdateLoadout: props.onUpdateLoadout,
+                onInteractionStateChange: props.onInteractionStateChange
+            },
+            stats: props.stats,
 
-            // --- TIME ---
+            // --- TIME & SIMULATION ---
             simTime: 0,
             renderTime: 0,
             lastSimDelta: 0.016,
-            lastRenderDelta: 0.016,
+            lastRenderDelta: 0.016
         };
     }
 
@@ -307,7 +339,8 @@ export class GameSessionLogic {
         // Ensuring all systems (bullets, explosions, etc.) that use state.applyDamage 
         // are automatically tracked by the DamageTrackerSystem.
         const originalApplyDamage = this.state.applyDamage || (() => false);
-        this.state.applyDamage = (enemy: any, amount: number, type: string, isHighImpact?: boolean) => {
+        this.state.applyDamage = (enemy: any, amount: number, type: DamageID, isHighImpact?: boolean) => {
+
             const dts = this.getSystem('damage_tracker_system') as any;
             if (dts) dts.recordOutgoingDamage(this, amount, type, enemy.isBoss);
 
@@ -328,7 +361,7 @@ export class GameSessionLogic {
     /**
      * Registers a discovery (POI, Clue, Perk, etc.) and triggers the HUD popup.
      */
-    triggerDiscovery(type: string, id: string, title: string, details: string) {
+    triggerDiscovery(type: string, id: string | number, title: string, details: string) {
         if (!this.state) return;
         this.state.discovery.active = true;
         this.state.discovery.type = type;
@@ -396,9 +429,7 @@ export class GameSessionLogic {
             this.state.sessionCollectiblesDiscovered.length = 0;
             this.state.collectiblesDiscovered.length = 0;
             this.state.mapItems.length = 0;
-            this.state.activePassives.length = 0;
-            this.state.activeBuffs.length = 0;
-            this.state.activeDebuffs.length = 0;
+            this.state.mapItems.length = 0;
 
             // Clean up sessionStats breakdowns (Zero-GC: keep object shape but nullify keys if needed, 
             // though usually we just let the whole sessionStats be replaced on next sector)

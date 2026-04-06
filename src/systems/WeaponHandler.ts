@@ -1,11 +1,13 @@
 import * as THREE from 'three';
-import { WeaponType, WeaponCategory, WeaponBehavior, WEAPONS } from '../content/weapons';
+import { WeaponType, WeaponCategory, WeaponBehavior, WEAPONS, WeaponStats } from '../content/weapons';
+import { PlayerStatID } from '../entities/player/PlayerTypes';
 import { ProjectileSystem } from './ProjectileSystem';
 import { soundManager } from '../utils/audio/SoundManager';
 import { haptic } from '../utils/HapticManager';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
 import { _buoyancyResult } from './WaterSystem';
+import { DamageID } from '../entities/player/CombatTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -14,49 +16,55 @@ const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 const _UP = new THREE.Vector3(0, 1, 0);
-const _slotArray: WeaponType[] = [];
+
+// Pre-defined static array for scroll iteration to avoid GC allocations
+const _SLOTS = ['primary', 'secondary', 'throwable', 'special', 'radio'];
 
 // Avoid creating empty objects and functions in loops
 const _NOOP_DAMAGE_TEXT = (x: number, y: number, z: number, t: string, c?: string) => { };
 
-// For Billboard Math
-const _cameraWorldPos = new THREE.Vector3();
-
-const _continuousNumberCache: Record<number, string> = {};
-function getContinuousNumberString(num: number): string {
-    const rounded = Math.round(num);
-    if (!_continuousNumberCache[rounded]) _continuousNumberCache[rounded] = rounded.toString();
-    return _continuousNumberCache[rounded];
+// Locked Interface to guarantee V8 Shape (Zero-GC)
+interface ContinuousContext {
+    scene: THREE.Scene | null;
+    enemies: any[];
+    collisionGrid: any;
+    spawnPart: Function | null;
+    showDamageText: Function;
+    spawnDecal: Function | null;
+    explodeEnemy: Function | null;
+    trackStats: Function | null;
+    addScore: Function | null;
+    fireZones: any[];
+    simTime: number;
+    playerPos: THREE.Vector3 | null;
+    session: any;
+    noiseEvents: any;
+    makeNoise: Function | null;
+    applyDamage: Function | null;
+    onPlayerHit: Function | null;
+    weaponHandler: any;
 }
 
-// Reusable context object to prevent GC allocation during continuous fire
-const _continuousCtx: any = {
+const _continuousCtx: ContinuousContext = {
     scene: null,
-    enemies: null,
+    enemies: [],
     collisionGrid: null,
     spawnPart: null,
-    showDamageText: null,
+    showDamageText: _NOOP_DAMAGE_TEXT,
     spawnDecal: null,
     explodeEnemy: null,
     trackStats: null,
     addScore: null,
-    addFireZone: null,
-    now: 0,
-    noiseEvents: null
+    fireZones: [],
+    simTime: 0,
+    playerPos: null,
+    session: null,
+    noiseEvents: null,
+    makeNoise: null,
+    applyDamage: null,
+    onPlayerHit: null,            // <-- TILLAGD
+    weaponHandler: null           // <-- TILLAGD
 };
-
-// Shared state for the checkSlot algorithm to avoid closure allocation
-let _currentSlotIdx = -1;
-function _checkSlot(wepType: WeaponType | null | undefined, state: any) {
-    if (!wepType) return;
-    if (WEAPONS[wepType] && WEAPONS[wepType].category === WeaponCategory.THROWABLE && (state.weaponAmmo[wepType] || 0) <= 0) return;
-    if (wepType === WeaponType.RADIO && state.familyFound) return;
-
-    if (wepType === state.activeWeapon) {
-        _currentSlotIdx = _slotArray.length;
-    }
-    _slotArray.push(wepType);
-}
 
 // Extracted to prevent closure allocations per frame during throwing charge
 function _executeThrow(
@@ -66,7 +74,7 @@ function _executeThrow(
     state: any,
     loadout: any,
     now: number,
-    wep: any,
+    wep: WeaponStats,
     ratio: number,
     aimCrossMesh?: THREE.Group | null,
     trajectoryLineMesh?: THREE.Mesh | null
@@ -74,12 +82,14 @@ function _executeThrow(
     const isUnlimited = !!state.sectorState?.unlimitedThrowables;
     if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
 
-    const tracker = (session as any).getSystem('damage_tracker_system') as any;
+    const tracker = session.getSystem('damage_tracker_system') as any;
     if (tracker) tracker.recordThrowable(session);
 
     _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
-    const maxDist = (wep.range || 25.0) * (state.multipliers.range || 1.0);
+    const rangeMult = state.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0;
+    const reloadMult = state.statsBuffer[PlayerStatID.MULTIPLIER_RELOAD] || 1.0;
+    const maxDist = (wep.range || 25.0) * rangeMult;
     const dist = Math.max(2.0, ratio * maxDist);
 
     _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0)); // Origin
@@ -90,11 +100,11 @@ function _executeThrow(
 
     const damage = WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]);
     ProjectileSystem.launchThrowable(scene, state.projectiles, _v2, _v3,
-        state.activeWeapon, tMax, damage);
+        state.activeWeapon as unknown as DamageID, tMax, damage);
 
     if (wep.reloadTime && wep.reloadTime > 0) {
         state.isReloading = true;
-        state.reloadEndTime = now + (wep.reloadTime * (state.multipliers.reloadTime || 1.0));
+        state.reloadEndTime = now + (wep.reloadTime * reloadMult);
         soundManager.playMagOut();
     }
 
@@ -113,7 +123,7 @@ export const WeaponHandler = {
 
     // Handle switching weapons via 1-4 keys
     handleSlotSwitch: (state: any, loadout: any, key: string) => {
-        // VINTERDÖD FIX: Block input during cinematics
+        // Block input during cinematics
         if (state.vehicle.active || state.cinematicActive) return;
         let next: WeaponType | null = null;
         if (key === '1') next = loadout.primary;
@@ -124,8 +134,10 @@ export const WeaponHandler = {
 
         if (!next) return;
 
+        const nextDef = (WEAPONS as any)[next] as WeaponStats;
+
         // Restriction: Cannot switch to empty throwables
-        if (WEAPONS[next]?.category === WeaponCategory.THROWABLE && (state.weaponAmmo[next] || 0) <= 0) {
+        if (nextDef?.category === WeaponCategory.THROWABLE && (state.weaponAmmo[next] || 0) <= 0) {
             soundManager.playUiClick();
             return;
         }
@@ -148,24 +160,34 @@ export const WeaponHandler = {
 
     // Handle weapon-related inputs (Scroll to switch, R to reload)
     handleInput: (input: any, state: any, loadout: any, simTime: number, disableInput: boolean) => {
-        // VINTERDÖD FIX: Block input during cinematics
+        // Block input during cinematics
         if (disableInput || state.vehicle.active || state.cinematicActive) return;
 
         // 1. Optimized Scroll Switching (Zero-GC)
         if (input.scrollDown || input.scrollUp) {
-            _slotArray.length = 0;
-            _currentSlotIdx = -1;
 
-            _checkSlot(loadout.primary, state);
-            _checkSlot(loadout.secondary, state);
-            _checkSlot(loadout.throwable, state);
-            _checkSlot(loadout.special, state);
-            _checkSlot(WeaponType.RADIO, state);
+            let currentIdx = -1;
+            const validWeapons: WeaponType[] = [];
+            let vCount = 0;
 
-            if (_currentSlotIdx !== -1 && _slotArray.length > 1) {
+            for (let i = 0; i < 5; i++) {
+                const slotKey = _SLOTS[i];
+                let w = (slotKey === 'radio') ? WeaponType.RADIO : loadout[slotKey];
+
+                if (w && w !== WeaponType.NONE) {
+                    const def = (WEAPONS as any)[w] as WeaponStats;
+                    if (def?.category === WeaponCategory.THROWABLE && (state.weaponAmmo[w] || 0) <= 0) continue;
+                    if (w === WeaponType.RADIO && state.familyFound) continue;
+
+                    if (w === state.activeWeapon) currentIdx = vCount;
+                    validWeapons[vCount++] = w;
+                }
+            }
+
+            if (currentIdx !== -1 && vCount > 1) {
                 const step = input.scrollDown ? 1 : -1;
-                const nextIdx = (_currentSlotIdx + step + _slotArray.length) % _slotArray.length;
-                const nextWep = _slotArray[nextIdx];
+                const nextIdx = (currentIdx + step + vCount) % vCount;
+                const nextWep = validWeapons[nextIdx];
 
                 if (nextWep !== state.activeWeapon) {
                     state.activeWeapon = nextWep;
@@ -180,10 +202,11 @@ export const WeaponHandler = {
         }
 
         // 2. Weapon Validation
-        let wep = WEAPONS[state.activeWeapon];
+        let wep = (WEAPONS as any)[state.activeWeapon] as WeaponStats;
         if (!wep) {
             state.activeWeapon = loadout.primary;
-            wep = WEAPONS[state.activeWeapon];
+            wep = (WEAPONS as any)[state.activeWeapon] as WeaponStats;
+            if (!wep) return; // Both active and primary are invalid — bail out safely
         }
 
         // 3. Reload Logic
@@ -192,7 +215,7 @@ export const WeaponHandler = {
 
         if (input.r && !state.isReloading && !isThrowable && !isRadio && (state.weaponAmmo[state.activeWeapon] || 0) < (wep.magSize || 0)) {
             state.isReloading = true;
-            const actualReloadTime = (wep.reloadTime || 0) * (state.multipliers.reloadTime || 1.0);
+            const actualReloadTime = (wep.reloadTime || 0) * (state.statsBuffer[PlayerStatID.MULTIPLIER_RELOAD] || 1.0);
             state.reloadEndTime = simTime + actualReloadTime;
             soundManager.playMagOut();
             haptic.reload();
@@ -201,7 +224,7 @@ export const WeaponHandler = {
         if (state.isReloading && simTime > state.reloadEndTime) {
             state.isReloading = false;
 
-            // VINTERDÖD FIX: Throwables use reloadTime as a cooldown, NOT an ammo refill.
+            // Throwables use reloadTime as a cooldown, NOT an ammo refill.
             // Only guns and special weapons (Continuous) should refill their mag on reload.
             if (wep.category !== WeaponCategory.THROWABLE) {
                 state.weaponAmmo[state.activeWeapon] = wep.magSize || 0;
@@ -212,7 +235,7 @@ export const WeaponHandler = {
 
     // --- DAMAGE SCALING ---
     getScaledDamage: (weaponType: WeaponType, level: number = 0) => {
-        const damage = WEAPONS[weaponType]?.damage || 0;
+        const damage = ((WEAPONS as any)[weaponType] as WeaponStats)?.damage || 0;
         // 10% increase per level above 1: Damage * (1 + (level - 1) * 0.1)
         return Math.floor(damage * (1 + (level - 1) * 0.1));
     },
@@ -220,12 +243,13 @@ export const WeaponHandler = {
     // --- CORE FIRING LOGIC ---
     handleFiring: (session: any, scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, simDelta: number, simTime: number, renderTime: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
         if (state.vehicle.active || state.cinematicActive) return;
-        if (state.isRolling || state.isReloading) return;
+        if (state.isDodging || state.isReloading) return;
 
-        let wep = WEAPONS[state.activeWeapon];
+        let wep = (WEAPONS as any)[state.activeWeapon] as WeaponStats;
         if (!wep) {
             state.activeWeapon = loadout.primary;
-            wep = WEAPONS[state.activeWeapon];
+            wep = (WEAPONS as any)[state.activeWeapon] as WeaponStats;
+            if (!wep) return; // Both active and primary are invalid — bail out safely
         }
 
         if (state.activeWeapon === WeaponType.RADIO) {
@@ -243,9 +267,10 @@ export const WeaponHandler = {
             if (input.fire) {
                 const isUnlimited = !!state.sectorState?.unlimitedAmmo;
                 const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
+
                 if (hasAmmo) {
                     if (!isUnlimited) {
-                        const actualFireRate = (wep.fireRate || 0) / (state.multipliers.fireRate || 1.0);
+                        const actualFireRate = (wep.fireRate || 0) / (state.statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] || 1.0);
                         if (simTime > state.lastShotTime + actualFireRate) {
                             state.weaponAmmo[state.activeWeapon]--;
                             state.lastShotTime = simTime;
@@ -260,6 +285,7 @@ export const WeaponHandler = {
                     _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
                     const cb = state.callbacks;
+
                     _continuousCtx.scene = scene;
                     _continuousCtx.enemies = state.enemies || [];
                     _continuousCtx.collisionGrid = state.collisionGrid;
@@ -269,17 +295,23 @@ export const WeaponHandler = {
                     _continuousCtx.explodeEnemy = cb?.explodeEnemy;
                     _continuousCtx.trackStats = cb?.trackStats;
                     _continuousCtx.addScore = cb?.gainXp;
-                    _continuousCtx.addFireZone = cb?.addFireZone;
-                    _continuousCtx.now = simTime;
+                    _continuousCtx.fireZones = state.fireZones;
+                    _continuousCtx.simTime = simTime;
+                    _continuousCtx.playerPos = playerGroup.position;
+                    _continuousCtx.session = session;
                     _continuousCtx.noiseEvents = state.noiseEvents;
-                    _continuousCtx.makeNoise = cb.makeNoise;
-
+                    _continuousCtx.makeNoise = cb?.makeNoise;
                     _continuousCtx.applyDamage = state.applyDamage;
+                    _continuousCtx.onPlayerHit = cb?.onPlayerHit;
+                    _continuousCtx.weaponHandler = WeaponHandler;
 
                     ProjectileSystem.handleContinuousFire(
-                        state.activeWeapon, _v2, _v3, simDelta, _continuousCtx,
-                        WeaponHandler.getScaledDamage(state.activeWeapon,
-                            state.weaponLevels[state.activeWeapon]) * (60 * simDelta)
+                        state.activeWeapon as unknown as DamageID,
+                        _v2,
+                        _v3,
+                        simDelta,
+                        _continuousCtx as any, // Castar säkert här nu när vi uppfyller gränssnittet
+                        WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]) * (60 * simDelta)
                     );
                 } else {
                     if (state.activeWeapon === WeaponType.FLAMETHROWER && (state as any).lastFireState) {
@@ -308,7 +340,7 @@ export const WeaponHandler = {
             if (input.fire) {
                 const isUnlimited = !!state.sectorState?.unlimitedAmmo;
                 const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
-                const actualFireRate = (wep.fireRate || 0) / (state.multipliers.fireRate || 1.0);
+                const actualFireRate = (wep.fireRate || 0) / (state.statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] || 1.0);
 
                 if (simTime > state.lastShotTime + actualFireRate && hasAmmo) {
                     state.lastShotTime = simTime;
@@ -324,7 +356,7 @@ export const WeaponHandler = {
                     haptic.gunshot();
 
                     if (state.callbacks && state.callbacks.makeNoise) {
-                        state.callbacks.makeNoise(_v2, NoiseType.GUNSHOT, NOISE_RADIUS.GUNSHOT);
+                        state.callbacks.makeNoise(_v2, NoiseType.GUNSHOT, NOISE_RADIUS[NoiseType.GUNSHOT]);
                     }
 
                     const pellets = wep.name === WeaponType.SHOTGUN ? 8 : 1;
@@ -344,7 +376,7 @@ export const WeaponHandler = {
                         }
                         _v3.normalize();
 
-                        ProjectileSystem.launchBullet(scene, state.projectiles, _v2, _v3, wep.name, damagePerPellet);
+                        ProjectileSystem.launchBullet(scene, state.projectiles, _v2, _v3, wep.name as unknown as DamageID, damagePerPellet);
                     }
                 } else if (input.fire && (state.weaponAmmo[state.activeWeapon] || 0) <= 0 && simTime > state.lastShotTime + (wep.fireRate || 0)) {
                     state.lastShotTime = simTime;
@@ -369,7 +401,7 @@ export const WeaponHandler = {
                 if (state.throwChargeStart === 0) state.throwChargeStart = simTime;
 
                 const chargeTime = 1250;
-                const holdTime = 500; // [VINTERDÖD FIX] Hold at max for 500ms before reset
+                const holdTime = 500; // Hold at max for 500ms before reset
                 const totalCycle = chargeTime + holdTime;
 
                 const elapsed = simTime - state.throwChargeStart;
@@ -378,7 +410,7 @@ export const WeaponHandler = {
 
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
-                const maxDist = (wep.range || 25.0) * (state.multipliers.range || 1.0);
+                const maxDist = (wep.range || 25.0) * (state.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0);
                 const dist = Math.max(2.0, ratio * maxDist);
 
                 _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0));
@@ -442,7 +474,7 @@ export const WeaponHandler = {
                     (trajectoryLineMesh.material as THREE.MeshBasicMaterial).depthTest = false;
                 }
 
-                // [VINTERDÖD FIX] Removed auto-throw at max strength. Charge cycles indefinitely while fire is held.
+                // Charge cycles indefinitely while fire is held.
 
             } else if (state.throwChargeStart > 0) {
                 // Calculate release ratio with same cycling logic
