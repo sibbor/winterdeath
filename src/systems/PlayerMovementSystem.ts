@@ -10,11 +10,9 @@ import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { _buoyancyResult } from './WaterSystem';
 import { NOISE_RADIUS, NoiseType } from '../entities/enemies/EnemyTypes';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
-import { MaterialType } from '../content/environment';
 import { FootprintSystem } from './FootprintSystem';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { SoundID } from '../utils/audio/AudioTypes';
-import { KMH_TO_MS } from '../content/constants';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -63,9 +61,8 @@ export class PlayerMovementSystem implements System {
         const disableInput = session.inputDisabled || false;
 
         // --- APPLY DYNAMIC MULTIPLIERS (DOD) ---
-        const speedMult = stats[PlayerStatID.MULTIPLIER_SPEED];
-        const baseSpeed = stats[PlayerStatID.SPEED];
-        const currentSpeed = (baseSpeed * speedMult) * KMH_TO_MS;
+        // Final Speed is pre-calculated in m/s (Unit conversion + Perk Multipliers) by PlayerStatsSystem
+        const currentSpeed = stats[PlayerStatID.FINAL_SPEED];
 
         if (state.vehicle.active) {
             state.isMoving = false;

@@ -221,7 +221,7 @@ export const EnemyManager = {
         e.awareness = 0;
         e.lastHeardNoiseType = NoiseType.NONE;
         e.lastKnownPosition.copy(e.mesh.position);
-        e.lastTrailPos.copy(e.mesh.position);
+        e.lastTrailPos.set(0, 0, 0); // V8 optimized: zeroing instead of copy if recycling
         e.hasLastTrailPos = false;
 
         // FIX: Ensure tackle time is reset to prevent NaN physics failures
@@ -236,9 +236,11 @@ export const EnemyManager = {
         resetMaterialEmissive(e.mesh);
 
         e.stunDuration = 0;
+        e.slowDuration = 0;
         e.blindDuration = 0;
         e.burnDuration = 0;
         e.burnTickTimer = 0;
+        e.lastBurnTick = 0;
 
         e.drownTimer = 0;
         e.drownDmgTimer = 0;
@@ -248,6 +250,15 @@ export const EnemyManager = {
         e.mesh.userData.gibbed = false;
         e.mesh.userData.electrocuted = false;
         e.mesh.userData.ashSpawned = false;
+        e.mesh.userData.ashPermanent = false;
+        e.mesh.userData.isRagdolling = false;
+        e.mesh.userData.isFlashing = false;
+        e.mesh.userData.wasKnockedBack = false;
+        e.mesh.userData.wasStunned = false;
+
+        // Reset spin velocity to zero (No truthy check, V8 Shape Locking guarantees existence)
+        (e.mesh.userData.spinVel as THREE.Vector3).set(0, 0, 0);
+        (e.mesh.userData.hitDir as THREE.Vector3).set(0, 0, 0);
         e.mesh.userData.ashPermanent = false;
         e.mesh.userData.isFlashing = false;
         e.mesh.userData.isRagdolling = false;
@@ -528,8 +539,9 @@ export const EnemyManager = {
                 const lift = maxForce * 0.45 * falloff;
                 e.knockbackVel.set(_v1.x * force, lift, _v1.z * force);
 
-                // Stun duration scales with force (e.g. 25 force = 1.25s, 15 force = 0.75s)
-                e.stunDuration = Math.max(0.5, (maxForce * 0.05) * falloff);
+                // Radius knockback: Set persistent slow for recovery window
+                e.stunDuration = Math.max(1.2, (maxForce * 0.05) * falloff);
+                e.slowDuration = 3.5;
                 e.state = AIState.IDLE;
                 e.attackTimer = 0; // BREAKOUT: Cancel any active bite/hit grip
 
@@ -561,24 +573,33 @@ export const EnemyManager = {
         const canTackle = enemy.deathState === EnemyDeathState.ALIVE && (simTime - enemy.lastTackleTime > 300);
         if (!canTackle) return;
 
+        // Cancel any active attacks BEFORE overwriting the state
+        if (enemy.state === AIState.ATTACK_CHARGE || enemy.state === AIState.ATTACKING) {
+            enemy.attackTimer = 0;
+        }
+
+        // Apply baseline stun/slow for ALL impacts
+        enemy.stunDuration = isDashing ? 2.0 : 0.5; // Short stun for regular hits
+        enemy.slowDuration = isDashing ? 3.5 : 1.5;
+        enemy.state = AIState.IDLE;
+        enemy.lastTackleTime = simTime;
+
+        // If not a dash/heavy impact, apply light push and exit early
         if (!isDashing) {
             const push = ((enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 1.0 : 4.0) / (enemy.originalScale * enemy.originalScale);
             _v2.subVectors(enemy.mesh.position, impactPos).setY(0).normalize().multiplyScalar(push);
             enemy.knockbackVel.add(_v2);
-            enemy.lastTackleTime = simTime;
             return;
         }
 
-        if (enemy.state === AIState.ATTACK_CHARGE || enemy.state === AIState.ATTACKING) {
-            enemy.state = AIState.IDLE;
-            enemy.attackTimer = 0;
-        }
-
+        // Heavy impact (Dash/Vehicle) physics
         const mass = (enemy.originalScale * enemy.originalScale * enemy.widthScale);
         const pushMultiplier = ((enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 0.1 : 1.0) / Math.max(0.5, mass);
 
         _v2.subVectors(enemy.mesh.position, impactPos).setY(0).normalize();
         _v1.copy(moveVec).normalize();
+
+        // Prevent zombies from being sucked inward if impact angle is sharp
         if (_v2.dot(_v1) > 0.3) {
             _v1.set(moveVec.z, 0, -moveVec.x).normalize();
             if (_v2.dot(_v1) < 0) _v1.negate();
@@ -589,10 +610,8 @@ export const EnemyManager = {
         const lift = 30.0 * pushMultiplier;
 
         enemy.knockbackVel.set(_v2.x * force, lift, _v2.z * force);
-        enemy.state = AIState.IDLE;
-        enemy.lastTackleTime = simTime;
-        enemy.stunDuration = 2.0;
 
+        // Apply dash damage (skip if damage was already handled by the vehicle system)
         if (isDashing && enemy.lastDamageType !== DamageID.VEHICLE_RAM && enemy.lastDamageType !== DamageID.VEHICLE_SPLATTER) {
             const tackleDamage = 10;
             const applyDamage = (state as any).applyDamage;
@@ -604,6 +623,7 @@ export const EnemyManager = {
             }
         }
 
+        // Ragdoll visuals and spinning for standard enemies
         if ((enemy.statusFlags & EnemyFlags.BOSS) === 0) {
             enemy.mesh.userData.isRagdolling = true;
             const sVel = enemy.mesh.userData.spinVel as THREE.Vector3;
@@ -613,6 +633,7 @@ export const EnemyManager = {
                 (Math.random() - 0.5) * 25
             );
         }
+
         FXSystem.spawnPart(scene, state.particles, enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
         soundManager.playImpact(MaterialType.FLESH);
     },
@@ -686,7 +707,7 @@ export const EnemyManager = {
         } else {
             e.lastDamageType = DamageID.VEHICLE_PUSH;
 
-            // Use dedicated V3 and V4 to avoid aliasing with V1 and V2 in applyKnockback
+            // Use dedicated V3 and V4 to avoid aliasing with V1 and V2 inside applyKnockback
             _v3.copy(knockDir).multiplyScalar(speedMS);
             _v4.copy(e.mesh.position).addScaledVector(knockDir, -1.0);
 

@@ -451,7 +451,7 @@ export class GameSessionSetup {
 
                 if (!alreadyDefeated) {
                     state.bossesDefeated.push(id);
-                    state.bossDefeatedTime = performance.now();
+                    state.bossDefeatedTime = engine.simTime;
 
                     const tracker = session.getSystem('damage_tracker_system') as any;
                     if (tracker) {
@@ -608,7 +608,7 @@ export class GameSessionSetup {
                     if (state.bossesDefeated[j] === id) { seen = true; break; }
                 }
                 if (!seen) state.bossesDefeated.push(id);
-                state.bossDefeatedTime = performance.now();
+                state.bossDefeatedTime = engine.simTime;
                 state.familyFound = true;
 
                 const tracker = session.getSystem('damage_tracker_system') as any;
@@ -736,7 +736,8 @@ export class GameSessionSetup {
         const scene = engine.scene;
 
         // --- 1. RESET PLAYER STATE (DOD / Zero-GC) ---
-        state.statusFlags &= ~PlayerStatusFlags.DEAD;
+        // --- STATUS & EFFECT RESET (Zero-GC Clean Slate) ---
+        state.statusFlags = 0; // Reset all flags (Dead, Airborne, etc.)
         refs.deathPhaseRef.current = 'NONE';
         state.playerDeathState = PlayerDeathState.ALIVE;
         state.statsBuffer[PlayerStatID.HP] = state.statsBuffer[PlayerStatID.MAX_HP];
@@ -748,9 +749,20 @@ export class GameSessionSetup {
         state.vehicle.speed = 0;
         state.vehicle.engineState = 'OFF';
 
-        // Reset buffs/debuffs (Zero-GC: Filling contiguous arrays with 0)
+        // Reset Numeric Effect Buffers (Zero-GC: Filling contiguous arrays with 0)
         state.effectDurations.fill(0);
         state.effectIntensities.fill(0);
+
+        // Clear Dynamic Status Effect Collections
+        state.activePassives.length = 0;
+        state.activeBuffs.length = 0;
+        state.activeDebuffs.length = 0;
+
+        // Reset Killer Metadata
+        state.killedByEnemy = false;
+        state.killerType = DamageID.NONE;
+        state.killerName = '';
+        state.killerAttackName = '';
 
         // Reset simulation timers to prevent lockout
         state.simTime = 0;
@@ -855,7 +867,6 @@ export class GameSessionSetup {
 
         // --- 7. FIX THE UI ---
         HudStore.patch({ isDead: false, hp: state.statsBuffer[PlayerStatID.MAX_HP] });
-        //HudStore.update({ ...HudStore.getState(), isDead: false, hp: state.statsBuffer[PlayerStatID.MAX_HP] });
 
         setDeathPhase('NONE');
     }

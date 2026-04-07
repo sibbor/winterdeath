@@ -1,17 +1,17 @@
 import * as THREE from 'three';
-import { 
-    Enemy, 
-    AIState, 
-    EnemyEffectType, 
-    EnemyDeathState, 
-    EnemyType, 
-    SEARCH_TIMERS, 
-    EnemyFlags, 
-    ENEMY_MAX_HP, 
-    ENEMY_BASE_SPEED, 
-    ENEMY_SCALE, 
-    ENEMY_WIDTH_SCALE, 
-    ENEMY_ATTACK_RANGE 
+import {
+    Enemy,
+    AIState,
+    EnemyEffectType,
+    EnemyDeathState,
+    EnemyType,
+    SEARCH_TIMERS,
+    EnemyFlags,
+    ENEMY_MAX_HP,
+    ENEMY_BASE_SPEED,
+    ENEMY_SCALE,
+    ENEMY_WIDTH_SCALE,
+    ENEMY_ATTACK_RANGE
 } from '../../entities/enemies/EnemyTypes';
 import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { EnemyAttackHandler } from './EnemyAttackHandler';
@@ -24,7 +24,6 @@ import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { EnemyAnimator } from './EnemyAnimator';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
-import { KMH_TO_MS } from '../../content/constants';
 
 const _waterCheckResult = { flatDepth: 0 };
 
@@ -41,7 +40,6 @@ const TWO_PI = Math.PI * 2;
 const SEPARATION_RADIUS = 1.5;
 const SEPARATION_RADIUS_SQ = SEPARATION_RADIUS * SEPARATION_RADIUS;
 const INV_SEPARATION_RADIUS = 1.0 / SEPARATION_RADIUS;
-const KPH_TO_MS = 1.0 / 3.6; // Convert kph to meters per second for world-scale physics
 
 function logStateChange(now: number, e: Enemy, newState: AIState, reason?: string) {
     if (PerformanceMonitor.getInstance().aiLoggingEnabled && e.state !== newState) {
@@ -189,62 +187,70 @@ export const EnemyAI = {
                 e.mesh.userData.wasKnockedBack = true;
             }
 
-            const mass = ENEMY_SCALE[e.type] * ENEMY_WIDTH_SCALE[e.type];
-            // FIX: Displacement shouldn't be divided by mass if velocity already accounts for it
-            e.mesh.position.addScaledVector(e.knockbackVel, simDelta);
-            e.knockbackVel.y -= 35 * simDelta; // Gravitation adjusted for better air-time (was 50)
+            const mass = (ENEMY_SCALE[e.type] || 1.0) * (ENEMY_WIDTH_SCALE[e.type] || 1.0);
 
-            // Apply friction only on X and Z (horizontally)
-            const friction = 1.0 + (mass * 2.0);
+            // 1. Apply Gravity (Softer -18 for cinematic weight)
+            e.knockbackVel.y -= 18 * simDelta;
+
+            // 2. Apply Friction (Horizontal only)
+            const friction = 4.0 + (mass * 3.0);
             const drag = Math.max(0, 1 - friction * simDelta);
             e.knockbackVel.x *= drag;
             e.knockbackVel.z *= drag;
 
-            if (e.mesh.position.y > e.fallStartY) {
+            // Track peak height for fall damage
+            if (e.mesh.position.y > (e.fallStartY || 0)) {
                 e.fallStartY = e.mesh.position.y;
             }
             e.statusFlags |= EnemyFlags.AIRBORNE;
 
-            // Dynamic floor height based on entity state to prevent sinking during horizontal knockback
-            const isRagdolling = e.mesh.userData.isRagdolling || e.deathState !== EnemyDeathState.ALIVE;
-            const floorY = isRagdolling ? 0 : (1.0 * ENEMY_SCALE[e.type]);
+            // 3. Unified Displacement (Apply velocity once per frame)
+            e.mesh.position.addScaledVector(e.knockbackVel, simDelta);
+
+            // 4. Floor Collision & Landing Logic
+            const isRagdolling = e.mesh.userData.isRagdolling === true || e.deathState !== EnemyDeathState.ALIVE;
+            const floorY = isRagdolling ? 0.2 : (1.0 * (ENEMY_SCALE[e.type] || 1.0));
 
             if (e.mesh.position.y <= floorY) {
-                const peakY = e.fallStartY;
+                const peakY = e.fallStartY || floorY;
+                e.mesh.position.y = floorY;
                 e.statusFlags &= ~EnemyFlags.AIRBORNE;
                 e.fallStartY = 0;
 
+                // Reset only VERTICAL speed. Horizontal X/Z momentum continues to bleed via friction.
+                e.knockbackVel.y = 0;
+
+                // Dampen horizontal slide if landing from a significant drop
+                if (peakY > floorY + 0.5) {
+                    e.knockbackVel.x *= 0.5;
+                    e.knockbackVel.z *= 0.5;
+                }
+
+                // Interaction: Water splashes or Fall damage
                 if (water) {
                     water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, renderTime);
                     checkedWaterThisFrame = true;
+                    if (_buoyancyResult.inWater) {
+                        water.spawnRipple(e.mesh.position.x, e.mesh.position.z, 1.5);
+                    }
                 }
 
-                if (water && _buoyancyResult.inWater) {
-                    water.spawnRipple(e.mesh.position.x, e.mesh.position.z, 1.5);
-                } else if (peakY > floorY + 1.5) {
-                    // FALL DAMAGE
+                // Apply fall damage if not in water
+                if ((!water || !_buoyancyResult.inWater) && peakY > floorY + 1.5) {
                     const fallDamage = Math.min(e.maxHp * 0.6, (peakY - floorY) * 8);
                     e.hp -= fallDamage;
                     callbacks.applyDamage(e, fallDamage, DamageID.FALL, true);
-
                     callbacks.spawnPart(e.mesh.position.x, 0.2, e.mesh.position.z, 'blood', 20);
+
                     if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
-                        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
-                            console.log(`[AI] ${e.type}_${e.id} killed by: Environment (FALL)`);
-                        }
                         e.deathState = EnemyDeathState.FALL;
                     }
                 }
 
-                e.mesh.position.y = floorY;
-
-                // Zero-GC: Only kill Y-velocity on landing. Allow horizontal friction to handle sliding.
-                e.knockbackVel.y = 0;
-
-                // Dampen horizontal sliding if landing from a high fall
-                if (peakY > floorY + 0.5) {
-                    e.knockbackVel.x *= 0.2;
-                    e.knockbackVel.z *= 0.2;
+                // Stop ragdolling if movement is nearly zero
+                if (Math.abs(e.knockbackVel.x) < 0.1 && Math.abs(e.knockbackVel.z) < 0.1) {
+                    e.knockbackVel.set(0, 0, 0);
+                    e.mesh.userData.isRagdolling = false;
                 }
             }
         } else {
@@ -328,6 +334,18 @@ export const EnemyAI = {
             return;
         }
 
+        // --- 6.5 STATUS TIMERS & COOLDOWNS ---
+        if (e.slowDuration > 0) e.slowDuration -= simDelta;
+        if (e.blindDuration > 0) e.blindDuration -= simDelta;
+
+        for (let i = 0; i < e.attacks.length; i++) {
+            const atkType = e.attacks[i].type;
+            const cd = e.attackCooldowns[atkType];
+            if (cd !== 0) {
+                e.attackCooldowns[atkType] = Math.max(0, cd - simDelta * 1000);
+            }
+        }
+
         // --- 7. STUNS & RAGDOLLS ---
         if (e.stunDuration > 0) {
             if (!e.mesh.userData.wasStunned) e.mesh.userData.wasStunned = true;
@@ -353,8 +371,8 @@ export const EnemyAI = {
                 }
             } else {
                 const jitterScale = simDelta * 60;
-                e.mesh.position.x += (Math.random() - 0.5) * 0.2 * jitterScale;
-                e.mesh.position.z += (Math.random() - 0.5) * 0.2 * jitterScale;
+                e.mesh.position.x += (Math.random() - 0.5) * 0.05 * jitterScale;
+                e.mesh.position.z += (Math.random() - 0.5) * 0.05 * jitterScale;
                 e.mesh.rotation.y += (Math.random() - 0.5) * 0.5 * jitterScale;
             }
 
@@ -372,8 +390,6 @@ export const EnemyAI = {
         } else {
             e.mesh.userData.wasStunned = false;
         }
-
-        if (e.blindDuration > 0) { e.blindDuration -= simDelta; return; }
 
         // --- 8. SENSORS & SEPARATION ---
         const isFullyAware = e.awareness >= 0.9;
@@ -408,6 +424,11 @@ export const EnemyAI = {
             }
         }
 
+        // AI Movement Lock: Do not allow base AI movement if currently being heavily displaced by physics.
+        // Optimized: Bypassing null-check since V8 shape guarantees knockbackVel exists.
+        // Using inline lengthSq on X and Z to avoid Math.sqrt() and Y-axis jumping interference.
+        const isKnockedBackH = (e.knockbackVel.x * e.knockbackVel.x + e.knockbackVel.z * e.knockbackVel.z) > 0.05;
+
         // --- 9. STATE MACHINE ---
         switch (e.state) {
             case AIState.IDLE:
@@ -424,9 +445,9 @@ export const EnemyAI = {
                     logStateChange(simTime, e, AIState.WANDER);
                     e.state = AIState.WANDER;
 
-                    const angle = Math.random() * TWO_PI;
+                    const angle = Math.random() * (TWO_PI);
                     _v1.set(e.spawnPos.x + Math.cos(angle) * 6, 0, e.spawnPos.z + Math.sin(angle) * 6);
-                    e.velocity.subVectors(_v1, e.mesh.position).normalize().multiplyScalar(ENEMY_BASE_SPEED[e.type] * 0.5);
+                    e.velocity.subVectors(_v1, e.mesh.position).normalize().multiplyScalar(e.speed * 0.5);
                     e.searchTimer = 2.0 + Math.random() * 3.0;
                 }
                 break;
@@ -435,8 +456,9 @@ export const EnemyAI = {
                 e.searchTimer -= simDelta;
                 _v1.set(e.mesh.position.x + e.velocity.x * simDelta, e.mesh.position.y + e.velocity.y * simDelta, e.mesh.position.z + e.velocity.z * simDelta);
 
-                if (!isTier4) {
-                    moveEntity(e, _v1, simDelta, ENEMY_BASE_SPEED[e.type] * 0.5, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                // Movement Lock Guard applied ONLY to physical displacement
+                if (!isTier4 && !isKnockedBackH) {
+                    moveEntity(e, _v1, simDelta, e.speed * 0.5, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                 }
 
                 if (seesPlayer) {
@@ -469,8 +491,9 @@ export const EnemyAI = {
                     e.state = AIState.IDLE;
                     e.idleTimer = 1.0 + Math.random() * 2.0;
                 } else if (e.mesh.position.distanceToSquared(e.lastKnownPosition) > 1.5) {
-                    if (!isTier4) {
-                        moveEntity(e, e.lastKnownPosition, simDelta, ENEMY_BASE_SPEED[e.type] * 0.8, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                    // Movement Lock Guard
+                    if (!isTier4 && !isKnockedBackH) {
+                        moveEntity(e, e.lastKnownPosition, simDelta, e.speed * 0.8, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                     }
                 } else {
                     e.mesh.rotation.y += simDelta * 2.5;
@@ -499,9 +522,10 @@ export const EnemyAI = {
                     }
 
                     const target = (seesPlayer) ? playerPos : e.lastKnownPosition;
-                    let chaseSpeed = ((e.statusFlags & EnemyFlags.WADING) !== 0 ? ENEMY_BASE_SPEED[e.type] * 0.6 : ENEMY_BASE_SPEED[e.type]);
+                    let chaseSpeed = ((e.statusFlags & EnemyFlags.WADING) !== 0 ? e.speed * 0.6 : e.speed);
 
-                    if (!isTier4) {
+                    // Movement Lock Guard
+                    if (!isTier4 && !isKnockedBackH) {
                         moveEntity(e, target, simDelta, chaseSpeed, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
                     }
 
@@ -514,7 +538,7 @@ export const EnemyAI = {
                         let bestAttackIndex = -1;
                         for (let i = 0; i < e.attacks.length; i++) {
                             const att = e.attacks[i];
-                            const cooldown = e.attackCooldowns[att.type] || 0;
+                            const cooldown = e.attackCooldowns[i] || 0;
                             if (cooldown > 0) continue;
 
                             const range = (att.type === EnemyAttackType.HIT && !att.range) ? ENEMY_ATTACK_RANGE[e.type] : (att.range || ENEMY_ATTACK_RANGE[e.type]);
@@ -552,8 +576,9 @@ export const EnemyAI = {
                     e.attackTimer -= simDelta;
                     const att = e.attacks[e.currentAttackIndex!];
 
-                    if (!isTier4) {
-                        moveEntity(e, playerPos, simDelta, ENEMY_BASE_SPEED[e.type] * 0.25, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                    // Movement Lock Guard
+                    if (!isTier4 && !isKnockedBackH) {
+                        moveEntity(e, playerPos, simDelta, e.speed * 0.25, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
                     }
 
                     if (e.attackTimer <= 0) {
@@ -570,8 +595,9 @@ export const EnemyAI = {
                     e.attackTimer -= simDelta;
                     const att = e.attacks[e.currentAttackIndex!];
 
-                    if (!isTier4) {
-                        moveEntity(e, playerPos, simDelta, ENEMY_BASE_SPEED[e.type] * 0.15, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                    // Movement Lock Guard
+                    if (!isTier4 && !isKnockedBackH) {
+                        moveEntity(e, playerPos, simDelta, e.speed * 0.15, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
                     }
 
                     if (att && att.activeTime) {
@@ -588,17 +614,6 @@ export const EnemyAI = {
 
         // --- 10. PROCEDURAL ANIMATION ---
         EnemyAnimator.updateAttackAnim(e, simTime, renderTime, simDelta);
-
-        // --- 11. COOLDOWNS ---
-        for (let i = 0; i < e.attacks.length; i++) {
-            const atkType = e.attacks[i].type;
-            const cd = e.attackCooldowns[atkType];
-            if (cd !== 0) {
-                e.attackCooldowns[atkType] = Math.max(0, cd - simDelta * 1000);
-            }
-        }
-
-        if (e.slowDuration > 0) e.slowDuration -= simDelta;
     }
 };
 
@@ -615,27 +630,25 @@ function moveEntity(e: Enemy, target: THREE.Vector3, simDelta: number, speed: nu
     _v2.y *= invDist;
     _v2.z *= invDist;
 
-    // 1. Calculate Base Speed in m/s
-    // Convert km/h to engine units (m/s)
-    let curSpeed = speed * KMH_TO_MS;
-    if (e.slowDuration > 0 || (e.statusFlags & EnemyFlags.SLOWED)) curSpeed *= 0.55;
+    // Apply Status Effect Slows (50% reduction)
+    if (e.slowDuration > 0 || (e.statusFlags & EnemyFlags.SLOWED) !== 0) {
+        speed *= 0.5;
+    }
 
     // 2. Set Base Velocity Vector
-    _v3.copy(_v2).multiplyScalar(curSpeed);
+    _v3.copy(_v2).multiplyScalar(speed);
 
     // 3. Apply Separation Force (if any)
     if (Math.abs(sepForce.x) > 0.001 || Math.abs(sepForce.z) > 0.001) {
-        // Add the push force (scaled to a realistic m/s value)
-        _v3.addScaledVector(sepForce, 2.0);
+        _v3.addScaledVector(sepForce, 1.2);
 
         // ZERO-GC CLAMP: Prevent "Crowd Surfing"
-        // Ensures separation steers them sideways but never breaks their max forward speed limit
-        if (_v3.lengthSq() > curSpeed * curSpeed) {
-            _v3.normalize().multiplyScalar(curSpeed);
+        if (_v3.lengthSq() > speed * speed) {
+            _v3.normalize().multiplyScalar(speed);
         }
     }
 
-    // Save actual physics velocity for other systems (drowning, blood splatter trajectory etc)
+    // Save actual physics velocity for other systems
     e.velocity.copy(_v3);
 
     // 4. Convert velocity to frame delta displacement

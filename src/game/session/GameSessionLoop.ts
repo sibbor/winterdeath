@@ -13,19 +13,16 @@ import { TriggerHandler } from '../../systems/TriggerHandler';
 import { CAMERA_HEIGHT, HEALTH_CRITICAL_THRESHOLD } from '../../content/constants';
 import { soundManager } from '../../utils/audio/SoundManager';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
-import { WeaponType, WEAPONS, WeaponBehavior } from '../../content/weapons';
+import { WEAPONS, WeaponBehavior } from '../../content/weapons';
 import { EnemyDeathState, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 import { DamageType, DamageID } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { ENEMY_TYPE_KEYS } from '../../utils/ui/Mappers';
-
 import { VehicleManager } from '../../systems/VehicleManager';
 import { InteractionType } from '../../systems/InteractionTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
-
-
 
 interface LoopContext {
     engine: WinterEngine;
@@ -78,7 +75,7 @@ const _triggerOptionsScratch: any = {
     resolveDynamicPos: null,
     onDiscovery: null,
     playSound: null,
-    isFamilyFollowing: null
+    activeFamilyMembers: null
 };
 
 // String cache for damage numbers to prevent GC spikes during rapid fire
@@ -114,7 +111,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         let visual: THREE.Object3D | null = null;
         const targetName = `clue_visual_${id}`;
 
-        // 1. Iterativ sökning istället för scene.getObjectByName (Zero-GC)
         _traverseStack.length = 0;
         _traverseStack.push(scene);
 
@@ -132,7 +128,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
         }
 
-        // 2. Iterativ uppdatering istället för visual.traverse (Zero-GC)
         if (visual) {
             _traverseStack.length = 0;
             _traverseStack.push(visual);
@@ -140,7 +135,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             while (_traverseStack.length > 0) {
                 const child = _traverseStack.pop() as any;
 
-                // Använd Three.js snabba boolean-flaggor istället för trög instanceof
                 if (child.isPointLight || child.isSpotLight || child.isDirectionalLight) {
                     child.intensity = 0;
                 } else if (child.isMesh) {
@@ -154,7 +148,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
     };
 
-    // Pre-declare ALL properties to lock V8 memory shape and avoid dynamic property allocations
     const _gameContext: any = {
         scene: null,
         enemies: null,
@@ -184,7 +177,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         applyDamage: (enemy: any, amount: number, type: DamageID, isHighImpact: boolean = false) => {
             if (enemy.deathState !== EnemyDeathState.ALIVE || amount <= 0) return false;
 
-
             // --- O(1) ZERO-GC ENEMY DISCOVERY ---
             if (!enemy.discovered) {
                 enemy.discovered = true;
@@ -203,7 +195,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             const actualDmg = Math.max(0, Math.min(enemy.hp, amount));
             enemy.hp -= actualDmg;
             enemy.lastDamageType = type;
-            enemy.hitTime = _gameContext.now;
+            enemy.hitTime = _gameContext.now; // this is already simTime
             enemy.lastHitWasHighImpact = isHighImpact;
 
             // Track stats centrally
@@ -218,9 +210,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             const weaponData = WEAPONS[type];
             const color = DamageNumberSystem.getColorForType(type, !!isHighImpact);
 
-            // Throttle text spawning for performance (Zero-GC Accumulation)
             const isContinuous = weaponData?.behavior === WeaponBehavior.CONTINUOUS || type === DamageID.BURN || type === DamageID.DROWNING;
-
             const textThrottle = isContinuous ? 250 : 0;
 
             enemy._accumulatedDamage += amount;
@@ -228,8 +218,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (_gameContext.now - enemy._lastDamageTextTime > textThrottle) {
                 if (_gameContext.showDamageText && enemy._accumulatedDamage >= 1) {
                     const textX = enemy.mesh.position.x;
-                    // --- DYNAMIC HEIGHT FIX ---
-                    // 1.8 is the approximate visual top, 1.2 is the float offset
                     const textY = enemy.originalScale * 1.8 + 1.2;
                     const textZ = enemy.mesh.position.z;
 
@@ -238,7 +226,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                         getCachedNumberString(enemy._accumulatedDamage),
                         color
                     );
-                    enemy._accumulatedDamage = 0; // Reset accumulation after showing
+                    enemy._accumulatedDamage = 0;
                     enemy._lastDamageTextTime = _gameContext.now;
                 }
             }
@@ -249,16 +237,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
     state.applyDamage = _gameContext.applyDamage;
 
-    // Hoist dynamic pos resolution to avoid allocating a new function every frame
     _triggerOptionsScratch.resolveDynamicPos = (familyId?: number, ownerId?: string) => {
         if (familyId !== undefined) {
             const members = refs.activeFamilyMembers.current;
             for (let i = 0; i < members.length; i++) {
                 if (members[i].id === familyId) {
-                    // If the family member is already following the player (Replay), don't move the trigger to them!
-                    // Let it stay at the end of the track so we can use it to start the boss fight.
                     if (members[i].following) return null;
-
                     return members[i].mesh?.position || null;
                 }
             }
@@ -267,8 +251,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         if (ownerId) {
             const scene = engine.scene;
-
-            // [VINTERDÖD FIX] Zero-GC iterative traversal instead of .getObjectByName
             _traverseStack.length = 0;
             _traverseStack.push(scene);
 
@@ -276,7 +258,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 const node = _traverseStack.pop() as THREE.Object3D;
 
                 if (node.name === ownerId || node.userData.id === ownerId) {
-                    _traverseStack.length = 0; // Free refs
+                    _traverseStack.length = 0;
                     return node.position;
                 }
 
@@ -294,38 +276,33 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
     return (dt: number) => {
         if (!refs.isMounted.current || refs.isBuildingSectorRef.current) return;
 
-        // --- VINTERDÖD FIX: Pause & Cinematic Time Logic ---
         let delta = dt;
         if (delta > 0.1) delta = 0.016;
 
-        // Spara den ofrysta tiden för UI, session och miljösystem
         const realDt = delta;
-
         const isCinematic = state.cinematicActive;
         const isBossIntro = refs.bossIntroRef.current?.active;
         const isHardPaused = propsRef.current.isPaused || propsRef.current.isClueOpen;
         const isInteractionPaused = state.isInteractionOpen && !isCinematic;
 
-        // 1. ESC-Meny eller Clue = TOTAL FRYSNING (Bakåtkompatibelt)
+        // 1. ESC-Meny eller Clue = TOTAL FRYSNING
         if (isHardPaused && !isCinematic && !isBossIntro) {
             engine.isSimulationPaused = true;
             engine.isSoftPaused = false;
             return;
         }
 
-        // Släpp den totala frysningen om vi inte är i en meny
         engine.isSimulationPaused = false;
 
-        // 2. Cinematic = SOFT PAUSE (Fiender/Fysik stannar, Miljö lever)
+        // 2. Cinematic = SOFT PAUSE
         if (isCinematic || isBossIntro) {
-            delta = 0; // Skickas till alla lokala spelsystem (fiender, projektiler)
+            delta = 0;
             engine.isSoftPaused = true;
         } else {
             engine.isSoftPaused = false;
         }
 
-        // --- VINTERDÖD FIX: Simulation & Visual Clocks (Milliseconds) ---
-        // Synchronize engine-owned master clocks with the local session state
+        // --- VINTERDÖD FIX: Simulation & Visual Clocks ---
         state.lastSimDelta = delta;
         state.lastRenderDelta = realDt;
         state.renderTime = engine.renderTime;
@@ -333,10 +310,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         const simTime = engine.simTime;
         const renderTime = engine.renderTime;
+        const now = performance.now(); // ENDAST för HUD och Visuell lerp
 
-        const now = performance.now();
-
-        // --- VINTERDÖD FIX: Bitwise Death Check ---
         const sf = state.statusFlags;
         const isDead = (sf & PlayerStatusFlags.DEAD) !== 0;
 
@@ -369,14 +344,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             lastHudSyncTime = now;
             state.framesSinceHudUpdate = 0;
 
-            if (!playerGroup || playerGroup.children.length === 0) {
-                if (now % 5000 < 16) console.error("[GameSessionLoop] ERROR: playerGroup missing or empty!");
-                return;
-            }
+            if (!playerGroup || playerGroup.children.length === 0) return;
 
-            // --- DISCOVERY QUEUE PROCESSOR (Zero-GC) ---
-            // Bridge events from handleDiscovery() into the HudStore-driven Popup.
-            // Only pops a new item if the current popup has finished or enough time passed.
             const queue = (refs as any).discoveryQueueRef.current;
             if (queue && queue.length > 0 && !state.discovery.active) {
                 const next = queue.shift();
@@ -386,12 +355,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     state.discovery.type = next.type;
                     state.discovery.title = next.title;
                     state.discovery.details = next.details;
-                    state.discovery.timestamp = next.timestamp;
+                    state.discovery.timestamp = next.timestamp; // ui timing
                 }
             }
 
-            // --- DISCOVERY AUTO-CLEAR (Zero-GC) ---
-            // Automatically clear the discovery state after 4 seconds to match UI animation
             if (state.discovery.active && now - state.discovery.timestamp > 4000) {
                 state.discovery.active = false;
             }
@@ -402,17 +369,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             monitor.end('hud_sync');
 
             hudData.debugInfo.drawCalls = refs.lastDrawCallsRef.current;
-
-            // Expose performance metrics implicitly onto state struct
             state.renderCpuTime = engine.renderer.info.render.frame || 0;
             state.drawCalls = engine.renderer.info.render.calls;
             state.triangles = engine.renderer.info.render.triangles;
 
-            // Append data directly to avoid Object Spread allocation
             (hudData as any).debugMode = propsRef.current.debugMode;
             (hudData as any).systems = session.getSystems();
-
-            // Always copy interactionPrompt from the store into the freshly swapped buffer.
             (hudData as any).interactionPrompt = HudStore.getState().interactionPrompt;
 
             HudStore.update(hudData);
@@ -437,7 +399,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _animStateScratch.isMoving = false;
                 _animStateScratch.isRushing = false;
                 _animStateScratch.isDodging = false;
-                // Use realDt for animations during Boss Intro
                 PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, realDt);
             }
             refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
@@ -447,14 +408,13 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         // 4. Throttled logic (Health warnings, burning effects)
         if (frame % 5 === 0) {
-            // Heart beat sound
             const sb = state.statsBuffer;
             const hp = sb[PlayerStatID.HP];
             const maxHp = sb[PlayerStatID.MAX_HP];
 
             if (hp < maxHp * HEALTH_CRITICAL_THRESHOLD && !isDead) {
-                if (now - state.lastHeartbeat > 800) {
-                    state.lastHeartbeat = now;
+                if (simTime - state.lastHeartbeat > 800) { // VINTERDÖD FIX: Använd simTime
+                    state.lastHeartbeat = simTime;
                     soundManager.playHeartbeat();
                 }
             }
@@ -465,9 +425,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 const mesh = burningObjects[i];
                 if (!mesh.visible || !mesh.userData.effects) continue;
 
-                // --- DISTANCE CULLING ---
                 const distSq = mesh.position.distanceToSquared(playerGroup.position);
-                if (distSq > 3600) { // 60 units radius
+                if (distSq > 3600) {
                     continue;
                 }
 
@@ -505,9 +464,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         // 5. Sector Flow (Boss Defeated, End Sector)
         if (state.bossDefeatedTime > 0) {
-            if (now - state.bossDefeatedTime < 10000) {
-                state.invulnerableUntil = now + 10000;
-                if (now - state.bossDefeatedTime > 4000) {
+            if (simTime - state.bossDefeatedTime < 10000) { // VINTERDÖD FIX: simTime istället för now
+                state.invulnerableUntil = simTime + 10000;
+                if (simTime - state.bossDefeatedTime > 4000) {
                     callbacks.concludeSector(state.familyFound);
                     return;
                 }
@@ -575,9 +534,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             session.playerPos = playerGroup.position;
         }
 
-        // --- VINTERDÖD FIX: Session update ALWAYS gets realDt.
-        // This ensures triggers, state machines, and end-of-dialogue logic
-        // process correctly, even when enemies/physics are frozen (delta = 0).
         session.update(realDt, propsRef.current.mapId || 0);
         monitor.end('session_update');
 
@@ -595,16 +551,15 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
             if (refs.playerMeshRef.current) {
                 const sb = state.statsBuffer;
-                const sf = state.statusFlags;
 
                 _animStateScratch.staminaRatio = sb[PlayerStatID.STAMINA] / sb[PlayerStatID.MAX_STAMINA];
                 _animStateScratch.isMoving = isMoving;
                 _animStateScratch.isRushing = (sf & PlayerStatusFlags.RUSHING) !== 0;
                 _animStateScratch.isDodging = (sf & PlayerStatusFlags.DODGING) !== 0;
                 _animStateScratch.dodgeStartTime = state.dodgeStartTime;
-                _animStateScratch.isSpeaking = state.speakBounce > 0 || now < state.speakingUntil;
-                _animStateScratch.isThinking = now < state.thinkingUntil;
-                _animStateScratch.isIdleLong = (now - state.lastActionTime > 20000);
+                _animStateScratch.isSpeaking = state.speakBounce > 0 || simTime < state.speakingUntil; // VINTERDÖD FIX
+                _animStateScratch.isThinking = simTime < state.thinkingUntil; // VINTERDÖD FIX
+                _animStateScratch.isIdleLong = (simTime - state.lastActionTime > 20000); // VINTERDÖD FIX
                 _animStateScratch.isWading = state.isWading;
                 _animStateScratch.isSwimming = state.isSwimming;
                 _animStateScratch.isDead = (sf & PlayerStatusFlags.DEAD) !== 0;
@@ -613,7 +568,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _animStateScratch.seed = 0;
 
                 monitor.begin('player_animation');
-                // Player animation uses realDt during cinematics to breathe/talk:
                 PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, engine.isSoftPaused ? realDt : delta);
                 monitor.end('player_animation');
             }
@@ -621,14 +575,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         // 9. Secondary Systems
         monitor.begin('footprints');
-        // VINTERDÖD FIX: Fotspår raderas långsamt i realtid även om spelet är fryst
         FootprintSystem.update(realDt);
         monitor.end('footprints');
 
         // 10. FX System
         monitor.begin('fx');
         try {
-            // VINTERDÖD FIX: Använd realDt! Då fortsätter bränder, rök och snöstorm!
             FXSystem.update(engine.scene, state.particles, state.bloodDecals, realDt, frame, now, _fxCallbacks);
         } catch (e) {
             console.error("[GameSessionLoop] FXSystem.update failed:", e);
@@ -640,15 +592,11 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (refs.cameraOverrideRef.current && refs.cameraOverrideRef.current.active) {
                 const override = refs.cameraOverrideRef.current;
 
-                // --- VINTERDÖD FIX: The Epic Drone Camera ---
                 if (!override.startPos) {
                     override.startPos = engine.camera.position.clone();
                     override.startTime = now;
-                    // Tvinga exakt 4000ms visningstid
                     override.endTime = now + 4000;
-                    // Göm UI (crosshair, hp, etc) under flygningen för en cinematisk look
                     engine.camera.setCinematic(true);
-
                 }
 
                 if (now > override.endTime) {
@@ -656,12 +604,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     engine.camera.setCinematic(false);
                 } else {
                     const elapsed = now - override.startTime;
-
-                    // Flyg i 1500ms, hovra kvar resten av tiden!
                     let t = Math.min(1.0, elapsed / 1500);
                     t = 1.0 - Math.pow(1.0 - t, 3); // Ease-out inbromsning
 
-                    // Drönar-Bågen: Lägg till höjd (y) i mitten av flygningen för ett top-down svep
                     const heightArc = Math.sin(t * Math.PI) * 20;
 
                     const currentX = THREE.MathUtils.lerp(override.startPos.x, override.targetPos.x, t);
@@ -707,7 +652,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
         lastTime = now;
 
-        // 13. Interaction Logic (Bypass Rect-only components for 60FPS updates)
+        // 13. Interaction Logic
         const currentInter = state.interaction.type;
         const currentLabel = state.interaction.label;
         const lastType = refs.interactionTypeRef.current;
@@ -724,7 +669,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
                 const lastPos = refs.lastInteractionPosRef.current;
 
-                // VINTERDÖD FIX: More solid fast-check before writing object properties
                 const posChanged = !lastPos || Math.abs(lastPos.x - screenX) > 3.0 || Math.abs(lastPos.y - screenY) > 2.0;
                 const typeChanged = currentInter !== lastType;
                 const labelChanged = currentLabel !== (state as any).lastInteractionLabel;
@@ -737,8 +681,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     (state as any).lastInteractionLabel = currentLabel;
 
                     const hData = HudStore.getState();
-
-                    // ZERO-GC: Mutate the prompt inside the HudStore buffer (Flat access for V8)
                     hData.interactionPrompt.active = true;
                     hData.interactionPrompt.type = currentInter;
                     hData.interactionPrompt.label = currentLabel;
@@ -783,10 +725,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         if (activeCallbacks.trackStats) _gameContext.trackStats = activeCallbacks.trackStats;
         _gameContext.fireZones = state.fireZones;
 
-        _gameContext.now = simTime;
+        _gameContext.now = simTime; // Uppdaterad till simTime
         _gameContext.playerPos = playerGroup.position;
         _gameContext.session = session;
-        _gameContext.fireZones = state.fireZones;
 
         refs.gameContextRef.current = _gameContext;
 
@@ -810,7 +751,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         monitor.end('enemies');
 
         ProjectileSystem.update(delta, simTime, _gameContext, state.projectiles, state.fireZones);
-        monitor.end('projectiles');
 
         // 17. TriggerSystem
         monitor.begin('triggers');
@@ -821,7 +761,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _triggerOptionsScratch.onDiscovery = activeCallbacks.onDiscovery || callbacks.onDiscovery;
         _triggerOptionsScratch.playSound = (id: SoundID) => soundManager.playSound(id);
         _triggerOptionsScratch.activeFamilyMembers = refs.activeFamilyMembers.current;
-        TriggerHandler.checkTriggers(playerGroup.position, state, now, _triggerOptionsScratch as any);
+        TriggerHandler.checkTriggers(playerGroup.position, state, simTime, _triggerOptionsScratch as any); // VINTERDÖD FIX: simTime
         monitor.end('triggers');
 
         // 18. Emitters Update
@@ -845,8 +785,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                         if (isBacklogged && !eff.essential) continue;
 
                         if (!eff.lastEmit) eff.lastEmit = 0;
-                        if (now - eff.lastEmit > eff.interval) {
-                            eff.lastEmit = now;
+                        if (simTime - eff.lastEmit > eff.interval) { // VINTERDÖD FIX: simTime istället för now
+                            eff.lastEmit = simTime;
                             if (eff.offset) {
                                 _vInteraction.copy(eff.offset);
                                 obj.localToWorld(_vInteraction);
@@ -878,7 +818,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             state.obstacles ? state.obstacles.length : 0
         );
 
-        // 20. High-frequency HUD update (Zero-GC, bypasses React)
+        // 20. High-frequency HUD update
         HudSystem.emitFastUpdate(state, engine.input.state, simTime, propsRef.current);
     };
 }

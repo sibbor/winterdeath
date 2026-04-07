@@ -9,6 +9,7 @@ import { MaterialType } from '../content/environment';
 import { StatusEffectID, PlayerStatID, PlayerStatusFlags, STATUS_EFFECT_MAP } from '../entities/player/PlayerTypes';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { EnemyType, EnemyFlags } from '../entities/enemies/EnemyTypes';
+import { KMH_TO_MS } from '../content/constants';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -38,6 +39,11 @@ export class PlayerStatsSystem implements System {
         this.checkAdrenalinePatch(session, now);
         this.updateBuffsAndDebuffs(session, dt, now);
         this.applyStatusTicks(session, dt, now);
+
+        // --- BAKE FINAL PRE-CALCULATED STATS (O(1) Access for Systems) ---
+        // Final Speed in m/s (Unit conversion + Perk Multipliers)
+        const stats = state.statsBuffer;
+        stats[PlayerStatID.FINAL_SPEED] = stats[PlayerStatID.SPEED] * stats[PlayerStatID.MULTIPLIER_SPEED] * KMH_TO_MS;
     }
 
     private checkAdrenalinePatch(session: GameSessionLogic, now: number) {
@@ -253,10 +259,9 @@ export class PlayerStatsSystem implements System {
             damageTracker.recordIncomingDamage(session, actualDmg, sourceKey, telemetryAttackIndex, (attacker?.statusFlags & EnemyFlags.BOSS) !== 0);
         }
 
-        if (effectType !== undefined) {
+        if (!isDoT && effectType !== undefined) {
             const perk = PERKS[effectType];
             if (perk) {
-                // VINTERDÖD FIX: Numeric SMI indexing on Float32Array (effectType is 0-13)
                 state.effectDurations[effectType] = perk.duration || effectDuration || 0;
                 state.effectIntensities[effectType] = effectIntensity !== undefined ? effectIntensity : (perk.intensity || 1);
             }

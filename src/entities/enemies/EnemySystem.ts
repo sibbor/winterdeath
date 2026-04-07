@@ -13,6 +13,7 @@ interface Callbacks {
     onBossKilled: (id: number) => void;
     onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, effectDuration?: number, effectIntensity?: number, attackName?: string) => void;
     onDiscovery?: (type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
+    spawnBubble: (text: string, duration?: number) => void;
 }
 
 
@@ -43,6 +44,9 @@ export class EnemySystem implements System {
                 if (state.applyDamage) {
                     state.applyDamage(enemy, amount, type, isHighImpact);
                 }
+            },
+            spawnBubble: (text: string, duration?: number) => {
+                if (this.currentSession) this.callbacks.spawnBubble(text, duration);
             }
         };
 
@@ -89,6 +93,7 @@ export class EnemySystem implements System {
                 this.updateCallbacks.spawnPart,
                 this.updateCallbacks.spawnDecal,
                 this.updateCallbacks.applyDamage,
+                this.updateCallbacks.spawnBubble,
                 session.engine.water
             );
 

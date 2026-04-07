@@ -5,6 +5,7 @@ import { soundManager } from '../../utils/audio/SoundManager';
 import { Enemy, AIState, EnemyDeathState, EnemyType, EnemyFlags, ENEMY_HP, ENEMY_SPEED, ENEMY_SCORE, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { WeaponType } from '../../content/weapons';
+import { KMH_TO_MS } from '../../content/constants';
 
 let _nextPoolId = 0;
 
@@ -23,9 +24,9 @@ export const EnemySpawner = {
 
         const rand = Math.random();
         // Probabilities: Walker 70%, Runner 15%, Tank 10%, Bomber 5%
-        if (rand > 0.95) return EnemyType.BOMBER;
-        if (rand > 0.85) return EnemyType.TANK;
-        if (rand > 0.70) return EnemyType.RUNNER;
+        if (rand > 0.90) return EnemyType.BOMBER;
+        if (rand > 0.80) return EnemyType.TANK;
+        if (rand > 0.65) return EnemyType.RUNNER;
         return EnemyType.WALKER;
     },
 
@@ -40,7 +41,7 @@ export const EnemySpawner = {
         e.type = typeKey;
         e.maxHp = ENEMY_HP[typeKey];
         e.hp = e.maxHp;
-        e.speed = ENEMY_SPEED[typeKey];
+        e.speed = ENEMY_SPEED[typeKey] * KMH_TO_MS;
         e.score = ENEMY_SCORE[typeKey];
         e.color = typeData.color;
         e.attacks = typeData.attacks || [];
@@ -124,6 +125,7 @@ export const EnemySpawner = {
             state: AIState.IDLE,
             idleTimer: 1.0 + Math.random() * 2.0,
             searchTimer: 0,
+            lastBurnTick: 0,
 
             spawnPos: new THREE.Vector3(x, 0, z),
             lastSeenTime: 0,
@@ -201,6 +203,7 @@ export const EnemySpawner = {
         if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
             console.log(`[EnemySpawner] Spawns ${EnemyType[typeKey]}_${enemy.id} at (${x.toFixed(1)}, ${z.toFixed(1)})`);
         }
+
         return enemy;
     },
 
@@ -229,7 +232,7 @@ export const EnemySpawner = {
             type: EnemyType.BOSS,
             maxHp: bossData.hp,
             hp: bossData.hp,
-            speed: bossData.speed,
+            speed: bossData.speed * KMH_TO_MS,
             score: 3000,
             color: bossData.color,
             attacks: bossData.attacks || [],
@@ -242,6 +245,7 @@ export const EnemySpawner = {
             state: AIState.IDLE,
             idleTimer: 2.0,
             searchTimer: 0,
+            lastBurnTick: 0,
             spawnPos: new THREE.Vector3(pos.x, 0, pos.z),
             lastSeenTime: 0,
             lastKnownPosition: new THREE.Vector3(pos.x, 0, pos.z),

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AttackDefinition } from '../../entities/player/CombatTypes';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
+import { BOSSES } from '../../content/enemies/bosses';
 import {
     EnemyType, NoiseType, AIState, EnemyDeathState, EnemyEffectType, EnemyFlags, ZombieTypeData
 } from './EnemyBase';
@@ -76,6 +77,8 @@ export const ENEMY_ATTACK_RANGE = new Float32Array(32);
 // --- INITIALIZATION (Module Level) ---
 Object.keys(ZOMBIE_TYPES).forEach(key => {
     const typeSMI = Number(key);
+    if (isNaN(typeSMI)) return; // SMI Security Fix: Skip string reverse-mapping keys
+
     const data = (ZOMBIE_TYPES as any)[key];
 
     ENEMY_MAX_HP[typeSMI] = data.hp;
@@ -91,6 +94,24 @@ Object.keys(ZOMBIE_TYPES).forEach(key => {
     else if (typeSMI === EnemyType.TANK) ENEMY_ATTACK_RANGE[typeSMI] = 2.5;
     else if (typeSMI === EnemyType.BOMBER) ENEMY_ATTACK_RANGE[typeSMI] = 3.5;
     else if (typeSMI === EnemyType.BOSS) ENEMY_ATTACK_RANGE[typeSMI] = 5.0;
+});
+
+// Initialize Boss stats from BOSSES registry
+Object.keys(BOSSES).forEach(key => {
+    const id = Number(key);
+    if (isNaN(id)) return;
+
+    const data = (BOSSES as any)[id];
+    const typeSMI = EnemyType.BOSS; // Currently all bosses share the BOSS type or are variants
+
+    // For bosses, we use the specific boss ID if we want granular speed, 
+    // but the engine currently indexes by EnemyType. 
+    // To support per-boss speeds in the global array, we would need 32+ slots.
+    // For now, we ensure the BOSS baseline is at least initialized.
+    ENEMY_MAX_HP[typeSMI] = data.hp;
+    ENEMY_BASE_SPEED[typeSMI] = data.speed;
+    ENEMY_SCALE[typeSMI] = data.scale || 3.0;
+    ENEMY_WIDTH_SCALE[typeSMI] = data.widthScale || 1.0;
 });
 
 /**

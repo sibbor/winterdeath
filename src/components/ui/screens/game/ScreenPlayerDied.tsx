@@ -51,7 +51,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
             deathPhrase: phrase, 
             deathDisplayText: displayName,
             deathDescription: description,
-            headerText: `${PLAYER_CHARACTER.name} - ${t('ui.kia')}`
+            headerText: t('ui.player_died', { name: PLAYER_CHARACTER.name })
         };
     }, [killedByEnemy, killerName, deathReason]);
 

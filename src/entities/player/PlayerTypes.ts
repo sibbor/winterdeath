@@ -39,8 +39,11 @@ export enum PlayerStatID {
     MULTIPLIER_DMG_RESIST = 20,
     MULTIPLIER_RANGE = 21,
 
+    // Pre-calculated stats (Zero-GC / O(1))
+    FINAL_SPEED = 22,
+
     // Buffer Size
-    COUNT = 22
+    COUNT = 23
 }
 
 /**
