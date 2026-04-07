@@ -110,8 +110,8 @@ export const EnemyAI = {
 
             e.deathTimer = simTime;
 
-            const baseScale = ENEMY_SCALE[e.type];
-            const widthScale = ENEMY_WIDTH_SCALE[e.type];
+            const baseScale = e.originalScale;
+            const widthScale = e.widthScale;
             e.mesh.scale.set(baseScale * widthScale, baseScale, baseScale * widthScale);
 
             const isHighImpact = e.lastHitWasHighImpact;
@@ -169,9 +169,9 @@ export const EnemyAI = {
         if (e.deathState !== EnemyDeathState.ALIVE) return;
 
         // --- 2. POOLING SCALE RECOVERY ---
-        const targetScaleY = ENEMY_SCALE[e.type];
+        const targetScaleY = e.originalScale;
         if (Math.abs(e.mesh.scale.y - targetScaleY) > 0.05) {
-            const w = ENEMY_WIDTH_SCALE[e.type];
+            const w = e.widthScale;
             e.mesh.scale.set(targetScaleY * w, targetScaleY, targetScaleY * w);
             e.mesh.visible = true;
         }
@@ -187,8 +187,7 @@ export const EnemyAI = {
                 e.mesh.userData.wasKnockedBack = true;
             }
 
-            const mass = (ENEMY_SCALE[e.type] || 1.0) * (ENEMY_WIDTH_SCALE[e.type] || 1.0);
-
+            const mass = e.originalScale * e.widthScale;
             // 1. Apply Gravity (Softer -18 for cinematic weight)
             e.knockbackVel.y -= 18 * simDelta;
 
@@ -209,7 +208,7 @@ export const EnemyAI = {
 
             // 4. Floor Collision & Landing Logic
             const isRagdolling = e.mesh.userData.isRagdolling === true || e.deathState !== EnemyDeathState.ALIVE;
-            const floorY = isRagdolling ? 0.2 : (1.0 * (ENEMY_SCALE[e.type] || 1.0));
+            const floorY = isRagdolling ? 0.2 : e.originalScale;
 
             if (e.mesh.position.y <= floorY) {
                 const peakY = e.fallStartY || floorY;
@@ -318,7 +317,7 @@ export const EnemyAI = {
                 if (water) water.spawnRipple(e.mesh.position.x, e.mesh.position.z, 0.9, 1.2);
                 callbacks.spawnPart(e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z, 'splash', 4);
 
-                const tickDmg = ENEMY_MAX_HP[e.type] * 0.05;
+                const tickDmg = e.maxHp * 0.05;
                 e.hp -= tickDmg;
                 callbacks.applyDamage(e, tickDmg, DamageID.DROWNING);
 
@@ -664,12 +663,12 @@ function moveEntity(e: Enemy, target: THREE.Vector3, simDelta: number, speed: nu
     if (isChasing) e.mesh.rotation.y = Math.atan2(_v2.x, _v2.z);
     else e.mesh.rotation.y = THREE.MathUtils.lerp(e.mesh.rotation.y, Math.atan2(_v2.x, _v2.z), 5 * simDelta);
 
-    const speedRatio = speed / (ENEMY_BASE_SPEED[e.type] || 1);
+    const speedRatio = speed / (e.speed || 1);
     const animFreq = isChasing ? 0.055 * speedRatio : 0.035 * speedRatio;
     const bounceOffset = Math.abs(Math.sin(renderTime * animFreq)) * 0.12;
 
-    const baseScale = ENEMY_SCALE[e.type];
-    const widthScale = ENEMY_WIDTH_SCALE[e.type];
+    const baseScale = e.originalScale;
+    const widthScale = e.widthScale;
 
     if ((e.statusFlags & EnemyFlags.AIRBORNE) === 0) {
         _v4.y = (1.0 * baseScale) + bounceOffset;

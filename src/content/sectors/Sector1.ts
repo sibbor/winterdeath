@@ -14,6 +14,8 @@ import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
 
+const _vS1 = new THREE.Vector3(); // Zero-GC Scratchpad
+
 const LOCATIONS = {
     SPAWN: {
         PLAYER: { x: 0, z: 200, rot: Math.PI },
@@ -96,6 +98,7 @@ function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vector3>) 
 
     // West wall needs a gap for the cave entrance
     const cavePos = new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0, LOCATIONS.POIS.CAVE_ENTRANCE.z);
+
     let splitIdx = -1;
     let minDist = Infinity;
     for (let i = 0; i < blockPointsWest.length; i++) {
@@ -107,7 +110,6 @@ function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vector3>) 
         const gap = 10;
         const part1 = blockPointsWest.slice(0, Math.max(0, splitIdx - gap));
         const part2 = blockPointsWest.slice(Math.min(blockPointsWest.length, splitIdx + gap));
-
         if (part1.length > 1) SectorBuilder.createBoundry(ctx, part1, 'BoundryWall_West_A');
         if (part2.length > 1) SectorBuilder.createBoundry(ctx, part2, 'BoundryWall_West_B');
     } else {
@@ -172,7 +174,6 @@ export const Sector1: SectorDef = {
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
     familySpawn: LOCATIONS.SPAWN.FAMILY,
     bossSpawn: LOCATIONS.SPAWN.BOSS,
-
     collectibles: [
         { id: 's2_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
         { id: 's2_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
@@ -323,7 +324,8 @@ export const Sector1: SectorDef = {
         if (id === 'cave_door') {
             if (!state.sectorState.jordanEventState) {
                 state.sectorState.jordanEventState = 1; // KNOCKING
-                state.sectorState.jordanEventTimer = performance.now();
+                // VINTERDÖD FIX: Unified with Simulation Clock
+                state.sectorState.jordanEventTimer = state.simTime;
                 object.userData.isInteractable = false;
                 events.setNotification({ text: events.t('ui.knocking'), duration: 2000 });
                 soundManager.playMetalKnocking();
@@ -444,11 +446,14 @@ export const Sector1: SectorDef = {
                     sectorState.jordanEventTimer = now;
 
                     if (playerPos) {
-                        sectorState.walkTarget = new THREE.Vector3(playerPos.x, 0, playerPos.z);
-                        const toPlayer = new THREE.Vector3().subVectors(playerPos, jordan?.position || new THREE.Vector3(25, 0, -193)).normalize();
-                        sectorState.walkTarget.sub(toPlayer.multiplyScalar(2.0));
+                        sectorState.walkTarget = sectorState.walkTarget || new THREE.Vector3();
+                        sectorState.walkTarget.set(playerPos.x, 0, playerPos.z);
+                        
+                        _vS1.subVectors(playerPos, jordan?.position || new THREE.Vector3(25, 0, -193)).normalize();
+                        sectorState.walkTarget.sub(_vS1.multiplyScalar(2.0));
                     } else {
-                        sectorState.walkTarget = new THREE.Vector3(52, 0, -193);
+                        sectorState.walkTarget = sectorState.walkTarget || new THREE.Vector3();
+                        sectorState.walkTarget.set(52, 0, -193);
                     }
                 }
             }
@@ -463,7 +468,7 @@ export const Sector1: SectorDef = {
                             isMoving: true, isRushing: false, isDodging: false, dodgeStartTime: 0,
                             staminaRatio: 1.0, isSpeaking: gameState.speakingUntil > now,
                             isThinking: false, isIdleLong: false, isSwimming: false, isWading: false,
-                            seed: jordan.userData.seed || 0, renderTime: now
+                            seed: jordan.userData.seed || 0, renderTime: gameState.renderTime || now
                         }, now, delta);
                     }
 
@@ -527,7 +532,9 @@ export const Sector1: SectorDef = {
                         if (r.id === 6 && Math.random() > 0.8) type = EnemyType.TANK;
                         if (r.id === 5 && Math.random() > 0.7) type = EnemyType.BOMBER;
                         else if (Math.random() > 0.7) type = EnemyType.RUNNER;
-                        events.spawnZombie(type, new THREE.Vector3(r.x + offX, 0, r.z + offZ));
+                        
+                        _vS1.set(r.x + offX, 0, r.z + offZ);
+                        events.spawnZombie(type, _vS1);
                     }
                 }
             }

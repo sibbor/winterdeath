@@ -5,8 +5,12 @@ import { t } from '../../utils/i18n';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
-import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
+import { VehicleGenerator } from '../../core/world/generators/VehicleGenerator';
+import { GeneratorUtils } from '../../core/world/generators/GeneratorUtils';
+import { InteractionType } from '../../systems/InteractionTypes';
+import { SoundID } from '../../utils/audio/AudioTypes';
+import { NoiseType } from '../../entities/enemies/EnemyBase';
 import { VEGETATION_TYPE } from '../../content/environment';
 import { CAMERA_HEIGHT } from '../constants';
 
@@ -18,6 +22,17 @@ const _c1 = new THREE.Color();
 const _c2 = new THREE.Color();
 const _q1 = new THREE.Quaternion();
 const _boatPos = new THREE.Vector3();
+
+// Zero-GC for the bus experiment
+const _busOriginalPos = new THREE.Vector3();
+const _matrix = new THREE.Matrix4();
+const _position = new THREE.Vector3();
+const _rotation = new THREE.Euler();
+const _quat = new THREE.Quaternion();
+const _scale = new THREE.Vector3();
+
+const EXPLODING_BUS_ID = 'playground_bus_explode';
+const EXPLODING_BUS_POS = { x: 40, y: 1.5, z: -40 };
 
 export const SECTOR6_ZONES: AtmosphereZone[] = [
     { label: "FOREST OF SHADOWS", x: 0, z: -360, weather: 'rain', bgColor: 0xff0000, fogDensity: 0.005, ambient: 0.2 },
@@ -315,6 +330,48 @@ export const Sector4: SectorDef = {
             scene.add(rock);
             SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 5, collider: { type: 'sphere', radius: 5 } });
         }
+
+        // --- EXPLODING BUS EXPERIMENT ---
+        const bus = VehicleGenerator.createBus(0x009ddb, false);
+        bus.position.set(EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.y, EXPLODING_BUS_POS.z);
+        bus.rotation.set(Math.PI / 2, Math.PI / 2, 0); // On its side
+        GeneratorUtils.freezeStatic(bus);
+        scene.add(bus);
+
+        const busBox = new THREE.Box3().setFromObject(bus);
+        const busSize = new THREE.Vector3();
+        busBox.getSize(busSize);
+        const busCenter = new THREE.Vector3();
+        busBox.getCenter(busCenter);
+
+        const colMesh = new THREE.Mesh(new THREE.BoxGeometry(busSize.x, busSize.y, busSize.z));
+        colMesh.position.copy(busCenter);
+        colMesh.visible = false;
+        GeneratorUtils.freezeStatic(colMesh);
+        scene.add(colMesh);
+
+        const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: 'box' as const, size: busSize } };
+        SectorBuilder.addObstacle(ctx, obstacle_bus);
+        SectorBuilder.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });
+
+        SectorBuilder.addInteractable(ctx, bus, {
+            id: EXPLODING_BUS_ID,
+            label: 'ui.interact_blow_up_bus',
+            type: InteractionType.SECTOR_SPECIFIC,
+            radius: 15.0
+        });
+        bus.userData.isInteractable = true;
+
+        // Store references
+        (ctx as any).busObject = bus;
+        (ctx as any).busColMesh = colMesh;
+
+        // Rubble
+        const rubble = SectorBuilder.spawnRubble(ctx, EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.z, 20, MATERIALS.busBlue, Math.PI);
+        rubble.position.y = -1000; // Hide initially
+        rubble.visible = false;
+        rubble.userData.hasLanded = new Uint8Array(rubble.count);
+        (ctx as any).busRubble = rubble;
     },
 
     onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {
@@ -337,6 +394,18 @@ export const Sector4: SectorDef = {
         }
         else if (id === 'TERMINAL_SKILLS') {
             events.setOverlay('STATION_SKILLS');
+        }
+
+        // BUS EXPLOSION
+        if (id === EXPLODING_BUS_ID) {
+            if (state.sectorState.busExploded || state.sectorState.busPlanting) return;
+
+            state.sectorState.busPlanting = true;
+            state.sectorState.busPlantingTime = state.simTime;
+            object.userData.isInteractable = false;
+
+            if (events.spawnBubble) events.spawnBubble("Planting explosives...", 500);
+            if (events.playSound) events.playSound(SoundID.IMPACT_METAL);
         }
     },
 
@@ -365,9 +434,171 @@ export const Sector4: SectorDef = {
                 obs.position.copy(ball.position);
 
                 // Update the SpatialGrid so physics match rendering
+                // Update the SpatialGrid so physics match rendering
                 if (gameState.collisionGrid && typeof gameState.collisionGrid.updateObstacle === 'function') {
                     gameState.collisionGrid.updateObstacle(obs);
                 }
+            }
+        }
+
+        // --- BUS EXPLOSION EXPERIMENT ---
+        if (sectorState.busExploded && !sectorState.busExplosionHandled) {
+            sectorState.busExplosionHandled = true;
+            sectorState.busExplosionTime = now;
+
+            if (events.playSound) events.playSound(SoundID.EXPLOSION);
+            if (events.cameraShake) events.cameraShake(5);
+
+            _busOriginalPos.set(EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.y, EXPLODING_BUS_POS.z);
+
+            if (events.spawnPart) {
+                events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'shockwave', 1);
+                events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_smoke', 5);
+                events.spawnPart(_busOriginalPos.x, 3, _busOriginalPos.z, 'debris', 15);
+            }
+
+            if (events.makeNoise) {
+                events.makeNoise(_busOriginalPos.clone(), NoiseType.OTHER, 100);
+            }
+
+            // Clear bus
+            const _busObj = (sectorState.ctx as any).busObject as THREE.Object3D | null;
+            const _obsArray = sectorState.ctx.obstacles;
+
+            if (_busObj) {
+                SectorBuilder.extinguishFire(sectorState.ctx, _busObj);
+                _busObj.visible = false;
+                _busObj.position.set(0, -1000, 0);
+                _busObj.updateMatrixWorld(true);
+                (sectorState.ctx as any).busObject = null;
+            }
+
+            if (_obsArray) {
+                for (let i = 0; i < _obsArray.length; i++) {
+                    const o = _obsArray[i];
+                    if (o && o.id === EXPLODING_BUS_ID) {
+                        o.collider.size?.set(0, 0, 0);
+                        if (o.position) o.position.set(99999, -1000, 99999);
+                        if (o.mesh) {
+                            o.mesh.position.set(99999, -1000, 99999);
+                            o.mesh.visible = false;
+                            o.mesh.updateMatrixWorld(true);
+                        }
+                        _obsArray.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+
+            // Activate Rubble
+            const rMesh = (sectorState.ctx as any).busRubble;
+            if (rMesh) {
+                sectorState.busRubble = rMesh;
+                rMesh.position.set(_busOriginalPos.x, _busOriginalPos.y, _busOriginalPos.z);
+                rMesh.visible = true;
+                rMesh.userData.active = true;
+                if (rMesh.userData.hasLanded) rMesh.userData.hasLanded.fill(0);
+
+                const data = rMesh.userData;
+                for (let i = 0; i < rMesh.count; i++) {
+                    const ix = i * 3;
+                    const arcAngle = Math.random() * Math.PI * 2;
+                    const power = 1.0 + Math.random();
+                    const dirX = Math.cos(arcAngle) * power;
+                    const dirZ = Math.sin(arcAngle) * power;
+                    const dirY = 1.0 + Math.random() * 1.5;
+                    const speed = 15 + Math.random() * 20;
+
+                    _v1.set(dirX, dirY, dirZ).normalize().multiplyScalar(speed);
+                    data.velocities[ix] = _v1.x;
+                    data.velocities[ix + 1] = _v1.y;
+                    data.velocities[ix + 2] = _v1.z;
+
+                    data.positions[ix] = (Math.random() - 0.5) * 4;
+                    data.positions[ix + 1] = 2 + Math.random() * 2;
+                    data.positions[ix + 2] = (Math.random() - 0.5) * 4;
+
+                    // Initialize spin and rotation arrays if they don't exist
+                    if (!data.spin) data.spin = new Float32Array(rMesh.count * 3);
+                    if (!data.rotations) data.rotations = new Float32Array(rMesh.count * 3);
+
+                    data.spin[ix] = (Math.random() - 0.5) * 10;
+                    data.spin[ix + 1] = (Math.random() - 0.5) * 10;
+                    data.spin[ix + 2] = (Math.random() - 0.5) * 10;
+                }
+            }
+        }
+
+        // Rubble Physics
+        if (sectorState.busRubble && sectorState.busRubble.userData.active) {
+            const rubble = sectorState.busRubble;
+            const rubbleWeight = 25.0; // [VINTERDÖD FIX] Calibrated for realistic gravity
+            const data = rubble.userData;
+            let stillMoving = false;
+            const elapsed = now - sectorState.busExplosionTime;
+
+            for (let i = 0; i < rubble.count; i++) {
+                const ix = i * 3;
+                const isAboveGround = data.positions[ix + 1] > 0.5;
+                const hasVelY = Math.abs(data.velocities[ix + 1]) > 0.1;
+                const hasVelX = Math.abs(data.velocities[ix]) > 0.1;
+                const hasVelZ = Math.abs(data.velocities[ix + 2]) > 0.1;
+
+                if (isAboveGround || hasVelY || hasVelX || hasVelZ) {
+                    stillMoving = true;
+                    const safeDt = Math.min(dt, 0.05);
+
+                    data.velocities[ix + 1] -= rubbleWeight * safeDt;
+                    data.positions[ix] += data.velocities[ix] * safeDt;
+                    data.positions[ix + 1] += data.velocities[ix + 1] * safeDt;
+                    data.positions[ix + 2] += data.velocities[ix + 2] * safeDt;
+
+                    if (data.positions[ix + 1] <= 0.5) {
+                        data.positions[ix + 1] = 0.5;
+                        data.velocities[ix] *= 0.6;
+                        data.velocities[ix + 2] *= 0.6;
+                        data.velocities[ix + 1] *= -0.4;
+
+                        if (data.spin) {
+                            data.spin[ix] *= 0.5;
+                            data.spin[ix + 1] *= 0.5;
+                            data.spin[ix + 2] *= 0.5;
+                        }
+
+                        if (Math.abs(data.velocities[ix + 1]) < 1.0) data.velocities[ix + 1] = 0;
+                        if (Math.abs(data.velocities[ix]) < 0.2) data.velocities[ix] = 0;
+                        if (Math.abs(data.velocities[ix + 2]) < 0.2) data.velocities[ix + 2] = 0;
+
+                        if (data.hasLanded && !data.hasLanded[i] && events.playSound) {
+                            data.hasLanded[i] = 1;
+                            events.playSound(SoundID.IMPACT_METAL);
+                        }
+                    }
+
+                    if (data.rotations && data.spin) {
+                        data.rotations[ix] += data.spin[ix] * safeDt;
+                        data.rotations[ix + 1] += data.spin[ix + 1] * safeDt;
+                        data.rotations[ix + 2] += data.spin[ix + 2] * safeDt;
+                    }
+
+                    _position.set(data.positions[ix], data.positions[ix + 1], data.positions[ix + 2]);
+                    if (data.rotations) {
+                        _rotation.set(data.rotations[ix], data.rotations[ix + 1], data.rotations[ix + 2]);
+                        _quat.setFromEuler(_rotation);
+                    } else {
+                        _quat.set(0, 0, 0, 1);
+                    }
+
+                    const s = data.scales ? data.scales[i] : 1.0;
+                    _scale.set(1.5 * s, 0.05 * s, 3.0 * s);
+
+                    _matrix.compose(_position, _quat, _scale);
+                    rubble.setMatrixAt(i, _matrix);
+                }
+            }
+            rubble.instanceMatrix.needsUpdate = true;
+            if (!stillMoving || elapsed > 10000) {
+                data.active = false;
             }
         }
     }

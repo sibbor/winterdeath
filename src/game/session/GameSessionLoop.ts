@@ -464,7 +464,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         // 5. Sector Flow (Boss Defeated, End Sector)
         if (state.bossDefeatedTime > 0) {
-            if (simTime - state.bossDefeatedTime < 10000) { // VINTERDÖD FIX: simTime istället för now
+            if (simTime - state.bossDefeatedTime < 10000) {
                 state.invulnerableUntil = simTime + 10000;
                 if (simTime - state.bossDefeatedTime > 4000) {
                     callbacks.concludeSector(state.familyFound);

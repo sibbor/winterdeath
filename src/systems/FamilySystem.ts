@@ -62,14 +62,17 @@ export class FamilySystem implements System {
         const state = _session.state;
         const isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
 
+        // VINTERDÖD FIX: Extract unified clocks from state for Zero-GC logic
+        const simTime = state.simTime;
+        const renderTime = state.renderTime || now;
+
         // --- Mirror player speed for the follow movement ---
         const playerSpeedValue = state.statsBuffer[PlayerStatID.SPEED];
 
-        // [VINTERDÖD FIX] Om värdet är högt antar vi att det är km/h och konverterar till m/s.
-        // Annars (om det är typ 1.0) agerar vi som förr.
+        // [VINTERDÖD FIX] Convert kph to m/s if value is > 5, else treat as raw multiplier
         const baseSpeed = playerSpeedValue > 5 ? (playerSpeedValue / 3.6) : 15 * playerSpeedValue;
 
-        // Familjen får vara lite snabbare än basfarten för att hinna ikapp
+        // Family follows slightly faster than base to catch up
         let followSpeed = baseSpeed * 1.25;
 
         if (state.isSwimming) {
@@ -84,7 +87,6 @@ export class FamilySystem implements System {
 
         const maxFollowSpeed = followSpeed * 1.25;
 
-        // VINTERDÖD FIX: Läs från structen istället för den gamla any-typen
         const activeVehicle = state.vehicle.active ? state.vehicle.mesh : null;
         const inVehicle = !!activeVehicle;
 
@@ -97,13 +99,11 @@ export class FamilySystem implements System {
 
             if (!fm.visible) fm.visible = true;
 
-
             // --- 0. VEHICLE RIDING LOGIC ---
             if (inVehicle) {
                 if (!familyMember.following) continue;
 
                 const def = activeVehicle.userData.vehicleDef;
-                // VINTERDÖD FIX: Hämta suspension från den centrala vehicle-structen!
                 const suspY = state.vehicle.suspY || 0;
 
                 if (familyMember.ring && familyMember.ring.visible) {
@@ -142,11 +142,11 @@ export class FamilySystem implements System {
                     _animState.isSwimming = false;
                     _animState.isWading = false;
                     _animState.isIdleLong = false;
-                    _animState.renderTime = state.renderTime;
-                    PlayerAnimator.update(body, _animState, now, delta);
+                    _animState.renderTime = renderTime;
+                    PlayerAnimator.update(body, _animState, renderTime, delta);
                 }
 
-                familyMember.wasInVehicle = true; // VINTERDÖD FIX: Sparad på familyMember för Zero-GC
+                familyMember.wasInVehicle = true;
                 continue;
             }
 
@@ -160,23 +160,23 @@ export class FamilySystem implements System {
                 fm.position.x += spreadX;
                 fm.position.z += spreadZ;
                 fm.rotation.set(0, 0, 0);
-                familyMember.lastMoveTime = now;
+                familyMember.lastMoveTime = simTime;
             }
 
-            // --- 1. Ring Pulse Visual ---
+            // --- 1. Ring Pulse Visual (Render Time) ---
             const ring = familyMember.ring;
             if (ring) {
                 const isFollowing = familyMember.following;
                 ring.visible = !(isFollowing || isDead);
 
                 if (ring.visible) {
-                    const pulse = 1.0 + Math.sin(now * 0.003) * 0.1;
+                    const pulse = 1.0 + Math.sin(renderTime * 0.003) * 0.1;
                     ring.scale.set(pulse, pulse, pulse);
                     ring.updateMatrix();
                 }
             }
 
-            // --- 2. Following Logic ---
+            // --- 2. Following Logic (Simulation Time) ---
             let fmIsMoving = false;
             let fmIsRushing = false;
 
@@ -220,7 +220,7 @@ export class FamilySystem implements System {
                         fm.position.addScaledVector(_v3, moveDist);
                         fm.lookAt(this.playerGroup.position);
                     }
-                    familyMember.lastMoveTime = now;
+                    familyMember.lastMoveTime = simTime;
                     fmIsRushing = state.isRushing || state.isDodging;
                 }
             }
@@ -230,18 +230,18 @@ export class FamilySystem implements System {
                 if (distSq > 1.0) {
                     fmIsMoving = true;
                     const dist = Math.sqrt(distSq);
-                    const step = followSpeed * 0.8 * delta; // Walk back slightly slower
+                    const step = followSpeed * 0.8 * delta;
 
                     _v3.subVectors(familyMember.spawnPos, fm.position).normalize();
                     const moveDist = Math.min(step, dist);
 
                     fm.position.addScaledVector(_v3, moveDist);
                     fm.lookAt(familyMember.spawnPos);
-                    familyMember.lastMoveTime = now;
+                    familyMember.lastMoveTime = simTime;
                 }
             }
 
-            // --- 3. Animation ---
+            // --- 3. Animation (Synchronized Logic + Smooth Visuals) ---
             let body = userData.cachedBody;
             if (!body) {
                 const children = fm.children;
@@ -256,7 +256,7 @@ export class FamilySystem implements System {
 
             if (body) {
                 const lastMove = familyMember.lastMoveTime ?? 0;
-                const isIdleLong = now - lastMove > 10000;
+                const isIdleLong = simTime - lastMove > 10000;
 
                 _animState.seed = familyMember.seed;
                 _animState.isMoving = fmIsMoving;
@@ -266,13 +266,13 @@ export class FamilySystem implements System {
 
                 _animState.isIdleLong = isIdleLong;
 
-                // VINTERDÖD FIX: Tracked on familyMember to avoid userData mutations
-                _animState.isSpeaking = now < (familyMember.speakingUntil || 0);
-                _animState.isThinking = now < (familyMember.thinkingUntil || 0);
+                // VINTERDÖD FIX: Simulation clock bound state flags
+                _animState.isSpeaking = simTime < (familyMember.speakingUntil || 0);
+                _animState.isThinking = simTime < (familyMember.thinkingUntil || 0);
 
                 const engine = WinterEngine.getInstance();
                 if (engine?.water) {
-                    engine.water.checkBuoyancy(fm.position.x, fm.position.y, fm.position.z, now);
+                    engine.water.checkBuoyancy(fm.position.x, fm.position.y, fm.position.z, renderTime);
                     _animState.isSwimming = _buoyancyResult.depth > 1.2;
                     _animState.isWading = _buoyancyResult.depth > 0.4 && !_animState.isSwimming;
 
@@ -282,14 +282,13 @@ export class FamilySystem implements System {
                         fm.position.y = THREE.MathUtils.lerp(fm.position.y, targetY, 4 * delta);
 
                         if (_animState.isSwimming || _animState.isWading) {
-                            // VINTERDÖD FIX: V8 Shape Lock - Tracked natively on familyMember array
                             const rx = familyMember.lastRippleX ?? fm.position.x + 99;
                             const rz = familyMember.lastRippleZ ?? fm.position.z + 99;
                             const dx = fm.position.x - rx;
                             const dz = fm.position.z - rz;
 
                             if (dx * dx + dz * dz > 0.5) {
-                                engine.water.spawnRipple(fm.position.x, fm.position.z, _session.state.simTime, _animState.isSwimming ? 0.8 : 0.5);
+                                engine.water.spawnRipple(fm.position.x, fm.position.z, state.simTime, _animState.isSwimming ? 0.8 : 0.5);
                                 familyMember.lastRippleX = fm.position.x;
                                 familyMember.lastRippleZ = fm.position.z;
                             }
@@ -307,8 +306,8 @@ export class FamilySystem implements System {
                     _animState.isWading = false;
                 }
 
-                _animState.renderTime = state.renderTime;
-                PlayerAnimator.update(body, _animState, now, delta);
+                _animState.renderTime = renderTime;
+                PlayerAnimator.update(body, _animState, renderTime, delta);
             }
         }
     }

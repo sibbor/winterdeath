@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import { PlayerStats } from '../entities/player/PlayerTypes';
+import { PlayerStats, PlayerStatID, StatusEffectID } from '../entities/player/PlayerTypes';
 import { GameSettings } from '../core/engine/EngineTypes';
 
 // Re-export Data
@@ -97,16 +97,43 @@ export const SCRAP_COST_BASE = 50;
 export const LEVEL_CAP = 20;
 
 export const INITIAL_STATS: PlayerStats = {
-    statsBuffer: new Float32Array([
-        100, 100, 100, 100, // HP, MAX_HP, STAMINA, MAX_STAMINA (0-3)
-        0, 1, 0, 1500,      // XP, LEVEL, CURRENT_XP, NEXT_LEVEL_XP (4-7)
-        0, 0, PLAYER_BASE_SPEED, // SKILL_POINTS, SCRAP, SPEED (8-10)
-        0, 0, 0, 0, 0,      // TOTALS (11-15: SCRAP, DAMAGE_DEALT, DAMAGE_TAKEN, DISTANCE, KILLS)
-        0,                  // SCORE (16)
-        1.0, 1.0, 1.0, 1.0, 1.0 // MULTIPLIERS (17-21: SPEED, RELOAD, FIRERATE, DMG_RESIST, RANGE)
-    ]),
-    effectDurations: new Float32Array(14), // StatusEffectID.COUNT
-    effectIntensities: new Float32Array(14), // StatusEffectID.COUNT
+    statsBuffer: (function() {
+        const b = new Float32Array(PlayerStatID.COUNT);
+        b[PlayerStatID.HP] = 100;
+        b[PlayerStatID.MAX_HP] = 100;
+        b[PlayerStatID.STAMINA] = 100;
+        b[PlayerStatID.MAX_STAMINA] = 100;
+        b[PlayerStatID.XP] = 0;
+        b[PlayerStatID.LEVEL] = 1;
+        b[PlayerStatID.CURRENT_XP] = 0;
+        b[PlayerStatID.NEXT_LEVEL_XP] = 1500;
+        b[PlayerStatID.SKILL_POINTS] = 0;
+        b[PlayerStatID.SCRAP] = 0;
+        b[PlayerStatID.SPEED] = PLAYER_BASE_SPEED;
+        
+        // --- TOTALS (11-15: SCRAP, DAMAGE_DEALT, DAMAGE_TAKEN, DISTANCE, KILLS) ---
+        b[PlayerStatID.TOTAL_SCRAP_COLLECTED] = 0;
+        b[PlayerStatID.TOTAL_DAMAGE_DEALT] = 0;
+        b[PlayerStatID.TOTAL_DAMAGE_TAKEN] = 0;
+        b[PlayerStatID.TOTAL_DISTANCE_TRAVELED] = 0;
+        b[PlayerStatID.TOTAL_KILLS] = 0;
+        
+        b[PlayerStatID.SCORE] = 0;
+
+        // --- MULTIPLIERS (17+) ---
+        b[PlayerStatID.MULTIPLIER_SPEED] = 1.0;
+        b[PlayerStatID.MULTIPLIER_RELOAD] = 1.0;
+        b[PlayerStatID.MULTIPLIER_FIRERATE] = 1.0;
+        b[PlayerStatID.MULTIPLIER_DMG_RESIST] = 1.0;
+        b[PlayerStatID.MULTIPLIER_RANGE] = 1.0;
+
+        // --- BAKE FINAL PRE-CALCULATED STATS (Zero-GC) ---
+        b[PlayerStatID.FINAL_SPEED] = b[PlayerStatID.SPEED] * b[PlayerStatID.MULTIPLIER_SPEED] * KMH_TO_MS;
+
+        return b;
+    })(),
+    effectDurations: new Float32Array(StatusEffectID.COUNT),
+    effectIntensities: new Float32Array(StatusEffectID.COUNT),
     statusFlags: 0,
     activePassives: [],
     activeBuffs: [],

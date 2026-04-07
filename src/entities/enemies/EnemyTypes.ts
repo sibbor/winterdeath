@@ -93,7 +93,6 @@ Object.keys(ZOMBIE_TYPES).forEach(key => {
     else if (typeSMI === EnemyType.RUNNER) ENEMY_ATTACK_RANGE[typeSMI] = 2.0;
     else if (typeSMI === EnemyType.TANK) ENEMY_ATTACK_RANGE[typeSMI] = 2.5;
     else if (typeSMI === EnemyType.BOMBER) ENEMY_ATTACK_RANGE[typeSMI] = 3.5;
-    else if (typeSMI === EnemyType.BOSS) ENEMY_ATTACK_RANGE[typeSMI] = 5.0;
 });
 
 // Initialize Boss stats from BOSSES registry
@@ -104,14 +103,16 @@ Object.keys(BOSSES).forEach(key => {
     const data = (BOSSES as any)[id];
     const typeSMI = EnemyType.BOSS; // Currently all bosses share the BOSS type or are variants
 
-    // For bosses, we use the specific boss ID if we want granular speed, 
-    // but the engine currently indexes by EnemyType. 
-    // To support per-boss speeds in the global array, we would need 32+ slots.
-    // For now, we ensure the BOSS baseline is at least initialized.
+    // For bosses, the engine currently indexes by EnemyType. 
+    // We populate the BOSS index (4) with the data from the last boss in the loop
+    // to provide a sensible global baseline for systems that don't know the specific boss ID.
     ENEMY_MAX_HP[typeSMI] = data.hp;
     ENEMY_BASE_SPEED[typeSMI] = data.speed;
+    ENEMY_SCORE[typeSMI] = 2000; // Standard Boss Score
+    ENEMY_COLOR[typeSMI] = data.color || 0x4a0404;
     ENEMY_SCALE[typeSMI] = data.scale || 3.0;
     ENEMY_WIDTH_SCALE[typeSMI] = data.widthScale || 1.0;
+    ENEMY_ATTACK_RANGE[typeSMI] = 5.0;
 });
 
 /**

@@ -7,16 +7,15 @@ import { SectorTrigger } from '../../systems/TriggerTypes';
 import { WeaponType } from '../../content/weapons';
 import { RuntimeState } from '../../core/RuntimeState';
 import { System } from '../../systems/System';
-import { PlayerDeathState, DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
-
-import { WEAPONS, ZOMBIE_TYPES, BOSSES, PLAYER_BASE_SPEED } from '../../content/constants';
+import { PlayerDeathState, DamageID } from '../../entities/player/CombatTypes';
+import { KMH_TO_MS } from '../../content/constants';
+import { WEAPONS, ZOMBIE_TYPES, PLAYER_BASE_SPEED } from '../../content/constants';
 import { Enemy } from '../../entities/enemies/EnemyManager';
 import { ScrapItem } from '../../systems/WorldLootSystem';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { Obstacle } from '../../core/world/CollisionResolution';
 import { ParticleState } from '../../systems/FXSystem';
 import { PlayerStatID, PlayerStatusFlags, PlayerStatsUtils } from '../../entities/player/PlayerTypes';
-import { StatusEffectType } from '../../content/perks';
 import { InteractionType } from '../../systems/InteractionTypes';
 
 export class GameSessionLogic {
@@ -152,6 +151,9 @@ export class GameSessionLogic {
         statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] = 1.0;
         statsBuffer[PlayerStatID.MULTIPLIER_DMG_RESIST] = 1.0;
         statsBuffer[PlayerStatID.MULTIPLIER_RANGE] = 1.0;
+
+        // --- BAKE INITIAL PRE-CALCULATED STATS (Zero-GC) ---
+        statsBuffer[PlayerStatID.FINAL_SPEED] = statsBuffer[PlayerStatID.SPEED] * statsBuffer[PlayerStatID.MULTIPLIER_SPEED] * KMH_TO_MS;
 
         return {
             // --- PERSISTENT DATA (DOD & Legacy) ---

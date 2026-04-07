@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../../utils/assets';
+import { KMH_TO_MS } from '../../content/constants';
 import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_SCORE, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { DamageID } from '../../entities/player/CombatTypes';
 import { EnemySpawner } from './EnemySpawner';
@@ -184,7 +185,7 @@ export const EnemyManager = {
         // DOD: Base Stat Initialization
         e.maxHp = ENEMY_MAX_HP[newType];
         e.hp = e.maxHp;
-        e.speed = ENEMY_BASE_SPEED[newType];
+        e.speed = ENEMY_BASE_SPEED[newType] * KMH_TO_MS;
         e.score = ENEMY_SCORE[newType];
         e.color = ENEMY_COLOR[newType];
         e.originalScale = ENEMY_SCALE[newType];

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ZOMBIE_TYPES } from '../../content/constants';
+import { ZOMBIE_TYPES, BOSSES } from '../../content/constants';
 import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/audio/SoundManager';
 import { Enemy, AIState, EnemyDeathState, EnemyType, EnemyFlags, ENEMY_HP, ENEMY_SPEED, ENEMY_SCORE, NoiseType } from '../../entities/enemies/EnemyTypes';
@@ -35,7 +35,8 @@ export const EnemySpawner = {
      * This is the "DNA-reset" that makes Object Pooling safe.
      */
     applyTypeStats: (e: Enemy, typeKey: EnemyType) => {
-        const typeData = (ZOMBIE_TYPES as any)[typeKey] || ZOMBIE_TYPES.WALKER;
+        const isBoss = (typeKey === EnemyType.BOSS);
+        const typeData = isBoss ? BOSSES[0] : ((ZOMBIE_TYPES as any)[typeKey] || ZOMBIE_TYPES.WALKER);
 
         // Identity & Core Stats (O(1) SMI lookup)
         e.type = typeKey;
@@ -53,7 +54,7 @@ export const EnemySpawner = {
         e.originalScale = typeData.scale || 1.0;
         e.widthScale = typeData.widthScale || 1.0;
         e.hitRadius = 0.5 * e.originalScale * e.widthScale;
-        e.statusFlags = (typeKey === EnemyType.BOSS) ? EnemyFlags.BOSS : 0;
+        e.statusFlags = isBoss ? EnemyFlags.BOSS : 0;
 
         if (e.indicatorRing) {
             e.indicatorRing.visible = false;
@@ -110,7 +111,7 @@ export const EnemySpawner = {
             type: typeKey,
             maxHp: ENEMY_HP[typeKey],
             hp: ENEMY_HP[typeKey],
-            speed: ENEMY_SPEED[typeKey],
+            speed: ENEMY_SPEED[typeKey] * KMH_TO_MS,
             score: ENEMY_SCORE[typeKey],
             color: typeData.color,
             attacks: typeData.attacks || [],

@@ -833,8 +833,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     },
                     onTrigger: (type: string, duration: number) => {
                         const state = refs.stateRef.current;
-                        if (type === 'SPEAK') state.speakingUntil = performance.now() + duration;
-                        else state.thinkingUntil = performance.now() + duration;
+                        const simTime = refs.engineRef.current?.simTime || 0;
+                        if (type === 'SPEAK') state.speakingUntil = simTime + duration;
+                        else state.thinkingUntil = simTime + duration;
                     },
                     onAction: (action: any) => onAction(action),
                     handleTriggerAction: (action: any, scene: THREE.Scene) => {

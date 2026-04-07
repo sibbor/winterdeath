@@ -28,6 +28,7 @@ export class PlayerStatsSystem implements System {
 
     init(session: GameSessionLogic) {
         this.updatePassives(session);
+        this.bakeFinalStats(session.state.statsBuffer);
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
@@ -40,9 +41,12 @@ export class PlayerStatsSystem implements System {
         this.updateBuffsAndDebuffs(session, dt, now);
         this.applyStatusTicks(session, dt, now);
 
+        this.bakeFinalStats(state.statsBuffer);
+    }
+
+    private bakeFinalStats(stats: Float32Array) {
         // --- BAKE FINAL PRE-CALCULATED STATS (O(1) Access for Systems) ---
         // Final Speed in m/s (Unit conversion + Perk Multipliers)
-        const stats = state.statsBuffer;
         stats[PlayerStatID.FINAL_SPEED] = stats[PlayerStatID.SPEED] * stats[PlayerStatID.MULTIPLIER_SPEED] * KMH_TO_MS;
     }
 
@@ -142,17 +146,29 @@ export class PlayerStatsSystem implements System {
             const duration = state.effectDurations[i];
             state.effectDurations[i] = Math.max(0, duration - dt * 1000);
             
-            // Map index to multipliers and state flags
-            if (i === StatusEffectID.ADRENALINE_PATCH) {
-                stats[PlayerStatID.MULTIPLIER_SPEED] *= state.effectIntensities[i];
-            } else if (i === StatusEffectID.DISORIENTED) {
-                state.statusFlags |= PlayerStatusFlags.DISORIENTED;
-                session.engine.camera.shake(0.05);
-            }
-
-            // HUD Synchronization: Report all non-passive effects to the Active Buff/Debuff arrays
+            // --- VINTERDÖD FIX: Dynamic Multiplier Resolution ---
+            // Ensuring all speed-affecting debuffs (Slowed, Freezing, Disoriented, etc.)
+            // are correctly factored into the statsBuffer before the final bake.
             const perk = PERKS[i];
             if (perk) {
+                if (perk.intensity !== undefined) {
+                    // Specific logic for multipliers vs state flags
+                    if (i === StatusEffectID.ADRENALINE_PATCH || 
+                        i === StatusEffectID.SLOWED || 
+                        i === StatusEffectID.FREEZING ||
+                        i === StatusEffectID.DISORIENTED ||
+                        i === StatusEffectID.BLEEDING ||
+                        i === StatusEffectID.BURNING) {
+                        stats[PlayerStatID.MULTIPLIER_SPEED] *= state.effectIntensities[i];
+                    }
+                }
+
+                if (i === StatusEffectID.DISORIENTED) {
+                    state.statusFlags |= PlayerStatusFlags.DISORIENTED;
+                    session.engine.camera.shake(0.05);
+                }
+
+                // HUD Synchronization: Report all non-passive effects to the Active Buff/Debuff arrays
                 if (perk.category === PerkCategory.BUFF) {
                     state.activeBuffs.push(i);
                 } else if (perk.category === PerkCategory.DEBUFF) {

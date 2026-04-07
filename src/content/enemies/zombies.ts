@@ -32,10 +32,10 @@ Special attacks with status effects for the player:
 Status effects are defined in the PERKS database.
 */
 
-export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
+export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<string, ZombieTypeData> = {
     [EnemyType.WALKER]: {
         hp: 50,
-        speed: 22.5,
+        speed: 15,
         score: 20,
         color: 0xc27ba0, // Pinkish
         scale: 1.0,
@@ -57,7 +57,7 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
     },
     [EnemyType.RUNNER]: {
         hp: 30,
-        speed: 27.0,
+        speed: 20.0,
         score: 10,
         color: 0x33a366, // Green
         scale: 0.8,
@@ -79,7 +79,7 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
     },
     [EnemyType.TANK]: {
         hp: 175,
-        speed: 20.0,
+        speed: 13.0,
         score: 50,
         color: 0x2b6599, // Blue
         scale: 1.5,
@@ -101,7 +101,7 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
     },
     [EnemyType.BOMBER]: {
         hp: 80,
-        speed: 17.5,
+        speed: 12,
         score: 30,
         color: 0xcf6e36,
         scale: 1.25,
@@ -114,30 +114,6 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
                 radius: 10.0,
                 chargeTime: 2000,
                 cooldown: 0,
-                effect: StatusEffectType.DISORIENTED,
-            }
-        ]
-    },
-    [EnemyType.BOSS]: {
-        hp: 2500,
-        speed: 25.0,
-        score: 2000,
-        color: 0xff0000,
-        scale: 4.0,
-        widthScale: 1.0,
-        attacks: [
-            {
-                type: EnemyAttackType.HIT,
-                damage: 40,
-                cooldown: 1500,
-            },
-            {
-                type: EnemyAttackType.SMASH,
-                damage: 80,
-                range: 5.0,
-                radius: 8.0,
-                chargeTime: 1200,
-                cooldown: 5000,
                 effect: StatusEffectType.DISORIENTED,
             }
         ]
