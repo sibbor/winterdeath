@@ -20,8 +20,8 @@ export class VehicleMovementSystem implements System {
     constructor(private playerGroup: THREE.Group) {
     }
 
-    update(session: GameSessionLogic, delta: number, now: number) {
-        VehicleManager.update(session, delta, now, this.playerGroup);
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
+        VehicleManager.update(session, this.playerGroup, delta, simTime, renderTime);
 
         const state = session.state;
         const input = session.engine.input.state;
@@ -41,7 +41,7 @@ export class VehicleMovementSystem implements System {
                     state,
                     delta,
                     session,
-                    now,
+                    simTime,
                     def
                 );
             }

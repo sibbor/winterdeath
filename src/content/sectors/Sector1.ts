@@ -469,7 +469,7 @@ export const Sector1: SectorDef = {
                             staminaRatio: 1.0, isSpeaking: gameState.speakingUntil > now,
                             isThinking: false, isIdleLong: false, isSwimming: false, isWading: false,
                             seed: jordan.userData.seed || 0, renderTime: gameState.renderTime || now
-                        }, now, delta);
+                        }, now);
                     }
 
                     if (jordan.position.distanceTo(target) < 1.5) {

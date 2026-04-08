@@ -61,7 +61,7 @@ const getPassiveIcon = (type: StatusEffectType | string) => {
         if (n === 'SOTIS' || n === 'PANTER') return '🐱';
         return getStatusIcon(n);
     }
-    
+
     // Direct enum lookup
     return PERKS[type]?.icon || '❓';
 };
@@ -80,7 +80,8 @@ const StatusEffectIcon = React.memo(({ type, isDebuff, isMobileDevice, isLandsca
             let progress = 0;
             const effect = state.statusEffects.find(e => e.type === type);
             if (effect) {
-                progress = Math.min(1.0, effect.duration / (effect.maxDuration || 5000));
+                const max = effect.maxDuration || 5000;
+                progress = Math.max(0, Math.min(1.0, effect.duration / max));
             }
             barRef.current.style.transform = `scaleX(${progress})`;
         });
@@ -94,13 +95,12 @@ const StatusEffectIcon = React.memo(({ type, isDebuff, isMobileDevice, isLandsca
     const tooltip = perk ? `${t(perk.displayName)}: ${t(perk.description)}` : type.toString();
 
     return (
-        <div className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-7 h-7 text-[11px]'} flex items-center justify-center bg-black/80 border-2 rounded-sm ${pulseClass} relative cursor-help`}
+        <div className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-10 h-10 text-[14px]'} flex items-center justify-center bg-black/80 border-2 rounded-sm ${pulseClass} relative cursor-help`}
             style={{ borderColor: color }}
             data-tooltip={tooltip}
             onTouchStart={isMobileDevice ? handleActionEnter : undefined}>
             <span>{getStatusIcon(type)}</span>
-
-            <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-black/40">
+            <div className="absolute -bottom-2 left-0 w-full h-0.5 bg-black/40">
                 <div ref={barRef} className="w-full h-full origin-left will-change-transform" style={{ backgroundColor: color, transform: 'scaleX(1)' }} />
             </div>
         </div>
@@ -177,7 +177,7 @@ const StatusEffectsPanel = React.memo(({ isMobileDevice, isLandscapeMode, handle
                 return (
                     <div key={`p-${i}`}
                         className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-7 h-7 text-[11px]'} flex items-center justify-center bg-black/80 border-2 rounded-full transition-all cursor-help`}
-                        style={{ 
+                        style={{
                             borderColor: PerkColor.PASSIVE,
                             boxShadow: `0 0 8px ${PerkColor.PASSIVE}66` // Add 40% opacity (66 in hex)
                         }}
@@ -332,11 +332,11 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                         if (!wData) return null;
 
                         const isActive = activeWeapon === type;
-                        
+
                         // Special fix for Slot 4 (Special) highlight if type matching is ambiguous 
                         // or if the engine state requires a more explicit check.
                         const isSpecialSlot = slot === '4';
-                        
+
                         const isThrowable = wData.category === WeaponCategory.THROWABLE;
                         const isRadio = type === WeaponType.RADIO;
                         const size = isMobileDevice ? "w-16 h-16" : "w-20 h-20";
@@ -510,7 +510,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         scrapBoxRef.current.classList.remove('hud-bling-pulse');
                         void scrapBoxRef.current.offsetWidth; // Force Reflow
                         scrapBoxRef.current.classList.add('hud-bling-pulse');
-                        
+
                         // Dynamic styling bypass
                         scrapBoxRef.current.style.backgroundColor = 'rgba(234, 179, 8, 0.2)';
                         scrapBoxRef.current.style.borderColor = '#eab308';

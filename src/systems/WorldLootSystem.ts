@@ -87,14 +87,14 @@ export class WorldLootSystem implements System {
         WorldLootSystem.instance = this;
     }
 
-    update(session: GameSessionLogic, dt: number, now: number) {
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         // 1. Process pending spawns from ring buffer
         const pendingSpawns = this.spawnHead - this.spawnTail;
         if (pendingSpawns > 0) {
             const batchSize = Math.min(pendingSpawns, 10);
             for (let i = 0; i < batchSize; i++) {
                 const idx = this.spawnTail % 512;
-                this.spawnSingle(this.spawnQueueX[idx], this.spawnQueueZ[idx], now);
+                this.spawnSingle(this.spawnQueueX[idx], this.spawnQueueZ[idx], simTime);
                 this.spawnTail++;
             }
 
@@ -106,7 +106,7 @@ export class WorldLootSystem implements System {
         }
 
         // 2. Physics & Collection update
-        const collected = this.updateLoot(this.playerGroup.position, dt, now);
+        const collected = this.updateLoot(this.playerGroup.position, delta, simTime);
 
         // 3. Callback execution
         if (collected > 0) {
@@ -119,7 +119,7 @@ export class WorldLootSystem implements System {
         }
     }
 
-    private updateLoot(playerPos: THREE.Vector3, delta: number, now: number): number {
+    private updateLoot(playerPos: THREE.Vector3, delta: number, simTime: number): number {
         let collectedAmount = 0;
         let gpuNeedsUpdate = false;
 
@@ -143,7 +143,7 @@ export class WorldLootSystem implements System {
             const dz = pz - item.position.z;
             const distSq = dx * dx + dy * dy + dz * dz;
 
-            const canMagnetize = (now - item.spawnTime) > magnetismDelay;
+            const canMagnetize = (simTime - item.spawnTime) > magnetismDelay;
 
             // 1. State logic
             if (!item.magnetized && canMagnetize && distSq < magnetRangeSq) {
@@ -198,9 +198,9 @@ export class WorldLootSystem implements System {
                 this.deactivateItem(item, i);
                 gpuNeedsUpdate = true;
 
-                if (now - this.lastSoundTime > 40) {
+                if (simTime - this.lastSoundTime > 40) {
                     soundManager.playPickupCollectible();
-                    this.lastSoundTime = now;
+                    this.lastSoundTime = simTime;
                 }
                 continue;
             }
@@ -261,7 +261,7 @@ export class WorldLootSystem implements System {
         }
     }
 
-    private spawnSingle(x: number, z: number, now: number) {
+    private spawnSingle(x: number, z: number, simTime: number) {
         if (this.freeCount === 0) return; // Prevent spawning if pool is fully exhausted
 
         // Get an unused item from the free list
@@ -275,7 +275,7 @@ export class WorldLootSystem implements System {
         item.needsUpdate = true;
         item.grounded = false;
         item.magnetized = false;
-        item.spawnTime = now;
+        item.spawnTime = simTime;
         item.value = 5 + Math.floor(Math.random() * 10);
         item.position.set(x, 1.5, z);
         item.scale.set(1.0, 1.0, 1.0);

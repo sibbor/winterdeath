@@ -40,7 +40,7 @@ export class PlayerMovementSystem implements System {
 
     constructor(private playerGroup: THREE.Group) { }
 
-    update(session: GameSessionLogic, dt: number, now: number) {
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         const state = session.state;
         const stats = state.statsBuffer;
 
@@ -73,8 +73,8 @@ export class PlayerMovementSystem implements System {
             this.playerGroup,
             input,
             state,
-            dt,
-            now,
+            delta,
+            simTime,
             disableInput,
             session,
             currentSpeed
@@ -92,7 +92,7 @@ export class PlayerMovementSystem implements System {
             session
         );
 
-        this.updateInvincibleGlow(state, state.renderTime || now);
+        this.updateInvincibleGlow(state, session.state.renderTime);
     }
 
     private checkReflexShield(session: GameSessionLogic, simTime: number) {
@@ -140,7 +140,7 @@ export class PlayerMovementSystem implements System {
         playerGroup: THREE.Group,
         input: any,
         state: any,
-        simDelta: number,
+        delta: number,
         simTime: number,
         disableInput: boolean,
         session: GameSessionLogic,
@@ -226,12 +226,12 @@ export class PlayerMovementSystem implements System {
 
                 const swimY = _buoyancyResult.waterLevel - 0.35;
                 const targetY = isSwimming ? swimY : _buoyancyResult.groundY;
-                playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, targetY, 4 * simDelta);
+                playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, targetY, 4 * delta);
             } else {
                 isSwimming = false;
                 isWading = false;
                 if (playerGroup.position.y !== 0) {
-                    playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, 0, 15 * simDelta);
+                    playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, 0, 15 * delta);
                     if (Math.abs(playerGroup.position.y) < 0.01) playerGroup.position.y = 0;
                 }
             }
@@ -250,20 +250,15 @@ export class PlayerMovementSystem implements System {
         const waterStaminaDrain = isSwimming ? 7 : (isWading ? 3 : 0);
         if (waterStaminaDrain > 0 && !state.vehicle.active) {
             state.lastStaminaUseTime = simTime;
-            stats[PlayerStatID.STAMINA] = Math.max(0, stats[PlayerStatID.STAMINA] - waterStaminaDrain * simDelta);
+            stats[PlayerStatID.STAMINA] = Math.max(0, stats[PlayerStatID.STAMINA] - waterStaminaDrain * delta);
 
             if (isSwimming && stats[PlayerStatID.STAMINA] < 0.1) {
                 speed *= 0.5;
 
+                // --- Unified Drowning Logic ---
+                // We only apply the status effect here. The PlayerStatsSystem handles the damage tick.
                 if (state.callbacks && state.callbacks.onPlayerHit) {
-                    state.callbacks.onPlayerHit(0, null, DamageID.DROWNING, true, StatusEffectType.DROWNING, 500, 0, DamageID.DROWNING);
-                }
-
-                if (simTime - state.lastDrownTick > 1000) {
-                    state.lastDrownTick = simTime;
-                    if (state.callbacks && state.callbacks.onPlayerHit) {
-                        state.callbacks.onPlayerHit(15, null, DamageID.DROWNING, true, StatusEffectType.DROWNING, 500, 15, DamageID.DROWNING);
-                    }
+                    state.callbacks.onPlayerHit(0, null, DamageID.DROWNING, true, StatusEffectType.DROWNING, 1500);
                 }
             }
         }
@@ -275,7 +270,7 @@ export class PlayerMovementSystem implements System {
             speed *= 2.0;
 
             // --- STEADY STAMINA DRAIN (22/sec) ---
-            stats[PlayerStatID.STAMINA] = Math.max(0, stats[PlayerStatID.STAMINA] - simDelta * 22);
+            stats[PlayerStatID.STAMINA] = Math.max(0, stats[PlayerStatID.STAMINA] - delta * 22);
             state.lastStaminaUseTime = simTime;
             state.statusFlags |= PlayerStatusFlags.RUSHING;
 
@@ -291,14 +286,14 @@ export class PlayerMovementSystem implements System {
         else if (!state.isDodging && !state.isRushing && waterStaminaDrain === 0) {
             // Natural regeneration only if idle/walking and not soon after stamina use
             if (simTime - state.lastStaminaUseTime > 2500) {
-                stats[PlayerStatID.STAMINA] = Math.min(stats[PlayerStatID.MAX_STAMINA], stats[PlayerStatID.STAMINA] + 15 * simDelta);
+                stats[PlayerStatID.STAMINA] = Math.min(stats[PlayerStatID.MAX_STAMINA], stats[PlayerStatID.STAMINA] + 15 * delta);
             }
         }
 
         if (stats[PlayerStatID.HP] < stats[PlayerStatID.MAX_HP] &&
             !(state.statusFlags & PlayerStatusFlags.DEAD) &&
             simTime - state.lastDamageTime > 5000) {
-            stats[PlayerStatID.HP] = Math.min(stats[PlayerStatID.MAX_HP], stats[PlayerStatID.HP] + 3 * simDelta);
+            stats[PlayerStatID.HP] = Math.min(stats[PlayerStatID.MAX_HP], stats[PlayerStatID.HP] + 3 * delta);
         }
 
         let isMovingVal = false;
@@ -335,8 +330,8 @@ export class PlayerMovementSystem implements System {
 
             if (simTime < state.dodgeStartTime + 300) {
                 const dodgeSpeed = speed * 2.5;
-                _v1.copy(state.dodgeDir).multiplyScalar(dodgeSpeed * simDelta);
-                this.performMove(playerGroup, _v1, state, session, simTime, simDelta);
+                _v1.copy(state.dodgeDir).multiplyScalar(dodgeSpeed * delta);
+                this.performMove(playerGroup, _v1, state, session, simTime, delta);
                 isMovingVal = true;
             } else {
                 state.isDodging = false;
@@ -390,14 +385,14 @@ export class PlayerMovementSystem implements System {
                 const oldZ = playerGroup.position.z;
 
                 // Motion-Based Triggering
-                _v1.multiplyScalar(speed * simDelta);
-                this.performMove(playerGroup, _v1, state, session, simTime, simDelta);
+                _v1.multiplyScalar(speed * delta);
+                this.performMove(playerGroup, _v1, state, session, simTime, delta);
 
                 const dx = playerGroup.position.x - oldX;
                 const dz = playerGroup.position.z - oldZ;
                 const movedDist = Math.sqrt(dx * dx + dz * dz);
 
-                const intendedDist = speed * simDelta;
+                const intendedDist = speed * delta;
                 const mobilityRatio = movedDist / Math.max(0.001, intendedDist);
 
                 // Velocity Gate: Accumulate ONLY if moving decisively
@@ -449,7 +444,7 @@ export class PlayerMovementSystem implements System {
         return isMovingVal;
     }
 
-    private performMove(playerGroup: THREE.Group, baseMoveVec: THREE.Vector3, state: any, session: GameSessionLogic, simTime: number, simDelta: number) {
+    private performMove(playerGroup: THREE.Group, baseMoveVec: THREE.Vector3, state: any, session: GameSessionLogic, simTime: number, delta: number) {
         const dist = baseMoveVec.length();
         if (dist < 0.001) return;
 

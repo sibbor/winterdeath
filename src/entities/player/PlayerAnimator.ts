@@ -21,11 +21,11 @@ export interface AnimState {
 }
 
 export const PlayerAnimator = {
+
     update: (
         mesh: THREE.Mesh,
         animState: AnimState,
-        now: number,
-        delta: number
+        renderTime: number
     ) => {
         if (!mesh) return;
 
@@ -51,7 +51,7 @@ export const PlayerAnimator = {
         if (animState.isDead) {
             // High-speed death animation (350ms)
             const deathDuration = 350;
-            const progress = Math.min(1.0, Math.max(0.0, (now - (animState.deathStartTime || now)) / deathDuration));
+            const progress = Math.min(1.0, Math.max(0.0, (renderTime - (animState.deathStartTime || renderTime)) / deathDuration));
 
             rotationX = -Math.PI / 2 * progress;
             positionY = -0.8 * progress; // Sink into snow/ground
@@ -59,7 +59,7 @@ export const PlayerAnimator = {
 
         // Dodging animation
         else if (animState.isDodging) {
-            const progress = Math.min(1.0, Math.max(0.0, (now - animState.dodgeStartTime) / 300));
+            const progress = Math.min(1.0, Math.max(0.0, (renderTime - animState.dodgeStartTime) / 300));
             rotationX = progress * Math.PI * 2;
             const squashFactor = Math.sin(progress * Math.PI);
             scaleY = 1.0 - (squashFactor * 0.4);
@@ -89,13 +89,13 @@ export const PlayerAnimator = {
                 rotationX = -0.15;
                 scaleY = 1.0 + (Math.abs(bob) * 0.15 * rushFactor); // More vertical bounce
                 scaleXZ = 1.0 - (Math.abs(bob) * 0.05 * rushFactor);
-                rotationZ = Math.cos(now * moveSpeed * wadingFactor) * 0.08; // Exaggerated wobble
+                rotationZ = Math.cos(renderTime * moveSpeed * wadingFactor) * 0.08; // Exaggerated wobble
                 positionY = Math.abs(bob) * 0.1; // Add vertical bounce
             } else if (animState.isStrafing) {
                 // Lean into the strafe, waddle
                 rotationX = 0.05; // Mostly upright
                 const strafeLean = (animState.strafeDirection || 0) * 0.2;
-                rotationZ = strafeLean + (Math.cos(now * moveSpeed * wadingFactor) * 0.05);
+                rotationZ = strafeLean + (Math.cos(renderTime * moveSpeed * wadingFactor) * 0.05);
                 scaleY = 1.0 + (Math.abs(bob) * 0.1 * rushFactor);
                 scaleXZ = 1.0 - (Math.abs(bob) * 0.05 * rushFactor);
                 positionY = Math.abs(bob) * 0.15; // Waddling height bounce
@@ -104,7 +104,7 @@ export const PlayerAnimator = {
                 rotationX = animState.isRushing ? 0.4 : (animState.isWading ? 0.3 : 0.2);
                 scaleY = 1.0 + (Math.abs(bob) * 0.1 * rushFactor);
                 scaleXZ = 1.0 - (Math.abs(bob) * 0.05 * rushFactor);
-                rotationZ = Math.cos(now * moveSpeed * wadingFactor) * 0.05;
+                rotationZ = Math.cos(renderTime * moveSpeed * wadingFactor) * 0.05;
             }
 
             // Wading Bobbing

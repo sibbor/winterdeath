@@ -90,10 +90,9 @@ export class DeathSystem implements System {
         this.setDeathPhase = opts.setDeathPhase;
     }
 
-    update(session: GameSessionLogic, delta: number, now: number) {
+    update(session: GameSessionLogic, delta: number, renderTime: number) {
         const state = session.state;
-        if (!(state.statusFlags & PlayerStatusFlags.DEAD)) return; // Skip immediately when alive — ~0 cost
-
+        if (!(state.statusFlags & PlayerStatusFlags.DEAD)) return;
 
         const playerGroup = this.playerGroupRef.current;
         const playerMesh = this.playerMeshRef.current;
@@ -113,16 +112,16 @@ export class DeathSystem implements System {
 
             // Fetch HUD data once for death state to avoid GC hits
             // HUD data now respects the statsBuffer and statusFlags automatically.
-            const hudData = HudSystem.getHudData(state, pgPos, fmMesh, input, now, props, this.distanceTraveledRef.current, camera) as any;
+            const hudData = HudSystem.getHudData(state, pgPos, fmMesh, input, renderTime, props, this.distanceTraveledRef.current, camera) as any;
             HudStore.update(hudData);
 
         } else if (this.deathPhaseRef.current === 'ANIMATION') {
-            if (now - state.deathStartTime > 2500) {
+            if (renderTime - state.deathStartTime > 2500) {
                 this.deathPhaseRef.current = 'MESSAGE';
                 this.setDeathPhase('MESSAGE');
             }
         } else if (this.deathPhaseRef.current === 'MESSAGE') {
-            if (now - state.deathStartTime > 3000) {
+            if (renderTime - state.deathStartTime > 3000) {
                 this.deathPhaseRef.current = 'CONTINUE';
                 this.setDeathPhase('CONTINUE');
             }
@@ -161,7 +160,7 @@ export class DeathSystem implements System {
                 _v2.set(state.deathVel.x, 0, state.deathVel.z);
                 _v1.copy(pgPos).sub(_v2);
                 playerGroup.lookAt(_v1);
-            } else if (!isExploded && !state.playerBloodSpawned && now - state.deathStartTime > 350) {
+            } else if (!isExploded && !state.playerBloodSpawned && renderTime - state.deathStartTime > 350) {
                 state.playerBloodSpawned = true;
                 const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 2.5 * baseScale, MATERIALS.bloodDecal);
@@ -169,16 +168,16 @@ export class DeathSystem implements System {
             }
 
             // Specialized Death Visuals
-            if (isBurning && now % 500 < 50) {
+            if (isBurning && renderTime % 500 < 50) {
                 this.fxCallbacks.spawnPart(pgPos.x, 0.5, pgPos.z, 'smoke', 1);
                 this.fxCallbacks.spawnPart(pgPos.x, 0.5, pgPos.z, 'spark', 1);
             }
 
             if (isBiting && this.deathPhaseRef.current === 'ANIMATION') {
-                playerMesh.position.x = Math.sin(now * 0.05) * 0.1;
-                playerMesh.position.z = Math.cos(now * 0.05) * 0.1;
+                playerMesh.position.x = Math.sin(renderTime * 0.05) * 0.1;
+                playerMesh.position.z = Math.cos(renderTime * 0.05) * 0.1;
 
-                if (now % 300 < 30) {
+                if (renderTime % 300 < 30) {
                     this.fxCallbacks.spawnPart(pgPos.x, 0.8, pgPos.z, 'blood', 5);
                 }
             }
@@ -191,12 +190,12 @@ export class DeathSystem implements System {
                 state.deathVel.z *= 0.95;
 
                 if (this.deathPhaseRef.current === 'ANIMATION') {
-                    if (now % 500 < 50) {
+                    if (renderTime % 500 < 50) {
                         this.fxCallbacks.spawnPart(pgPos.x, pgPos.y + 1.0, pgPos.z, 'splash', 2);
                     }
                 }
             } else if (state.playerDeathState === PlayerDeathState.BURNED) {
-                const age = now - state.deathStartTime;
+                const age = renderTime - state.deathStartTime;
                 const duration = 1500;
                 const progress = Math.min(1.0, age / duration);
 
@@ -206,11 +205,11 @@ export class DeathSystem implements System {
                     const ashRenderer = EnemyManager.getAshRenderer();
                     if (ashRenderer) {
                         // [VINTERDÖD FIX] Use world position (pgPos) and group rotation for the ash pile
-                        ashRenderer.addAsh(pgPos, playerGroup.rotation, 1.0, 1.0, 0x333333, now, 1500);
+                        ashRenderer.addAsh(pgPos, playerGroup.rotation, 1.0, 1.0, 0x333333, renderTime, 1500);
                     }
                 }
 
-                if (now % 100 < 16) {
+                if (renderTime % 100 < 16) {
                     this.fxCallbacks.spawnPart(pgPos.x, pgPos.y + 1.8, pgPos.z, 'enemy_effect_flame', 1);
                 }
 
@@ -257,7 +256,7 @@ export class DeathSystem implements System {
         } else if (playerMesh) {
             _deathAnimState.deathStartTime = state.deathStartTime;
             _deathAnimState.renderTime = state.renderTime;
-            PlayerAnimator.update(playerMesh as any, _deathAnimState, now, delta);
+            PlayerAnimator.update(playerMesh as any, _deathAnimState, renderTime);
         }
 
         // --- 4. Family Grief ---
@@ -287,8 +286,8 @@ export class DeathSystem implements System {
             const lastCry = (fm as any)._lastCryTime;
             const cryDelay = (fm as any)._cryDelay;
 
-            if (now - lastCry > cryDelay) {
-                (fm as any)._lastCryTime = now;
+            if (renderTime - lastCry > cryDelay) {
+                (fm as any)._lastCryTime = renderTime;
                 (fm as any)._cryDelay = 4000 + Math.random() * 6000;
                 soundManager.playFamilyCrying(fm);
             }
@@ -312,7 +311,7 @@ export class DeathSystem implements System {
                 _griefAnimState.isMoving = isWalking;
                 _griefAnimState.renderTime = state.renderTime;
                 _griefAnimState.staminaRatio = state.statsBuffer[PlayerStatID.STAMINA] / Math.max(1, state.statsBuffer[PlayerStatID.MAX_STAMINA]);
-                PlayerAnimator.update(body, _griefAnimState, now, delta);
+                PlayerAnimator.update(body, _griefAnimState, renderTime);
             }
         }
     }

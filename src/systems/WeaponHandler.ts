@@ -36,6 +36,7 @@ interface ContinuousContext {
     addScore: Function | null;
     fireZones: any[];
     simTime: number;
+    renderTime: number;
     playerPos: THREE.Vector3 | null;
     session: any;
     noiseEvents: any;
@@ -57,6 +58,7 @@ const _continuousCtx: ContinuousContext = {
     addScore: null,
     fireZones: [],
     simTime: 0,
+    renderTime: 0,
     playerPos: null,
     session: null,
     noiseEvents: null,
@@ -73,7 +75,7 @@ function _executeThrow(
     playerGroup: THREE.Group,
     state: any,
     loadout: any,
-    now: number,
+    simTime: number,
     wep: WeaponStats,
     ratio: number,
     aimCrossMesh?: THREE.Group | null,
@@ -104,7 +106,7 @@ function _executeThrow(
 
     if (wep.reloadTime && wep.reloadTime > 0) {
         state.isReloading = true;
-        state.reloadEndTime = now + (wep.reloadTime * reloadMult);
+        state.reloadEndTime = simTime + (wep.reloadTime * reloadMult);
         soundManager.playMagOut();
     }
 
@@ -113,7 +115,7 @@ function _executeThrow(
     }
 
     state.throwChargeStart = 0;
-    state.lastShotTime = now;
+    state.lastShotTime = simTime;
 
     if (aimCrossMesh) aimCrossMesh.visible = false;
     if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
@@ -241,7 +243,7 @@ export const WeaponHandler = {
     },
 
     // --- CORE FIRING LOGIC ---
-    handleFiring: (session: any, scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, simDelta: number, simTime: number, renderTime: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
+    handleFiring: (session: any, scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh: THREE.Mesh | null | undefined, delta: number, simTime: number, renderTime: number) => {
         if (state.vehicle.active || state.cinematicActive) return;
         if (state.isDodging || state.isReloading) return;
 
@@ -297,6 +299,7 @@ export const WeaponHandler = {
                     _continuousCtx.addScore = cb?.gainXp;
                     _continuousCtx.fireZones = state.fireZones;
                     _continuousCtx.simTime = simTime;
+                    _continuousCtx.renderTime = renderTime;
                     _continuousCtx.playerPos = playerGroup.position;
                     _continuousCtx.session = session;
                     _continuousCtx.noiseEvents = state.noiseEvents;
@@ -309,9 +312,11 @@ export const WeaponHandler = {
                         state.activeWeapon as unknown as DamageID,
                         _v2,
                         _v3,
-                        simDelta,
                         _continuousCtx as any, // Castar säkert här nu när vi uppfyller gränssnittet
-                        WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]) * (60 * simDelta)
+                        delta,
+                        simTime,
+                        renderTime,
+                        WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]) * (60 * delta)
                     );
                 } else {
                     if (state.activeWeapon === WeaponType.FLAMETHROWER && (state as any).lastFireState) {

@@ -148,7 +148,148 @@ export const EnemyManager = {
         enemyPool.length = 0;
     },
 
-    getAshRenderer: () => ashRenderer,
+    update: (
+        playerPos: THREE.Vector3,
+        enemies: Enemy[],
+        collisionGrid: SpatialGrid,
+        isDead: boolean,
+        onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number) => void,
+        spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void,
+        spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => void,
+        applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => void,
+        spawnBubble: ((text: string, duration: number) => void) | null,
+        water: WaterSystem | null,
+        delta: number,
+        simTime: number,
+        renderTime: number
+    ) => {
+
+        collisionGrid.updateEnemyGrid(enemies);
+        _syncList.length = 0;
+
+        _aiContext._realOnPlayerHit = onPlayerHit;
+        _aiContext.spawnPart = spawnPart;
+        _aiContext.spawnDecal = spawnDecal;
+        _aiContext.applyDamage = applyDamage;
+        _aiContext.spawnBubble = spawnBubble;
+
+        const engine = WinterEngine.getInstance();
+        const camera = engine.camera;
+        const cameraPos = camera.threeCamera.position;
+        const cameraDir = _camDir.set(0, 0, -1).applyQuaternion(camera.threeCamera.quaternion);
+
+        const len = enemies.length;
+        for (let i = 0; i < len; i++) {
+            const e = enemies[i];
+
+            if (e.deathState === EnemyDeathState.ALIVE) {
+                // Let EnemyAI handle duration updates and physics!
+                EnemyAI.updateEnemy(e, playerPos, collisionGrid, isDead, _aiContext, water, delta, simTime, renderTime);
+            }
+
+            if (e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD) {
+                EnemyManager.processDeathAnimation(e, _aiContext, delta, simTime, renderTime);
+            }
+
+            const deathState = e.deathState;
+
+            if (deathState === EnemyDeathState.BURNED || deathState === EnemyDeathState.ELECTROCUTED || deathState === EnemyDeathState.DROWNED) {
+                e.mesh.visible = true;
+                e.mesh.matrixAutoUpdate = true;
+            }
+            else if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !e.mesh.userData.exploded && deathState !== EnemyDeathState.DEAD) {
+                let isVisible = true;
+                if (cameraPos && cameraDir) {
+                    _v2.subVectors(e.mesh.position, cameraPos);
+                    const dot = cameraDir.dot(_v2);
+                    const distSq = _v2.lengthSq();
+
+                    if (dot < -2.0 && distSq > 625) {
+                        isVisible = false;
+                    }
+                }
+
+                const isTelegraphing = e.indicatorRing && e.indicatorRing.visible;
+
+                if (isVisible && !isTelegraphing) {
+                    e.mesh.visible = false;
+                    e.mesh.matrixAutoUpdate = false;
+                    e.mesh.updateMatrix();
+                    _syncList.push(e);
+                } else {
+                    e.mesh.visible = isVisible;
+                    e.mesh.matrixAutoUpdate = true;
+                }
+            }
+
+            if (deathState === EnemyDeathState.ALIVE) {
+                if ((e.statusFlags & EnemyFlags.BOSS) !== 0 && e.mesh && e.color !== undefined) {
+                    const timeSinceHit = simTime - e.hitTime;
+                    if (timeSinceHit < 100) {
+                        if (!e.mesh.userData.isFlashing) {
+                            e.mesh.userData.isFlashing = true;
+                            const isArc = e.lastDamageType === DamageID.ARC_CANNON;
+
+                            if (isArc) _flashColor.setHex(0x00ffff).lerp(_white, 0.4);
+                            else _flashColor.setHex(0xffffff);
+
+                            _traverseStack.length = 0;
+                            _traverseStack.push(e.mesh);
+                            while (_traverseStack.length > 0) {
+                                const c = _traverseStack.pop() as any;
+                                if (c.isMesh && c.material && c.material.emissive) {
+                                    c.material.emissive.copy(_flashColor);
+                                    c.material.emissiveIntensity = isArc ? 2.0 : 1.0;
+                                }
+                                for (let k = 0; k < c.children.length; k++) {
+                                    _traverseStack.push(c.children[k]);
+                                }
+                            }
+                        }
+                    } else {
+                        if (e.mesh.userData.isFlashing) {
+                            e.mesh.userData.isFlashing = false;
+
+                            _traverseStack.length = 0;
+                            _traverseStack.push(e.mesh);
+                            while (_traverseStack.length > 0) {
+                                const c = _traverseStack.pop() as any;
+                                if (c.isMesh && c.material && c.material.emissive) {
+                                    c.material.emissive.setHex(0x000000);
+                                    c.material.emissiveIntensity = 0.0;
+                                }
+                                for (let k = 0; k < c.children.length; k++) {
+                                    _traverseStack.push(c.children[k]);
+                                }
+                            }
+                        }
+                    }
+                } else if ((e.statusFlags & EnemyFlags.BOSS) === 0 && e.color !== undefined) {
+                    const timeSinceHit = simTime - e.hitTime;
+                    if (timeSinceHit < 100) {
+                        if (!e.mesh.userData.isFlashing) {
+                            e.mesh.userData.isFlashing = true;
+                            e.mesh.userData.originalColor = e.color;
+                            const isArc = e.lastDamageType === DamageID.ARC_CANNON;
+                            if (isArc) {
+                                e.color = _flashColor.setHex(0x00ffff).lerp(_white, 0.4).getHex();
+                            } else {
+                                e.color = 0xffffff;
+                            }
+                        }
+                    } else {
+                        if (e.mesh.userData.isFlashing) {
+                            e.mesh.userData.isFlashing = false;
+                            e.color = e.mesh.userData.originalColor as number;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (zombieRenderer) zombieRenderer.sync(_syncList, simTime);
+        if (ashRenderer) ashRenderer.update(Math.max(simTime, 1));
+    },
 
     clear: () => {
         zombieRenderer?.destroy();
@@ -159,6 +300,8 @@ export const EnemyManager = {
         ashRenderer = null;
         enemyPool.length = 0;
     },
+
+    getAshRenderer: () => ashRenderer,
 
     spawn: (scene: THREE.Scene, playerPos: THREE.Vector3, forcedType?: EnemyType, forcedPos?: THREE.Vector3, bossSpawned: boolean = false, enemyCount: number = 0): Enemy | null => {
         let enemy: Enemy | null = null;
@@ -363,7 +506,7 @@ export const EnemyManager = {
         }
     },
 
-    processDeathAnimation: (e: Enemy, simDelta: number, simTime: number, renderTime: number, callbacks: any) => {
+    processDeathAnimation: (e: Enemy, callbacks: any, delta: number, simTime: number, renderTime: number) => {
         const age = simTime - e.deathTimer;
 
         switch (e.deathState) {
@@ -466,8 +609,8 @@ export const EnemyManager = {
             case EnemyDeathState.GENERIC:
             case EnemyDeathState.FALL:
             default:
-                e.deathVel.y -= 35 * simDelta;
-                e.mesh.position.addScaledVector(e.deathVel, simDelta);
+                e.deathVel.y -= 35 * delta;
+                e.mesh.position.addScaledVector(e.deathVel, delta);
                 if (e.mesh.position.y <= 0.2) {
                     e.mesh.position.y = 0.2;
                     e.deathVel.set(0, 0, 0);
@@ -477,7 +620,7 @@ export const EnemyManager = {
                 e.mesh.rotation.x += (targetRot - e.mesh.rotation.x) * 0.12;
 
                 if (e.mesh.userData.spinDir) {
-                    e.mesh.rotation.y += e.mesh.userData.spinDir * simDelta;
+                    e.mesh.rotation.y += e.mesh.userData.spinDir * delta;
                     e.mesh.userData.spinDir *= 0.9;
                 }
 
@@ -570,7 +713,7 @@ export const EnemyManager = {
         if (hitAnyone) soundManager.playImpact(MaterialType.FLESH);
     },
 
-    applyKnockback: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, simTime: number) => {
+    applyKnockback: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, delta: number, simTime: number) => {
         const canTackle = enemy.deathState === EnemyDeathState.ALIVE && (simTime - enemy.lastTackleTime > 300);
         if (!canTackle) return;
 
@@ -646,6 +789,7 @@ export const EnemyManager = {
         vehicleDef: any,
         state: any,
         session: any,
+        delta: number,
         simTime: number
     ): boolean => {
         const speedKmh = speedMS * 3.6;
@@ -712,157 +856,14 @@ export const EnemyManager = {
             _v3.copy(knockDir).multiplyScalar(speedMS);
             _v4.copy(e.mesh.position).addScaledVector(knockDir, -1.0);
 
-            EnemyManager.applyKnockback(e, _v4, _v3, true, state, scene, simTime);
+            EnemyManager.applyKnockback(e, _v4, _v3, true, state, scene, delta, simTime);
 
             e.slowDuration = 0.5;
             return false;
         }
     },
 
-    update: (
-        simDelta: number,
-        simTime: number,
-        renderTime: number,
-        playerPos: THREE.Vector3,
-        enemies: Enemy[],
-        collisionGrid: SpatialGrid,
-        isDead: boolean,
-        onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number) => void,
-        spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void,
-        spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => void,
-        applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => void,
-        spawnBubble: ((text: string, duration: number) => void) | null,
-        water: WaterSystem | null
-    ) => {
-
-        collisionGrid.updateEnemyGrid(enemies);
-        _syncList.length = 0;
-
-        _aiContext._realOnPlayerHit = onPlayerHit;
-        _aiContext.spawnPart = spawnPart;
-        _aiContext.spawnDecal = spawnDecal;
-        _aiContext.applyDamage = applyDamage;
-        _aiContext.spawnBubble = spawnBubble;
-
-        const engine = WinterEngine.getInstance();
-        const camera = engine.camera;
-        const cameraPos = camera.threeCamera.position;
-        const cameraDir = _camDir.set(0, 0, -1).applyQuaternion(camera.threeCamera.quaternion);
-
-        const len = enemies.length;
-        for (let i = 0; i < len; i++) {
-            const e = enemies[i];
-
-            if (e.deathState === EnemyDeathState.ALIVE) {
-                // Let EnemyAI handle duration updates and physics!
-                EnemyAI.updateEnemy(e, simTime, renderTime, simDelta, playerPos, collisionGrid, isDead, _aiContext, water);
-            }
-
-            if (e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD) {
-                EnemyManager.processDeathAnimation(e, simDelta, simTime, renderTime, _aiContext);
-            }
-
-            const deathState = e.deathState;
-
-            if (deathState === EnemyDeathState.BURNED || deathState === EnemyDeathState.ELECTROCUTED || deathState === EnemyDeathState.DROWNED) {
-                e.mesh.visible = true;
-                e.mesh.matrixAutoUpdate = true;
-            }
-            else if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !e.mesh.userData.exploded && deathState !== EnemyDeathState.DEAD) {
-                let isVisible = true;
-                if (cameraPos && cameraDir) {
-                    _v2.subVectors(e.mesh.position, cameraPos);
-                    const dot = cameraDir.dot(_v2);
-                    const distSq = _v2.lengthSq();
-
-                    if (dot < -2.0 && distSq > 625) {
-                        isVisible = false;
-                    }
-                }
-
-                const isTelegraphing = e.indicatorRing && e.indicatorRing.visible;
-
-                if (isVisible && !isTelegraphing) {
-                    e.mesh.visible = false;
-                    e.mesh.matrixAutoUpdate = false;
-                    e.mesh.updateMatrix();
-                    _syncList.push(e);
-                } else {
-                    e.mesh.visible = isVisible;
-                    e.mesh.matrixAutoUpdate = true;
-                }
-            }
-
-            if (deathState === EnemyDeathState.ALIVE) {
-                if ((e.statusFlags & EnemyFlags.BOSS) !== 0 && e.mesh && e.color !== undefined) {
-                    const timeSinceHit = simTime - e.hitTime;
-                    if (timeSinceHit < 100) {
-                        if (!e.mesh.userData.isFlashing) {
-                            e.mesh.userData.isFlashing = true;
-                            const isArc = e.lastDamageType === DamageID.ARC_CANNON;
-
-                            if (isArc) _flashColor.setHex(0x00ffff).lerp(_white, 0.4);
-                            else _flashColor.setHex(0xffffff);
-
-                            _traverseStack.length = 0;
-                            _traverseStack.push(e.mesh);
-                            while (_traverseStack.length > 0) {
-                                const c = _traverseStack.pop() as any;
-                                if (c.isMesh && c.material && c.material.emissive) {
-                                    c.material.emissive.copy(_flashColor);
-                                    c.material.emissiveIntensity = isArc ? 2.0 : 1.0;
-                                }
-                                for (let k = 0; k < c.children.length; k++) {
-                                    _traverseStack.push(c.children[k]);
-                                }
-                            }
-                        }
-                    } else {
-                        if (e.mesh.userData.isFlashing) {
-                            e.mesh.userData.isFlashing = false;
-
-                            _traverseStack.length = 0;
-                            _traverseStack.push(e.mesh);
-                            while (_traverseStack.length > 0) {
-                                const c = _traverseStack.pop() as any;
-                                if (c.isMesh && c.material && c.material.emissive) {
-                                    c.material.emissive.setHex(0x000000);
-                                    c.material.emissiveIntensity = 0.0;
-                                }
-                                for (let k = 0; k < c.children.length; k++) {
-                                    _traverseStack.push(c.children[k]);
-                                }
-                            }
-                        }
-                    }
-                } else if ((e.statusFlags & EnemyFlags.BOSS) === 0 && e.color !== undefined) {
-                    const timeSinceHit = simTime - e.hitTime;
-                    if (timeSinceHit < 100) {
-                        if (!e.mesh.userData.isFlashing) {
-                            e.mesh.userData.isFlashing = true;
-                            e.mesh.userData.originalColor = e.color;
-                            const isArc = e.lastDamageType === DamageID.ARC_CANNON;
-                            if (isArc) {
-                                e.color = _flashColor.setHex(0x00ffff).lerp(_white, 0.4).getHex();
-                            } else {
-                                e.color = 0xffffff;
-                            }
-                        }
-                    } else {
-                        if (e.mesh.userData.isFlashing) {
-                            e.mesh.userData.isFlashing = false;
-                            e.color = e.mesh.userData.originalColor as number;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (zombieRenderer) zombieRenderer.sync(_syncList, simTime);
-        if (ashRenderer) ashRenderer.update(Math.max(simTime, 1));
-    },
-
-    cleanupDeadEnemies: (scene: THREE.Scene, enemies: Enemy[], simTime: number, state: any, callbacks: any, simDelta: number = 1 / 60) => {
+    cleanupDeadEnemies: (scene: THREE.Scene, enemies: Enemy[], state: any, callbacks: any, delta: number, simTime: number) => {
         for (let i = enemies.length - 1; i >= 0; i--) {
             const e = enemies[i];
 

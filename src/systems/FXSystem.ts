@@ -485,8 +485,9 @@ export const FXSystem = {
         }
     },
 
-    update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], renderDelta: number, frame: number, renderTime: number, callbacks: any) => {
-        const safeDelta = renderDelta > 0.1 ? 0.1 : renderDelta;
+    update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[],
+        callbacks: any, delta: number, simTime: number, renderTime: number) => {
+        const safeDelta = delta > 0.1 ? 0.1 : delta;
 
         const decay = safeDelta * 44;
         const airFriction = 1.0 - (5.0 * safeDelta);

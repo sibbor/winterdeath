@@ -72,14 +72,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     }, [refs]);
 
     const getSectorStats = useCallback((isExtraction: boolean = false, aborted: boolean = false): SectorStats => {
+        const engine = WinterEngine.getInstance();
         const state = refs.stateRef.current;
+
         if (!state.sessionStats) return ({} as SectorStats);
 
         // Zero-GC: Breakdown objects and lists are already in sessionStats
         const stats = state.sessionStats;
         stats.isExtraction = isExtraction;
         stats.aborted = aborted;
-        stats.timeElapsed = performance.now() - (state.startTime || performance.now());
+        stats.timeElapsed = engine.simTime;
         stats.timePlayed = stats.timeElapsed;
         stats.accuracy = (stats.shotsFired > 0 ? (stats.shotsHit / stats.shotsFired) : 1) * 100;
         stats.distanceTraveled = refs.distanceTraveledRef.current;
@@ -111,7 +113,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (tracker) tracker.recordXp(session, amount);
 
         const statsBuffer = session.state.statsBuffer;
-        
+
         // --- VINTERDÖD FIX: Zero-GC DOD Progression ---
         // We use the statsBuffer (Float32Array) directly for O(1) SMI access.
         statsBuffer[PlayerStatID.SCORE] += amount;
@@ -402,7 +404,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     }, [gainXp, props.currentSectorData, props.familyAlreadyRescued, refs, spawnBubble]);
 
     // --- ZERO-GC DISCOVERY HANDLER ---
-    const handleDiscovery = useCallback((type: string, id: any, titleKey: string, detailsKey: string, payload?: any) => {
+    const handleDiscovery = useCallback((type: string | number, id: any, titleKey: string, detailsKey: string, payload?: any) => {
         const state = refs.stateRef.current;
         const currentProps = latestStateRef.current.props;
         if (!state || !state.sessionStats || !state.discoverySets) return;
@@ -414,7 +416,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         titleKey = titleKey || payload?.titleKey || '';
         detailsKey = detailsKey || payload?.detailsKey || '';
 
-        switch (type) {
+        // [VINTERDÖD FIX] Normalize type bridge to handle both numeric enums and string keys
+        const normalizedType = typeof type === 'number' ?
+            (type === DiscoveryType.ENEMY ? 'enemy' :
+                type === DiscoveryType.BOSS ? 'boss' :
+                    type === DiscoveryType.COLLECTIBLE ? 'collectible' :
+                        type === DiscoveryType.POI ? 'poi' :
+                            type === DiscoveryType.CLUE ? 'clue' : 'clue') : type;
+
+        switch (normalizedType) {
             case 'enemy':
                 const enemyId = Number(id);
                 if (!sets.seenEnemies.has(enemyId)) {
@@ -472,12 +482,19 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
 
         if (isNew && currentProps.settings?.showDiscoveryPopups !== false) {
-            soundManager.playUiConfirm();
+            soundManager.playDiscovery();
+
+            // [VINTERDÖD FIX] Correctly map normalized types back to DiscoveryType for the UI Queue
+            let finalType = DiscoveryType.CLUE;
+            if (normalizedType === 'enemy') finalType = DiscoveryType.ENEMY;
+            else if (normalizedType === 'boss') finalType = DiscoveryType.BOSS;
+            else if (normalizedType === 'collectible') finalType = DiscoveryType.COLLECTIBLE;
+            else if (normalizedType === 'poi') finalType = DiscoveryType.POI;
 
             // Push to queue instead of overwriting directly
             (refs as any).discoveryQueueRef.current.push({
                 id,
-                type: type === 'enemy' ? DiscoveryType.ENEMY : (type === 'boss' ? DiscoveryType.BOSS : DiscoveryType.CLUE),
+                type: finalType,
                 title: titleKey,
                 details: detailsKey,
                 timestamp: performance.now()
@@ -579,7 +596,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 refs.bossIntroRef.current = {
                     active: true,
                     bossMesh: boss.mesh,
-                    startTime: performance.now()
+                    startTime: WinterEngine.getInstance().renderTime
                 };
 
                 const bossNameKey = (BOSSES as any)[boss.bossId]?.name || 'BOSS';
@@ -641,7 +658,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     active: true,
                     targetPos: new THREE.Vector3(targetPos.x, targetPos.y || 30, targetPos.z),
                     lookAtPos: new THREE.Vector3(lookAtPos.x, lookAtPos.y || 0, lookAtPos.z),
-                    endTime: performance.now() + (duration || 5000)
+                    endTime: WinterEngine.getInstance().renderTime + (duration || 5000)
                 };
                 refs.engineRef.current.camera.setCinematic(true);
             }

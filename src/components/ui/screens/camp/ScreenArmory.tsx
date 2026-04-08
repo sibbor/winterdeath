@@ -131,7 +131,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                         ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
                                     `}
                                 style={isActive ? {
-                                    backgroundColor: darkenColor(catColor, 20),
+                                    backgroundColor: darkenColor(catColor as string, 20),
                                     '--pulse-color': catColor
                                 } as React.CSSProperties : {}}
                             >

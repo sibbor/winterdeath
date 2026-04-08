@@ -117,6 +117,7 @@ export interface PlayerStats {
     // --- DOD BUFFERS (Zero-GC / O(1)) ---
     statsBuffer: Float32Array;      // Sized by PlayerStatID.COUNT
     effectDurations: Float32Array;  // Sized by StatusEffectID.COUNT
+    effectMaxDurations: Float32Array; // Sized by StatusEffectID.COUNT
     effectIntensities: Float32Array; // Sized by StatusEffectID.COUNT
 
     // --- SMI STATE ---
@@ -181,6 +182,7 @@ export const PlayerStatsUtils = {
         return {
             statsBuffer: new Float32Array(PlayerStatID.COUNT),
             effectDurations: new Float32Array(StatusEffectID.COUNT),
+            effectMaxDurations: new Float32Array(StatusEffectID.COUNT),
             effectIntensities: new Float32Array(StatusEffectID.COUNT),
             activePassives: [] as StatusEffectType[],
             activeBuffs: [] as StatusEffectType[],

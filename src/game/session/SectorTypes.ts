@@ -119,7 +119,7 @@ export interface SectorDef {
             cameraShake: (amount: number) => void;
             t: (key: string) => string;
             scene?: THREE.Scene;
-            spawnPart: (x: number, y: number, z: number, type: string, count: number) => void;
+            spawnPart: (x: number, y: number, z: number, type: string, count: number, scale?: number, life?: number) => void;
             startCinematic?: (target: THREE.Object3D, id: number, params?: any) => void;
             // Environment Controls
             setWind?: (direction: number, strength: number) => void;

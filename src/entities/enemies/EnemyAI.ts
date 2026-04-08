@@ -41,7 +41,7 @@ const SEPARATION_RADIUS = 1.5;
 const SEPARATION_RADIUS_SQ = SEPARATION_RADIUS * SEPARATION_RADIUS;
 const INV_SEPARATION_RADIUS = 1.0 / SEPARATION_RADIUS;
 
-function logStateChange(now: number, e: Enemy, newState: AIState, reason?: string) {
+function logStateChange(simTime: number, e: Enemy, newState: AIState, reason?: string) {
     if (PerformanceMonitor.getInstance().aiLoggingEnabled && e.state !== newState) {
         const oldState = e.state;
         const reasonStr = reason ? ` (${reason})` : '';
@@ -53,9 +53,6 @@ export const EnemyAI = {
 
     updateEnemy: (
         e: Enemy,
-        simTime: number,
-        renderTime: number,
-        simDelta: number,
         playerPos: THREE.Vector3,
         collisionGrid: SpatialGrid,
         isDead: boolean,
@@ -67,7 +64,10 @@ export const EnemyAI = {
             spawnBubble: (text: string, duration: number) => void;
             spawnPart: (x: number, y: number, z: number, type: string, count: number) => void;
         },
-        water: WaterSystem | null
+        water: WaterSystem | null,
+        delta: number,
+        simTime: number,
+        renderTime: number
     ) => {
         if (e.deathState === EnemyDeathState.DEAD || !e.mesh) return;
 
@@ -177,7 +177,7 @@ export const EnemyAI = {
         }
 
         // --- 3. STATUS EFFECTS ---
-        handleStatusEffects(e, simDelta, simTime, callbacks);
+        handleStatusEffects(e, delta, simTime, callbacks);
 
         let checkedWaterThisFrame = false;
 
@@ -187,13 +187,16 @@ export const EnemyAI = {
                 e.mesh.userData.wasKnockedBack = true;
             }
 
-            const mass = e.originalScale * e.widthScale;
-            // 1. Apply Gravity (Softer -18 for cinematic weight)
-            e.knockbackVel.y -= 18 * simDelta;
+            // --- FIX: Apply pure velocity (EnemyManager already divided by mass!) ---
+            e.mesh.position.addScaledVector(e.knockbackVel, delta);
 
-            // 2. Apply Friction (Horizontal only)
-            const friction = 4.0 + (mass * 3.0);
-            const drag = Math.max(0, 1 - friction * simDelta);
+            // --- Snappy, heavy gravity ---
+            e.knockbackVel.y -= 50 * delta;
+
+            // --- Friction (Horizontal only) ---
+            const mass = e.originalScale * e.widthScale;
+            const friction = 1.0 + (mass * 2.0);
+            const drag = Math.max(0, 1 - friction * delta);
             e.knockbackVel.x *= drag;
             e.knockbackVel.z *= drag;
 
@@ -202,9 +205,6 @@ export const EnemyAI = {
                 e.fallStartY = e.mesh.position.y;
             }
             e.statusFlags |= EnemyFlags.AIRBORNE;
-
-            // 3. Unified Displacement (Apply velocity once per frame)
-            e.mesh.position.addScaledVector(e.knockbackVel, simDelta);
 
             // 4. Floor Collision & Landing Logic
             const isRagdolling = e.mesh.userData.isRagdolling === true || e.deathState !== EnemyDeathState.ALIVE;
@@ -215,15 +215,6 @@ export const EnemyAI = {
                 e.mesh.position.y = floorY;
                 e.statusFlags &= ~EnemyFlags.AIRBORNE;
                 e.fallStartY = 0;
-
-                // Reset only VERTICAL speed. Horizontal X/Z momentum continues to bleed via friction.
-                e.knockbackVel.y = 0;
-
-                // Dampen horizontal slide if landing from a significant drop
-                if (peakY > floorY + 0.5) {
-                    e.knockbackVel.x *= 0.5;
-                    e.knockbackVel.z *= 0.5;
-                }
 
                 // Interaction: Water splashes or Fall damage
                 if (water) {
@@ -246,11 +237,9 @@ export const EnemyAI = {
                     }
                 }
 
-                // Stop ragdolling if movement is nearly zero
-                if (Math.abs(e.knockbackVel.x) < 0.1 && Math.abs(e.knockbackVel.z) < 0.1) {
-                    e.knockbackVel.set(0, 0, 0);
-                    e.mesh.userData.isRagdolling = false;
-                }
+                // --- RESTORED OLD BEHAVIOR: Instant hard stop on landing ---
+                e.knockbackVel.set(0, 0, 0);
+                e.mesh.userData.isRagdolling = false;
             }
         } else {
             e.mesh.userData.wasKnockedBack = false;
@@ -278,7 +267,7 @@ export const EnemyAI = {
 
                 const inDeepWater = _waterCheckResult.flatDepth > 1.25;
                 if (inDeepWater && (e.statusFlags & EnemyFlags.DROWNING) === 0) {
-                    e.swimDistance += e.velocity.length() * simDelta;
+                    e.swimDistance += e.velocity.length() * delta;
                     if (e.swimDistance > e.maxSwimDistance) {
                         e.statusFlags |= EnemyFlags.DROWNING;
                     }
@@ -290,7 +279,7 @@ export const EnemyAI = {
                 e.statusFlags &= ~(EnemyFlags.IN_WATER | EnemyFlags.WADING | EnemyFlags.DROWNING);
                 e.swimDistance = 0;
                 if (e.mesh.position.y < 0) {
-                    e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, 0, 8 * simDelta);
+                    e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, 0, 8 * delta);
                     if (e.mesh.position.y > -0.01) e.mesh.position.y = 0;
                 }
             }
@@ -298,20 +287,20 @@ export const EnemyAI = {
 
         // --- 6. DROWNING ---
         if ((e.statusFlags & EnemyFlags.DROWNING) !== 0 && e.deathState === EnemyDeathState.ALIVE) {
-            e.drownTimer += simDelta;
+            e.drownTimer += delta;
 
             if (water) {
                 const targetY = _buoyancyResult.waterLevel - 0.2;
-                e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, targetY, 3 * simDelta);
+                e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, targetY, 3 * delta);
             }
 
-            const dj = simDelta * 60;
+            const dj = delta * 60;
             e.mesh.position.x += (Math.random() - 0.5) * 0.18 * dj;
             e.mesh.position.z += (Math.random() - 0.5) * 0.18 * dj;
             e.mesh.rotation.x += (Math.random() - 0.5) * 0.3 * dj;
             e.mesh.rotation.z += (Math.random() - 0.5) * 0.3 * dj;
 
-            e.drownDmgTimer += simDelta;
+            e.drownDmgTimer += delta;
             if (e.drownDmgTimer >= 0.15) {
                 e.drownDmgTimer = 0;
                 if (water) water.spawnRipple(e.mesh.position.x, e.mesh.position.z, 0.9, 1.2);
@@ -334,32 +323,32 @@ export const EnemyAI = {
         }
 
         // --- 6.5 STATUS TIMERS & COOLDOWNS ---
-        if (e.slowDuration > 0) e.slowDuration -= simDelta;
-        if (e.blindDuration > 0) e.blindDuration -= simDelta;
+        if (e.slowDuration > 0) e.slowDuration -= delta;
+        if (e.blindDuration > 0) e.blindDuration -= delta;
 
         for (let i = 0; i < e.attacks.length; i++) {
             const atkType = e.attacks[i].type;
             const cd = e.attackCooldowns[atkType];
             if (cd !== 0) {
-                e.attackCooldowns[atkType] = Math.max(0, cd - simDelta * 1000);
+                e.attackCooldowns[atkType] = Math.max(0, cd - delta * 1000);
             }
         }
 
         // --- 7. STUNS & RAGDOLLS ---
         if (e.stunDuration > 0) {
             if (!e.mesh.userData.wasStunned) e.mesh.userData.wasStunned = true;
-            e.stunDuration -= simDelta;
+            e.stunDuration -= delta;
 
             if (e.mesh.userData.isRagdolling && e.mesh.userData.spinVel) {
-                e.mesh.rotation.x += e.mesh.userData.spinVel.x * simDelta;
-                e.mesh.rotation.y += e.mesh.userData.spinVel.y * simDelta;
-                e.mesh.rotation.z += e.mesh.userData.spinVel.z * simDelta;
+                e.mesh.rotation.x += e.mesh.userData.spinVel.x * delta;
+                e.mesh.rotation.y += e.mesh.userData.spinVel.y * delta;
+                e.mesh.rotation.z += e.mesh.userData.spinVel.z * delta;
                 e.mesh.quaternion.setFromEuler(e.mesh.rotation);
 
                 if (e.mesh.position.y <= 0.1) {
-                    e.mesh.userData.spinVel.x *= Math.max(0, 1 - 6.0 * simDelta);
-                    e.mesh.userData.spinVel.y *= Math.max(0, 1 - 6.0 * simDelta);
-                    e.mesh.userData.spinVel.z *= Math.max(0, 1 - 6.0 * simDelta);
+                    e.mesh.userData.spinVel.x *= Math.max(0, 1 - 6.0 * delta);
+                    e.mesh.userData.spinVel.y *= Math.max(0, 1 - 6.0 * delta);
+                    e.mesh.userData.spinVel.z *= Math.max(0, 1 - 6.0 * delta);
                 }
 
                 if (e.stunDuration < 0.6) {
@@ -369,7 +358,7 @@ export const EnemyAI = {
                     e.mesh.quaternion.setFromEuler(e.mesh.rotation);
                 }
             } else {
-                const jitterScale = simDelta * 60;
+                const jitterScale = delta * 60;
                 e.mesh.position.x += (Math.random() - 0.5) * 0.05 * jitterScale;
                 e.mesh.position.z += (Math.random() - 0.5) * 0.05 * jitterScale;
                 e.mesh.rotation.y += (Math.random() - 0.5) * 0.5 * jitterScale;
@@ -431,7 +420,7 @@ export const EnemyAI = {
         // --- 9. STATE MACHINE ---
         switch (e.state) {
             case AIState.IDLE:
-                e.idleTimer -= simDelta;
+                e.idleTimer -= delta;
                 if (seesPlayer) {
                     logStateChange(simTime, e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
@@ -452,12 +441,12 @@ export const EnemyAI = {
                 break;
 
             case AIState.WANDER:
-                e.searchTimer -= simDelta;
-                _v1.set(e.mesh.position.x + e.velocity.x * simDelta, e.mesh.position.y + e.velocity.y * simDelta, e.mesh.position.z + e.velocity.z * simDelta);
+                e.searchTimer -= delta;
+                _v1.set(e.mesh.position.x + e.velocity.x * delta, e.mesh.position.y + e.velocity.y * delta, e.mesh.position.z + e.velocity.z * delta);
 
                 // Movement Lock Guard applied ONLY to physical displacement
                 if (!isTier4 && !isKnockedBackH) {
-                    moveEntity(e, _v1, simDelta, e.speed * 0.5, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                    moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                 }
 
                 if (seesPlayer) {
@@ -476,7 +465,7 @@ export const EnemyAI = {
                 break;
 
             case AIState.SEARCH:
-                e.searchTimer -= simDelta;
+                e.searchTimer -= delta;
 
                 if (seesPlayer) {
                     logStateChange(simTime, e, AIState.CHASE, 'VISUAL');
@@ -492,10 +481,10 @@ export const EnemyAI = {
                 } else if (e.mesh.position.distanceToSquared(e.lastKnownPosition) > 1.5) {
                     // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, e.lastKnownPosition, simDelta, e.speed * 0.8, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                        moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                     }
                 } else {
-                    e.mesh.rotation.y += simDelta * 2.5;
+                    e.mesh.rotation.y += delta * 2.5;
                 }
                 break;
 
@@ -525,7 +514,7 @@ export const EnemyAI = {
 
                     // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, target, simDelta, chaseSpeed, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                        moveEntity(e, target, delta, chaseSpeed, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
                     }
 
                     const chaseStepInterval = e.type === EnemyType.RUNNER ? 250 : 400;
@@ -560,7 +549,7 @@ export const EnemyAI = {
                                 e.state = AIState.ATTACK_CHARGE;
                                 e.attackTimer = att.chargeTime * 0.001;
                             } else {
-                                EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks);
+                                EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
                                 logStateChange(simTime, e, AIState.ATTACKING);
                                 e.state = AIState.ATTACKING;
                                 e.attackTimer = (att.activeTime || 500) * 0.001;
@@ -572,35 +561,35 @@ export const EnemyAI = {
 
             case AIState.ATTACK_CHARGE:
                 if (e.attackTimer !== -1) {
-                    e.attackTimer -= simDelta;
+                    e.attackTimer -= delta;
                     const att = e.attacks[e.currentAttackIndex!];
 
                     // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, playerPos, simDelta, e.speed * 0.25, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                        moveEntity(e, playerPos, delta, e.speed * 0.25, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
                     }
 
                     if (e.attackTimer <= 0) {
                         logStateChange(simTime, e, AIState.ATTACKING);
                         e.state = AIState.ATTACKING;
                         e.attackTimer = (att.activeTime || 100) * 0.001;
-                        EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks);
+                        EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
                     }
                 }
                 break;
 
             case AIState.ATTACKING:
                 if (e.attackTimer !== -1) {
-                    e.attackTimer -= simDelta;
+                    e.attackTimer -= delta;
                     const att = e.attacks[e.currentAttackIndex!];
 
                     // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, playerPos, simDelta, e.speed * 0.15, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                        moveEntity(e, playerPos, delta, e.speed * 0.15, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
                     }
 
                     if (att && att.activeTime) {
-                        EnemyAttackHandler.updateContinuousAttack(e, att, simDelta, playerPos, callbacks);
+                        EnemyAttackHandler.updateContinuousAttack(e, att, playerPos, callbacks, delta, simTime, renderTime);
                     }
 
                     if (e.attackTimer <= 0) {
@@ -612,12 +601,12 @@ export const EnemyAI = {
         }
 
         // --- 10. PROCEDURAL ANIMATION ---
-        EnemyAnimator.updateAttackAnim(e, simTime, renderTime, simDelta);
+        EnemyAnimator.updateAttackAnim(e, simTime, renderTime, delta);
     }
 };
 
 // --- HELPERS ---
-function moveEntity(e: Enemy, target: THREE.Vector3, simDelta: number, speed: number, collisionGrid: SpatialGrid, sepForce: THREE.Vector3, simTime: number, renderTime: number, isChasing: boolean, isTier1: boolean, isTier2: boolean, frameOffset: number) {
+function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid, sepForce: THREE.Vector3, simTime: number, renderTime: number, isChasing: boolean, isTier1: boolean, isTier2: boolean, frameOffset: number) {
     _v1.set(target.x, e.mesh.position.y, target.z);
     _v2.subVectors(_v1, e.mesh.position);
     const dist = _v2.length();
@@ -651,7 +640,7 @@ function moveEntity(e: Enemy, target: THREE.Vector3, simDelta: number, speed: nu
     e.velocity.copy(_v3);
 
     // 4. Convert velocity to frame delta displacement
-    _v3.multiplyScalar(simDelta);
+    _v3.multiplyScalar(delta);
 
     _v4.set(
         e.mesh.position.x + _v3.x,
@@ -661,7 +650,7 @@ function moveEntity(e: Enemy, target: THREE.Vector3, simDelta: number, speed: nu
 
     // 5. ANIMATION & ROTATION
     if (isChasing) e.mesh.rotation.y = Math.atan2(_v2.x, _v2.z);
-    else e.mesh.rotation.y = THREE.MathUtils.lerp(e.mesh.rotation.y, Math.atan2(_v2.x, _v2.z), 5 * simDelta);
+    else e.mesh.rotation.y = THREE.MathUtils.lerp(e.mesh.rotation.y, Math.atan2(_v2.x, _v2.z), 5 * delta);
 
     const speedRatio = speed / (e.speed || 1);
     const animFreq = isChasing ? 0.055 * speedRatio : 0.035 * speedRatio;
@@ -677,13 +666,13 @@ function moveEntity(e: Enemy, target: THREE.Vector3, simDelta: number, speed: nu
     e.mesh.position.copy(_v4);
 }
 
-function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
+function updateLastSeen(e: Enemy, pos: THREE.Vector3, simTime: number) {
     if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3();
     e.lastKnownPosition.copy(pos);
-    e.lastSeenTime = now;
+    e.lastSeenTime = simTime;
 }
 
-function handleStatusEffects(e: Enemy, simDelta: number, simTime: number, callbacks: any) {
+function handleStatusEffects(e: Enemy, delta: number, simTime: number, callbacks: any) {
     if ((e.statusFlags & EnemyFlags.BURNING) !== 0) {
         if (simTime > (e.lastBurnTick || 0) + 500) {
             const dmg = 5;

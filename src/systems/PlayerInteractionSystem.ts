@@ -76,13 +76,13 @@ export class PlayerInteractionSystem implements System {
         }
     }
 
-    update(session: GameSessionLogic, dt: number, now: number) {
+    update(session: GameSessionLogic, delta: number, simTime: number) {
         const state = session.state;
         const input = session.engine.input.state;
 
         // 1. Detect nearby interactive objects (Throttled to 10hz)
-        if (now - this.lastDetectionTime > 100) {
-            this.lastDetectionTime = now;
+        if (simTime - this.lastDetectionTime > 100) {
+            this.lastDetectionTime = simTime;
 
             _detectionResult.type = InteractionType.NONE;
             _detectionResult.id = '';
@@ -150,7 +150,7 @@ export class PlayerInteractionSystem implements System {
             const anim = this.activeAnimations[i];
             if (!anim.obj) continue;
 
-            anim.progress += dt / anim.duration;
+            anim.progress += delta / anim.duration;
             if (anim.progress > 1) anim.progress = 1;
 
             // Smooth braking (ease-out)
@@ -184,7 +184,7 @@ export class PlayerInteractionSystem implements System {
                     child.position.x = targetX;
                     child.position.z = targetZ;
                     child.position.y = (1.5 * easeOut) + Math.sin(anim.progress * Math.PI * 4) * 0.1;
-                    child.rotation.y += 5.0 * dt;
+                    child.rotation.y += 5.0 * delta;
 
                     if (anim.progress > 0.9) {
                         const shrink = (1.0 - anim.progress) * 10.0;
@@ -252,7 +252,7 @@ export class PlayerInteractionSystem implements System {
             const anim = this.activeChests[i];
             if (!anim.lid) continue;
 
-            anim.progress += dt / anim.duration;
+            anim.progress += delta / anim.duration;
 
             if (anim.progress >= 1) {
                 anim.lid.rotation.x = anim.targetR;

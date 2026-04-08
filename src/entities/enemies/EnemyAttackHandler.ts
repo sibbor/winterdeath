@@ -14,7 +14,7 @@ export const EnemyAttackHandler = {
         playSound: (id: string | number) => void,
         spawnPart?: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void,
         applyDamage?: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => void
-    }) => {
+    }, delta: number, simTime: number, renderTime: number) => {
 
         if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
             console.log(`[EnemyAttackHandler] ${e.type}_${e.id} attacking with ${att.type} (${att.damage} dmg)`);
@@ -29,13 +29,13 @@ export const EnemyAttackHandler = {
         }
 
         if (att.type === EnemyAttackType.HIT) {
-            EnemyAttackHandler.handleBasicHit(e, att, distSq, callbacks);
+            EnemyAttackHandler.handleBasicHit(e, att, distSq, callbacks, delta, simTime, renderTime);
         } else {
-            EnemyAttackHandler.handleSpecialAttack(e, att, distSq, playerPos, callbacks);
+            EnemyAttackHandler.handleSpecialAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
         }
     },
 
-    handleBasicHit: (e: Enemy, att: AttackDefinition, distSq: number, callbacks: any) => {
+    handleBasicHit: (e: Enemy, att: AttackDefinition, distSq: number, callbacks: any, delta: number, simTime: number, renderTime: number) => {
         const range = att.range || ENEMY_ATTACK_RANGE[e.type];
         const inRange = distSq < (range * range);
 
@@ -46,7 +46,7 @@ export const EnemyAttackHandler = {
         }
     },
 
-    handleSpecialAttack: (e: Enemy, att: AttackDefinition, distSq: number, playerPos: THREE.Vector3, callbacks: any) => {
+    handleSpecialAttack: (e: Enemy, att: AttackDefinition, distSq: number, playerPos: THREE.Vector3, callbacks: any, delta: number, simTime: number, renderTime: number) => {
         const pos = e.mesh.position;
         const effectiveRange = att.radius || att.range || ENEMY_ATTACK_RANGE[e.type];
         const inRange = distSq < (effectiveRange * effectiveRange);
@@ -105,7 +105,7 @@ export const EnemyAttackHandler = {
         }
     },
 
-    updateContinuousAttack: (e: Enemy, att: AttackDefinition, delta: number, playerPos: THREE.Vector3, callbacks: any) => {
+    updateContinuousAttack: (e: Enemy, att: AttackDefinition, playerPos: THREE.Vector3, callbacks: any, delta: number, simTime: number, renderTime: number) => {
         const pos = e.mesh.position;
         const dx = playerPos.x - pos.x;
         const dy = playerPos.y - pos.y;

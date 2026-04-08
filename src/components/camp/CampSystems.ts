@@ -54,7 +54,7 @@ export class FamilyAnimationSystem implements System {
                 isMoving: false, isRushing: false, isDodging: false, dodgeStartTime: 0, staminaRatio: 1.0,
                 isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed,
                 renderTime: now
-            }, now, dt);
+            }, now);
 
             const isHov = hoveredId === (fm.mesh.userData.id);
             const emissiveIntensity = isHov ? 0.5 + Math.sin(now * 0.005) * 0.5 : 0;

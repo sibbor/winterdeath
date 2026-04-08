@@ -36,7 +36,7 @@ export class SectorSystem implements System {
         private callbacks: {
             setNotification: (notification: any) => void;
             t: (key: string) => string;
-            spawnPart: (x: number, y: number, z: number, type: string, count: number) => void;
+            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number, life?: number) => void;
             startCinematic: (target: THREE.Object3D, id: number, params?: any) => void;
             setInteraction: (interaction: any | null) => void;
             playSound: (id: SoundID) => void;
@@ -111,7 +111,7 @@ export class SectorSystem implements System {
                 cameraShake: this.callbacks.cameraShake,
                 t: this.callbacks.t,
                 scene: scene,
-                spawnPart: this.callbacks.spawnPart,
+                spawnPart: (x: number, y: number, z: number, type: string, count: number, scale?: number, life?: number) => this.callbacks.spawnPart(x, y, z, type, count, undefined, undefined, undefined, scale, life),
                 startCinematic: (target: THREE.Object3D, id: number, params?: any) => this.callbacks.startCinematic(target, id, params),
                 setCameraOverride: this.callbacks.setCameraOverride,
                 setWind: (direction: number, strength: number) => session.engine.wind.setOverride(direction, strength),
@@ -182,7 +182,8 @@ export class SectorSystem implements System {
                         for (let i = 0; i < count; i++) this.callbacks.spawnZombie(type || EnemyType.WALKER, pos);
                     }
                 },
-                setOverlay: this.callbacks.setOverlay
+                setOverlay: this.callbacks.setOverlay,
+                spawnBubble: (text: string, duration?: number) => this.callbacks.setNotification({ text, visible: true, duration: duration || 3000 })
             };
         }
 

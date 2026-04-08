@@ -311,7 +311,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             const now = performance.now();
 
             if (nextWildlifeTime.current === 0) {
-                nextWildlifeTime.current = now + 5000 + Math.random() * 10000;
+                nextWildlifeTime.current = engine.renderTime + 5000 + Math.random() * 10000;
             }
             const familyMembers = sceneFamilyMembersRef.current;
             const interactables = sceneInteractablesRef.current;
@@ -331,13 +331,13 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             _campCtx.camera = camera.threeCamera;
             _campCtx.container = container;
             _campCtx.envState = envStateRef.current;
-            
+
             // ARCHITECTURAL FIX: LightSystem prioritizes 'state.dynamicLights'.
             // By updating the campState directly, we ensure the lights are picked up even before React re-renders.
             if (campState) {
                 campState.dynamicLights = envStateRef.current?.fireLight ? [envStateRef.current.fireLight] : [];
             }
-            
+
             _campCtx.playerPos = camera.threeCamera.position;
             _campCtx.familyMembers = familyMembers;
             _campCtx.activeMembers = sceneActiveMembersRef.current;

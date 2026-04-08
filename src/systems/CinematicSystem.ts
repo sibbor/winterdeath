@@ -297,7 +297,7 @@ export class CinematicSystem implements System {
                 _animState.seed = mesh.userData.seed || 0;
                 _animState.renderTime = now;
 
-                PlayerAnimator.update(body as THREE.Mesh, _animState, now, renderDelta);
+                PlayerAnimator.update(body as THREE.Mesh, _animState, now);
             }
         }
 

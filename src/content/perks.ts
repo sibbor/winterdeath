@@ -119,8 +119,7 @@ PERKS[StatusEffectType.BLEEDING] = {
     description: 'perks.BLEEDING.description',
     category: PerkCategory.DEBUFF,
     duration: 3000,
-    damage: 5, // Damage per tick
-    intensity: 0.9, // 10% slow
+    damage: 5
 };
 PERKS[StatusEffectType.BURNING] = {
     id: StatusEffectType.BURNING,
@@ -129,8 +128,7 @@ PERKS[StatusEffectType.BURNING] = {
     description: 'perks.BURNING.description',
     category: PerkCategory.DEBUFF,
     duration: 3000,
-    damage: 10,
-    intensity: 0.9,
+    damage: 10
 };
 PERKS[StatusEffectType.STUNNED] = {
     id: StatusEffectType.STUNNED,

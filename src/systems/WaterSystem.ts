@@ -396,7 +396,7 @@ export class WaterSystem implements System {
         this.playerWasInWater = false;
     }
 
-    public update(ctx: any, dt: number, now: number): void {
+    public update(ctx: any, delta: number, simTime: number, renderTime: number): void {
 
         // Auto-sync with Engine Wind
         const engine = (window as any).WinterEngineInstance;
@@ -412,13 +412,13 @@ export class WaterSystem implements System {
         }
 
         // Apply water inertia (mass) - water reacts much slower than leaves
-        this.waterStrength += (this.targetWaterStrength - this.waterStrength) * (dt * 0.2);
-        this.waterDirection.lerp(this.targetWaterDirection, dt * 0.1);
+        this.waterStrength += (this.targetWaterStrength - this.waterStrength) * (delta * 0.2);
+        this.waterDirection.lerp(this.targetWaterDirection, delta * 0.1);
 
         // Animate aquatic shaders
         for (let i = 0; i < this.boundUniforms.length; i++) {
             const b = this.boundUniforms[i];
-            b.uTime.value = now * 0.001; // Synchronize with renderTime
+            b.uTime.value = renderTime * 0.001; // Synchronize with renderTime
             if (b.uWaterDirection) b.uWaterDirection.value.copy(this.waterDirection);
             if (b.uWaveStrength) b.uWaveStrength.value = 0.4 + (this.waterStrength * 0.1);
         }
@@ -465,7 +465,7 @@ export class WaterSystem implements System {
 
         // --- 2. Update Surfaces ---
         for (let i = 0; i < this.surfaces.length; i++) {
-            this.surfaces[i].update(now);
+            this.surfaces[i].update(renderTime);
             this.surfaces[i].material.uniforms.uObjectPositions.value = this.objectPositions;
             if (this.surfaces[i].material.uniforms.uClarity) {
                 this.surfaces[i].material.uniforms.uClarity.value = this.clarity;
@@ -481,13 +481,13 @@ export class WaterSystem implements System {
         // --- 3. Body Physics & Splashes ---
         for (let i = 0; i < bLen; i++) {
             const body = this.waterBodies[i];
-            this.updateBodyPhysics(body, dt, now);
-            this.updateSplashSources(body, dt, now);
+            this.updateBodyPhysics(body, delta, renderTime);
+            this.updateSplashSources(body, delta, renderTime);
         }
 
-        if (this.playerGroup) this.updatePlayerLogic(dt, now);
+        if (this.playerGroup) this.updatePlayerLogic(delta, renderTime);
 
-        this.updateInstancedLilies(dt, now);
+        this.updateInstancedLilies(delta, renderTime);
 
         // Ripples and splashes for moving objects
         for (let i = 0; i < bLen; i++) {
@@ -500,9 +500,9 @@ export class WaterSystem implements System {
 
                 if (speedSq > 0.1 && !isPassive) {
                     // Throttling: Kör bara plask/ljud om tiden passerat vår cooldown
-                    if (!p.userData.nextSplash || now > p.userData.nextSplash) {
+                    if (!p.userData.nextSplash || renderTime > p.userData.nextSplash) {
 
-                        this.spawnRipple(p.position.x, p.position.z, now, 0.7);
+                        this.spawnRipple(p.position.x, p.position.z, renderTime, 0.7);
 
                         // Generate splash particles if moving very fast (e.g. boat driving)
                         if (speedSq > 10.0 && this.spawnPartCb && Math.random() < 0.6) {
@@ -510,7 +510,7 @@ export class WaterSystem implements System {
                         }
 
                         // Sätt nästa tillåtna plask till om 150-250 millisekunder
-                        p.userData.nextSplash = now + 150 + (Math.random() * 100);
+                        p.userData.nextSplash = renderTime + 150 + (Math.random() * 100);
                     }
                 }
             }

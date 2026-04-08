@@ -181,6 +181,35 @@ export class SoundManager {
     }
   }
 
+  /**
+   * VINTERDÖD FIX: New discovery sound.
+   * Reminiscent of victory but faster and cleaner for constant gameplay feedback.
+   */
+  playDiscovery() {
+    const now = this._core.ctx.currentTime;
+    const freqs = [440, 554, 659, 880];
+    for (let i = 0; i < freqs.length; i++) {
+      const freq = freqs[i];
+      const osc = this._core.ctx.createOscillator();
+      const gain = this._core.ctx.createGain();
+
+      osc.type = 'triangle';
+      // Slight pitch sweep at the start for a "discovered" chime feel
+      osc.frequency.setValueAtTime(freq * 0.9, now + i * 0.06);
+      osc.frequency.exponentialRampToValueAtTime(freq, now + i * 0.06 + 0.02);
+
+      gain.gain.setValueAtTime(0, now + i * 0.06);
+      gain.gain.linearRampToValueAtTime(0.15, now + i * 0.06 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.4);
+
+      osc.connect(gain);
+      gain.connect(this._core.masterGain);
+      osc.start(now + i * 0.06);
+      osc.stop(now + i * 0.06 + 0.4);
+      this._core.track(osc);
+    }
+  }
+
   startCampfire() {
     if (this.fireOsc) return;
     const ctx = this._core.ctx;

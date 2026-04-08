@@ -14,7 +14,7 @@ import { CAMERA_HEIGHT, HEALTH_CRITICAL_THRESHOLD } from '../../content/constant
 import { soundManager } from '../../utils/audio/SoundManager';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { WEAPONS, WeaponBehavior } from '../../content/weapons';
-import { EnemyDeathState, NoiseType } from '../../entities/enemies/EnemyTypes';
+import { Enemy, EnemyFlags, EnemyDeathState, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 import { DamageType, DamageID } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
@@ -91,7 +91,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
     let uiSyncTimer = 0;
     let frame = 0;
-    let lastTime = performance.now();
 
     const getActiveCallbacks = () => state.callbacks || callbacks || EMPTY_OBJECT;
 
@@ -156,7 +155,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         spawnPart: null,
         spawnDecal: null,
         showDamageText: null,
-        now: 0,
+        simTime: 0,
+        renderTime: 0,
         playerPos: null,
         session: null,
         fireZones: null,
@@ -174,20 +174,31 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         onPlayerHit: (dmg: number, attacker: any, type: DamageType, isDoT: boolean = false, effect?: any, dur?: number, intense?: number, attackName?: string) => {
             if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type, isDoT, effect, dur, intense, attackName);
         },
-        applyDamage: (enemy: any, amount: number, type: DamageID, isHighImpact: boolean = false) => {
+        applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact: boolean = false) => {
             if (enemy.deathState !== EnemyDeathState.ALIVE || amount <= 0) return false;
 
-            // --- O(1) ZERO-GC ENEMY DISCOVERY ---
-            if (!enemy.discovered) {
-                enemy.discovered = true;
+            const isBoss = (enemy.statusFlags & EnemyFlags.BOSS) !== 0;
 
-                if (!enemy.isBoss && callbacks.onDiscovery) {
-                    const sets = state.discoverySets;
-                    if (sets && !sets.seenEnemies.has(enemy.type)) {
-                        sets.seenEnemies.add(enemy.type);
-                        if (state.sessionStats) state.sessionStats.seenEnemies.push(enemy.type);
-                        callbacks.onDiscovery(DiscoveryType.ENEMY, String(enemy.type), 'ui.enemy_encountered', ENEMY_TYPE_KEYS[enemy.type]);
-                    }
+            // --- O(1) ZERO-GC ENEMY DISCOVERY ---
+            const sets = state.discoverySets;
+
+            // Vi kollar direkt i vår "databas" om typen är känd
+            if (sets && !sets.seenEnemies.has(enemy.type)) {
+                // Om den inte fanns, lägg till den i databasen direkt så nästa tick missar denna if-sats
+                sets.seenEnemies.add(enemy.type);
+
+                if (state.sessionStats) state.sessionStats.seenEnemies.push(enemy.type);
+
+                // FIX: Använd bitmasken istället för enemy.isBoss
+
+                // Trigga UI bara om det inte är en boss
+                if (!isBoss && callbacks.onDiscovery) {
+                    callbacks.onDiscovery(
+                        DiscoveryType.ENEMY,
+                        String(enemy.type),
+                        'ui.enemy_encountered',
+                        ENEMY_TYPE_KEYS[enemy.type]
+                    );
                 }
             }
 
@@ -195,14 +206,14 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             const actualDmg = Math.max(0, Math.min(enemy.hp, amount));
             enemy.hp -= actualDmg;
             enemy.lastDamageType = type;
-            enemy.hitTime = _gameContext.now; // this is already simTime
+            enemy.hitTime = _gameContext.simTime; // this is already simTime
             enemy.lastHitWasHighImpact = isHighImpact;
 
             // Track stats centrally
             if (actualDmg > 0) {
                 const damageTracker = session.getSystem('damage_tracker_system') as any;
                 if (damageTracker) {
-                    damageTracker.recordOutgoingDamage(session, actualDmg, type, enemy.isBoss);
+                    damageTracker.recordOutgoingDamage(session, actualDmg, type, isBoss);
                 }
             }
 
@@ -215,7 +226,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
             enemy._accumulatedDamage += amount;
 
-            if (_gameContext.now - enemy._lastDamageTextTime > textThrottle) {
+            if (_gameContext.simTime - enemy._lastDamageTextTime > textThrottle) {
                 if (_gameContext.showDamageText && enemy._accumulatedDamage >= 1) {
                     const textX = enemy.mesh.position.x;
                     const textY = enemy.originalScale * 1.8 + 1.2;
@@ -227,7 +238,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                         color
                     );
                     enemy._accumulatedDamage = 0;
-                    enemy._lastDamageTextTime = _gameContext.now;
+                    enemy._lastDamageTextTime = _gameContext.simTime;
                 }
             }
 
@@ -279,7 +290,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         let delta = dt;
         if (delta > 0.1) delta = 0.016;
 
-        const realDt = delta;
         const isCinematic = state.cinematicActive;
         const isBossIntro = refs.bossIntroRef.current?.active;
         const isHardPaused = propsRef.current.isPaused || propsRef.current.isClueOpen;
@@ -288,29 +298,28 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         // 1. ESC-Meny eller Clue = TOTAL FRYSNING
         if (isHardPaused && !isCinematic && !isBossIntro) {
             engine.isSimulationPaused = true;
-            engine.isSoftPaused = false;
             return;
         }
 
         engine.isSimulationPaused = false;
 
-        // 2. Cinematic = SOFT PAUSE
-        if (isCinematic || isBossIntro) {
-            delta = 0;
-            engine.isSoftPaused = true;
-        } else {
-            engine.isSoftPaused = false;
-        }
-
-        // --- VINTERDÖD FIX: Simulation & Visual Clocks ---
+        // --- Simulation & Visual Clocks ---
         state.lastSimDelta = delta;
-        state.lastRenderDelta = realDt;
+        state.lastRenderDelta = delta;
         state.renderTime = engine.renderTime;
         state.simTime = engine.simTime;
 
         const simTime = engine.simTime;
         const renderTime = engine.renderTime;
-        const now = performance.now(); // ENDAST för HUD och Visuell lerp
+        const now = performance.now();
+
+        // Retrieve systems for the current tick
+        const statsSystem = session.getSystem('player_stats_system') as any;
+        const movementSystem = session.getSystem('player_movement') as any;
+        const combatSystem = session.getSystem('player_combat') as any;
+        const lootSystem = session.getSystem('world_loot') as any;
+        const familySystem = session.getSystem('family') as any;
+        const water = engine.water;
 
         const sf = state.statusFlags;
         const isDead = (sf & PlayerStatusFlags.DEAD) !== 0;
@@ -325,8 +334,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         if (isInteractionPaused) {
             refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
-            engine.isRenderingPaused = true;
-            lastTime = now;
+            // VINTERDÖD: Vi behåller renderingen igång även under station-interaktioner
+            // för att se bakgrunden (snö, vind, etc).
+            engine.isRenderingPaused = false; 
             return;
         } else {
             engine.isRenderingPaused = false;
@@ -338,7 +348,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         // 2. UI Throttling
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
         state.framesSinceHudUpdate++;
-        uiSyncTimer += realDt;
+        uiSyncTimer += delta;
 
         if (now - lastHudSyncTime >= 66) { // ~15 FPS
             lastHudSyncTime = now;
@@ -355,7 +365,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     state.discovery.type = next.type;
                     state.discovery.title = next.title;
                     state.discovery.details = next.details;
-                    state.discovery.timestamp = next.timestamp; // ui timing
+                    state.discovery.timestamp = next.timestamp;
                 }
             }
 
@@ -384,7 +394,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         if (isBossIntro && refs.bossIntroRef.current.bossMesh) {
             const bossMesh = refs.bossIntroRef.current.bossMesh;
             const bossPos = bossMesh.position;
-            const introTime = now - refs.bossIntroRef.current.startTime;
+            const introTime = renderTime - refs.bossIntroRef.current.startTime;
 
             _vCamera.set(bossPos.x, 12, bossPos.z + 20);
             engine.camera.setPosition(_vCamera);
@@ -399,10 +409,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _animStateScratch.isMoving = false;
                 _animStateScratch.isRushing = false;
                 _animStateScratch.isDodging = false;
-                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, realDt);
+                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now);
             }
             refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
-            lastTime = now;
             return;
         }
 
@@ -482,7 +491,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         if (!propsRef.current.isGameRunning || (propsRef.current.isPaused && !isCinematic && !isBossIntro)) {
             soundManager.stopRadioStatic();
-            lastTime = now;
             return;
         }
 
@@ -534,7 +542,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             session.playerPos = playerGroup.position;
         }
 
-        session.update(realDt, propsRef.current.mapId || 0);
+        session.update(delta, propsRef.current.mapId || 0);
         monitor.end('session_update');
 
         // 8. Standard Gameplay State Updates
@@ -568,20 +576,20 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _animStateScratch.seed = 0;
 
                 monitor.begin('player_animation');
-                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, engine.isSoftPaused ? realDt : delta);
+                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, renderTime);
                 monitor.end('player_animation');
             }
         }
 
-        // 9. Secondary Systems
+        // 9. Footprints
         monitor.begin('footprints');
-        FootprintSystem.update(realDt);
+        FootprintSystem.update(delta);
         monitor.end('footprints');
 
         // 10. FX System
         monitor.begin('fx');
         try {
-            FXSystem.update(engine.scene, state.particles, state.bloodDecals, realDt, frame, now, _fxCallbacks);
+            FXSystem.update(engine.scene, state.particles, state.bloodDecals, _fxCallbacks, delta, simTime, renderTime);
         } catch (e) {
             console.error("[GameSessionLoop] FXSystem.update failed:", e);
         }
@@ -594,16 +602,16 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
                 if (!override.startPos) {
                     override.startPos = engine.camera.position.clone();
-                    override.startTime = now;
-                    override.endTime = now + 4000;
+                    override.startTime = renderTime;
+                    override.endTime = renderTime + 4000;
                     engine.camera.setCinematic(true);
                 }
 
-                if (now > override.endTime) {
+                if (renderTime > override.endTime) {
                     refs.cameraOverrideRef.current = null;
                     engine.camera.setCinematic(false);
                 } else {
-                    const elapsed = now - override.startTime;
+                    const elapsed = renderTime - override.startTime;
                     let t = Math.min(1.0, elapsed / 1500);
                     t = 1.0 - Math.pow(1.0 - t, 3); // Ease-out inbromsning
 
@@ -635,6 +643,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         } else {
             engine.camera.setCinematic(true);
         }
+        if (water) {
+            water.update(_gameContext, delta, simTime, renderTime);
+        }
 
         // 12. TRACKING SHADOW CAMERA
         if (refs.skyLightRef?.current && refs.skyLightOffsetRef?.current && playerGroup) {
@@ -650,7 +661,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
 
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
-        lastTime = now;
 
         // 13. Interaction Logic
         const currentInter = state.interaction.type;
@@ -725,32 +735,46 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         if (activeCallbacks.trackStats) _gameContext.trackStats = activeCallbacks.trackStats;
         _gameContext.fireZones = state.fireZones;
 
-        _gameContext.now = simTime; // Uppdaterad till simTime
+        _gameContext.simTime = simTime;
+        _gameContext.renderTime = renderTime;
         _gameContext.playerPos = playerGroup.position;
         _gameContext.session = session;
 
         refs.gameContextRef.current = _gameContext;
 
-        // 15. Enemy System
-        monitor.begin('enemies');
-        EnemyManager.update(
-            delta,
-            simTime,
-            renderTime,
-            playerGroup.position,
-            state.enemies,
-            state.collisionGrid,
-            (state.statusFlags & PlayerStatusFlags.DEAD) !== 0,
-            _fxCallbacks.onPlayerHit,
-            _fxCallbacks.spawnPart,
-            _fxCallbacks.spawnDecal,
-            _gameContext.applyDamage,
-            activeCallbacks.spawnBubble,
-            engine.water
-        );
-        monitor.end('enemies');
+        // Only run these if not cinematic or boss intro
+        if (!isCinematic && !isBossIntro) {
+            // 15. EnemyManager
+            monitor.begin('enemies');
+            EnemyManager.update(
+                playerGroup.position,
+                state.enemies,
+                state.collisionGrid,
+                (state.statusFlags & PlayerStatusFlags.DEAD) !== 0,
+                _fxCallbacks.onPlayerHit,
+                _fxCallbacks.spawnPart,
+                _fxCallbacks.spawnDecal,
+                _gameContext.applyDamage,
+                activeCallbacks.spawnBubble,
+                water,
+                delta,
+                simTime,
+                renderTime
+            );
+            monitor.end('enemies');
 
-        ProjectileSystem.update(delta, simTime, _gameContext, state.projectiles, state.fireZones);
+            // 16. ProjectileSystem
+            monitor.begin('ProjectileSystem');
+            ProjectileSystem.update(_gameContext, state.projectiles, state.fireZones, delta, simTime, renderTime);
+            monitor.end('ProjectileSystem');
+
+            // 16.5 Core Systems update
+            if (statsSystem) statsSystem.update(session, delta, simTime, renderTime);
+            if (movementSystem) movementSystem.update(session, delta, simTime, renderTime);
+            if (combatSystem) combatSystem.update(session, delta, simTime, renderTime);
+            if (lootSystem) lootSystem.update(session, delta, simTime, renderTime);
+            if (familySystem) familySystem.update(session, delta, simTime, renderTime);
+        }
 
         // 17. TriggerSystem
         monitor.begin('triggers');
@@ -761,7 +785,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _triggerOptionsScratch.onDiscovery = activeCallbacks.onDiscovery || callbacks.onDiscovery;
         _triggerOptionsScratch.playSound = (id: SoundID) => soundManager.playSound(id);
         _triggerOptionsScratch.activeFamilyMembers = refs.activeFamilyMembers.current;
-        TriggerHandler.checkTriggers(playerGroup.position, state, simTime, _triggerOptionsScratch as any); // VINTERDÖD FIX: simTime
+        TriggerHandler.checkTriggers(playerGroup.position, state, _triggerOptionsScratch, delta, simTime, renderTime);
         monitor.end('triggers');
 
         // 18. Emitters Update

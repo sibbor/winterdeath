@@ -21,12 +21,12 @@ export interface System {
     init?(context: any): void;
 
     /**
-     * Main update loop called every frame.
-     * @param context Reference to the current world (GameSessionLogic or Camp)
-     * @param delta Time since last frame in seconds
-     * @param now Current performance.now() timestamp
-     */
-    update(context: any, delta: number, now: number): void;
+         * Main update loop called every frame by the WinterEngine.
+         * @param context Reference to the current world state.
+         * @param delta Time since the last frame in seconds (clamped).
+         * @param time The engine-provided active timestamp in milliseconds (simTime or renderTime depending on system type).
+         */
+    update(context: any, delta: number, simTime: number, renderTime: number): void;
 
     /**
      * Optional cleanup called when the system is removed or scene ends.

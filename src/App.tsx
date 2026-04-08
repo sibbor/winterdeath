@@ -691,8 +691,8 @@ const App: React.FC = () => {
             gameState.screen === GameScreen.PROLOGUE ||
             gameState.screen === GameScreen.RECAP ||
             gameState.screen === GameScreen.BOSS_KILLED ||
-            gameState.screen === GameScreen.DEATH)
-        && !transitionTaskRef.current;
+            gameState.screen === GameScreen.DEATH);
+    // Tog bort "&& !transitionTaskRef.current"
 
     return (
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">

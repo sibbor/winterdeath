@@ -11,7 +11,6 @@ export const TriggerHandler = {
     checkTriggers: (
         playerPos: THREE.Vector3,
         state: RuntimeState,
-        now: number,
         callbacks: {
             spawnBubble: (text: string, duration?: number) => void;
             removeVisual: (id: string) => void;
@@ -21,7 +20,10 @@ export const TriggerHandler = {
             resolveDynamicPos?: (familyId?: number, ownerId?: string) => THREE.Vector3 | null;
             onDiscovery?: (type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
             playSound?: (id: SoundID) => void;
-        }
+        },
+        delta: number,
+        simTime: number,
+        renderTime: number
     ) => {
         // OPTIMIZATION: Only fetch triggers within 40 units to save CPU cycles
         const triggers = state.collisionGrid.getNearbyTriggers(playerPos, 40.0);
@@ -92,7 +94,7 @@ export const TriggerHandler = {
                 if ((trig.statusFlags & TriggerStatus.TRIGGERED) === 0) {
                     // --- ON ENTER ---
                     trig.statusFlags |= TriggerStatus.TRIGGERED;
-                    trig.lastTriggerTime = now;
+                    trig.lastTriggerTime = simTime;
 
                     // --- ADVENTURE LOG DISCOVERY ---
                     if (trig.id && callbacks.onDiscovery) {
@@ -133,7 +135,7 @@ export const TriggerHandler = {
                     if ((trig.statusFlags & TriggerStatus.RESET_ON_EXIT) !== 0) {
                         trig.statusFlags &= ~TriggerStatus.TRIGGERED;
                     } else if (trig.repeatInterval && trig.repeatInterval > 0) {
-                        if (now - (trig.lastTriggerTime || 0) > trig.repeatInterval) {
+                        if (simTime - (trig.lastTriggerTime || 0) > trig.repeatInterval) {
                             trig.statusFlags &= ~TriggerStatus.TRIGGERED;
                         }
                     }

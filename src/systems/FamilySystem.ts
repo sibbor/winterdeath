@@ -56,15 +56,11 @@ export class FamilySystem implements System {
         this.callbacks = callbacks;
     }
 
-    update(_session: GameSessionLogic, delta: number, now: number) {
+    update(_session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         const members = this.activeFamilyMembers.current;
         const isCinematicActive = this.isCinematicRef.current.active;
         const state = _session.state;
         const isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
-
-        // VINTERDÖD FIX: Extract unified clocks from state for Zero-GC logic
-        const simTime = state.simTime;
-        const renderTime = state.renderTime || now;
 
         // --- Mirror player speed for the follow movement ---
         const playerSpeedValue = state.statsBuffer[PlayerStatID.SPEED];
@@ -143,7 +139,7 @@ export class FamilySystem implements System {
                     _animState.isWading = false;
                     _animState.isIdleLong = false;
                     _animState.renderTime = renderTime;
-                    PlayerAnimator.update(body, _animState, renderTime, delta);
+                    PlayerAnimator.update(body, _animState, renderTime);
                 }
 
                 familyMember.wasInVehicle = true;
@@ -307,7 +303,7 @@ export class FamilySystem implements System {
                 }
 
                 _animState.renderTime = renderTime;
-                PlayerAnimator.update(body, _animState, renderTime, delta);
+                PlayerAnimator.update(body, _animState, renderTime);
             }
         }
     }

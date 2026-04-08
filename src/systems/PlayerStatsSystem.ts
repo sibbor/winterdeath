@@ -31,15 +31,15 @@ export class PlayerStatsSystem implements System {
         this.bakeFinalStats(session.state.statsBuffer);
     }
 
-    update(session: GameSessionLogic, dt: number, now: number) {
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         const state = session.state;
         if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
         if ((state.statusFlags & PlayerStatusFlags.STUNNED) !== 0) return;
 
         this.updatePassives(session);
-        this.checkAdrenalinePatch(session, now);
-        this.updateBuffsAndDebuffs(session, dt, now);
-        this.applyStatusTicks(session, dt, now);
+        this.checkAdrenalinePatch(session, simTime);
+        this.updateBuffsAndDebuffs(session, delta, simTime);
+        this.applyStatusTicks(session, delta, simTime);
 
         this.bakeFinalStats(state.statsBuffer);
     }
@@ -50,7 +50,7 @@ export class PlayerStatsSystem implements System {
         stats[PlayerStatID.FINAL_SPEED] = stats[PlayerStatID.SPEED] * stats[PlayerStatID.MULTIPLIER_SPEED] * KMH_TO_MS;
     }
 
-    private checkAdrenalinePatch(session: GameSessionLogic, now: number) {
+    private checkAdrenalinePatch(session: GameSessionLogic, simTime: number) {
         const state = session.state;
         const perkID = StatusEffectType.ADRENALINE_PATCH;
         const perk = PERKS[perkID];
@@ -60,15 +60,15 @@ export class PlayerStatsSystem implements System {
         const maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
 
         if (hp > 0 && hp < maxHp * 0.25) {
-            if (now - state.lastAdrenalinePatchTime > (perk.cooldown || 60000)) {
-                state.lastAdrenalinePatchTime = now;
+            if (simTime - state.lastAdrenalinePatchTime > (perk.cooldown || 60000)) {
+                state.lastAdrenalinePatchTime = simTime;
 
                 const sID = StatusEffectID.ADRENALINE_PATCH;
                 state.effectDurations[sID] = perk.duration || 3000;
                 state.effectIntensities[sID] = perk.intensity || 1;
 
                 soundManager.playEffect(SoundID.ADRENALINE_BOOST);
-                
+
                 if (!state.discoveredPerks.includes(perkID)) {
                     state.discoveredPerks.push(perkID);
                     session.triggerDiscovery('perk', perkID, perk.displayName, perk.description);
@@ -119,14 +119,14 @@ export class PlayerStatsSystem implements System {
             }
         }
         this.cachedPassives.length = pIdx;
-        
+
         // --- SYNC TO STATE (Zero-GC) ---
         state.activePassives.length = 0;
         for (let i = 0; i < pIdx; i++) state.activePassives.push(this.cachedPassives[i]);
     }
 
 
-    private updateBuffsAndDebuffs(session: GameSessionLogic, dt: number, now: number) {
+    private updateBuffsAndDebuffs(session: GameSessionLogic, delta: number, simTime: number) {
         const state = session.state;
         const stats = state.statsBuffer;
 
@@ -139,13 +139,13 @@ export class PlayerStatsSystem implements System {
         state.statusFlags &= ~PlayerStatusFlags.DISORIENTED;
         state.activeBuffs.length = 0;
         state.activeDebuffs.length = 0;
-        
+
         for (let i = 0; i < StatusEffectID.COUNT; i++) {
             if (state.effectDurations[i] <= 0) continue;
 
             const duration = state.effectDurations[i];
-            state.effectDurations[i] = Math.max(0, duration - dt * 1000);
-            
+            state.effectDurations[i] = Math.max(0, duration - delta * 1000);
+
             // --- VINTERDÖD FIX: Dynamic Multiplier Resolution ---
             // Ensuring all speed-affecting debuffs (Slowed, Freezing, Disoriented, etc.)
             // are correctly factored into the statsBuffer before the final bake.
@@ -153,8 +153,8 @@ export class PlayerStatsSystem implements System {
             if (perk) {
                 if (perk.intensity !== undefined) {
                     // Specific logic for multipliers vs state flags
-                    if (i === StatusEffectID.ADRENALINE_PATCH || 
-                        i === StatusEffectID.SLOWED || 
+                    if (i === StatusEffectID.ADRENALINE_PATCH ||
+                        i === StatusEffectID.SLOWED ||
                         i === StatusEffectID.FREEZING ||
                         i === StatusEffectID.DISORIENTED ||
                         i === StatusEffectID.BLEEDING ||
@@ -178,30 +178,27 @@ export class PlayerStatsSystem implements System {
         }
     }
 
-    private applyStatusTicks(session: GameSessionLogic, dt: number, now: number) {
+    private applyStatusTicks(session: GameSessionLogic, delta: number, simTime: number) {
         const state = session.state;
 
         // Tick DoT every 1 second
-        if (Math.floor(now / 1000) !== Math.floor((now - dt * 1000) / 1000)) {
+        if (Math.floor(simTime / 1000) !== Math.floor((simTime - delta * 1000) / 1000)) {
             for (let i = 0; i < StatusEffectID.COUNT; i++) {
                 if (state.effectDurations[i] <= 0) continue;
 
-                // Map index to fixed damage logic
-                let dmg = 0;
+                const perk = PERKS[i];
+                if (!perk || perk.damage === undefined) continue;
+
                 let dmgID = DamageID.PHYSICAL;
-                let effectKey: StatusEffectType | undefined;
+                if (i === StatusEffectID.BURNING) dmgID = DamageID.BURN;
+                else if (i === StatusEffectID.BLEEDING) dmgID = DamageID.BLEED;
+                else if (i === StatusEffectID.ELECTRIFIED) dmgID = DamageID.ELECTRIC;
+                else if (i === StatusEffectID.DROWNING) dmgID = DamageID.DROWNING;
+                else if (i === StatusEffectID.FREEZING) dmgID = DamageID.BURN; // Freeze damage uses BURN internally for VFX match
 
-                if (i === StatusEffectID.BURNING) {
-                    dmg = 5; dmgID = DamageID.BURN; effectKey = StatusEffectType.BURNING;
-                } else if (i === StatusEffectID.BLEEDING) {
-                    dmg = 3; dmgID = DamageID.BLEED; effectKey = StatusEffectType.BLEEDING;
-                } else if (i === StatusEffectID.ELECTRIFIED) {
-                    dmg = 2; dmgID = DamageID.ELECTRIC; effectKey = StatusEffectType.ELECTRIFIED;
-                }
+                if (perk.damage > 0) {
+                    this.handlePlayerHit(session, perk.damage, null, dmgID, true);
 
-                if (dmg > 0 && effectKey) {
-                    this.handlePlayerHit(session, dmg, null, dmgID, true, effectKey);
-                    
                     // Visuals
                     if (i === StatusEffectID.BLEEDING) {
                         FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.8 + Math.random(), this.playerGroup.position.z, 'blood', 3);
@@ -275,10 +272,12 @@ export class PlayerStatsSystem implements System {
             damageTracker.recordIncomingDamage(session, actualDmg, sourceKey, telemetryAttackIndex, (attacker?.statusFlags & EnemyFlags.BOSS) !== 0);
         }
 
-        if (!isDoT && effectType !== undefined) {
+        if (effectType !== undefined) {
             const perk = PERKS[effectType];
             if (perk) {
-                state.effectDurations[effectType] = perk.duration || effectDuration || 0;
+                const duration = perk.duration || effectDuration || 0;
+                state.effectDurations[effectType] = duration;
+                state.effectMaxDurations[effectType] = duration;
                 state.effectIntensities[effectType] = effectIntensity !== undefined ? effectIntensity : (perk.intensity || 1);
             }
         }
@@ -322,12 +321,12 @@ export class PlayerStatsSystem implements System {
             state.killerName = this.t(`enemies.bosses.${attacker.bossId}.name`);
             state.killedByEnemy = true;
             // For bosses, the specific attack name is often generic or uses the boss identity
-            state.killerAttackName = attackName; 
+            state.killerAttackName = attackName;
         } else if (attacker) {
             const enemyNameKey = EnemyType[attacker.type] || 'other';
             state.killerName = this.t(`enemies.zombies.${enemyNameKey}.name`);
             state.killedByEnemy = true;
-            
+
             // Map numeric attack type to Enum String for UI translation (e.g. "BITE")
             const attackEnumName = EnemyAttackType[attackIndex] || attackName;
             state.killerAttackName = attackEnumName;
@@ -339,7 +338,7 @@ export class PlayerStatsSystem implements System {
             else if (type === DamageID.ELECTRIC) envKey = 'ui.electrified';
             else if (type === DamageID.FALL) envKey = 'ui.falling';
             else if (type === DamageID.EXPLOSION) envKey = 'ui.explosion';
-            
+
             state.killerName = this.t(envKey);
             state.killedByEnemy = false;
             state.killerAttackName = 'HIDDEN'; // Environment doesn't show attack title in parens

@@ -58,7 +58,7 @@ export class PlayerCombatSystem implements System {
         }
     }
 
-    update(session: GameSessionLogic, simDelta: number, simTime: number) {
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         if (!this.initialized) return;
         const state = session.state;
         const input = session.engine.input.state;
@@ -108,12 +108,12 @@ export class PlayerCombatSystem implements System {
             this.playerGroup,
             input,
             state,
-            simDelta,
-            simTime,
-            state.renderTime,
             state.loadout,
             this.aimCross,
             this.trajectoryLine,
+            delta,
+            simTime,
+            renderTime
         );
 
         // Visibility toggle based on vehicle state

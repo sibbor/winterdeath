@@ -1,6 +1,6 @@
 import React, { useEffect, useImperativeHandle, useCallback, useRef } from 'react';
 import * as THREE from 'three';
-import { GameCanvasProps, SectorStats } from '../../game/session/SessionTypes';
+import { GameCanvasProps } from '../../game/session/SessionTypes';
 import { MapItem, DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { SectorContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
@@ -72,7 +72,7 @@ export interface SetupContext {
         startCinematic: (mesh: any, scriptId?: number, params?: any) => void;
         endCinematic: () => void;
         playCinematicLine: (index: number) => void;
-        spawnPart: (x: number, y: number, z: number, type: string, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => void;
+        spawnPart: (x: number, y: number, z: number, type: string, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: string) => void;
         showDamageText: (x: number, y: number, z: number, text: string, color?: string) => void;
         spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => void;
@@ -655,6 +655,7 @@ export class GameSessionSetup {
         }));
 
         session.addSystem(new WorldLootSystem(playerGroup, engine.scene, { gainScrap: callbacks.gainScrap }));
+
         session.addSystem(new FamilySystem(playerGroup, refs.activeFamilyMembers, refs.cinematicRef, {
             setFoundMemberName: (n: string) => ui.setFoundMemberName && ui.setFoundMemberName(n),
             startCinematic: callbacks.startCinematic
@@ -670,7 +671,6 @@ export class GameSessionSetup {
             },
             state: state
         }));
-
 
         session.addSystem(new DeathSystem({
             playerGroupRef: refs.playerGroupRef as any, playerMeshRef: refs.playerMeshRef as any, fmMeshRef: refs.familyMemberRef, activeFamilyMembers: refs.activeFamilyMembers,

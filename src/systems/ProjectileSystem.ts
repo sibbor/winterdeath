@@ -35,6 +35,7 @@ export interface GameContext {
     applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => boolean;
 
     simTime: number;
+    renderTime: number;
     playerPos: THREE.Vector3;
     onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, attackName?: string) => void;
     makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => void;
@@ -272,11 +273,11 @@ export const ProjectileSystem = {
         projectiles.push(p);
     },
 
-    handleContinuousFire: (weapon: DamageID, origin: THREE.Vector3, direction: THREE.Vector3, simDelta: number, ctx: GameContext, damageOverride?: number) => {
+    handleContinuousFire: (weapon: DamageID, origin: THREE.Vector3, direction: THREE.Vector3, ctx: GameContext, delta: number, simTime: number, renderTime: number, damageOverride?: number) => {
         const data = WEAPONS[weapon];
         if (!data) return;
 
-        const damage = damageOverride !== undefined ? damageOverride : (data.damage || 0) * (60 * simDelta);
+        const damage = damageOverride !== undefined ? damageOverride : (data.damage || 0) * (60 * delta);
 
         switch (weapon) {
             case DamageID.FLAMETHROWER: {
@@ -341,17 +342,17 @@ export const ProjectileSystem = {
                         e.burnTickTimer = 0.5;
                         e.burnDuration = 5.0;
 
-                        const chance = (simDelta * 1000) / (data.fireRate || 35);
+                        const chance = (delta * 1000) / (data.fireRate || 35);
                         if (Math.random() < chance) {
-                            const finalDmg = damageOverride !== undefined ? (damageOverride / (60 * simDelta)) : data.damage;
+                            const finalDmg = damageOverride !== undefined ? (damageOverride / (60 * delta)) : data.damage;
                             ctx.applyDamage(e, finalDmg || 0, DamageID.FLAMETHROWER);
                         }
                     }
                 }
 
-                if (ctx.simTime - _lastFlameSoundTime > 200) {
+                if (simTime - _lastFlameSoundTime > 200) {
                     soundManager.playFlamethrowerStart();
-                    _lastFlameSoundTime = ctx.simTime;
+                    _lastFlameSoundTime = simTime;
                 }
 
                 break;
@@ -448,18 +449,18 @@ export const ProjectileSystem = {
                         currentDamage *= damageDecay;
                     }
 
-                    if (ctx.simTime - _lastArcCannonSoundTime > 150) {
+                    if (simTime - _lastArcCannonSoundTime > 150) {
                         soundManager.playArcCannonZap();
-                        _lastArcCannonSoundTime = ctx.simTime;
+                        _lastArcCannonSoundTime = simTime;
                     }
 
                 } else {
                     _v1.copy(origin).addScaledVector(direction, range);
                     WeaponFX.createLightning(origin, _v1, true);
 
-                    if (ctx.simTime - _lastArcCannonSoundTime > 150) {
+                    if (simTime - _lastArcCannonSoundTime > 150) {
                         soundManager.playArcCannonZap();
-                        _lastArcCannonSoundTime = ctx.simTime;
+                        _lastArcCannonSoundTime = simTime;
                     }
                 }
                 break;
@@ -467,8 +468,9 @@ export const ProjectileSystem = {
         }
     },
 
-    update: (simDelta: number, simTime: number, ctx: GameContext, projectiles: Projectile[], fireZones: FireZone[]) => {
+    update: (ctx: GameContext, projectiles: Projectile[], fireZones: FireZone[], delta: number, simTime: number, renderTime: number) => {
         ctx.simTime = simTime;
+        ctx.renderTime = renderTime;
 
         const waterSystem = WinterEngine.getInstance()?.water;
 
@@ -476,9 +478,9 @@ export const ProjectileSystem = {
             const p = projectiles[i];
 
             if (p.type === ProjectileType.BULLET) {
-                updateBullet(p, i, simDelta, ctx, projectiles);
+                updateBullet(p, i, delta, ctx, projectiles);
             } else {
-                updateThrowable(p, i, simDelta, ctx, simTime, projectiles, waterSystem);
+                updateThrowable(p, i, delta, ctx, simTime, projectiles, waterSystem);
             }
         }
 
@@ -488,10 +490,10 @@ export const ProjectileSystem = {
 
             for (let i = fireZones.length - 1; i >= 0; i--) {
                 const fz = fireZones[i];
-                fz.life -= simDelta;
+                fz.life -= delta;
 
                 if ((frameCounter + i) % 2 === 0) {
-                    WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, simDelta * 2, ctx);
+                    WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, delta * 2, ctx);
                 }
 
                 if (simTime - (fz._lastDamageTime || 0) > 500) {
@@ -548,11 +550,11 @@ export const ProjectileSystem = {
 };
 
 // --- INTERNAL HELPERS ---
-function updateBullet(projectile: Projectile, index: number, simDelta: number, ctx: GameContext, projectiles: Projectile[]) {
+function updateBullet(projectile: Projectile, index: number, delta: number, ctx: GameContext, projectiles: Projectile[]) {
     _v3.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
-    projectile.mesh.position.addScaledVector(projectile.vel, simDelta);
+    projectile.mesh.position.addScaledVector(projectile.vel, delta);
     _v4.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
-    projectile.life -= simDelta;
+    projectile.life -= delta;
 
     let destroyBullet = false;
 
@@ -560,7 +562,7 @@ function updateBullet(projectile: Projectile, index: number, simDelta: number, c
     const lineLenSq = _v2.lengthSq();
 
     _v1.addVectors(_v3, _v4).multiplyScalar(0.5);
-    const bulletTravelDist = projectile.speed * simDelta;
+    const bulletTravelDist = projectile.speed * delta;
     const obsSearchRad = 2.0 + bulletTravelDist * 0.5;
     const nearbyObs = ctx.collisionGrid.getNearbyObstacles(_v1, obsSearchRad);
     const obsLen = nearbyObs.length;
@@ -671,10 +673,10 @@ function updateBullet(projectile: Projectile, index: number, simDelta: number, c
     }
 }
 
-function updateThrowable(p: Projectile, index: number, simDelta: number, ctx: GameContext, simTime: number, projectiles: Projectile[], waterSystem: any) {
-    p.vel.y -= 30 * simDelta;
-    p.mesh.position.addScaledVector(p.vel, simDelta);
-    p.mesh.rotation.x += 8 * simDelta;
+function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameContext, simTime: number, projectiles: Projectile[], waterSystem: any) {
+    p.vel.y -= 30 * delta;
+    p.mesh.position.addScaledVector(p.vel, delta);
+    p.mesh.rotation.x += 8 * delta;
 
     if (p.marker) {
         (p.marker.material as any).opacity = 0.4 + Math.abs(Math.sin(simTime * 0.01)) * 0.6;
@@ -845,6 +847,6 @@ function updateThrowable(p: Projectile, index: number, simDelta: number, ctx: Ga
         projectiles[index] = projectiles[pLen - 1];
         projectiles.pop();
     } else {
-        p.life -= simDelta;
+        p.life -= delta;
     }
 }

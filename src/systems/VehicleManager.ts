@@ -27,7 +27,7 @@ const _vehicleKnockbackCtx: any = {
 
 export const VehicleManager = {
 
-    update: (session: GameSessionLogic, delta: number, now: number, playerGroup: THREE.Group) => {
+    update: (session: GameSessionLogic, playerGroup: THREE.Group, delta: number, simTime: number, renderTime: number) => {
         const state = session.state;
         const input = session.engine.input.state;
 
@@ -51,7 +51,7 @@ export const VehicleManager = {
             // 2. Collision Logic (OPTIMIZED)
             if (state.vehicle.engineState !== 'OFF') {
                 const vel = vehicle.userData.velocity as THREE.Vector3;
-                VehicleManager.handleEnemyCollisions(vehicle, vel, def, session, now);
+                VehicleManager.handleEnemyCollisions(vehicle, vel, def, session, simTime);
                 VehicleManager.handleObstacleCollisions(vehicle, vel, def, session);
 
                 // --- ENGINE & MOVEMENT NOISE ---
@@ -59,9 +59,9 @@ export const VehicleManager = {
                 const noiseType = speedSq > 5 ? NoiseType.VEHICLE_DRIVE : NoiseType.VEHICLE_IDLE;
                 const noiseRadius = NOISE_RADIUS[noiseType];
 
-                if (now - vehicle.userData._lastNoiseTime > 500) {
+                if (simTime - vehicle.userData._lastNoiseTime > 500) {
                     session.makeNoise(vehicle.position, noiseType, noiseRadius);
-                    vehicle.userData._lastNoiseTime = now;
+                    vehicle.userData._lastNoiseTime = simTime;
                 }
             }
         }
@@ -197,7 +197,7 @@ export const VehicleManager = {
         vel: THREE.Vector3,
         def: VehicleDef,
         session: GameSessionLogic,
-        now: number
+        simTime: number
     ) => {
         const speedSq = vel.lengthSq();
         if (speedSq < SPEED_SQ_PUSH) return;
@@ -240,8 +240,8 @@ export const VehicleManager = {
             if (distSq > collisionRad * collisionRad) continue;
 
             const lastHit = e.lastVehicleHit;
-            if (now - lastHit < HIT_COOLDOWN_MS) continue;
-            e.lastVehicleHit = now;
+            if (simTime - lastHit < HIT_COOLDOWN_MS) continue;
+            e.lastVehicleHit = simTime;
             hitAnyone = true;
 
             // --- DATA-DRIVEN KNOCKBACK ---

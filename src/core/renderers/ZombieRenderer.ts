@@ -76,7 +76,7 @@ export class ZombieRenderer {
      * Synchronizes enemy states with hardware instances
      * High-performance loop: Zero new object allocations
      */
-    public sync(enemies: Enemy[], now: number = performance.now()) {
+    public sync(enemies: Enemy[], time: number) {
         // 1. Reset counts using fast loop
         for (let i = 0; i < this._meshList.length; i++) {
             this._meshList[i].count = 0;
@@ -108,7 +108,7 @@ export class ZombieRenderer {
 
             // --- HIT FLASH LOGIC ---
             // Calculate color based on hit feedback. Arc-Cannon has a unique cyan-white flash.
-            const timeSinceHit = now - e.hitTime;
+            const timeSinceHit = time - e.hitTime;
             if (timeSinceHit < 100) {
                 if (e.lastDamageType === WeaponType.ARC_CANNON) {
                     // Lerp between White and Cyan for the electric look

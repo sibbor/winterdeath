@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { System } from '../../systems/System';
 import { GameSessionLogic } from '../../game/session/GameSessionLogic';
+import { Enemy } from './EnemyTypes';
 import { EnemyManager } from '../enemies/EnemyManager';
 import { FXSystem } from '../../systems/FXSystem';
 import { WorldLootSystem } from '../../systems/WorldLootSystem';
@@ -36,7 +37,7 @@ export class EnemySystem implements System {
             spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => {
                 if (this.currentSession) this.spawnDecal(this.currentSession, x, z, s, mat, type);
             },
-            applyDamage: (enemy: any, amount: number, type: DamageID, isHighImpact: boolean = false) => {
+            applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact: boolean = false) => {
 
                 if (!this.currentSession) return;
 
@@ -72,7 +73,7 @@ export class EnemySystem implements System {
         EnemyManager.init(scene);
     }
 
-    update(session: GameSessionLogic, dt: number, now: number) {
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         this.currentSession = session;
 
         const state = session.state;
@@ -82,9 +83,6 @@ export class EnemySystem implements System {
 
         if (!state.bossIntroActive) {
             EnemyManager.update(
-                dt,
-                now,
-                state.renderTime,
                 session.playerPos || this.playerGroup.position,
                 state.enemies,
                 state.collisionGrid,
@@ -94,7 +92,10 @@ export class EnemySystem implements System {
                 this.updateCallbacks.spawnDecal,
                 this.updateCallbacks.applyDamage,
                 this.updateCallbacks.spawnBubble,
-                session.engine.water
+                session.engine.water,
+                delta,
+                simTime,
+                renderTime
             );
 
         }
@@ -102,10 +103,10 @@ export class EnemySystem implements System {
         EnemyManager.cleanupDeadEnemies(
             scene,
             state.enemies,
-            now,
             state,
             this.cleanupCallbacks,
-            dt
+            delta,
+            simTime
         );
     }
 

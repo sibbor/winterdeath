@@ -57,7 +57,7 @@ export class WinterEngine {
     // Lifecycle & Timing
     private lastTime: number = 0;
     private requestID: number | null = null;
-    private isRushing: boolean = false;
+    private isRunning: boolean = false;
     private container: HTMLElement | null = null;
 
     /** Engine's global visual clock (Milliseconds). Always ticks regardless of pause state. */
@@ -81,7 +81,6 @@ export class WinterEngine {
     }
 
     // VINTERDÖD FIX: Hard Paused stänger av allt (även miljö).
-    public isSoftPaused: boolean = false;
     public isRenderingPaused: boolean = false;
     public isSimulationPaused: boolean = false;
 
@@ -256,15 +255,15 @@ export class WinterEngine {
     }
 
     public start() {
-        if (!this.isRushing) {
-            this.isRushing = true;
+        if (!this.isRunning) {
+            this.isRunning = true;
             this.lastTime = performance.now();
             this.animate();
         }
     }
 
     public stop() {
-        this.isRushing = false;
+        this.isRunning = false;
         if (this.requestID !== null) {
             cancelAnimationFrame(this.requestID);
             this.requestID = null;
@@ -450,30 +449,43 @@ export class WinterEngine {
     /**
      * Main animation loop
      */
+    /**
+         * Main animation loop
+         */
     private animate = () => {
-        if (!this.isRushing) return;
+        if (!this.isRunning) return;
         this.requestID = requestAnimationFrame(this.animate);
 
         const now = performance.now();
         const frameStart = now;
+
+        // Clampa delta till max 50ms. Skyddar mot fysik-explosioner vid lagg.
         const delta = Math.min(0.05, (now - this.lastTime) / 1000);
         this.lastTime = now;
 
-        // Unified Clock Ticking (Milliseconds)
+        // --- VINTERDÖD KLOCK-SEPARATION ---
+        // 1. Visuell tid (renderTime) tickar ALLTID (för UI, menyer, kamerarörelser)
         this.renderTime += delta * 1000;
-        this.simTime += (this.isSoftPaused ? 0 : delta * 1000);
+
+        // 2. Logisk tid (simTime) tickar BARA när spelet inte är hårdpausat
+        if (!this.isSimulationPaused) {
+            this.simTime += delta * 1000;
+        }
 
         const monitor = PerformanceMonitor.getInstance();
         monitor.startFrame();
 
         // 1. Logic Update (Physics, Movement, Systems)
-        // We provide the standardized delta (seconds) and global clocks (milliseconds).
         monitor.begin('logic');
-        if (this.onUpdate) this.onUpdate(delta);
+        // VINTERDÖD: Vi kör alltid onUpdate så att loopen kan hantera sina egna pause-transitioner
+        if (this.onUpdate) {
+            this.onUpdate(delta);
+        }
         monitor.end('logic');
 
         // 2. High-Performance System Logic (Unified Registry)
-        if (!this.isSimulationPaused && (this.onUpdateContext || this._systemArray.length > 0)) {
+        // VINTERDÖD: System-loopen körs alltid, men vi filtrerar inuti updateSystems
+        if (this.onUpdateContext || this._systemArray.length > 0) {
             const context = this.onUpdateContext || { scene: this.scene, state: {} };
             this.updateSystems(context, delta);
         }
@@ -485,7 +497,8 @@ export class WinterEngine {
 
         // 4. Render Pass
         monitor.begin('render');
-        if (!this.isRenderingPaused && !this.isSimulationPaused) {
+        if (!this.isRenderingPaused) {
+            // Vi renderar även under paus så spelet inte blir svart bakom menyn
             if (this.onRender) {
                 this.onRender();
             } else {
@@ -556,16 +569,15 @@ export class WinterEngine {
             if (sys.enabled === false) continue;
 
             const id = sys.id;
-            const isEnv = this._envSystemIds.has(id);
 
-            // Cinematic Skip Rule: Skip heavy emitters/AI while keeping atmosphere alive.
-            if (this.isSoftPaused && !isEnv) continue;
-
-            // Use engine-owned clocks for perfect sync.
-            const effectiveNow = (isEnv || this.isSoftPaused) ? this.renderTime : this.simTime;
+            // --- VINTERDÖD: DUAL-CLOCK GATING ---
+            // Miljösystem (vind, vatten, etc.) körs alltid med renderTime.
+            // Logiksystem (fiender, spelare) pausas om isSimulationPaused är true.
+            const isEnvSystem = this._envSystemIds.has(id);
+            if (!isEnvSystem && this.isSimulationPaused) continue;
 
             monitor.begin(id);
-            sys.update(context, delta, effectiveNow);
+            sys.update(context, delta, this.simTime, this.renderTime);
             monitor.end(id);
         }
     }

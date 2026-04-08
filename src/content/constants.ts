@@ -133,6 +133,7 @@ export const INITIAL_STATS: PlayerStats = {
         return b;
     })(),
     effectDurations: new Float32Array(StatusEffectID.COUNT),
+    effectMaxDurations: new Float32Array(StatusEffectID.COUNT),
     effectIntensities: new Float32Array(StatusEffectID.COUNT),
     statusFlags: 0,
     activePassives: [],

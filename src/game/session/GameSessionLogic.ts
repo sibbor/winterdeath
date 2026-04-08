@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameCanvasProps, SectorStats } from '../../game/session/SessionTypes';
-import { NoiseType } from '../../entities/enemies/EnemyTypes';
+import { Enemy, EnemyFlags, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { SectorTrigger } from '../../systems/TriggerTypes';
 import { WeaponType } from '../../content/weapons';
@@ -10,7 +10,6 @@ import { System } from '../../systems/System';
 import { PlayerDeathState, DamageID } from '../../entities/player/CombatTypes';
 import { KMH_TO_MS } from '../../content/constants';
 import { WEAPONS, ZOMBIE_TYPES, PLAYER_BASE_SPEED } from '../../content/constants';
-import { Enemy } from '../../entities/enemies/EnemyManager';
 import { ScrapItem } from '../../systems/WorldLootSystem';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { Obstacle } from '../../core/world/CollisionResolution';
@@ -212,8 +211,7 @@ export class GameSessionLogic {
             sessionStats,
             discoverySets,
 
-            applyDamage: (enemy: any, amount: number, type: DamageID, isHighImpact?: boolean) => false,
-
+            applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => false,
 
             bossesDefeated: [],
             familyFound: !!props.familyAlreadyRescued,
@@ -337,20 +335,15 @@ export class GameSessionLogic {
     init(state: RuntimeState) {
         this.state = state;
 
-        // --- VINTERDÖD FIX: Centralized Telemetry Wrapper ---
-        // Ensuring all systems (bullets, explosions, etc.) that use state.applyDamage 
-        // are automatically tracked by the DamageTrackerSystem.
         const originalApplyDamage = this.state.applyDamage || (() => false);
-        this.state.applyDamage = (enemy: any, amount: number, type: DamageID, isHighImpact?: boolean) => {
-
-            const dts = this.getSystem('damage_tracker_system') as any;
-            if (dts) dts.recordOutgoingDamage(this, amount, type, enemy.isBoss);
+        this.state.applyDamage = (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => {
 
             // --- VINTERDÖD FIX: Dual-Clock Visual Jitter ---
             // Set the visual hit timestamp so EnemyAnimator knows to shake the mesh 
             // even if the simulation clock (now) is paused or slowed.
-            if (enemy) enemy.hitrenderTime = this.state.renderTime;
+            if (enemy) enemy.hitRenderTime = this.state.renderTime;
 
+            // (Skicka bara vidare! Trackingen sköts redan perfekt inuti originalApplyDamage)
             return originalApplyDamage(enemy, amount, type, isHighImpact);
         };
     }

@@ -125,7 +125,7 @@ export interface RuntimeState extends PlayerStats {
         seenBosses: Set<number>;
     };
 
-    applyDamage: (enemy: any, amount: number, type: DamageID, isHighImpact?: boolean) => boolean;
+    applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => boolean;
 
 
     bossesDefeated: number[];

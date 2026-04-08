@@ -394,9 +394,9 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false)
         color: CAMP_SCENE.campfireLight.color,
         intensity: CAMP_SCENE.campfireLight.intensity,
         distance: CAMP_SCENE.campfireLight.distance,
-        flickerRate: 0.1,      // Subtle staccato
-        flickerSpeed: 0.05,    // Smooth pulse speed
-        flickerSpread: 15.0,    // Smooth pulse amplitude (15% of base)
+        flickerRate: 0.5,      // Subtle staccato
+        flickerSpeed: 0.02,    // Smooth pulse speed
+        flickerSpread: 10,    // Smooth pulse amplitude (15% of base)
 
         // Shadow Specs
         castShadow: true,

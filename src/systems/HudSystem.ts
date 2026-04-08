@@ -265,8 +265,7 @@ export const HudSystem = {
                     const typeKey = STATUS_EFFECT_MAP[i];
                     poolItem.type = (StatusEffectType as any)[typeKey];
                     poolItem.duration = duration;
-
-                    poolItem.maxDuration = 0; // Legacy placeholder
+                    poolItem.maxDuration = state.effectMaxDurations[i];
                     poolItem.intensity = effectIntensities[i];
                     _current.statusEffects.push(poolItem);
                     effectIndex++;
