@@ -196,6 +196,8 @@ export class GameSessionLogic {
             lastReflexShieldTime: 0,
             lastAdrenalinePatchTime: 0,
             lastHeartbeat: 0,
+            rushFactor: 0,
+            currentSpeedRatio: 1.0,
 
             // --- OBJECT POOLS ---
             enemies: [] as Enemy[],

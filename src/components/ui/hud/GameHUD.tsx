@@ -239,17 +239,19 @@ const KillsPanel = React.memo(({ isMobileDevice, isBossIntro, handlePauseInterna
 const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro, scrapTextRef, spTextRef, scrapBoxRef, spBoxRef }: any) => {
 
     return (
-        <div className={`flex flex-col gap-2 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-            {/* SCRAP BOX */}
-            <div ref={scrapBoxRef} className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-2'} border backdrop-blur-sm transition-all bg-black/80 border-white/10 w-full flex flex-col items-center`}>
-                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold text-white/20`}>{t('ui.scrap')}</span>
-                <span ref={scrapTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-white/40`}>0</span>
+        <div className={`flex flex-col gap-2.5 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+            {/* SCRAP BOX (CampHUD Style) */}
+            <div ref={scrapBoxRef} 
+                 className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-1.5'} border bg-black border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] w-full flex flex-col items-end gap-0 transition-all`}>
+                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[9px]'} block uppercase font-bold text-yellow-500 leading-tight opacity-70`}>{t('ui.scrap')}</span>
+                <span ref={scrapTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-yellow-400 leading-none`}>0</span>
             </div>
 
-            {/* SP BOX */}
-            <div ref={spBoxRef} className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-2'} border backdrop-blur-sm transition-all bg-black/80 border-white/10 w-full flex flex-col items-center`}>
-                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold text-white/20`}>{t('ui.sp')}</span>
-                <span ref={spTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-white/40`}>0</span>
+            {/* SP BOX (CampHUD Style) */}
+            <div ref={spBoxRef} 
+                 className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-1.5'} border bg-black border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)] w-full flex flex-col items-end gap-0 transition-all`}>
+                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[9px]'} block uppercase font-bold text-purple-500 leading-tight opacity-70`}>{t('ui.sp')}</span>
+                <span ref={spTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-purple-400 leading-none`}>0</span>
             </div>
         </div>
     );
@@ -615,7 +617,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         )}
                     </div>
 
-                    <div className="flex flex-col items-end gap-2">
+                    <div className="flex flex-col items-end gap-12">
                         <KillsPanel isMobileDevice={isMobileDevice} isBossIntro={isBossIntro} handlePauseInternal={handlePauseInternal} killsTextRef={killsTextRef} />
                         <CurrencyPanel isMobileDevice={isMobileDevice} isBossIntro={isBossIntro} scrapTextRef={scrapTextRef} spTextRef={spTextRef} scrapBoxRef={scrapBoxRef} spBoxRef={spBoxRef} />
                     </div>

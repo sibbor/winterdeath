@@ -97,7 +97,9 @@ export enum SoundID {
 
     // --- MISC COMBAT ---
     BITE = 97,
-    ADRENALINE_BOOST = 98,
+    PASSIVE_GAINED = 98,
+    BUFF_GAINED = 100,
+    DEBUFF_GAINED = 101,
     STEAM_HISS = 99,
 }
 

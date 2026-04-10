@@ -431,6 +431,14 @@ export const MATERIALS = {
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide
     }),
+    buff_shield_bubble: new THREE.MeshBasicMaterial({
+        color: 0x4488ff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false
+    }),
 
     // ---- DECALS ----
     bloodDecal: new THREE.MeshBasicMaterial({

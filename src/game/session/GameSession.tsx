@@ -133,8 +133,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
 
         if (levelUps > 0) {
+            console.log(`DING! Level up: ${levelUps}`);
             soundManager.playLevelUp();
-            // HUD will automatically pick up changes from the buffer on the next frame update
         }
     }, [refs]);
 

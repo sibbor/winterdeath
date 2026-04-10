@@ -248,6 +248,7 @@ export const GEOMETRY = {
     bloodSplat: createBloodSplatGeo(),
     impactSplat: createImpactSplatGeo(),
     splash: createSplashGeo(),
+    buff_shield_bubble: new THREE.SphereGeometry(1.2, 32, 32),
 
     // Zombie:
     zombieRing: new THREE.RingGeometry(0.05, 1, 32),

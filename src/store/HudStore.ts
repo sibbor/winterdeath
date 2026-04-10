@@ -86,8 +86,18 @@ type Listener = (state: HudState) => void;
 
 class HudStoreClass {
     private state: HudState = INITIAL_HUD_STATE;
-    // Standby buffer for Zero-GC patch mutations. Pre-allocated to match structure.
-    private standbyState: HudState = Object.assign({}, INITIAL_HUD_STATE);
+    // Standby buffer for Zero-GC patch mutations. 
+    // VINTERDÖD FIX: We MUST ensure nested arrays have unique references 
+    // otherwise React's shallow checks skip re-renders for lists.
+    private standbyState: HudState = {
+        ...INITIAL_HUD_STATE,
+        statusEffects: [],
+        activePassives: [],
+        activeBuffs: [],
+        activeDebuffs: [],
+        mapItems: [],
+        systems: []
+    };
     private listeners: Listener[] = [];
 
     /**
@@ -98,8 +108,11 @@ class HudStoreClass {
      * reference change (=== check) and trigger the UI update.
      */
     public update(nextState: HudState): void {
-        this.state = nextState;
-        this.notifyListeners();
+        // PERFORMANCE (VINTERDÖD FIX): 
+        // If we simply set this.state = nextState, and nextState is always the 
+        // same memory reference (the pooled _current), React's useSyncExternalStore 
+        // will SKIP the update. We MUST use the ping-pong buffer to force a re-render.
+        this.patch(nextState);
     }
 
     /**
@@ -110,7 +123,15 @@ class HudStoreClass {
     public patch(changes: Partial<HudState>): void {
         // 1. Copy current state and apply changes into the standby buffer (in-place mutation)
         Object.assign(this.standbyState, this.state, changes);
-
+ 
+        // 1.5 VINTERDÖD FIX: Clone array references to force React re-renders for lists.
+        // Even if we are Zero-GC focussed, React REQUIRES reference changes for consistency.
+        if (changes.statusEffects) this.standbyState.statusEffects = [...changes.statusEffects];
+        if (changes.activeBuffs) this.standbyState.activeBuffs = [...changes.activeBuffs];
+        if (changes.activeDebuffs) this.standbyState.activeDebuffs = [...changes.activeDebuffs];
+        if (changes.activePassives) this.standbyState.activePassives = [...changes.activePassives];
+        if (changes.mapItems) this.standbyState.mapItems = [...changes.mapItems];
+ 
         // 2. Pointer swap (Ping-Pong) to give React a "new" root object
         const temp = this.state;
         this.state = this.standbyState;

@@ -63,50 +63,8 @@ export enum PlayerStatusFlags {
     DODGING = 1 << 8
 }
 
-/**
- * SMI-indexed IDs for tracking active status effects/perks.
- * Strictly maps to PERKS registry for O(1) update logic.
- */
-export enum StatusEffectID {
-    TRICKSTERS_HASTE = 0,
-    EAGLES_SIGHT = 1,
-    LEAD_FEVER = 2,
-    WINTERS_BONE = 3,
-    REFLEX_SHIELD = 4,
-    ADRENALINE_PATCH = 5,
-    BLEEDING = 6,
-    SLOWED = 7,
-    STUNNED = 8,
-    BURNING = 9,
-    DISORIENTED = 10,
-    FREEZING = 11,
-    ELECTRIFIED = 12,
-    DROWNING = 13,
+// StatusEffectID has been consolidated into StatusEffectType in perks.ts
 
-    // Buffer Size
-    COUNT = 14
-}
-
-/**
- * Static mapping of StatusEffectID to StatusEffectType string keys.
- * Used for O(1) registry lookups in Zero-GC update loops.
- */
-export const STATUS_EFFECT_MAP: string[] = [
-    'TRICKSTERS_HASTE',
-    'EAGLES_SIGHT',
-    'LEAD_FEVER',
-    'WINTERS_BONE',
-    'REFLEX_SHIELD',
-    'ADRENALINE_PATCH',
-    'BLEEDING',
-    'SLOWED',
-    'STUNNED',
-    'BURNING',
-    'DISORIENTED',
-    'FREEZING',
-    'ELECTRIFIED',
-    'DROWNING'
-];
 
 /**
  * REFACTORED: PlayerStats (Phase 9 DOD SoA)
@@ -116,9 +74,9 @@ export const STATUS_EFFECT_MAP: string[] = [
 export interface PlayerStats {
     // --- DOD BUFFERS (Zero-GC / O(1)) ---
     statsBuffer: Float32Array;      // Sized by PlayerStatID.COUNT
-    effectDurations: Float32Array;  // Sized by StatusEffectID.COUNT
-    effectMaxDurations: Float32Array; // Sized by StatusEffectID.COUNT
-    effectIntensities: Float32Array; // Sized by StatusEffectID.COUNT
+    effectDurations: Float32Array;  // Sized by StatusEffectType (e.g. 16/32)
+    effectMaxDurations: Float32Array; 
+    effectIntensities: Float32Array; 
 
     // --- SMI STATE ---
     statusFlags: number;            // Bitmask (PlayerStatusFlags)
@@ -179,11 +137,12 @@ export const PlayerStatsUtils = {
      * Initializes the DOD buffers for a new session.
      */
     initBuffers: () => {
+        const effectCount = 32; // Over-allocated for expansion
         return {
             statsBuffer: new Float32Array(PlayerStatID.COUNT),
-            effectDurations: new Float32Array(StatusEffectID.COUNT),
-            effectMaxDurations: new Float32Array(StatusEffectID.COUNT),
-            effectIntensities: new Float32Array(StatusEffectID.COUNT),
+            effectDurations: new Float32Array(effectCount),
+            effectMaxDurations: new Float32Array(effectCount),
+            effectIntensities: new Float32Array(effectCount),
             activePassives: [] as StatusEffectType[],
             activeBuffs: [] as StatusEffectType[],
             activeDebuffs: [] as StatusEffectType[]

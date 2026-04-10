@@ -5,7 +5,7 @@ import { PerformanceMonitor } from './PerformanceMonitor';
 import { StatusEffectType } from '../content/perks';
 import { InteractionType } from './InteractionTypes';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
-import { PlayerStatID, PlayerStatusFlags, StatusEffectID, STATUS_EFFECT_MAP } from '../entities/player/PlayerTypes';
+import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 
 // Performance Scratchpads (Zero-GC)
 const _v1 = new THREE.Vector3();
@@ -18,7 +18,7 @@ const _v1 = new THREE.Vector3();
 // to detect a change and re-render, without ever allocating new objects.
 // ============================================================================
 
-const createStatusPool = () => Array.from({ length: 16 }, () => ({ type: 0 as StatusEffectType, duration: 0, maxDuration: 0, intensity: 0 }));
+const createStatusPool = () => Array.from({ length: 16 }, () => ({ type: 0 as StatusEffectType, duration: 0, maxDuration: 0, intensity: 0, progress: 0 }));
 
 
 const createDebugInfo = () => ({
@@ -257,16 +257,19 @@ export const HudSystem = {
         const effectIntensities = state.effectIntensities;
         let effectIndex = 0;
         
-        for (let i = 0; i < StatusEffectID.COUNT; i++) {
+        // Loop through all possible effects (SMI direct index)
+        const totalEffects = 32; // Buffer size
+        for (let i = 0; i < totalEffects; i++) {
             const duration = effectDurations[i];
             if (duration > 0) {
                 const poolItem = _current._statusPool[effectIndex];
                 if (poolItem) {
-                    const typeKey = STATUS_EFFECT_MAP[i];
-                    poolItem.type = (StatusEffectType as any)[typeKey];
+                    poolItem.type = i as StatusEffectType;
                     poolItem.duration = duration;
-                    poolItem.maxDuration = state.effectMaxDurations[i];
+                    const maxDur = state.effectMaxDurations[i] || 1;
+                    poolItem.maxDuration = maxDur;
                     poolItem.intensity = effectIntensities[i];
+                    poolItem.progress = Math.max(0, Math.min(1, duration / maxDur));
                     _current.statusEffects.push(poolItem);
                     effectIndex++;
                 }

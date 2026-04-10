@@ -16,6 +16,7 @@ export interface AnimState {
     isStrafing?: boolean;
     isBacking?: boolean;
     strafeDirection?: number;
+    currentSpeedRatio?: number; // New: 1.0 = base speed, 2.0 = full rush, etc.
     renderTime: number;
     seed: number;
 }
@@ -64,7 +65,9 @@ export const PlayerAnimator = {
             const squashFactor = Math.sin(progress * Math.PI);
             scaleY = 1.0 - (squashFactor * 0.4);
             scaleXZ = 1.0 + (squashFactor * 0.4);
-            positionY = 0.2;
+            
+            // --- VINTERDÖD FIX: Jump curve (25cm peak) ---
+            positionY = Math.sin(progress * Math.PI) * 0.25;
         }
 
         // Swimming Animation: Heavy lean, deep bobbing
@@ -79,7 +82,11 @@ export const PlayerAnimator = {
 
         // Moving animation
         else if (animState.isMoving) {
-            moveSpeed = animState.isRushing ? 0.020 : 0.012;
+            // --- DYNAMIC BOBBING (Vinterdöd Fix: Scales with actual speed) ---
+            const baseFrequency = 0.012;
+            const speedRatio = animState.currentSpeedRatio || 1.0;
+            moveSpeed = baseFrequency * speedRatio;
+
             wadingFactor = animState.isWading ? 0.6 : 1.0;
             bob = Math.sin(animState.renderTime * moveSpeed * wadingFactor);
             const rushFactor = animState.isRushing ? 2.0 : 1.0;

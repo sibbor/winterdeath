@@ -3,13 +3,13 @@ import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTyp
 import { t } from '../../../../utils/i18n';
 import { soundManager } from '../../../../utils/audio/SoundManager';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
-import { LEVEL_CAP } from '../../../../content/constants';
-import { useOrientation } from '../../../../hooks/useOrientation';
+import { LEVEL_CAP, PLAYER_BASE_SPEED } from '../../../../content/constants';
+import { useOrientation } from '../../hooks/useOrientation';
 
 const SKILLS_CONFIG = [
     { statId: PlayerStatID.MAX_HP,      labelKey: 'skills.vitality',  descKey: 'skills.vitality_desc',  cost: 1, value: 20,  base: 100  },
     { statId: PlayerStatID.MAX_STAMINA, labelKey: 'skills.adrenaline', descKey: 'skills.adrenaline_desc', cost: 1, value: 20,  base: 100  },
-    { statId: PlayerStatID.SPEED,       labelKey: 'skills.reflex',    descKey: 'skills.reflex_desc',   cost: 2, value: 0.2, base: 25.0 }
+    { statId: PlayerStatID.SPEED,       labelKey: 'skills.reflex',    descKey: 'skills.reflex_desc',   cost: 2, value: 0.5, base: PLAYER_BASE_SPEED }
 ];
 
 interface ScreenPlayerSkillsProps {

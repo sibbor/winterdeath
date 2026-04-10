@@ -47,8 +47,15 @@ export interface PerkStats {
     category: PerkCategory;
     duration?: number; // ms
     cooldown?: number; // ms
-    intensity?: number; // Magnitude of effect (e.g. 0.25 for 25% boost)
-    damage?: number;    // Damage per tick (for DoT)
+
+    // --- ADDITIVE INTEGER MODIFIERS (Step 1 DOD Refactor) ---
+    // Rule: Positive = Good for Player, Negative = Bad for Player
+    speedModifier?: number;        // e.g. -20 for 20% slow
+    reloadModifier?: number;       // e.g. 20 for 20% faster
+    fireRateModifier?: number;     // e.g. 20 for 20% faster
+    damageResistModifier?: number; // e.g. 10 for 10% resist
+    rangeModifier?: number;        // e.g. 15 for 15% range
+    dotDamage?: number;            // Fixed damage per tick
 }
 
 /**
@@ -64,7 +71,7 @@ PERKS[StatusEffectType.TRICKSTERS_HASTE] = {
     displayName: 'perks.TRICKSTERS_HASTE.title',
     description: 'perks.TRICKSTERS_HASTE.description',
     category: PerkCategory.PASSIVE,
-    intensity: 0.8, // 20% faster reload
+    reloadModifier: 20, // 20% faster reload
 };
 PERKS[StatusEffectType.EAGLES_SIGHT] = {
     id: StatusEffectType.EAGLES_SIGHT,
@@ -72,7 +79,7 @@ PERKS[StatusEffectType.EAGLES_SIGHT] = {
     displayName: 'perks.EAGLES_SIGHT.title',
     description: 'perks.EAGLES_SIGHT.description',
     category: PerkCategory.PASSIVE,
-    intensity: 1.15, // 15% more range
+    rangeModifier: 15, // 15% more range
 };
 PERKS[StatusEffectType.LEAD_FEVER] = {
     id: StatusEffectType.LEAD_FEVER,
@@ -80,7 +87,7 @@ PERKS[StatusEffectType.LEAD_FEVER] = {
     displayName: 'perks.LEAD_FEVER.title',
     description: 'perks.LEAD_FEVER.description',
     category: PerkCategory.PASSIVE,
-    intensity: 1.2, // 20% faster fire rate
+    fireRateModifier: 20, // 20% faster fire rate
 };
 PERKS[StatusEffectType.WINTERS_BONE] = {
     id: StatusEffectType.WINTERS_BONE,
@@ -88,7 +95,7 @@ PERKS[StatusEffectType.WINTERS_BONE] = {
     displayName: 'perks.WINTERS_BONE.title',
     description: 'perks.WINTERS_BONE.description',
     category: PerkCategory.PASSIVE,
-    intensity: 0.9, // 10% damage resistance
+    damageResistModifier: 10, // 10% damage resistance
 };
 
 // --- BUFFS ---
@@ -98,8 +105,9 @@ PERKS[StatusEffectType.REFLEX_SHIELD] = {
     displayName: 'perks.REFLEX_SHIELD.title',
     description: 'perks.REFLEX_SHIELD.description',
     category: PerkCategory.BUFF,
-    duration: 500,
+    duration: 2000,
     cooldown: 10000,
+    damageResistModifier: 100, // 100% damage resistance
 };
 PERKS[StatusEffectType.ADRENALINE_PATCH] = {
     id: StatusEffectType.ADRENALINE_PATCH,
@@ -109,6 +117,8 @@ PERKS[StatusEffectType.ADRENALINE_PATCH] = {
     category: PerkCategory.BUFF,
     duration: 3000,
     cooldown: 60000,
+    speedModifier: 30,
+    fireRateModifier: 20
 };
 
 // --- DEBUFFS ---
@@ -119,7 +129,7 @@ PERKS[StatusEffectType.BLEEDING] = {
     description: 'perks.BLEEDING.description',
     category: PerkCategory.DEBUFF,
     duration: 3000,
-    damage: 5
+    dotDamage: 5
 };
 PERKS[StatusEffectType.BURNING] = {
     id: StatusEffectType.BURNING,
@@ -128,7 +138,7 @@ PERKS[StatusEffectType.BURNING] = {
     description: 'perks.BURNING.description',
     category: PerkCategory.DEBUFF,
     duration: 3000,
-    damage: 10
+    dotDamage: 10
 };
 PERKS[StatusEffectType.STUNNED] = {
     id: StatusEffectType.STUNNED,
@@ -137,7 +147,6 @@ PERKS[StatusEffectType.STUNNED] = {
     description: 'perks.STUNNED.description',
     category: PerkCategory.DEBUFF,
     duration: 3000,
-    intensity: 0,
 };
 PERKS[StatusEffectType.DISORIENTED] = {
     id: StatusEffectType.DISORIENTED,
@@ -146,7 +155,7 @@ PERKS[StatusEffectType.DISORIENTED] = {
     description: 'perks.DISORIENTED.description',
     category: PerkCategory.DEBUFF,
     duration: 2000,
-    intensity: 0.8,
+    speedModifier: -20,
 };
 PERKS[StatusEffectType.SLOWED] = {
     id: StatusEffectType.SLOWED,
@@ -155,7 +164,7 @@ PERKS[StatusEffectType.SLOWED] = {
     description: 'perks.SLOWED.description',
     category: PerkCategory.DEBUFF,
     duration: 2500,
-    intensity: 0.6,
+    speedModifier: -40,
 };
 PERKS[StatusEffectType.FREEZING] = {
     id: StatusEffectType.FREEZING,
@@ -164,8 +173,8 @@ PERKS[StatusEffectType.FREEZING] = {
     description: 'perks.FREEZING.description',
     category: PerkCategory.DEBUFF,
     duration: 2000,
-    damage: 10,
-    intensity: 0.8 / 1.5,
+    dotDamage: 10,
+    speedModifier: -20,
 };
 PERKS[StatusEffectType.ELECTRIFIED] = {
     id: StatusEffectType.ELECTRIFIED,
@@ -174,8 +183,8 @@ PERKS[StatusEffectType.ELECTRIFIED] = {
     description: 'perks.ELECTRIFIED.description',
     category: PerkCategory.DEBUFF,
     duration: 2000,
-    damage: 10,
-    intensity: 0.8 / 1.5,
+    dotDamage: 10,
+    speedModifier: -20,
 };
 PERKS[StatusEffectType.DROWNING] = {
     id: StatusEffectType.DROWNING,
@@ -184,5 +193,5 @@ PERKS[StatusEffectType.DROWNING] = {
     description: 'perks.DROWNING.description',
     category: PerkCategory.DEBUFF,
     duration: 3000,
-    damage: 15,
+    dotDamage: 15,
 };

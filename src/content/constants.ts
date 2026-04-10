@@ -1,6 +1,5 @@
-
 import * as THREE from 'three';
-import { PlayerStats, PlayerStatID, StatusEffectID } from '../entities/player/PlayerTypes';
+import { PlayerStats, PlayerStatID } from '../entities/player/PlayerTypes';
 import { GameSettings } from '../core/engine/EngineTypes';
 
 // Re-export Data
@@ -10,7 +9,7 @@ export { WEAPONS } from './weapons';
 
 // 20% HP
 export const HEALTH_CRITICAL_THRESHOLD = 0.2;
-export const PLAYER_BASE_SPEED = 25.0; // km/h, km/tim, kph
+export const PLAYER_BASE_SPEED = 15.0; // km/h, km/tim, kph
 export const KMH_TO_MS = 1.0 / 3.6;
 
 export const CAMERA_HEIGHT = 50;
@@ -97,7 +96,7 @@ export const SCRAP_COST_BASE = 50;
 export const LEVEL_CAP = 20;
 
 export const INITIAL_STATS: PlayerStats = {
-    statsBuffer: (function() {
+    statsBuffer: (function () {
         const b = new Float32Array(PlayerStatID.COUNT);
         b[PlayerStatID.HP] = 100;
         b[PlayerStatID.MAX_HP] = 100;
@@ -110,14 +109,14 @@ export const INITIAL_STATS: PlayerStats = {
         b[PlayerStatID.SKILL_POINTS] = 0;
         b[PlayerStatID.SCRAP] = 0;
         b[PlayerStatID.SPEED] = PLAYER_BASE_SPEED;
-        
+
         // --- TOTALS (11-15: SCRAP, DAMAGE_DEALT, DAMAGE_TAKEN, DISTANCE, KILLS) ---
         b[PlayerStatID.TOTAL_SCRAP_COLLECTED] = 0;
         b[PlayerStatID.TOTAL_DAMAGE_DEALT] = 0;
         b[PlayerStatID.TOTAL_DAMAGE_TAKEN] = 0;
         b[PlayerStatID.TOTAL_DISTANCE_TRAVELED] = 0;
         b[PlayerStatID.TOTAL_KILLS] = 0;
-        
+
         b[PlayerStatID.SCORE] = 0;
 
         // --- MULTIPLIERS (17+) ---
@@ -132,9 +131,9 @@ export const INITIAL_STATS: PlayerStats = {
 
         return b;
     })(),
-    effectDurations: new Float32Array(StatusEffectID.COUNT),
-    effectMaxDurations: new Float32Array(StatusEffectID.COUNT),
-    effectIntensities: new Float32Array(StatusEffectID.COUNT),
+    effectDurations: new Float32Array(32),
+    effectMaxDurations: new Float32Array(32),
+    effectIntensities: new Float32Array(32),
     statusFlags: 0,
     activePassives: [],
     activeBuffs: [],

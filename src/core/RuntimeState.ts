@@ -104,6 +104,8 @@ export interface RuntimeState extends PlayerStats {
     lastReflexShieldTime: number;
     lastAdrenalinePatchTime: number;
     lastHeartbeat: number;
+    rushFactor: number; // 0.0 to 1.0 interpolation for Rush ability (2.0s ramp)
+    currentSpeedRatio: number; // Current speed relative to base speed (for animations)
 
     // --- OBJECT POOLS ---
     enemies: Enemy[];
@@ -236,4 +238,5 @@ export interface RuntimeState extends PlayerStats {
     renderTime: number;      // Sum of real-world delta, used for breathing/wind/bobbing
     lastSimDelta: number;    // Clamped/frozen delta used for this frame's simulation
     lastRenderDelta: number;   // Raw/unclamped delta used for this frame's visuals
+    previousPerkMask: number; // VINTERDÖD: Zero-GC bitmask for status effect transitions
 }

@@ -36,7 +36,8 @@ export class PlayerMovementSystem implements System {
         particles: null
     };
 
-    private _shieldMesh: THREE.Mesh | null = null;
+    private _invincibilityMesh: THREE.Mesh | null = null;
+    private _buffShieldMesh: THREE.Mesh | null = null;
 
     constructor(private playerGroup: THREE.Group) { }
 
@@ -93,6 +94,51 @@ export class PlayerMovementSystem implements System {
         );
 
         this.updateInvincibleGlow(state, session.state.renderTime);
+        this.updateShieldBubble(session, delta);
+    }
+
+    private updateShieldBubble(session: GameSessionLogic, delta: number) {
+        const state = session.state;
+        const perkID = StatusEffectType.REFLEX_SHIELD;
+        const duration = state.effectDurations[perkID];
+        const maxDuration = state.effectMaxDurations[perkID] || 1000;
+
+        if (duration > 0) {
+            if (!this._buffShieldMesh) {
+                this._buffShieldMesh = new THREE.Mesh(GEOMETRY.buff_shield_bubble, MATERIALS.buff_shield_bubble);
+                this._buffShieldMesh.position.y = 1.0;
+                this.playerGroup.add(this._buffShieldMesh);
+            }
+
+            const mat = this._buffShieldMesh.material as THREE.MeshBasicMaterial;
+
+            // FADE LOGIC:
+            let targetOpacity = 0.4;
+            const elapsed = maxDuration - duration;
+
+            // Fade in (first ms)
+            if (elapsed < 150) {
+                targetOpacity = (elapsed / 150) * 0.4;
+            }
+            // Fade out (last ms)
+            else if (duration < 200) {
+                targetOpacity = (duration / 200) * 0.4;
+            }
+
+            mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 10 * delta);
+
+            // Interaction: Pulse scale
+            const pulse = 1.0 + Math.sin(state.renderTime * 0.015) * 0.05;
+            this._buffShieldMesh.scale.setScalar(pulse);
+            this._buffShieldMesh.rotation.y += delta * 2;
+            this._buffShieldMesh.visible = true;
+        } else if (this._buffShieldMesh) {
+            const mat = this._buffShieldMesh.material as THREE.MeshBasicMaterial;
+            mat.opacity = THREE.MathUtils.lerp(mat.opacity, 0, 15 * delta);
+            if (mat.opacity < 0.01) {
+                this._buffShieldMesh.visible = false;
+            }
+        }
     }
 
     private checkReflexShield(session: GameSessionLogic, simTime: number) {
@@ -102,12 +148,14 @@ export class PlayerMovementSystem implements System {
         if (!perk) return;
 
         // Trigger if off cooldown
-        if (simTime - state.lastReflexShieldTime > perk.cooldown) {
+        const cooldown = perk.cooldown ?? 10000;
+        if (simTime - state.lastReflexShieldTime > cooldown) {
             state.lastReflexShieldTime = simTime;
 
             // Add the buff (Zero-GC SoA)
-            state.effectDurations[perkID] = perk.duration || 500;
-            state.effectIntensities[perkID] = 1;
+            const duration = perk.duration ?? 1000;
+            state.effectDurations[perkID] = duration;
+            state.effectMaxDurations[perkID] = duration;
 
             // Discovery (Numeric SMI check)
             if (!state.discoveredPerks.includes(perkID as any)) {
@@ -119,20 +167,20 @@ export class PlayerMovementSystem implements System {
 
     private updateInvincibleGlow(state: any, renderTime: number) {
         if (state.sectorState.isInvincible) {
-            if (!this._shieldMesh) {
-                this._shieldMesh = new THREE.Mesh(GEOMETRY.reflexShield, MATERIALS.reflexShield);
-                this._shieldMesh.position.y = 1.0;
-                this.playerGroup.add(this._shieldMesh);
+            if (!this._invincibilityMesh) {
+                this._invincibilityMesh = new THREE.Mesh(GEOMETRY.reflexShield, MATERIALS.reflexShield);
+                this._invincibilityMesh.position.y = 1.0;
+                this.playerGroup.add(this._invincibilityMesh);
             }
 
             // Pulse effect
             const sineWave = Math.sin(renderTime * 0.005) * 0.05;
 
-            (this._shieldMesh.material as THREE.MeshBasicMaterial).opacity = 0.15 + sineWave;
-            this._shieldMesh.scale.setScalar(1.0 + sineWave);
-            this._shieldMesh.visible = true;
-        } else if (this._shieldMesh) {
-            this._shieldMesh.visible = false;
+            (this._invincibilityMesh.material as THREE.MeshBasicMaterial).opacity = 0.15 + sineWave;
+            this._invincibilityMesh.scale.setScalar(1.0 + sineWave);
+            this._invincibilityMesh.visible = true;
+        } else if (this._invincibilityMesh) {
+            this._invincibilityMesh.visible = false;
         }
     }
 
@@ -263,14 +311,18 @@ export class PlayerMovementSystem implements System {
             }
         }
 
+        const isMoving = state.isMoving;
+        const rushRampSpeed = delta / 2.0; // 2 seconds for full ramp
+
         if (state.isRushing) {
             this.checkReflexShield(session, simTime);
 
-            // --- CONSOLIDATED RUSH SPEED (2.0x) ---
-            speed *= 2.0;
+            // --- PROGRESSIVE RAMP-UP (2.0s) ---
+            state.rushFactor = Math.min(1.0, state.rushFactor + rushRampSpeed);
 
-            // --- STEADY STAMINA DRAIN (22/sec) ---
-            stats[PlayerStatID.STAMINA] = Math.max(0, stats[PlayerStatID.STAMINA] - delta * 22);
+            // --- DYNAMIC STAMINA DRAIN (Ramping from 5/sec to 22/sec) ---
+            const drainRate = 5 + (state.rushFactor * 17);
+            stats[PlayerStatID.STAMINA] = Math.max(0, stats[PlayerStatID.STAMINA] - delta * drainRate);
             state.lastStaminaUseTime = simTime;
             state.statusFlags |= PlayerStatusFlags.RUSHING;
 
@@ -282,8 +334,21 @@ export class PlayerMovementSystem implements System {
             } else if (stats[PlayerStatID.STAMINA] >= stats[PlayerStatID.MAX_STAMINA] * 0.5) {
                 state.statusFlags &= ~PlayerStatusFlags.EXHAUSTED;
             }
+        } else {
+            // --- PROGRESSIVE RAMP-DOWN (2.0s) ---
+            state.rushFactor = Math.max(0, state.rushFactor - rushRampSpeed);
+            if (state.rushFactor === 0) {
+                state.statusFlags &= ~PlayerStatusFlags.RUSHING;
+            }
         }
-        else if (!state.isDodging && !state.isRushing && waterStaminaDrain === 0) {
+
+        // Apply Speed Multiplier based on Rush Factor (1.0x to 2.0x)
+        speed *= (1.0 + state.rushFactor);
+
+        // Update Speed Ratio for Animation Sync (Base = 1.0)
+        state.currentSpeedRatio = speed / Math.max(0.001, currentSpeed);
+
+        if (!state.isDodging && !state.isRushing && waterStaminaDrain === 0) {
             // Natural regeneration only if idle/walking and not soon after stamina use
             if (simTime - state.lastStaminaUseTime > 2500) {
                 stats[PlayerStatID.STAMINA] = Math.min(stats[PlayerStatID.MAX_STAMINA], stats[PlayerStatID.STAMINA] + 15 * delta);

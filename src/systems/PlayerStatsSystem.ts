@@ -6,7 +6,7 @@ import { FXSystem } from './FXSystem';
 import { PlayerDeathState, DamageID, EnemyAttackType } from '../entities/player/CombatTypes';
 import { PERKS, StatusEffectType, PerkCategory } from '../content/perks';
 import { MaterialType } from '../content/environment';
-import { StatusEffectID, PlayerStatID, PlayerStatusFlags, STATUS_EFFECT_MAP } from '../entities/player/PlayerTypes';
+import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { EnemyType, EnemyFlags } from '../entities/enemies/EnemyTypes';
 import { KMH_TO_MS } from '../content/constants';
@@ -36,11 +36,37 @@ export class PlayerStatsSystem implements System {
         if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
         if ((state.statusFlags & PlayerStatusFlags.STUNNED) !== 0) return;
 
-        this.updatePassives(session);
+        let currentMask = this.updatePassives(session);
         this.checkAdrenalinePatch(session, simTime);
-        this.updateBuffsAndDebuffs(session, delta, simTime);
+        currentMask = this.updateBuffsAndDebuffs(session, delta, simTime, currentMask);
         this.applyStatusTicks(session, delta, simTime);
-
+ 
+        // --- STATUS TRANSITION SOUNDS (VINTERDÖD FIX: Debounced & Inclusive) ---
+        // Only trigger sounds if the mask actually changed since the START of the frame
+        const startMask = state.previousPerkMask;
+        if (currentMask !== startMask) {
+            for (let i = 0; i < 32; i++) {
+                const isNew = (currentMask & (1 << i)) && !(startMask & (1 << i));
+                const isRemoved = !(currentMask & (1 << i)) && (startMask & (1 << i));
+                
+                if (isNew || isRemoved) {
+                    const perk = PERKS[i];
+                    if (perk) {
+                        if (isNew) {
+                            console.log(`[PlayerStatsSystem] ACTIVATED: ${perk.displayName} (ID: ${i})`);
+                            if (perk.category === PerkCategory.BUFF) soundManager.playBuffGained();
+                            else if (perk.category === PerkCategory.DEBUFF) soundManager.playDebuffGained();
+                            else if (perk.category === PerkCategory.PASSIVE) soundManager.playPassiveGained();
+                        } else {
+                            console.log(`[PlayerStatsSystem] EXPIRED: ${perk.displayName} (ID: ${i})`);
+                        }
+                    }
+                }
+            }
+        }
+ 
+        // --- FINAL BAKE (Zero-GC) ---
+        state.previousPerkMask = currentMask;
         this.bakeFinalStats(state.statsBuffer);
     }
 
@@ -60,14 +86,17 @@ export class PlayerStatsSystem implements System {
         const maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
 
         if (hp > 0 && hp < maxHp * 0.25) {
-            if (simTime - state.lastAdrenalinePatchTime > (perk.cooldown || 60000)) {
+            // Use canonical cooldown from perks.ts (default to 60s if missing)
+            const cooldown = perk.cooldown ?? 60000;
+            if (simTime - state.lastAdrenalinePatchTime > cooldown) {
                 state.lastAdrenalinePatchTime = simTime;
 
-                const sID = StatusEffectID.ADRENALINE_PATCH;
-                state.effectDurations[sID] = perk.duration || 3000;
-                state.effectIntensities[sID] = perk.intensity || 1;
+                // Mark the duration in the buffer
+                state.effectDurations[perkID] = perk.duration ?? 3000;
+                state.effectMaxDurations[perkID] = perk.duration ?? 3000;
 
-                soundManager.playEffect(SoundID.ADRENALINE_BOOST);
+                // VINTERDÖD: Removed legacy sound trigger. 
+                // Detection now happens in the main update loop via bitmask.
 
                 if (!state.discoveredPerks.includes(perkID)) {
                     state.discoveredPerks.push(perkID);
@@ -81,8 +110,8 @@ export class PlayerStatsSystem implements System {
         speed: 1.0, reloadTime: 1.0, fireRate: 1.0, damageResist: 1.0, range: 1.0
     };
 
-    public updatePassives(session: GameSessionLogic) {
-        this.cachedFamilyMultipliers = { speed: 1.0, reloadTime: 1.0, fireRate: 1.0, damageResist: 1.0, range: 1.0 };
+    public updatePassives(session: GameSessionLogic): number {
+        let mask = 0;
         const family = this.activeFamilyMembers.current;
         const state = session.state;
 
@@ -94,21 +123,13 @@ export class PlayerStatsSystem implements System {
             const name = member.name.toLowerCase();
             let passiveId: StatusEffectType | null = null;
 
-            if (name === 'loke') {
-                this.cachedFamilyMultipliers.reloadTime *= (PERKS[StatusEffectType.TRICKSTERS_HASTE]?.intensity || 0.8);
-                passiveId = StatusEffectType.TRICKSTERS_HASTE;
-            } else if (name === 'jordan') {
-                this.cachedFamilyMultipliers.range *= (PERKS[StatusEffectType.EAGLES_SIGHT]?.intensity || 1.15);
-                passiveId = StatusEffectType.EAGLES_SIGHT;
-            } else if (name === 'esmeralda') {
-                this.cachedFamilyMultipliers.fireRate *= (PERKS[StatusEffectType.LEAD_FEVER]?.intensity || 1.2);
-                passiveId = StatusEffectType.LEAD_FEVER;
-            } else if (name === 'nathalie') {
-                this.cachedFamilyMultipliers.damageResist *= (PERKS[StatusEffectType.WINTERS_BONE]?.intensity || 0.9);
-                passiveId = StatusEffectType.WINTERS_BONE;
-            }
+            if (name === 'loke') passiveId = StatusEffectType.TRICKSTERS_HASTE;
+            else if (name === 'jordan') passiveId = StatusEffectType.EAGLES_SIGHT;
+            else if (name === 'esmeralda') passiveId = StatusEffectType.LEAD_FEVER;
+            else if (name === 'nathalie') passiveId = StatusEffectType.WINTERS_BONE;
 
-            if (passiveId) {
+            if (passiveId !== null) {
+                mask |= (1 << passiveId); // Set bit for mask
                 this.cachedPassives[pIdx++] = passiveId;
                 const perk = PERKS[passiveId];
 
@@ -123,59 +144,80 @@ export class PlayerStatsSystem implements System {
         // --- SYNC TO STATE (Zero-GC) ---
         state.activePassives.length = 0;
         for (let i = 0; i < pIdx; i++) state.activePassives.push(this.cachedPassives[i]);
+
+        return mask;
     }
 
 
-    private updateBuffsAndDebuffs(session: GameSessionLogic, delta: number, simTime: number) {
+    private updateBuffsAndDebuffs(session: GameSessionLogic, delta: number, simTime: number, initialMask: number): number {
+        let currentPerkMask = initialMask;
         const state = session.state;
         const stats = state.statsBuffer;
-
-        stats[PlayerStatID.MULTIPLIER_SPEED] = this.cachedFamilyMultipliers.speed;
-        stats[PlayerStatID.MULTIPLIER_RELOAD] = this.cachedFamilyMultipliers.reloadTime;
-        stats[PlayerStatID.MULTIPLIER_FIRERATE] = this.cachedFamilyMultipliers.fireRate;
-        stats[PlayerStatID.MULTIPLIER_DMG_RESIST] = this.cachedFamilyMultipliers.damageResist;
-        stats[PlayerStatID.MULTIPLIER_RANGE] = this.cachedFamilyMultipliers.range;
 
         state.statusFlags &= ~PlayerStatusFlags.DISORIENTED;
         state.activeBuffs.length = 0;
         state.activeDebuffs.length = 0;
 
-        for (let i = 0; i < StatusEffectID.COUNT; i++) {
+        // Reset modifiers for integer stacking
+        let speedMod = 0, reloadMod = 0, fireRateMod = 0, resistMod = 0, rangeMod = 0;
+
+        // Loop through the effect buffer (32 slots)
+        for (let i = 0; i < 32; i++) {
+            // Clamping decrement before check
+            state.effectDurations[i] = Math.max(0, state.effectDurations[i] - delta * 1000);
+            
+            // --- DIAGNOSTIC: PERK DECAY (VINTERDÖD) ---
+            if (state.effectDurations[i] > 0) {
+                const perk = PERKS[i];
+                if (perk) {
+                    // Note: This generates high-frequency logs for ALL active effects as requested
+                    console.log(`[PlayerStatsSystem] Decay: ${perk.displayName} @ ${state.effectDurations[i].toFixed(1)}ms`);
+                }
+            }
+ 
             if (state.effectDurations[i] <= 0) continue;
 
-            const duration = state.effectDurations[i];
-            state.effectDurations[i] = Math.max(0, duration - delta * 1000);
+            currentPerkMask |= (1 << i);
 
-            // --- VINTERDÖD FIX: Dynamic Multiplier Resolution ---
-            // Ensuring all speed-affecting debuffs (Slowed, Freezing, Disoriented, etc.)
-            // are correctly factored into the statsBuffer before the final bake.
             const perk = PERKS[i];
             if (perk) {
-                if (perk.intensity !== undefined) {
-                    // Specific logic for multipliers vs state flags
-                    if (i === StatusEffectID.ADRENALINE_PATCH ||
-                        i === StatusEffectID.SLOWED ||
-                        i === StatusEffectID.FREEZING ||
-                        i === StatusEffectID.DISORIENTED ||
-                        i === StatusEffectID.BLEEDING ||
-                        i === StatusEffectID.BURNING) {
-                        stats[PlayerStatID.MULTIPLIER_SPEED] *= state.effectIntensities[i];
-                    }
-                }
+                // --- STEP 3 DOD REFACTOR: Additive Integer Stacking ---
+                if (perk.speedModifier) speedMod += perk.speedModifier;
+                if (perk.reloadModifier) reloadMod += perk.reloadModifier;
+                if (perk.fireRateModifier) fireRateMod += perk.fireRateModifier;
+                if (perk.damageResistModifier) resistMod += perk.damageResistModifier;
+                if (perk.rangeModifier) rangeMod += perk.rangeModifier;
 
-                if (i === StatusEffectID.DISORIENTED) {
+                if (i === StatusEffectType.DISORIENTED) {
                     state.statusFlags |= PlayerStatusFlags.DISORIENTED;
                     session.engine.camera.shake(0.05);
                 }
 
-                // HUD Synchronization: Report all non-passive effects to the Active Buff/Debuff arrays
-                if (perk.category === PerkCategory.BUFF) {
-                    state.activeBuffs.push(i);
-                } else if (perk.category === PerkCategory.DEBUFF) {
-                    state.activeDebuffs.push(i);
-                }
+                if (perk.category === PerkCategory.BUFF) state.activeBuffs.push(i);
+                else if (perk.category === PerkCategory.DEBUFF) state.activeDebuffs.push(i);
             }
         }
+
+        // Add modifiers from current passives too
+        for (let j = 0; j < state.activePassives.length; j++) {
+            const perk = PERKS[state.activePassives[j]];
+            if (perk) {
+                if (perk.speedModifier) speedMod += perk.speedModifier;
+                if (perk.reloadModifier) reloadMod += perk.reloadModifier;
+                if (perk.fireRateModifier) fireRateMod += perk.fireRateModifier;
+                if (perk.damageResistModifier) resistMod += perk.damageResistModifier;
+                if (perk.rangeModifier) rangeMod += perk.rangeModifier;
+            }
+        }
+
+        // --- CONVERT TO FLOAT MULTIPLIERS (As per step 3 instructions) ---
+        stats[PlayerStatID.MULTIPLIER_SPEED] = Math.max(0.1, 1.0 + (speedMod / 100));
+        stats[PlayerStatID.MULTIPLIER_RANGE] = Math.max(0.1, 1.0 + (rangeMod / 100));
+        stats[PlayerStatID.MULTIPLIER_RELOAD] = Math.max(0.1, 1.0 - (reloadMod / 100));
+        stats[PlayerStatID.MULTIPLIER_FIRERATE] = Math.max(0.1, 1.0 - (fireRateMod / 100));
+        stats[PlayerStatID.MULTIPLIER_DMG_RESIST] = Math.max(0.0, 1.0 - (resistMod / 100));
+
+        return currentPerkMask;
     }
 
     private applyStatusTicks(session: GameSessionLogic, delta: number, simTime: number) {
@@ -183,29 +225,27 @@ export class PlayerStatsSystem implements System {
 
         // Tick DoT every 1 second
         if (Math.floor(simTime / 1000) !== Math.floor((simTime - delta * 1000) / 1000)) {
-            for (let i = 0; i < StatusEffectID.COUNT; i++) {
+            for (let i = 0; i < 32; i++) {
                 if (state.effectDurations[i] <= 0) continue;
 
                 const perk = PERKS[i];
-                if (!perk || perk.damage === undefined) continue;
+                if (!perk || perk.dotDamage === undefined || perk.dotDamage <= 0) continue;
 
                 let dmgID = DamageID.PHYSICAL;
-                if (i === StatusEffectID.BURNING) dmgID = DamageID.BURN;
-                else if (i === StatusEffectID.BLEEDING) dmgID = DamageID.BLEED;
-                else if (i === StatusEffectID.ELECTRIFIED) dmgID = DamageID.ELECTRIC;
-                else if (i === StatusEffectID.DROWNING) dmgID = DamageID.DROWNING;
-                else if (i === StatusEffectID.FREEZING) dmgID = DamageID.BURN; // Freeze damage uses BURN internally for VFX match
+                if (i === StatusEffectType.BURNING) dmgID = DamageID.BURN;
+                else if (i === StatusEffectType.BLEEDING) dmgID = DamageID.BLEED;
+                else if (i === StatusEffectType.ELECTRIFIED) dmgID = DamageID.ELECTRIC;
+                else if (i === StatusEffectType.DROWNING) dmgID = DamageID.DROWNING;
+                else if (i === StatusEffectType.FREEZING) dmgID = DamageID.BURN;
 
-                if (perk.damage > 0) {
-                    this.handlePlayerHit(session, perk.damage, null, dmgID, true);
+                this.handlePlayerHit(session, perk.dotDamage, null, dmgID, true);
 
-                    // Visuals
-                    if (i === StatusEffectID.BLEEDING) {
-                        FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.8 + Math.random(), this.playerGroup.position.z, 'blood', 3);
-                    } else if (i === StatusEffectID.BURNING) {
-                        _v1.set(this.playerGroup.position.x + (Math.random() - 0.5) * 0.5, this.playerGroup.position.y + 1.8, this.playerGroup.position.z + (Math.random() - 0.5) * 0.5);
-                        FXSystem.spawnPart(session.engine.scene, state.particles, _v1.x, _v1.y, _v1.z, 'flame', 1);
-                    }
+                // Visuals
+                if (i === StatusEffectType.BLEEDING) {
+                    FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.8 + Math.random(), this.playerGroup.position.z, 'blood', 3);
+                } else if (i === StatusEffectType.BURNING) {
+                    _v1.set(this.playerGroup.position.x + (Math.random() - 0.5) * 0.5, this.playerGroup.position.y + 1.8, this.playerGroup.position.z + (Math.random() - 0.5) * 0.5);
+                    FXSystem.spawnPart(session.engine.scene, state.particles, _v1.x, _v1.y, _v1.z, 'flame', 1);
                 }
             }
         }
@@ -227,7 +267,7 @@ export class PlayerStatsSystem implements System {
 
         if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0 || state.sectorState?.isInvincible) return;
 
-        if (state.effectDurations[StatusEffectID.REFLEX_SHIELD] > 0 || state.effectDurations[StatusEffectID.ADRENALINE_PATCH] > 0) {
+        if (state.effectDurations[StatusEffectType.REFLEX_SHIELD] > 0 || state.effectDurations[StatusEffectType.ADRENALINE_PATCH] > 0) {
             return;
         }
 
@@ -276,9 +316,17 @@ export class PlayerStatsSystem implements System {
             const perk = PERKS[effectType];
             if (perk) {
                 const duration = perk.duration || effectDuration || 0;
+                
+                // --- TIMER AUDIT (VINTERDÖD FIX) ---
+                const simDelta = session.state.lastSimDelta;
+                if (simDelta > 0.5) {
+                    console.warn(`[PlayerStatsSystem] CRITICAL: Delta looks like milliseconds (${simDelta.toFixed(4)}). Expected seconds (0.016).`);
+                }
+ 
+                console.log(`[PlayerStatsSystem] APPLY: ${perk.displayName} for ${duration}ms (ID: ${effectType}, Delta: ${simDelta.toFixed(4)})`);
                 state.effectDurations[effectType] = duration;
-                state.effectMaxDurations[effectType] = duration;
-                state.effectIntensities[effectType] = effectIntensity !== undefined ? effectIntensity : (perk.intensity || 1);
+                state.effectMaxDurations[effectType] = duration; // Sync Max Duration for UI
+                state.effectIntensities[effectType] = effectIntensity !== undefined ? effectIntensity : 1;
             }
         }
 

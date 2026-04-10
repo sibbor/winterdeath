@@ -697,6 +697,84 @@ const Generators = {
     jump_impact: (ctx: AudioContext) => createExplosion(ctx),
     heavy_smash: (ctx: AudioContext) => createExplosion(ctx),
     impact_water: (ctx: AudioContext) => createExplosion(ctx), // Reuse for splashy impact
+
+    // STATUS EFFECTS (VINTERDÖD FIX)
+    passive_gained: (ctx: AudioContext) => {
+        const duration = 0.4;
+        const length = ctx.sampleRate * duration;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        // Fast shimmering arpeggio: G5, C6, E6
+        const notes = [783.99, 1046.50, 1318.51];
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            let val = 0;
+            for (let idx = 0; idx < notes.length; idx++) {
+                const offset = idx * 0.08;
+                if (t >= offset) {
+                    const localT = t - offset;
+                    const env = Math.exp(-20 * localT);
+                    val += Math.sin(2 * Math.PI * notes[idx] * localT) * 0.1 * env;
+                }
+            }
+            data[i] = val;
+        }
+        return buffer;
+    },
+
+    buff_gained: (ctx: AudioContext) => {
+        const duration = 0.45;
+        const length = ctx.sampleRate * duration;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        // Heroic upward sweep: 220Hz -> 880Hz
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const progress = t / duration;
+            const freq = 220 + 660 * progress;
+            // Triangle wave for texturally rich swell
+            const val = Math.abs(2 * (t * freq % 1) - 1) * 2 - 1;
+            const env = progress < 0.1 ? progress / 0.1 : Math.exp(-6 * (progress - 0.1));
+            data[i] = val * 0.15 * env;
+        }
+        return buffer;
+    },
+
+    debuff_gained: (ctx: AudioContext) => {
+        const duration = 0.5;
+        const length = ctx.sampleRate * duration;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        // Dissonant downward sweep: 150Hz -> 40Hz
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const progress = t / duration;
+            const freq = 150 - 110 * progress;
+            // Sawtooth for aggressive, negative feel
+            const val = (t * freq % 1) * 2 - 1;
+            const env = Math.exp(-8 * progress);
+            data[i] = val * 0.2 * env;
+        }
+        return buffer;
+    },
+
+    steam_hiss: (ctx: AudioContext) => {
+        const duration = 0.6;
+        const length = ctx.sampleRate * duration;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        // High-frequency pressurized noise (extinguishing fire)
+        let last = 0;
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const white = (Math.random() * 2 - 1);
+            // Simple High-pass filter for the hiss
+            last = white - (last * 0.9);
+            const env = Math.exp(-8 * t);
+            data[i] = last * 0.25 * env;
+        }
+        return buffer;
+    },
 };
 
 // --- HELPER GENERATORS ---
@@ -866,8 +944,10 @@ export function registerSoundGenerators() {
     SoundBank.register(SoundID.UI_PICKUP, Generators.uiConfirm); // Placeholder for pickup
     SoundBank.register(SoundID.UI_CHIME, Generators.uiChime);
     SoundBank.register(SoundID.UI_LEVEL_UP, Generators.ui_level_up);
-    SoundBank.register(SoundID.ADRENALINE_BOOST, Generators.uiChime);
-    SoundBank.register(SoundID.STEAM_HISS, Generators.shot_flamethrower);
+    SoundBank.register(SoundID.PASSIVE_GAINED, Generators.passive_gained);
+    SoundBank.register(SoundID.BUFF_GAINED, Generators.buff_gained);
+    SoundBank.register(SoundID.DEBUFF_GAINED, Generators.debuff_gained);
+    SoundBank.register(SoundID.STEAM_HISS, Generators.steam_hiss);
 
     // Gameplay / World
     SoundBank.register(SoundID.FOOTSTEP_L, Generators.step_generic);

@@ -65,6 +65,17 @@ WEAPON_CATEGORY_KEYS[WeaponCategory.THROWABLE] = 'categories.throwable';
 WEAPON_CATEGORY_KEYS[WeaponCategory.SPECIAL] = 'categories.special';
 WEAPON_CATEGORY_KEYS[WeaponCategory.TOOL] = 'categories.tool';
 
+export const ENEMY_ATTACK_NAMES: string[] = [];
+ENEMY_ATTACK_NAMES[EnemyAttackType.HIT] = 'HIT';
+ENEMY_ATTACK_NAMES[EnemyAttackType.BITE] = 'BITE';
+ENEMY_ATTACK_NAMES[EnemyAttackType.JUMP] = 'JUMP';
+ENEMY_ATTACK_NAMES[EnemyAttackType.EXPLODE] = 'EXPLODE';
+ENEMY_ATTACK_NAMES[EnemyAttackType.SMASH] = 'SMASH';
+ENEMY_ATTACK_NAMES[EnemyAttackType.FREEZE_JUMP] = 'FREEZE_JUMP';
+ENEMY_ATTACK_NAMES[EnemyAttackType.SCREECH] = 'SCREECH';
+ENEMY_ATTACK_NAMES[EnemyAttackType.ELECTRIC_BEAM] = 'ELECTRIC_BEAM';
+ENEMY_ATTACK_NAMES[EnemyAttackType.MAGNETIC_CHAIN] = 'MAGNETIC_CHAIN';
+
 export const ATTACK_TYPE_KEYS: string[] = [];
 ATTACK_TYPE_KEYS[EnemyAttackType.HIT] = 'attacks.HIT.title';
 ATTACK_TYPE_KEYS[EnemyAttackType.BITE] = 'attacks.BITE.title';

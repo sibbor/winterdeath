@@ -95,6 +95,9 @@ export class SoundManager {
   playUiConfirm() { UiSounds.playConfirm(this._core); }
   playCollectibleChime() { UiSounds.playCollectibleChime(this._core); }
   playLevelUp() { UiSounds.playLevelUp(this._core); }
+  playPassiveGained() { this.playSound(SoundID.PASSIVE_GAINED); }
+  playBuffGained() { this.playSound(SoundID.BUFF_GAINED); }
+  playDebuffGained() { this.playSound(SoundID.DEBUFF_GAINED); }
 
   // --- GAMEPLAY DELEGATES ---
   playOpenChest() { GamePlaySounds.playOpenChest(this._core); }

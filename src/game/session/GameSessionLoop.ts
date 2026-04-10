@@ -573,6 +573,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _animStateScratch.isDead = (sf & PlayerStatusFlags.DEAD) !== 0;
                 _animStateScratch.deathStartTime = state.deathStartTime;
                 _animStateScratch.renderTime = state.renderTime;
+                _animStateScratch.currentSpeedRatio = state.currentSpeedRatio;
                 _animStateScratch.seed = 0;
 
                 monitor.begin('player_animation');
@@ -768,8 +769,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             ProjectileSystem.update(_gameContext, state.projectiles, state.fireZones, delta, simTime, renderTime);
             monitor.end('ProjectileSystem');
 
-            // 16.5 Core Systems update
-            if (statsSystem) statsSystem.update(session, delta, simTime, renderTime);
             if (movementSystem) movementSystem.update(session, delta, simTime, renderTime);
             if (combatSystem) combatSystem.update(session, delta, simTime, renderTime);
             if (lootSystem) lootSystem.update(session, delta, simTime, renderTime);
@@ -787,6 +786,24 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _triggerOptionsScratch.activeFamilyMembers = refs.activeFamilyMembers.current;
         TriggerHandler.checkTriggers(playerGroup.position, state, _triggerOptionsScratch, delta, simTime, renderTime);
         monitor.end('triggers');
+
+        // 17.5 Orchestration Fix: Finalize Stats & Sync HUD (ZERO-LATENCY)
+        // Only run if not cinematic/boss intro (matching simulation block)
+        if (!isCinematic && !isBossIntro) {
+            if (statsSystem) {
+                const oldMask = state.previousPerkMask;
+                statsSystem.update(session, delta, simTime, renderTime);
+                
+                // VINTERDÖD FIX: If any effect was added OR expired, bypass 15fps sync for instant HUD update
+                // This now catches everything from Enemies, Projectiles, Movement, and Triggers!
+                if (state.previousPerkMask !== oldMask) {
+                    const hudMesh = refs.playerMeshRef.current;
+                    const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, refs.distanceTraveledRef.current, engine.camera.threeCamera);
+                    (hudData as any).debugMode = propsRef.current.debugMode;
+                    HudStore.update(hudData);
+                }
+            }
+        }
 
         // 18. Emitters Update
         monitor.begin('active_effects');
