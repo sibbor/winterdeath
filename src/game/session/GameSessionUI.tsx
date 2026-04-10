@@ -65,10 +65,10 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
         }
 
         // VINTERDÖD FIX: Standardized click-to-lock logic.
-        if (gameProps.isRushing && !gameProps.isMobileDevice && input && !input.state.locked && !state?.isDead) {
+        if (gameProps.isGameRunning && !gameProps.isMobileDevice && input && !input.state.locked && !state?.isDead) {
             callbacks.requestPointerLock();
         }
-    }, [gameProps.isRushing, gameProps.isMobileDevice, callbacks, refs, uiState.currentLine]);
+    }, [gameProps.isGameRunning, gameProps.isMobileDevice, callbacks, refs, uiState.currentLine]);
 
     const handlePauseTouch = useCallback(() => {
         callbacks.onPauseToggle(true);
@@ -93,11 +93,11 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
             />
 
             {/* Mobile Touch Controls 
-                VINTERDÖD FIX: Removed strict refs.engineRef.current check to prevent React Ref-Render trap. 
-                Assuming engine inputs are initialized safely before isRushing is set to true. */}
-            {gameProps.isMobileDevice && gameProps.isRushing && !gameProps.isPaused && !uiState.cinematicActive && !uiState.bossIntroActive && (
+                VINTERDÖD FIX: Corrected prop name mismatch (isRushing -> isGameRunning).
+                Also ensured inputState is safely derived from either the store or the engine ref. */}
+            {gameProps.isMobileDevice && gameProps.isGameRunning && !gameProps.isPaused && !uiState.cinematicActive && !uiState.bossIntroActive && (
                 <TouchController
-                    inputState={refs.engineRef.current?.input?.state || {}}
+                    inputState={refs.engineRef.current?.input?.state || refs.stateRef.current.inputState}
                     onPause={handlePauseTouch}
                     onOpenMap={handleOpenMapTouch}
                 />

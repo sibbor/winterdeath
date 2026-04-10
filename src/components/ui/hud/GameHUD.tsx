@@ -306,7 +306,9 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                     <span ref={ammoTextRef} className={`${isMobileDevice ? 'text-2xl' : 'text-4xl'} font-bold text-white tracking-tighter font-mono`}>
                         {unlimitedAmmo ? '∞' : '--'}
                     </span>
-                    <span className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-bold text-white/30 ml-1 font-mono`}>/ {wep.magSize || 0}</span>
+                    {!wep.isEnergy && (
+                        <span className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-bold text-white/30 ml-1 font-mono`}>/ {wep.magSize || 0}</span>
+                    )}
                 </div>
             )}
 
@@ -454,7 +456,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
             // 4. Ammo Updates
             if (ammoTextRef.current) {
-                const val = data.ammo.toString();
+                const wep = WEAPONS[HudStore.getState().activeWeapon];
+                const val = wep?.isEnergy 
+                    ? Math.floor(data.ammo) + '%' 
+                    : data.ammo.toString();
+
                 if (ammoTextRef.current.innerText !== val) {
                     ammoTextRef.current.innerText = val;
                 }

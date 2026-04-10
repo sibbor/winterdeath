@@ -54,13 +54,20 @@ const _lastSpawnZ: Record<string, number> = {};
 const REQUEST_POOL: SpawnRequest[] = [];
 const DECAL_REQUEST_POOL: SpawnRequest[] = [];
 
+// VINTERDÖD FIX: Static fallback to prevent mid-combat object allocations if pool runs dry
+const _FALLBACK_REQUEST: SpawnRequest = {
+    scene: null as any,
+    x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3(),
+    hasCustomVel: false, color: undefined, scale: undefined, life: undefined, material: undefined
+};
+
 // Limits
-const MAX_INSTANCES_PER_MESH = 5000;
+const MAX_INSTANCES_PER_MESH = 10000; // Increased to handle massive horde density
 const MAX_AMBIENT_SPAWNS_PER_FRAME = 500;
 const AMBIENT_QUEUE_WARNING_LIMIT = 1500;
 const AMBIENT_QUEUE_HARD_CAP = 2000;
-const MAX_DECALS = 150;
-const MAX_PARTICLE_REQUESTS = 2200; // Buffer for essential + ambient
+const MAX_DECALS = 250;
+const MAX_PARTICLE_REQUESTS = 5000; // Expanded buffer for essential + ambient
 
 // Pre-allocate pools to prevent mid-combat GC spikes
 for (let i = 0; i < MAX_PARTICLE_REQUESTS; i++) {
@@ -127,7 +134,7 @@ const PARTICLE_TTL: Record<string, number> = {
 // VINTERDÖD FIX: Pre-allocate state pool to prevent massive GC spike on first grenade
 const _INITIAL_STATE_POOL: ParticleState[] = [];
 const _INITIAL_STATE_FREE: number[] = [];
-for (let i = 0; i < 5000; i++) {
+for (let i = 0; i < 10000; i++) {
     _INITIAL_STATE_POOL.push({
         pos: new THREE.Vector3(),
         rot: new THREE.Euler(),
@@ -156,6 +163,7 @@ export const FXSystem = {
     _essentialQueueHead: 0,
     _ambientQueueHead: 0,
     _decalQueueHead: 0,
+    _decalPoolIdx: 0,
 
     reset: () => {
         FXSystem.essentialQueue.length = 0;
@@ -247,21 +255,37 @@ export const FXSystem = {
             req.hasCustomVel = false;
             return req;
         }
-        return {
-            scene: null as any,
-            x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3(),
-            hasCustomVel: false, color: undefined, scale: undefined, life: undefined, material: undefined
-        };
+        // VINTERDÖD FIX: Return static fallback instead of creating garbage
+        return _FALLBACK_REQUEST;
     },
 
     // --- SPAWNING ---
 
     _spawnDecalImmediate: (req: SpawnRequest, decalList: THREE.Mesh[]) => {
         const geo = req.type === 'splatter' ? GEOMETRY.splatterDecal : GEOMETRY.decal;
-        const d = FXSystem.getPooledMesh(req.scene, geo, req.material || MATERIALS.bloodDecal, 'decal');
+
+        // --- CIRKULÄR BUFFER (DOD) ---
+        // Vi skriver över det äldsta decal-objektet istället för att allokera nytt eller köra shift().
+        let d: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
+
+        if (decalList.length < MAX_DECALS) {
+            d = FXSystem.getPooledMesh(req.scene, geo, req.material || MATERIALS.bloodDecal, 'decal');
+            decalList.push(d);
+        } else {
+            d = decalList[FXSystem._decalPoolIdx] as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
+            d.geometry = geo;
+            d.material = req.material || MATERIALS.bloodDecal;
+            d.visible = true;
+            if (d.parent !== req.scene) {
+                if (d.parent) d.parent.remove(d);
+                req.scene.add(d);
+            }
+        }
+
+        FXSystem._decalPoolIdx = (FXSystem._decalPoolIdx + 1) % MAX_DECALS;
+
         d.position.set(req.x, 0.2 + Math.random() * 0.05, req.z);
         d.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
-
         d.userData.targetScale = req.scale || 1.0;
 
         if (req.type === 'splatter') {
@@ -271,7 +295,6 @@ export const FXSystem = {
         }
 
         d.renderOrder = (req.material === MATERIALS.scorchDecal) ? -1 : 50;
-        decalList.push(d);
     },
 
     _spawnPartImmediate: (req: SpawnRequest, particlesList: ParticleState[]) => {
@@ -383,6 +406,12 @@ export const FXSystem = {
         if (!MATERIALS['_blackSmoke']) MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
         if (!MATERIALS['flame']) MATERIALS['flame'] = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.9, depthWrite: false });
         if (!MATERIALS['large_fire']) MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.9, depthWrite: false });
+
+        if (!_whiteGoreMaterial) {
+            _whiteGoreMaterial = (MATERIALS.gore as THREE.MeshStandardMaterial).clone();
+            (_whiteGoreMaterial as any).color.setHex(0xffffff);
+            _whiteGoreMaterial.userData = { isSharedAsset: true };
+        }
 
         const types = Object.keys(INSTANCED_TYPES);
         const dummyMatrix = new THREE.Matrix4();
@@ -667,13 +696,7 @@ export const FXSystem = {
         }
 
         if (decalList.length > MAX_DECALS) {
-            console.warn(`[FXSystem] MAX_DECALS (${MAX_DECALS}) exceeded. Earliest decals will be force-recycled.`);
-        }
-
-        // VINTERDÖD FIX: Use shift() instead of swap-and-pop to correctly remove the OLDEST decals.
-        while (decalList.length > MAX_DECALS) {
-            const oldDecal = decalList.shift();
-            if (oldDecal) FXSystem.recycleMesh(oldDecal as any, 'decal');
+            console.warn(`[FXSystem] MAX_DECALS (${MAX_DECALS}) exceeded. This should not happen with circular buffer.`);
         }
     },
 
@@ -727,7 +750,7 @@ export const FXSystem = {
             else if (type === 'spark' || type === 'smoke' || type === 'campfire_spark' || type === 'campfire_smoke' || type === 'enemy_effect_spark') {
                 mat = (type === 'enemy_effect_spark') ? MATERIALS.enemy_effect_spark : MATERIALS.bullet;
             }
-            else if (type === 'debris') mat = MATERIALS.stone;
+            else if (type === 'debris' || type === 'scrap') mat = MATERIALS.stone;
             else if (type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
             else if (type === 'flash' || type === 'electric_flash') {
                 geo = (type === 'flash') ? GEOMETRY.sphere : GEOMETRY.shard;
@@ -746,13 +769,12 @@ export const FXSystem = {
             else if (type === 'magnetic_sparks') { geo = GEOMETRY.particle; mat = MATERIALS.bullet; }
             else if (type === 'gore') {
                 geo = GEOMETRY.gore;
-                if (!_whiteGoreMaterial) {
-                    _whiteGoreMaterial = MATERIALS.gore.clone();
-                    (_whiteGoreMaterial as any).color.setHex(0xffffff);
-                    _whiteGoreMaterial.userData = { isSharedAsset: true };
-                }
-                mat = _whiteGoreMaterial;
+                // VINTERDÖD FIX: Lazy clone removed. Relies entirely on AssetPreloader to pre-cache the material.
+                mat = _whiteGoreMaterial as THREE.Material;
             }
+
+            // VINTERDÖD DOD FIX: Material fallback to prevent crash if AssetPreloader hasn't warmed up gore yet
+            if (!mat) mat = MATERIALS.bullet;
 
             const imesh = new THREE.InstancedMesh(geo, mat, MAX_INSTANCES_PER_MESH);
             imesh.frustumCulled = false;

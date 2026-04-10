@@ -58,16 +58,22 @@ export const PlayerAnimator = {
             positionY = -0.8 * progress; // Sink into snow/ground
         }
 
-        // Dodging animation
+        // Dodging animation (Athletic Leap/Dash pose)
         else if (animState.isDodging) {
             const progress = Math.min(1.0, Math.max(0.0, (renderTime - animState.dodgeStartTime) / 300));
-            rotationX = progress * Math.PI * 2;
-            const squashFactor = Math.sin(progress * Math.PI);
-            scaleY = 1.0 - (squashFactor * 0.4);
-            scaleXZ = 1.0 + (squashFactor * 0.4);
             
-            // --- VINTERDÖD FIX: Jump curve (25cm peak) ---
-            positionY = Math.sin(progress * Math.PI) * 0.25;
+            // --- VINTERDÖD STYLE: Athletic Leap ---
+            // Lean heavily forward at start, then tuck slightly
+            rotationX = 0.6 * (1.0 - progress * 0.5);
+            
+            const archFactor = Math.sin(progress * Math.PI);
+            
+            // Stretch during takeoff/landing
+            scaleY = 1.0 + (archFactor * 0.2); 
+            scaleXZ = 1.0 - (archFactor * 0.1);
+            
+            // Height curve (45cm peak for "Proper Dodge" feel)
+            positionY = archFactor * 0.45;
         }
 
         // Swimming Animation: Heavy lean, deep bobbing

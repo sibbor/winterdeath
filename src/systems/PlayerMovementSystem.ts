@@ -76,6 +76,7 @@ export class PlayerMovementSystem implements System {
             state,
             delta,
             simTime,
+            renderTime,
             disableInput,
             session,
             currentSpeed
@@ -190,6 +191,7 @@ export class PlayerMovementSystem implements System {
         state: any,
         delta: number,
         simTime: number,
+        renderTime: number,
         disableInput: boolean,
         session: GameSessionLogic,
         currentSpeed: number
@@ -198,47 +200,49 @@ export class PlayerMovementSystem implements System {
 
         // --- 1. Ability Triggering (Rush & Dodge) ---
         if (!input.space) {
-            if (state.isRushing) {
-                state.isRushing = false;
-                state.lastRushEndTime = simTime;
-            }
-
             // Check for Dodge trigger on release (Short Press)
-            if (state.spaceDepressed && !state.isDodging && !state.isRushing) {
+            if (state.spaceDepressed) {
                 const pressDuration = simTime - state.spacePressTime;
-                if (pressDuration < 150) {
+                
+                // VINTERDÖD FIX: Increased window (150->200ms) and added '!state.isDodging' check
+                if (!state.isRushing && !state.isDodging && pressDuration < 200) {
                     if (stats[PlayerStatID.STAMINA] >= 15) {
                         stats[PlayerStatID.STAMINA] -= 15;
                         state.lastStaminaUseTime = simTime;
                         state.isDodging = true;
-                        state.dodgeStartTime = simTime;
-                        state.dodgeDir.set(0, 0, 0);
+                        state.dodgeStartTime = renderTime; // FIX: Sync with renderTime for animator
+                        state.dodgeDir.set(0, 0, 0); // Reset to recalc next frame
                     }
                 }
             }
 
+            if (state.isRushing) {
+                state.isRushing = false;
+                state.lastRushEndTime = simTime;
+                // VINTERDÖD FIX: Clear flag immediately for responsive animation
+                state.statusFlags &= ~PlayerStatusFlags.RUSHING;
+            }
+
             state.spaceDepressed = false;
             state.rushCostPaid = false;
-        }
+        } else {
+            // Initiation
+            if (!state.spaceDepressed && !disableInput) {
+                state.spaceDepressed = true;
+                state.spacePressTime = simTime;
+                state.rushCostPaid = false;
+            }
 
-        // Initiation
-        if (input.space && !state.spaceDepressed && !disableInput) {
-            state.spaceDepressed = true;
-            state.spacePressTime = simTime;
-            state.rushCostPaid = false;
-        }
-
-        // Handle Rush (Hold Space)
-        if (state.spaceDepressed && !state.isDodging && !state.isRushing) {
-            if (simTime - state.spacePressTime >= 150) {
-                if (stats[PlayerStatID.STAMINA] >= 10) {
-                    state.isRushing = true;
-                    stats[PlayerStatID.STAMINA] -= 2;
-                    state.rushCostPaid = true;
-                    state.lastStaminaUseTime = simTime;
-
-                    // --- BUFF: Trigger Shield on Initiation ---
-                    this.checkReflexShield(session, simTime);
+            // Handle Rush Elevation (Hold Space)
+            if (state.spaceDepressed && !state.isDodging && !state.isRushing) {
+                if (simTime - state.spacePressTime >= 150) {
+                    if (stats[PlayerStatID.STAMINA] >= 10) {
+                        state.isRushing = true;
+                        // stats[PlayerStatID.STAMINA] -= 2; // Immediate cost removed for ramp-up balance
+                        state.rushCostPaid = true;
+                        state.lastStaminaUseTime = simTime;
+                        this.checkReflexShield(session, simTime);
+                    }
                 }
             }
         }
@@ -334,12 +338,9 @@ export class PlayerMovementSystem implements System {
             } else if (stats[PlayerStatID.STAMINA] >= stats[PlayerStatID.MAX_STAMINA] * 0.5) {
                 state.statusFlags &= ~PlayerStatusFlags.EXHAUSTED;
             }
-        } else {
             // --- PROGRESSIVE RAMP-DOWN (2.0s) ---
             state.rushFactor = Math.max(0, state.rushFactor - rushRampSpeed);
-            if (state.rushFactor === 0) {
-                state.statusFlags &= ~PlayerStatusFlags.RUSHING;
-            }
+            // Note: RUSHING flag is now cleared immediately in input handling for animation responsiveness.
         }
 
         // Apply Speed Multiplier based on Rush Factor (1.0x to 2.0x)
@@ -398,8 +399,12 @@ export class PlayerMovementSystem implements System {
                 _v1.copy(state.dodgeDir).multiplyScalar(dodgeSpeed * delta);
                 this.performMove(playerGroup, _v1, state, session, simTime, delta);
                 isMovingVal = true;
+                
+                // UNIFIED STATE SYNC
+                state.statusFlags |= PlayerStatusFlags.DODGING;
             } else {
                 state.isDodging = false;
+                state.statusFlags &= ~PlayerStatusFlags.DODGING;
                 state.dodgeSmokeSpawned = false;
                 state.dodgeDir.set(0, 0, 0);
                 state.lastDodgeEndTime = simTime;
@@ -478,7 +483,8 @@ export class PlayerMovementSystem implements System {
                             state.lastStepRight,
                             state.isRushing,
                             inWater,
-                            isSwimming
+                            isSwimming,
+                            session.state.collisionGrid.getGroundMaterial(playerGroup.position.x, playerGroup.position.z)
                         );
 
                         let noiseType = NoiseType.PLAYER_WALK;

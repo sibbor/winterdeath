@@ -54,6 +54,7 @@ export interface WeaponStats {
   fireRate?: number;     // ms between shots
   bulletSpeed?: number;  // Travel speed
   magSize?: number;
+  isEnergy?: boolean;    // New: Percentage-based charge (0-100)
   reloadTime?: number;   // ms
   range: number;         // Bullet range OR Max throw distance
   radius?: number;       // Explosion/AoE radius
@@ -143,13 +144,13 @@ WEAPONS[DamageID.MINIGUN] = {
 };
 WEAPONS[DamageID.FLAMETHROWER] = {
   name: DamageID.FLAMETHROWER, displayName: 'weapons.flamethrower', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.CONTINUOUS,
-  damage: 6, fireRate: 35, range: 10, spread: 0.25, magSize: 500,
+  damage: 6, fireRate: 35, range: 10, spread: 0.25, magSize: 100, isEnergy: true,
   icon: PNG_PATH + 'flamethrower.png', iconIsPng: true,
   impactType: EnemyDeathState.BURNED, statusEffect: { type: StatusEffectType.BURNING, duration: 4.5, damagePerTick: 10 }
 };
 WEAPONS[DamageID.ARC_CANNON] = {
   name: DamageID.ARC_CANNON, displayName: 'weapons.arc_cannon', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.CONTINUOUS,
-  damage: 14, fireRate: 90, range: 15, spread: 0.05, magSize: 500,
+  damage: 14, fireRate: 90, range: 15, spread: 0.05, magSize: 100, isEnergy: true,
   icon: PNG_PATH + 'arc_cannon.png', iconIsPng: true,
   piercing: true, pierceDecay: 0.5, impactType: EnemyDeathState.ELECTROCUTED, statusEffect: { type: StatusEffectType.ELECTRIFIED, duration: 2.5 }
 };

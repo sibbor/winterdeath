@@ -289,13 +289,17 @@ const Generators = {
         const length = ctx.sampleRate * 0.15;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
+
+        let lp = 0;
+        const alpha = 0.25;
+
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            // Generic grit/dirt
-            const noise = (Math.random() * 2 - 1) * 0.1 * Math.exp(-30 * t);
-            // Solid thud
-            const thud = Math.sin(2 * Math.PI * 120 * t) * 0.2 * Math.exp(-20 * t);
-            data[i] = noise + thud;
+            const noise = (Math.random() * 2 - 1) * 0.15;
+            
+            // Low-pass 'thud'
+            lp = lp + alpha * (noise - lp);
+            data[i] = lp * Math.exp(-25 * t);
         }
         return buffer;
     },
@@ -303,15 +307,24 @@ const Generators = {
         const length = ctx.sampleRate * 0.25;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
+
+        let lp = 0;
+        let hp = 0;
+        const lpAlpha = 0.1;
+
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            // High frequency crunch noise (More power for crunch)
-            const noise = (Math.random() * 2 - 1) * 0.2 * Math.exp(-15 * t);
-            // Squeak component for snow
-            const squeak = Math.sin(2 * Math.PI * 400 * t) * 0.05 * Math.exp(-10 * t);
-            // Lower thud (Reduced)
-            const thud = Math.sin(2 * Math.PI * 80 * t) * 0.05 * Math.exp(-20 * t);
-            data[i] = noise + squeak + thud;
+            const noise = (Math.random() * 2 - 1);
+            
+            // High-pass component (Crunch)
+            const currentHP = noise - lp;
+            const crunch = currentHP * 0.12 * Math.exp(-25 * t);
+            
+            // Low-pass component (Thud)
+            lp = lp + lpAlpha * (noise - lp);
+            const thud = lp * 0.08 * Math.exp(-15 * t);
+
+            data[i] = crunch + thud;
         }
         return buffer;
     },
@@ -319,11 +332,20 @@ const Generators = {
         const length = ctx.sampleRate * 0.15;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
+        
+        let lp = 0;
+        const alpha = 0.5; // Brighter for metal
+
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            const resonance = Math.sin(2 * Math.PI * 800 * t) * 0.08 * Math.exp(-40 * t);
+            const noise = (Math.random() * 2 - 1);
+            
+            // High-freq metallic ring (Resonant noise)
+            lp = lp + alpha * (noise - lp);
+            const ring = (noise - lp) * 0.1 * Math.exp(-35 * t);
             const clank = (Math.random() * 2 - 1) * 0.05 * Math.exp(-60 * t);
-            data[i] = resonance + clank;
+            
+            data[i] = ring + clank;
         }
         return buffer;
     },
@@ -331,10 +353,19 @@ const Generators = {
         const length = ctx.sampleRate * 0.2;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
+
+        let lp = 0;
+        const alpha = 0.1; // Deep low-pass for hollow wood
+
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            const hollow = Math.sin(2 * Math.PI * 250 * t) * 0.12 * Math.exp(-20 * t);
+            const noise = (Math.random() * 2 - 1);
+            
+            // Hollow thud (Low-pass)
+            lp = lp + alpha * (noise - lp);
+            const hollow = lp * 0.15 * Math.exp(-20 * t);
             const knock = (Math.random() * 2 - 1) * 0.03 * Math.exp(-40 * t);
+            
             data[i] = hollow + knock;
         }
         return buffer;
@@ -343,12 +374,20 @@ const Generators = {
         const length = ctx.sampleRate * 0.3;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
+
+        let lp = 0;
+        const alpha = 0.05; // Very deep for liquid
+
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
+            const noise = (Math.random() * 2 - 1);
+            
             // Splash noise
-            const splash = (Math.random() * 2 - 1) * 0.2 * Math.exp(-15 * t);
+            const splash = (noise * 0.15) * Math.exp(-15 * t);
             // Low liquid thud
-            const thud = Math.sin(2 * Math.PI * 80 * t) * 0.15 * Math.exp(-10 * t);
+            lp = lp + alpha * (noise - lp);
+            const thud = lp * 0.2 * Math.exp(-10 * t);
+            
             data[i] = splash + thud;
         }
         return buffer;
@@ -357,12 +396,21 @@ const Generators = {
         const length = ctx.sampleRate * 0.2;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
+
+        let lp = 0;
+        const alpha = 0.15;
+
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            // Mycket textur/kras från småsten
-            const crunch = (Math.random() * 2 - 1) * 0.15 * Math.exp(-30 * t);
-            // Mjuk, lågfrekvent duns för jorden
-            const thud = Math.sin(2 * Math.PI * 70 * t) * 0.1 * Math.exp(-15 * t);
+            const noise = (Math.random() * 2 - 1);
+            
+            // Crunch (unfiltered)
+            const crunch = noise * 0.1 * Math.exp(-35 * t);
+            
+            // Thud (low-pass)
+            lp = lp + alpha * (noise - lp);
+            const thud = lp * 0.1 * Math.exp(-15 * t);
+
             data[i] = crunch + thud;
         }
         return buffer;
@@ -371,12 +419,21 @@ const Generators = {
         const length = ctx.sampleRate * 0.25;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
+
+        let lp = 0;
+        const alpha = 0.3;
+
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            // Mycket textur/kras från småsten
-            const crunch = (Math.random() * 2 - 1) * 0.15 * Math.exp(-30 * t);
-            // Mjuk, lågfrekvent duns för jorden
-            const thud = Math.sin(2 * Math.PI * 70 * t) * 0.1 * Math.exp(-15 * t);
+            const noise = (Math.random() * 2 - 1);
+            
+            // Sharp crunch (high freq bias)
+            const crunch = (noise * 0.15) * Math.exp(-40 * t);
+            
+            // Hollow thud
+            lp = lp + alpha * (noise - lp);
+            const thud = lp * 0.05 * Math.exp(-20 * t);
+
             data[i] = crunch + thud;
         }
         return buffer;
@@ -952,6 +1009,12 @@ export function registerSoundGenerators() {
     // Gameplay / World
     SoundBank.register(SoundID.FOOTSTEP_L, Generators.step_generic);
     SoundBank.register(SoundID.FOOTSTEP_R, Generators.step_generic);
+    SoundBank.register(SoundID.FOOTSTEP_SNOW, Generators.step_snow);
+    SoundBank.register(SoundID.FOOTSTEP_METAL, Generators.step_metal);
+    SoundBank.register(SoundID.FOOTSTEP_WOOD, Generators.step_wood);
+    SoundBank.register(SoundID.FOOTSTEP_WATER, Generators.step_water);
+    SoundBank.register(SoundID.FOOTSTEP_DIRT, Generators.step_dirt);
+    SoundBank.register(SoundID.FOOTSTEP_GRAVEL, Generators.step_gravel);
     SoundBank.register(SoundID.IMPACT_FLESH, Generators.impact_flesh);
     SoundBank.register(SoundID.IMPACT_METAL, Generators.impact_metal);
     SoundBank.register(SoundID.IMPACT_WOOD, Generators.impact_wood);
@@ -1068,14 +1131,20 @@ export const GamePlaySounds = {
     },
     playHeartbeat: (core: SoundCore) => SoundBank.play(core, SoundID.UI_CHIME, 0.8), // Placeholder
 
-    playFootstep: (core: SoundCore, material: MATERIAL_TYPE, isRight: boolean) => {
+    playFootstep: (core: SoundCore, material: MATERIAL_TYPE, isRight: boolean, isRushing: boolean = false) => {
         const id = FOOTSTEP_MAP[material] || SoundID.FOOTSTEP_L;
 
         // VINTERDÖD: Natural GAIT logic - subtle pitch variation between feet
-        // Right foot (+0.02), Left foot (-0.02)
-        const gaitPitch = isRight ? 0.02 : -0.02;
-        const pitch = (0.9 + Math.random() * 0.2) + gaitPitch; 
-        const vol = 0.4 + Math.random() * 0.1; 
+        const gaitPitch = isRight ? 0.03 : -0.03;
+        
+        // Lower pitch and more variation for Rush to feel "heavy"
+        const basePitch = isRushing ? 0.8 : 1.0;
+        const pitchRange = isRushing ? 0.15 : 0.1;
+        const pitch = (basePitch + (Math.random() - 0.5) * pitchRange) + gaitPitch; 
+        
+        // Lower volume overall as per user feedback (gritty/minimal aesthetic)
+        const baseVol = isRushing ? 0.15 : 0.2;
+        const vol = (baseVol + Math.random() * 0.05) * (isRushing ? 1.2 : 1.0); 
 
         SoundBank.play(core, id, vol, pitch, false, true);
     },

@@ -289,6 +289,20 @@ export const MATERIALS = {
         metalness: 0.8,
         roughness: 0.2
     }),
+    arc_cannon_bolt: new THREE.LineBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    }),
+    arc_cannon_core: new THREE.LineBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    }),
 
     // ---- VEHICLES ----
     vehicleWindow: new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.7 }),

@@ -239,4 +239,5 @@ export interface RuntimeState extends PlayerStats {
     lastSimDelta: number;    // Clamped/frozen delta used for this frame's simulation
     lastRenderDelta: number;   // Raw/unclamped delta used for this frame's visuals
     previousPerkMask: number; // VINTERDÖD: Zero-GC bitmask for status effect transitions
+    inputState: any; // VINTERDÖD: Stable proxy for InputManager.state to prevent React Ref-Render traps
 }

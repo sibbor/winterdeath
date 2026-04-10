@@ -23,15 +23,15 @@ import { SoundID } from '../utils/audio/AudioTypes';
 // For footstep sounds
 export const FOOTSTEP_MAP: Partial<Record<MATERIAL_TYPE, SoundID>> = {
     [MaterialType.GENERIC]: SoundID.FOOTSTEP_L,
-    [MaterialType.SNOW]: SoundID.FOOTSTEP_L,
-    [MaterialType.WOOD]: SoundID.FOOTSTEP_L,
-    [MaterialType.METAL]: SoundID.FOOTSTEP_L,
+    [MaterialType.SNOW]: SoundID.FOOTSTEP_SNOW,
+    [MaterialType.WOOD]: SoundID.FOOTSTEP_WOOD,
+    [MaterialType.METAL]: SoundID.FOOTSTEP_METAL,
     [MaterialType.CONCRETE]: SoundID.FOOTSTEP_L,
     [MaterialType.STONE]: SoundID.FOOTSTEP_L,
-    [MaterialType.DIRT]: SoundID.FOOTSTEP_L,
-    [MaterialType.GRAVEL]: SoundID.FOOTSTEP_L,
+    [MaterialType.DIRT]: SoundID.FOOTSTEP_DIRT,
+    [MaterialType.GRAVEL]: SoundID.FOOTSTEP_GRAVEL,
     [MaterialType.ASPHALT]: SoundID.FOOTSTEP_L,
-    [MaterialType.WATER]: SoundID.FOOTSTEP_L
+    [MaterialType.WATER]: SoundID.FOOTSTEP_WATER
 };
 
 // For impact sounds

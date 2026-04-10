@@ -22,6 +22,7 @@ export interface FireZone {
     radiusSq: number;
     life: number;
     _lastDamageTime?: number;
+    audioPoolIdx: number;
 }
 
 export interface GameContext {
@@ -53,7 +54,7 @@ export interface Projectile {
     type: ProjectileType;
     weapon: DamageID;
 
-    // --- Fysik & Vektorer ---
+    // --- Physics & Vectors ---
     vel: THREE.Vector3;
     origin: THREE.Vector3;
     speed: number;
@@ -67,8 +68,8 @@ export interface Projectile {
     piercing: boolean;
     pierceDecay: number;
     impactType: EnemyDeathState;
-    highImpactDistSq: number;       // Avstånd från origin i kvadrat. 0 = inaktiv.
-    highImpactDamageFactor: number; // Procent av baseDamage. 0 = inaktiv.
+    highImpactDistSq: number;
+    highImpactDamageFactor: number;
 
     maxRadius?: number;
     marker?: THREE.Mesh;
@@ -98,7 +99,6 @@ function manualSortNearbyEnemies(projectilePos: THREE.Vector3, enemies: Enemy[])
     const len = enemies.length;
     if (len <= 1) return;
 
-    // 1. Cache distances to the projectile once (Zero-GC)
     for (let i = 0; i < len; i++) {
         const ePos = enemies[i].mesh.position;
         const dx = ePos.x - projectilePos.x;
@@ -107,7 +107,6 @@ function manualSortNearbyEnemies(projectilePos: THREE.Vector3, enemies: Enemy[])
         _enemyDistBuffer[i] = dx * dx + dy * dy + dz * dz;
     }
 
-    // 2. Insertion Sort (Stable, O(n^2) but n is extremely small here)
     for (let i = 1; i < len; i++) {
         const enemy = enemies[i];
         const dist = _enemyDistBuffer[i];
@@ -199,14 +198,12 @@ export const ProjectileSystem = {
         p.origin.copy(origin);
         p.life = 1.5;
 
-        // VINTERDÖD DOD FLATTENING
         p.baseDamage = data.damage;
         p.damage = damage !== undefined ? damage : data.damage;
         p.piercing = data.piercing || false;
         p.pierceDecay = data.pierceDecay || 1.0;
         p.impactType = data.impactType;
 
-        // Data-Driven High Impact Rules
         p.highImpactDistSq = (weapon === DamageID.SHOTGUN) ? 144.0 : 0;
         p.highImpactDamageFactor = (weapon === DamageID.REVOLVER) ? 0.5 : 0;
 
@@ -283,6 +280,12 @@ export const ProjectileSystem = {
             case DamageID.FLAMETHROWER: {
                 if (Math.random() < 0.3) {
                     WeaponFX.createMuzzleFlash(origin, direction, false);
+                }
+
+                // Dynamic Light for the Flamethrower
+                if (Math.random() < 0.4) {
+                    _v4.copy(origin).addScaledVector(direction, 2.0);
+                    WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0xff6600, 2.5, 15.0, 0.1);
                 }
 
                 const count = 4;
@@ -423,13 +426,17 @@ export const ProjectileSystem = {
                         }
                     }
 
-                    // --- VINTERDÖD FIX: Sammanhållen blixt (Chain Lightning) med avtagande skada ---
                     let currentDamage = damage;
                     const damageDecay = 0.80;
                     const stunDur = data.statusEffect?.duration || 2.5;
 
                     _v3.copy(origin);
                     const hitLen = _arcCannonHitList.length;
+
+                    // Light up the origin of the arc-cannon slightly
+                    if (Math.random() > 0.5) {
+                        WeaponFX.spawnDynamicLight(ctx.scene, origin, 0x00ffff, 1.5, 10.0, 0.1);
+                    }
 
                     for (let i = 0; i < hitLen; i++) {
                         const e = _arcCannonHitList[i];
@@ -438,12 +445,20 @@ export const ProjectileSystem = {
                         _v1.y += (e.originalScale || 1.0) * 1.0;
 
                         const isMain = (i === 0);
-                        WeaponFX.createLightning(_v3, _v1, isMain);
+
+                        // New optimized lightning call
+                        WeaponFX.drawArcLightning(ctx.scene, _v3, _v1, isMain);
 
                         ctx.applyDamage(e, currentDamage, DamageID.ARC_CANNON);
 
                         e.statusFlags |= EnemyFlags.STUNNED;
                         e.stunDuration = stunDur;
+
+                        // Spark effect on enemy bodies!
+                        if (Math.random() < 0.4) {
+                            WeaponFX.createStunSparks(_v1);
+                            WeaponFX.spawnDynamicLight(ctx.scene, _v1, 0x00ffff, 1.0, 8.0, 0.1);
+                        }
 
                         _v3.copy(_v1);
                         currentDamage *= damageDecay;
@@ -456,7 +471,7 @@ export const ProjectileSystem = {
 
                 } else {
                     _v1.copy(origin).addScaledVector(direction, range);
-                    WeaponFX.createLightning(origin, _v1, true);
+                    WeaponFX.drawArcLightning(ctx.scene, origin, _v1, true);
 
                     if (simTime - _lastArcCannonSoundTime > 150) {
                         soundManager.playArcCannonZap();
@@ -471,6 +486,9 @@ export const ProjectileSystem = {
     update: (ctx: GameContext, projectiles: Projectile[], fireZones: FireZone[], delta: number, simTime: number, renderTime: number) => {
         ctx.simTime = simTime;
         ctx.renderTime = renderTime;
+
+        // VINTERDÖD DOD FIX: Always clear out dead FX nodes
+        WeaponFX.updateFX(delta);
 
         const waterSystem = WinterEngine.getInstance()?.water;
 
@@ -494,6 +512,10 @@ export const ProjectileSystem = {
 
                 if ((frameCounter + i) % 2 === 0) {
                     WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, delta * 2, ctx);
+                }
+
+                if (fz.audioPoolIdx !== -1) {
+                    soundManager.updateFireLoop(fz.audioPoolIdx, fz.mesh.position.x, fz.mesh.position.z, fz.life / 6.0);
                 }
 
                 if (simTime - (fz._lastDamageTime || 0) > 500) {
@@ -520,6 +542,10 @@ export const ProjectileSystem = {
                 }
 
                 if (fz.life <= 0) {
+                    if (fz.audioPoolIdx !== -1) {
+                        soundManager.stopFireLoop(fz.audioPoolIdx);
+                        fz.audioPoolIdx = -1;
+                    }
                     ctx.scene.remove(fz.mesh);
                     fireZones[i] = fireZones[fireZones.length - 1];
                     fireZones.pop();
@@ -776,7 +802,13 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
 
                     const mRad = p.maxRadius || 10;
                     if (!fz) {
-                        fz = { mesh: new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone), radius: mRad, radiusSq: mRad * mRad, life: 6.0 };
+                        fz = {
+                            mesh: new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone),
+                            radius: mRad,
+                            radiusSq: mRad * mRad,
+                            life: 6.0,
+                            audioPoolIdx: -1
+                        };
                         FIREZONE_POOL.push(fz);
                     }
 
@@ -789,6 +821,9 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
                     fz.mesh.scale.setScalar(fz.radius / 3.5);
 
                     if (fz.mesh.parent !== ctx.scene) ctx.scene.add(fz.mesh);
+
+                    fz.audioPoolIdx = soundManager.startFireLoop(ctx.fireZones.length, _v1.x, _v1.z);
+
                     ctx.fireZones.push(fz);
 
                     const direct = ctx.collisionGrid.getNearbyEnemies(_v1, mRad);

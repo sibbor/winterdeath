@@ -540,6 +540,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         monitor.begin('session_update');
         if (playerGroup) {
             session.playerPos = playerGroup.position;
+            // VINTERDÖD DOD FIX: Sync player pos to sound manager for positional culling/attenuation
+            soundManager.setPlayerPosReference(playerGroup.position);
         }
 
         session.update(delta, propsRef.current.mapId || 0);
@@ -559,15 +561,16 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
             if (refs.playerMeshRef.current) {
                 const sb = state.statsBuffer;
-
+                
+                const sf = state.statusFlags;
                 _animStateScratch.staminaRatio = sb[PlayerStatID.STAMINA] / sb[PlayerStatID.MAX_STAMINA];
-                _animStateScratch.isMoving = isMoving;
+                _animStateScratch.isMoving = state.isMoving;
                 _animStateScratch.isRushing = (sf & PlayerStatusFlags.RUSHING) !== 0;
                 _animStateScratch.isDodging = (sf & PlayerStatusFlags.DODGING) !== 0;
                 _animStateScratch.dodgeStartTime = state.dodgeStartTime;
-                _animStateScratch.isSpeaking = state.speakBounce > 0 || simTime < state.speakingUntil; // VINTERDÖD FIX
-                _animStateScratch.isThinking = simTime < state.thinkingUntil; // VINTERDÖD FIX
-                _animStateScratch.isIdleLong = (simTime - state.lastActionTime > 20000); // VINTERDÖD FIX
+                _animStateScratch.isSpeaking = state.speakBounce > 0 || simTime < state.speakingUntil;
+                _animStateScratch.isThinking = simTime < state.thinkingUntil;
+                _animStateScratch.isIdleLong = (simTime - state.lastActionTime > 20000);
                 _animStateScratch.isWading = state.isWading;
                 _animStateScratch.isSwimming = state.isSwimming;
                 _animStateScratch.isDead = (sf & PlayerStatusFlags.DEAD) !== 0;

@@ -113,6 +113,13 @@ export const AssetPreloader = {
 
                 if (soundManager) {
                     try {
+                        // VINTERDÖD FIX: Pre-render procedural buffers before sector starts
+                        soundManager.preRenderProceduralSounds();
+                        
+                        // VINTERDÖD FIX: Pre-cache FX materials (like gore clones) before shared pool is populated.
+                        // Using _dummyScene is safe and prevents the null-property access crash.
+                        FXSystem.preload(_dummyScene);
+                        
                         await SoundBank.preloadAllAsync(soundManager.core, yieldToMain || _NOOP_ASYNC);
                     } catch (e) {
                         console.error("[AssetPreloader] SoundBank preloading failed:", e);

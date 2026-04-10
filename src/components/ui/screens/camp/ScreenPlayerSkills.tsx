@@ -4,7 +4,7 @@ import { t } from '../../../../utils/i18n';
 import { soundManager } from '../../../../utils/audio/SoundManager';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { LEVEL_CAP, PLAYER_BASE_SPEED } from '../../../../content/constants';
-import { useOrientation } from '../../hooks/useOrientation';
+import { useOrientation } from '../../../../hooks/useOrientation';
 
 const SKILLS_CONFIG = [
     { statId: PlayerStatID.MAX_HP,      labelKey: 'skills.vitality',  descKey: 'skills.vitality_desc',  cost: 1, value: 20,  base: 100  },

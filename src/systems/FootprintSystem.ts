@@ -86,7 +86,8 @@ class FootprintSystemClass {
         isRight: boolean,
         isRushing: boolean,
         inWater: boolean,
-        isSwimming: boolean
+        isSwimming: boolean,
+        groundMaterial: number = 0
     ) {
         if (!this.enabled || !this.scene || !this.instancedMesh) return;
 
@@ -103,7 +104,7 @@ class FootprintSystemClass {
                 );
                 session.engine.water?.spawnRipple(position.x, position.z, session.state.simTime, 4.0);
             } else {
-                soundManager.playFootstep(MaterialType.WATER, isRight);
+                soundManager.playFootstep(MaterialType.WATER, isRight, isRushing);
                 session.engine.water?.spawnRipple(position.x, position.z, session.state.simTime, 1.5);
             }
             return;
@@ -149,7 +150,10 @@ class FootprintSystemClass {
         this.index = (this.index + 1) % MAX_FOOTPRINTS;
 
         // 3. Audio & Particle Feedback
-        soundManager.playFootstep(MaterialType.SNOW, isRight);
+        let playMaterial: number = groundMaterial || MaterialType.SNOW;
+        if (inWater || isSwimming) playMaterial = MaterialType.WATER;
+
+        soundManager.playFootstep(playMaterial, isRight, isRushing);
 
         if (isRushing) {
             FXSystem.spawnPart(

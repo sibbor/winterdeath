@@ -1,7 +1,8 @@
+import * as THREE from 'three';
 import { SoundCore } from './SoundCore';
 import { SoundBank } from './SoundBank';
 import { UiSounds, GamePlaySounds, WeaponSounds, EnemySounds, BossSounds, VoiceSounds, createMusicBuffer } from './SoundLib';
-import { MATERIAL_TYPE, MaterialType } from '../../content/environment';
+import { MaterialType } from '../../content/environment';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { PLAYER_CHARACTER, FAMILY_MEMBERS } from '../../content/constants';
 import { SoundID, MusicID } from './AudioTypes';
@@ -10,6 +11,14 @@ import { SoundID, MusicID } from './AudioTypes';
  * SoundManager serves as the high-level API for the game's audio systems.
  * It manages persistent sounds (loops), music transitions, and global volume.
  */
+
+interface FirePoolNode {
+  source: AudioBufferSourceNode | null;
+  gain: GainNode | null;
+  id: number; // Associated FireZone ID
+  active: boolean;
+}
+
 export class SoundManager {
   public get core(): SoundCore { return this._core; }
   private _core: SoundCore = new SoundCore();
@@ -38,11 +47,22 @@ export class SoundManager {
   private musicGain: GainNode | null = null;
   private currentMusicId: MusicID | null = null;
 
+  // Fire Loop Pool (DOD)
+  private firePool: FirePoolNode[] = [];
+  private readonly MAX_FIRE_LOOPS = 8;
+
   // GLOBAL SHARED NOISE BUFFER
   private sharedNoiseBuffer: AudioBuffer | null = null;
+  private zapBuffer: AudioBuffer | null = null;
+  private discoveryBuffer: AudioBuffer | null = null;
+
+  private playerPosScratch: THREE.Vector3 | null = null;
 
   constructor() {
-    // registerSoundGenerators(); // Removed in favor of SoundBank registry
+    // Pre-allocate Fire Loop Pool (Zero-GC during gameplay)
+    for (let i = 0; i < this.MAX_FIRE_LOOPS; i++) {
+      this.firePool.push({ source: null, gain: null, id: -1, active: false });
+    }
   }
 
   resume() { this._core.resume(); }
@@ -82,6 +102,49 @@ export class SoundManager {
   }
 
   /**
+   * VINTERDÖD DOD FIX: Pre-renders expensive procedural sounds once.
+   * Eliminates mid-combat node creation overhead for Arc-Cannon and UI.
+   */
+  preRenderProceduralSounds() {
+    const ctx = this._core.ctx;
+
+    // 1. Arc-Cannon Zap Buffer
+    const zapLen = ctx.sampleRate * 0.3;
+    const zBuf = ctx.createBuffer(1, zapLen, ctx.sampleRate);
+    const zData = zBuf.getChannelData(0);
+    const noise = this.getNoiseBuffer().getChannelData(0);
+
+    for (let i = 0; i < zapLen; i++) {
+      const t = i / zapLen;
+      const env = Math.exp(-t * 8.0) * (i < 200 ? i / 200 : 1.0);
+      // Combine low-freq sawtooth feel with noise crackle
+      const sawtooth = (i % 800 < 400) ? 0.5 : -0.5;
+      const crackle = noise[i % noise.length] * 0.8;
+      const chop = (i % 1000 < 500) ? 1.0 : 0.2; // Simulated AM modulation
+      zData[i] = (sawtooth + crackle) * env * chop * 0.3;
+    }
+    this.zapBuffer = zBuf;
+
+    // 2. Discovery Chime Buffer
+    const chLen = ctx.sampleRate * 0.5;
+    const chBuf = ctx.createBuffer(1, chLen, ctx.sampleRate);
+    const chData = chBuf.getChannelData(0);
+    const freqs = [440, 554, 659, 880];
+
+    for (let i = 0; i < chLen; i++) {
+      let val = 0;
+      const t = i / chLen;
+      const env = Math.exp(-t * 6.0);
+      for (let f = 0; f < freqs.length; f++) {
+        const phase = (i * freqs[f] * 2 * Math.PI) / ctx.sampleRate;
+        val += Math.sin(phase) * 0.25;
+      }
+      chData[i] = val * env;
+    }
+    this.discoveryBuffer = chBuf;
+  }
+
+  /**
    * High-performance sound trigger using numeric SoundID.
    * Bypasses string hashing and ensures V8 monomorphism.
    */
@@ -106,10 +169,35 @@ export class SoundManager {
   playMetalDoorShut() { GamePlaySounds.playMetalDoorShut(this._core); }
   playMetalDoorOpen() { GamePlaySounds.playMetalDoorOpen(this._core); }
   playMetalKnocking() { GamePlaySounds.playMetalKnocking(this._core); }
-  playFootstep(material: MaterialType, isRight: boolean) { GamePlaySounds.playFootstep(this._core, material, isRight); }
+  playFootstep(material: MaterialType, isRight: boolean, isRushing: boolean = false) { GamePlaySounds.playFootstep(this._core, material, isRight, isRushing); }
   playImpact(material: MaterialType) { GamePlaySounds.playImpact(this._core, material); }
   playSwimming() { GamePlaySounds.playSwimming(this._core); }
   playDash() { this.playSound(SoundID.FOOTSTEP_L, 0.25, 1.3); }
+
+  /**
+   * VINTERDÖD DOD OPTIMIZATION: Positional culling and attenuation.
+   * Strictly uses distance squared to avoid Math.sqrt() in hot loops.
+   */
+  playPositionalEffect(id: SoundID, x: number, z: number, volume: number = 1.0, maxDist: number = 40.0) {
+    if (!this.playerPosScratch) return; // Not initialized yet
+
+    const dx = x - this.playerPosScratch.x;
+    const dz = z - this.playerPosScratch.z;
+    const distSq = dx * dx + dz * dz;
+    const maxDistSq = maxDist * maxDist;
+
+    // 1. HARD CULLING (40m limit default)
+    if (distSq > maxDistSq) return;
+
+    // 2. LINEAR ATTENUATION
+    const dist = Math.sqrt(distSq); // Sqrt is okay once per valid sound trigger, but culling happened first
+    const attenuation = 1.0 - (dist / maxDist);
+    this.playSound(id, volume * attenuation);
+  }
+
+  setPlayerPosReference(pos: THREE.Vector3) {
+    this.playerPosScratch = pos;
+  }
 
   // --- VOICE DELEGATES ---
   playVoice(name: string = PLAYER_CHARACTER.name || 'Robert') { VoiceSounds.playVoice(this._core, name); }
@@ -189,28 +277,19 @@ export class SoundManager {
    * Reminiscent of victory but faster and cleaner for constant gameplay feedback.
    */
   playDiscovery() {
-    const now = this._core.ctx.currentTime;
-    const freqs = [440, 554, 659, 880];
-    for (let i = 0; i < freqs.length; i++) {
-      const freq = freqs[i];
-      const osc = this._core.ctx.createOscillator();
-      const gain = this._core.ctx.createGain();
-
-      osc.type = 'triangle';
-      // Slight pitch sweep at the start for a "discovered" chime feel
-      osc.frequency.setValueAtTime(freq * 0.9, now + i * 0.06);
-      osc.frequency.exponentialRampToValueAtTime(freq, now + i * 0.06 + 0.02);
-
-      gain.gain.setValueAtTime(0, now + i * 0.06);
-      gain.gain.linearRampToValueAtTime(0.15, now + i * 0.06 + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.4);
-
-      osc.connect(gain);
-      gain.connect(this._core.masterGain);
-      osc.start(now + i * 0.06);
-      osc.stop(now + i * 0.06 + 0.4);
-      this._core.track(osc);
+    if (!this.discoveryBuffer) {
+      // Fallback if not pre-rendered
+      this.playTone(440, 'triangle', 0.2, 0.2);
+      return;
     }
+    const src = this._core.ctx.createBufferSource();
+    src.buffer = this.discoveryBuffer;
+    const gain = this._core.ctx.createGain();
+    gain.gain.value = 0.5;
+    src.connect(gain);
+    gain.connect(this._core.masterGain);
+    src.start();
+    this._core.track(src);
   }
 
   startCampfire() {
@@ -353,58 +432,93 @@ export class SoundManager {
   }
 
   playArcCannonZap() {
-    const ctx = this._core.ctx;
-    const now = ctx.currentTime;
+    if (!this.zapBuffer) return; // Pre-render failed or not called yet
 
-    // 1. THE HUM: Low frequency sawtooth for the underlying "current"
-    const humOsc = ctx.createOscillator();
-    humOsc.type = 'sawtooth';
-    humOsc.frequency.setValueAtTime(60, now);
+    const src = this._core.ctx.createBufferSource();
+    src.buffer = this.zapBuffer;
+    const gain = this._core.ctx.createGain();
+    gain.gain.value = 0.4;
+    src.connect(gain);
+    gain.connect(this._core.masterGain);
+    src.start();
+    this._core.track(src);
+  }
 
-    // 2. THE CRACKLE: Use the global generic noise buffer
-    const noiseSource = ctx.createBufferSource();
-    noiseSource.buffer = this.getNoiseBuffer();
-    noiseSource.loop = true;
+  // --- FIRE LOOP POOL (Positional & Dynamic) ---
 
-    // Filter the noise to keep only the aggressive high-end sizzle
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.value = 3500;
-    filter.Q.value = 1.2;
+  startFireLoop(fzId: number, x: number, z: number): number {
+    // Find free node
+    for (let i = 0; i < this.MAX_FIRE_LOOPS; i++) {
+      const node = this.firePool[i];
+      if (!node.active) {
+        const ctx = this._core.ctx;
+        const src = ctx.createBufferSource();
+        src.buffer = this.getNoiseBuffer();
+        src.loop = true;
 
-    // AM SYNTHESIS (Modulation): Make the constant noise "chop" rapidly to simulate sparks
-    const lfo = ctx.createOscillator();
-    lfo.type = 'square';
-    lfo.frequency.value = 45; // 45 sparks per second
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.8;
-    lfo.connect(lfoGain);
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 250;
 
-    const noiseGain = ctx.createGain();
-    noiseGain.gain.value = 0.5;
-    lfoGain.connect(noiseGain.gain); // Modulate the volume of the noise
+        const gain = ctx.createGain();
+        gain.gain.value = 0; // Starts silent, feidas in via update
 
-    // 3. MASTER ENVELOPE
-    const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.0, now);
-    masterGain.gain.linearRampToValueAtTime(0.4, now + 0.02);
-    masterGain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(this._core.masterGain);
 
-    const humGain = ctx.createGain();
-    humGain.gain.value = 0.6;
+        src.start();
 
-    // Routing
-    humOsc.connect(humGain).connect(masterGain);
-    noiseSource.connect(filter).connect(noiseGain).connect(masterGain);
-    masterGain.connect(this._core.masterGain);
+        node.source = src;
+        node.gain = gain;
+        node.id = fzId;
+        node.active = true;
+        return i;
+      }
+    }
+    return -1;
+  }
 
-    humOsc.start(now);
-    noiseSource.start(now);
-    lfo.start(now);
+  updateFireLoop(poolIdx: number, x: number, z: number, lifeRatio: number) {
+    if (poolIdx < 0 || poolIdx >= this.MAX_FIRE_LOOPS) return;
+    const node = this.firePool[poolIdx];
+    if (!node.active || !node.gain || !this.playerPosScratch) return;
 
-    humOsc.stop(now + 0.3);
-    noiseSource.stop(now + 0.3);
-    lfo.stop(now + 0.3);
+    // 1. Distance Attenuation
+    const dx = x - this.playerPosScratch.x;
+    const dz = z - this.playerPosScratch.z;
+    const distSq = dx * dx + dz * dz;
+    const maxDistSq = 900; // 30m limit for fire crackle
+
+    let vol = 0;
+    if (distSq < maxDistSq) {
+      const dist = Math.sqrt(distSq);
+      vol = (1.0 - (dist / 30.0)) * 0.4;
+    }
+
+    // 2. Life Fade
+    vol *= Math.min(1.0, lifeRatio * 2.0); // Fade out during last 50% of life
+
+    // 3. APPLY (Zero-GC, no ramp to avoid lag cumulative nodes)
+    node.gain.gain.setTargetAtTime(vol, this._core.ctx.currentTime, 0.1);
+  }
+
+  stopFireLoop(poolIdx: number) {
+    if (poolIdx < 0 || poolIdx >= this.MAX_FIRE_LOOPS) return;
+    const node = this.firePool[poolIdx];
+    if (node.active) {
+      if (node.gain) {
+        node.gain.gain.setTargetAtTime(0, this._core.ctx.currentTime, 0.2);
+        const s = node.source;
+        const g = node.gain;
+        this._core.safeTimeout(() => {
+          try { s?.stop(); s?.disconnect(); } catch (e) { }
+          try { g?.disconnect(); } catch (e) { }
+        }, 300);
+      }
+      node.active = false;
+      node.id = -1;
+    }
   }
 
   // --- VEHICLE AUDIO ---

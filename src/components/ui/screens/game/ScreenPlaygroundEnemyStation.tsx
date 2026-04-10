@@ -122,19 +122,19 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                 {/* STRESS TEST CONTROLS */}
                 <div className="flex items-center justify-between bg-zinc-900/50 p-4 border border-red-900/30 rounded">
                     <div className="flex flex-col">
-                        <span className="text-red-500 text-[10px] font-black uppercase tracking-[0.2em]">{t('ui.stress_test')}</span>
-                        <span className="text-zinc-400 text-[9px] uppercase">{t('ui.mass_spawning')}</span>
+                        <span className="text-red-500 text-[13px] font-black uppercase tracking-[0.2em]">{t('ui.stress_test')}</span>
+                        <span className="text-zinc-400 text-[11px] uppercase">{t('ui.mass_spawning')}</span>
                     </div>
                     <div className="flex gap-2">
                         <button 
                             onClick={handleRandomize}
-                            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-bold uppercase transition-colors rounded"
+                            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-[12px] font-bold uppercase transition-colors rounded"
                         >
                             {t('ui.randomize')}
                         </button>
                         <button 
                             onClick={handleClear}
-                            className="px-3 py-1.5 border border-zinc-700 hover:border-red-600 text-zinc-500 hover:text-red-500 text-[10px] font-bold uppercase transition-colors rounded"
+                            className="px-4 py-2 border border-zinc-700 hover:border-red-600 text-zinc-500 hover:text-red-500 text-[12px] font-bold uppercase transition-colors rounded"
                         >
                             {t('ui.clear_all')}
                         </button>
@@ -143,7 +143,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
 
                 {/* SLIDERS SECTION */}
                 <div className="space-y-6">
-                    <label className="text-zinc-500 uppercase text-[10px] font-black tracking-widest block border-b border-zinc-800 pb-2">{t('ui.horde_composition')}</label>
+                    <label className="text-zinc-500 uppercase text-[12px] font-black tracking-widest block border-b border-zinc-800 pb-2">{t('ui.horde_composition')}</label>
                     <div className="grid grid-cols-1 gap-5">
                         {ZOMBIE_TYPES.map(type => {
                             const val = counts[type] || 0;
@@ -151,8 +151,8 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                             return (
                                 <div key={type} className="flex flex-col gap-2">
                                     <div className="flex justify-between items-end">
-                                        <span className="text-zinc-200 text-xs font-bold uppercase tracking-tighter">{t(`enemies.${typeName}.name`)}</span>
-                                        <span className={`text-[10px] font-mono ${val > 0 ? 'text-red-500' : 'text-zinc-600'}`}>{val}</span>
+                                        <span className="text-zinc-200 text-sm font-bold uppercase tracking-tighter">{t(`enemies.zombies.${typeName}.name`)}</span>
+                                        <span className={`text-[13px] font-mono ${val > 0 ? 'text-red-500' : 'text-zinc-600'}`}>{val}</span>
                                     </div>
                                     <input
                                         type="range" min="0" max="100" value={val}
@@ -167,13 +167,13 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
 
                 {/* BOSS SELECTION */}
                 <div className="space-y-4">
-                    <label className="text-zinc-500 uppercase text-[10px] font-black tracking-widest block border-b border-zinc-800 pb-2">{t('ui.boss_spawner')}</label>
+                    <label className="text-zinc-500 uppercase text-[12px] font-black tracking-widest block border-b border-zinc-800 pb-2">{t('ui.boss_spawner')}</label>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {BOSS_IDS.map(id => (
                             <button
                                 key={id}
                                 onClick={() => { soundManager.playUiClick(); setSelectedBoss(selectedBoss === id ? null : id); }}
-                                className={`px-2 py-3 border-2 transition-all duration-200 uppercase font-black tracking-tighter text-[10px] text-center ${selectedBoss === id ? 'bg-red-600 border-red-600 text-black' : 'bg-black border-zinc-800 text-zinc-500 hover:border-zinc-500'}`}
+                                className={`px-2 py-3 border-2 transition-all duration-200 uppercase font-black tracking-tighter text-[13px] text-center ${selectedBoss === id ? 'bg-red-600 border-red-600 text-black' : 'bg-black border-zinc-800 text-zinc-500 hover:border-zinc-500'}`}
                             >
                                 {t(BOSSES[id].name)}
                             </button>
@@ -186,24 +186,24 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                     <label className="text-zinc-500 uppercase text-[10px] font-black tracking-widest block border-b border-zinc-800 pb-2">{t('ui.spawn_parameters')}</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="flex flex-col gap-2">
-                            <span className="text-zinc-400 text-[10px] uppercase font-bold">{t('ui.spread')}</span>
+                            <span className="text-zinc-400 text-[12px] uppercase font-bold">{t('ui.spread')}</span>
                             <div className="flex items-center gap-3">
                                 <input
                                     type="range" min="1" max="50" value={spread}
                                     onChange={(e) => setSpread(parseInt(e.target.value))}
                                     className="flex-1 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-zinc-200"
                                 />
-                                <span className="text-zinc-100 font-mono text-[10px] w-6">{spread}m</span>
+                                <span className="text-zinc-100 font-mono text-[13px] w-6">{spread}m</span>
                             </div>
                         </div>
                         <div className="flex flex-col gap-2">
-                            <span className="text-zinc-400 text-[10px] uppercase font-bold">{t('ui.spawn_location')}</span>
+                            <span className="text-zinc-400 text-[12px] uppercase font-bold">{t('ui.spawn_location')}</span>
                             <div className="flex flex-wrap gap-1">
                                 {SPAWN_LOCATIONS.map(b => (
                                     <button
                                         key={b}
                                         onClick={() => { soundManager.playUiClick(); setBiome(b as any); }}
-                                        className={`px-2 py-1.5 border transition-all text-[9px] font-bold uppercase ${biome === b ? 'bg-zinc-200 border-zinc-100 text-black' : 'bg-black border-zinc-800 text-zinc-600 hover:border-zinc-700'}`}
+                                        className={`px-3 py-2 border transition-all text-[11px] font-bold uppercase ${biome === b ? 'bg-zinc-200 border-zinc-100 text-black' : 'bg-black border-zinc-800 text-zinc-600 hover:border-zinc-700'}`}
                                     >
                                         {t(`location.${b.toLowerCase()}`)}
                                     </button>

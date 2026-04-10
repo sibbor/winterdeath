@@ -53,7 +53,7 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
             <div className="flex flex-col gap-8 p-2 max-w-xl mx-auto h-full overflow-y-auto pr-4 custom-scrollbar">
                 {/* Stats Section */}
                 <div className="flex flex-col gap-4">
-                    <label className="text-zinc-500 uppercase text-xs font-bold tracking-widest">{t('ui.stat_calibration')}</label>
+                    <label className="text-zinc-500 uppercase text-sm font-bold tracking-widest">{t('ui.stat_calibration')}</label>
                     <div className="flex flex-col gap-2">
                         {SKILLS_CONFIG.map(skill => {
                             const val = tempStats.statsBuffer[skill.id];
@@ -62,8 +62,8 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                             return (
                                 <div key={skill.id} className="bg-zinc-900/40 border border-zinc-800 p-4 flex justify-between items-center group hover:bg-zinc-800/40 transition-all rounded-lg">
                                     <div className="flex-1">
-                                        <div className="text-white font-black uppercase text-[10px] tracking-widest mb-1">{t(skill.labelKey)}</div>
-                                        <div className="text-zinc-500 text-[9px] uppercase font-bold">{t(skill.descKey)}</div>
+                                        <div className="text-white font-black uppercase text-[13px] tracking-widest mb-1">{t(skill.labelKey)}</div>
+                                        <div className="text-zinc-500 text-[11px] uppercase font-bold">{t(skill.descKey)}</div>
                                     </div>
                                     <div className="flex items-center gap-4">
                                         <div className="text-2xl font-mono font-light text-green-500">{displayVal}</div>
@@ -82,7 +82,7 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
 
                 {/* Modifiers Section */}
                 <div className="flex flex-col gap-4">
-                    <label className="text-zinc-500 uppercase text-xs font-bold tracking-widest">{t('ui.temporary_modifiers')}</label>
+                    <label className="text-zinc-500 uppercase text-sm font-bold tracking-widest">{t('ui.temporary_modifiers')}</label>
                     <div className="grid grid-cols-1 gap-3">
                         {/* Invincibility */}
                         <div
@@ -95,8 +95,8 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                                 {tempSectorState.isInvincible && <div className="text-black font-black text-xs">✓</div>}
                             </div>
                             <div>
-                                <div className="font-black uppercase tracking-widest text-xs">{t('ui.invincible')}</div>
-                                <div className="text-[9px] uppercase font-bold opacity-60 mt-1">{t('ui.no_damage_hint')}</div>
+                                <div className="font-black uppercase tracking-widest text-sm">{t('ui.invincible')}</div>
+                                <div className="text-[11px] uppercase font-bold opacity-60 mt-1">{t('ui.no_damage_hint')}</div>
                             </div>
                         </div>
 
@@ -111,15 +111,15 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                                 {tempSectorState.unlimitedAmmo && <div className="text-zinc-100 font-black text-xs">✓</div>}
                             </div>
                             <div>
-                                <div className="font-black uppercase tracking-widest text-xs">{t('ui.unlimited_ammo_no_reload')}</div>
-                                <div className="text-[9px] uppercase font-bold opacity-60 mt-1">{t('ui.playground_only')}</div>
+                                <div className="font-black uppercase tracking-widest text-sm">{t('ui.unlimited_ammo_no_reload')}</div>
+                                <div className="text-[11px] uppercase font-bold opacity-60 mt-1">{t('ui.playground_only')}</div>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div className="mt-4 text-center pb-4">
-                    <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-[0.2em] leading-tight">
+                    <p className="text-[11px] text-zinc-600 font-bold uppercase tracking-[0.2em] leading-tight">
                         {t('ui.playground_disclaimer')}
                     </p>
                 </div>

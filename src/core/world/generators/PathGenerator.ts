@@ -133,6 +133,11 @@ export const PathGenerator = {
             GeneratorUtils.freezeStatic(mesh);
 
             ctx.scene.add(mesh);
+
+            // VINTERDÖD: Mandatory material registration in the DOD grid
+            for (let i = 0; i < pts.length; i++) {
+                ctx.collisionGrid.registerGroundMaterial(pts[i].x, pts[i].z, w / 2, materialId);
+            }
         };
 
         buildRibbon(pointsList, 4.5, 0.05, MATERIALS.gravel, 'RailGravel', MaterialType.GRAVEL);
@@ -240,9 +245,14 @@ export const PathGenerator = {
 
         ctx.scene.add(mesh);
 
-        for (let i = 0; i < pts.length; i += 10) {
+        for (let i = 0; i < pts.length; i++) {
             const p = pts[i];
-            ctx.mapItems.push({ id: `path_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', label: null, icon: null, radius: width / 2, color: type === 'ROAD' ? '#444' : '#6b5a4a' });
+            // VINTERDÖD: Mandatory material registration in the DOD grid
+            ctx.collisionGrid.registerGroundMaterial(p.x, p.z, width / 2, materialId);
+
+            if (i % 10 === 0) {
+              ctx.mapItems.push({ id: `path_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', label: null, icon: null, radius: width / 2, color: type === 'ROAD' ? '#444' : '#6b5a4a' });
+            }
         }
         return curve;
     },

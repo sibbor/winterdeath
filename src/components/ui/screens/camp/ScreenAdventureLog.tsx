@@ -38,7 +38,7 @@ const TABS: { id: Tab, label: string }[] = [
     { id: 'enemy', label: 'ui.log_enemies' },
     { id: 'boss', label: 'ui.log_bosses' },
 ];
-const SECTORS = [0, 1, 2, 3, 4];
+const SECTORS = [0, 1, 2, 3];
 const THEME_COLOR = '#16a34a'; // green-600
 
 const darkenColor = (hex: string, percent: number) => {
@@ -425,10 +425,10 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorIndex => {
-                const bossIdx = sectorIndex - 1;
+                const bossIdx = sectorIndex;
                 const boss = BOSSES[bossIdx];
                 const theme = SECTOR_THEMES[bossIdx];
-                const isSectorUnlocked = isDebug || stats.sectorsCompleted >= bossIdx;
+                const isSectorUnlocked = isDebug || stats.sectorsCompleted >= sectorIndex;
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorIndex}`) : '???';
 
                 const isSeen = boss && ((stats.seenBosses || EMPTY_ARRAY).includes(bossIdx) || (stats.bossesDefeated || EMPTY_ARRAY).includes(bossIdx));
@@ -684,16 +684,16 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boo
                                         <div className="flex flex-col gap-4">
                                             <div className="flex justify-between items-start border-b border-zinc-800/50 pb-3">
                                                 <h3 className={`text-2xl font-semibold uppercase tracking-tighter ${isFound ? 'text-white' : 'text-zinc-800'}`}>
-                                                    {isFound ? t(`pois.${poi.sector - 1}.${poi.index}.title`) : '???'}
+                                                    {isFound ? t(`pois.${poi.sector}.${poi.index}.title`) : '???'}
                                                 </h3>
                                             </div>
                                             <div className="space-y-3">
                                                 <p className={`text-sm leading-relaxed ${isFound ? 'text-zinc-400' : 'text-zinc-800'}`}>
-                                                    {isFound ? t(`pois.${poi.sector - 1}.${poi.index}.description`) : '???'}
+                                                    {isFound ? t(`pois.${poi.sector}.${poi.index}.description`) : '???'}
                                                 </p>
-                                                {isFound && t(`pois.${poi.sector - 1}.${poi.index}.reaction`) && (
+                                                {isFound && t(`pois.${poi.sector}.${poi.index}.reaction`) && (
                                                     <p className="text-lg italic leading-relaxed border-l-4 pl-4 py-1 text-gray-200" style={{ borderColor: color }}>
-                                                        "{t(`pois.${poi.sector - 1}.${poi.index}.reaction`)}"
+                                                        "{t(`pois.${poi.sector}.${poi.index}.reaction`)}"
                                                     </p>
                                                 )}
                                             </div>

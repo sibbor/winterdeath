@@ -278,7 +278,36 @@ export const en = {
         horde_composition: "HORDE COMPOSITION",
         boss_spawner: "BOSS SPAWNER",
         spawn_parameters: "SPAWN PARAMETERS",
-        spread: "SPREAD"
+        spread: "SPREAD",
+        report: {
+            damage: {
+                incoming: "INCOMING DAMAGE",
+                outgoing: "OUTGOING DAMAGE",
+            },
+            time: {
+                unit_min: " min"
+            },
+            distance: {
+                unit_m: " m",
+                unit_km: " km"
+            },
+            labels: {
+                physical: "PHYSICAL",
+                boss: "BOSS",
+                player: "YOU",
+                unknown: "UNKNOWN"
+            },
+            stats: {
+                xp: "XP",
+                sp: "SP",
+                scrap: "SCRAP",
+                chests: "CHESTS",
+                shots: "SHOTS",
+                accuracy: "ACCURACY",
+                kills: "KILLS",
+                throwables: "THROWABLES"
+            }
+        }
     },
     location: {
         near: "NEARBY",

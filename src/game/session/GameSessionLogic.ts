@@ -177,6 +177,7 @@ export class GameSessionLogic {
             reloadEndTime: 0,
 
             // --- ZERO-GC VECTORS & STATE ---
+            previousPerkMask: 0,
             dodgeStartTime: 0,
             dodgeDir: new THREE.Vector3(),
             isDodging: false,
@@ -233,7 +234,8 @@ export class GameSessionLogic {
 
             // --- SECTOR & WORLD ---
             sectorState: {
-                envOverride: props.environmentOverrides ? props.environmentOverrides[props.currentSector] : undefined
+                ...(props.sectorState || {}),
+                envOverride: props.environmentOverrides ? props.environmentOverrides[props.currentSector] : (props.sectorState?.envOverride || undefined)
             },
             triggers: [] as SectorTrigger[],
             obstacles: [] as Obstacle[],
@@ -325,7 +327,16 @@ export class GameSessionLogic {
             simTime: 0,
             renderTime: 0,
             lastSimDelta: 0.016,
-            lastRenderDelta: 0.016
+            lastRenderDelta: 0.016,
+
+            // --- VINTERDÖD FIX: Pre-allocate input proxy for Mobile UI ---
+            inputState: {
+                w: false, a: false, s: false, d: false, space: false, fire: false, r: false, e: false, f: false,
+                joystickMove: new THREE.Vector2(),
+                joystickAim: new THREE.Vector2(),
+                aimVector: new THREE.Vector2(1, 0),
+                mouse: new THREE.Vector2()
+            }
         };
     }
 

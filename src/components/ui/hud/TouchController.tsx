@@ -112,7 +112,9 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                     dy *= ratio;
                 }
 
-                inputState.joystickMove.set(dx / MAX_DIST, dy / MAX_DIST);
+                if (inputState.joystickMove.set) {
+                    inputState.joystickMove.set(dx / MAX_DIST, dy / MAX_DIST);
+                }
 
                 if (leftStickKnobRef.current) {
                     leftStickKnobRef.current.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
@@ -131,7 +133,10 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                     dy *= ratio;
                 }
 
-                inputState.joystickAim.set(dx / MAX_DIST, dy / MAX_DIST);
+                if (inputState.joystickAim.set) {
+                    inputState.joystickAim.set(dx / MAX_DIST, dy / MAX_DIST);
+                }
+                
                 inputState.fire = dist > 5;
 
                 if (rightStickKnobRef.current) {

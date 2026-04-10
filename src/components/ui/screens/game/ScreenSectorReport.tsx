@@ -5,7 +5,7 @@ import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { SECTORS } from '../../../../systems/SectorSystem';
 import { DamageID } from '../../../../entities/player/CombatTypes';
 import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
-import { ENEMY_TYPE_KEYS, ATTACK_TYPE_KEYS } from '../../../../utils/ui/Mappers';
+import { ENEMY_TYPE_KEYS, ATTACK_TYPE_KEYS, DAMAGE_ID_KEYS } from '../../../../utils/ui/Mappers';
 
 interface ScreenSectorReportProps {
     stats: SectorStats;
@@ -53,7 +53,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
     const totalKills = (Object.values(stats.killsByType || {}) as number[]).reduce((a, b) => a + b, 0);
 
-    const bossKills = (stats.killsByType?.[EnemyType.BOSS] as number) || (stats.killsByType?.['Boss'] as any) || 0;
+    const bossKills = (stats.killsByType?.[EnemyType.BOSS] as number) || 0;
     const bossKilled = bossKills > 0;
     const familyStatusKey = (stats.familyFound || bossKilled) ? 'ui.family_member_rescued' : 'ui.family_member_missing';
     const bossStatusKey = bossKilled ? 'ui.boss_dead' : 'ui.boss_alive';
@@ -224,16 +224,25 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
                                 let attackerName = t('report.labels.unknown');
                                 const id = parseInt(enemyId);
-                                if (id === DamageID.BOSS) attackerName = t('report.labels.boss');
-                                else if (ENEMY_TYPE_KEYS[id]) attackerName = t(ENEMY_TYPE_KEYS[id]);
-                                else if (id === DamageID.PHYSICAL) attackerName = t('report.labels.physical');
-                                else attackerName = t(`report.damage.source.${enemyId}`, { defaultValue: enemyId });
+                                
+                                if (id === DamageID.BOSS) {
+                                    attackerName = t('report.labels.boss');
+                                } else if (ENEMY_TYPE_KEYS[id]) {
+                                    attackerName = t(ENEMY_TYPE_KEYS[id]);
+                                } else if (DAMAGE_ID_KEYS[id]) {
+                                    attackerName = t(DAMAGE_ID_KEYS[id]);
+                                } else {
+                                    attackerName = t(`report.damage.source.${enemyId}`, { defaultValue: enemyId });
+                                }
 
                                 return (
                                     <div key={enemyId} className="mb-2 last:mb-0">
                                         {Object.entries(enemyMapTyped).map(([attackId, dmg]) => {
                                             if (dmg <= 0) return null;
-                                            const atkName = t(ATTACK_TYPE_KEYS[parseInt(attackId)] || `report.labels.unknown`);
+                                            
+                                            const atkKey = ATTACK_TYPE_KEYS[parseInt(attackId)];
+                                            const atkName = atkKey ? t(atkKey) : t('report.labels.unknown');
+                                            
                                             const label = `${attackerName} > ${atkName}`.toUpperCase();
                                             return <LineItem key={attackId} title={label} val={dmg} />;
                                         })}
@@ -252,7 +261,11 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                             {Object.entries(stats.outgoingDamageBreakdown || {}).map(([weaponId, damage]) => {
                                 const dmgVal = (damage as number) || 0;
                                 if (dmgVal <= 0) return null;
-                                const name = t(`weapon.${weaponId}.name`, { defaultValue: weaponId });
+                                
+                                const instrumentId = parseInt(weaponId);
+                                const weaponKey = DAMAGE_ID_KEYS[instrumentId];
+                                const name = weaponKey ? t(weaponKey) : weaponId;
+                                
                                 return <LineItem key={weaponId} title={name.toUpperCase()} val={dmgVal} />;
                             })}
                         </div>

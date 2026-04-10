@@ -248,6 +248,12 @@ export const SectorBuilder = {
         const ground = TerrainGenerator.createGroundLayer(type, size.width, size.depth);
         ctx.scene.add(ground);
 
+        // VINTERDÖD: Sync the DOD material grid
+        let mat = MaterialType.SNOW;
+        if (type === 'DIRT') mat = MaterialType.DIRT;
+        else if (type === 'GRAVEL') mat = MaterialType.GRAVEL;
+        ctx.collisionGrid.fillGroundMaterial(mat);
+
         const engine = WinterEngine.getInstance();
         if (engine && engine.water) {
             engine.water.registerGround(ground);

@@ -460,7 +460,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 break;
             case 'poi':
                 titleKey = DISCOVERY_TYPE_KEYS[DiscoveryType.POI];
-                detailsKey = payload.detailsKey || `pois.${payload.sector - 1}.${payload.index}.title`;
+                detailsKey = payload.detailsKey || `pois.${payload.sector}.${payload.index}.title`;
                 if (!sets.pois.has(id)) {
                     sets.pois.add(id);
                     stats.discoveredPOIs.push(id);

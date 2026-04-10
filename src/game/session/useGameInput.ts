@@ -90,38 +90,11 @@ export const useGameInput = (
 
             if (state.statusFlags & PlayerStatusFlags.DEAD) return;
 
-            // Dodging (Space)
+            // Dodging / Rushing cleanup (Movement handling is moved to PlayerMovementSystem)
             if (key === ' ') {
-                const inp = engine.input.state;
-                if (!(state.statusFlags & PlayerStatusFlags.RUSHING) && !(state.statusFlags & PlayerStatusFlags.DODGING) && state.spaceDepressed) {
-                    const SB = state.statsBuffer;
-                    if (SB[PlayerStatID.STAMINA] >= 5) {
-                        SB[PlayerStatID.STAMINA] -= 5;
-                        state.lastStaminaUseTime = state.simTime;
-                        state.statusFlags |= PlayerStatusFlags.DODGING;
-                        state.dodgeStartTime = state.simTime;
-                        state.invulnerableUntil = state.simTime + 400;
-
-                        let dx = 0; let dz = 0;
-                        if (inp.w) dz -= 1;
-                        if (inp.s) dz += 1;
-                        if (inp.a) dx -= 1;
-                        if (inp.d) dx += 1;
-
-                        if (dx !== 0 || dz !== 0) {
-                            state.dodgeDir.set(dx, 0, dz).normalize();
-                            if (engine.camera.angle !== 0) {
-                                state.dodgeDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), engine.camera.angle);
-                            }
-                        } else if (refs.playerGroupRef.current) {
-                            state.dodgeDir.set(0, 0, 1).applyQuaternion(refs.playerGroupRef.current.quaternion).normalize();
-                        }
-
-                        soundManager.playDash();
-                    }
-                }
                 state.spaceDepressed = false;
                 state.statusFlags &= ~PlayerStatusFlags.RUSHING;
+                // state.statusFlags &= ~PlayerStatusFlags.DODGING; // Handled by System
             }
         };
 

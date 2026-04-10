@@ -194,6 +194,7 @@ export const EnemySpawner = {
         g.userData.ashSpawned = false;
         g.userData.ashPermanent = false;
         g.userData.isRagdolling = false;
+        g.userData.targetPos = new THREE.Vector3();
 
         const enemyIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
         enemyIndicatorRing.rotation.x = -Math.PI / 2;
@@ -299,6 +300,9 @@ export const EnemySpawner = {
         };
 
         boss.userData.entity = enemy;
+        boss.userData.targetPos = new THREE.Vector3();
+        boss.userData.spinVel = new THREE.Vector3();
+        boss.userData.hitDir = new THREE.Vector3();
 
         // Ensure boss has an indicator ring for its special attacks
         const bossIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);

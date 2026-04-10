@@ -36,11 +36,17 @@ export class SpatialGrid {
     private interactableCells: THREE.Object3D[][];
     private dynamicTriggers: any[] = []; // Triggers with familyId/ownerId
 
+    // --- GROUND MATERIAL GRID (DOD Flat TypedArray) ---
+    private readonly GRID_SIZE = 1024;
+    private readonly GRID_HALF = 512;
+    private groundCells: Uint8Array;
+
     // Hook for external heightmap resolution
     private terrainHeightFn: ((x: number, z: number) => number) | null = null;
 
     constructor(cellSize: number = 15) {
         this.cellSize = cellSize;
+        this.groundCells = new Uint8Array(this.GRID_SIZE * this.GRID_SIZE);
 
         // Pre-allocate the entire grid to force V8 into PACKED_ELEMENTS mode
         this.obstacleCells = new Array(HASH_SIZE);
@@ -93,6 +99,49 @@ export class SpatialGrid {
             return this.terrainHeightFn(x, z);
         }
         return 0; // Default flat ground
+    }
+
+    /**
+     * Registers material type for a circular area in the flat ground grid.
+     */
+    registerGroundMaterial(x: number, z: number, radius: number, material: number) {
+        const startX = Math.max(0, Math.floor((x - radius) + this.GRID_HALF));
+        const endX = Math.min(this.GRID_SIZE - 1, Math.floor((x + radius) + this.GRID_HALF));
+        const startZ = Math.max(0, Math.floor((z - radius) + this.GRID_HALF));
+        const endZ = Math.min(this.GRID_SIZE - 1, Math.floor((z + radius) + this.GRID_HALF));
+
+        const radSq = radius * radius;
+
+        for (let ix = startX; ix <= endX; ix++) {
+            for (let iz = startZ; iz <= endZ; iz++) {
+                const dx = (ix - this.GRID_HALF) - x;
+                const dz = (iz - this.GRID_HALF) - z;
+                if (dx * dx + dz * dz <= radSq) {
+                    this.groundCells[iz * this.GRID_SIZE + ix] = material;
+                }
+            }
+        }
+    }
+
+    /**
+     * Blixtsnabb O(1) lookup of ground material.
+     */
+    getGroundMaterial(x: number, z: number): number {
+        const ix = Math.floor(x + this.GRID_HALF);
+        const iz = Math.floor(z + this.GRID_HALF);
+
+        if (ix < 0 || ix >= this.GRID_SIZE || iz < 0 || iz >= this.GRID_SIZE) {
+            return 0; // MaterialType.NONE
+        }
+
+        return this.groundCells[iz * this.GRID_SIZE + ix];
+    }
+
+    /**
+     * Fills the entire grid with a base material (e.g. SNOW).
+     */
+    fillGroundMaterial(material: number) {
+        this.groundCells.fill(material);
     }
 
     // --- OBSTACLE MANAGEMENT ---

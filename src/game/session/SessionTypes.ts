@@ -149,6 +149,7 @@ export interface GameCanvasProps {
   weather: WeatherType;
   settings: GameSettings;
   currentSectorData?: any;
+  sectorState?: SectorState;
 }
 
 export type DeathPhase = 'NONE' | 'ANIMATION' | 'MESSAGE' | 'CONTINUE';

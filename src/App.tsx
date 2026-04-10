@@ -540,7 +540,14 @@ const App: React.FC = () => {
                 const isFinished = isCleared && prev.currentSector === 3;
 
                 const finalStats = isFinished ? { ...prev.stats, gameIsFinished: true } : prev.stats;
-                return { ...prev, stats: finalStats, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
+                return { 
+                    ...prev, 
+                    stats: finalStats, 
+                    screen: GameScreen.CAMP, 
+                    currentSector: nextSector, 
+                    weather: 'snow',
+                    sectorState: nextSector === 4 ? prev.sectorState : undefined // Clear if leaving playground
+                };
             });
         });
     }, [triggerLoadingTransition, aggregatePendingStats]);
@@ -571,7 +578,13 @@ const App: React.FC = () => {
             setActiveCollectible(null);
             setActiveOverlay(null);
 
-            setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR, currentSector: nextSector, sessionToken: (prev.sessionToken || 0) + 1 }));
+            setGameState(prev => ({ 
+                ...prev, 
+                screen: GameScreen.SECTOR, 
+                currentSector: nextSector, 
+                sessionToken: (prev.sessionToken || 0) + 1,
+                sectorState: nextSector === 4 ? prev.sectorState : undefined // Only persist for playground
+            }));
             HudStore.update({ ...HudStore.getState(), hudVisible: false });
         });
     }, [triggerLoadingTransition, aggregatePendingStats]);
@@ -592,7 +605,12 @@ const App: React.FC = () => {
             setActiveCollectible(null);
             setActiveOverlay(null);
 
-            setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR, sessionToken: (prev.sessionToken || 0) + 1 }));
+            setGameState(prev => ({ 
+                ...prev, 
+                screen: GameScreen.SECTOR, 
+                sessionToken: (prev.sessionToken || 0) + 1,
+                sectorState: prev.currentSector === 4 ? prev.sectorState : undefined // Clear if not playground
+            }));
             HudStore.update({ ...HudStore.getState(), hudVisible: false });
         });
     }, [triggerLoadingTransition]);
@@ -784,6 +802,7 @@ const App: React.FC = () => {
                                     settings={gameState.settings}
                                     isMobileDevice={isMobileDevice}
                                     weather={gameState.weather}
+                                    sectorState={gameState.sectorState}
                                 />
 
                                 {showHUD && (

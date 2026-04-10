@@ -215,8 +215,9 @@ export const WeaponHandler = {
         // 3. Reload Logic
         const isThrowable = wep.category === WeaponCategory.THROWABLE;
         const isRadio = state.activeWeapon === WeaponType.RADIO;
+        const isEnergy = !!wep.isEnergy;
 
-        if (input.r && !state.isReloading && !isThrowable && !isRadio && (state.weaponAmmo[state.activeWeapon] || 0) < (wep.magSize || 0)) {
+        if (input.r && !state.isReloading && !isThrowable && !isRadio && !isEnergy && (state.weaponAmmo[state.activeWeapon] || 0) < (wep.magSize || 0)) {
             state.isReloading = true;
             const actualReloadTime = (wep.reloadTime || 0) * (state.statsBuffer[PlayerStatID.MULTIPLIER_RELOAD] || 1.0);
             state.reloadEndTime = simTime + actualReloadTime;
@@ -262,6 +263,20 @@ export const WeaponHandler = {
             return;
         }
 
+        // --- 0. ENERGY MANAGEMENT (Zero-GC) ---
+        // Regenerate ALL energy weapons in the loadout simultaneously
+        const loadoutKeys = ['primary', 'secondary', 'throwable', 'special'];
+        for (let i = 0; i < 4; i++) {
+            const wId = loadout[loadoutKeys[i]];
+            if (wId && (WEAPONS as any)[wId]?.isEnergy) {
+                const isFiring = input.fire && state.activeWeapon === wId;
+                if (!isFiring) {
+                    // Regenerate 10% per second
+                    state.weaponAmmo[wId] = Math.min(100, (state.weaponAmmo[wId] || 0) + 10 * delta);
+                }
+            }
+        }
+
         // --- 1. CONTINUOUS FIRE (Flamethrower / Arc-Cannon) ---
         if (wep.behavior === WeaponBehavior.CONTINUOUS) {
             if (aimCrossMesh) aimCrossMesh.visible = false;
@@ -272,7 +287,11 @@ export const WeaponHandler = {
                 const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
 
                 if (hasAmmo) {
-                    if (!isUnlimited) {
+                    if (wep.isEnergy) {
+                        // Deplete 20% per second
+                        state.weaponAmmo[state.activeWeapon] -= 20 * delta;
+                        if (state.weaponAmmo[state.activeWeapon] < 0) state.weaponAmmo[state.activeWeapon] = 0;
+                    } else if (!isUnlimited) {
                         const actualFireRate = (wep.fireRate || 0) / (state.statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] || 1.0);
                         if (simTime > state.lastShotTime + actualFireRate) {
                             state.weaponAmmo[state.activeWeapon]--;
