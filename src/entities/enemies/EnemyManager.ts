@@ -364,8 +364,16 @@ export const EnemyManager = {
         e.lastSeenTime = 0;
         e.awareness = 0;
         e.lastHeardNoiseType = NoiseType.NONE;
+        
+        // --- ZERO-GC VECTOR ALLOCATION (Pool warmup phase) ---
+        if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3();
+        if (!e.mesh.userData.targetPos) e.mesh.userData.targetPos = new THREE.Vector3();
+
+        // --- STALE DATA RESET (DOD) ---
         e.lastKnownPosition.copy(e.mesh.position);
-        e.lastTrailPos.set(0, 0, 0); // V8 optimized: zeroing instead of copy if recycling
+        (e.mesh.userData.targetPos as THREE.Vector3).set(0, 0, 0);
+        
+        e.lastTrailPos.set(0, 0, 0); 
         e.hasLastTrailPos = false;
 
         // FIX: Ensure tackle time is reset to prevent NaN physics failures

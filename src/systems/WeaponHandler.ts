@@ -19,6 +19,7 @@ const _UP = new THREE.Vector3(0, 1, 0);
 
 // Pre-defined static array for scroll iteration to avoid GC allocations
 const _SLOTS = ['primary', 'secondary', 'throwable', 'special', 'radio'];
+const _validWeaponsScratch: WeaponType[] = [];
 
 // Avoid creating empty objects and functions in loops
 const _NOOP_DAMAGE_TEXT = (x: number, y: number, z: number, t: string, c?: string) => { };
@@ -169,7 +170,7 @@ export const WeaponHandler = {
         if (input.scrollDown || input.scrollUp) {
 
             let currentIdx = -1;
-            const validWeapons: WeaponType[] = [];
+            _validWeaponsScratch.length = 0;
             let vCount = 0;
 
             for (let i = 0; i < 5; i++) {
@@ -182,14 +183,14 @@ export const WeaponHandler = {
                     if (w === WeaponType.RADIO && state.familyFound) continue;
 
                     if (w === state.activeWeapon) currentIdx = vCount;
-                    validWeapons[vCount++] = w;
+                    _validWeaponsScratch[vCount++] = w;
                 }
             }
 
             if (currentIdx !== -1 && vCount > 1) {
                 const step = input.scrollDown ? 1 : -1;
                 const nextIdx = (currentIdx + step + vCount) % vCount;
-                const nextWep = validWeapons[nextIdx];
+                const nextWep = _validWeaponsScratch[nextIdx];
 
                 if (nextWep !== state.activeWeapon) {
                     state.activeWeapon = nextWep;

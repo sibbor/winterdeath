@@ -667,7 +667,6 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
 }
 
 function updateLastSeen(e: Enemy, pos: THREE.Vector3, simTime: number) {
-    if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3();
     e.lastKnownPosition.copy(pos);
     e.lastSeenTime = simTime;
 }
