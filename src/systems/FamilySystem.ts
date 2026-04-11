@@ -11,6 +11,8 @@ import { DamageID } from '../entities/player/CombatTypes';
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3(); // Target Position / Offset
 const _v3 = new THREE.Vector3(); // Direction
+const _vAim = new THREE.Vector3();
+const _UP = new THREE.Vector3(0, 1, 0);
 
 // Single reusable animation state — avoids per-frame object allocation
 const _animState = {
@@ -27,7 +29,8 @@ const _animState = {
     isDead: false,
     deathStartTime: 0,
     seed: 0,
-    renderTime: 0
+    renderTime: 0,
+    simTime: 0
 };
 
 export class FamilySystem implements System {
@@ -129,6 +132,7 @@ export class FamilySystem implements System {
                     _animState.isWading = false;
                     _animState.isIdleLong = false;
                     _animState.renderTime = renderTime;
+                    _animState.simTime = simTime;
                     PlayerAnimator.update(body, _animState, renderTime);
                 }
 
@@ -167,18 +171,44 @@ export class FamilySystem implements System {
             let fmIsRushing = false;
 
             if (familyMember.following && !isCinematicActive && !isDead) {
-                const pRot = this.playerGroup.rotation.y;
-                const cos = Math.cos(pRot);
-                const sin = Math.sin(pRot);
-
-                const sideSign = i % 2 === 0 ? -1 : 1;
                 const row = Math.floor(i / 2) + 1;
 
                 const backDist = 2.0 + row * 1.2;
+                const sideSign = i % 2 === 0 ? -1 : 1;
                 const sideDist = 1.5 + (i % 2) * 0.5;
 
-                const localX = sideSign * sideDist;
-                const localZ = -backDist;
+                let localX = sideSign * sideDist;
+                let localZ = -backDist;
+
+                // --- VINTERDÖD: AIM-AVOIDANCE LOGIC ---
+                const engine = WinterEngine.getInstance();
+                const input = engine?.input?.state;
+                if (input?.aimVector && input.aimVector.lengthSq() > 0.1) {
+                    const camAngle = (engine as any).session?.cameraAngle || 0;
+                    _vAim.set(input.aimVector.x, 0, input.aimVector.y).normalize();
+                    if (camAngle !== 0) _vAim.applyAxisAngle(_UP, camAngle);
+
+                    // Compute relative aim direction normalized to player rotation
+                    const pRot = this.playerGroup.rotation.y;
+                    const cosP = Math.cos(-pRot);
+                    const sinP = Math.sin(-pRot);
+                    const relAimX = _vAim.x * cosP + _vAim.z * sinP;
+                    const relAimZ = -_vAim.x * sinP + _vAim.z * cosP;
+
+                    // If player is aiming backwards or towards the follower slot
+                    const dotAim = (relAimX * (localX / sideDist)) + (relAimZ * (localZ / backDist));
+                    
+                    if (dotAim > 0.5) { // If they are in the crosshair cone
+                        // Push laterally away from the aim ray
+                        const repulsionForce = (dotAim - 0.5) * 2.0; 
+                        localX += sideSign * repulsionForce * 2.5;
+                        localZ -= repulsionForce * 1.5; // Also push slightly further back
+                    }
+                }
+
+                const pRot = this.playerGroup.rotation.y;
+                const cos = Math.cos(pRot);
+                const sin = Math.sin(pRot);
 
                 _v1.copy(this.playerGroup.position);
                 _v1.x += localX * cos + localZ * sin;
@@ -186,28 +216,29 @@ export class FamilySystem implements System {
 
                 const distSq = fm.position.distanceToSquared(_v1);
 
-                if (distSq > 4.0) { // 2.0m threshold
+                const dist = Math.sqrt(distSq);
+
+                if (dist > 0.15) { // VINTERDÖD FIX: Tightened epsilon for near-instant reaction
                     fmIsMoving = true;
 
-                    if (distSq > 900.0) {
-                        fm.position.copy(_v1);
-                    } else {
-                        const catchUpBoost = distSq > 25.0 ? 1.4 : 1.0;
-                        const actualSpeed = Math.min(maxFollowSpeed, followSpeed * catchUpBoost);
+                    // --- ELASTIC CATCH-UP BOOST ---
+                    // 1.0x at formation spot, scaling up to 2.5x if separated.
+                    // This ensures they can close the gap even while the player is rushing.
+                    const elasticBoost = 1.0 + Math.min(1.5, dist / 4.0);
+                    const actualSpeed = Math.min(followSpeed * 3.0, followSpeed * elasticBoost);
 
-                        const step = actualSpeed * delta;
-                        const dist = Math.sqrt(distSq);
+                    const step = actualSpeed * delta;
 
-                        _v3.subVectors(_v1, fm.position).normalize();
+                    _v3.subVectors(_v1, fm.position).normalize();
 
-                        const maxAllowedStep = Math.max(0, dist - 1.9);
-                        const moveDist = Math.min(step, maxAllowedStep);
+                    // Precision move (Remove the 1.9m buffer)
+                    const moveDist = Math.min(step, dist);
 
-                        fm.position.addScaledVector(_v3, moveDist);
-                        fm.lookAt(this.playerGroup.position);
-                    }
+                    fm.position.addScaledVector(_v3, moveDist);
+                    fm.lookAt(this.playerGroup.position);
+
                     familyMember.lastMoveTime = simTime;
-                    fmIsRushing = state.isRushing || state.isDodging;
+                    fmIsRushing = state.isRushing || state.isDodging || dist > 3.0;
                 }
             }
 
@@ -293,6 +324,7 @@ export class FamilySystem implements System {
                 }
 
                 _animState.renderTime = renderTime;
+                _animState.simTime = simTime;
                 PlayerAnimator.update(body, _animState, renderTime);
             }
         }
