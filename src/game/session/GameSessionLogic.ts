@@ -191,6 +191,7 @@ export class GameSessionLogic {
             rushCostPaid: false,
             wasFiring: false,
             throwChargeStart: 0,
+            throwChargeRotation: new THREE.Quaternion(),
             lastShotTime: 0,
             lastRushEndTime: 0,
             lastDodgeEndTime: 0,

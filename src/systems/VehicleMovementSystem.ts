@@ -16,6 +16,7 @@ const _right = new THREE.Vector3();
 
 export class VehicleMovementSystem implements System {
     id = 'vehicle_movement';
+    isFixedStep = true;
 
     constructor(private playerGroup: THREE.Group) {
     }

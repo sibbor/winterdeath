@@ -119,6 +119,7 @@ export class WaterSystem implements System {
     public id = 'water';
     public enabled = true;
     public persistent = true;
+    public isFixedStep?: boolean;
 
     surfaces: WaterSurface[] = [];
     waterBodies: WaterBody[] = [];

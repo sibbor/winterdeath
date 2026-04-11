@@ -59,7 +59,7 @@ export enum VEGETATION_TYPE {
     SPRUCE = 'SPRUCE',
     OAK = 'OAK',
     BIRCH = 'BIRCH',
-    DEAD = 'DEAD',
+    DEAD_TREE = 'DEAD_TREE',
     GRASS = 'GRASS',
     BUSH = 'BUSH',
     SUNFLOWER = 'SUNFLOWER',

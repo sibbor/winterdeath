@@ -7,9 +7,10 @@ export { ZOMBIE_TYPES } from './enemies/zombies';
 export { BOSSES } from './enemies/bosses';
 export { WEAPONS } from './weapons';
 
-// 20% HP
-export const HEALTH_CRITICAL_THRESHOLD = 0.2;
-export const PLAYER_BASE_SPEED = 15.0; // km/h, km/tim, kph
+export const OVERRIDE_DEFAULT_SECTOR = 2; // Set to -1 to disable override
+
+export const HEALTH_CRITICAL_THRESHOLD = 0.2; // 20% HP
+export const PLAYER_BASE_SPEED = 20.0; // km/h, km/tim, kph
 export const KMH_TO_MS = 1.0 / 3.6;
 
 export const CAMERA_HEIGHT = 50;

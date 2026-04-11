@@ -88,9 +88,9 @@ ATTACK_TYPE_KEYS[EnemyAttackType.ELECTRIC_BEAM] = 'attacks.ELECTRIC_BEAM.title';
 ATTACK_TYPE_KEYS[EnemyAttackType.MAGNETIC_CHAIN] = 'attacks.MAGNETIC_CHAIN.title';
 
 export const DISCOVERY_TYPE_KEYS: string[] = [];
-DISCOVERY_TYPE_KEYS[DiscoveryType.CLUE] = 'ui.discovery.clue';
-DISCOVERY_TYPE_KEYS[DiscoveryType.POI] = 'ui.discovery.poi';
-DISCOVERY_TYPE_KEYS[DiscoveryType.COLLECTIBLE] = 'ui.discovery.collectible';
-DISCOVERY_TYPE_KEYS[DiscoveryType.ENEMY] = 'ui.discovery.enemy';
-DISCOVERY_TYPE_KEYS[DiscoveryType.BOSS] = 'ui.discovery.boss';
-DISCOVERY_TYPE_KEYS[DiscoveryType.PERK] = 'ui.discovery.perk';
+DISCOVERY_TYPE_KEYS[DiscoveryType.CLUE] = 'ui.clue';
+DISCOVERY_TYPE_KEYS[DiscoveryType.POI] = 'ui.poi';
+DISCOVERY_TYPE_KEYS[DiscoveryType.COLLECTIBLE] = 'ui.collectible_discovered';
+DISCOVERY_TYPE_KEYS[DiscoveryType.ENEMY] = 'ui.enemy_encountered';
+DISCOVERY_TYPE_KEYS[DiscoveryType.BOSS] = 'ui.boss_encountered';
+DISCOVERY_TYPE_KEYS[DiscoveryType.PERK] = 'ui.skill_point';

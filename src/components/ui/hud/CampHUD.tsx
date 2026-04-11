@@ -96,19 +96,18 @@ const CampHUD: React.FC<CampHUDProps> = ({
 
 
                 <div className="flex gap-4 pointer-events-auto">
-                    {/* Clicking SP now opens the Upgrade screen (via onOpenSkills theoretically, but here mapped to onOpenSkills call) */}
+                    {/* Clicking SP now opens the Upgrade screen */}
                     <div onClick={() => { if (debugMode) onDebugSkill(); else onOpenSkills(); }}
-                        className={`px-4 py-2 border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 hover:border-purple-500 ${stats.statsBuffer[PlayerStatID.SKILL_POINTS] > 0 ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-black border-slate-700'}`}>
-                        <span className={`text-[10px] block uppercase font-bold ${stats.statsBuffer[PlayerStatID.SKILL_POINTS] > 0 ? 'text-purple-500' : 'text-slate-500'}`}>{t('ui.sp')}</span>
-                        <span className={`text-2xl font-bold font-mono ${stats.statsBuffer[PlayerStatID.SKILL_POINTS] > 0 ? 'text-purple-400' : 'text-white'}`}>{stats.statsBuffer[PlayerStatID.SKILL_POINTS]}</span>
+                        className={`w-20 h-20 aspect-square border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 flex flex-col items-center justify-center ${stats.statsBuffer[PlayerStatID.SKILL_POINTS] > 0 ? 'bg-purple-950/40 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-black/80 border-slate-700'}`}>
+                        <span className={`text-[10px] block uppercase font-bold ${stats.statsBuffer[PlayerStatID.SKILL_POINTS] > 0 ? 'text-purple-600' : 'text-slate-500'}`}>{t('ui.sp')}</span>
+                        <span className={`text-2xl font-bold font-mono ${stats.statsBuffer[PlayerStatID.SKILL_POINTS] > 0 ? 'text-purple-500' : 'text-white'}`}>{stats.statsBuffer[PlayerStatID.SKILL_POINTS]}</span>
                     </div>
 
                     <div onClick={() => { if (debugMode) onDebugScrap(); else onOpenArmory(); }}
-                        className={`px-4 py-2 border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 hover:border-yellow-500 ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-black border-slate-700'}`}>
-                        <span className={`text-[10px] block uppercase font-bold ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'text-yellow-500' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
-                        <span className={`text-2xl font-bold font-mono ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'text-yellow-400' : 'text-white'}`}>{stats.statsBuffer[PlayerStatID.SCRAP]}</span>
+                        className={`w-20 h-20 aspect-square border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 flex flex-col items-center justify-center ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'bg-yellow-950/40 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'bg-black/80 border-slate-700'}`}>
+                        <span className={`text-[10px] block uppercase font-bold ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'text-yellow-600' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
+                        <span className={`text-2xl font-bold font-mono ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'text-yellow-500' : 'text-white'}`}>{stats.statsBuffer[PlayerStatID.SCRAP]}</span>
                     </div>
-
                 </div>
             </div>
 

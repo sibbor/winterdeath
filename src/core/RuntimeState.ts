@@ -98,6 +98,7 @@ export interface RuntimeState extends PlayerStats {
     rushCostPaid: boolean;
     wasFiring: boolean;
     throwChargeStart: number;
+    throwChargeRotation: THREE.Quaternion;
     lastShotTime: number;
     lastRushEndTime: number;
     lastDodgeEndTime: number;

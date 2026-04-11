@@ -17,6 +17,7 @@ const _v2 = new THREE.Vector3();
 
 export class PlayerStatsSystem implements System {
     id = 'player_stats_system';
+    isFixedStep = true;
 
     private cachedPassives: StatusEffectType[] = [];
 
@@ -41,24 +42,25 @@ export class PlayerStatsSystem implements System {
         currentMask = this.updateBuffsAndDebuffs(session, delta, simTime, currentMask);
         this.applyStatusTicks(session, delta, simTime);
  
-        // --- STATUS TRANSITION SOUNDS (VINTERDÖD FIX: Debounced & Inclusive) ---
-        // Only trigger sounds if the mask actually changed since the START of the frame
+        // --- STATUS TRANSITION SOUNDS (VINTERDÖD FIX: Debounced & Pulse-Protected) ---
         const startMask = state.previousPerkMask;
         if (currentMask !== startMask) {
             for (let i = 0; i < 32; i++) {
                 const isNew = (currentMask & (1 << i)) && !(startMask & (1 << i));
                 const isRemoved = !(currentMask & (1 << i)) && (startMask & (1 << i));
                 
-                if (isNew || isRemoved) {
+                if (isNew) {
                     const perk = PERKS[i];
                     if (perk) {
-                        if (isNew) {
-                            console.log(`[PlayerStatsSystem] ACTIVATED: ${perk.displayName} (ID: ${i})`);
-                            if (perk.category === PerkCategory.BUFF) soundManager.playBuffGained();
-                            else if (perk.category === PerkCategory.DEBUFF) soundManager.playDebuffGained();
-                            else if (perk.category === PerkCategory.PASSIVE) soundManager.playPassiveGained();
-                        } else {
-                            console.log(`[PlayerStatsSystem] EXPIRED: ${perk.displayName} (ID: ${i})`);
+                        // VINTERDÖD FIX: Double check that we aren't just refreshing an existing duration 
+                        // by accident (though previousPerkMask should prevent this).
+                        if (perk.category === PerkCategory.BUFF) soundManager.playBuffGained();
+                        else if (perk.category === PerkCategory.DEBUFF) soundManager.playDebuffGained();
+                        else if (perk.category === PerkCategory.PASSIVE) soundManager.playPassiveGained();
+
+                        if (!state.discoveredPerks.includes(i)) {
+                            state.discoveredPerks.push(i);
+                            session.triggerDiscovery('perk', i, perk.displayName, perk.description);
                         }
                     }
                 }

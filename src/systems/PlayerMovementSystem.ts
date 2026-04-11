@@ -14,6 +14,15 @@ import { FootprintSystem } from './FootprintSystem';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { SoundID } from '../utils/audio/AudioTypes';
 
+// --- SPEED AUDIT TELEMETRY (ZERO-GC) ---
+let _auditSimDist = 0;
+let _auditSteps = 0;
+let _auditFrameCount = 0;
+let _auditMinDelta = 999;
+let _auditMaxDelta = 0;
+let _auditClampedCount = 0;
+let _auditLastLogTime = 0;
+
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -26,6 +35,7 @@ const _right = new THREE.Vector3();
 
 export class PlayerMovementSystem implements System {
     id = 'player_movement';
+    isFixedStep = true;
 
     // Zero-GC context bridge for EnemyManager physics 
     private _knockbackCtx: any = {
@@ -39,6 +49,7 @@ export class PlayerMovementSystem implements System {
     private _invincibilityMesh: THREE.Mesh | null = null;
     private _buffShieldMesh: THREE.Mesh | null = null;
 
+
     constructor(private playerGroup: THREE.Group) { }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
@@ -49,7 +60,6 @@ export class PlayerMovementSystem implements System {
         if ((state.statusFlags & PlayerStatusFlags.STUNNED) !== 0) return;
 
         // --- CINEMATIC LOCK (Zero-Velocity) ---
-        // As per guardrail: Kill velocity and return early to prevent "sliding" during focus
         if (state.cinematicActive) {
             state.isMoving = false;
             if (this.playerGroup.userData.velocity) {
@@ -62,7 +72,6 @@ export class PlayerMovementSystem implements System {
         const disableInput = session.inputDisabled || false;
 
         // --- APPLY DYNAMIC MULTIPLIERS (DOD) ---
-        // Final Speed is pre-calculated in m/s (Unit conversion + Perk Multipliers) by PlayerStatsSystem
         const currentSpeed = stats[PlayerStatID.FINAL_SPEED];
 
         if (state.vehicle.active) {
@@ -96,6 +105,39 @@ export class PlayerMovementSystem implements System {
 
         this.updateInvincibleGlow(state, session.state.renderTime);
         this.updateShieldBubble(session, delta);
+
+        // --- ZERO-GC TELEMETRY LOGGING (Throttled @ 1000ms) ---
+        _auditFrameCount++;
+        if (delta < _auditMinDelta) _auditMinDelta = delta;
+        if (delta > _auditMaxDelta) _auditMaxDelta = delta;
+        
+        // 0.05 is the hard clamp in WinterEngine.ts
+        if (delta >= 0.0499) _auditClampedCount++;
+
+        const now = performance.now();
+        if (now - _auditLastLogTime > 1000) {
+            const elapsed = (now - _auditLastLogTime) / 1000;
+            const fps = _auditFrameCount / elapsed;
+            const avgSteps = _auditSteps / _auditFrameCount;
+            
+            console.log(
+                `[SPEED_AUDIT] ` +
+                `FPS: ${fps.toFixed(1)} | ` +
+                `Delta: ${(_auditMinDelta * 1000).toFixed(1)}-${(_auditMaxDelta * 1000).toFixed(1)}ms ` +
+                `(${_auditClampedCount}/${_auditFrameCount} clamped) | ` +
+                `Steps: ${avgSteps.toFixed(1)}/fr | ` +
+                `SimDist: ${_auditSimDist.toFixed(2)}m (Total)`
+            );
+
+            // Reset for next window
+            _auditSimDist = 0;
+            _auditSteps = 0;
+            _auditFrameCount = 0;
+            _auditMinDelta = 999;
+            _auditMaxDelta = 0;
+            _auditClampedCount = 0;
+            _auditLastLogTime = now;
+        }
     }
 
     private updateShieldBubble(session: GameSessionLogic, delta: number) {
@@ -235,12 +277,12 @@ export class PlayerMovementSystem implements System {
 
             // Handle Rush Elevation (Hold Space)
             if (state.spaceDepressed && !state.isDodging && !state.isRushing) {
-                if (simTime - state.spacePressTime >= 150) {
+                if (simTime - state.spacePressTime >= 250) { // VINTERDÖD FIX: Increased threshold to avoid accidental dodge blocking
                     if (stats[PlayerStatID.STAMINA] >= 10) {
                         state.isRushing = true;
-                        // stats[PlayerStatID.STAMINA] -= 2; // Immediate cost removed for ramp-up balance
                         state.rushCostPaid = true;
                         state.lastStaminaUseTime = simTime;
+                        state.statusFlags |= PlayerStatusFlags.RUSHING; // Set immediately
                         this.checkReflexShield(session, simTime);
                     }
                 }
@@ -338,9 +380,10 @@ export class PlayerMovementSystem implements System {
             } else if (stats[PlayerStatID.STAMINA] >= stats[PlayerStatID.MAX_STAMINA] * 0.5) {
                 state.statusFlags &= ~PlayerStatusFlags.EXHAUSTED;
             }
-            // --- PROGRESSIVE RAMP-DOWN (2.0s) ---
+        } else {
+            // --- VINTERDÖD FIX: Properly ramp down when not rushing ---
             state.rushFactor = Math.max(0, state.rushFactor - rushRampSpeed);
-            // Note: RUSHING flag is now cleared immediately in input handling for animation responsiveness.
+            state.statusFlags &= ~PlayerStatusFlags.RUSHING;
         }
 
         // Apply Speed Multiplier based on Rush Factor (1.0x to 2.0x)
@@ -435,7 +478,13 @@ export class PlayerMovementSystem implements System {
                 isMovingVal = true;
                 const camAngle = session.cameraAngle || 0;
 
-                _v1.copy(_v6).normalize();
+                // VINTERDÖD FIX: If it's a joystick, we DON'T necessarily want to normalize to 1.0 
+                // if we want analog walking, BUT the game design specifies digital-like speed.
+                // However, we MUST ensure the magnitude never exceeds 1.0.
+                const mag = _v6.length();
+                if (mag > 1.0) _v6.normalize();
+                
+                _v1.copy(_v6);
                 if (camAngle !== 0) _v1.applyAxisAngle(_UP, camAngle);
 
                 _forward.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
@@ -548,6 +597,12 @@ export class PlayerMovementSystem implements System {
         for (let s = 0; s < steps; s++) {
             _v3.copy(playerGroup.position).add(_v2);
 
+            // --- TRACK SIMULATED DISTANCE ---
+            const dx = _v3.x - playerGroup.position.x;
+            const dz = _v3.z - playerGroup.position.z;
+            _auditSimDist += Math.sqrt(dx * dx + dz * dz);
+            _auditSteps++;
+
             const nearbyObs = state.collisionGrid.getNearbyObstacles(_v3, 2.5);
             const nLen = nearbyObs.length;
 
@@ -600,7 +655,25 @@ export class PlayerMovementSystem implements System {
         const angle = session.cameraAngle || 0;
 
         if (isMobileDevice) {
-            const stick = (input.joystickAim?.lengthSq() > 0.25) ? input.joystickAim : (input.joystickMove?.lengthSq() > 0.1 ? input.joystickMove : null);
+            const joystickAim = input.joystickAim;
+            const isAiming = joystickAim && joystickAim.lengthSq() > 0.25;
+            const stick = isAiming ? joystickAim : (input.joystickMove?.lengthSq() > 0.1 ? input.joystickMove : null);
+
+            // VINTERDÖD: If we are charging a throwable, we only rotate to the stick IF it's an aim stick.
+            // If the aim stick is released while charging, we remain facing the locked throw rotation
+            // and IGNORE the movement stick for rotation.
+            if (state.throwChargeStart > 0) {
+                if (isAiming) {
+                    _v1.set(stick.x, 0, stick.y);
+                    if (angle !== 0) _v1.applyAxisAngle(_UP, angle);
+                    _v5.set(playerGroup.position.x + _v1.x * 10, playerGroup.position.y, playerGroup.position.z + _v1.z * 10);
+                    playerGroup.lookAt(_v5);
+                } else {
+                    // Lock to the cached throw rotation
+                    playerGroup.quaternion.copy(state.throwChargeRotation);
+                }
+                return;
+            }
 
             if (stick) {
                 _v1.set(stick.x, 0, stick.y);
@@ -614,7 +687,11 @@ export class PlayerMovementSystem implements System {
                 playerGroup.lookAt(_v5);
             }
         } else {
-            if (input.aimVector && input.aimVector.lengthSq() > 1) {
+            // --- DESKTOP / MOUSE ---
+            const isCharging = state.throwChargeStart > 0;
+            const hasAimInput = input.aimVector && input.aimVector.lengthSq() > 1;
+
+            if (hasAimInput) {
                 _v1.set(input.aimVector.x, 0, input.aimVector.y);
                 if (angle !== 0) _v1.applyAxisAngle(_UP, angle);
 
@@ -624,7 +701,9 @@ export class PlayerMovementSystem implements System {
                     playerGroup.position.z + _v1.z
                 );
                 playerGroup.lookAt(_v5);
-
+            } else if (isCharging) {
+                // Keep facing the throw direction even if mouse isn't moving
+                playerGroup.quaternion.copy(state.throwChargeRotation);
             } else if (isMoving) {
                 if (_v6.lengthSq() > 0) {
                     _v1.copy(_v6).normalize();

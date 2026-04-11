@@ -535,7 +535,7 @@ export const SectorBuilder = {
         building.castShadow = true;
         building.receiveShadow = true;
         GeneratorUtils.freezeStatic(building);
-        
+
         // VINTERDÖD FIX: Manual sync for frozen objects
         building.updateMatrix();
         building.updateMatrixWorld();
@@ -1013,7 +1013,7 @@ export const SectorBuilder = {
     fillVegetation: (ctx: SectorContext, type: VEGETATION_TYPE | VEGETATION_TYPE[], region: THREE.Vector3[] | { x: number, z: number, w: number, d: number }, density: number = 1.0) => {
         // Register polygon-based regions on the minimap
         if (Array.isArray(region) && region.length >= 3) {
-            const isTree = [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.OAK, VEGETATION_TYPE.BIRCH, VEGETATION_TYPE.DEAD]
+            const isTree = [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.OAK, VEGETATION_TYPE.BIRCH, VEGETATION_TYPE.DEAD_TREE]
                 .includes(Array.isArray(type) ? type[0] : type);
             const isWheat = (Array.isArray(type) ? type[0] : type) === VEGETATION_TYPE.WHEAT;
 
@@ -1108,7 +1108,7 @@ export const SectorBuilder = {
             case POI_TYPE.GYM: poi = PoiGenerator.createGym(); break;
             case POI_TYPE.PIZZERIA: poi = PoiGenerator.createPizzeria(); break;
             case POI_TYPE.FARM: poi = PoiGenerator.createFarm(); break;
-            case POI_TYPE.FARMHOUSE: poi = PoiGenerator.createFarmhouse(); break;
+            case POI_TYPE.EGG_FARM: poi = PoiGenerator.createEggFarm(); break;
             case POI_TYPE.BARN: poi = PoiGenerator.createBarn(); break;
             case POI_TYPE.DEALERSHIP: poi = PoiGenerator.createDealership(); break;
             case POI_TYPE.MAST: poi = PoiGenerator.createMast(); break;
@@ -1233,7 +1233,7 @@ export const SectorBuilder = {
     addTriggers: (ctx: SectorContext, triggers: SectorTrigger[]) => {
         for (let i = 0; i < triggers.length; i++) {
             const trigger = triggers[i];
-            
+
             // Re-initialize statusFlags if they are missing or still in boolean format
             if (trigger.statusFlags === undefined) {
                 let flags = TriggerStatus.ACTIVE;

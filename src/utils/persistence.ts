@@ -1,6 +1,6 @@
 import { GameState, GameScreen } from '../game/session/SessionTypes';
 import { WeaponType } from '../content/weapons';
-import { INITIAL_STATS, DEFAULT_SETTINGS } from '../content/constants';
+import { INITIAL_STATS, DEFAULT_SETTINGS, OVERRIDE_DEFAULT_SECTOR } from '../content/constants';
 import { PlayerStatsUtils } from '../entities/player/PlayerTypes';
 
 export const DEFAULT_STATE: GameState = {
@@ -68,10 +68,12 @@ const SAVE_KEY = 'winterDeathSave_v1';
 
 export const loadGameState = (): GameState => {
     const saved = localStorage.getItem(SAVE_KEY);
+    let state: GameState;
+
     if (saved) {
         try {
             const loaded = JSON.parse(saved);
-            return {
+            state = {
                 ...DEFAULT_STATE,
                 ...loaded,
                 stats: {
@@ -90,9 +92,19 @@ export const loadGameState = (): GameState => {
             };
         } catch (e) {
             console.error('Save file corrupted, resetting.');
+            state = { ...DEFAULT_STATE };
         }
+    } else {
+        state = { ...DEFAULT_STATE };
     }
-    return DEFAULT_STATE;
+
+    // --- VINTERDÖD DEBUG OVERRIDE ---
+    if (OVERRIDE_DEFAULT_SECTOR >= 0 && OVERRIDE_DEFAULT_SECTOR <= 4) {
+        state.screen = GameScreen.SECTOR;
+        state.currentSector = OVERRIDE_DEFAULT_SECTOR;
+    }
+
+    return state;
 };
 
 export const saveGameState = (state: GameState) => {

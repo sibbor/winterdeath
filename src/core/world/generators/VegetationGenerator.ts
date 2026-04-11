@@ -458,7 +458,7 @@ const _placeSunflowers = (ctx: SectorContext, region: Region, density: number) =
     const sHead = new THREE.InstancedMesh(SHARED_GEO.sunflowerHead, MATERIALS.sunflowerHead, count);
     const sCent = new THREE.InstancedMesh(SHARED_GEO.sunflowerCenter, MATERIALS.sunflowerCenter, count);
     for (const m of [sStem, sHead, sCent]) {
-        m.userData.windAffected = true; 
+        m.userData.windAffected = true;
         GeneratorUtils.freezeStatic(m);
     }
 
@@ -552,7 +552,7 @@ export const VegetationGenerator = {
             if (!prototypes[`${VEGETATION_TYPE.SPRUCE}_${i}`]) prototypes[`${VEGETATION_TYPE.SPRUCE}_${i}`] = generateSprucePrototype(i);
             if (!prototypes[`${VEGETATION_TYPE.OAK}_${i}`]) prototypes[`${VEGETATION_TYPE.OAK}_${i}`] = generateOakPrototype(i);
             if (!prototypes[`${VEGETATION_TYPE.BIRCH}_${i}`]) prototypes[`${VEGETATION_TYPE.BIRCH}_${i}`] = generateBirchPrototype(i);
-            if (!prototypes[`${VEGETATION_TYPE.DEAD}_${i}`]) prototypes[`${VEGETATION_TYPE.DEAD}_${i}`] = generateDeadTreePrototype(i);
+            if (!prototypes[`${VEGETATION_TYPE.DEAD_TREE}_${i}`]) prototypes[`${VEGETATION_TYPE.DEAD_TREE}_${i}`] = generateDeadTreePrototype(i);
             if (yieldToMain) await yieldToMain();
         }
     },
@@ -605,7 +605,7 @@ export const VegetationGenerator = {
         let trunkMat = MATERIALS.treeTrunk;
         if (type === 'OAK') trunkMat = MATERIALS.treeTrunkOak;
         else if (type === 'BIRCH') trunkMat = MATERIALS.treeTrunkBirch;
-        else if (type === 'DEAD') trunkMat = MATERIALS.deadWood;
+        else if (type === 'DEAD_TREE') trunkMat = MATERIALS.deadWood;
 
         const trunk = new THREE.Mesh(proto.trunkGeo, trunkMat);
         trunk.castShadow = true; trunk.receiveShadow = true;
@@ -649,13 +649,14 @@ export const VegetationGenerator = {
         if (!materialOverride) {
             if (baseType === 'OAK') { trunkMat = MATERIALS.treeTrunkOak; leavesMat = MATERIALS.treeLeavesOak; }
             else if (baseType === 'BIRCH') { trunkMat = MATERIALS.treeTrunkBirch; leavesMat = MATERIALS.treeLeavesBirch; }
-            else if (baseType === 'DEAD') { trunkMat = MATERIALS.deadWood; }
+            else if (baseType === 'DEAD_TREE') { trunkMat = MATERIALS.deadWood; }
         }
 
         const trunkMesh = new THREE.InstancedMesh(proto.trunkGeo, trunkMat, matrices.length);
         trunkMesh.castShadow = !materialOverride;
         trunkMesh.receiveShadow = !materialOverride;
         trunkMesh.userData.windAffected = true;
+        trunkMesh.userData.isEngineStatic = true;
         GeneratorUtils.freezeStatic(trunkMesh);
 
         let leavesMesh: THREE.InstancedMesh | undefined;
@@ -664,6 +665,7 @@ export const VegetationGenerator = {
             leavesMesh.castShadow = !materialOverride;
             leavesMesh.receiveShadow = !materialOverride;
             leavesMesh.userData.windAffected = true;
+            leavesMesh.userData.isEngineStatic = true;
             GeneratorUtils.freezeStatic(leavesMesh);
 
             if (!materialOverride) {
@@ -676,6 +678,7 @@ export const VegetationGenerator = {
             snowMesh = new THREE.InstancedMesh(proto.snowGeo, MATERIALS.snow, matrices.length);
             snowMesh.castShadow = true;
             snowMesh.userData.windAffected = true;
+            snowMesh.userData.isEngineStatic = true;
             GeneratorUtils.freezeStatic(snowMesh);
         }
 
@@ -718,7 +721,7 @@ export const VegetationGenerator = {
             || firstType === VEGETATION_TYPE.SPRUCE
             || firstType === VEGETATION_TYPE.OAK
             || firstType === VEGETATION_TYPE.BIRCH
-            || firstType === VEGETATION_TYPE.DEAD;
+            || firstType === VEGETATION_TYPE.DEAD_TREE;
 
         if (isTree) {
             _placeTrees(ctx, region, density, types);
@@ -767,7 +770,7 @@ export const VegetationGenerator = {
 
             let selectedType = type;
             if (Array.isArray(type)) selectedType = type[Math.floor(rand() * type.length)];
-            if (selectedType === 'random') selectedType = ['PINE', 'OAK', 'DEAD', 'BIRCH'][Math.floor(rand() * 4)];
+            if (selectedType === 'random') selectedType = ['PINE', 'OAK', 'DEAD_TREE', 'BIRCH'][Math.floor(rand() * 4)];
             if (typeof selectedType !== 'string') selectedType = 'PINE';
             selectedType = selectedType.toUpperCase();
 
@@ -824,7 +827,7 @@ export const VegetationGenerator = {
 
                 let selectedType = type;
                 if (Array.isArray(type)) selectedType = type[Math.floor(rand() * type.length)];
-                if (selectedType === 'random') selectedType = ['PINE', 'OAK', 'DEAD', 'BIRCH'][Math.floor(rand() * 4)];
+                if (selectedType === 'random') selectedType = ['PINE', 'OAK', 'DEAD_TREE', 'BIRCH'][Math.floor(rand() * 4)];
                 if (typeof selectedType !== 'string') selectedType = 'PINE';
                 selectedType = selectedType.toUpperCase();
 
@@ -1015,7 +1018,7 @@ export const VegetationGenerator = {
     },
 
     createDeadTree: (variant: 'standing' | 'fallen' = 'standing', scale: number = 1.0): THREE.Group => {
-        const tree = VegetationGenerator.createTree(VEGETATION_TYPE.DEAD, scale, Math.floor(Math.random() * 3));
+        const tree = VegetationGenerator.createTree(VEGETATION_TYPE.DEAD_TREE, scale, Math.floor(Math.random() * 3));
         if (variant === 'fallen') {
             tree.rotation.z = Math.PI / 2 + (Math.random() - 0.5) * 0.5;
             tree.position.y = 0.5 * scale;

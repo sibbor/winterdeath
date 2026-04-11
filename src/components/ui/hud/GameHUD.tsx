@@ -237,21 +237,22 @@ const KillsPanel = React.memo(({ isMobileDevice, isBossIntro, handlePauseInterna
 });
 
 const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro, scrapTextRef, spTextRef, scrapBoxRef, spBoxRef }: any) => {
+    const size = isMobileDevice ? 'w-14 h-14' : 'w-20 h-20';
 
     return (
-        <div className={`flex flex-col gap-2.5 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+        <div className={`flex flex-col gap-3 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
             {/* SCRAP BOX (CampHUD Style) */}
             <div ref={scrapBoxRef} 
-                 className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-1.5'} border bg-black border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] w-full flex flex-col items-end gap-0 transition-all`}>
-                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[9px]'} block uppercase font-bold text-yellow-500 leading-tight opacity-70`}>{t('ui.scrap')}</span>
-                <span ref={scrapTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-yellow-400 leading-none`}>0</span>
+                 className={`${size} aspect-square border bg-yellow-950/80 border-yellow-700 shadow-[0_0_15px_rgba(234,179,8,0.2)] flex flex-col items-center justify-center gap-0 transition-all pointer-events-auto`}>
+                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold text-yellow-500 leading-tight`}>{t('ui.scrap')}</span>
+                <span ref={scrapTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-yellow-500 leading-none`}>0</span>
             </div>
 
             {/* SP BOX (CampHUD Style) */}
             <div ref={spBoxRef} 
-                 className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-1.5'} border bg-black border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)] w-full flex flex-col items-end gap-0 transition-all`}>
-                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[9px]'} block uppercase font-bold text-purple-500 leading-tight opacity-70`}>{t('ui.sp')}</span>
-                <span ref={spTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-purple-400 leading-none`}>0</span>
+                 className={`${size} aspect-square border bg-purple-950/80 border-purple-700 shadow-[0_0_15px_rgba(168,85,247,0.2)] flex flex-col items-center justify-center gap-0 transition-all pointer-events-auto`}>
+                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold text-purple-500 leading-tight`}>{t('ui.sp')}</span>
+                <span ref={spTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-purple-500 leading-none`}>0</span>
             </div>
         </div>
     );
@@ -513,17 +514,14 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             if (scrapTextRef.current && data.scrap !== undefined) {
                 scrapTextRef.current.innerText = data.scrap.toString();
                 if (data.scrap > prevTelemetry.current.scrap) {
-                    // Trigger Bling (CSS Class Reflow Trick)
                     if (scrapBoxRef.current) {
                         scrapBoxRef.current.classList.remove('hud-bling-pulse');
-                        void scrapBoxRef.current.offsetWidth; // Force Reflow
+                        void scrapBoxRef.current.offsetWidth;
                         scrapBoxRef.current.classList.add('hud-bling-pulse');
 
-                        // Dynamic styling bypass
-                        scrapBoxRef.current.style.backgroundColor = 'rgba(234, 179, 8, 0.2)';
-                        scrapBoxRef.current.style.borderColor = '#eab308';
-                        scrapBoxRef.current.style.boxShadow = '0 0 15px rgba(234, 179, 8, 0.3)';
-                        scrapTextRef.current.style.color = '#facc15';
+                        // Reset to theme base (Zero-GC bypass for 60fps responsiveness)
+                        scrapBoxRef.current.style.backgroundColor = 'rgba(66, 32, 6, 0.8)'; // dark yellow
+                        scrapBoxRef.current.style.borderColor = '#a16207'; // yellow-700
                     }
                 }
                 prevTelemetry.current.scrap = data.scrap;
@@ -534,13 +532,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 if (data.spEarned > prevTelemetry.current.sp) {
                     if (spBoxRef.current) {
                         spBoxRef.current.classList.remove('hud-bling-pulse-purple');
-                        void spBoxRef.current.offsetWidth; // Force Reflow
+                        void spBoxRef.current.offsetWidth;
                         spBoxRef.current.classList.add('hud-bling-pulse-purple');
 
-                        spBoxRef.current.style.backgroundColor = 'rgba(168, 85, 247, 0.2)';
-                        spBoxRef.current.style.borderColor = '#a855f7';
-                        spBoxRef.current.style.boxShadow = '0 0 15px rgba(168, 85, 247, 0.3)';
-                        spTextRef.current.style.color = '#c084fc';
+                        spBoxRef.current.style.backgroundColor = 'rgba(88, 28, 135, 0.8)'; // dark purple
+                        spBoxRef.current.style.borderColor = '#7e22ce'; // purple-700
                     }
                 }
                 prevTelemetry.current.sp = data.spEarned;

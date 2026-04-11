@@ -50,7 +50,8 @@ const _griefAnimState = {
 };
 
 export class DeathSystem implements System {
-    id = 'death';
+    id = 'death_system';
+    isFixedStep = true;
 
     private playerGroupRef: React.MutableRefObject<THREE.Group>;
     private playerMeshRef: React.MutableRefObject<THREE.Group>;

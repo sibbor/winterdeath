@@ -11,6 +11,7 @@ interface TouchControllerProps {
 
 const STICK_RADIUS = 60;
 const MAX_DIST = 50;
+const HUD_GUTTER = '12%'; // VINTERDÖD: Safe zone for Pause/HUD buttons
 
 const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState, onPause, onOpenMap }) => {
     const { isLandscapeMode } = useOrientation();
@@ -106,18 +107,21 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 let dy = t.clientY - leftCenter.current.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
-                if (dist > MAX_DIST) {
-                    const ratio = MAX_DIST / dist;
-                    dx *= ratio;
-                    dy *= ratio;
+                // --- VINTERDÖD: ABSOLUTE NORMALIZATION ---
+                // We enforce a unit vector if the distance exceeds 1.0 logic units.
+                // This ensures absolute physics parity regardless of CSS-to-DPI scaling.
+                if (dist > 0.001) {
+                    const normMag = Math.min(1.0, dist / MAX_DIST);
+                    const angle = Math.atan2(dy, dx);
+                    inputState.joystickMove.set(Math.cos(angle) * normMag, Math.sin(angle) * normMag);
+                } else {
+                    inputState.joystickMove.set(0, 0);
                 }
 
-                if (inputState.joystickMove.set) {
-                    inputState.joystickMove.set(dx / MAX_DIST, dy / MAX_DIST);
-                }
-
+                const visualDist = Math.min(dist, MAX_DIST);
+                const visualAngle = Math.atan2(dy, dx);
                 if (leftStickKnobRef.current) {
-                    leftStickKnobRef.current.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+                    leftStickKnobRef.current.style.transform = `translate3d(${Math.cos(visualAngle) * visualDist}px, ${Math.sin(visualAngle) * visualDist}px, 0)`;
                 }
             }
 
@@ -127,20 +131,20 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 let dy = t.clientY - rightCenter.current.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
-                if (dist > MAX_DIST) {
-                    const ratio = MAX_DIST / dist;
-                    dx *= ratio;
-                    dy *= ratio;
+                if (dist > 0.001) {
+                    const normMag = Math.min(1.0, dist / MAX_DIST);
+                    const angle = Math.atan2(dy, dx);
+                    inputState.joystickAim.set(Math.cos(angle) * normMag, Math.sin(angle) * normMag);
+                } else {
+                    inputState.joystickAim.set(0, 0);
                 }
 
-                if (inputState.joystickAim.set) {
-                    inputState.joystickAim.set(dx / MAX_DIST, dy / MAX_DIST);
-                }
-                
                 inputState.fire = dist > 5;
 
+                const visualDist = Math.min(dist, MAX_DIST);
+                const visualAngle = Math.atan2(dy, dx);
                 if (rightStickKnobRef.current) {
-                    rightStickKnobRef.current.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+                    rightStickKnobRef.current.style.transform = `translate3d(${Math.cos(visualAngle) * visualDist}px, ${Math.sin(visualAngle) * visualDist}px, 0)`;
                 }
             }
         }
@@ -169,55 +173,66 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
 
     return (
         <div className={`absolute inset-0 pointer-events-none z-[100] overflow-hidden select-none touch-none transition-opacity duration-1000 ${hudVisible ? 'opacity-100' : 'opacity-0'}`}>
+            {/* LEFT TOUCH ZONE (Movement) */}
             <div
-                className="absolute inset-0 pointer-events-auto"
-                style={{ touchAction: 'none' }}
+                className="absolute left-0 w-[40%] h-[80%] pointer-events-auto"
+                style={{ top: HUD_GUTTER, touchAction: 'none' }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
                 onTouchCancel={handleTouchEnd}
+            />
+
+            {/* RIGHT TOUCH ZONE (Aiming) */}
+            <div
+                className="absolute right-0 w-[50%] h-[80%] pointer-events-auto"
+                style={{ top: HUD_GUTTER, touchAction: 'none' }}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onTouchCancel={handleTouchEnd}
+            />
+
+            {/* LEFT JOYSTICK VISUAL */}
+            <div
+                ref={leftStickContainerRef}
+                className="absolute rounded-full border-2 border-white/20 bg-white/5 pointer-events-none animate-in fade-in zoom-in duration-200"
+                style={{ width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, display: 'none' }}
             >
-                {/* VÄNSTER JOYSTICK */}
                 <div
-                    ref={leftStickContainerRef}
-                    className="absolute rounded-full border-2 border-white/20 bg-white/5 pointer-events-none will-change-transform"
-                    style={{ width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, display: 'none' }}
-                >
-                    <div
-                        ref={leftStickKnobRef}
-                        className="absolute rounded-full bg-white/40 shadow-[0_0_15px_rgba(255,255,255,0.3)] will-change-transform"
-                        style={{ left: STICK_RADIUS - 25, top: STICK_RADIUS - 25, width: 50, height: 50 }}
-                    />
-                </div>
+                    ref={leftStickKnobRef}
+                    className="absolute rounded-full bg-white/40 shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+                    style={{ left: STICK_RADIUS - 25, top: STICK_RADIUS - 25, width: 50, height: 50 }}
+                />
+            </div>
 
-                {/* HÖGER JOYSTICK */}
+            {/* RIGHT JOYSTICK VISUAL */}
+            <div
+                ref={rightStickContainerRef}
+                className="absolute rounded-full border-2 border-red-500/20 bg-red-900/5 pointer-events-none animate-in fade-in zoom-in duration-200"
+                style={{ width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, display: 'none' }}
+            >
                 <div
-                    ref={rightStickContainerRef}
-                    className="absolute rounded-full border-2 border-red-500/20 bg-red-900/5 pointer-events-none will-change-transform"
-                    style={{ width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, display: 'none' }}
-                >
-                    <div
-                        ref={rightStickKnobRef}
-                        className="absolute rounded-full bg-red-500/40 shadow-[0_0_15px_rgba(220,38,38,0.3)] will-change-transform"
-                        style={{ left: STICK_RADIUS - 25, top: STICK_RADIUS - 25, width: 50, height: 50 }}
-                    />
-                </div>
+                    ref={rightStickKnobRef}
+                    className="absolute rounded-full bg-red-500/40 shadow-[0_0_15px_rgba(220,38,38,0.3)]"
+                    style={{ left: STICK_RADIUS - 25, top: STICK_RADIUS - 25, width: 50, height: 50 }}
+                />
+            </div>
 
-                {/* Action Buttons */}
-                <div className={`absolute pointer-events-auto flex z-40 pr-safe pb-safe ${isLandscapeMode ? 'bottom-2 right-4 flex-col gap-2' : 'bottom-24 right-4 flex-col gap-2'}`}>
-                    <div className="flex justify-end">
-                        <button data-action="f" className="w-12 h-12 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
-                            <img src="/assets/icons/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain pointer-events-none" />
-                        </button>
-                    </div>
-                    <div className="flex items-end gap-2">
-                        <button data-action="r" className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
-                            <img src="/assets/icons/ui/icon_reload.png" alt="R" className="w-full h-full object-contain pointer-events-none" />
-                        </button>
-                        <button data-action="space" className="w-20 h-20 md:w-24 md:h-24 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 shadow-[0_0_20px_rgba(255,0,0,0.4)] opacity-80 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
-                            <img src="/assets/icons/ui/icon_dodge.png" alt="Dodge" className="w-full h-full object-contain pointer-events-none" />
-                        </button>
-                    </div>
+            {/* Action Buttons */}
+            <div className={`absolute pointer-events-auto flex z-40 pr-safe pb-safe ${isLandscapeMode ? 'bottom-2 right-4 flex-col gap-2' : 'bottom-24 right-4 flex-col gap-2'}`}>
+                <div className="flex justify-end">
+                    <button data-action="f" className="w-12 h-12 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
+                        <img src="/assets/icons/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain pointer-events-none" />
+                    </button>
+                </div>
+                <div className="flex items-end gap-2">
+                    <button data-action="r" className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
+                        <img src="/assets/icons/ui/icon_reload.png" alt="R" className="w-full h-full object-contain pointer-events-none" />
+                    </button>
+                    <button data-action="space" className="w-20 h-20 md:w-24 md:h-24 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 shadow-[0_0_20px_rgba(255,0,0,0.4)] opacity-80 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
+                        <img src="/assets/icons/ui/icon_dodge.png" alt="Dodge" className="w-full h-full object-contain pointer-events-none" />
+                    </button>
                 </div>
             </div>
         </div>

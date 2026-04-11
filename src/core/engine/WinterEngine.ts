@@ -60,6 +60,13 @@ export class WinterEngine {
     private isRunning: boolean = false;
     private container: HTMLElement | null = null;
 
+    // --- FIXED-STEP ACCUMULATOR ---
+    /** 60Hz Physics/Logic target in seconds */
+    public static readonly FIXED_DELTA = 1 / 60;
+    /** Max simulation steps per frame to prevent "Spiral of Death" on lag spikes */
+    private static readonly MAX_STEPS = 8;
+    private _accumulator: number = 0;
+
     /** Engine's global visual clock (Milliseconds). Always ticks regardless of pause state. */
     public renderTime: number = 0;
     /** Engine's simulation clock (Milliseconds). Freezes during soft pause or cinematics. */
@@ -129,6 +136,12 @@ export class WinterEngine {
         this.weather = new WeatherSystem(this.scene, this.wind, this.camera.threeCamera);
         this.fog = new FogSystem(this.scene, this.wind, this.camera.threeCamera);
         this.water = new WaterSystem(this.scene);
+
+        // --- GATE SYSTEMS TO FIXED STEP ---
+        this.wind.isFixedStep = true;
+        this.weather.isFixedStep = true;
+        this.water.isFixedStep = true;
+        // Fog & Light stay variable for smooth visual interpolation/shadows
 
         (window as any).WinterEngineInstance = this;
 
@@ -459,46 +472,64 @@ export class WinterEngine {
         const now = performance.now();
         const frameStart = now;
 
-        // Clampa delta till max 50ms. Skyddar mot fysik-explosioner vid lagg.
-        const delta = Math.min(0.05, (now - this.lastTime) / 1000);
+        // --- 1. RAW DELTA CALCULATION ---
+        const realDelta = Math.min(0.25, (now - this.lastTime) / 1000);
         this.lastTime = now;
 
-        // --- VINTERDÖD KLOCK-SEPARATION ---
-        // 1. Visuell tid (renderTime) tickar ALLTID (för UI, menyer, kamerarörelser)
-        this.renderTime += delta * 1000;
-
-        // 2. Logisk tid (simTime) tickar BARA när spelet inte är hårdpausat
-        if (!this.isSimulationPaused) {
-            this.simTime += delta * 1000;
-        }
+        // --- 2. ACCUMULATE TIME ---
+        this._accumulator += realDelta;
 
         const monitor = PerformanceMonitor.getInstance();
         monitor.startFrame();
 
-        // 1. Logic Update (Physics, Movement, Systems)
-        monitor.begin('logic');
-        // VINTERDÖD: Vi kör alltid onUpdate så att loopen kan hantera sina egna pause-transitioner
-        if (this.onUpdate) {
-            this.onUpdate(delta);
-        }
-        monitor.end('logic');
+        const context = this.onUpdateContext || { scene: this.scene, state: {} };
+        const FIXED_DT = WinterEngine.FIXED_DELTA;
 
-        // 2. High-Performance System Logic (Unified Registry)
-        // VINTERDÖD: System-loopen körs alltid, men vi filtrerar inuti updateSystems
-        if (this.onUpdateContext || this._systemArray.length > 0) {
-            const context = this.onUpdateContext || { scene: this.scene, state: {} };
-            this.updateSystems(context, delta);
-        }
+        // --- 3. FIXED-STEP LOGIC HEARTBEAT (60Hz) ---
+        // Decouples physics/AI/movement from rendering FPS.
+        let steps = 0;
+        monitor.begin('logic_simulation');
+        while (this._accumulator >= FIXED_DT) {
+            steps++;
+            
+            // Increment simulation clock by EXACT milliseconds to prevent drift
+            if (!this.isSimulationPaused) {
+                this.simTime += FIXED_DT * 1000;
+            }
 
-        // 3. Camera Update
+            // A. Trigger GameSessionLoop Logic (Always uses FIXED_DT in seconds)
+            if (this.onUpdate) {
+                this.onUpdate(FIXED_DT);
+            }
+
+            // B. Update Logic Systems (Fixed-Step)
+            this.updateSystems(context, FIXED_DT, true);
+
+            this._accumulator -= FIXED_DT;
+
+            // Spiral of Death Protection
+            if (steps >= WinterEngine.MAX_STEPS) {
+                this._accumulator = 0; // Drop remaining time to catch up
+                break;
+            }
+        }
+        monitor.end('logic_simulation');
+
+        // --- 4. VARIABLE RENDER CLOCK AND UPDATES ---
+        // Environmental visual smoothing, camera tracking, and UI sync.
+        this.renderTime += realDelta * 1000;
+
+        // A. Update Visual Systems (Variable-Rate)
+        this.updateSystems(context, realDelta, false);
+
+        // B. Camera Update (Smooth Tracking)
         monitor.begin('camera');
-        this.camera.update(delta, this.renderTime);
+        this.camera.update(realDelta, this.renderTime);
         monitor.end('camera');
 
-        // 4. Render Pass
+        // --- 5. RENDER PASS ---
         monitor.begin('render');
         if (!this.isRenderingPaused) {
-            // Vi renderar även under paus så spelet inte blir svart bakom menyn
             if (this.onRender) {
                 this.onRender();
             } else {
@@ -510,7 +541,6 @@ export class WinterEngine {
         monitor.end('render');
 
         monitor.setRendererStats(this.renderer.info);
-
         const totalTime = performance.now() - frameStart;
         monitor.printIfHeavy('Game Engine Performance', totalTime, 50);
     };
@@ -559,7 +589,7 @@ export class WinterEngine {
      * Unified system update loop (Zero-GC)
      * Provision standardized timing: env systems get renderTime; simulation systems get simTime.
      */
-    private updateSystems(context: any, delta: number): void {
+    private updateSystems(context: any, delta: number, fixedOnly?: boolean): void {
         const monitor = PerformanceMonitor.getInstance();
         const systems = this._systemArray;
         const len = systems.length;
@@ -570,7 +600,12 @@ export class WinterEngine {
 
             const id = sys.id;
 
-            // --- VINTERDÖD: DUAL-CLOCK GATING ---
+            // --- VINTERDÖD: FIXED-STEP & CLOCK GATING ---
+            const isFixed = sys.isFixedStep || false;
+            
+            // Skip systems that don't match the current loop cycle
+            if (fixedOnly !== undefined && isFixed !== fixedOnly) continue;
+
             // Miljösystem (vind, vatten, etc.) körs alltid med renderTime.
             // Logiksystem (fiender, spelare) pausas om isSimulationPaused är true.
             const isEnvSystem = this._envSystemIds.has(id);

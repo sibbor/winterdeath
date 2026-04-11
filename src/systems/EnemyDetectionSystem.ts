@@ -11,7 +11,8 @@ export interface NoiseEvent {
 }
 
 export class EnemyDetectionSystem implements System {
-    id = 'EnemyDetectionSystem';
+    id = 'enemy_detection_system';
+    isFixedStep = true;
     private noiseEvents: NoiseEvent[] = [];
     private raycaster = new THREE.Raycaster();
     private context: any = null;

@@ -26,7 +26,8 @@ export interface ScrapItem {
 }
 
 export class WorldLootSystem implements System {
-    id = 'world_loot';
+    id = 'world_loot_system';
+    isFixedStep = true;
 
     private static MAX_SCRAP = 300;
     private instancedMesh: THREE.InstancedMesh;

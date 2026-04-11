@@ -16,6 +16,12 @@ export interface System {
     persistent?: boolean;
 
     /**
+     * If true, the system updates within the fixed-step accumulator (60Hz).
+     * Otherwise, it updates within the variable render loop.
+     */
+    isFixedStep?: boolean;
+
+    /**
      * Called once when the system is registered.
      */
     init?(context: any): void;

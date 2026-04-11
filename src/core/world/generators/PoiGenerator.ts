@@ -71,7 +71,7 @@ export const PoiGenerator = {
         const cafeBody = new THREE.Mesh(mergedCafeGeo, MATERIALS.yellowBrick);
         cafeBody.position.y = 6;
         group.add(cafeBody);
-        
+
         group.userData = {
             size: new THREE.Vector3(18, 20, 12),
             material: MaterialType.CONCRETE,
@@ -127,7 +127,7 @@ export const PoiGenerator = {
         group.userData.staircase = { width: 6, height: 12, depth: 8, offset: new THREE.Vector3(-23, 0, 0) };
         group.userData.neonSign = { text: "Gånghester Gym", color: 0xffaa00, offset: new THREE.Vector3(-10, 4.5, 10.1) };
         group.userData.colliders = [{ type: 'box', size: new THREE.Vector3(40, 12, 20) }];
-        
+
         return GeneratorUtils.freezeStatic(group);
     },
 
@@ -159,24 +159,23 @@ export const PoiGenerator = {
     },
 
     createFarm: () => {
-        // Based on Sector 2
         const group = ObjectGenerator.createBuilding(25, 8, 20, 0x7c2e2e, true, true);
         group.userData.effects = [{ type: 'fire', smoke: true, intensity: 20, distance: 40, onRoof: true }];
-        return group; // createBuilding is already freezed
+        return group;
     },
 
-    createFarmhouse: () => {
+    createEggFarm: () => {
         const group = ObjectGenerator.createBuilding(25, 8, 20, 0x7c2e2e, true, true);
         group.userData.effects = [{ type: 'fire', smoke: true, intensity: 150, distance: 40, onRoof: true }];
         return group;
     },
-    
+
     createBarn: () => {
         const group = ObjectGenerator.createBuilding(25, 8, 20, 0x7c2e2e, true, true);
         group.userData.effects = [{ type: 'fire', smoke: false, intensity: 0, distance: 0, onRoof: true }];
         return group;
     },
-    
+
     // Moved from ObjectGenerator
     createMast: () => {
         const group = new THREE.Group();
@@ -214,7 +213,7 @@ export const PoiGenerator = {
 
         group.add(lightHub);
         group.userData.colliders = [{ type: 'box', size: new THREE.Vector3(10, 60, 10) }];
-        
+
         return GeneratorUtils.freezeStatic(group, ["mastWarningLights"]);
     },
 

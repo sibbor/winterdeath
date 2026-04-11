@@ -279,35 +279,6 @@ export const en = {
         boss_spawner: "BOSS SPAWNER",
         spawn_parameters: "SPAWN PARAMETERS",
         spread: "SPREAD",
-        report: {
-            damage: {
-                incoming: "INCOMING DAMAGE",
-                outgoing: "OUTGOING DAMAGE",
-            },
-            time: {
-                unit_min: " min"
-            },
-            distance: {
-                unit_m: " m",
-                unit_km: " km"
-            },
-            labels: {
-                physical: "PHYSICAL",
-                boss: "BOSS",
-                player: "YOU",
-                unknown: "UNKNOWN"
-            },
-            stats: {
-                xp: "XP",
-                sp: "SP",
-                scrap: "SCRAP",
-                chests: "CHESTS",
-                shots: "SHOTS",
-                accuracy: "ACCURACY",
-                kills: "KILLS",
-                throwables: "THROWABLES"
-            }
-        }
     },
     location: {
         near: "NEARBY",
@@ -717,14 +688,14 @@ export const en = {
                 reaction: "The mast is huge! Hard to imagine it was even higher before it was sabotaged in 2016."
             },
             "1": {
-                title: "Egg Farm",
-                description: "We used to buy our eggs here. Now the yard is crawling with the undead.",
-                reaction: "Poor bastards... Children, look away!"
-            },
-            "2": {
                 title: "Burning Farmhouse",
                 description: "The main farmhouse is completely engulfed in flames. A grim beacon in the cold winter night.",
                 reaction: "The farm is in flames. At least it's giving us some warmth in this ice-colde bister winter night."
+            },
+            "2": {
+                title: "Egg Farm",
+                description: "We used to buy our eggs here. Now the yard is crawling with the undead.",
+                reaction: "Poor bastards... Children, look away!"
             },
             "3": {
                 title: "The Old Barn",
@@ -853,6 +824,10 @@ export const en = {
         "3_26": "COME GET SOME, YOU BASTARD!"
     },
     report: {
+        damage: {
+            incoming: "INCOMING DAMAGE",
+            outgoing: "OUTGOING DAMAGE",
+        },
         time: {
             unit_min: " min"
         },

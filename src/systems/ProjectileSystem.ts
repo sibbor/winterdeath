@@ -54,7 +54,6 @@ export interface Projectile {
     type: ProjectileType;
     weapon: DamageID;
 
-    // --- Physics & Vectors ---
     vel: THREE.Vector3;
     origin: THREE.Vector3;
     speed: number;
@@ -62,7 +61,6 @@ export interface Projectile {
     active: boolean;
     hitEntities: Set<string>;
 
-    // --- ZERO-GC FLATTENING (DOD) ---
     damage: number;
     baseDamage: number;
     piercing: boolean;
@@ -75,7 +73,6 @@ export interface Projectile {
     marker?: THREE.Mesh;
 }
 
-// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -83,18 +80,10 @@ const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 const _v6 = new THREE.Vector3();
 
-// Dedicated scratchpads for Arc-Cannon continuous fire
 const _arcCannonHitList: Enemy[] = [];
 const _arcCannonHitIds = new Set<string>();
-
-// ZERO-GC SORTING (DOD)
 const _enemyDistBuffer = new Float32Array(512);
 
-/**
- * Optimized Zero-GC Insertion Sort for nearby enemies.
- * Calculates distance once per enemy and sorts in-place.
- * Best for small n (n < 64), which fits our SpatialGrid cell size.
- */
 function manualSortNearbyEnemies(projectilePos: THREE.Vector3, enemies: Enemy[]) {
     const len = enemies.length;
     if (len <= 1) return;
@@ -122,13 +111,11 @@ function manualSortNearbyEnemies(projectilePos: THREE.Vector3, enemies: Enemy[])
     }
 }
 
-// Audio Throttling for Arc-Cannon & Flamethrower
 let _lastArcCannonSoundTime = 0;
 let _lastFlameSoundTime = 0;
 
 const FLAMETHROWER_CONE_ANGLE = Math.cos(28 * Math.PI / 180);
 
-// ZERO-GC Pools
 const PROJECTILE_POOL: Projectile[] = [];
 const FIREZONE_POOL: FireZone[] = [];
 
@@ -282,10 +269,10 @@ export const ProjectileSystem = {
                     WeaponFX.createMuzzleFlash(origin, direction, false);
                 }
 
-                // Dynamic Light for the Flamethrower
-                if (Math.random() < 0.4) {
-                    _v4.copy(origin).addScaledVector(direction, 2.0);
-                    WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0xff6600, 2.5, 15.0, 0.1);
+                // [VINTERDÖD FIX] Push the dynamic light 3 meters ahead
+                if (Math.random() < 0.5) {
+                    _v4.copy(origin).addScaledVector(direction, 3.0);
+                    WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0xff6600, 5.0, 30.0, 0.12, 'fire');
                 }
 
                 const count = 4;
@@ -433,9 +420,10 @@ export const ProjectileSystem = {
                     _v3.copy(origin);
                     const hitLen = _arcCannonHitList.length;
 
-                    // Light up the origin of the arc-cannon slightly
-                    if (Math.random() > 0.5) {
-                        WeaponFX.spawnDynamicLight(ctx.scene, origin, 0x00ffff, 1.5, 10.0, 0.1);
+                    // [VINTERDÖD FIX] Illuminate the target area (forward push)
+                    if (Math.random() > 0.4) {
+                        _v4.copy(target.mesh.position).addScaledVector(direction, -1.0);
+                        WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0x00ffff, 2.0, 14.0, 0.1, 'electric');
                     }
 
                     for (let i = 0; i < hitLen; i++) {
@@ -446,7 +434,6 @@ export const ProjectileSystem = {
 
                         const isMain = (i === 0);
 
-                        // New optimized lightning call
                         WeaponFX.drawArcLightning(ctx.scene, _v3, _v1, isMain);
 
                         ctx.applyDamage(e, currentDamage, DamageID.ARC_CANNON);
@@ -454,10 +441,9 @@ export const ProjectileSystem = {
                         e.statusFlags |= EnemyFlags.STUNNED;
                         e.stunDuration = stunDur;
 
-                        // Spark effect on enemy bodies!
-                        if (Math.random() < 0.4) {
+                        if (Math.random() < 0.6) {
                             WeaponFX.createStunSparks(_v1);
-                            WeaponFX.spawnDynamicLight(ctx.scene, _v1, 0x00ffff, 1.0, 8.0, 0.1);
+                            WeaponFX.spawnDynamicLight(ctx.scene, _v1, 0x00ffff, 1.2, 8.0, 0.1, 'electric');
                         }
 
                         _v3.copy(_v1);
@@ -473,6 +459,10 @@ export const ProjectileSystem = {
                     _v1.copy(origin).addScaledVector(direction, range);
                     WeaponFX.drawArcLightning(ctx.scene, origin, _v1, true);
 
+                    // [VINTERDÖD FIX] Illuminate the air/ground 5m ahead when missing
+                    _v4.copy(origin).addScaledVector(direction, 5.0);
+                    WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0x00ffff, 5.0, 30.0, 0.12, 'electric');
+
                     if (simTime - _lastArcCannonSoundTime > 150) {
                         soundManager.playArcCannonZap();
                         _lastArcCannonSoundTime = simTime;
@@ -487,8 +477,7 @@ export const ProjectileSystem = {
         ctx.simTime = simTime;
         ctx.renderTime = renderTime;
 
-        // VINTERDÖD DOD FIX: Always clear out dead FX nodes
-        WeaponFX.updateFX(delta);
+        WeaponFX.updateFX(delta, ctx);
 
         const waterSystem = WinterEngine.getInstance()?.water;
 
@@ -575,7 +564,6 @@ export const ProjectileSystem = {
     }
 };
 
-// --- INTERNAL HELPERS ---
 function updateBullet(projectile: Projectile, index: number, delta: number, ctx: GameContext, projectiles: Projectile[]) {
     _v3.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
     projectile.mesh.position.addScaledVector(projectile.vel, delta);

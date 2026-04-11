@@ -4,6 +4,7 @@ import { soundManager } from '../utils/audio/SoundManager';
 import { MaterialType } from '../content/environment';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
+import { System } from './System';
 
 const MAX_FOOTPRINTS = 100; // Vi kan dubbla antalet nu när det är Instanced!
 const FADE_DURATION = 15000; // 15 seconds life
@@ -20,7 +21,9 @@ interface FootprintData {
     scaleRef: THREE.Vector3;
 }
 
-class FootprintSystemClass {
+class FootprintSystemClass implements System {
+    public id = 'footprint_system';
+    public isFixedStep = true;
     public enabled = true;
     private scene: THREE.Scene | null = null;
 

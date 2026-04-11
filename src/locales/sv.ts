@@ -288,34 +288,34 @@ export const sv = {
         spread: "SPRIDNING",
         spawn_location: "SPAWNPLATS",
         spawn: "SKAPA",
-        report: {
-            damage: {
-                incoming: "INKOMMANDE SKADA",
-                outgoing: "UTGÅENDE SKADA",
-            },
-            time: {
-                unit_min: " min"
-            },
-            distance: {
-                unit_m: " m",
-                unit_km: " km"
-            },
-            labels: {
-                physical: "FYSISK",
-                boss: "BOSS",
-                player: "DU",
-                unknown: "OKÄND"
-            },
-            stats: {
-                xp: "XP",
-                sp: "SP",
-                scrap: "SKROT",
-                chests: "KISTOR",
-                shots: "SKOTT",
-                accuracy: "PRICKSÄKERHET",
-                kills: "DÖDADE",
-                throwables: "KASTVAPEN"
-            }
+    },
+    report: {
+        damage: {
+            incoming: "INKOMMANDE SKADA",
+            outgoing: "UTGÅENDE SKADA",
+        },
+        time: {
+            unit_min: " min"
+        },
+        distance: {
+            unit_m: " m",
+            unit_km: " km"
+        },
+        labels: {
+            physical: "FYSISK",
+            boss: "BOSS",
+            player: "DU",
+            unknown: "OKÄND"
+        },
+        stats: {
+            xp: "XP",
+            sp: "SP",
+            scrap: "SKROT",
+            chests: "KISTOR",
+            shots: "SKOTT",
+            accuracy: "PRICKSÄKERHET",
+            kills: "DÖDADE",
+            throwables: "KASTVAPEN"
         }
     },
     location: {

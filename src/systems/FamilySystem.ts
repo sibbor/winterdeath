@@ -31,7 +31,9 @@ const _animState = {
 };
 
 export class FamilySystem implements System {
-    id = 'family';
+    id = 'family_system';
+    isFixedStep = true;
+    private static readonly MAX_ENTITIES = 4;
 
     private playerGroup: THREE.Group;
     private activeFamilyMembers: React.MutableRefObject<any[]>;
@@ -63,25 +65,13 @@ export class FamilySystem implements System {
         const isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
 
         // --- Mirror player speed for the follow movement ---
-        const playerSpeedValue = state.statsBuffer[PlayerStatID.SPEED];
+        const baseSpeed = state.statsBuffer[PlayerStatID.FINAL_SPEED];
+        const playerCurrentSpeed = baseSpeed * state.currentSpeedRatio;
 
-        // [VINTERDÖD FIX] Convert kph to m/s if value is > 5, else treat as raw multiplier
-        const baseSpeed = playerSpeedValue > 5 ? (playerSpeedValue / 3.6) : 15 * playerSpeedValue;
+        // Family follows at exactly the player's current speed
+        let followSpeed = playerCurrentSpeed;
 
-        // Family follows slightly faster than base to catch up
-        let followSpeed = baseSpeed * 1.25;
-
-        if (state.isSwimming) {
-            followSpeed *= 0.35;
-        } else if (state.isWading) {
-            followSpeed *= 0.6;
-        } else if (state.isRushing) {
-            followSpeed *= 1.75;
-        } else if (state.isDodging) {
-            followSpeed *= 2.5;
-        }
-
-        const maxFollowSpeed = followSpeed * 1.25;
+        const maxFollowSpeed = followSpeed * 1.5;
 
         const activeVehicle = state.vehicle.active ? state.vehicle.mesh : null;
         const inVehicle = !!activeVehicle;

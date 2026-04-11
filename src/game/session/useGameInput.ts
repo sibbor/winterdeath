@@ -92,9 +92,6 @@ export const useGameInput = (
 
             // Dodging / Rushing cleanup (Movement handling is moved to PlayerMovementSystem)
             if (key === ' ') {
-                state.spaceDepressed = false;
-                state.statusFlags &= ~PlayerStatusFlags.RUSHING;
-                // state.statusFlags &= ~PlayerStatusFlags.DODGING; // Handled by System
             }
         };
 

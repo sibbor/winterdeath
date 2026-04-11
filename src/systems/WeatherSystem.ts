@@ -13,6 +13,7 @@ export class WeatherSystem implements System {
     public id = 'weather';
     public enabled = true;
     public persistent = true;
+    public isFixedStep?: boolean;
 
     private instancedMesh: THREE.InstancedMesh | null = null;
 

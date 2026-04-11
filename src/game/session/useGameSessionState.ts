@@ -17,7 +17,8 @@ export interface UIState {
     bossName: string;
     foundMemberName: string;
     interactionType: InteractionType;
-    activeModal: 'armory' | 'spawner' | 'environment' | 'skills' | null;
+    activeModal: 'armory' | 'spawner' | 'environment' | 'skills' | 'collectible' | null;
+    collectibleId: string | null;
     interactionScreenPos: { x: number, y: number } | null;
     forceHideHUD: boolean;
     stationOverlay: string | null;
@@ -116,6 +117,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
         foundMemberName: '',
         interactionType: InteractionType.NONE,
         activeModal: null,
+        collectibleId: null,
         interactionScreenPos: null,
         forceHideHUD: false,
         stationOverlay: null,

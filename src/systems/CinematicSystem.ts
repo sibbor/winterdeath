@@ -101,6 +101,8 @@ export class CinematicSystem implements System {
 
         cinematic.zoom = params.zoom || 0.4;
         cinematic.rotationSpeed = params.rotationSpeed || 0.00015;
+        cinematic.customPath = params.customPath || null;
+        cinematic.pathDuration = params.pathDuration || 0;
 
         this.camera.setCinematic(true);
 
@@ -110,7 +112,14 @@ export class CinematicSystem implements System {
         this.callbacks.setCinematicActive(true);
 
         const startLine = params.lineIndex || 0;
-        this.playLine(startLine);
+        if (cinematic.script && cinematic.script.length > 0) {
+            this.playLine(startLine);
+        } else {
+            // STANDALONE PROCEDURAL PATH (No dialogue)
+            cinematic.lineIndex = 0;
+            cinematic.lineStartTime = currentNow;
+            cinematic.lineDuration = cinematic.pathDuration || 5500;
+        }
     }
 
     public playLine(index: number) {
@@ -213,16 +222,7 @@ export class CinematicSystem implements System {
         }
 
         // --- CAMERA ORBIT MATH ---
-        if (cinematic.hasTarget && cinematic.target) {
-            const targetPos = _v3;
-            cinematic.target.getWorldPosition(targetPos);
-
-            _v1.set(
-                (targetPos.x + playerPos.x) * 0.5,
-                (targetPos.y + playerPos.y) * 0.5,
-                (targetPos.z + playerPos.z) * 0.5
-            );
-
+        if (cinematic.active || cinematic.isClosing) {
             let t = 0;
             if (cinematic.active && !cinematic.isClosing) {
                 t = Math.min(1.0, totalElapsed / 2000);
@@ -236,30 +236,95 @@ export class CinematicSystem implements System {
                 }
             }
 
-            const zoomFactor = 1.0 - (t * (cinematic.zoom || 0.4));
-            const orbitRadius = 15 * zoomFactor;
-            const orbitHeight = 12 * zoomFactor;
-            const angle = (totalElapsed * (cinematic.rotationSpeed || 0.00015));
+            // --- VINTERDÖD SPECIAL: Prodedural Paths ---
+            if (cinematic.customPath === 'mast_flyover' && cinematic.target) {
+                const targetPos = _v3;
+                cinematic.target.getWorldPosition(targetPos);
 
-            const focusPosX = _v1.x + Math.sin(angle) * orbitRadius;
-            const focusPosY = _v1.y + orbitHeight;
-            const focusPosZ = _v1.z + Math.cos(angle) * orbitRadius;
+                const basePos = _v1.copy(targetPos).add({ x: -15, y: 5, z: 15 } as any);
+                const topPos = _v2.copy(targetPos).add({ x: -10, y: 65, z: 10 } as any);
+                const lookAtTop = _v3.copy(targetPos).add({ x: 0, y: 60, z: 0 } as any);
 
-            this.camera.setPosition(
-                THREE.MathUtils.lerp(cinematic.startPos.x, focusPosX, t),
-                THREE.MathUtils.lerp(cinematic.startPos.y, focusPosY, t),
-                THREE.MathUtils.lerp(cinematic.startPos.z, focusPosZ, t)
-            );
+                if (totalElapsed < 1500) {
+                    // Stage 1: Fly to base (1500ms)
+                    const p1 = totalElapsed / 1500;
+                    const smoothP = THREE.MathUtils.smoothstep(p1, 0, 1);
+                    this.camera.setPosition(
+                        THREE.MathUtils.lerp(cinematic.startPos.x, basePos.x, smoothP),
+                        THREE.MathUtils.lerp(cinematic.startPos.y, basePos.y, smoothP),
+                        THREE.MathUtils.lerp(cinematic.startPos.z, basePos.z, smoothP)
+                    );
+                    this.camera.lookAt(
+                        THREE.MathUtils.lerp(cinematic.startLookAt.x, targetPos.x, smoothP),
+                        THREE.MathUtils.lerp(cinematic.startLookAt.y, targetPos.y, smoothP),
+                        THREE.MathUtils.lerp(cinematic.startLookAt.z, targetPos.z, smoothP)
+                    );
+                } else if (totalElapsed < 3500) {
+                    // Stage 2: Climb mast (2000ms)
+                    const p2 = (totalElapsed - 1500) / 2000;
+                    const smoothP = THREE.MathUtils.smoothstep(p2, 0, 1);
+                    this.camera.setPosition(
+                        THREE.MathUtils.lerp(basePos.x, topPos.x, smoothP),
+                        THREE.MathUtils.lerp(basePos.y, topPos.y, smoothP),
+                        THREE.MathUtils.lerp(basePos.z, topPos.z, smoothP)
+                    );
+                    this.camera.lookAt(
+                        THREE.MathUtils.lerp(targetPos.x, lookAtTop.x, smoothP),
+                        THREE.MathUtils.lerp(targetPos.y, lookAtTop.y, smoothP),
+                        THREE.MathUtils.lerp(targetPos.z, lookAtTop.z, smoothP)
+                    );
+                } else {
+                    // Stage 3: Circle top (2000ms+)
+                    const circleElapsed = totalElapsed - 3500;
+                    const angle = circleElapsed * 0.0005; // Circular speed
+                    const radius = 15;
+                    const focusPosX = lookAtTop.x + Math.sin(angle) * radius;
+                    const focusPosY = lookAtTop.y + 5;
+                    const focusPosZ = lookAtTop.z + Math.cos(angle) * radius;
 
-            _v1.y += 1.5;
-            const currentLookAt = this.camera.lookAtTarget || _v1;
+                    this.camera.setPosition(focusPosX, focusPosY, focusPosZ);
+                    this.camera.lookAt(lookAtTop);
 
-            _v2.set(
-                THREE.MathUtils.lerp(currentLookAt.x, _v1.x, t),
-                THREE.MathUtils.lerp(currentLookAt.y, _v1.y, t),
-                THREE.MathUtils.lerp(currentLookAt.z, _v1.z, t)
-            );
-            this.camera.lookAt(_v2);
+                    // Auto-end after 5500ms total if no script
+                    if (totalElapsed > 5500 && (!cinematic.script || cinematic.script.length === 0)) {
+                        this.endCinematic();
+                    }
+                }
+            } else if (cinematic.hasTarget && cinematic.target) {
+                const targetPos = _v3;
+                cinematic.target.getWorldPosition(targetPos);
+
+                _v1.set(
+                    (targetPos.x + playerPos.x) * 0.5,
+                    (targetPos.y + playerPos.y) * 0.5,
+                    (targetPos.z + playerPos.z) * 0.5
+                );
+
+                const zoomFactor = 1.0 - (t * (cinematic.zoom || 0.4));
+                const orbitRadius = 15 * zoomFactor;
+                const orbitHeight = 12 * zoomFactor;
+                const angle = (totalElapsed * (cinematic.rotationSpeed || 0.00015));
+
+                const focusPosX = _v1.x + Math.sin(angle) * orbitRadius;
+                const focusPosY = _v1.y + orbitHeight;
+                const focusPosZ = _v1.z + Math.cos(angle) * orbitRadius;
+
+                this.camera.setPosition(
+                    THREE.MathUtils.lerp(cinematic.startPos.x, focusPosX, t),
+                    THREE.MathUtils.lerp(cinematic.startPos.y, focusPosY, t),
+                    THREE.MathUtils.lerp(cinematic.startPos.z, focusPosZ, t)
+                );
+
+                _v1.y += 1.5;
+                const currentLookAt = this.camera.lookAtTarget || _v1;
+
+                _v2.set(
+                    THREE.MathUtils.lerp(currentLookAt.x, _v1.x, t),
+                    THREE.MathUtils.lerp(currentLookAt.y, _v1.y, t),
+                    THREE.MathUtils.lerp(currentLookAt.z, _v1.z, t)
+                );
+                this.camera.lookAt(_v2);
+            }
         }
 
         if (cinematic.isClosing) return;

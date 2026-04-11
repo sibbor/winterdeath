@@ -48,7 +48,7 @@ const FX_GAS = [
 ];
 const ALL_FX = [...FX_SOLID, ...FX_GAS];
 const DEAD_BODY_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, EnemyType.BOMBER];
-const TREE_TYPES = [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.OAK, VEGETATION_TYPE.BIRCH, VEGETATION_TYPE.DEAD];
+const TREE_TYPES = [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.OAK, VEGETATION_TYPE.BIRCH, VEGETATION_TYPE.DEAD_TREE];
 const WEATHER_MATS = [MATERIALS.particle_snow, MATERIALS.particle_rain, MATERIALS.particle_ash, MATERIALS.particle_ember];
 
 // Reusable dummy scene for compilation
@@ -115,11 +115,11 @@ export const AssetPreloader = {
                     try {
                         // VINTERDÖD FIX: Pre-render procedural buffers before sector starts
                         soundManager.preRenderProceduralSounds();
-                        
+
                         // VINTERDÖD FIX: Pre-cache FX materials (like gore clones) before shared pool is populated.
                         // Using _dummyScene is safe and prevents the null-property access crash.
                         FXSystem.preload(_dummyScene);
-                        
+
                         await SoundBank.preloadAllAsync(soundManager.core, yieldToMain || _NOOP_ASYNC);
                     } catch (e) {
                         console.error("[AssetPreloader] SoundBank preloading failed:", e);
@@ -595,7 +595,7 @@ export const AssetPreloader = {
         add(PoiGenerator.createMast(), true, true);
         add(PoiGenerator.createSmu(), true, true);
         add(PoiGenerator.createFarm(), true, true);
-        add(PoiGenerator.createFarmhouse(), true, true);
+        add(PoiGenerator.createEggFarm(), true, true);
         add(PoiGenerator.createBarn(), true, true);
         add(PoiGenerator.createTrainTunnel([]), false, true);
         add(PoiGenerator.createCampfire(), true, true);

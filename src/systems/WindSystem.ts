@@ -5,12 +5,14 @@ import { System } from './System';
 interface WindBind {
   uTime: { value: number };
   uWind: { value: THREE.Vector2 };
+  uInteractors: { value: THREE.Vector4[] };
 }
 
 export class WindSystem implements System {
   public id = 'wind';
   public enabled = true;
   public persistent = true;
+  public isFixedStep?: boolean;
   
 
   public current = new THREE.Vector2(0, 0);
@@ -28,6 +30,7 @@ export class WindSystem implements System {
 
   // Här lagrar detta specifika WindSystem sina referenser
   private boundUniforms: WindBind[] = [];
+  private currentInteractors: THREE.Vector4[] = new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0));
 
   constructor() { }
 
@@ -75,6 +78,12 @@ export class WindSystem implements System {
     }
   }
 
+  public setInteractors(interactors: THREE.Vector4[]) {
+    for (let i = 0; i < 8; i++) {
+        this.currentInteractors[i].copy(interactors[i]);
+    }
+  }
+
   public sync(minStrength: number, maxStrength: number, baseAngle: number = 0.0, angleVariance: number = Math.PI) {
     this.setRandomWind(minStrength, maxStrength, baseAngle, angleVariance);
   }
@@ -92,6 +101,9 @@ export class WindSystem implements System {
       this.bindMaterial(MATERIALS.treeTrunkBirch);
       this.bindMaterial(MATERIALS.deadWood);
       this.bindMaterial(MATERIALS.treeSilhouette);
+      this.bindMaterial(MATERIALS.sunflowerStem);
+      this.bindMaterial(MATERIALS.sunflowerHead);
+      this.bindMaterial(MATERIALS.sunflowerCenter);
     }
 
     if (!this.overrideActive && renderTime > this.nextChange) {
@@ -123,6 +135,11 @@ export class WindSystem implements System {
       b.uTime.value = timeSec;
       b.uWind.value.x = windX;
       b.uWind.value.y = windY;
+      
+      // Update interactors
+      for (let j = 0; j < 8; j++) {
+        b.uInteractors.value[j].copy(this.currentInteractors[j]);
+      }
     }
 
     return this.current;

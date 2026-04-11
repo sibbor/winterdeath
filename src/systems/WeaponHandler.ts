@@ -88,7 +88,9 @@ function _executeThrow(
     const tracker = session.getSystem('damage_tracker_system') as any;
     if (tracker) tracker.recordThrowable(session);
 
-    _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+    // VINTERDÖD FIX: Use the locked CHARGE rotation, not the current character rotation
+    // which may have snapped towards the move direction during release.
+    _v1.set(0, 0, 1).applyQuaternion(state.throwChargeRotation).normalize();
 
     const rangeMult = state.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0;
     const reloadMult = state.statsBuffer[PlayerStatID.MULTIPLIER_RELOAD] || 1.0;
@@ -423,7 +425,17 @@ export const WeaponHandler = {
             const canCharge = (state.weaponAmmo[state.activeWeapon] > 0) && simTime > (state.lastShotTime || 0) + 500;
 
             if (input.fire && canCharge) {
-                if (state.throwChargeStart === 0) state.throwChargeStart = simTime;
+                if (state.throwChargeStart === 0) {
+                    state.throwChargeStart = simTime;
+                    state.throwChargeRotation.copy(playerGroup.quaternion);
+                }
+
+                // VINTERDÖD: Update the cached rotation ONLY while the player is actively providing aim input.
+                // This allows them to let go of the stick and keep the trajectory locked.
+                const isAiming = (input.joystickAim && input.joystickAim.lengthSq() > 0.1) || (input.aimVector && input.aimVector.lengthSq() > 1);
+                if (isAiming) {
+                    state.throwChargeRotation.copy(playerGroup.quaternion);
+                }
 
                 const chargeTime = 1250;
                 const holdTime = 500; // Hold at max for 500ms before reset
@@ -433,7 +445,8 @@ export const WeaponHandler = {
                 const cycleElapsed = elapsed % totalCycle;
                 const ratio = cycleElapsed < chargeTime ? (cycleElapsed / chargeTime) : 1.0;
 
-                _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+                // VINTERDÖD: Use the LOCKED rotation for trajectory line/visuals
+                _v1.set(0, 0, 1).applyQuaternion(state.throwChargeRotation).normalize();
 
                 const maxDist = (wep.range || 25.0) * (state.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0);
                 const dist = Math.max(2.0, ratio * maxDist);

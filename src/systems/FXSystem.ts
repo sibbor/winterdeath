@@ -518,11 +518,11 @@ export const FXSystem = {
         callbacks: any, delta: number, simTime: number, renderTime: number) => {
         const safeDelta = delta > 0.1 ? 0.1 : delta;
 
-        const decay = safeDelta * 44;
-        const airFriction = 1.0 - (5.0 * safeDelta);
-        const shrinkRate = 1.0 - (10.0 * safeDelta);
-        const fireShrinkRate = 1.0 - (1.5 * safeDelta);
-        const flameThrowerDrag = 1.0 - (5.0 * safeDelta);
+        const decay = safeDelta * 265;
+        const airFriction = 1.0 - (30.0 * safeDelta);
+        const shrinkRate = 1.0 - (60.0 * safeDelta);
+        const fireShrinkRate = 1.0 - (9.0 * safeDelta);
+        const flameThrowerDrag = 1.0 - (30.0 * safeDelta);
 
         const safeAirFriction = airFriction < 0 ? 0 : airFriction;
         const safeShrinkRate = shrinkRate < 0 ? 0 : shrinkRate;
@@ -545,10 +545,10 @@ export const FXSystem = {
                 pPos.z += p.vel.z * safeDelta;
 
                 if (p.isPhysics) {
-                    p.vel.y -= 25 * safeDelta;
+                    p.vel.y -= 150 * safeDelta;
                     if (p.type !== 'blood' && p.type !== 'splash') {
-                        p.rot.x += p.rotVel.x * 10 * safeDelta;
-                        p.rot.z += p.rotVel.z * 10 * safeDelta;
+                        p.rot.x += p.rotVel.x * 60 * safeDelta;
+                        p.rot.z += p.rotVel.z * 60 * safeDelta;
                     }
                     if (pPos.y <= (p.type === 'splash' ? -5.0 : 0.05)) {
                         FXSystem._handleLanding(p, i, particlesList, callbacks);
@@ -563,33 +563,29 @@ export const FXSystem = {
                     const pType = p.type;
 
                     if (pType === 'shockwave') {
-                        const grow = 30 * safeDelta;
+                        const grow = 180 * safeDelta;
                         pScale.x += grow;
                         pScale.y += grow;
                         pScale.z += grow;
                     } else if (pType === 'flash') {
-                        const grow = 15 * safeDelta;
+                        const grow = 90 * safeDelta;
                         pScale.x += grow;
                         pScale.y += grow;
                         pScale.z += grow;
                     } else if (pType === 'electric_flash') {
-                        pScale.x *= 0.6;
-                        pScale.y *= 0.6;
+                        pScale.x *= 1.0 - (2.5 * safeDelta);
+                        pScale.y *= 1.0 - (2.5 * safeDelta);
                     } else if (pType === 'flamethrower_fire') {
-                        const grow = 5.0 * safeDelta;
+                        const grow = 30.0 * safeDelta;
                         pScale.x += grow;
                         pScale.y += grow;
                         pScale.z += grow;
-
-                        p.vel.x *= safeFlameDrag;
-                        p.vel.y *= safeFlameDrag;
-                        p.vel.z *= safeFlameDrag;
-                    } else if (pType === 'fire' || pType === 'enemy_effect_flame' || pType === 'large_fire') {
+                    } else if (pType === 'fire' || pType === 'flame' || pType === 'large_fire') {
                         pScale.x *= safeFireShrinkRate;
                         pScale.y *= safeFireShrinkRate;
                         pScale.z *= safeFireShrinkRate;
                     } else if (pType === 'black_smoke') {
-                        const grow = 1.0 * safeDelta;
+                        const grow = 6.0 * safeDelta;
                         pScale.x += grow;
                         pScale.y += grow;
                         pScale.z += grow;

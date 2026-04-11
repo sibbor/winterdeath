@@ -20,6 +20,8 @@ import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { PlayerStatID } from '../../entities/player/PlayerTypes';
 import { ENEMY_TYPE_KEYS, BOSS_NAME_KEYS, DISCOVERY_TYPE_KEYS } from '../../utils/ui/Mappers';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
+import { getCollectibleById } from '../../content/collectibles';
+import ScreenCollectibleDiscovered from '../../components/ui/screens/game/ScreenCollectibleDiscovered';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -448,14 +450,19 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
                 break;
             case 'collectible':
+                const collDef = getCollectibleById(id);
                 titleKey = DISCOVERY_TYPE_KEYS[DiscoveryType.COLLECTIBLE];
-                detailsKey = detailsKey || payload?.detailsKey || `collectibles.${id}.title`;
+                detailsKey = detailsKey || payload?.detailsKey || (collDef ? `collectibles.${collDef.sector}.${collDef.index}.title` : `collectibles.${id}.title`);
+                
                 if (!sets.collectibles.has(id)) {
                     sets.collectibles.add(id);
                     stats.collectiblesDiscovered.push(id);
                     state.sessionCollectiblesDiscovered.push(id);
                     isNew = true;
                     if (currentProps.onCollectibleDiscovered) currentProps.onCollectibleDiscovered(id);
+                    
+                    // Trigger Full Screen Modal for Collectibles
+                    updateUiState({ activeModal: 'collectible', collectibleId: id });
                 }
                 break;
             case 'poi':
@@ -1016,18 +1023,31 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (!queue || queue.length === 0) return;
 
             const hData = HudStore.getState();
-            if (!hData.discovery) {
+            if (!hData.discovery || !hData.discovery.active) {
                 const next = queue.shift();
-                HudStore.update({
-                    ...hData,
-                    discovery: next
-                });
+                if (next) {
+                    HudStore.update({
+                        ...hData,
+                        discovery: { ...next, active: true }
+                    });
+                }
             }
         }, 500);
         return () => clearInterval(interval);
     }, [refs]);
 
-    return <GameSessionUI refs={refs} uiState={uiState} gameProps={props} callbacks={uiCallbacks} />;
+    return (
+        <>
+            <GameSessionUI refs={refs} uiState={uiState} gameProps={props} callbacks={uiCallbacks} />
+            {uiState.activeModal === 'collectible' && uiState.collectibleId && (
+                <ScreenCollectibleDiscovered 
+                    collectibleId={uiState.collectibleId} 
+                    onClose={closeModal} 
+                    isMobileDevice={props.isMobileDevice}
+                />
+            )}
+        </>
+    );
 });
 
 export default GameSession;

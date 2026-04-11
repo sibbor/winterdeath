@@ -58,6 +58,10 @@ const _interactionScreenPosScratch = { x: 0, y: 0 };
 const _animStateScratch: any = {};
 const _traverseStack: THREE.Object3D[] = []; // Used for Zero-GC scene traversal
 
+// --- INTERACTIVE VEGETATION BENDING ---
+const _bendInteractors = new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0));
+const _bendDistSq = new Float32Array(8);
+
 // Pre-define ALL properties to lock V8 Hidden Classes (Shapes)
 const _fxCallbacks: any = {
     spawnPart: null,
@@ -810,6 +814,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         // 18. Emitters Update
         monitor.begin('active_effects');
+        
+        // VINTERDÖD: FXSystem update must run at render rate for visual smoothness.
+        FXSystem.update(engine.scene, state.particles, state.bloodDecals, _fxCallbacks, delta, simTime, renderTime);
+
         if (state.activeEffects.length > 0) {
             const isBacklogged = (FXSystem as any).ambientQueue && (FXSystem as any).ambientQueue.length > 1000;
 
@@ -862,7 +870,82 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             state.obstacles ? state.obstacles.length : 0
         );
 
-        // 20. High-frequency HUD update
+        // 20. VEGETATION INTERACTION (ZERO-GC TOP-8 GATHERING)
+        const windSystem = session.getSystem('wind') as any;
+        if (windSystem && windSystem.enabled) {
+            // Reset state
+            for (let i = 0; i < 8; i++) {
+                _bendInteractors[i].w = 0.0;
+                _bendDistSq[i] = Infinity;
+            }
+
+            const pPos = refs.playerGroupRef.current.position;
+            const refMember = refs.activeFamilyMembers.current;
+            const enemies = state.enemies;
+            const eCount = enemies.length;
+            const vehicle = state.vehicle.mesh;
+
+            let count = 0;
+
+            // Player (Priority 1)
+            if (pPos && count < 8) {
+                _bendInteractors[count].set(pPos.x, pPos.y, pPos.z, 1.2);
+                _bendDistSq[count] = 0;
+                count++;
+            }
+
+            // Active Vehicle (Priority 2)
+            if (vehicle && count < 8) {
+                _bendInteractors[count].set(vehicle.position.x, vehicle.position.y, vehicle.position.z, 2.5);
+                _bendDistSq[count] = 0;
+                count++;
+            }
+
+            // Family Members (Priority 3)
+            if (refMember && count < 8) {
+                for (let i = 0; i < refMember.length && count < 8; i++) {
+                    const m = refMember[i];
+                    if (m.mesh && m.following) {
+                        _bendInteractors[count].set(m.mesh.position.x, m.mesh.position.y, m.mesh.position.z, 1.2);
+                        _bendDistSq[count] = 0;
+                        count++;
+                    }
+                }
+            }
+
+            // Fill remaining slots with closest enemies (Top-K)
+            if (enemies && eCount > 0 && count < 8) {
+                for (let i = 0; i < eCount; i++) {
+                    const e = enemies[i];
+                    if (e.deathState !== EnemyDeathState.ALIVE) continue;
+                    
+                    const dx = e.mesh.position.x - pPos.x;
+                    const dz = e.mesh.position.z - pPos.z;
+                    const dSq = dx * dx + dz * dz;
+
+                    // Find furthest current slot to potentially replace
+                    let furthestIdx = -1;
+                    let maxDSq = -1;
+                    
+                    for (let j = count; j < 8; j++) {
+                        if (_bendDistSq[j] > maxDSq) {
+                            maxDSq = _bendDistSq[j];
+                            furthestIdx = j;
+                        }
+                    }
+
+                    if (furthestIdx !== -1 && dSq < maxDSq) {
+                        const isBoss = (e.statusFlags & EnemyFlags.BOSS) !== 0;
+                        _bendInteractors[furthestIdx].set(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, isBoss ? 2.0 : 1.0);
+                        _bendDistSq[furthestIdx] = dSq;
+                    }
+                }
+            }
+
+            windSystem.setInteractors(_bendInteractors);
+        }
+
+        // 21. High-frequency HUD update
         HudSystem.emitFastUpdate(state, engine.input.state, simTime, propsRef.current);
     };
 }

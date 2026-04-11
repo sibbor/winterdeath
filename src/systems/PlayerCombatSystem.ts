@@ -7,6 +7,7 @@ import { PlayerStatusFlags } from '../entities/player/PlayerTypes';
 
 export class PlayerCombatSystem implements System {
     id = 'player_combat';
+    isFixedStep = true;
 
     private _p1: boolean = false;
     private _p2: boolean = false;

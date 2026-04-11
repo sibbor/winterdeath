@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FXSystem } from './FXSystem';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { MATERIALS } from '../utils/assets';
-import { LogicalLight } from './LightSystem'; // Import your existing interface
+import { LogicalLight } from './LightSystem';
 
 // --- ZERO-GC SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
@@ -17,12 +17,12 @@ const LIGHTNING_SEGMENTS = 6;
 const LIGHT_POOL_SIZE = 4;
 
 interface LightningNode {
-    line: THREE.Line;
+    lineMain: THREE.Line;
+    lineCore: THREE.Line;
     life: number;
     active: boolean;
 }
 
-// Extending your LogicalLight with FX metadata
 interface WeaponLightNode extends LogicalLight {
     life: number;
     maxLife: number;
@@ -39,33 +39,32 @@ let _lightsInjected = false;
 const initPools = (scene: THREE.Scene) => {
     if (_poolsInitialized) return;
 
-    // Material with vertexColors for lightning variation
-    const matLightning = new THREE.LineBasicMaterial({
-        color: 0xffffff,
-        vertexColors: true,
-        blending: THREE.AdditiveBlending,
-        transparent: true,
-        opacity: 0.9,
-        depthWrite: false
-    });
+    // [VINTERDÖD FIX] Rock-solid dual-material setup that works perfectly for lightning
+    const matMain = new THREE.LineBasicMaterial({ color: 0x00ffff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 });
+    const matCore = new THREE.LineBasicMaterial({ color: 0xffffff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.9 });
 
     for (let i = 0; i < LIGHTNING_POOL_SIZE; i++) {
-        const geo = new THREE.BufferGeometry();
-        const posArray = new Float32Array((LIGHTNING_SEGMENTS + 1) * 3);
-        const colorArray = new Float32Array((LIGHTNING_SEGMENTS + 1) * 3);
+        const geoMain = new THREE.BufferGeometry();
+        const geoCore = new THREE.BufferGeometry();
+        const posMain = new Float32Array((LIGHTNING_SEGMENTS + 1) * 3);
+        const posCore = new Float32Array((LIGHTNING_SEGMENTS + 1) * 3);
 
-        geo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-        geo.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
+        geoMain.setAttribute('position', new THREE.BufferAttribute(posMain, 3));
+        geoCore.setAttribute('position', new THREE.BufferAttribute(posCore, 3));
 
-        const line = new THREE.Line(geo, matLightning);
-        line.frustumCulled = false;
-        line.visible = false;
+        const lineMain = new THREE.Line(geoMain, matMain);
+        const lineCore = new THREE.Line(geoCore, matCore);
 
-        scene.add(line);
-        _lightningPool.push({ line, life: 0, active: false });
+        lineMain.frustumCulled = false;
+        lineCore.frustumCulled = false;
+        lineMain.visible = false;
+        lineCore.visible = false;
+
+        scene.add(lineMain);
+        scene.add(lineCore);
+        _lightningPool.push({ lineMain, lineCore, life: 0, active: false });
     }
 
-    // Initialize Logical Lights using your structure
     for (let i = 0; i < LIGHT_POOL_SIZE; i++) {
         _lightPool.push({
             isLogicalLight: true,
@@ -73,6 +72,7 @@ const initPools = (scene: THREE.Scene) => {
             color: 0xffffff,
             intensity: 0,
             distance: 10,
+            castShadow: false,
             life: 0,
             maxLife: 1,
             initialIntensity: 0,
@@ -86,14 +86,9 @@ const initPools = (scene: THREE.Scene) => {
 
 export const WeaponFX = {
 
-    /**
-     * Updates FX and ensures lights are registered in your LightSystem.
-     * Call this from ProjectileSystem.ts update loop.
-     */
     updateFX: (delta: number, ctx?: any) => {
         if (!_poolsInitialized) return;
 
-        // One-time injection into your LightSystem's dynamic list
         if (!_lightsInjected && ctx) {
             const state = ctx.state || ctx.session?.state || ctx;
             if (state) {
@@ -103,19 +98,18 @@ export const WeaponFX = {
             }
         }
 
-        // Update Lightning bolts
         for (let i = 0; i < LIGHTNING_POOL_SIZE; i++) {
             const node = _lightningPool[i];
             if (node.active) {
                 node.life -= delta;
                 if (node.life <= 0) {
-                    node.line.visible = false;
+                    node.lineMain.visible = false;
+                    node.lineCore.visible = false;
                     node.active = false;
                 }
             }
         }
 
-        // Update Logical Lights with flicker logic
         for (let i = 0; i < LIGHT_POOL_SIZE; i++) {
             const node = _lightPool[i];
             if (node.active) {
@@ -128,11 +122,9 @@ export const WeaponFX = {
                     const alpha = node.life / node.maxLife;
                     let intensity = node.initialIntensity * alpha;
 
-                    // Add flickering for fire type
                     if (node.type === 'fire') {
                         intensity *= (0.8 + Math.random() * 0.4);
                     }
-
                     node.intensity = intensity;
                 }
             }
@@ -141,9 +133,23 @@ export const WeaponFX = {
 
     spawnDynamicLight: (scene: THREE.Scene, pos: THREE.Vector3, color: number, intensity: number, distance: number, life: number, type: 'electric' | 'fire' = 'electric') => {
         initPools(scene);
+
+        // Light Recycling: Prevent pool starvation by moving the existing active light
         for (let i = 0; i < LIGHT_POOL_SIZE; i++) {
             const node = _lightPool[i];
-            if (!node.active) {
+            if (node.active && node.type === type) {
+                node.position.lerp(pos, 0.5);
+                node.life = life;
+                node.initialIntensity = intensity;
+                node.color = color;
+                node.distance = distance;
+                return;
+            }
+        }
+
+        for (let i = 0; i < LIGHT_POOL_SIZE; i++) {
+            const node = _lightPool[i];
+            if (!node.active || node.life < 0.02) {
                 node.color = color;
                 node.distance = distance;
                 node.position.copy(pos);
@@ -184,12 +190,18 @@ export const WeaponFX = {
 
             activeNode.active = true;
             activeNode.life = 0.08;
-            activeNode.line.visible = true;
+            activeNode.lineMain.visible = true;
 
-            const attrPos = activeNode.line.geometry.getAttribute('position') as THREE.BufferAttribute;
-            const attrCol = activeNode.line.geometry.getAttribute('color') as THREE.BufferAttribute;
-            const posArray = attrPos.array as Float32Array;
-            const colArray = attrCol.array as Float32Array;
+            if (l === 0 && isMain && Math.random() > 0.2) {
+                activeNode.lineCore.visible = true;
+            } else {
+                activeNode.lineCore.visible = false;
+            }
+
+            const attrMain = activeNode.lineMain.geometry.getAttribute('position') as THREE.BufferAttribute;
+            const attrCore = activeNode.lineCore.geometry.getAttribute('position') as THREE.BufferAttribute;
+            const posMain = attrMain.array as Float32Array;
+            const posCore = attrCore.array as Float32Array;
 
             const lineJitterForce = jitterBase * (1.0 + (l * 0.5));
 
@@ -207,16 +219,15 @@ export const WeaponFX = {
                 }
 
                 const idx = i * 3;
-                posArray[idx] = _v1.x; posArray[idx + 1] = _v1.y; posArray[idx + 2] = _v1.z;
+                posMain[idx] = _v1.x; posMain[idx + 1] = _v1.y; posMain[idx + 2] = _v1.z;
 
-                const redChannel = Math.random() * 0.7; // Lower red = More Cyan
-                colArray[idx] = redChannel;
-                colArray[idx + 1] = 1.0;
-                colArray[idx + 2] = 1.0;
+                if (activeNode.lineCore.visible) {
+                    posCore[idx] = _v1.x; posCore[idx + 1] = _v1.y; posCore[idx + 2] = _v1.z;
+                }
             }
 
-            attrPos.needsUpdate = true;
-            attrCol.needsUpdate = true;
+            attrMain.needsUpdate = true;
+            attrCore.needsUpdate = true;
         }
     },
 
@@ -246,7 +257,6 @@ export const WeaponFX = {
         }
     },
 
-    // Standard impact functions
     createGrenadeImpact: (pos: THREE.Vector3, radius: number, hitWater: boolean, ctx: any) => {
         if (hitWater) {
             ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 85);
@@ -269,7 +279,7 @@ export const WeaponFX = {
 
     updateFireZoneVisuals: (pos: THREE.Vector3, radius: number, delta: number, ctx: any) => {
         const fireDensity = 6.0;
-        const targetFlameCount = Math.min(25, (radius * radius * fireDensity) * delta);
+        const targetFlameCount = Math.min(25, (radius * radius * fireDensity) * (delta * 1000));
         let flameCount = Math.floor(targetFlameCount);
         if (Math.random() < (targetFlameCount - flameCount)) flameCount++;
 
@@ -288,7 +298,9 @@ export const WeaponFX = {
         }
 
         if (Math.random() < 0.1) {
-            WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xff8800, 1.0 + Math.random(), radius * 2.0, 0.15, 'fire');
+            _v1.copy(pos); // Changed _v4 to _v1 to prevent ReferenceError
+            _v1.y += 1.0;
+            WeaponFX.spawnDynamicLight(ctx.scene, _v1, 0xff8800, 2.5 + Math.random() * 2.0, radius * 3.5, 0.15, 'fire');
         }
     },
 

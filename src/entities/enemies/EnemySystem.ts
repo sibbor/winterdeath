@@ -20,6 +20,7 @@ interface Callbacks {
 
 export class EnemySystem implements System {
     id = 'enemy_system';
+    isFixedStep = true;
 
     private currentSession: GameSessionLogic | null = null;
     private updateCallbacks: any;

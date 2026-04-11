@@ -13,7 +13,8 @@ import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/Tri
 
 const LOCATIONS = {
     SPAWN: {
-        PLAYER: { x: 0, z: 0 },
+        //PLAYER: { x: 0, z: 0 },
+        PLAYER: { x: 145, z: -70 },
         FAMILY: { x: 215, z: -25 },
         BOSS: { x: 220, z: -10 }
     },
@@ -32,7 +33,7 @@ const LOCATIONS = {
     },
     POIS: {
         FARM: { x: 150, z: -120 },
-        FARMHOUSE: { x: 275, z: -175 },
+        EGG_FARM: { x: 275, z: -175 },
         BARN: { x: 305, z: -150 },
         MAST: { x: 215, z: -25 },
     },
@@ -55,7 +56,7 @@ const LOCATIONS = {
         ROAD_TO_MAST: [
             new THREE.Vector3(300, 0, -130),
             new THREE.Vector3(289, 0, -92),
-            new THREE.Vector3(250, 0, -85),
+            new THREE.Vector3(245, 0, -75),
             new THREE.Vector3(215, 0, -25)
         ],
         FARM_PATH: [
@@ -94,7 +95,7 @@ export const Sector2: SectorDef = {
         wind: {
             strengthMin: 0.5,
             strengthMax: 1.0,
-            direction: { x: 1, z: 1 },
+            //direction: { x: 1, z: 1 },
             angleVariance: Math.PI / 4
         }
     },
@@ -139,40 +140,42 @@ export const Sector2: SectorDef = {
         scene.add(farmGravel);
 
         const fhGravel = new THREE.Mesh(gravelGeo, gravelMat);
-        fhGravel.position.set(LOCATIONS.POIS.FARMHOUSE.x, 0.02, LOCATIONS.POIS.FARMHOUSE.z);
+        fhGravel.position.set(LOCATIONS.POIS.EGG_FARM.x, 0.02, LOCATIONS.POIS.EGG_FARM.z);
         fhGravel.receiveShadow = true;
         scene.add(fhGravel);
 
         SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
         // --- 2. BUILDINGS & PROPS ---
+        // POI - Farm
         SectorBuilder.spawnPoi(ctx, POI_TYPE.FARM, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, (3 * Math.PI) / 4);
 
         SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z + 5, EnemyType.WALKER, Math.random() * Math.PI);
         SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x - 5, LOCATIONS.POIS.FARM.z + 10, EnemyType.RUNNER, Math.random() * Math.PI);
         SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, EnemyType.TANK, Math.random() * Math.PI);
 
-        SectorBuilder.spawnDriveableVehicle(ctx, LOCATIONS.POIS.FARM.x - 10, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 4, 'tractor');
-        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z - 5, Math.random() * Math.PI, 1.2);
-        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 8, LOCATIONS.POIS.FARM.z - 2, Math.random() * Math.PI, 1.1);
+        SectorBuilder.spawnDriveableVehicle(ctx, LOCATIONS.POIS.FARM.x - 20, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 2, 'tractor');
+        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 15, LOCATIONS.POIS.FARM.z - 5, Math.random() * Math.PI, 1.2);
+        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 18, LOCATIONS.POIS.FARM.z - 2, Math.random() * Math.PI, 1.1);
         SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 4, LOCATIONS.POIS.FARM.z - 8, Math.random() * Math.PI, 1.0);
 
+        // Timberpiles + timbertruck
         SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 15, LOCATIONS.POIS.FARM.z + 10, Math.PI / 4, 1.2);
         SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 12, LOCATIONS.POIS.FARM.z + 14, Math.PI / 3, 1.0);
-
-        SectorBuilder.spawnTimberPile(ctx, 122, -92, 0, 2.0);
+        //SectorBuilder.spawnTimberPile(ctx, 122, -92, 0, 2.0);
         SectorBuilder.spawnDriveableVehicle(ctx, 136, -92, -Math.PI / 3, 'timber_truck', 0x334433);
 
-        SectorBuilder.spawnPoi(ctx, POI_TYPE.FARMHOUSE, LOCATIONS.POIS.FARMHOUSE.x, LOCATIONS.POIS.FARMHOUSE.z, (3 * Math.PI) / 4);
+        // POI - Egg farm
+        SectorBuilder.spawnPoi(ctx, POI_TYPE.EGG_FARM, LOCATIONS.POIS.EGG_FARM.x, LOCATIONS.POIS.EGG_FARM.z, (3 * Math.PI) / 4);
         SectorBuilder.spawnPoi(ctx, POI_TYPE.BARN, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, (3 * Math.PI) / 4);
 
         // Abandoned House 1: North of Farmhouse (Birch Forest)
-        const house1Coords = { x: 285, z: -250 };
+        const house1Coords = { x: 350, z: -130 };
         SectorBuilder.spawnBuilding(ctx, house1Coords.x, house1Coords.z, 12, 5, 12, Math.PI / 4, 0x445544, false);
         SectorBuilder.spawnDeadBody(ctx, house1Coords.x + 5, house1Coords.z + 5, 'HUMAN', Math.random() * Math.PI);
 
-        // Abandoned House 2: South near boundary (Dead Forest)
-        const house2Coords = { x: 300, z: 80 };
+        // Abandoned House 2: South near boundary
+        const house2Coords = { x: 310, z: -90 };
         SectorBuilder.spawnBuilding(ctx, house2Coords.x, house2Coords.z, 15, 6, 15, -Math.PI / 3, 0x333333, false);
         SectorBuilder.spawnDeadBody(ctx, house2Coords.x - 5, house2Coords.z - 5, 'HUMAN', Math.random() * Math.PI);
 
@@ -181,29 +184,29 @@ export const Sector2: SectorDef = {
         const hagPts = hagCurve.getSpacedPoints(120);
         const farmPathPts = farmCurve.getSpacedPoints(60);
 
+        // --- 4.3 Forest ---
         const forestOffset = 7;
         const forestDepth = 35;
 
-        // 4.3 Spruce (Forest Trail)
         // Strict filters: x < 115 stops before crossroads. z > -75 prevents bleeding onto Haglaredsvägen (z:-83).
         const filterTrailNorth = (points: THREE.Vector3[]) => points.filter(p => p.x < 115 && p.z > -75);
-        const filterTrailSouth = (points: THREE.Vector3[]) => points.filter(p => p.x < 115);
-
         const sprucePolyNorth = [
             ...filterTrailNorth(PathGenerator.getOffsetPoints(trailPts, -forestOffset)),
             ...filterTrailNorth(PathGenerator.getOffsetPoints(trailPts, -(forestOffset + forestDepth))).reverse()
         ];
-        const sprucePolySouth = [
+        sprucePolyNorth.forEach(p => p.y = 0);
+        SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.PINE], sprucePolyNorth, 12);
+
+        // Dead trees
+        const filterTrailSouth = (points: THREE.Vector3[]) => points.filter(p => p.x < 115);
+        const deadTreePoly = [
             ...filterTrailSouth(PathGenerator.getOffsetPoints(trailPts, forestOffset)),
             ...filterTrailSouth(PathGenerator.getOffsetPoints(trailPts, forestOffset + forestDepth)).reverse()
         ];
-        sprucePolyNorth.forEach(p => p.y = 0);
-        sprucePolySouth.forEach(p => p.y = 0);
+        deadTreePoly.forEach(p => p.y = 0);
+        SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.DEAD_TREE], deadTreePoly, 12);
 
-        SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.PINE], sprucePolyNorth, 12);
-        SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.PINE], sprucePolySouth, 12);
-
-        // 4.6 Wheat Fields (Strictly SOUTH of Haglaredsvägen using offset spline)
+        // --- 4.4 Wheat Fields ---
         const wheatOffset = 7;
         const wheatDepth = 35;
 
@@ -214,7 +217,7 @@ export const Sector2: SectorDef = {
         ];
         wheatPoly1.forEach(p => p.y = 0);
         SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.WHEAT, wheatPoly1, 0.4);
-        SectorBuilder.createScarecrow(ctx, 125, -95);
+        SectorBuilder.createScarecrow(ctx, 100, -100);
 
         const filterWheat2 = (points: THREE.Vector3[]) => points.filter(p => p.x > 170 && p.x < 240);
         const wheatPoly2 = [
@@ -271,7 +274,7 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(340, 0, 110),
             new THREE.Vector3(270, 0, 110)
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.DEAD, deadForestPoly, 18);
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.DEAD_TREE, deadForestPoly, 18);
 
         // --- 4. LAKE & GRASS ---
         const lakeCoords = { x: 255, z: -117 };
@@ -342,7 +345,8 @@ export const Sector2: SectorDef = {
         mastGroup.position.set(mastPos.x, 5, mastPos.z);
 
         const mast = SectorBuilder.spawnPoi(ctx, POI_TYPE.MAST, mastPos.x, mastPos.z, 0);
-        mastLightHubRef = mast.getObjectByName("mastWarningLights") || null;
+        mast.name = "POI_MAST";
+        ctx.sectorState.mastLightHub = mast.getObjectByName("mastWarningLights") || null;
     },
 
     setupContent: async (ctx: SectorContext) => {
@@ -360,10 +364,21 @@ export const Sector2: SectorDef = {
                 actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { scriptId: 2 } }]
             },
             { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_AMBIENT, radius: 8, type: TriggerType.SPEAK, content: "clues.2.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-            { id: 's3_poi_mast', position: LOCATIONS.TRIGGERS.POI_MAST, radius: 50, type: TriggerType.POI, content: "pois.2.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            {
+                id: 's3_poi_mast',
+                position: LOCATIONS.TRIGGERS.POI_MAST,
+                radius: 50,
+                type: TriggerType.POI,
+                content: "pois.2.0.reaction",
+                statusFlags: TriggerStatus.ACTIVE,
+                actions: [
+                    { type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } },
+                    { type: TriggerActionType.START_CINEMATIC, payload: { customPath: 'mast_flyover', targetName: 'POI_MAST' } }
+                ]
+            },
             { id: 's3_poi_farm', position: LOCATIONS.POIS.FARM, radius: 20, type: TriggerType.POI, content: "pois.2.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
             { id: 's3_tractor', position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: TriggerType.SPEAK, content: "clues.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-            { id: 's3_poi_farmhouse', position: LOCATIONS.POIS.FARMHOUSE, radius: 20, type: TriggerType.POI, content: "pois.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's2_poi_egg_farm', position: LOCATIONS.POIS.EGG_FARM, radius: 20, type: TriggerType.POI, content: "pois.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
             { id: 's3_poi_barn', position: LOCATIONS.POIS.BARN, radius: 20, type: TriggerType.POI, content: "pois.2.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
         ]);
     },

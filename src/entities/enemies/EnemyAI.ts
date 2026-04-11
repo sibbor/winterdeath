@@ -526,7 +526,7 @@ export const EnemyAI = {
                         let bestAttackIndex = -1;
                         for (let i = 0; i < e.attacks.length; i++) {
                             const att = e.attacks[i];
-                            const cooldown = e.attackCooldowns[i] || 0;
+                            const cooldown = e.attackCooldowns[att.type] || 0;
                             if (cooldown > 0) continue;
 
                             const range = (att.type === EnemyAttackType.HIT && !att.range) ? ENEMY_ATTACK_RANGE[e.type] : (att.range || ENEMY_ATTACK_RANGE[e.type]);
@@ -561,7 +561,6 @@ export const EnemyAI = {
 
             case AIState.ATTACK_CHARGE:
                 if (e.attackTimer !== -1) {
-                    e.attackTimer -= delta;
                     const att = e.attacks[e.currentAttackIndex!];
 
                     // Movement Lock Guard
@@ -580,7 +579,6 @@ export const EnemyAI = {
 
             case AIState.ATTACKING:
                 if (e.attackTimer !== -1) {
-                    e.attackTimer -= delta;
                     const att = e.attacks[e.currentAttackIndex!];
 
                     // Movement Lock Guard
@@ -659,7 +657,8 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     const baseScale = e.originalScale;
     const widthScale = e.widthScale;
 
-    if ((e.statusFlags & EnemyFlags.AIRBORNE) === 0) {
+    const hijackY = e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING;
+    if ((e.statusFlags & EnemyFlags.AIRBORNE) === 0 && !hijackY) {
         _v4.y = (1.0 * baseScale) + bounceOffset;
     }
 

@@ -13,7 +13,7 @@ export enum POI_TYPE {
     MOUNTAIN_VAULT = 'MOUNTAIN_VAULT',
     MAST = 'MAST',
     FARM = 'FARM',
-    FARMHOUSE = 'FARMHOUSE',
+    EGG_FARM = 'FARMHOUSE',
     BARN = 'BARN',
     DEALERSHIP = 'DEALERSHIP',
     SCRAPYARD = 'SCRAPYARD'
@@ -45,7 +45,7 @@ export const POIS: Record<string, PoiDefinition> = {
     // Sector 3
     's3_poi_mast': { id: 's3_poi_mast', sector: 2, index: 0, type: POI_TYPE.MAST },
     's3_poi_farm': { id: 's3_poi_farm', sector: 2, index: 1, type: POI_TYPE.FARM },
-    's3_poi_farmhouse': { id: 's3_poi_farmhouse', sector: 2, index: 2, type: POI_TYPE.FARMHOUSE },
+    's2_poi_egg_farm': { id: 's2_poi_egg_farm', sector: 2, index: 2, type: POI_TYPE.EGG_FARM },
     's3_poi_barn': { id: 's3_poi_barn', sector: 2, index: 3, type: POI_TYPE.BARN },
 
     // Sector 4

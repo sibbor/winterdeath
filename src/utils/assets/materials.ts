@@ -316,9 +316,9 @@ export const MATERIALS = {
     vehicleSign: new THREE.MeshBasicMaterial({ transparent: true }),
 
     // ---- VEGETATION ----
-    sunflowerStem: new THREE.MeshStandardMaterial({ color: 0x228B22 }),
-    sunflowerHead: new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.8 }),
-    sunflowerCenter: new THREE.MeshStandardMaterial({ color: 0x3E2723, roughness: 1.0 }),
+    sunflowerStem: patchWindMaterial(new THREE.MeshStandardMaterial({ color: 0x228B22 })),
+    sunflowerHead: patchWindMaterial(new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.8 })),
+    sunflowerCenter: patchWindMaterial(new THREE.MeshStandardMaterial({ color: 0x3E2723, roughness: 1.0 })),
 
     // ---- SPECIAL ----
     textSprite: new THREE.SpriteMaterial({ transparent: true, depthWrite: false, depthTest: true }),
