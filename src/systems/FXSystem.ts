@@ -125,10 +125,10 @@ const ESSENTIAL_TYPES: Record<string, boolean> = {
 let _whiteGoreMaterial: THREE.Material | null = null;
 
 const PARTICLE_TTL: Record<string, number> = {
-    blood: 120, debris: 200, large_fire: 60, large_smoke: 60, flame: 60, fire: 60,
-    smoke: 60, spark: 60, enemy_effect_flame: 60, enemy_effect_spark: 60,
-    electric_beam: 15, ground_impact: 40, shockwave: 40, frost_nova: 40,
-    screech_wave: 30, magnetic_sparks: 60, impact: 30, default: 30
+    blood: 1.5, debris: 2.0, large_fire: 0.8, large_smoke: 0.8, flame: 0.6, fire: 0.6,
+    smoke: 1.0, spark: 0.3, enemy_effect_flame: 0.6, enemy_effect_spark: 0.3,
+    electric_beam: 0.2, ground_impact: 0.5, shockwave: 0.5, frost_nova: 0.5,
+    screech_wave: 0.4, magnetic_sparks: 0.6, impact: 0.2, default: 0.5
 };
 
 // VINTERDÖD FIX: Pre-allocate state pool to prevent massive GC spike on first grenade
@@ -389,10 +389,10 @@ export const FXSystem = {
         }
 
         if (t === 'electric_flash') {
-            p.life = req.life !== undefined ? req.life : (2 + Math.random() * 2);
+            p.life = req.life !== undefined ? req.life : (0.05 + Math.random() * 0.05);
         } else {
             const baseLife = PARTICLE_TTL[t] ?? PARTICLE_TTL.default;
-            p.life = req.life !== undefined ? req.life : (baseLife + Math.random() * 20);
+            p.life = req.life !== undefined ? req.life : (baseLife + Math.random() * 0.2);
         }
         p.maxLife = p.life;
         p.rotVel.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
@@ -518,7 +518,7 @@ export const FXSystem = {
         callbacks: any, delta: number, simTime: number, renderTime: number) => {
         const safeDelta = delta > 0.1 ? 0.1 : delta;
 
-        const decay = safeDelta * 265;
+        const decay = safeDelta;
         const airFriction = 1.0 - (30.0 * safeDelta);
         const shrinkRate = 1.0 - (60.0 * safeDelta);
         const fireShrinkRate = 1.0 - (9.0 * safeDelta);

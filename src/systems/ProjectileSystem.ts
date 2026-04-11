@@ -195,6 +195,17 @@ export const ProjectileSystem = {
         p.highImpactDistSq = (weapon === DamageID.SHOTGUN) ? 144.0 : 0;
         p.highImpactDamageFactor = (weapon === DamageID.REVOLVER) ? 0.5 : 0;
 
+        // VINTERDÖD FIX: Inject engine-wide Muzzle FX for ballistic firearms
+        const isBallistic = weapon === DamageID.SMG || weapon === DamageID.SHOTGUN || 
+                           weapon === DamageID.RIFLE || weapon === DamageID.PISTOL || 
+                           weapon === DamageID.REVOLVER || weapon === DamageID.MINIGUN;
+
+        if (isBallistic) {
+            WeaponFX.createMuzzleFlash(origin, dir);
+            // Quick punchy light (Strobe effect as per constraint #2)
+            WeaponFX.spawnDynamicLight(scene, origin, 0xffaa44, 12.0, 18.0, 0.08, 'fire');
+        }
+
         projectiles.push(p);
     },
 
@@ -266,13 +277,14 @@ export const ProjectileSystem = {
 
         switch (weapon) {
             case DamageID.FLAMETHROWER: {
-                if (Math.random() < 0.3) {
+                if (Math.random() < 0.6) {
                     WeaponFX.createMuzzleFlash(origin, direction, false);
                 }
 
-                if (Math.random() < 0.5) {
+                if (Math.random() < 0.8) {
                     _v4.copy(origin).addScaledVector(direction, 3.0);
-                    WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0xff6600, 5.0, 30.0, 0.12, 'fire');
+                    // Massive Intensity Buff (5.0 -> 25.0, Radius 30 -> 55)
+                    WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0xff6600, 25.0, 55.0, 0.15, 'fire');
                 }
 
                 const count = 4;
@@ -423,7 +435,8 @@ export const ProjectileSystem = {
 
                     if (Math.random() > 0.4) {
                         _v4.copy(target.mesh.position).addScaledVector(direction, -1.0);
-                        WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0x00ffff, 2.0, 14.0, 0.1, 'electric');
+                        // Arc-Cannon Lightning Buff (2.0 -> 18.0, Radius 14 -> 35)
+                        WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0x00ffff, 18.0, 35.0, 0.12, 'electric');
                     }
 
                     for (let i = 0; i < hitLen; i++) {
@@ -438,9 +451,10 @@ export const ProjectileSystem = {
                         e.statusFlags |= EnemyFlags.STUNNED;
                         e.stunDuration = stunDur;
 
-                        if (Math.random() < 0.6) {
+                        if (Math.random() < 0.7) {
                             WeaponFX.createStunSparks(_v1);
-                            WeaponFX.spawnDynamicLight(ctx.scene, _v1, 0x00ffff, 1.2, 8.0, 0.1, 'electric');
+                            // Victim Glow
+                            WeaponFX.spawnDynamicLight(ctx.scene, _v1, 0x00ffff, 8.0, 15.0, 0.1, 'electric');
                         }
 
                         _v3.copy(_v1);

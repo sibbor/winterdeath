@@ -14,7 +14,7 @@ const _v8 = new THREE.Vector3();
 // --- POOLS ---
 const LIGHTNING_POOL_SIZE = 40;
 const LIGHTNING_SEGMENTS = 6;
-const LIGHT_POOL_SIZE = 4;
+const LIGHT_POOL_SIZE = 12;
 
 interface LightningNode {
     lineMain: THREE.Line;
@@ -262,18 +262,23 @@ export const WeaponFX = {
             ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 85);
             return;
         }
-        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), undefined, 1.5, 1.0);
-        ctx.spawnPart(pos.x, pos.y + 0.1, pos.z, 'shockwave', 1, undefined, _v2, undefined, radius * 0.2, 2.0);
-        ctx.spawnPart(pos.x, pos.y + 0.05, pos.z, 'blastRadius', 1, undefined, _v2, undefined, radius, 25.0);
-        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xffaa00, 5.0, radius * 3, 0.5, 'fire');
+        // VINTERDÖD FIX: Standardized to seconds-based life (0.1s flash, 0.4s shockwave, 1.2s blast)
+        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), undefined, 1.5, 0.1);
+        ctx.spawnPart(pos.x, pos.y + 0.1, pos.z, 'shockwave', 2, undefined, _v2, undefined, radius * 0.2, 0.4);
+        ctx.spawnPart(pos.x, pos.y + 0.05, pos.z, 'blastRadius', 1, undefined, _v2, undefined, radius, 1.2);
+        
+        // Massive Intensity Buff (5.0 -> 25.0)
+        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xffaa00, 25.0, radius * 6, 0.5, 'fire');
     },
 
     createMolotovImpact: (pos: THREE.Vector3, radius: number, hitWater: boolean, ctx: any) => {
         if (hitWater) return;
         ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'glass', 15);
-        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), 0xff8800, 1.0, 1.0);
-        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'large_fire', 5, undefined, undefined, undefined, 1.5);
-        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xff6600, 3.0, radius * 2.5, 0.4, 'fire');
+        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), 0xff8800, 1.0, 0.15);
+        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'large_fire', 8, undefined, undefined, undefined, 1.8);
+        
+        // Intensity Buff (3.0 -> 15.0)
+        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xff6600, 15.0, radius * 5, 0.4, 'fire');
         ctx.spawnDecal(pos.x, pos.z, radius * 2.0, MATERIALS.scorchDecal);
     },
 
@@ -308,8 +313,9 @@ export const WeaponFX = {
 
     createFlashbangImpact: (pos: THREE.Vector3, hitWater: boolean, ctx: any) => {
         if (hitWater) return;
-        ctx.spawnPart(pos.x, pos.y + 2, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), undefined, 8.0);
-        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xffffff, 10.0, 30.0, 0.6);
+        ctx.spawnPart(pos.x, pos.y + 2, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), undefined, 8.0, 0.5);
+        // Blinding Intensity (10.0 -> 45.0)
+        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xffffff, 45.0, 60.0, 1.5);
         ctx.spawnDecal(pos.x, pos.z, 2.0, MATERIALS.scorchDecal);
     },
 
@@ -324,7 +330,7 @@ export const WeaponFX = {
         req.hasCustomVel = true;
         req.scale = 0.1 + Math.random() * 0.2;
         req.color = Math.random() > 0.8 ? 0xffcc00 : (Math.random() > 0.4 ? 0xff4400 : 0xaa1100);
-        req.life = 25 + Math.random() * 15;
+        req.life = 0.2 + Math.random() * 0.1; // Standardized to seconds
         FXSystem.essentialQueue.push(req);
     },
 
@@ -337,7 +343,7 @@ export const WeaponFX = {
         req.hasCustomVel = true;
         req.scale = 0.3 + Math.random() * 0.3;
         req.color = isCyan ? 0x00bfff : 0xffcc00;
-        req.life = 6 + Math.random() * 4;
+        req.life = 0.05 + Math.random() * 0.05; // Standardized to seconds (short, punchy strobe)
         FXSystem.essentialQueue.push(req);
     }
 };
