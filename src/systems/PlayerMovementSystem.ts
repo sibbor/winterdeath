@@ -50,7 +50,7 @@ export class PlayerMovementSystem implements System {
     private _buffShieldMesh: THREE.Mesh | null = null;
 
 
-    constructor(private playerGroup: THREE.Group) { 
+    constructor(private playerGroup: THREE.Group) {
         // VINTERDÖD: 100% Zero-GC Mesh Pre-allocation
         this._buffShieldMesh = new THREE.Mesh(GEOMETRY.buff_shield_bubble, MATERIALS.buff_shield_bubble);
         this._buffShieldMesh.position.y = 1.0;
@@ -121,16 +121,17 @@ export class PlayerMovementSystem implements System {
         _auditFrameCount++;
         if (delta < _auditMinDelta) _auditMinDelta = delta;
         if (delta > _auditMaxDelta) _auditMaxDelta = delta;
-        
+
         // 0.05 is the hard clamp in WinterEngine.ts
         if (delta >= 0.0499) _auditClampedCount++;
 
         const now = performance.now();
         if (now - _auditLastLogTime > 1000) {
             const elapsed = (now - _auditLastLogTime) / 1000;
+            /*
             const fps = _auditFrameCount / elapsed;
             const avgSteps = _auditSteps / _auditFrameCount;
-            
+
             console.log(
                 `[SPEED_AUDIT] ` +
                 `FPS: ${fps.toFixed(1)} | ` +
@@ -139,6 +140,7 @@ export class PlayerMovementSystem implements System {
                 `Steps: ${avgSteps.toFixed(1)}/fr | ` +
                 `SimDist: ${_auditSimDist.toFixed(2)}m (Total)`
             );
+            */
 
             // Reset for next window
             _auditSimDist = 0;
@@ -245,14 +247,14 @@ export class PlayerMovementSystem implements System {
             // Check for Dodge trigger on release (Short Press)
             if (state.spaceDepressed) {
                 const pressDuration = simTime - state.spacePressTime;
-                
+
                 // VINTERDÖD FIX: Increased window (150->200ms) and added '!state.isDodging' check
                 if (!state.isRushing && !state.isDodging && pressDuration < 200) {
                     if (stats[PlayerStatID.STAMINA] >= 15) {
                         stats[PlayerStatID.STAMINA] -= 15;
                         state.lastStaminaUseTime = simTime;
                         state.isDodging = true;
-                        state.dodgeStartTime = renderTime; // FIX: Sync with renderTime for animator
+                        state.dodgeStartTime = simTime; // VINTERDÖD FIX: Logic MUST use simTime for parity
                         state.dodgeDir.set(0, 0, 0); // Reset to recalc next frame
                     }
                 }
@@ -442,7 +444,7 @@ export class PlayerMovementSystem implements System {
                 _v1.copy(state.dodgeDir).multiplyScalar(dodgeSpeed * delta);
                 this.performMove(playerGroup, _v1, state, session, simTime, delta);
                 isMovingVal = true;
-                
+
                 // UNIFIED STATE SYNC
                 state.statusFlags |= PlayerStatusFlags.DODGING;
             } else {
@@ -483,7 +485,7 @@ export class PlayerMovementSystem implements System {
                 // However, we MUST ensure the magnitude never exceeds 1.0.
                 const mag = _v6.length();
                 if (mag > 1.0) _v6.normalize();
-                
+
                 _v1.copy(_v6);
                 if (camAngle !== 0) _v1.applyAxisAngle(_UP, camAngle);
 

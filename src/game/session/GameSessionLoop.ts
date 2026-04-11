@@ -581,6 +581,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _animStateScratch.isDead = (sf & PlayerStatusFlags.DEAD) !== 0;
                 _animStateScratch.deathStartTime = state.deathStartTime;
                 _animStateScratch.renderTime = state.renderTime;
+                _animStateScratch.simTime = state.simTime;
                 _animStateScratch.currentSpeedRatio = state.currentSpeedRatio;
                 _animStateScratch.seed = 0;
 

@@ -18,6 +18,7 @@ export interface AnimState {
     strafeDirection?: number;
     currentSpeedRatio?: number; // New: 1.0 = base speed, 2.0 = full rush, etc.
     renderTime: number;
+    simTime: number;
     seed: number;
 }
 
@@ -29,6 +30,8 @@ export const PlayerAnimator = {
         renderTime: number
     ) => {
         if (!mesh) return;
+        
+        const simTime = animState.simTime || renderTime;
 
         // --- 1. Base Variables ---
         let scaleY = 1.0;
@@ -52,7 +55,7 @@ export const PlayerAnimator = {
         if (animState.isDead) {
             // High-speed death animation (350ms)
             const deathDuration = 350;
-            const progress = Math.min(1.0, Math.max(0.0, (renderTime - (animState.deathStartTime || renderTime)) / deathDuration));
+            const progress = Math.min(1.0, Math.max(0.0, (simTime - (animState.deathStartTime || simTime)) / deathDuration));
 
             rotationX = -Math.PI / 2 * progress;
             positionY = -0.8 * progress; // Sink into snow/ground
@@ -60,7 +63,7 @@ export const PlayerAnimator = {
 
         // Dodging animation (Athletic Leap/Dash pose)
         else if (animState.isDodging) {
-            const progress = Math.min(1.0, Math.max(0.0, (renderTime - animState.dodgeStartTime) / 300));
+            const progress = Math.min(1.0, Math.max(0.0, (simTime - animState.dodgeStartTime) / 300));
             
             // --- VINTERDÖD STYLE: Athletic Leap ---
             // Lean heavily forward at start, then tuck slightly

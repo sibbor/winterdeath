@@ -33,7 +33,8 @@ const _deathAnimState = {
     seed: 0,
     isDead: true,
     deathStartTime: 0,
-    renderTime: 0
+    renderTime: 0,
+    simTime: 0
 };
 
 const _griefAnimState = {
@@ -46,7 +47,8 @@ const _griefAnimState = {
     isThinking: true,
     isIdleLong: false,
     seed: 0,
-    renderTime: 0
+    renderTime: 0,
+    simTime: 0
 };
 
 export class DeathSystem implements System {
@@ -91,7 +93,7 @@ export class DeathSystem implements System {
         this.setDeathPhase = opts.setDeathPhase;
     }
 
-    update(session: GameSessionLogic, delta: number, renderTime: number) {
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         const state = session.state;
         if (!(state.statusFlags & PlayerStatusFlags.DEAD)) return;
 
@@ -117,12 +119,12 @@ export class DeathSystem implements System {
             HudStore.update(hudData);
 
         } else if (this.deathPhaseRef.current === 'ANIMATION') {
-            if (renderTime - state.deathStartTime > 2500) {
+            if (simTime - state.deathStartTime > 2500) {
                 this.deathPhaseRef.current = 'MESSAGE';
                 this.setDeathPhase('MESSAGE');
             }
         } else if (this.deathPhaseRef.current === 'MESSAGE') {
-            if (renderTime - state.deathStartTime > 3000) {
+            if (simTime - state.deathStartTime > 3000) {
                 this.deathPhaseRef.current = 'CONTINUE';
                 this.setDeathPhase('CONTINUE');
             }
@@ -257,6 +259,7 @@ export class DeathSystem implements System {
         } else if (playerMesh) {
             _deathAnimState.deathStartTime = state.deathStartTime;
             _deathAnimState.renderTime = state.renderTime;
+            _deathAnimState.simTime = state.simTime;
             PlayerAnimator.update(playerMesh as any, _deathAnimState, renderTime);
         }
 
@@ -311,6 +314,7 @@ export class DeathSystem implements System {
                 _griefAnimState.seed = fm.seed || 0;
                 _griefAnimState.isMoving = isWalking;
                 _griefAnimState.renderTime = state.renderTime;
+                _griefAnimState.simTime = state.simTime;
                 _griefAnimState.staminaRatio = state.statsBuffer[PlayerStatID.STAMINA] / Math.max(1, state.statsBuffer[PlayerStatID.MAX_STAMINA]);
                 PlayerAnimator.update(body, _griefAnimState, renderTime);
             }
