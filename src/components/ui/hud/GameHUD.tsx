@@ -9,6 +9,8 @@ import { DataResolver } from '../../../utils/ui/DataResolver';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import DamageVignette from './DamageVignette';
 import DiscoveryPopup from './DiscoveryPopup';
+import InteractionPrompt from './InteractionPrompt';
+import { InteractionType } from '../../../systems/InteractionTypes';
 
 interface GameHUDProps {
     loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
@@ -300,8 +302,22 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
 
     const wep = DataResolver.getWeapons()[activeWeapon];
 
+    const interactionActive = useHudStore(s => s.interactionPrompt.active);
+    const interactionType = useHudStore(s => s.interactionPrompt.type);
+    const interactionLabel = useHudStore(s => s.interactionPrompt.label);
+
     return (
         <div className={`absolute ${isMobileDevice ? 'bottom-4' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+            {interactionActive && interactionType !== InteractionType.NONE && (
+                <div className="mb-4 animate-in fade-in slide-in-from-bottom-2 duration-300 pointer-events-auto">
+                    <InteractionPrompt 
+                        type={interactionType} 
+                        label={interactionLabel} 
+                        isMobileDevice={isMobileDevice} 
+                    />
+                </div>
+            )}
+
             {!isDriving && wep && wep.category !== WeaponCategory.THROWABLE && activeWeapon !== WeaponType.RADIO && (
                 <div className={`${isMobileDevice ? 'mb-2' : 'mb-4'} text-center animate-fadeIn flex items-baseline`}>
                     <span ref={ammoTextRef} className={`${isMobileDevice ? 'text-2xl' : 'text-4xl'} font-bold text-white tracking-tighter font-mono`}>
