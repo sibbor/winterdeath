@@ -50,7 +50,18 @@ export class PlayerMovementSystem implements System {
     private _buffShieldMesh: THREE.Mesh | null = null;
 
 
-    constructor(private playerGroup: THREE.Group) { }
+    constructor(private playerGroup: THREE.Group) { 
+        // VINTERDÖD: 100% Zero-GC Mesh Pre-allocation
+        this._buffShieldMesh = new THREE.Mesh(GEOMETRY.buff_shield_bubble, MATERIALS.buff_shield_bubble);
+        this._buffShieldMesh.position.y = 1.0;
+        this._buffShieldMesh.visible = false;
+        this.playerGroup.add(this._buffShieldMesh);
+
+        this._invincibilityMesh = new THREE.Mesh(GEOMETRY.reflexShield, MATERIALS.reflexShield);
+        this._invincibilityMesh.position.y = 1.0;
+        this._invincibilityMesh.visible = false;
+        this.playerGroup.add(this._invincibilityMesh);
+    }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         const state = session.state;
@@ -146,13 +157,7 @@ export class PlayerMovementSystem implements System {
         const duration = state.effectDurations[perkID];
         const maxDuration = state.effectMaxDurations[perkID] || 1000;
 
-        if (duration > 0) {
-            if (!this._buffShieldMesh) {
-                this._buffShieldMesh = new THREE.Mesh(GEOMETRY.buff_shield_bubble, MATERIALS.buff_shield_bubble);
-                this._buffShieldMesh.position.y = 1.0;
-                this.playerGroup.add(this._buffShieldMesh);
-            }
-
+        if (duration > 0 && this._buffShieldMesh) {
             const mat = this._buffShieldMesh.material as THREE.MeshBasicMaterial;
 
             // FADE LOGIC:
@@ -209,12 +214,7 @@ export class PlayerMovementSystem implements System {
     }
 
     private updateInvincibleGlow(state: any, renderTime: number) {
-        if (state.sectorState.isInvincible) {
-            if (!this._invincibilityMesh) {
-                this._invincibilityMesh = new THREE.Mesh(GEOMETRY.reflexShield, MATERIALS.reflexShield);
-                this._invincibilityMesh.position.y = 1.0;
-                this.playerGroup.add(this._invincibilityMesh);
-            }
+        if (state.sectorState.isInvincible && this._invincibilityMesh) {
 
             // Pulse effect
             const sineWave = Math.sin(renderTime * 0.005) * 0.05;
@@ -615,7 +615,9 @@ export class PlayerMovementSystem implements System {
                     const enemy = nearbyEnemies[j];
                     const distSq = _v3.distanceToSquared(enemy.mesh.position);
                     if (distSq < 0.6) {
-                        const overlap = 0.77 - Math.sqrt(distSq);
+                        // VINTERDÖD: Sqrt Purge! 
+                        // Using squared approximation for soft shove (0.6 - distSq) * factor
+                        const overlap = (0.6 - distSq) * 1.2;
                         _v1.subVectors(_v3, enemy.mesh.position).normalize().multiplyScalar(overlap);
                         _v3.add(_v1);
                         adjusted = true;

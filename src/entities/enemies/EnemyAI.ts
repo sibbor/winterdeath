@@ -400,15 +400,22 @@ export const EnemyAI = {
                 const odSq = odx * odx + odz * odz;
 
                 if (odSq < SEPARATION_RADIUS_SQ && odSq > 0.001) {
-                    const od = Math.sqrt(odSq);
-                    const invOd = 1.0 / od;
-                    const pushStrength = (SEPARATION_RADIUS - od) * INV_SEPARATION_RADIUS;
-                    _v6.x += (odx * invOd) * pushStrength * 1.5;
-                    _v6.z += (odz * invOd) * pushStrength * 1.5;
+                    // VINTERDÖD: Sqrt Purge! 
+                    // Using squared falloff for push strength. No sqrt needed.
+                    // (1.0 - (odSq / SEPARATION_RADIUS_SQ)) * 5.0 (tuning factor)
+                    const pushFactor = (1.0 - (odSq / SEPARATION_RADIUS_SQ)) * 5.0;
+                    _v6.x += odx * pushFactor;
+                    _v6.z += odz * pushFactor;
                 }
             }
             if (Math.abs(_v6.x) > 0.001 || Math.abs(_v6.z) > 0.001) {
-                if (_v6.lengthSq() > 9.0) _v6.normalize().multiplyScalar(3.0);
+                // Limit the shove force using lengthSq
+                const shoveSq = _v6.x * _v6.x + _v6.z * _v6.z;
+                if (shoveSq > 16.0) { // Limit to 4.0 units
+                    const invShove = 4.0 / Math.sqrt(shoveSq); // Still one sqrt but only once per enemy, NOT per neighbor!
+                    _v6.x *= invShove;
+                    _v6.z *= invShove;
+                }
             }
         }
 

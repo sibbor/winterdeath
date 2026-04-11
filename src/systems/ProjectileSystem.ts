@@ -270,7 +270,6 @@ export const ProjectileSystem = {
                     WeaponFX.createMuzzleFlash(origin, direction, false);
                 }
 
-                // [VINTERDÖD FIX] Push the dynamic light 3 meters ahead
                 if (Math.random() < 0.5) {
                     _v4.copy(origin).addScaledVector(direction, 3.0);
                     WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0xff6600, 5.0, 30.0, 0.12, 'fire');
@@ -312,32 +311,31 @@ export const ProjectileSystem = {
                     _v1.subVectors(e.mesh.position, origin);
                     const distSq = _v1.lengthSq();
 
+                    // VINTERDÖD: Sqrt Purge! 
                     if (distSq > rangeSq) continue;
+                    
+                    // Optimization: Check dot product BEFORE reach to cull most targets
+                    _v2.copy(_v1).normalize(); 
+                    if (direction.dot(_v2) <= FLAMETHROWER_CONE_ANGLE) continue;
 
                     const dist = Math.sqrt(distSq);
-
                     if (dist > maxReach + 1.2) continue;
 
-                    _v1.divideScalar(dist);
-                    const dot = direction.dot(_v1);
-
-                    if (dot > FLAMETHROWER_CONE_ANGLE) {
-                        if ((e.statusFlags & EnemyFlags.IN_WATER) !== 0) {
-                            if (Math.random() < 0.1) {
-                                ctx.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'large_smoke', 1);
-                            }
-                            continue;
+                    if ((e.statusFlags & EnemyFlags.IN_WATER) !== 0) {
+                        if (Math.random() < 0.1) {
+                            ctx.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'large_smoke', 1);
                         }
+                        continue;
+                    }
 
-                        e.statusFlags |= EnemyFlags.BURNING;
-                        e.burnTickTimer = 0.5;
-                        e.burnDuration = 5.0;
+                    e.statusFlags |= EnemyFlags.BURNING;
+                    e.burnTickTimer = 0.5;
+                    e.burnDuration = 5.0;
 
-                        const chance = (delta * 1000) / (data.fireRate || 35);
-                        if (Math.random() < chance) {
-                            const finalDmg = damageOverride !== undefined ? (damageOverride / (60 * delta)) : data.damage;
-                            ctx.applyDamage(e, finalDmg || 0, DamageID.FLAMETHROWER);
-                        }
+                    const chance = (delta * 1000) / (data.fireRate || 35);
+                    if (Math.random() < chance) {
+                        const finalDmg = damageOverride !== undefined ? (damageOverride / (60 * delta)) : data.damage;
+                        ctx.applyDamage(e, finalDmg || 0, DamageID.FLAMETHROWER);
                     }
                 }
 
@@ -345,7 +343,6 @@ export const ProjectileSystem = {
                     WeaponSounds.startFlamethrowerLoop();
                     _lastFlameSoundTime = simTime;
                 }
-
                 break;
             }
 
@@ -367,13 +364,16 @@ export const ProjectileSystem = {
                     const distSq = _v1.lengthSq();
                     if (distSq > rangeSq) continue;
 
-                    const dist = Math.sqrt(distSq);
-                    _v1.divideScalar(dist);
-
-                    if (direction.dot(_v1) > aimThreshold) {
-                        if (dist < minDist) {
-                            minDist = dist;
-                            target = e;
+                    // VINTERDÖD: Sqrt Purge! 
+                    const dot = direction.dot(_v1);
+                    if (dot > 0) {
+                        const threshold = aimThreshold * aimThreshold;
+                        const dotSq = dot * dot;
+                        if (dotSq > threshold * distSq) {
+                            if (distSq < minDist) {
+                                minDist = distSq;
+                                target = e;
+                            }
                         }
                     }
                 }
@@ -421,7 +421,6 @@ export const ProjectileSystem = {
                     _v3.copy(origin);
                     const hitLen = _arcCannonHitList.length;
 
-                    // [VINTERDÖD FIX] Illuminate the target area (forward push)
                     if (Math.random() > 0.4) {
                         _v4.copy(target.mesh.position).addScaledVector(direction, -1.0);
                         WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0x00ffff, 2.0, 14.0, 0.1, 'electric');
@@ -429,14 +428,11 @@ export const ProjectileSystem = {
 
                     for (let i = 0; i < hitLen; i++) {
                         const e = _arcCannonHitList[i];
-
                         _v1.copy(e.mesh.position);
                         _v1.y += (e.originalScale || 1.0) * 1.0;
 
                         const isMain = (i === 0);
-
                         WeaponFX.drawArcLightning(ctx.scene, _v3, _v1, isMain);
-
                         ctx.applyDamage(e, currentDamage, DamageID.ARC_CANNON);
 
                         e.statusFlags |= EnemyFlags.STUNNED;
@@ -455,12 +451,10 @@ export const ProjectileSystem = {
                         WeaponSounds.playArcCannonZap();
                         _lastArcCannonSoundTime = simTime;
                     }
-
                 } else {
                     _v1.copy(origin).addScaledVector(direction, range);
                     WeaponFX.drawArcLightning(ctx.scene, origin, _v1, true);
 
-                    // [VINTERDÖD FIX] Illuminate the air/ground 5m ahead when missing
                     _v4.copy(origin).addScaledVector(direction, 5.0);
                     WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0x00ffff, 5.0, 30.0, 0.12, 'electric');
 
@@ -505,7 +499,10 @@ export const ProjectileSystem = {
                 }
 
                 if (fz.audioPoolIdx !== -1) {
-                    audioEngine.updateVoiceVolume(fz.audioPoolIdx, (1.0 - (fz.mesh.position.distanceTo(ctx.playerPos) / 30)) * 0.4 * Math.min(1.0, (fz.life / 6.0) * 2.0));
+                    const dSq = fz.mesh.position.distanceToSquared(ctx.playerPos);
+                    // Approximation for volume falloff without sqrt: 1.0 - (dSq / 900)
+                    const vol = (1.0 - (dSq / 900)) * 0.4 * Math.min(1.0, (fz.life / 6.0) * 2.0);
+                    audioEngine.updateVoiceVolume(fz.audioPoolIdx, Math.max(0, vol));
                 }
 
                 if (simTime - (fz._lastDamageTime || 0) > 500) {
@@ -753,12 +750,15 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
 
                         if (isKill) {
                             const forceMultiplier = hitWater ? 5.0 : 15.0;
-                            const force = forceMultiplier * (1.0 - Math.sqrt(distSq) / effectiveRadius);
+                            // VINTERDÖD: Sqrt Purge!
+                            const radSq = effectiveRadius * effectiveRadius;
+                            const force = forceMultiplier * (1.0 - Math.min(1.0, distSq / radSq));
                             _v4.copy(_v2).normalize().setY(hitWater ? 1.5 : 0.5).multiplyScalar(force);
                             e.deathVel.copy(_v4);
                         } else {
                             const mass = e.originalScale * e.widthScale;
-                            const kbForce = hitWater ? 12 : 25;
+                            const radSq = effectiveRadius * effectiveRadius;
+                            const kbForce = (hitWater ? 12 : 25) * (1.0 - Math.min(1.0, distSq / radSq));
                             _v4.copy(_v2).normalize().multiplyScalar(kbForce / mass).setY(hitWater ? 1.0 : 2.0);
                             e.knockbackVel.add(_v4);
                         }

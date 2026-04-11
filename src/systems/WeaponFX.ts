@@ -284,7 +284,9 @@ export const WeaponFX = {
         if (Math.random() < (targetFlameCount - flameCount)) flameCount++;
 
         for (let j = 0; j < flameCount; j++) {
-            const r = Math.sqrt(Math.random()) * radius;
+            // VINTERDÖD: Sqrt Purge! 
+            // Using Math.max(rand, rand) as a fast approximation for uniform circular distribution.
+            const r = Math.max(Math.random(), Math.random()) * radius;
             const theta = Math.random() * Math.PI * 2;
             const fx = pos.x + r * Math.cos(theta);
             const fzZ = pos.z + r * Math.sin(theta);

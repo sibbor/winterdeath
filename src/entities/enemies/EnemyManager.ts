@@ -16,6 +16,7 @@ import { FXSystem } from '../../systems/FXSystem';
 import { WaterSystem } from '../../systems/WaterSystem';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { SoundID } from '../../utils/audio/AudioTypes';
+import { getCachedNumberString } from '../../utils/NumberCache';
 
 export type { Enemy };
 
@@ -668,8 +669,10 @@ export const EnemyManager = {
 
             if (distSq < radiusSq) {
                 hitAnyone = true;
-                const dist = Math.sqrt(distSq);
-                const falloff = 1.0 - Math.min(1.0, dist / radius);
+                // VINTERDÖD: Sqrt Purge! 
+                // Using quadratic falloff for physics/damage (distSq / radiusSq). 
+                // APPROXIMATION: falloff = 1.0 - (distSq / radiusSq)
+                const falloff = 1.0 - (distSq / radiusSq);
 
                 // --- DAMAGE ---
                 const damage = Math.ceil(maxDamage * falloff);
@@ -772,7 +775,7 @@ export const EnemyManager = {
             else enemy.hp -= tackleDamage;
 
             if (state.callbacks?.showDamageText) {
-                state.callbacks.showDamageText(enemy.mesh.position.x, 2.5, enemy.mesh.position.z, tackleDamage.toString(), "#ffffff");
+                state.callbacks.showDamageText(enemy.mesh.position.x, 2.5, enemy.mesh.position.z, getCachedNumberString(tackleDamage), "#ffffff");
             }
         }
 
