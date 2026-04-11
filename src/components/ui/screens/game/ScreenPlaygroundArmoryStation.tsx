@@ -3,8 +3,9 @@ import { PlayerStats } from '../../../../entities/player/PlayerTypes';
 import { SectorState } from '../../../../game/session/SessionTypes';;
 import { WeaponType, WeaponCategory, WeaponCategoryColors } from '../../../../content/weapons';
 import { t } from '../../../../utils/i18n';
-import { WEAPONS, SCRAP_COST_BASE } from '../../../../content/constants';
-import { soundManager } from '../../../../utils/audio/SoundManager';
+import { SCRAP_COST_BASE } from '../../../../content/constants';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
+import { DataResolver } from '../../../../utils/ui/DataResolver';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 
 interface ScreenPlaygroundArmoryStationProps {
@@ -31,7 +32,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
 
     const handleUpgradeWeapon = (e: React.MouseEvent, weapon: WeaponType) => {
         e.stopPropagation();
-        soundManager.playUiClick();
+        UiSounds.playClick();
         const level = tempWeaponLevels[weapon] || 1;
         const cost = SCRAP_COST_BASE * level;
         const currentScrap = (tempStats as any).collectedScrap !== undefined ? (tempStats as any).collectedScrap : tempStats.scrap;
@@ -48,7 +49,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
     const handleEquip = (weapon: WeaponType, category: WeaponCategory) => {
         if (category === WeaponCategory.TOOL) return;
 
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
         if (category === WeaponCategory.PRIMARY) setTempLoadout({ ...tempLoadout, primary: weapon });
         else if (category === WeaponCategory.SECONDARY) setTempLoadout({ ...tempLoadout, secondary: weapon });
         else if (category === WeaponCategory.THROWABLE) setTempLoadout({ ...tempLoadout, throwable: weapon });
@@ -67,7 +68,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
         if (tempSectorState.unlimitedThrowables !== sectorState.unlimitedThrowables) return true;
         if (tempSectorState.noReload !== sectorState.noReload) return true;
 
-        const weapons = Object.values(WEAPONS).filter(Boolean);
+        const weapons = Object.values(DataResolver.getWeapons()).filter(Boolean);
         for (const w of weapons) {
             const k = w.name;
             if ((tempWeaponLevels[k] || 1) !== (weaponLevels[k] || 1)) return true;
@@ -99,7 +100,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
             titleColorClass="text-yellow-600"
             tabs={[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL]}
             activeTab={activeTab}
-            onTabChange={(cat) => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
+            onTabChange={(cat) => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
             tabOrientation="horizontal"
         >
             <div className="flex flex-col h-full overflow-hidden gap-4 md:gap-8">
@@ -138,7 +139,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                             return (
                                 <button
                                     key={cat}
-                                    onClick={() => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
+                                    onClick={() => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
                                     className={`px-4 md:px-8 py-2 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-3 group whitespace-nowrap
                                         ${isActive
                                             ? 'bg-white text-black font-black italic'
@@ -155,7 +156,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
 
                 {/* Main Content Area */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6 overflow-y-auto pb-4 pr-1 custom-scrollbar">
-                    {Object.values(WEAPONS).filter(w => w.category === activeTab).map((weapon) => {
+                    {Object.values(DataResolver.getWeapons()).filter(w => w.category === activeTab).map((weapon) => {
                         const level = tempWeaponLevels[weapon.name] || 1;
                         const cost = SCRAP_COST_BASE * level;
                         const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;

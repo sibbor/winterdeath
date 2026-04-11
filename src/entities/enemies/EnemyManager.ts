@@ -6,7 +6,8 @@ import { DamageID } from '../../entities/player/CombatTypes';
 import { EnemySpawner } from './EnemySpawner';
 import { EnemyAI } from './EnemyAI';
 import { MaterialType } from '../../content/environment';
-import { soundManager } from '../../utils/audio/SoundManager';
+import { GamePlaySounds, EnemySounds } from '../../utils/audio/AudioLib';
+import { audioEngine } from '../../utils/audio/AudioEngine';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { ZombieRenderer } from '../../core/renderers/ZombieRenderer';
 import { CorpseRenderer } from '../../core/renderers/CorpseRenderer';
@@ -123,7 +124,7 @@ const _aiContext: AIContext = {
     spawnDecal: null,
     applyDamage: null,
     onEffectTick: null,
-    playSound: (id: SoundID) => soundManager.playSound(id),
+    playSound: (id: SoundID) => audioEngine.playSound(id),
     spawnBubble: null,
     onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
         if (_aiContext._realOnPlayerHit) {
@@ -718,7 +719,7 @@ export const EnemyManager = {
             }
         }
 
-        if (hitAnyone) soundManager.playImpact(MaterialType.FLESH);
+        if (hitAnyone) GamePlaySounds.playImpact(MaterialType.FLESH);
     },
 
     applyKnockback: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, delta: number, simTime: number) => {
@@ -787,7 +788,7 @@ export const EnemyManager = {
         }
 
         FXSystem.spawnPart(scene, state.particles, enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
-        soundManager.playImpact(MaterialType.FLESH);
+        GamePlaySounds.playImpact(MaterialType.FLESH);
     },
 
     applyVehicleHit: (
@@ -827,7 +828,7 @@ export const EnemyManager = {
                 EnemyManager.explodeEnemy(e, _aiContext, forceDir, true);
 
                 session.engine.camera.shake(0.4);
-                soundManager.playImpact(MaterialType.FLESH);
+                GamePlaySounds.playImpact(MaterialType.FLESH);
 
                 return true;
             } else if (speedKmh >= 20) {
@@ -845,7 +846,7 @@ export const EnemyManager = {
                     1.0 + Math.random() * 1.5, MATERIALS.bloodDecal);
 
                 session.engine.camera.shake(0.2);
-                soundManager.playImpact(MaterialType.FLESH);
+                GamePlaySounds.playImpact(MaterialType.FLESH);
 
                 return true;
             } else {
@@ -883,9 +884,9 @@ export const EnemyManager = {
                 e.mesh.userData.deathPy = e.mesh.position.y;
                 e.mesh.userData.deathPz = e.mesh.position.z;
                 if (!e.mesh.userData.exploded) {
-                    if (e.type === EnemyType.RUNNER) soundManager.playRunnerDeath();
-                    else if (e.type === EnemyType.TANK) soundManager.playTankDeath();
-                    else soundManager.playWalkerDeath();
+                    if (e.type === EnemyType.RUNNER) EnemySounds.playGrowl('runner', e.mesh.position);
+                    else if (e.type === EnemyType.TANK) EnemySounds.playGrowl('tank', e.mesh.position);
+                    else EnemySounds.playGrowl('walker', e.mesh.position);
                 }
             }
 

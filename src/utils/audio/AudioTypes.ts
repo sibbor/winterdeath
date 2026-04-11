@@ -14,6 +14,9 @@ export enum SoundID {
     UI_PICKUP = 4,
     UI_LEVEL_UP = 5,
     UI_CHIME = 6,
+    UI_VICTORY = 7,
+    UI_DEFEAT = 8,
+    UI_DISCOVERY = 9,
 
     // --- GAMEPLAY / WORLD ---
     FOOTSTEP_L = 10,
@@ -79,6 +82,7 @@ export enum SoundID {
     VO_PLAYER_HURT = 70,
     VO_PLAYER_DEATH = 71,
     VO_PLAYER_COUGH = 72,
+    VO_FAMILY_CRY = 73,
 
     // --- AMBIENTS
     AMBIENT_WIND = 500,

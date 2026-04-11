@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { System } from './System';
 import { CameraSystem } from './CameraSystem';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
-import { soundManager } from '../utils/audio/SoundManager';
+import { VoiceSounds } from '../utils/audio/AudioLib';
 import { STORY_SCRIPTS } from '../content/dialogues';
 import { RuntimeState } from '../core/RuntimeState';
 
@@ -340,7 +340,7 @@ export class CinematicSystem implements System {
         const timeSinceLastVoice = now - (cinematic.lastVoiceTime || 0);
         if (timeInLine < cinematic.typingDuration && timeSinceLastVoice > 150) {
             cinematic.lastVoiceTime = now;
-            soundManager.playVoice(currentSpeakerName);
+            VoiceSounds.playDialogueBeep(currentSpeakerName);
         }
 
         // --- VINTERDÖD FIX: Zero-GC Animator Sync ---

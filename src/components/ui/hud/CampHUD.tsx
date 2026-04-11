@@ -2,7 +2,7 @@
 import React from 'react';
 import { PlayerStats, PlayerStatID } from '../../../entities/player/PlayerTypes';
 import { t } from '../../../utils/i18n';
-import { soundManager } from '../../../utils/audio/SoundManager';
+import { UiSounds } from '../../../utils/audio/AudioLib';
 
 
 interface CampHUDProps {
@@ -120,11 +120,11 @@ const CampHUD: React.FC<CampHUDProps> = ({
                         <span className="text-xs uppercase text-gray-300 font-bold tracking-widest">{t('ui.settings')}</span>
                     </div>
 
-                    <div onClick={() => { soundManager.playUiClick(); onToggleDebug(!debugMode); }} className={`flex items-center gap-2 cursor-pointer px-4 py-2 border transition-colors ${debugMode ? 'bg-green-900/50 border-green-500' : 'bg-black border-gray-500 hover:border-white'}`}>
+                    <div onClick={() => { UiSounds.playClick(); onToggleDebug(!debugMode); }} className={`flex items-center gap-2 cursor-pointer px-4 py-2 border transition-colors ${debugMode ? 'bg-green-900/50 border-green-500' : 'bg-black border-gray-500 hover:border-white'}`}>
                         <span className={`text-xs uppercase font-bold tracking-widest ${debugMode ? 'text-green-400' : 'text-gray-300'}`}>{t('ui.debug_mode')}</span>
                     </div>
 
-                    <div onClick={() => { soundManager.playUiClick(); onResetGame(); }} className="flex items-center gap-2 cursor-pointer bg-black px-4 py-2 border border-red-900 hover:border-red-500 hover:bg-red-900/20 transition-colors">
+                    <div onClick={() => { UiSounds.playClick(); onResetGame(); }} className="flex items-center gap-2 cursor-pointer bg-black px-4 py-2 border border-red-900 hover:border-red-500 hover:bg-red-900/20 transition-colors">
                         <span className="text-xs uppercase text-red-500 font-bold tracking-widest">{t('ui.delete_save_data')}</span>
                     </div>
 

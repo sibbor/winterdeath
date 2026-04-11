@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useMemo } from 'react';
-import { soundManager } from '../../../utils/audio/SoundManager';
+import { UiSounds } from '../../../utils/audio/AudioLib';
 import { t } from '../../../utils/i18n';
 
 interface ScreenModalLayoutProps {
@@ -120,13 +120,13 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
 
             if (e.key === 'Escape') {
                 e.stopPropagation();
-                soundManager.playUiClick();
+                UiSounds.playClick();
                 if (currCancel) currCancel();
                 else currClose();
             } else if (e.key === 'Enter' && currConfirm && currCanConfirm) {
                 e.stopPropagation();
                 e.preventDefault();
-                soundManager.playUiConfirm();
+                UiSounds.playConfirm();
                 currConfirm();
             } else {
                 // --- Tab Navigation Logic ---
@@ -163,26 +163,26 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
 
     // --- ZERO-GC HANDLERS ---
     const handleCloseInternal = useCallback(() => {
-        soundManager.playUiClick();
+        UiSounds.playClick();
         onClose();
     }, [onClose]);
 
     const handleCancelInternal = useCallback(() => {
-        soundManager.playUiClick();
+        UiSounds.playClick();
         if (onCancel) onCancel();
         else onClose();
     }, [onCancel, onClose]);
 
     const handleConfirmInternal = useCallback(() => {
         if (canConfirm && onConfirm) {
-            soundManager.playUiConfirm();
+            UiSounds.playConfirm();
             onConfirm();
         }
     }, [canConfirm, onConfirm]);
 
     const handleDebugInternal = useCallback(() => {
         if (debugAction) {
-            soundManager.playUiClick();
+            UiSounds.playClick();
             debugAction.action();
         }
     }, [debugAction]);

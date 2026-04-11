@@ -3,9 +3,11 @@ import * as THREE from 'three';
 import { GameCanvasProps, SectorStats } from '../../game/session/SessionTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
-import { soundManager } from '../../utils/audio/SoundManager';
+import { audioEngine } from '../../utils/audio/AudioEngine';
+import { UiSounds, WeaponSounds, GamePlaySounds } from '../../utils/audio/AudioLib';
+import { SoundID, MusicID } from '../../utils/audio/AudioTypes';
 import { t } from '../../utils/i18n';
-import { WEAPONS, LEVEL_CAP, BOSSES, WEATHER_SYSTEM, WIND_SYSTEM } from '../../content/constants';
+import { LEVEL_CAP, WEATHER_SYSTEM, WIND_SYSTEM } from '../../content/constants';
 import { useGameSessionState } from './useGameSessionState';
 import { useGameInput } from './useGameInput';
 import { GameSessionSetup, SetupContext } from './GameSessionSetup';
@@ -18,7 +20,7 @@ import { HudStore } from '../../store/HudStore';
 import { PlayerStatsSystem } from '../../systems/PlayerStatsSystem';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { PlayerStatID } from '../../entities/player/PlayerTypes';
-import { ENEMY_TYPE_KEYS, BOSS_NAME_KEYS, DISCOVERY_TYPE_KEYS } from '../../utils/ui/Mappers';
+import { DataResolver } from '../../utils/ui/DataResolver';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { getCollectibleById } from '../../content/collectibles';
 import ScreenCollectibleDiscovered from '../../components/ui/screens/game/ScreenCollectibleDiscovered';
@@ -96,8 +98,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             refs.hasEndedSector.current = true;
             if (isExtraction) {
                 refs.stateRef.current.familyExtracted = true;
-                soundManager.stopRadioStatic();
-                soundManager.setReverb(0);
+                audioEngine.stopAmbience();
+                audioEngine.setReverb(0);
             }
             latestStateRef.current.props.onSectorEnded(getSectorStats(isExtraction));
         }
@@ -136,7 +138,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         if (levelUps > 0) {
             console.log(`DING! Level up: ${levelUps}`);
-            soundManager.playLevelUp();
+            UiSounds.playLevelUp();
         }
     }, [refs]);
 
@@ -200,17 +202,17 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         switch (actionType) {
             case 'HEAL':
                 state.hp = Math.min(state.maxHp, state.hp + (payload.amount || 20));
-                soundManager.playUiConfirm();
+                UiSounds.playConfirm();
                 break;
 
             case 'SOUND':
             case 'PLAY_SOUND':
                 const soundId = payload.id || action.id;
                 if (soundId === 'explosion') {
-                    soundManager.playExplosion();
+                    WeaponSounds.playExplosion(refs.playerGroupRef.current?.position || _spawnPosScratch.set(0,0,0));
                     if ((window as any).haptic) (window as any).haptic.explosion();
                 } else {
-                    soundManager.playEffect(soundId || 'ui_hover');
+                    audioEngine.playSound(soundId || SoundID.UI_HOVER);
                 }
                 break;
 
@@ -221,7 +223,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
                 if (payload.xp) gainXp(payload.xp);
                 if (payload.sp) gainSp(payload.sp);
-                soundManager.playUiConfirm();
+                UiSounds.playConfirm();
                 break;
 
             case 'SPAWN_BOSS':
@@ -260,7 +262,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
                 if (targetName) {
                     spawnBubble(targetName + " " + t('ui.saved'), 3000);
-                    soundManager.playVictory();
+                    audioEngine.playSound(SoundID.UI_CHIME);
                 }
                 break;
             }
@@ -433,8 +435,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     sets.seenEnemies.add(enemyId);
                     if (stats.seenEnemies.indexOf(enemyId) === -1) stats.seenEnemies.push(enemyId);
                     isNew = true;
-                    titleKey = DISCOVERY_TYPE_KEYS[DiscoveryType.ENEMY];
-                    detailsKey = ENEMY_TYPE_KEYS[enemyId];
+                    titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.ENEMY);
+                    detailsKey = DataResolver.getZombieName(enemyId);
                     if (currentProps.onEnemyDiscovered) currentProps.onEnemyDiscovered(enemyId);
                 }
                 break;
@@ -444,15 +446,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     sets.seenBosses.add(bossId);
                     if (stats.seenBosses.indexOf(bossId) === -1) stats.seenBosses.push(bossId);
                     isNew = true;
-                    titleKey = DISCOVERY_TYPE_KEYS[DiscoveryType.BOSS];
-                    detailsKey = BOSS_NAME_KEYS[bossId];
+                    titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.BOSS);
+                    detailsKey = DataResolver.getBossName(bossId);
                     if (currentProps.onBossDiscovered) currentProps.onBossDiscovered(bossId);
                 }
                 break;
             case 'collectible':
-                const collDef = getCollectibleById(id);
-                titleKey = DISCOVERY_TYPE_KEYS[DiscoveryType.COLLECTIBLE];
-                detailsKey = detailsKey || payload?.detailsKey || (collDef ? `collectibles.${collDef.sector}.${collDef.index}.title` : `collectibles.${id}.title`);
+                titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.COLLECTIBLE);
+                detailsKey = detailsKey || payload?.detailsKey || DataResolver.getCollectibleName(id);
                 
                 if (!sets.collectibles.has(id)) {
                     sets.collectibles.add(id);
@@ -466,8 +467,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
                 break;
             case 'poi':
-                titleKey = DISCOVERY_TYPE_KEYS[DiscoveryType.POI];
-                detailsKey = payload.detailsKey || `pois.${payload.sector}.${payload.index}.title`;
+                titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.POI);
+                detailsKey = payload.detailsKey || DataResolver.getPoiName(id);
                 if (!sets.pois.has(id)) {
                     sets.pois.add(id);
                     stats.discoveredPOIs.push(id);
@@ -476,7 +477,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
                 break;
             case 'clue':
-                titleKey = DISCOVERY_TYPE_KEYS[DiscoveryType.CLUE];
+                titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.CLUE);
                 detailsKey = detailsKey || 'ui.clue_found';
                 if (!sets.clues.has(id)) {
                     sets.clues.add(id);
@@ -489,7 +490,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
 
         if (isNew && currentProps.settings?.showDiscoveryPopups !== false) {
-            soundManager.playDiscovery();
+            audioEngine.playSound(SoundID.PASSIVE_GAINED);
 
             // [VINTERDÖD FIX] Correctly map normalized types back to DiscoveryType for the UI Queue
             let finalType = DiscoveryType.CLUE;
@@ -515,7 +516,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             const { uiState: currentUi, props: currentProps } = latestStateRef.current;
             if (currentUi.deathPhase === 'CONTINUE') {
                 updateUiState({ deathPhase: 'FADEOUT' as any });
-                soundManager.playUiConfirm();
+                UiSounds.playConfirm();
                 setTimeout(() => {
                     currentProps.onSectorEnded({
                         timeElapsed: 0, shotsFired: 0, shotsHit: 0, throwablesThrown: 0, killsByType: {}, scrapLooted: 0, xpGained: 0, bonusXp: 0, familyFound: false, familyExtracted: false, damageDealt: 0, damageTaken: 0, bossDamageDealt: 0, bossDamageTaken: 0, chestsOpened: 0, bigChestsOpened: 0, distanceTraveled: refs.distanceTraveledRef.current, cluesFound: [], collectiblesDiscovered: [], isExtraction: false, spEarned: 0, seenEnemies: [], discoveredPOIs: [], aborted: true, seenBosses: [], incomingDamageBreakdown: {}, outgoingDamageBreakdown: {}
@@ -556,10 +557,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             for (const key in refs.stateRef.current.weaponAmmo) {
                 const wepType = key as any;
-                refs.stateRef.current.weaponAmmo[wepType] = WEAPONS[wepType]?.magSize || 0;
+                refs.stateRef.current.weaponAmmo[wepType] = DataResolver.getWeapons()[wepType]?.magSize || 0;
             }
             closeModal();
-            soundManager.playUiConfirm();
+            UiSounds.playConfirm();
         },
         spawnEnemies: (newEnemies: any[]) => {
             const enemies = refs.stateRef.current.enemies;
@@ -606,15 +607,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     startTime: WinterEngine.getInstance().renderTime
                 };
 
-                const bossNameKey = (BOSSES as any)[boss.bossId]?.name || 'BOSS';
+                const bossNameKey = boss.bossId !== undefined ? DataResolver.getBossName(boss.bossId) : 'BOSS';
                 updateUiState({
                     bossIntroActive: true,
                     bossName: t(bossNameKey)
                 });
-                soundManager.stopMusic();
+                audioEngine.stopMusic();
 
-                if (boss.bossId !== undefined) soundManager.playBossSpawn(boss.bossId);
-                else soundManager.playTankRoar();
+                if (boss.bossId !== undefined) audioEngine.playSound(SoundID.ZOMBIE_GROWL_TANK);
+                else audioEngine.playSound(SoundID.ZOMBIE_GROWL_TANK);
 
                 if (refs.bossIntroTimerRef.current) clearTimeout(refs.bossIntroTimerRef.current);
                 refs.bossIntroTimerRef.current = setTimeout(() => {
@@ -622,8 +623,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     updateUiState({ bossIntroActive: false });
 
                     const currentProps = latestStateRef.current.props;
-                    const sectorData = (currentProps as any).currentSectorData || { environment: { bossMusic: 'boss_battle' } };
-                    soundManager.playMusic(sectorData.environment.bossMusic || 'boss_battle');
+                    const sectorData = (currentProps as any).currentSectorData || { environment: { bossMusic: MusicID.BOSS_FIGHT } };
+                    audioEngine.playMusic(sectorData.environment.bossMusic || MusicID.BOSS_FIGHT);
                 }, 3000);
             }
         };
@@ -708,8 +709,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (props.isGameRunning && !props.isPaused && !uiState.isSectorLoading) {
             const currentSector = refs.propsRef.current.currentSectorData;
 
-            if (currentSector?.ambientLoop && !soundManager.isMusicPlaying()) {
-                soundManager.playMusic(currentSector.ambientLoop);
+            if (currentSector?.ambientLoop && !audioEngine.isMusicPlaying()) {
+                audioEngine.playMusic(currentSector.ambientLoop);
             }
 
             if (currentSector?.intro && !hasPlayedIntroRef.current) {
@@ -720,7 +721,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         window.dispatchEvent(new CustomEvent('spawn-bubble', {
                             detail: { text: `🧠 ${introText}`, duration: currentSector.intro!.duration || 4000 }
                         }));
-                        if (currentSector.intro!.sound) soundManager.playEffect(currentSector.intro!.sound);
+                        if (currentSector.intro!.sound) audioEngine.playSound(currentSector.intro!.sound as any);
                     }
                 }, currentSector.intro.delay || 1500);
             }
@@ -906,10 +907,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     onSectorLoaded: props.onSectorLoaded,
                     collectedCluesRef: refs.collectedCluesRef,
                     onBossKilled: (id: number) => {
-                        soundManager.stopMusic();
+                        audioEngine.stopMusic();
                         const pProps = latestStateRef.current.props;
                         const sectorData = pProps.currentSectorData || SectorSystem.getSector(pProps.currentSector || 0);
-                        if (sectorData?.ambientLoop) soundManager.playMusic(sectorData.ambientLoop);
+                        if (sectorData?.ambientLoop) audioEngine.playMusic(sectorData.ambientLoop);
                     }
                 }
             };

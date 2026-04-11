@@ -1,19 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
 import { t } from '../../../../utils/i18n';
-import { COLLECTIBLES } from '../../../../content/collectibles';
-import { CLUES } from '../../../../content/clues';
-import { POIS } from '../../../../content/pois';
 import { useOrientation } from '../../../../hooks/useOrientation';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import CollectiblePreview from '../../core/CollectiblePreview';
-import { ZOMBIE_TYPES, BOSSES } from '../../../../content/constants';
-import { SECTOR_THEMES } from '../../../../content/sectors/sector_themes';
-import { soundManager } from '../../../../utils/audio/SoundManager';
-import { PERKS, PerkCategory, PerkColor } from '../../../../content/perks';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
+import { DiscoveryType } from '../../hud/HudTypes';
 import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
-import { DamageID, EnemyAttackType } from '../../../../entities/player/CombatTypes';
-import { ENEMY_TYPE_KEYS, DAMAGE_ID_KEYS, ATTACK_TYPE_KEYS, WEAPON_CATEGORY_KEYS, BOSS_NAME_KEYS } from '../../../../utils/ui/Mappers';
+import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { PerkCategory, PerkColor } from '../../../../content/perks';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
@@ -38,7 +33,7 @@ const TABS: { id: Tab, label: string }[] = [
     { id: 'enemy', label: 'ui.log_enemies' },
     { id: 'boss', label: 'ui.log_bosses' },
 ];
-const SECTORS = [0, 1, 2, 3];
+const SECTORS = [0, 1, 2, 3, 4];
 const THEME_COLOR = '#16a34a'; // green-600
 
 const darkenColor = (hex: string, percent: number) => {
@@ -93,25 +88,26 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
     }, [initialItemId, activeTab]);
 
     const handleTabChange = useCallback((tab: Tab) => {
-        soundManager.playUiClick();
+        UiSounds.playClick();
         setActiveTab(tab);
     }, []);
 
     const handleDebugShowAll = useCallback(() => {
         switch (activeTab) {
             case 'collectibles': {
-                const allIds = Object.keys(COLLECTIBLES);
+                const allIds = Object.keys(DataResolver.getCollectibles());
                 stats.collectiblesDiscovered = [...new Set([...(stats.collectiblesDiscovered || []), ...allIds])];
                 if (onMarkCollectiblesViewed) onMarkCollectiblesViewed(allIds);
                 break;
             }
             case 'clues': {
-                const allClueIds = Object.keys(CLUES);
+                const allClueIds = Object.keys(DataResolver.getClues());
                 stats.cluesFound = [...new Set([...(stats.cluesFound || []), ...allClueIds])];
                 break;
             }
             case 'poi': {
-                const allPoiIds = Object.keys(POIS);
+                const allPois = DataResolver.getDiscoveryList(DiscoveryType.POI);
+                const allPoiIds = allPois.map(p => p.id);
                 stats.discoveredPOIs = [...new Set([...(stats.discoveredPOIs || []), ...allPoiIds])];
                 break;
             }
@@ -132,7 +128,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
             }
         }
 
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
         const current = activeTab;
         setActiveTab(current === 'poi' ? 'enemy' : 'poi');
         setTimeout(() => setActiveTab(current), 50);
@@ -216,13 +212,13 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
 
 const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
     const sb = stats.statsBuffer;
-    const level       = Math.floor(sb[PlayerStatID.LEVEL]);
-    const currentXp   = Math.floor(sb[PlayerStatID.CURRENT_XP]);
+    const level = Math.floor(sb[PlayerStatID.LEVEL]);
+    const currentXp = Math.floor(sb[PlayerStatID.CURRENT_XP]);
     const nextLevelXp = Math.floor(sb[PlayerStatID.NEXT_LEVEL_XP]);
-    const totalKills  = Math.floor(sb[PlayerStatID.TOTAL_KILLS]);
-    const dmgDealt    = Math.floor(sb[PlayerStatID.TOTAL_DAMAGE_DEALT]);
-    const dmgTaken    = Math.floor(sb[PlayerStatID.TOTAL_DAMAGE_TAKEN]);
-    const scrapTotal  = Math.floor(sb[PlayerStatID.TOTAL_SCRAP_COLLECTED]);
+    const totalKills = Math.floor(sb[PlayerStatID.TOTAL_KILLS]);
+    const dmgDealt = Math.floor(sb[PlayerStatID.TOTAL_DAMAGE_DEALT]);
+    const dmgTaken = Math.floor(sb[PlayerStatID.TOTAL_DAMAGE_TAKEN]);
+    const scrapTotal = Math.floor(sb[PlayerStatID.TOTAL_SCRAP_COLLECTED]);
 
     const getRank = (lvl: number) => {
         const rankKey = Math.min(Math.max(0, lvl - 1), 19);
@@ -298,7 +294,7 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Rea
                         {stats.killsByType && Object.entries(stats.killsByType).map(([type, count]) => (
                             <div key={type} className="flex justify-between items-end text-xs py-1 border-b border-gray-900">
                                 <span className="text-gray-400 font-medium">
-                                    {t(ENEMY_TYPE_KEYS[Number(type)])}
+                                    {t(DataResolver.getZombieName(Number(type) as EnemyType))}
                                 </span>
                                 <span className="text-white font-mono text-lg">{count as number}</span>
                             </div>
@@ -313,16 +309,13 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Rea
 const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape }) => {
 
     const getEnemyDescription = (type: number) => {
-        const key = ENEMY_TYPE_KEYS[type];
-        if (!key) return '';
-        // Map "enemies.WALKER.name" -> "enemies.WALKER.description"
-        const base = key.substring(0, key.lastIndexOf('.'));
-        return t(`${base}.description`);
+        return t(DataResolver.getZombieDescription(type as EnemyType));
     };
 
     return (
         <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'} pb-12`}>
-            {Object.entries(ZOMBIE_TYPES).map(([key, data]) => {
+            {DataResolver.getDiscoveryList(DiscoveryType.ENEMY).map((data) => {
+                const key = data.id; // Correct key from data object
                 const typeSmi = EnemyType[key as keyof typeof EnemyType];
                 const isSeen = (stats.seenEnemies || EMPTY_ARRAY).includes(typeSmi) || (stats.killsByType && stats.killsByType[typeSmi] > 0);
                 if (!isSeen) return null;
@@ -332,7 +325,7 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                     <Card key={key} id={`log-item-${key}`} isLocked={!isSeen} color={itemColor}>
                         <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
                             <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: isSeen ? itemColor : '#4b5563' }}>
-                                {isSeen ? t(ENEMY_TYPE_KEYS[typeSmi]) : '???'}
+                                {isSeen ? t(DataResolver.getZombieName(typeSmi)) : '???'}
                             </h3>
                             {isSeen && (
                                 <div className="flex gap-4">
@@ -370,13 +363,11 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                     <div className="grid grid-cols-1 gap-2">
                                         {data.attacks.map((attack, idx) => {
                                             const attackSmi = attack.type;
-                                            const attackKey = EnemyAttackType[attackSmi];
-                                            const hasDesc = t(`attacks.${attackKey}.description`) !== `attacks.${attackKey}.description`;
                                             return (
                                                 <div key={idx} className="flex flex-col bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                                                            {t(ATTACK_TYPE_KEYS[attackSmi]) || attack.type}
+                                                            {t(DataResolver.getAttackName(attackSmi))}
                                                         </span>
                                                         <div className="flex gap-2">
                                                             <div className="flex items-center gap-1">
@@ -389,11 +380,9 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    {hasDesc && (
-                                                        <p className="text-[12px] text-gray-500 italic mt-1 line-clamp-3 leading-tight">
-                                                            {t(`attacks.${attackKey}.description`)}
-                                                        </p>
-                                                    )}
+                                                    <p className="text-[12px] text-gray-500 italic mt-1 line-clamp-3 leading-tight">
+                                                        {t(DataResolver.getAttackDescription(attackSmi))}
+                                                    </p>
                                                 </div>
                                             );
                                         })}
@@ -415,24 +404,20 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
 const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
 
     const getBossDescription = (bossId: number) => {
-        const key = BOSS_NAME_KEYS[bossId];
-        if (!key) return '';
-        // Map "bosses.0.name" -> "bosses.0.lore"
-        const base = key.substring(0, key.lastIndexOf('.'));
-        return t(`${base}.lore`);
+        return t(DataResolver.getBossDescription(bossId));
     };
 
     return (
         <div className="space-y-16 pb-12">
-            {SECTORS.map(sectorIndex => {
-                const bossIdx = sectorIndex;
-                const boss = BOSSES[bossIdx];
-                const theme = SECTOR_THEMES[bossIdx];
+            {DataResolver.getSectors().map(sectorIndex => {
+                const bosses = DataResolver.getDiscoveryList(DiscoveryType.BOSS);
+                const boss = bosses[sectorIndex];
+                const theme = DataResolver.getSectorThemes()[sectorIndex];
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= sectorIndex;
-                const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorIndex}`) : '???';
+                const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorIndex)) : `Sector ${sectorIndex}`) : '???';
 
-                const isSeen = boss && ((stats.seenBosses || EMPTY_ARRAY).includes(bossIdx) || (stats.bossesDefeated || EMPTY_ARRAY).includes(bossIdx));
-                const isDefeated = (stats.bossesDefeated || EMPTY_ARRAY).includes(bossIdx);
+                const isSeen = boss && ((stats.seenBosses || EMPTY_ARRAY).includes(sectorIndex) || (stats.bossesDefeated || EMPTY_ARRAY).includes(sectorIndex));
+                const isDefeated = (stats.bossesDefeated || EMPTY_ARRAY).includes(sectorIndex);
                 const isBossUnlocked = boss && (isSeen || isDefeated || isDebug);
 
                 return (
@@ -450,7 +435,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                         <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
                                             <div className="flex flex-col">
                                                 <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: boss ? `#${boss.color.toString(16).padStart(6, '0')}` : 'white' }}>
-                                                    {t(boss.name)}
+                                                    {t(DataResolver.getBossName(sectorIndex))}
                                                 </h3>
                                             </div>
                                             <div className="flex flex-col items-end">
@@ -472,7 +457,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                                 <div></div>
                                             </div>
                                             <div className="space-y-4">
-                                                <p className="text-gray-400 text-sm leading-relaxed">{getBossDescription(bossIdx)}</p>
+                                                <p className="text-gray-400 text-sm leading-relaxed">{getBossDescription(sectorIndex)}</p>
 
                                                 {boss.attacks && boss.attacks.length > 0 && (
                                                     <div className="space-y-2 mt-4">
@@ -484,14 +469,12 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                                         <div className="grid grid-cols-1 gap-2">
                                                             {boss.attacks.map((attack, idx) => {
                                                                 const attackSmi = attack.type;
-                                                                const attackKey = EnemyAttackType[attackSmi];
-                                                                const hasDesc = t(`attacks.${attackKey}.description`) !== `attacks.${attackKey}.description`;
                                                                 return (
                                                                     <div key={idx} className="flex flex-col bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
                                                                         <div className="flex justify-between items-center">
                                                                             <div className="flex flex-col">
                                                                                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                                                                                    {t(ATTACK_TYPE_KEYS[attackSmi]) || attack.type}
+                                                                                    {t(DataResolver.getAttackName(attackSmi))}
                                                                                 </span>
                                                                             </div>
                                                                             <div className="flex gap-4">
@@ -505,11 +488,9 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                                                                 </div>
                                                                             </div>
                                                                         </div>
-                                                                        {hasDesc && (
-                                                                            <p className="text-sm text-gray-500 italic mt-1 line-clamp-2 leading-tight">
-                                                                                {t(`attacks.${attackKey}.description`)}
-                                                                            </p>
-                                                                        )}
+                                                                        <p className="text-sm text-gray-500 italic mt-1 line-clamp-2 leading-tight">
+                                                                            {t(DataResolver.getAttackDescription(attackSmi))}
+                                                                        </p>
                                                                     </div>
                                                                 );
                                                             })}
@@ -535,17 +516,15 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
 
 const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
     const foundIds = stats.collectiblesDiscovered || EMPTY_ARRAY;
-
-    // Pre-compute object values to avoid GC allocation on every frame
-    const COLLECTIBLES_ARRAY = Object.values(COLLECTIBLES);
+    const COLLECTIBLES_ARRAY = DataResolver.getDiscoveryList(DiscoveryType.COLLECTIBLE);
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
             {SECTORS.map(sectorId => {
                 const sectorCollectibles = COLLECTIBLES_ARRAY.filter(c => c.sector === sectorId);
-                const theme = SECTOR_THEMES[sectorId];
+                const theme = DataResolver.getSectorThemes()[sectorId];
                 const isSectorUnlocked = isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId;
-                const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
+                const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorId)) : `Sector ${sectorId}`) : '???';
 
                 let foundInSector = 0;
                 for (let i = 0; i < sectorCollectibles.length; i++) {
@@ -582,17 +561,15 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
 
 const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
     const cluesFound = stats.cluesFound || EMPTY_ARRAY;
-
-    // Pre-compute object values to avoid GC allocation on every frame
-    const CLUES_ARRAY = Object.values(CLUES);
+    const CLUES_ARRAY = DataResolver.getDiscoveryList(DiscoveryType.CLUE);
 
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
-                const theme = SECTOR_THEMES[sectorId];
+                const theme = DataResolver.getSectorThemes()[sectorId];
                 const sectorClues = CLUES_ARRAY.filter(clue => clue.sector === sectorId);
                 const isSectorUnlocked = isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId;
-                const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
+                const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorId)) : `Sector ${sectorId}`) : '???';
 
                 let foundInSector = 0;
                 for (let i = 0; i < sectorClues.length; i++) {
@@ -629,7 +606,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                                 </span>
                                             </div>
                                             <p className={`text-lg italic leading-relaxed border-l-4 pl-4 py-1 ${isFound ? 'text-gray-200' : 'text-zinc-800'}`} style={{ borderColor: isFound ? typeColor : '#333' }}>
-                                                {isFound ? `"${t(`clues.${clue.sector}.${clue.index}.reaction`)}"` : '???'}
+                                                {isFound ? `"${t(DataResolver.getClueReaction(clueId))}"` : '???'}
                                             </p>
                                         </div>
                                     </div>
@@ -645,17 +622,15 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
 
 const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
     const visitedList = stats.discoveredPOIs || EMPTY_ARRAY;
-
-    // Pre-compute object values to avoid GC allocation on every frame
-    const POIS_ARRAY = Object.values(POIS);
+    const POIS_ARRAY = DataResolver.getDiscoveryList(DiscoveryType.POI);
 
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
-                const theme = SECTOR_THEMES[sectorId];
+                const theme = DataResolver.getSectorThemes()[sectorId];
                 const sectorPOIs = POIS_ARRAY.filter(poi => poi.sector === sectorId);
                 const isSectorUnlocked = isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId;
-                const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
+                const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorId)) : `Sector ${sectorId}`) : '???';
 
                 let foundInSector = 0;
                 for (let i = 0; i < sectorPOIs.length; i++) {
@@ -684,16 +659,16 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boo
                                         <div className="flex flex-col gap-4">
                                             <div className="flex justify-between items-start border-b border-zinc-800/50 pb-3">
                                                 <h3 className={`text-2xl font-semibold uppercase tracking-tighter ${isFound ? 'text-white' : 'text-zinc-800'}`}>
-                                                    {isFound ? t(`pois.${poi.sector}.${poi.index}.title`) : '???'}
+                                                    {isFound ? t(DataResolver.getPoiName(poiId)) : '???'}
                                                 </h3>
                                             </div>
                                             <div className="space-y-3">
                                                 <p className={`text-sm leading-relaxed ${isFound ? 'text-zinc-400' : 'text-zinc-800'}`}>
-                                                    {isFound ? t(`pois.${poi.sector}.${poi.index}.description`) : '???'}
+                                                    {isFound ? t(DataResolver.getPoiDescription(poiId)) : '???'}
                                                 </p>
-                                                {isFound && t(`pois.${poi.sector}.${poi.index}.reaction`) && (
+                                                {isFound && DataResolver.getPoiReaction(poiId) && (
                                                     <p className="text-lg italic leading-relaxed border-l-4 pl-4 py-1 text-gray-200" style={{ borderColor: color }}>
-                                                        "{t(`pois.${poi.sector}.${poi.index}.reaction`)}"
+                                                        "{t(DataResolver.getPoiReaction(poiId))}"
                                                     </p>
                                                 )}
                                             </div>
@@ -713,7 +688,8 @@ const PerksTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
     const discoveredList = stats.discoveredPerks || EMPTY_ARRAY;
 
     // Categorize perks
-    const perksArray = Object.values(PERKS);
+    const perks = DataResolver.getPerks();
+    const perksArray = Object.values(perks);
     const buffs = perksArray.filter(p => p.category === PerkCategory.BUFF);
     const debuffs = perksArray.filter(p => p.category === PerkCategory.DEBUFF);
     const passives = perksArray.filter(p => p.category === PerkCategory.PASSIVE);
@@ -740,7 +716,7 @@ const PerksTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                     </div>
                     <div className="space-y-3">
                         <p className={`text-sm leading-relaxed ${isFound ? 'text-zinc-400' : 'text-zinc-800'}`}>
-                            {isFound ? t(perk.description) : 'Perform specific tactical actions or rescue family members to unlock new perks.'}
+                            {isFound ? t(DataResolver.getPerkDescription(perk.id)) : 'Perform specific tactical actions or rescue family members to unlock new perks.'}
                         </p>
                     </div>
                 </div>
@@ -796,16 +772,14 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevi
             <div className={`w-full bg-zinc-900 relative border-b border-zinc-800/50 ${isMobileDevice ? 'h-24' : 'aspect-square'}`}>
                 <CollectiblePreview type={item.modelType} isLocked={!isFound} />
             </div>
-
             <div className={`${isMobileDevice ? 'p-2' : 'p-4'} flex-1 flex flex-col`}>
-                <h4 className={`${isMobileDevice ? 'text-xs' : 'text-lg'} font-semibold uppercase tracking-tighter mb-1 truncate ${isFound ? 'text-yellow-500' : 'text-zinc-700'}`}>
-                    {isFound ? t(`collectibles.${item.sector}.${item.index}.title`) : '???'}
+                <h4 className={`text-sm font-bold uppercase tracking-wider mb-2 ${isFound ? 'text-white' : 'text-zinc-700'}`}>
+                    {isFound ? t(DataResolver.getCollectibleName(item.id)) : '???'}
                 </h4>
-                <p className={`text-xs font-mono leading-relaxed ${isExpanded ? '' : 'line-clamp-3'} ${isFound ? 'text-zinc-400 italic' : 'text-zinc-800'}`}>
-                    {isFound ? t(`collectibles.${item.sector}.${item.index}.description`) : ''}
-                </p>
-                {isFound && !isExpanded && !isMobileDevice && (
-                    <span className="text-[10px] text-zinc-600 mt-2 uppercase font-bold tracking-widest">[ Click to expand ]</span>
+                {isExpanded && (
+                    <p className="text-[10px] text-zinc-400 leading-relaxed italic animate-in fade-in slide-in-from-top-1 duration-300">
+                        {isFound ? t(DataResolver.getCollectibleDescription(item.id)) : '???'}
+                    </p>
                 )}
             </div>
         </div>

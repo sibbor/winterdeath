@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../utils/assets/materials';
-import { soundManager } from '../utils/audio/SoundManager';
+import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { MaterialType } from '../content/environment';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
@@ -97,7 +97,7 @@ class FootprintSystemClass implements System {
         // 1. Water Handle (No decals)
         if (inWater) {
             if (isSwimming) {
-                soundManager.playSwimming();
+                GamePlaySounds.playSwimming();
                 FXSystem.spawnPart(
                     this.scene,
                     session.state.particles,
@@ -107,7 +107,7 @@ class FootprintSystemClass implements System {
                 );
                 session.engine.water?.spawnRipple(position.x, position.z, session.state.simTime, 4.0);
             } else {
-                soundManager.playFootstep(MaterialType.WATER, isRight, isRushing);
+                GamePlaySounds.playFootstep(MaterialType.WATER, isRight, isRushing);
                 session.engine.water?.spawnRipple(position.x, position.z, session.state.simTime, 1.5);
             }
             return;
@@ -156,7 +156,7 @@ class FootprintSystemClass implements System {
         let playMaterial: number = groundMaterial || MaterialType.SNOW;
         if (inWater || isSwimming) playMaterial = MaterialType.WATER;
 
-        soundManager.playFootstep(playMaterial, isRight, isRushing);
+        GamePlaySounds.playFootstep(playMaterial, isRight, isRushing);
 
         if (isRushing) {
             FXSystem.spawnPart(

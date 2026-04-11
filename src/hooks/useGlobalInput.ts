@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { soundManager } from '../utils/audio/SoundManager';
+import { UiSounds } from '../utils/audio/AudioLib';
 import { OverlayType } from '../App';
 import { GameScreen } from '../game/session/SessionTypes';;
 import { HudStore } from '../store/HudStore';
@@ -62,17 +62,17 @@ export const useGlobalInput = (
                 if (current === 'TELEPORT') {
                     acts.setTeleportInitialCoords(null);
                     acts.setActiveOverlay('MAP');
-                    soundManager.playUiClick();
+                    UiSounds.playClick();
                 } else if (current === 'RESET_CONFIRM') {
                     acts.setActiveOverlay('SETTINGS');
-                    soundManager.playUiClick();
+                    UiSounds.playClick();
                 } else if (current === 'SETTINGS' || current === 'ADVENTURE_LOG') {
                     if (screen === GameScreen.CAMP) {
                         acts.setActiveOverlay(null);
                     } else {
                         acts.setActiveOverlay('PAUSE');
                     }
-                    soundManager.playUiClick();
+                    UiSounds.playClick();
                 } else if (current === 'PAUSE' || current === 'MAP' || current === 'COLLECTIBLE' || (current && current.startsWith('STATION_'))) {
                     if (current === 'COLLECTIBLE' && acts.onCollectibleClose) {
                         acts.onCollectibleClose();
@@ -80,7 +80,7 @@ export const useGlobalInput = (
                         acts.setActiveOverlay(null);
                         acts.requestPointerLock?.();
                     }
-                    soundManager.playUiClick();
+                    UiSounds.playClick();
                 } else if (!current && !isDead) {
                     if (screen === GameScreen.CAMP) {
                         acts.setActiveOverlay('SETTINGS');
@@ -89,7 +89,7 @@ export const useGlobalInput = (
                         // Always release pointer lock when entering menu
                         if (document.pointerLockElement) document.exitPointerLock();
                     }
-                    soundManager.playUiClick();
+                    UiSounds.playClick();
                 }
             }
             // Map Logic (M)
@@ -99,11 +99,11 @@ export const useGlobalInput = (
                 if (!current && !isDead) {
                     acts.setActiveOverlay('MAP');
                     if (document.pointerLockElement) document.exitPointerLock();
-                    soundManager.playUiConfirm();
+                    UiSounds.playConfirm();
                 } else if (current === 'MAP') {
                     acts.setActiveOverlay(null);
                     acts.requestPointerLock?.();
-                    soundManager.playUiClick();
+                    UiSounds.playClick();
                 }
             }
         };

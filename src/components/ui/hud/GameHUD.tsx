@@ -1,11 +1,12 @@
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { WeaponType, WeaponCategoryColors, WeaponCategory } from '../../../content/weapons';
-import { WEAPONS } from '../../../content/constants';
 import { t } from '../../../utils/i18n';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { useOrientation } from '../../../hooks/useOrientation';
 import { HudStore } from '../../../store/HudStore';
-import { StatusEffectType, PERKS, PerkColor } from '../../../content/perks';
+import { StatusEffectType, PerkColor } from '../../../content/perks';
+import { DataResolver } from '../../../utils/ui/DataResolver';
+import { UiSounds } from '../../../utils/audio/AudioLib';
 import DamageVignette from './DamageVignette';
 import DiscoveryPopup from './DiscoveryPopup';
 
@@ -47,10 +48,11 @@ const getCachedArray = (length: number): number[] => {
 
 const getStatusIcon = (type: StatusEffectType | string) => {
     // If it's a number (numeric SMI enum), direct index
-    if (typeof type === 'number') return PERKS[type]?.icon || '❓';
+    if (typeof type === 'number') return DataResolver.getPerks()[type]?.icon || '❓';
     // If it's a string (legacy or pet name), lookup by keys
     const n = type.toUpperCase();
-    if (PERKS[n as any]) return (PERKS as any)[n].icon;
+    const perks = DataResolver.getPerks() as any;
+    if (perks[n]) return perks[n].icon;
     return '❓';
 };
 
@@ -63,7 +65,7 @@ const getPassiveIcon = (type: StatusEffectType | string) => {
     }
 
     // Direct enum lookup
-    return PERKS[type]?.icon || '❓';
+    return DataResolver.getPerks()[type]?.icon || '❓';
 };
 
 
@@ -91,8 +93,7 @@ const StatusEffectIcon = React.memo(({ type, isDebuff, isMobileDevice, isLandsca
     const color = isDebuff ? PerkColor.DEBUFF : PerkColor.BUFF;
     const pulseClass = isDebuff ? 'hud-debuff-pulse' : 'hud-buff-pulse';
 
-    const perk = PERKS[type];
-    const tooltip = perk ? `${t(perk.displayName)}: ${t(perk.description)}` : type.toString();
+    const tooltip = DataResolver.getPerkName(type) ? `${t(DataResolver.getPerkName(type))}: ${t(DataResolver.getPerkDescription(type))}` : type.toString();
 
     return (
         <div className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-10 h-10 text-[14px]'} flex items-center justify-center bg-black/80 border-2 rounded-sm ${pulseClass} relative cursor-help`}
@@ -172,8 +173,7 @@ const StatusEffectsPanel = React.memo(({ isMobileDevice, isLandscapeMode, handle
     return (
         <div className={isMobileDevice && isLandscapeMode ? "absolute top-24 left-0 flex flex-col gap-2 pl-safe pointer-events-auto" : "flex flex-wrap gap-2 mt-1 ml-1 pointer-events-auto"}>
             {activePassives.map((id, i) => {
-                const perk = PERKS[id];
-                const tooltip = perk ? `${t(perk.displayName)}: ${t(perk.description)}` : id.toString();
+                const tooltip = DataResolver.getPerkName(id) ? `${t(DataResolver.getPerkName(id))}: ${t(DataResolver.getPerkDescription(id))}` : id.toString();
                 return (
                     <div key={`p-${i}`}
                         className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-7 h-7 text-[11px]'} flex items-center justify-center bg-black/80 border-2 rounded-full transition-all cursor-help`}
@@ -298,7 +298,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
     const familyFound = useHudStore(s => s.familyFound);
     const unlimitedAmmo = useHudStore(s => s.sectorStats?.unlimitedAmmo || false);
 
-    const wep = WEAPONS[activeWeapon];
+    const wep = DataResolver.getWeapons()[activeWeapon];
 
     return (
         <div className={`absolute ${isMobileDevice ? 'bottom-4' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
@@ -333,7 +333,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
             ) : (
                 <div className={`flex ${isMobileDevice ? 'gap-1.5' : 'gap-3'} pointer-events-auto`}>
                     {weaponSlots.map(({ slot, type }: any) => {
-                        const wData = WEAPONS[Number(type)];
+                        const wData = DataResolver.getWeapons()[Number(type)];
                         if (!wData) return null;
 
                         const isActive = activeWeapon === type;
@@ -457,7 +457,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
             // 4. Ammo Updates
             if (ammoTextRef.current) {
-                const wep = WEAPONS[HudStore.getState().activeWeapon];
+                const wep = DataResolver.getWeapons()[HudStore.getState().activeWeapon];
                 const val = wep?.isEnergy 
                     ? Math.floor(data.ammo) + '%' 
                     : data.ammo.toString();
@@ -522,6 +522,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         // Reset to theme base (Zero-GC bypass for 60fps responsiveness)
                         scrapBoxRef.current.style.backgroundColor = 'rgba(66, 32, 6, 0.8)'; // dark yellow
                         scrapBoxRef.current.style.borderColor = '#a16207'; // yellow-700
+ 
+                        UiSounds.playPickUp();
                     }
                 }
                 prevTelemetry.current.scrap = data.scrap;
@@ -537,6 +539,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
                         spBoxRef.current.style.backgroundColor = 'rgba(88, 28, 135, 0.8)'; // dark purple
                         spBoxRef.current.style.borderColor = '#7e22ce'; // purple-700
+ 
+                        UiSounds.playPickUp();
                     }
                 }
                 prevTelemetry.current.sp = data.spEarned;
@@ -572,7 +576,10 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const handleSelectWeaponInternal = useCallback((e: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>) => {
         e.stopPropagation();
         const slot = e.currentTarget.dataset.slot;
-        if (slot && onSelectWeapon) onSelectWeapon(slot);
+        if (slot && onSelectWeapon) {
+            onSelectWeapon(slot);
+            UiSounds.playClick();
+        }
     }, [onSelectWeapon]);
 
     const handlePauseInternal = useCallback((e: React.TouchEvent<HTMLElement>) => {
@@ -580,7 +587,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
         onTogglePause?.();
     }, [onTogglePause]);
 
-    const wep = WEAPONS[activeWeapon];
+    const wep = DataResolver.getWeapons()[activeWeapon];
     const catColor = wep ? WeaponCategoryColors[wep.category] || 'white' : 'white';
 
 

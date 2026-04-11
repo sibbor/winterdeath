@@ -18,7 +18,7 @@ import { EnemyAttackHandler } from './EnemyAttackHandler';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { WEAPONS } from '../../content/weapons';
 import { haptic } from '../../utils/HapticManager';
-import { soundManager } from '../../utils/audio/SoundManager';
+import { WeaponSounds, EnemySounds } from '../../utils/audio/AudioLib';
 import { WaterSystem, _buoyancyResult } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { EnemyAnimator } from './EnemyAnimator';
@@ -130,7 +130,7 @@ export const EnemyAI = {
             else if (dmgType === DamageID.GRENADE || e.type === EnemyType.BOMBER || (e.statusFlags & EnemyFlags.BOSS) !== 0) {
                 e.deathState = EnemyDeathState.EXPLODED;
                 if (dmgType !== DamageID.GRENADE) {
-                    soundManager.playExplosion();
+                    WeaponSounds.playExplosion(e.mesh.position);
                     haptic.explosion();
                 }
             }

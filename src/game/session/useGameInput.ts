@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { GameCanvasProps } from '../../game/session/SessionTypes';
-import { soundManager } from '../../utils/audio/SoundManager';
+import { UiSounds } from '../../utils/audio/AudioLib';
 import { FLASHLIGHT } from '../../content/constants';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 
@@ -73,7 +73,7 @@ export const useGameInput = (
                     const intensity = state.vehicle.active ? FLASHLIGHT.intensity * 2 : FLASHLIGHT.intensity;
                     flashlight.intensity = state.flashlightOn ? intensity : 0;
                 }
-                soundManager.playUiClick();
+                UiSounds.playClick();
             }
 
             if (state.statusFlags & PlayerStatusFlags.DEAD) return;

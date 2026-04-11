@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import { System } from '../../systems/System';
 import { CampWorld } from './CampWorld';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
-import { soundManager } from '../../utils/audio/SoundManager';
-import { t } from '../../utils/i18n';
+import { UiSounds } from '../../utils/audio/AudioLib';
+import { DataResolver } from '../../utils/ui/DataResolver';
+import { audioEngine } from '../../utils/audio/AudioEngine';
+import { SoundID } from '../../utils/audio/AudioTypes';
 
 /**
  * Wraps CampWorld effects (Fire, Smoke, Stars, Wind)
@@ -82,7 +84,7 @@ export class CampChatterSystem implements System {
 
         // 1. Ambient Wildlife
         if (now > nextWildlifeTime.val) {
-            if (Math.random() > 0.5) soundManager.playOwlHoot();
+            if (Math.random() > 0.5) audioEngine.playSound(SoundID.OWL_HOOT, 0.3);
             nextWildlifeTime.set(now + 30000 + Math.random() * 60000);
         }
 
@@ -91,13 +93,11 @@ export class CampChatterSystem implements System {
             const numSpeakers = 1 + Math.floor(Math.random() * 2.5);
             let delayOffset = 0;
             for (let i = 0; i < numSpeakers; i++) {
-                const speaker = familyMembers[Math.floor(Math.random() * familyMembers.length)];
-                const linesKey = (speaker.name || '').toLowerCase();
-
-                // Speakers localized strings
-                let lines = t(`chatter.${linesKey}`) as string[];
-                if (!Array.isArray(lines)) lines = ["..."];
-
+                const speaker = activeMembers[Math.floor(Math.random() * activeMembers.length)];
+                if (!speaker || !speaker.mesh) continue;
+                
+                const speakerId = speaker.mesh.userData.id;
+                const lines = DataResolver.getChatterLines(speakerId);
                 const text = lines[Math.floor(Math.random() * lines.length)];
                 const duration = 2000 + text.length * 60;
 
@@ -144,7 +144,7 @@ export class CampChatterSystem implements System {
             else if (now >= c.startTime) {
                 if (!c.playedSound) {
                     c.playedSound = true;
-                    soundManager.playUiConfirm();
+                    UiSounds.playConfirm();
                 }
 
                 // 1. Opacity - update only if it actually changes

@@ -11,7 +11,8 @@ import { FXSystem } from '../../systems/FXSystem';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { TriggerHandler } from '../../systems/TriggerHandler';
 import { CAMERA_HEIGHT, HEALTH_CRITICAL_THRESHOLD } from '../../content/constants';
-import { soundManager } from '../../utils/audio/SoundManager';
+import { UiSounds, EnemySounds } from '../../utils/audio/AudioLib';
+import { audioEngine } from '../../utils/audio/AudioEngine';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { WEAPONS, WeaponBehavior } from '../../content/weapons';
 import { Enemy, EnemyFlags, EnemyDeathState, NoiseType } from '../../entities/enemies/EnemyTypes';
@@ -19,7 +20,7 @@ import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTyp
 import { DamageType, DamageID } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
-import { ENEMY_TYPE_KEYS } from '../../utils/ui/Mappers';
+import { DataResolver } from '../../utils/ui/DataResolver';
 import { VehicleManager } from '../../systems/VehicleManager';
 import { InteractionType } from '../../systems/InteractionTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
@@ -201,7 +202,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                         DiscoveryType.ENEMY,
                         String(enemy.type),
                         'ui.enemy_encountered',
-                        ENEMY_TYPE_KEYS[enemy.type]
+                        DataResolver.getZombieName(enemy.type)
                     );
                 }
             }
@@ -428,7 +429,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (hp < maxHp * HEALTH_CRITICAL_THRESHOLD && !isDead) {
                 if (simTime - state.lastHeartbeat > 800) { // VINTERDÖD FIX: Använd simTime
                     state.lastHeartbeat = simTime;
-                    soundManager.playHeartbeat();
+                    audioEngine.playSound(SoundID.PASSIVE_GAINED, 0.4);
                 }
             }
 
@@ -494,7 +495,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
 
         if (!propsRef.current.isGameRunning || (propsRef.current.isPaused && !isCinematic && !isBossIntro)) {
-            soundManager.stopRadioStatic();
+            audioEngine.stopAmbience();
             return;
         }
 
@@ -512,7 +513,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
             playerGroup.position.set(tgt.x, 0, tgt.z);
             callbacks.spawnPart(tgt.x, 1, tgt.z, 'flash', 1, undefined, undefined, undefined, 2);
-            soundManager.playTone(800, 'sine', 0.6, 0.1);
+            audioEngine.playSound(SoundID.UI_CHIME);
 
             for (let i = 0; i < refs.activeFamilyMembers.current.length; i++) {
                 const fm = refs.activeFamilyMembers.current[i];
@@ -545,7 +546,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         if (playerGroup) {
             session.playerPos = playerGroup.position;
             // VINTERDÖD DOD FIX: Sync player pos to sound manager for positional culling/attenuation
-            soundManager.setPlayerPosReference(playerGroup.position);
+            // Removed spatial ref hackplayerGroup.position);
         }
 
         session.update(delta, propsRef.current.mapId || 0);
@@ -789,7 +790,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _triggerOptionsScratch.onTrigger = activeCallbacks.onTrigger;
         _triggerOptionsScratch.onAction = activeCallbacks.onAction;
         _triggerOptionsScratch.onDiscovery = activeCallbacks.onDiscovery || callbacks.onDiscovery;
-        _triggerOptionsScratch.playSound = (id: SoundID) => soundManager.playSound(id);
+        _triggerOptionsScratch.playSound = (id: SoundID) => audioEngine.playSound(id);
         _triggerOptionsScratch.activeFamilyMembers = refs.activeFamilyMembers.current;
         TriggerHandler.checkTriggers(playerGroup.position, state, _triggerOptionsScratch, delta, simTime, renderTime);
         monitor.end('triggers');

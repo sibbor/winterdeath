@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { t } from '../../../utils/i18n';
-import { soundManager } from '../../../utils/audio/SoundManager';
+import { UiSounds } from '../../../utils/audio/AudioLib';
 import { DiscoveryType } from './HudTypes';
-import { DISCOVERY_TYPE_KEYS } from '../../../utils/ui/Mappers';
+import { DataResolver } from '../../../utils/ui/DataResolver';
 
 interface DiscoveryPopupProps {
   onOpenAdventureLog: (tab?: string, itemId?: string) => void;
@@ -11,13 +11,6 @@ interface DiscoveryPopupProps {
 
 // STATIC MAP: Undviker att allokera ett nytt objekt i minnet vid varje interaktion
 // STATIC MAP: SMI-indexed mapping to Adventure Log tabs
-const TAB_MAP: Record<number, string> = {};
-TAB_MAP[DiscoveryType.CLUE] = 'clues';
-TAB_MAP[DiscoveryType.POI] = 'poi';
-TAB_MAP[DiscoveryType.COLLECTIBLE] = 'collectibles';
-TAB_MAP[DiscoveryType.ENEMY] = 'enemy';
-TAB_MAP[DiscoveryType.BOSS] = 'boss';
-TAB_MAP[DiscoveryType.PERK] = 'perks';
 
 // ZERO-GC: Statisk variabel utanför komponenten som överlever unmounts (t.ex. vid paus)
 let lastProcessedTimestamp = 0;
@@ -44,6 +37,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
       lastProcessedTimestamp = timestamp;
       setActiveDiscovery({ id, type, title, details, timestamp });
       setVisible(true);
+      UiSounds.playDiscovery();
     }
   }, [isActive, timestamp, id, type, title, details]);
 
@@ -52,8 +46,8 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
     setVisible(prevVisible => {
       if (!prevVisible) return prevVisible; // Avbryt om den redan är stängd
 
-      soundManager.playUiConfirm();
-      const tab = TAB_MAP[activeDiscovery?.type] || 'clues';
+      UiSounds.playDiscovery();
+      const tab = DataResolver.getAdventureLogTab(activeDiscovery?.type);
 
       // Skickar med både tab och ID precis som du lade till!
       onOpenAdventureLog(tab, activeDiscovery?.id);

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';;
 import { t } from '../../../../utils/i18n';
-import { soundManager } from '../../../../utils/audio/SoundManager';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { LEVEL_CAP, PLAYER_BASE_SPEED } from '../../../../content/constants';
 import { useOrientation } from '../../../../hooks/useOrientation';
@@ -24,7 +24,7 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
     const [tempStats, setTempStats] = useState({ ...stats });
 
     const handleUpgradeSkill = (statId: PlayerStatID, cost: number, value: number) => {
-        soundManager.playUiClick();
+        UiSounds.playClick();
         const sp = tempStats.statsBuffer[PlayerStatID.SKILL_POINTS];
         if (sp >= cost) {
             const newBuffer = new Float32Array(tempStats.statsBuffer);

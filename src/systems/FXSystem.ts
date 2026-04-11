@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
-import { soundManager } from '../utils/audio/SoundManager';
+import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { MaterialType } from '../content/environment';
 
 // --- TYPES & INTERFACES ---
@@ -716,7 +716,7 @@ export const FXSystem = {
         } else if (p.type === 'gore') {
             p.landed = true;
             if (Math.random() < 0.40) callbacks.spawnDecal(p.pos.x, p.pos.z, 0.8 + Math.random() * 0.5, MATERIALS.bloodDecal);
-            soundManager.playImpact(MaterialType.FLESH);
+            GamePlaySounds.playImpact(MaterialType.FLESH);
             p.vel.set(0, 0, 0);
         } else if (p.type === 'debris') {
             if (p.vel.y < -8) {

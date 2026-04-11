@@ -30,8 +30,8 @@ import ScreenResetConfirm from './components/ui/screens/camp/ScreenResetConfirm'
 import DebugDisplay from './components/ui/core/DebugDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
-import { soundManager } from './utils/audio/SoundManager';
-import { BOSSES } from './content/constants';
+import { UiSounds } from './utils/audio/AudioLib';
+import { DataResolver } from './utils/ui/DataResolver';
 import { checkIsMobileDevice } from './utils/device';
 import { AssetPreloader } from './systems/AssetPreloader';
 import { WinterEngine, GameSettings } from './core/engine/WinterEngine';
@@ -108,7 +108,7 @@ const App: React.FC = () => {
             setInitialAdventureLogTab(tab || null);
             setInitialAdventureLogItem(itemId || null);
             setActiveOverlay('ADVENTURE_LOG');
-            soundManager.playUiConfirm();
+        UiSounds.playConfirm();
         };
 
         window.addEventListener('resize', checkMobile);
@@ -244,7 +244,7 @@ const App: React.FC = () => {
 
     const handleOpenMap = useCallback(() => {
         setActiveOverlay('MAP');
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
     }, []);
 
     const handleCheckpointReached = useCallback(() => { }, []);
@@ -328,12 +328,12 @@ const App: React.FC = () => {
 
     const handleTogglePauseAction = useCallback(() => {
         setActiveOverlay('PAUSE');
-        soundManager.playUiClick();
+        UiSounds.playClick();
     }, []);
 
     const handleToggleMapAction = useCallback(() => {
         setActiveOverlay('MAP');
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
     }, []);
 
     const handleSelectWeaponAction = useCallback((slot: string) => {
@@ -357,7 +357,7 @@ const App: React.FC = () => {
         if (tab) setInitialAdventureLogTab(tab);
         if (itemId) setInitialAdventureLogItem(itemId);
         setActiveOverlay('ADVENTURE_LOG');
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
     }, []);
 
     const handleCloseAction = useCallback(() => {
@@ -392,7 +392,7 @@ const App: React.FC = () => {
         // 1. Process technical death (updates permanent stats)
         handleDie(stats as any, finalHud.killerName);
 
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
         setGameState(prev => ({ ...prev, screen: GameScreen.RECAP }));
         setActiveOverlay(null);
     }, [handleDie]);
@@ -435,7 +435,7 @@ const App: React.FC = () => {
     }, []);
 
     const handleBossKilledProceed = useCallback(() => {
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
         setGameState(prev => ({ ...prev, screen: GameScreen.RECAP }));
     }, []);
 
@@ -447,7 +447,7 @@ const App: React.FC = () => {
             stats: { ...prev.stats, prologueSeen: true }
         }));
         HudStore.update({ ...HudStore.getState(), hudVisible: true });
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
     }, []);
 
     const handleCancelReset = useCallback(() => setActiveOverlay('SETTINGS'), []);
@@ -458,10 +458,9 @@ const App: React.FC = () => {
         setSectorStats(stats); // DONT aggregate yet!
 
         setGameState(prev => {
-            const bossRawId = BOSSES[prev.currentSector]?.name || "GÅRDSHERREN";
             const bossKilled = stats.killsByType && (
                 (stats.killsByType['Boss'] || 0) > 0 ||
-                (stats.killsByType[bossRawId] || 0) > 0
+                (stats.killsByType[DataResolver.getBossName(prev.currentSector)] || 0) > 0
             ); return {
                 ...prev,
                 screen: bossKilled ? GameScreen.BOSS_KILLED : GameScreen.RECAP,
@@ -491,10 +490,9 @@ const App: React.FC = () => {
         if (!sectorStats) return;
         setGameState(prev => {
             let newUniqueAchievements = 0;
-            const bossRawId = (BOSSES as any)[prev.currentSector]?.name;
             const bossKilled = sectorStats.killsByType && (
                 (sectorStats.killsByType['Boss'] || 0) > 0 ||
-                (sectorStats.killsByType[bossRawId] || 0) > 0
+                (sectorStats.killsByType[DataResolver.getBossName(prev.currentSector)] || 0) > 0
             );
 
             const newBosses = [...prev.deadBossIndices];
@@ -522,7 +520,7 @@ const App: React.FC = () => {
     }, [sectorStats, deathDetails]);
 
     const handleReturnToCamp = useCallback(() => {
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
         aggregatePendingStats();
 
         triggerLoadingTransition('CAMP', async () => {
@@ -553,7 +551,7 @@ const App: React.FC = () => {
     }, [triggerLoadingTransition, aggregatePendingStats]);
 
     const handleNextSector = useCallback(() => {
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
         aggregatePendingStats();
 
         triggerLoadingTransition('SECTOR', async () => {
@@ -616,7 +614,7 @@ const App: React.FC = () => {
     }, [triggerLoadingTransition]);
 
     const handleRespawnSector = useCallback(() => {
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
 
         // VINTERDÖD FIX: Keep gameCanvasRef alive and trigger resurrection
         if (gameCanvasRef.current) {
@@ -636,7 +634,7 @@ const App: React.FC = () => {
     }, []);
 
     const handleRestartSector = useCallback(() => {
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
 
         gameCanvasRef.current?.restartSector();
 
@@ -654,7 +652,7 @@ const App: React.FC = () => {
         setActiveOverlay(null);
         const stats = gameCanvasRef.current.getSectorStats(false, true);
         handleSectorEnded(stats);
-        soundManager.playUiClick();
+        UiSounds.playClick();
     }, [handleSectorEnded]);
 
     const handleResetGame = useCallback(() => {
@@ -687,7 +685,7 @@ const App: React.FC = () => {
     const handlePauseToggle = useCallback((val: boolean) => setActiveOverlay(val ? 'PAUSE' : null), []);
     const handleToggleShowFps = useCallback(() => {
         setGameState(prev => ({ ...prev, showFps: !prev.showFps }));
-        soundManager.playUiClick();
+        UiSounds.playClick();
     }, []);
     const handleOverlayClose = useCallback(() => setActiveOverlay(null), []);
 

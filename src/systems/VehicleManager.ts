@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { soundManager } from '../utils/audio/SoundManager';
+import { VehicleSounds } from '../utils/audio/AudioLib';
+import { audioEngine } from '../utils/audio/AudioEngine';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
 import { DamageID } from '../entities/player/CombatTypes';
@@ -79,8 +80,8 @@ export const VehicleManager = {
         state.vehicle.type = def.type;
         state.vehicle.active = true;
         const category = def.category === 'BOAT' ? 'BOAT' : 'CAR';
-        soundManager.playVehicleEnter(category);
-        soundManager.playVehicleEngine(category);
+        VehicleSounds.playEnter(category);
+        vehicle.userData.engineVoiceIdx = VehicleSounds.startEngine(category);
         vel.set(0, 0, 0);
         angVel.set(0, 0, 0);
 
@@ -143,9 +144,12 @@ export const VehicleManager = {
         state.vehicle.speed = 0;
         state.vehicle.engineState = 'OFF';
 
-        soundManager.stopVehicleEngine();
-        soundManager.playVehicleSkid(0);
-        soundManager.playVehicleExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
+        if (vehicle.userData.engineVoiceIdx !== undefined && vehicle.userData.engineVoiceIdx !== -1) {
+            audioEngine.stopVoice(vehicle.userData.engineVoiceIdx);
+            vehicle.userData.engineVoiceIdx = -1;
+        }
+
+        VehicleSounds.playExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
 
         _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
             .applyQuaternion(vehicle.quaternion);
@@ -273,9 +277,9 @@ export const VehicleManager = {
         if (hitAnyone) {
             if (isHeavyHit) {
                 vehicle.userData.suspVelY += 2.0;
-                soundManager.playVehicleImpact('heavy');
+                VehicleSounds.playImpact('heavy');
             } else {
-                soundManager.playVehicleImpact('light');
+                VehicleSounds.playImpact('light');
             }
         }
     },
@@ -320,7 +324,7 @@ export const VehicleManager = {
 
                 const impactSpeed = Math.abs(impactDot);
                 if (impactSpeed > 2.0) {
-                    soundManager.playVehicleImpact(impactSpeed > 10.0 ? 'heavy' : 'light');
+                    VehicleSounds.playImpact(impactSpeed > 10.0 ? 'heavy' : 'light');
                 }
             }
         }

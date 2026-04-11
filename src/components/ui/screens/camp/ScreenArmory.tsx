@@ -2,9 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
 import { WeaponType, WeaponCategory, WeaponCategoryColors } from '../../../../content/weapons';
 import { t } from '../../../../utils/i18n';
-import { WEAPONS, SCRAP_COST_BASE } from '../../../../content/constants';
-import { soundManager } from '../../../../utils/audio/SoundManager';
-import { WEAPON_CATEGORY_KEYS } from '../../../../utils/ui/Mappers';
+import { SCRAP_COST_BASE } from '../../../../content/constants';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
+import { DataResolver } from '../../../../utils/ui/DataResolver';
 import { useOrientation } from '../../../../hooks/useOrientation';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 
@@ -31,7 +31,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
 
     const handleUpgradeWeapon = (e: React.MouseEvent, weapon: WeaponType) => {
         e.stopPropagation();
-        soundManager.playUiClick();
+        UiSounds.playClick();
         const level = tempWeaponLevels[weapon] || 1;
         const cost = SCRAP_COST_BASE * level;
         const scrap = tempStats.statsBuffer[PlayerStatID.SCRAP];
@@ -50,7 +50,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
             return;
         }
 
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
         if (category === WeaponCategory.PRIMARY) setTempLoadout({ ...tempLoadout, primary: weapon });
         else if (category === WeaponCategory.SECONDARY) setTempLoadout({ ...tempLoadout, secondary: weapon });
         else if (category === WeaponCategory.THROWABLE) setTempLoadout({ ...tempLoadout, throwable: weapon });
@@ -65,7 +65,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
         if (tempLoadout.special !== currentLoadout.special) return true;
 
         // Deep compare weapon levels if any upgrade happened
-        const weaponIds = Object.keys(WEAPONS).map(Number) as unknown as WeaponType[];
+        const weaponIds = Object.keys(DataResolver.getWeapons()).map(Number) as unknown as WeaponType[];
         for (const k of weaponIds) {
             if ((tempWeaponLevels[k] || 1) !== (weaponLevels[k] || 1)) return true;
         }
@@ -109,7 +109,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
             titleColorClass="text-yellow-600"
             tabs={[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL]}
             activeTab={activeTab}
-            onTabChange={(cat) => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
+            onTabChange={(cat) => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
             tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
         >
             <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
@@ -119,10 +119,10 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                         {[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL].map(cat => {
                             const isActive = activeTab === cat;
                             const catColor = WeaponCategoryColors[cat as keyof typeof WeaponCategoryColors] || '#ffffff';
-                            const catKey = WEAPON_CATEGORY_KEYS[cat];
+                            const catName = DataResolver.getWeaponCategoryName(cat);
 
                             return (
-                                <button key={cat} onClick={() => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
+                                <button key={cat} onClick={() => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
                                     className={`px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
                                         ${isActive
                                             ? 'text-white animate-tab-pulsate'
@@ -135,7 +135,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                     '--pulse-color': catColor
                                 } as React.CSSProperties : {}}
                             >
-                                <span>{t(catKey as string)}</span>
+                                <span>{t(catName)}</span>
                                     {isActive && effectiveLandscape && <span className="text-white font-bold ml-2">→</span>}
                                 </button>
                             );
@@ -146,7 +146,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                 <div className="flex-1 flex flex-col min-w-0 pr-safe min-h-0">
                     {/* Main Content Area */}
                     <div className={`${isMobileDevice && !isLandscapeMode ? 'flex flex-col gap-10' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'} overflow-y-auto pb-8 pr-1 custom-scrollbar`}>
-                        {Object.values(WEAPONS).filter(w => w.category === activeTab).map((weapon) => {
+                        {Object.values(DataResolver.getWeapons()).filter(w => w.category === activeTab).map((weapon) => {
                             const level = tempWeaponLevels[weapon.name] || 1;
                             const cost = SCRAP_COST_BASE * level;
                             const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;

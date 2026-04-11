@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { WEAPONS, BOSSES } from '../content/constants';
-import { WeaponType } from '../content/weapons';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { StatusEffectType } from '../content/perks';
 import { InteractionType } from './InteractionTypes';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
+import { DataResolver } from '../utils/ui/DataResolver';
+import { WeaponType } from '../content/weapons';
 
 // Performance Scratchpads (Zero-GC)
 const _v1 = new THREE.Vector3();
@@ -136,7 +136,7 @@ const _fastUpdateDetail = {
 
 export const HudSystem = {
     emitFastUpdate: (state: any, input: any, now: number, props: any) => {
-        const wep = WEAPONS[state.activeWeapon];
+        const wep = DataResolver.getWeapons()[state.activeWeapon];
         const stats = state.statsBuffer;
 
         // Clamp reloadProgress mellan 0 och 1 för stabil CSS-rendering
@@ -211,7 +211,7 @@ export const HudSystem = {
 
         if (activeBossObj) {
             _current.boss.active = true;
-            _current.boss.name = (activeBossObj.bossId !== undefined && BOSSES[activeBossObj.bossId]) ? BOSSES[activeBossObj.bossId].name : 'BOSS';
+            _current.boss.name = activeBossObj.bossId !== undefined ? DataResolver.getBossName(activeBossObj.bossId) : 'BOSS';
             _current.boss.hp = activeBossObj.hp;
             _current.boss.maxHp = activeBossObj.maxHp;
         } else if (state.sectorState && state.sectorState.hordeTarget > 0 && state.sectorState.zombiesKilled < state.sectorState.zombiesKillTarget) {
@@ -244,7 +244,7 @@ export const HudSystem = {
         }
 
 
-        const wep = WEAPONS[state.activeWeapon];
+        const wep = DataResolver.getWeapons()[state.activeWeapon];
         _current.reloadProgress = state.isReloading
             ? 1 - ((state.reloadEndTime - now) / ((wep?.reloadTime || 1000) + (input.fire ? 1000 : 0)))
             : 0;

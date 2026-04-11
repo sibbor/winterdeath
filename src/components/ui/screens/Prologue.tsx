@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { t, getLocale, setLocale as setGlobalLocale } from '../../../utils/i18n';
-import { soundManager } from '../../../utils/audio/SoundManager';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import { audioEngine } from '../../../utils/audio/AudioEngine';
+import { MusicID } from '../../../utils/audio/AudioTypes';
 
 interface PrologueProps {
     onComplete: () => void;
@@ -18,12 +20,12 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
         };
 
         window.addEventListener('locale-changed', handleLocaleChange);
-        soundManager.playUiConfirm();
-        soundManager.playPrologueMusic();
+        UiSounds.playConfirm();
+        audioEngine.playMusic(MusicID.PROLOGUE_SAD);
 
         return () => {
             window.removeEventListener('locale-changed', handleLocaleChange);
-            soundManager.stopPrologueMusic();
+            audioEngine.stopMusic();
         };
     }, []);
 
@@ -33,7 +35,7 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
         const next = current === 'en' ? 'sv' : 'en';
 
         setGlobalLocale(next);
-        soundManager.playUiClick();
+        UiSounds.playClick();
     };
 
     const prologueData = t('story.prologue') as any[];
@@ -52,14 +54,14 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
     const handleNext = () => {
         if (currentPage < prologueData.length - 1) {
             setCurrentIndex(prev => prev + 1);
-            soundManager.playUiConfirm();
+            UiSounds.playConfirm();
         } else {
             handleFinish();
         }
     };
 
     const handleFinish = () => {
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
         onComplete();
     };
 
@@ -165,7 +167,7 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
                         <button
                             key={i}
                             onClick={() => {
-                                soundManager.playUiConfirm();
+                                UiSounds.playConfirm();
                                 setCurrentIndex(i);
                             }}
                             className={`h-2 transition-all duration-700 rounded-full cursor-pointer hover:bg-gray-400 ${i === currentPage ? 'w-12 bg-white' : 'w-4 bg-gray-800'}`}

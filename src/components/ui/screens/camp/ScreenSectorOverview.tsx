@@ -1,14 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { t } from '../../../../utils/i18n';
-import { BOSSES, FAMILY_MEMBERS } from '../../../../content/constants';
-import { SECTOR_THEMES } from '../../../../content/sectors/sector_themes';
-import { getCollectiblesBySector } from '../../../../content/collectibles';
-import { CLUES } from '../../../../content/clues';
-import { POIS } from '../../../../content/pois';
 import { useOrientation } from '../../../../hooks/useOrientation';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { PlayerStats } from '../../../../entities/player/PlayerTypes';
-import { soundManager } from '../../../../utils/audio/SoundManager';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
+import { DataResolver } from '../../../../utils/ui/DataResolver';
 
 interface ScreenSectorOverviewProps {
     currentSector: number;
@@ -28,16 +24,17 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
     const [selectedSectorIndex, setSelectedSectorIndex] = useState(currentSector);
     const textRef = useRef<HTMLSpanElement>(null);
 
-    const sectorTheme = SECTOR_THEMES[selectedSectorIndex];
-    const boss = BOSSES[selectedSectorIndex];
+    const sectorThemes = DataResolver.getSectorThemes();
+    const sectorTheme = sectorThemes[selectedSectorIndex];
+    const boss = DataResolver.getBosses()[selectedSectorIndex];
     const isRescued = rescuedFamilyIndices.includes(selectedSectorIndex);
     const isCleared = deadBossIndices.includes(selectedSectorIndex);
 
     // -- Briefing Text Logic --
     const briefingData = useMemo(() => {
-        const sectorName = t(sectorTheme.name);
+        const sectorName = t(DataResolver.getSectorName(selectedSectorIndex));
         const sectorBriefing = t(sectorTheme.briefing);
-        const bossName = boss ? t(boss.name) : '';
+        const bossName = boss ? t(DataResolver.getBossName(selectedSectorIndex)) : '';
 
         return { map: sectorName, boss: bossName, briefing: sectorBriefing };
     }, [selectedSectorIndex, sectorTheme, boss]);
@@ -62,13 +59,14 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
     // -- Stats Calculation --
     const { collectibles, clues, pois } = useMemo(() => {
         // Accurate Collectible Count
-        const sectorCollectibles = getCollectiblesBySector(selectedSectorIndex);
+        const allCollectibles = Object.values(DataResolver.getCollectibles());
+        const sectorCollectibles = allCollectibles.filter(c => c.sector === selectedSectorIndex);
         const foundCollectiblesCount = (stats.collectiblesDiscovered || []).filter(id =>
             sectorCollectibles.some(c => c.id === id)
         ).length;
 
-        // Accurate Clue Count (using CLUES constant)
-        const sectorClueIds = Object.values(CLUES)
+        // Accurate Clue Count
+        const sectorClueIds = Object.values(DataResolver.getClues())
             .filter(c => c.sector === selectedSectorIndex)
             .map(c => c.id);
         const foundCluesCount = (stats.cluesFound || []).filter(clueObj => {
@@ -76,8 +74,8 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
             return sectorClueIds.includes(id);
         }).length;
 
-        // Accurate POI Count (using POIS constant)
-        const sectorPoiIds = Object.values(POIS)
+        // Accurate POI Count
+        const sectorPoiIds = Object.values(DataResolver.getPois())
             .filter(p => p.sector === selectedSectorIndex)
             .map(p => p.id);
         const foundPoisCount = (stats.discoveredPOIs || []).filter(id => sectorPoiIds.includes(id)).length;
@@ -92,7 +90,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
     const handleSelect = (index: number) => {
         if (!debugMode && (index > 0 && index !== 4 && !deadBossIndices.includes(index - 1))) return;
-        soundManager.playUiClick();
+        UiSounds.playClick();
         setSelectedSectorIndex(index);
         onSelectSector(index);
     };
@@ -127,7 +125,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
             canConfirm={!(!debugMode && (selectedSectorIndex > 0 && selectedSectorIndex !== 4 && !deadBossIndices.includes(selectedSectorIndex - 1)))}
             showCancel={true}
             titleColorClass="text-red-600"
-            tabs={SECTOR_THEMES.map((_, i) => i)}
+            tabs={DataResolver.getSectorThemes().map((_, i) => i)}
             activeTab={selectedSectorIndex}
             onTabChange={handleSelect}
             tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
@@ -136,7 +134,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                 {/* LEFT: Sector List */}
                 <div className={`${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : 'w-full shrink-0 relative'}`}>
                     <div className={`${!effectiveLandscape ? 'flex gap-2 overflow-x-auto pb-4 px-10 snap-x snap-mandatory pt-2 scrollbar-hide' : 'flex flex-col gap-4 pt-4 pr-10'}`}>
-                        {SECTOR_THEMES.map((map, i) => {
+                        {DataResolver.getSectorThemes().map((map, i) => {
                             const isSel = selectedSectorIndex === i;
                             const locked = !debugMode && (i > 0 && i !== 4 && !deadBossIndices.includes(i - 1));
                             const pulseColor = '#ef4444';
@@ -167,7 +165,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
                                     {/* Sector Name */}
                                     <h3 className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-semibold uppercase tracking-wider`}>
-                                        {locked ? '???' : t(map.name)}
+                                        {locked ? '???' : t(DataResolver.getSectorName(i))}
                                     </h3>
 
                                     {/* Selection Indicator Arrow */}
@@ -187,9 +185,9 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                     {/* Header */}
                     <div className="flex flex-col gap-4 mb-6 border-b border-gray-800 pb-4">
                         <div>
-                            <h2 className={`${isMobileDevice ? 'text-xl' : 'text-5xl'} font-light uppercase tracking-tighter text-white mb-2`}>
-                                {t(sectorTheme.name)}
-                            </h2>
+                             <h2 className={`${isMobileDevice ? 'text-xl' : 'text-5xl'} font-light uppercase tracking-tighter text-white mb-2`}>
+                                 {t(DataResolver.getSectorName(selectedSectorIndex))}
+                             </h2>
                             {/* Stats Row */}
                             {(collectibles.total > 0 || clues.total > 0 || pois.total > 0) && (
                                 <div className={`flex flex-wrap gap-2 md:gap-4 ${isMobileDevice ? 'text-xs' : 'text-lg'} font-bold font-mono text-gray-400 mt-1`}>
@@ -220,7 +218,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                                 {sectorTheme.familyMemberId !== undefined && (
                                     <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
                                         {t('ui.family_member')}: {isRescued
-                                            ? t(FAMILY_MEMBERS[sectorTheme.familyMemberId]?.name)
+                                            ? t(DataResolver.getFamilyMembers()[sectorTheme.familyMemberId!]?.name)
                                             : t(familyStatusKey)}
                                     </div>
                                 )}

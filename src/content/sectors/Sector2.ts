@@ -210,13 +210,13 @@ export const Sector2: SectorDef = {
         const wheatOffset = 7;
         const wheatDepth = 35;
 
-        const filterWheat1 = (points: THREE.Vector3[]) => points.filter(p => p.x > 90 && p.x < 150);
-        const wheatPoly1 = [
-            ...filterWheat1(PathGenerator.getOffsetPoints(hagPts, wheatOffset)),
-            ...filterWheat1(PathGenerator.getOffsetPoints(hagPts, wheatOffset + wheatDepth)).reverse()
-        ];
-        wheatPoly1.forEach(p => p.y = 0);
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.WHEAT, wheatPoly1, 0.4);
+        const wheatField1 = [
+            new THREE.Vector3(112, 0, -86),
+            new THREE.Vector3(112, 0, -120),
+            new THREE.Vector3(77, 0, -120),
+            new THREE.Vector3(77, 0, -88),
+        ]
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.WHEAT, wheatField1, 0.4);
         SectorBuilder.createScarecrow(ctx, 100, -100);
 
         const filterWheat2 = (points: THREE.Vector3[]) => points.filter(p => p.x > 170 && p.x < 240);

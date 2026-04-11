@@ -1,14 +1,15 @@
-import React, { useState, useCallback } from 'react';
+import * as THREE from 'three';
+import React, { useState, useCallback, useRef } from 'react';
 import { t } from '../../../../utils/i18n';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { EnemyManager } from '../../../../entities/enemies/EnemyManager';
 import { WinterEngine } from '../../../../core/engine/WinterEngine';
-import * as THREE from 'three';
-import { soundManager } from '../../../../utils/audio/SoundManager';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { HudStore } from '../../../../store/HudStore';
 import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
-import { BOSSES } from '../../../../content/enemies/bosses';
+import { DataResolver } from '../../../../utils/ui/DataResolver';
 import { SoundID } from '../../../../utils/audio/AudioTypes';
+import { audioEngine } from '../../../../utils/audio/AudioEngine';
 
 interface ScreenPlaygroundEnemyStationProps {
     onClose: () => void;
@@ -35,6 +36,30 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
     const [selectedBoss, setSelectedBoss] = useState<number | null>(null);
     const [spread, setSpread] = useState(10);
     const [biome, setBiome] = useState<'NEAR' | 'FOREST' | 'FARM' | 'VILLAGE'>('NEAR');
+    const spawnedRef = useRef<any[]>([]);
+
+    const handleSpawnBoss = (id: number, collection?: any[]) => {
+        const scene = WinterEngine.getInstance().scene;
+        const hud = HudStore.getState();
+        const playerPos = hud.playerPos || { x: 0, z: 0 };
+        _playerPosRef.set(playerPos.x, 0, playerPos.z);
+        _centerPos.copy(_playerPosRef);
+
+        if (biome === 'FOREST') _centerPos.set(30, 0, -30);
+        if (biome === 'FARM') _centerPos.set(-30, 0, -30);
+        if (biome === 'VILLAGE') _centerPos.set(0, 0, -100);
+        if (biome === 'NEAR') _centerPos.z -= 20;
+
+        const bossData = DataResolver.getBosses()[id];
+        if (bossData) {
+            _spawnPos.set(_centerPos.x, 0, _centerPos.z - 5);
+            const boss = EnemyManager.spawnBoss(scene, _spawnPos, bossData);
+            if (boss) {
+                if (collection) collection.push(boss);
+                else spawnedRef.current.push(boss);
+            }
+        }
+    };
 
     const handleSpawn = useCallback(() => {
         const hud = HudStore.getState();
@@ -56,7 +81,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
         ZOMBIE_TYPES.forEach(type => {
             const count = counts[type] || 0;
             totalCount += count;
-            
+
             for (let i = 0; i < count; i++) {
                 _spawnPos.set(
                     _centerPos.x + (Math.random() - 0.5) * spread,
@@ -70,16 +95,11 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
 
         // 2. Spawn Selected Boss (If any)
         if (selectedBoss !== null) {
-            const bossData = BOSSES[selectedBoss];
-            if (bossData) {
-                _spawnPos.set(_centerPos.x, 0, _centerPos.z - 5);
-                const boss = EnemyManager.spawnBoss(scene, _spawnPos, bossData);
-                if (boss) spawned.push(boss);
-            }
+            handleSpawnBoss(selectedBoss, spawned);
         }
 
         if (totalCount > 10 || selectedBoss !== null) {
-            soundManager.playSound(SoundID.ZOMBIE_GROWL_TANK); 
+            audioEngine.playSound(SoundID.ZOMBIE_GROWL_TANK);
         }
 
         if (onSpawnEnemies) onSpawnEnemies(spawned);
@@ -91,7 +111,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
     };
 
     const handleRandomize = () => {
-        soundManager.playUiClick();
+        UiSounds.playClick();
         const newCounts: Record<number, number> = {};
         ZOMBIE_TYPES.forEach(type => {
             newCounts[type] = Math.floor(Math.random() * 60); // Random up to 60 for stress test
@@ -100,7 +120,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
     };
 
     const handleClear = () => {
-        soundManager.playUiClick();
+        UiSounds.playClick();
         const newCounts: Record<number, number> = {};
         ZOMBIE_TYPES.forEach(type => { newCounts[type] = 0; });
         setCounts(newCounts);
@@ -118,7 +138,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
             titleColorClass="text-red-600"
         >
             <div className="flex flex-col gap-6 p-4 max-w-2xl mx-auto h-full overflow-y-auto pr-6 custom-scrollbar">
-                
+
                 {/* STRESS TEST CONTROLS */}
                 <div className="flex items-center justify-between bg-zinc-900/50 p-4 border border-red-900/30 rounded">
                     <div className="flex flex-col">
@@ -126,13 +146,12 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                         <span className="text-zinc-400 text-[11px] uppercase">{t('ui.mass_spawning')}</span>
                     </div>
                     <div className="flex gap-2">
-                        <button 
-                            onClick={handleRandomize}
-                            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-[12px] font-bold uppercase transition-colors rounded"
-                        >
-                            {t('ui.randomize')}
-                        </button>
-                        <button 
+                        {BOSS_IDS.map(id => (
+                            <button key={id} onClick={() => handleSpawnBoss(Number(id))} className="p-3 bg-zinc-800 border border-zinc-700 text-white rounded hover:bg-zinc-700 transition-colors uppercase font-mono text-xs">
+                                {t(DataResolver.getBossName(Number(id)))}
+                            </button>
+                        ))}
+                        <button
                             onClick={handleClear}
                             className="px-4 py-2 border border-zinc-700 hover:border-red-600 text-zinc-500 hover:text-red-500 text-[12px] font-bold uppercase transition-colors rounded"
                         >
@@ -172,10 +191,10 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                         {BOSS_IDS.map(id => (
                             <button
                                 key={id}
-                                onClick={() => { soundManager.playUiClick(); setSelectedBoss(selectedBoss === id ? null : id); }}
+                                onClick={() => { UiSounds.playClick(); setSelectedBoss(selectedBoss === id ? null : id); }}
                                 className={`px-2 py-3 border-2 transition-all duration-200 uppercase font-black tracking-tighter text-[13px] text-center ${selectedBoss === id ? 'bg-red-600 border-red-600 text-black' : 'bg-black border-zinc-800 text-zinc-500 hover:border-zinc-500'}`}
                             >
-                                {t(BOSSES[id].name)}
+                                {t(DataResolver.getBossName(id))}
                             </button>
                         ))}
                     </div>
@@ -202,7 +221,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                                 {SPAWN_LOCATIONS.map(b => (
                                     <button
                                         key={b}
-                                        onClick={() => { soundManager.playUiClick(); setBiome(b as any); }}
+                                        onClick={() => { UiSounds.playClick(); setBiome(b as any); }}
                                         className={`px-3 py-2 border transition-all text-[11px] font-bold uppercase ${biome === b ? 'bg-zinc-200 border-zinc-100 text-black' : 'bg-black border-zinc-800 text-zinc-600 hover:border-zinc-700'}`}
                                     >
                                         {t(`location.${b.toLowerCase()}`)}

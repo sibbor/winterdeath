@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { soundManager } from '../utils/audio/SoundManager';
+import { UiSounds, GamePlaySounds } from '../utils/audio/AudioLib';
 import { WorldLootSystem } from './WorldLootSystem';
 import { getCollectibleById } from '../content/collectibles';
 import { FXSystem } from './FXSystem';
@@ -457,7 +457,7 @@ export class PlayerInteractionSystem implements System {
         if (!getCollectibleById(collectibleId)) return;
 
         collectible.userData.pickedUp = true;
-        soundManager.playPickupCollectible();
+        UiSounds.playPickUp();
 
         collectible.matrixAutoUpdate = true;
         for (let i = 0; i < collectible.children.length; i++) {
@@ -503,7 +503,7 @@ export class PlayerInteractionSystem implements System {
         if (chestData && !chestData.opened) {
             const c = chestData;
             c.opened = true;
-            soundManager.playOpenChest();
+            GamePlaySounds.playChestOpen();
 
             let inRegistry = false;
             for (let i = 0; i < chests.length; i++) {

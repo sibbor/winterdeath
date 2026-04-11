@@ -5,7 +5,7 @@ import { System } from './System';
 import { PlayerDeathState, DamageType, DamageID } from '../entities/player/CombatTypes';
 import { PLAYER_CHARACTER } from '../content/constants';
 import { MATERIALS } from '../utils/assets';
-import { soundManager } from '../utils/audio/SoundManager';
+import { VoiceSounds } from '../utils/audio/AudioLib';
 import { HudSystem } from './HudSystem';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { HudStore } from '../store/HudStore';
@@ -109,7 +109,7 @@ export class DeathSystem implements System {
         if (this.deathPhaseRef.current === 'NONE') {
             this.deathPhaseRef.current = 'ANIMATION';
             this.setDeathPhase('ANIMATION');
-            soundManager.playPlayerDeath();
+            VoiceSounds.playDeathScream();
 
             // Fetch HUD data once for death state to avoid GC hits
             // HUD data now respects the statsBuffer and statusFlags automatically.
@@ -290,7 +290,7 @@ export class DeathSystem implements System {
             if (renderTime - lastCry > cryDelay) {
                 (fm as any)._lastCryTime = renderTime;
                 (fm as any)._cryDelay = 4000 + Math.random() * 6000;
-                soundManager.playFamilyCrying(fm);
+                VoiceSounds.playCrying(fm.mesh.position);
             }
 
             // VINTERDÖD FIX: Cached body lookup (O(1) instead of O(N) array scan)

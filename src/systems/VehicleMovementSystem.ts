@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
-import { soundManager } from '../utils/audio/SoundManager';
+import { VehicleSounds } from '../utils/audio/AudioLib';
+import { audioEngine } from '../utils/audio/AudioEngine';
 import { VehicleDef } from '../content/vehicles';
 import { VehicleManager } from './VehicleManager';
 import { _buoyancyResult } from './WaterSystem';
@@ -54,8 +55,18 @@ export class VehicleMovementSystem implements System {
             state.vehicle.engineState = 'OFF';
             state.vehicle.speed = 0;
             state.vehicle.throttle = 0;
-            soundManager.stopVehicleEngine();
-            soundManager.playVehicleSkid(0);
+
+            const vehicle = state.vehicle.mesh;
+            if (vehicle && vehicle.userData) {
+                if (vehicle.userData.engineVoiceIdx !== undefined && vehicle.userData.engineVoiceIdx !== -1) {
+                    audioEngine.stopVoice(vehicle.userData.engineVoiceIdx);
+                    vehicle.userData.engineVoiceIdx = -1;
+                }
+                if (vehicle.userData.skidVoiceIdx !== undefined && vehicle.userData.skidVoiceIdx !== -1) {
+                    audioEngine.stopVoice(vehicle.userData.skidVoiceIdx);
+                    vehicle.userData.skidVoiceIdx = -1;
+                }
+            }
         }
     }
 
@@ -351,7 +362,7 @@ export class VehicleMovementSystem implements System {
             state.vehicle.engineState = 'RUNNING';
 
             if (Number.isFinite(normSpeed)) {
-                soundManager.updateVehicleEngine(normSpeed);
+                VehicleSounds.updateEngine(vehicle.userData.engineVoiceIdx ?? -1, normSpeed);
             }
 
 
@@ -359,9 +370,15 @@ export class VehicleMovementSystem implements System {
 
             if (def.category !== 'BOAT') {
                 if (isSkidding) {
-                    soundManager.playVehicleSkid(Math.min(1.0, absLatSpeed / 10.0));
+                    if (vehicle.userData.skidVoiceIdx === undefined || vehicle.userData.skidVoiceIdx === -1) {
+                        vehicle.userData.skidVoiceIdx = VehicleSounds.startSkid();
+                    }
+                    VehicleSounds.updateSkid(vehicle.userData.skidVoiceIdx, Math.min(1.0, absLatSpeed / 10.0));
                 } else {
-                    soundManager.playVehicleSkid(0);
+                    if (vehicle.userData.skidVoiceIdx !== undefined && vehicle.userData.skidVoiceIdx !== -1) {
+                        audioEngine.stopVoice(vehicle.userData.skidVoiceIdx);
+                        vehicle.userData.skidVoiceIdx = -1;
+                    }
                 }
 
                 // Exhaust smoke

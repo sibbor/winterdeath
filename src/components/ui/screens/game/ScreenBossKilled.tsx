@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { t } from '../../../../utils/i18n';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
-import { BOSSES } from '../../../../content/constants';
 import { SectorStats } from '../../../../game/session/SessionTypes';
 import { DamageID } from '../../../../entities/player/CombatTypes';
-import { DAMAGE_ID_KEYS, ATTACK_TYPE_KEYS } from '../../../../utils/ui/Mappers';
+import { DataResolver } from '../../../../utils/ui/DataResolver';
 
 interface ScreenBossKilledProps {
     sectorIndex: number;
@@ -14,8 +14,11 @@ interface ScreenBossKilledProps {
 }
 
 const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProceed, stats, isMobileDevice }) => {
-    const bossData = BOSSES[sectorIndex];
-    const bossName = t(bossData?.name || "ui.boss").toUpperCase();
+    const bossName = t(DataResolver.getBossName(sectorIndex)).toUpperCase();
+ 
+    useEffect(() => {
+        UiSounds.playVictory();
+    }, []);
 
     return (
         <ScreenModalLayout
@@ -31,7 +34,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
 
             <div className={`bg-black/50 ${isMobileDevice ? 'p-4' : 'p-8'} border-2 border-red-900 mb-6 md:mb-10 shadow-[0_0_30px_rgba(153,27,27,0.2)]`}>
                 <p className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} leading-relaxed font-light italic mb-4 md:mb-8 text-gray-200`}>
-                    "{t(bossData?.deathStory || "The target has been eliminated.")}"
+                    "{t(DataResolver.getBossDeathLore(sectorIndex))}"
                 </p>
 
                 {stats && (
@@ -44,7 +47,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                                     .sort((a, b) => (b[1] as any) - (a[1] as any))
                                     .map(([weapon, amount]) => (
                                         <div key={weapon} className="flex justify-between items-center text-[10px]">
-                                            <span className="text-gray-400 uppercase font-bold">{t(DAMAGE_ID_KEYS[Number(weapon)] || 'ui.unknown')}</span>
+                                            <span className="text-gray-400 uppercase font-bold">{t(DataResolver.getDamageName(Number(weapon)))}</span>
                                             <span className="text-white font-mono">{Math.floor(amount as any).toLocaleString()}</span>
                                         </div>
                                     ))}
@@ -63,7 +66,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                                     .sort((a, b) => (b[1] as any) - (a[1] as any))
                                     .map(([attack, amount]) => (
                                         <div key={attack} className="flex justify-between items-center text-[10px]">
-                                            <span className="text-gray-400 uppercase font-bold">{t(ATTACK_TYPE_KEYS[Number(attack)]) || attack}</span>
+                                            <span className="text-gray-400 uppercase font-bold">{t(DataResolver.getAttackName(Number(attack)))}</span>
                                             <span className="text-white font-mono">{Math.floor(amount as any).toLocaleString()}</span>
                                         </div>
                                     ))}

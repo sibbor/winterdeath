@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { soundManager } from '../utils/audio/SoundManager';
+import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { PlayerStatID } from '../entities/player/PlayerTypes';
 
@@ -200,7 +200,7 @@ export class WorldLootSystem implements System {
                 gpuNeedsUpdate = true;
 
                 if (simTime - this.lastSoundTime > 40) {
-                    soundManager.playPickupCollectible();
+                    GamePlaySounds.playLootScrap();
                     this.lastSoundTime = simTime;
                 }
                 continue;

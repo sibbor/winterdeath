@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { t } from '../../../../utils/i18n';
-import { soundManager } from '../../../../utils/audio/SoundManager';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
+import { audioEngine } from '../../../../utils/audio/AudioEngine';
 
 interface ScreenStartUpProps {
     onStart: () => void;
@@ -18,10 +19,8 @@ const ScreenStartGame: React.FC<ScreenStartUpProps> = ({ onStart, isMobileDevice
         // We play a sound or a click sound, and if AudioContext was 'suspended'
         // the browser will now force it to 'running'.
         try {
-            soundManager.playUiConfirm();
-            if (soundManager.core.ctx.state === 'suspended') {
-                await soundManager.core.ctx.resume();
-            }
+            UiSounds.playConfirm();
+            audioEngine.resume();
         } catch (e) {
             console.error("Sound playback failed:", e);
         }

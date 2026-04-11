@@ -20,6 +20,14 @@ export const WeaponCategoryColors = [
   '#3b82f6'  // TOOL (Blue-500)
 ];
 
+export const WEAPON_CATEGORY_NAMES: Record<WeaponCategory, string> = {
+    [WeaponCategory.PRIMARY]: 'categories.primary',
+    [WeaponCategory.SECONDARY]: 'categories.secondary',
+    [WeaponCategory.THROWABLE]: 'categories.throwable',
+    [WeaponCategory.SPECIAL]: 'categories.special',
+    [WeaponCategory.TOOL]: 'categories.tool',
+};
+
 /**
  * Defines how the ProjectileSystem handles the delivery of the attack.
  */

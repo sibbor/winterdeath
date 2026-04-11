@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { t } from '../../../../utils/i18n';
-import { soundManager } from '../../../../utils/audio/SoundManager';
-import { PLAYER_CHARACTER } from '../../../../content/constants';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { useHudStore } from '../../../../hooks/useHudStore';
-
+import { DataResolver } from '../../../../utils/ui/DataResolver';
 import { EnemyAttackType } from '../../../../entities/player/CombatTypes';
 
 interface ScreenPlayerDiedProps {
@@ -21,7 +20,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
     const killedByEnemy = useHudStore(s => s.killedByEnemy || false);
 
     useEffect(() => {
-        soundManager.playUiConfirm();
+        UiSounds.playDefeat();
         const tId = setTimeout(() => setIsVisible(true), 10);
         return () => clearTimeout(tId);
     }, []);
@@ -42,16 +41,16 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
         
         let displayName = killerName.toUpperCase();
         if (hasSpecificAttack) {
-            displayName = `${killerName.toUpperCase()} (${t(`attacks.${deathReason}.title`)})`;
+            displayName = `${killerName.toUpperCase()} (${t(DataResolver.getAttackName(deathReason as any))})`;
         }
 
-        const description = (hasSpecificAttack || !killedByEnemy) ? t(`attacks.${deathReason}.description`) : '';
+        const description = (hasSpecificAttack || !killedByEnemy) ? t(DataResolver.getAttackDescription(deathReason as any)) : '';
 
         return { 
             deathPhrase: phrase, 
             deathDisplayText: displayName,
             deathDescription: description,
-            headerText: t('ui.player_died', { name: PLAYER_CHARACTER.name })
+            headerText: t('ui.player_died', { name: 'Sven' })
         };
     }, [killedByEnemy, killerName, deathReason]);
 

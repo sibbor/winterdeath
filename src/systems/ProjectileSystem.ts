@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { Enemy } from '../entities/enemies/EnemyManager';
 import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
-import { soundManager } from '../utils/audio/SoundManager';
+import { WeaponSounds, GamePlaySounds } from '../utils/audio/AudioLib';
+import { audioEngine } from '../utils/audio/AudioEngine';
 import { haptic } from '../utils/HapticManager';
 import { WEAPONS } from '../content/weapons';
 import { DamageID } from '../entities/player/CombatTypes';
@@ -341,7 +342,7 @@ export const ProjectileSystem = {
                 }
 
                 if (simTime - _lastFlameSoundTime > 200) {
-                    soundManager.playFlamethrowerStart();
+                    WeaponSounds.startFlamethrowerLoop();
                     _lastFlameSoundTime = simTime;
                 }
 
@@ -451,7 +452,7 @@ export const ProjectileSystem = {
                     }
 
                     if (simTime - _lastArcCannonSoundTime > 150) {
-                        soundManager.playArcCannonZap();
+                        WeaponSounds.playArcCannonZap();
                         _lastArcCannonSoundTime = simTime;
                     }
 
@@ -464,7 +465,7 @@ export const ProjectileSystem = {
                     WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0x00ffff, 5.0, 30.0, 0.12, 'electric');
 
                     if (simTime - _lastArcCannonSoundTime > 150) {
-                        soundManager.playArcCannonZap();
+                        WeaponSounds.playArcCannonZap();
                         _lastArcCannonSoundTime = simTime;
                     }
                 }
@@ -504,7 +505,7 @@ export const ProjectileSystem = {
                 }
 
                 if (fz.audioPoolIdx !== -1) {
-                    soundManager.updateFireLoop(fz.audioPoolIdx, fz.mesh.position.x, fz.mesh.position.z, fz.life / 6.0);
+                    audioEngine.updateVoiceVolume(fz.audioPoolIdx, (1.0 - (fz.mesh.position.distanceTo(ctx.playerPos) / 30)) * 0.4 * Math.min(1.0, (fz.life / 6.0) * 2.0));
                 }
 
                 if (simTime - (fz._lastDamageTime || 0) > 500) {
@@ -532,7 +533,7 @@ export const ProjectileSystem = {
 
                 if (fz.life <= 0) {
                     if (fz.audioPoolIdx !== -1) {
-                        soundManager.stopFireLoop(fz.audioPoolIdx);
+                        audioEngine.stopVoice(fz.audioPoolIdx);
                         fz.audioPoolIdx = -1;
                     }
                     ctx.scene.remove(fz.mesh);
@@ -601,7 +602,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
             const isGround = obs.mesh?.name?.startsWith('Ground_');
             if (!isGround) {
                 const material = obs.materialId || (obs.mesh as any)?.userData?.materialId || MaterialType.GENERIC;
-                soundManager.playImpact(material);
+                GamePlaySounds.playImpact(material);
             }
 
             ctx.makeNoise(_v6, NoiseType.BULLET_HIT, NOISE_RADIUS[NoiseType.BULLET_HIT]);
@@ -664,7 +665,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 const headY = enemy.mesh.position.y + enemy.originalScale * 1.8;
                 ctx.spawnPart(_v6.x, projectile.mesh.position.y, _v6.z, 'blood', 40);
                 ctx.spawnPart(_v6.x, headY, _v6.z, 'blood_splat', 1, undefined, undefined, undefined, 3.0);
-                soundManager.playImpact(MaterialType.FLESH);
+                GamePlaySounds.playImpact(MaterialType.FLESH);
 
                 if (projectile.piercing) {
                     projectile.damage *= projectile.pierceDecay;
@@ -725,10 +726,10 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
         switch (p.weapon) {
             case DamageID.GRENADE:
                 if (hitWater) {
-                    soundManager.playWaterExplosion();
+                    GamePlaySounds.playWaterExplosion();
                     haptic.explosionWater();
                 } else {
-                    soundManager.playGrenadeImpact();
+                    WeaponSounds.playGrenadeImpact();
                     haptic.explosion();
                 }
                 const gnRadius = hitWater ? (NOISE_RADIUS[NoiseType.GRENADE] * 0.5) : NOISE_RADIUS[NoiseType.GRENADE];
@@ -768,11 +769,11 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
             case DamageID.MOLOTOV:
                 if (hitWater) {
                     ctx.makeNoise(_v1, NoiseType.MOLOTOV, NOISE_RADIUS[NoiseType.BULLET_HIT]);
-                    soundManager.playWaterSplash();
+                    GamePlaySounds.playWaterSplash();
                     haptic.explosionWater();
                 } else {
                     ctx.makeNoise(_v1, NoiseType.MOLOTOV, NOISE_RADIUS[NoiseType.MOLOTOV]);
-                    soundManager.playMolotovImpact();
+                    WeaponSounds.playMolotovImpact();
                     haptic.explosion();
                 }
 
@@ -810,7 +811,7 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
 
                     if (fz.mesh.parent !== ctx.scene) ctx.scene.add(fz.mesh);
 
-                    fz.audioPoolIdx = soundManager.startFireLoop(ctx.fireZones.length, _v1.x, _v1.z);
+                    fz.audioPoolIdx = WeaponSounds.startFireLoop();
 
                     ctx.fireZones.push(fz);
 
@@ -835,11 +836,11 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
             case DamageID.FLASHBANG:
                 if (hitWater) {
                     ctx.makeNoise(_v1, NoiseType.FLASHBANG, NOISE_RADIUS[NoiseType.BULLET_HIT]);
-                    soundManager.playWaterSplash();
+                    GamePlaySounds.playWaterSplash();
                     haptic.explosionWater();
                 } else {
                     ctx.makeNoise(_v1, NoiseType.FLASHBANG, NOISE_RADIUS[NoiseType.FLASHBANG]);
-                    soundManager.playFlashbangImpact();
+                    WeaponSounds.playFlashbangImpact();
                     haptic.explosion();
                 }
 

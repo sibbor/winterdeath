@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WeaponType, WeaponCategory, WeaponBehavior, WEAPONS, WeaponStats } from '../content/weapons';
 import { PlayerStatID } from '../entities/player/PlayerTypes';
 import { ProjectileSystem } from './ProjectileSystem';
-import { soundManager } from '../utils/audio/SoundManager';
+import { WeaponSounds, UiSounds } from '../utils/audio/AudioLib';
 import { haptic } from '../utils/HapticManager';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
@@ -110,7 +110,7 @@ function _executeThrow(
     if (wep.reloadTime && wep.reloadTime > 0) {
         state.isReloading = true;
         state.reloadEndTime = simTime + (wep.reloadTime * reloadMult);
-        soundManager.playMagOut();
+        WeaponSounds.playMagOut();
     }
 
     if (state.weaponAmmo[state.activeWeapon] <= 0) {
@@ -143,13 +143,13 @@ export const WeaponHandler = {
 
         // Restriction: Cannot switch to empty throwables
         if (nextDef?.category === WeaponCategory.THROWABLE && (state.weaponAmmo[next] || 0) <= 0) {
-            soundManager.playUiClick();
+            UiSounds.playClick();
             return;
         }
 
         // Restriction: Radio is only for calling family
         if (next === WeaponType.RADIO && state.familyFound) {
-            soundManager.playUiClick();
+            UiSounds.playClick();
             return;
         }
 
@@ -158,7 +158,7 @@ export const WeaponHandler = {
             state.isReloading = false;
             state.reloadEndTime = 0;
             state.throwChargeStart = 0;
-            soundManager.playWeaponSwap();
+            WeaponSounds.playWeaponSwap();
             haptic.weaponSwap();
         }
     },
@@ -199,7 +199,7 @@ export const WeaponHandler = {
                     state.isReloading = false;
                     state.reloadEndTime = 0;
                     state.throwChargeStart = 0;
-                    soundManager.playWeaponSwap();
+                    WeaponSounds.playWeaponSwap();
                     haptic.weaponSwap();
                 }
             }
@@ -223,7 +223,7 @@ export const WeaponHandler = {
             state.isReloading = true;
             const actualReloadTime = (wep.reloadTime || 0) * (state.statsBuffer[PlayerStatID.MULTIPLIER_RELOAD] || 1.0);
             state.reloadEndTime = simTime + actualReloadTime;
-            soundManager.playMagOut();
+            WeaponSounds.playMagOut();
             haptic.reload();
         }
 
@@ -234,7 +234,7 @@ export const WeaponHandler = {
             // Only guns and special weapons (Continuous) should refill their mag on reload.
             if (wep.category !== WeaponCategory.THROWABLE) {
                 state.weaponAmmo[state.activeWeapon] = wep.magSize || 0;
-                soundManager.playMagIn();
+                WeaponSounds.playMagIn();
             }
         }
     },
@@ -342,17 +342,17 @@ export const WeaponHandler = {
                     );
                 } else {
                     if (state.activeWeapon === WeaponType.FLAMETHROWER && (state as any).lastFireState) {
-                        soundManager.playFlamethrowerEnd();
+                        WeaponSounds.playFlamethrowerEnd();
                     }
 
                     if (input.fire && simTime > state.lastShotTime + 500) {
-                        soundManager.playEmptyClick();
+                        WeaponSounds.playEmptyClick();
                         state.lastShotTime = simTime;
                     }
                 }
             } else {
                 if (state.activeWeapon === WeaponType.FLAMETHROWER && (state as any).lastFireState) {
-                    soundManager.playFlamethrowerEnd();
+                    WeaponSounds.playFlamethrowerEnd();
                 }
             }
             (state as any).lastFireState = !!input.fire;
@@ -379,7 +379,7 @@ export const WeaponHandler = {
                     _v1.set(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion);
                     _v2.copy(playerGroup.position).add(_v1);
 
-                    soundManager.playShot(wep.name);
+                    WeaponSounds.playShot(state.activeWeapon);
                     haptic.gunshot();
 
                     if (state.callbacks && state.callbacks.makeNoise) {
@@ -410,10 +410,10 @@ export const WeaponHandler = {
                     if (state.sectorState.noReload) {
                         state.weaponAmmo[state.activeWeapon] = wep.magSize || 0;
                     } else {
-                        soundManager.playEmptyClick();
+                        WeaponSounds.playEmptyClick();
                         state.isReloading = true;
                         state.reloadEndTime = simTime + (wep.reloadTime || 0);
-                        soundManager.playMagOut();
+                        WeaponSounds.playMagOut();
                     }
                 }
             }

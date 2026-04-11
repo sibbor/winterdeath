@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { t } from '../../../../utils/i18n';
 import { SectorStats } from '../../../../game/session/SessionTypes';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
-import { SECTORS } from '../../../../systems/SectorSystem';
 import { DamageID } from '../../../../entities/player/CombatTypes';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
-import { ENEMY_TYPE_KEYS, ATTACK_TYPE_KEYS, DAMAGE_ID_KEYS } from '../../../../utils/ui/Mappers';
+import { DataResolver } from '../../../../utils/ui/DataResolver';
 
 interface ScreenSectorReportProps {
     stats: SectorStats;
@@ -36,12 +36,20 @@ const formatDistance = (meters: number) => {
  */
 const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRestartSector, onRespawn, onNextSector, currentSector, isMobileDevice }) => {
     const [activeTab, setActiveTab] = useState<0 | 1>(0);
+ 
+    const isFailed = !!deathDetails;
+ 
+    useEffect(() => {
+        if (isFailed) {
+            UiSounds.playDefeat();
+        } else {
+            UiSounds.playVictory();
+        }
+    }, [isFailed]);
 
-    const sectorDef = SECTORS[currentSector];
-    const sectorName = sectorDef?.name ? t(sectorDef.name) : `${t('ui.sector_label')} ${currentSector}`;
+    const sectorName = t(DataResolver.getSectorName(currentSector));
 
     // Sector Status Aggregation
-    const isFailed = !!deathDetails;
     const isAborted = stats.aborted && !deathDetails;
 
     const statusKey = isFailed ? 'ui.failed' : (isAborted ? 'ui.aborted' : 'ui.completed');
@@ -97,7 +105,10 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
     const TabButton = ({ index, label }: { index: 0 | 1, label: string }) => (
         <button
-            onClick={() => setActiveTab(index)}
+            onClick={() => {
+                setActiveTab(index);
+                UiSounds.playClick();
+            }}
             className={`px-6 py-2 text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === index ? 'border-white text-white' : 'border-transparent text-gray-500 hover:text-gray-300'}`}
         >
             {label}
@@ -227,12 +238,10 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                                 
                                 if (id === DamageID.BOSS) {
                                     attackerName = t('report.labels.boss');
-                                } else if (ENEMY_TYPE_KEYS[id]) {
-                                    attackerName = t(ENEMY_TYPE_KEYS[id]);
-                                } else if (DAMAGE_ID_KEYS[id]) {
-                                    attackerName = t(DAMAGE_ID_KEYS[id]);
+                                } else if (id < 20) { // Standard enemies or weapons
+                                    attackerName = t(DataResolver.getEnemyName(id as number));
                                 } else {
-                                    attackerName = t(`report.damage.source.${enemyId}`, { defaultValue: enemyId });
+                                    attackerName = t(DataResolver.getDamageName(id));
                                 }
 
                                 return (
@@ -240,8 +249,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                                         {Object.entries(enemyMapTyped).map(([attackId, dmg]) => {
                                             if (dmg <= 0) return null;
                                             
-                                            const atkKey = ATTACK_TYPE_KEYS[parseInt(attackId)];
-                                            const atkName = atkKey ? t(atkKey) : t('report.labels.unknown');
+                                            const atkName = t(DataResolver.getAttackName(parseInt(attackId)));
                                             
                                             const label = `${attackerName} > ${atkName}`.toUpperCase();
                                             return <LineItem key={attackId} title={label} val={dmg} />;
@@ -263,8 +271,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                                 if (dmgVal <= 0) return null;
                                 
                                 const instrumentId = parseInt(weaponId);
-                                const weaponKey = DAMAGE_ID_KEYS[instrumentId];
-                                const name = weaponKey ? t(weaponKey) : weaponId;
+                                const name = t(DataResolver.getDamageName(instrumentId));
                                 
                                 return <LineItem key={weaponId} title={name.toUpperCase()} val={dmgVal} />;
                             })}

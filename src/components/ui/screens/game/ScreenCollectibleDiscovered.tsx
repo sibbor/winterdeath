@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { t } from '../../../../utils/i18n';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { getCollectibleById } from '../../../../content/collectibles';
 import CollectiblePreview from '../../core/CollectiblePreview';
@@ -12,6 +13,10 @@ interface ScreenCollectibleDiscoveredProps {
 
 const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = ({ collectibleId, onClose, isMobileDevice }) => {
     const def = getCollectibleById(collectibleId);
+ 
+    useEffect(() => {
+        UiSounds.playLevelUp();
+    }, []);
 
     if (!def) return null;
 

@@ -12,6 +12,18 @@ export enum EnemyAttackType {
     MAGNETIC_CHAIN = 8
 }
 
+export const ENEMY_ATTACK_NAMES: Record<EnemyAttackType, string> = {
+    [EnemyAttackType.HIT]: 'attacks.HIT.title',
+    [EnemyAttackType.BITE]: 'attacks.BITE.title',
+    [EnemyAttackType.JUMP]: 'attacks.JUMP.title',
+    [EnemyAttackType.EXPLODE]: 'attacks.EXPLODE.title',
+    [EnemyAttackType.SMASH]: 'attacks.SMASH.title',
+    [EnemyAttackType.FREEZE_JUMP]: 'attacks.FREEZE_JUMP.title',
+    [EnemyAttackType.SCREECH]: 'attacks.SCREECH.title',
+    [EnemyAttackType.ELECTRIC_BEAM]: 'attacks.ELECTRIC_BEAM.title',
+    [EnemyAttackType.MAGNETIC_CHAIN]: 'attacks.MAGNETIC_CHAIN.title',
+};
+
 export enum PlayerDeathState {
     ALIVE = 0,
     NORMAL = 1,
@@ -64,6 +76,25 @@ export enum DamageID {
     OTHER = 35,
     BOSS_GENERIC = 36
 }
+
+export const ENVIRONMENTAL_DAMAGE_NAMES: Partial<Record<DamageID, string>> = {
+    [DamageID.PHYSICAL]: 'ui.physical',
+    [DamageID.BURN]: 'ui.burn',
+    [DamageID.FIRE]: 'ui.fire',
+    [DamageID.BLEED]: 'ui.bleed',
+    [DamageID.DROWNING]: 'ui.drowning',
+    [DamageID.FALL]: 'ui.fall',
+    [DamageID.FALL_DAMAGE]: 'ui.fall_damage',
+    [DamageID.EXPLOSION]: 'ui.explosion',
+    [DamageID.BITE]: 'ui.bite',
+    [DamageID.ELECTRIC]: 'ui.electric',
+    [DamageID.BOSS]: 'ui.boss',
+    [DamageID.BOSS_GENERIC]: 'ui.boss',
+    [DamageID.OTHER]: 'ui.other',
+    [DamageID.VEHICLE_SPLATTER]: 'ui.vehicle_splatter',
+    [DamageID.VEHICLE_RAM]: 'ui.vehicle_ram',
+    [DamageID.VEHICLE_PUSH]: 'ui.vehicle_push',
+};
 
 // Deprecated alias for legacy code during transition
 export type DamageType = DamageID;

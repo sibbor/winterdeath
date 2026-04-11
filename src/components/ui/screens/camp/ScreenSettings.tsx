@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { t, setLocale, getLocale } from '../../../../utils/i18n';
-import { soundManager } from '../../../../utils/audio/SoundManager';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { GameSettings } from '../../../../core/engine/EngineTypes';
 import { SHADOW_PRESETS } from '../../../../content/constants';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
@@ -32,23 +32,23 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
         const current = getLocale();
         const next = current === 'en' ? 'sv' : 'en';
         setLocale(next);
-        soundManager.playUiClick();
+        UiSounds.playClick();
         setTick(t => t + 1);
     };
 
     const setPixelRatio = (ratio: number) => {
         setTempGraphics({ ...tempGraphics, pixelRatio: ratio });
-        soundManager.playUiClick();
+        UiSounds.playClick();
     };
 
     const toggleAntialias = () => {
         setTempGraphics({ ...tempGraphics, antialias: !tempGraphics.antialias });
-        soundManager.playUiClick();
+        UiSounds.playClick();
     };
 
     const toggleVolumetricFog = () => {
         setTempGraphics({ ...tempGraphics, volumetricFog: !tempGraphics.volumetricFog });
-        soundManager.playUiClick();
+        UiSounds.playClick();
     };
 
     const handleSave = () => {
@@ -70,7 +70,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
     };
 
     const confirmReload = useCallback(() => {
-        soundManager.playUiConfirm();
+        UiSounds.playConfirm();
         onUpdateGraphics(tempGraphics);
 
         // We force a hard reload to kill all old WebGL contexts.
@@ -89,7 +89,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
             if (e.key === 'Escape') {
                 e.stopPropagation();
                 setShowReloadConfirm(false);
-                soundManager.playUiClick();
+                UiSounds.playClick();
             } else if (e.key === 'Enter') {
                 e.stopPropagation();
                 confirmReload();
@@ -161,7 +161,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
                 </div>
                 <div className="flex gap-1 md:gap-2 flex-wrap">
                     <button
-                        onClick={() => { setTempGraphics({ ...tempGraphics, ...SHADOW_PRESETS.OFF }); soundManager.playUiClick(); }}
+                        onClick={() => { setTempGraphics({ ...tempGraphics, ...SHADOW_PRESETS.OFF }); UiSounds.playClick(); }}
                         className={`px-3 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${!tempGraphics.shadows ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}
                     >
                         {t('ui.off')}
@@ -174,7 +174,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
                     ].map(q => (
                         <button
                             key={q.label}
-                            onClick={() => { setTempGraphics({ ...tempGraphics, ...q.preset }); soundManager.playUiClick(); }}
+                            onClick={() => { setTempGraphics({ ...tempGraphics, ...q.preset }); UiSounds.playClick(); }}
                             className={`px-2 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${tempGraphics.shadows && tempGraphics.shadowMapType === q.preset.shadowMapType ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}
                         >
                             {q.label}
@@ -196,7 +196,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
                         { val: 0.75, label: t('ui.quality_med') },
                         { val: 1.0, label: t('ui.quality_high') }
                     ].map(q => (
-                        <button key={q.val} onClick={() => { setTempGraphics({ ...tempGraphics, textureQuality: q.val }); soundManager.playUiClick(); }} className={`px-3 py-1 font-bold uppercase border-2 transition-all ${tempGraphics.textureQuality === q.val ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>
+                        <button key={q.val} onClick={() => { setTempGraphics({ ...tempGraphics, textureQuality: q.val }); UiSounds.playClick(); }} className={`px-3 py-1 font-bold uppercase border-2 transition-all ${tempGraphics.textureQuality === q.val ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>
                             {q.label}
                         </button>
                     ))}
@@ -240,8 +240,8 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
                     <p className="text-gray-400 text-xs font-mono">{t('ui.language_sub')}</p>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); setLocale('en'); setTick(t => t + 1); soundManager.playUiClick(); }} className={`px-4 py-1 font-bold uppercase border-2 transition-all ${getLocale() === 'en' ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>EN</button>
-                    <button onClick={(e) => { e.stopPropagation(); setLocale('sv'); setTick(t => t + 1); soundManager.playUiClick(); }} className={`px-4 py-1 font-bold uppercase border-2 transition-all ${getLocale() === 'sv' ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>SV</button>
+                    <button onClick={(e) => { e.stopPropagation(); setLocale('en'); setTick(t => t + 1); UiSounds.playClick(); }} className={`px-4 py-1 font-bold uppercase border-2 transition-all ${getLocale() === 'en' ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>EN</button>
+                    <button onClick={(e) => { e.stopPropagation(); setLocale('sv'); setTick(t => t + 1); UiSounds.playClick(); }} className={`px-4 py-1 font-bold uppercase border-2 transition-all ${getLocale() === 'sv' ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>SV</button>
                 </div>
             </div>
 
@@ -258,7 +258,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
             </div>
 
             {/* Discovery Popups Toggle */}
-            <div onClick={() => { setTempGraphics({ ...tempGraphics, showDiscoveryPopups: !tempGraphics.showDiscoveryPopups }); soundManager.playUiClick(); }} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white cursor-pointer group rounded-lg gap-4">
+            <div onClick={() => { setTempGraphics({ ...tempGraphics, showDiscoveryPopups: !tempGraphics.showDiscoveryPopups }); UiSounds.playClick(); }} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white cursor-pointer group rounded-lg gap-4">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.discovery_popups')}</h3>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.discovery_popups_sub')}</p>
@@ -283,7 +283,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
             titleColorClass="text-blue-600"
             tabs={['graphics', 'general']}
             activeTab={activeTab}
-            onTabChange={(tab: any) => { setActiveTab(tab); soundManager.playUiClick(); }}
+            onTabChange={(tab: any) => { setActiveTab(tab); UiSounds.playClick(); }}
             tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
         >
             <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
@@ -296,7 +296,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
                             const tabKey = 'ui.' + tab;
 
                             return (
-                                <button key={tab} onClick={() => { setActiveTab(tab as 'graphics' | 'general'); soundManager.playUiClick(); }}
+                                <button key={tab} onClick={() => { setActiveTab(tab as 'graphics' | 'general'); UiSounds.playClick(); }}
                                     className={`px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
                                         ${isActive
                                             ? 'text-white animate-tab-pulsate'
@@ -335,13 +335,13 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
 
                         <div className="flex gap-4 mt-4">
                             <button
-                                onClick={() => { soundManager.playUiClick(); confirmReload(); }}
+                                onClick={() => { UiSounds.playClick(); confirmReload(); }}
                                 className="px-8 py-3 bg-zinc-800 border-2 border-zinc-700 text-zinc-400 font-black uppercase tracking-widest hover:bg-zinc-700 transition-all"
                             >
                                 {t('ui.reload_now')}
                             </button>
                             <button
-                                onClick={() => { soundManager.playUiClick(); setShowReloadConfirm(false); onClose(); }}
+                                onClick={() => { UiSounds.playClick(); setShowReloadConfirm(false); onClose(); }}
                                 className="px-8 py-3 bg-zinc-100 border-2 border-zinc-100 text-black font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)]"
                             >
                                 {t('ui.reload_later')}

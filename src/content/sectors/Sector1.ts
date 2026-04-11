@@ -8,7 +8,9 @@ import { VegetationGenerator } from '../../core/world/generators/VegetationGener
 import { VEGETATION_TYPE } from '../../content/environment';
 import { POI_TYPE } from '../../content/pois';
 import { generateCaveSystem } from './Sector1_Cave';
-import { soundManager } from '../../utils/audio/SoundManager';
+import { UiSounds } from '../../utils/audio/AudioLib';
+import { audioEngine } from '../../utils/audio/AudioEngine';
+import { SoundID } from '../../utils/audio/AudioTypes';
 import { CAMERA_HEIGHT } from '../constants';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
@@ -328,7 +330,7 @@ export const Sector1: SectorDef = {
                 state.sectorState.jordanEventTimer = state.simTime;
                 object.userData.isInteractable = false;
                 events.setNotification({ text: events.t('ui.knocking'), duration: 2000 });
-                soundManager.playMetalKnocking();
+                audioEngine.playSound(SoundID.DOOR_KNOCK, 0.6);
             }
         }
     },
@@ -336,9 +338,9 @@ export const Sector1: SectorDef = {
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
         // --- REVERB ---
         const insideCave = playerPos.z < -80;
-        if (soundManager.ctx) {
-            if (insideCave) soundManager.setReverb(0.35);
-            else soundManager.setReverb(0);
+        if (audioEngine.ctx) {
+            if (insideCave) audioEngine.setReverb(0.35);
+            else audioEngine.setReverb(0);
         }
 
         /*
@@ -403,7 +405,7 @@ export const Sector1: SectorDef = {
                 sectorState.pendingTrigger = null; // Konsumera direkt (Zero-GC)
                 sectorState.jordanEventState = 3; // OPENING_DOORS
                 sectorState.jordanEventTimer = now;
-                soundManager.playMetalDoorOpen();
+                audioEngine.playSound(SoundID.DOOR_OPEN, 0.6);
 
                 window.dispatchEvent(new CustomEvent('hide_hud'));
 
@@ -487,7 +489,7 @@ export const Sector1: SectorDef = {
                 if (doorR) { doorR.position.x = 15 - (closeProgress * 10); doorR.position.x = 15 - (closeProgress * 10); doorR.matrixAutoUpdate = true; }
 
                 if (elapsed >= 800 && !sectorState.doorCloseSoundPlayed) {
-                    soundManager.playMetalDoorShut();
+                    audioEngine.playSound(SoundID.DOOR_SHUT, 0.6);
                     sectorState.doorCloseSoundPlayed = true;
                 }
 

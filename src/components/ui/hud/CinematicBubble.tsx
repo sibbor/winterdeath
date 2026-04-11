@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { t } from '../../../utils/i18n';
 import { useHudStore } from '../../../hooks/useHudStore';
-import { PLAYER_CHARACTER, FAMILY_MEMBERS } from '../../../content/constants';
+import { DataResolver } from '../../../utils/ui/DataResolver';
 
 interface CinematicBubbleProps {
     isMobileDevice?: boolean;
@@ -22,21 +22,7 @@ interface TextToken {
 const CONTAINER_HIDDEN = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out bottom-[-20%] opacity-0";
 const CONTAINER_VISIBLE = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out bottom-[calc(12%+25px)] opacity-100";
 
-// ZERO-GC: Static speaker color mapping (O(1) lookup)
-const SPEAKER_COLORS: Record<string, string> = {
-    'robert': '#' + PLAYER_CHARACTER.color.toString(16).padStart(6, '0'),
-    'narrator': '#ef4444',
-    'okänd': '#9ca3af',
-    'unknown': '#9ca3af',
-    'radio': '#9ca3af',
-    'röst': '#9ca3af',
-    'mannen': '#9ca3af'
-};
-
-// Map family members
-FAMILY_MEMBERS.forEach(m => {
-    SPEAKER_COLORS[m.name.toLowerCase()] = '#' + m.color.toString(16).padStart(6, '0');
-});
+// ZERO-GC: Static speaker metadata resolution occurs via DataResolver
 
 const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(({ isMobileDevice, onComplete }, ref) => {
     // ============================================================================
@@ -175,13 +161,7 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
         };
     }, [translatedText, isVisible, fullTextLength, onComplete, updateDOMText]);
 
-    const getSpeakerColor = (speakerName: string) => {
-        if (!speakerName) return '#000000';
-        const lower = speakerName.toLowerCase();
-        return SPEAKER_COLORS[lower] || '#000000';
-    };
-
-    const bgColor = useMemo(() => getSpeakerColor(speakerName), [speakerName]);
+    const bgColor = useMemo(() => DataResolver.getSpeakerColor(speakerName), [speakerName]);
 
     // Extract dynamic styles to avoid inline object allocation per render
     const lineStyle = useMemo(() => ({ backgroundColor: bgColor }), [bgColor]);

@@ -1,6 +1,6 @@
 import React from 'react';
 import { t } from '../../../../utils/i18n';
-import { soundManager } from '../../../../utils/audio/SoundManager';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 
 interface ScreenPauseProps {
@@ -25,29 +25,29 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
             isSmallScreen={true}
         >
             <div className="space-y-6">
-                <button onClick={() => { soundManager.playUiClick(); onResume(); }} className={`${buttonStyle} bg-white text-black border-white hover:bg-gray-200`}>
+                <button onClick={() => { UiSounds.playClick(); onResume(); }} className={`${buttonStyle} bg-white text-black border-white hover:bg-gray-200`}>
                     <span>{t('ui.continue')}</span>
                 </button>
                 <button
-                    onClick={() => { soundManager.playUiClick(); onOpenAdventureLog(); }}
+                    onClick={() => { UiSounds.playClick(); onOpenAdventureLog(); }}
                     className={`${buttonStyle} bg-transparent text-gray-400 border-gray-600 hover:text-white hover:border-white`}
                 >
                     <span>{t('ui.adventure_log')}</span>
                 </button>
                 <button
-                    onClick={() => { soundManager.playUiClick(); onOpenMap(); }}
+                    onClick={() => { UiSounds.playClick(); onOpenMap(); }}
                     className={`${buttonStyle} bg-transparent text-gray-400 border-gray-600 hover:text-white hover:border-white`}
                 >
                     <span>{t('ui.map_btn')}</span>
                 </button>
                 <button
-                    onClick={() => { soundManager.playUiClick(); onOpenSettings(); }}
+                    onClick={() => { UiSounds.playClick(); onOpenSettings(); }}
                     className={`${buttonStyle} bg-transparent text-gray-400 border-gray-600 hover:text-white hover:border-white`}
                 >
                     <span>{t('ui.settings')}</span>
                 </button>
                 <button
-                    onClick={() => { soundManager.playUiClick(); onAbort(); }}
+                    onClick={() => { UiSounds.playClick(); onAbort(); }}
                     className={`${buttonStyle} bg-black text-red-600 border-red-800 hover:bg-red-900/10 shadow-[0_0_20px_rgba(220,38,38,0.2)]`}
                 >
                     <span>{t('ui.end_game')}</span>

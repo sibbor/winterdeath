@@ -3,7 +3,7 @@ import { Enemy, ENEMY_ATTACK_RANGE } from '../../entities/enemies/EnemyTypes';
 import { AttackDefinition, EnemyAttackType, DamageType, DamageID } from '../../entities/player/CombatTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { SoundID } from '../../utils/audio/AudioTypes';
-import { ENEMY_ATTACK_NAMES } from '../../utils/ui/Mappers';
+import { DataResolver } from '../../utils/ui/DataResolver';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -18,7 +18,7 @@ export const EnemyAttackHandler = {
     }, delta: number, simTime: number, renderTime: number) => {
 
         if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
-            const attackName = ENEMY_ATTACK_NAMES[att.type] || 'UNKNOWN';
+            const attackName = DataResolver.getAttackName(att.type);
             console.log(`[EnemyAttackHandler] ${e.type}_${e.id} attacking with ${attackName} (${att.damage} dmg)`);
         }
 

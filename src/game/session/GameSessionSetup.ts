@@ -20,7 +20,8 @@ import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTyp
 import { PlayerDeathState, DamageID } from '../../entities/player/CombatTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
-import { soundManager } from '../../utils/audio/SoundManager';
+import { audioEngine } from '../../utils/audio/AudioEngine';
+import { UiSounds } from '../../utils/audio/AudioLib';
 import { WEAPONS } from '../../content/weapons';
 import { PlayerMovementSystem } from '../../systems/PlayerMovementSystem';
 import { VehicleMovementSystem } from '../../systems/VehicleMovementSystem';
@@ -38,7 +39,7 @@ import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { RuntimeState } from '../../core/RuntimeState';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
-import { BOSS_NAME_KEYS } from '../../utils/ui/Mappers';
+import { DataResolver } from '../../utils/ui/DataResolver';
 
 import { InteractionType } from '../../systems/InteractionTypes';
 
@@ -335,7 +336,7 @@ export class GameSessionSetup {
                 }
 
                 if (!seen && callbacks.onDiscovery) {
-                    callbacks.onDiscovery(DiscoveryType.BOSS as any, String(bossId), 'ui.boss_encountered', BOSS_NAME_KEYS[bossId] || 'bosses.unknown');
+                    callbacks.onDiscovery(DiscoveryType.BOSS as any, String(bossId), 'ui.boss_encountered', DataResolver.getBossName(bossId));
                 }
             }
             return boss;
@@ -369,9 +370,9 @@ export class GameSessionSetup {
                     const hp = state.statsBuffer[PlayerStatID.HP];
                     const maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
                     state.statsBuffer[PlayerStatID.HP] = Math.min(maxHp, hp + action.amount);
-                    soundManager.playUiConfirm();
+                    UiSounds.playConfirm();
                 }
-                if (action.type === 'SOUND' && action.id) soundManager.playEffect(action.id);
+                if (action.type === 'SOUND' && action.id) audioEngine.playSound(action.id);
                 callbacks.handleTriggerAction(action, engine.scene);
             },
             explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, sectorCtx, force),
@@ -620,9 +621,9 @@ export class GameSessionSetup {
                     if (!props.stats.rescuedFamilyIds.includes(currentFM.id)) props.stats.rescuedFamilyIds.push(currentFM.id);
                 }
 
-                soundManager.stopMusic();
+                audioEngine.stopMusic();
                 const curSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
-                if (curSector?.ambientLoop) soundManager.playMusic(curSector.ambientLoop);
+                if (curSector?.ambientLoop) audioEngine.playMusic(curSector.ambientLoop);
             },
             onPlayerHit: (damage, attacker, type, isDoT, effect, dur, intense, attackName) =>
                 playerStatsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName),
@@ -644,8 +645,8 @@ export class GameSessionSetup {
                 }
             },
 
-            playSound: (id: SoundID) => soundManager.playEffect(id),
-            playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => soundManager.playTone(freq, type, duration, vol || 0.1),
+            playSound: (id: SoundID) => audioEngine.playSound(id),
+            playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => {},
             cameraShake: (amount: number) => engine.camera.shake(amount), scene: engine.scene,
             setCameraOverride: (params: any) => { refs.cameraOverrideRef.current = params; engine.camera.setCinematic(!!params); },
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
@@ -931,8 +932,8 @@ export class GameSessionSetup {
 
         const engine = WinterEngine.getInstance();
         engine.input.disable();
-        soundManager.setReverb(0);
-        soundManager.stopAll();
+        audioEngine.setReverb(0);
+        audioEngine.stopAll();
 
         ProjectileSystem.clear(engine.scene, state.projectiles, state.fireZones);
         FXSystem.reset();

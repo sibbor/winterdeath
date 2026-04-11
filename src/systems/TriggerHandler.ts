@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { SectorTrigger, TriggerAction, TriggerType, TriggerStatus } from '../systems/TriggerTypes';
 import { RuntimeState } from '../core/RuntimeState';
 import { SoundID } from '../utils/audio/AudioTypes';
+import { DataResolver } from '../utils/ui/DataResolver';
+import { DiscoveryType } from '../components/ui/hud/HudTypes';
+import { WeaponStats } from '../content/weapons';
 
 export const TriggerHandler = {
     /**
@@ -98,9 +101,14 @@ export const TriggerHandler = {
 
                     // --- ADVENTURE LOG DISCOVERY ---
                     if (trig.id && callbacks.onDiscovery) {
-                        const discType = trig.type === TriggerType.POI ? 'poi' : 'clue';
-                        const titleKey = trig.type === TriggerType.POI ? 'ui.poi_discovered_title' : 'ui.clue_discovered';
-                        callbacks.onDiscovery(discType, trig.id, titleKey, trig.content || '', trig);
+                        const dType = trig.type === TriggerType.POI ? DiscoveryType.POI : DiscoveryType.CLUE;
+                        callbacks.onDiscovery(
+                            DataResolver.getAdventureLogTab(dType),
+                            trig.id,
+                            DataResolver.getDiscoveryTitle(dType),
+                            trig.content || '',
+                            trig
+                        );
                     }
 
                     // --- FIRE ACTIONS ---

@@ -13,9 +13,8 @@ import { VegetationGenerator } from '../core/world/generators/VegetationGenerato
 import { PoiGenerator } from '../core/world/generators/PoiGenerator';
 import { CampWorld, CAMP_SCENE } from '../components/camp/CampWorld';
 import { SectorSystem } from './SectorSystem';
-import { registerSoundGenerators } from '../utils/audio/SoundLib';
-import { soundManager } from '../utils/audio/SoundManager';
-import { SoundBank } from '../utils/audio/SoundBank';
+import { registerSoundGenerators } from '../utils/audio/AudioLib';
+import { audioEngine } from '../utils/audio/AudioEngine';
 import { FXSystem } from './FXSystem';
 import { COLLECTIBLES } from '../content/collectibles';
 import { WEAPONS } from '../content/weapons';
@@ -110,33 +109,8 @@ export const AssetPreloader = {
                 beginInternal('core_assets');
 
                 registerSoundGenerators();
-
-                if (soundManager) {
-                    try {
-                        // VINTERDÖD FIX: Pre-render procedural buffers before sector starts
-                        soundManager.preRenderProceduralSounds();
-
-                        // VINTERDÖD FIX: Pre-cache FX materials (like gore clones) before shared pool is populated.
-                        // Using _dummyScene is safe and prevents the null-property access crash.
-                        FXSystem.preload(_dummyScene);
-
-                        await SoundBank.preloadAllAsync(soundManager.core, yieldToMain || _NOOP_ASYNC);
-                    } catch (e) {
-                        console.error("[AssetPreloader] SoundBank preloading failed:", e);
-                    }
-
-                    try {
-                        const { createMusicBuffer } = await import('../utils/audio/SoundLib');
-                        const music = ['ambient_wind_loop', 'ambient_forest_loop', 'ambient_scrapyard_loop', 'ambient_finale_loop', 'boss_metal', 'prologue_sad'];
-
-                        for (let i = 0; i < music.length; i++) {
-                            createMusicBuffer(soundManager.core.ctx, music[i] as any);
-                        }
-
-                    } catch (e) {
-                        console.warn("[AssetPreloader] Music buffering deferred.");
-                    }
-                }
+                audioEngine.resume();
+                FXSystem.preload(_dummyScene);
 
                 if (yieldToMain) await yieldToMain();
 

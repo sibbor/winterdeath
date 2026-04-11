@@ -3,7 +3,7 @@ import { t } from '../../../../utils/i18n';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { EnvironmentOverride, WeatherType } from '../../../../core/engine/EngineTypes';;
 import { Sector4 } from '../../../../content/sectors/Sector4';
-import { soundManager } from '../../../../utils/audio/SoundManager';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
 
 interface ScreenPlaygroundEnvironmentStationProps {
     onClose: () => void;
@@ -148,7 +148,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                         {['none', 'rain', 'snow', 'ash', 'ember'].map((w) => (
                             <button
                                 key={w}
-                                onClick={() => { soundManager.playUiClick(); onWeatherChange(w as WeatherType); }}
+                                onClick={() => { UiSounds.playClick(); onWeatherChange(w as WeatherType); }}
                                 className={`px-4 py-2 border-2 transition-all duration-200 uppercase font-black tracking-widest text-xs ${currentWeather === w ? 'bg-cyan-600 border-cyan-600 text-black' : 'bg-black border-zinc-800 text-zinc-500 hover:border-zinc-700'}`}
                             >
                                 {t(`weather.${w}`)}

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { soundManager } from '../utils/audio/SoundManager';
+import { UiSounds, VoiceSounds } from '../utils/audio/AudioLib';
+import { audioEngine } from '../utils/audio/AudioEngine';
 import { FXSystem } from './FXSystem';
 import { PlayerDeathState, DamageID, EnemyAttackType } from '../entities/player/CombatTypes';
 import { PERKS, StatusEffectType, PerkCategory } from '../content/perks';
@@ -54,9 +55,9 @@ export class PlayerStatsSystem implements System {
                     if (perk) {
                         // VINTERDÖD FIX: Double check that we aren't just refreshing an existing duration 
                         // by accident (though previousPerkMask should prevent this).
-                        if (perk.category === PerkCategory.BUFF) soundManager.playBuffGained();
-                        else if (perk.category === PerkCategory.DEBUFF) soundManager.playDebuffGained();
-                        else if (perk.category === PerkCategory.PASSIVE) soundManager.playPassiveGained();
+                        if (perk.category === PerkCategory.BUFF) audioEngine.playSound(SoundID.BUFF_GAINED);
+                        else if (perk.category === PerkCategory.DEBUFF) audioEngine.playSound(SoundID.DEBUFF_GAINED);
+                        else if (perk.category === PerkCategory.PASSIVE) audioEngine.playSound(SoundID.PASSIVE_GAINED);
 
                         if (!state.discoveredPerks.includes(i)) {
                             state.discoveredPerks.push(i);
@@ -335,7 +336,7 @@ export class PlayerStatsSystem implements System {
         if (!isDoT) {
             if (isBite) state.lastBiteTime = now;
             else state.invulnerableUntil = now + 400;
-            soundManager.playDamageGrunt();
+            VoiceSounds.playDamageGrunt();
             state.hurtShake = 1.0;
         }
 

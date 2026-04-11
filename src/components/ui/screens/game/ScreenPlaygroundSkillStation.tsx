@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
 import { SectorState } from '../../../../game/session/SessionTypes';;
 import { t } from '../../../../utils/i18n';
-import { soundManager } from '../../../../utils/audio/SoundManager';
+import { UiSounds } from '../../../../utils/audio/AudioLib';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 
 const SKILLS_CONFIG = [
@@ -24,7 +24,7 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
     const [tempSectorState, setTempSectorState] = useState({ ...sectorState });
 
     const handleUpgradeSkill = (skillId: PlayerStatID, value: number) => {
-        soundManager.playUiClick();
+        UiSounds.playClick();
         
         // Zero-GC: Clone the buffer for the state update to trigger React re-render
         const newStats = { ...tempStats };
@@ -89,7 +89,7 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                             className={`p-4 border-2 transition-all cursor-pointer flex items-center gap-4 rounded-lg
                                 ${tempSectorState.isInvincible ? 'bg-red-950/20 border-red-600 text-red-500 shadow-[0_0_15px_rgba(220,38,38,0.2)]' : 'bg-black border-zinc-800 text-zinc-500 hover:border-zinc-700'}
                             `}
-                            onClick={() => { soundManager.playUiClick(); setTempSectorState({ ...tempSectorState, isInvincible: !tempSectorState.isInvincible }); }}
+                            onClick={() => { UiSounds.playClick(); setTempSectorState({ ...tempSectorState, isInvincible: !tempSectorState.isInvincible }); }}
                         >
                             <div className={`w-6 h-6 border flex items-center justify-center transition-all ${tempSectorState.isInvincible ? 'bg-red-600 border-red-600' : 'border-zinc-800'}`}>
                                 {tempSectorState.isInvincible && <div className="text-black font-black text-xs">✓</div>}
@@ -105,7 +105,7 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                             className={`p-4 border-2 transition-all cursor-pointer flex items-center gap-4 rounded-lg
                                 ${tempSectorState.unlimitedAmmo ? 'bg-zinc-100 border-zinc-100 text-black' : 'bg-black border-zinc-800 text-zinc-500 hover:border-zinc-700'}
                             `}
-                            onClick={() => { soundManager.playUiClick(); setTempSectorState({ ...tempSectorState, unlimitedAmmo: !tempSectorState.unlimitedAmmo, noReload: !tempSectorState.unlimitedAmmo }); }}
+                            onClick={() => { UiSounds.playClick(); setTempSectorState({ ...tempSectorState, unlimitedAmmo: !tempSectorState.unlimitedAmmo, noReload: !tempSectorState.unlimitedAmmo }); }}
                         >
                             <div className={`w-6 h-6 border flex items-center justify-center transition-all ${tempSectorState.unlimitedAmmo ? 'bg-black border-black' : 'border-zinc-800'}`}>
                                 {tempSectorState.unlimitedAmmo && <div className="text-zinc-100 font-black text-xs">✓</div>}

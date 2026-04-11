@@ -5,7 +5,7 @@ import { FXSystem } from './FXSystem';
 import { DamageID } from '../entities/player/CombatTypes';
 import { PERKS, StatusEffectType } from '../content/perks';
 import { applyCollisionResolution } from '../core/world/CollisionResolution';
-import { soundManager } from '../utils/audio/SoundManager';
+import { audioEngine } from '../utils/audio/AudioEngine';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { _buoyancyResult } from './WaterSystem';
 import { NOISE_RADIUS, NoiseType } from '../entities/enemies/EnemyTypes';
@@ -337,7 +337,7 @@ export class PlayerMovementSystem implements System {
         // --- 3. EXTINGUISH BURNING IN WATER ---
         if (inWater && state.effectDurations[StatusEffectType.BURNING] > 0) {
             state.effectDurations[StatusEffectType.BURNING] = 0;
-            soundManager.playSound(SoundID.STEAM_HISS);
+            audioEngine.playSound(SoundID.STEAM_HISS);
         }
 
         // --- 4. STAMINA & REGENERATION ---
@@ -427,7 +427,7 @@ export class PlayerMovementSystem implements System {
             if (!state.dodgeSmokeSpawned && !inWater) {
                 state.dodgeSmokeSpawned = true;
                 this.checkReflexShield(session, simTime);
-                soundManager.playSound(SoundID.DASH);
+                audioEngine.playSound(SoundID.DASH);
                 session.makeNoise(playerGroup.position, NoiseType.PLAYER_DODGING, NOISE_RADIUS[NoiseType.PLAYER_DODGING]);
 
                 FXSystem.spawnPart(

@@ -2,9 +2,11 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { PlayerStats } from '../../entities/player/PlayerTypes';;
 import { WeaponType } from '../../content/weapons';
-import { WEAPONS, FAMILY_MEMBERS, PLAYER_CHARACTER } from '../../content/constants';
+import { PLAYER_CHARACTER } from '../../content/constants';
 import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
-import { soundManager } from '../../utils/audio/SoundManager';
+import { UiSounds, AmbientSounds, VoiceSounds } from '../../utils/audio/AudioLib';
+import { audioEngine } from '../../utils/audio/AudioEngine';
+import { DataResolver } from '../../utils/ui/DataResolver';
 import { t } from '../../utils/i18n';
 import { createProceduralTextures } from '../../utils/assets';
 import { WinterEngine, GameSettings } from '../../core/engine/WinterEngine';
@@ -18,8 +20,8 @@ import { CampEffectsSystem, FamilyAnimationSystem, CampChatterSystem } from './C
 const _v1 = new THREE.Vector3();
 const _campCtx: any = { dynamicLights: [] };
 
-/** Safe O(1) WEAPONS lookup — guards against undefined entries (NONE=0, env DamageIDs, etc.) */
-const weaponName = (id: number): string => WEAPONS[id]?.displayName ?? '';
+/** Safe O(1) WEAPONS lookup via DataResolver */
+const weaponName = (id: number): string => DataResolver.getDamageName(id);
 
 // Import UI Components
 import CampHUD from '../ui/hud/CampHUD';
@@ -103,10 +105,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
     useEffect(() => {
         if (isGameRunning) {
-            soundManager.resume();
-            soundManager.startCampfire();
+            audioEngine.resume();
+            AmbientSounds.startCampfire();
         }
-        return () => soundManager.stopCampfire();
+        return () => AmbientSounds.stopCampfire();
     }, [isGameRunning]);
 
     // Idle Timer
@@ -172,7 +174,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
             // Setup Family Members
             const { familyMembers, interactables: familyInteractables, activeMembers } = CampWorld.setupFamilyMembers(
-                scene, rescuedFamilyIndices, debugMode, PLAYER_CHARACTER, FAMILY_MEMBERS
+                scene, rescuedFamilyIndices, debugMode, PLAYER_CHARACTER, DataResolver.getFamilyMembers()
             );
 
             if (setupCounterRef.current !== currentSetupId) return;
@@ -247,9 +249,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 if (hovered.startsWith('family_') || hovered.startsWith('player_')) {
                     const familyMembers = sceneFamilyMembersRef.current;
                     const fmWrapper = familyMembers.find((fm: any) => fm.mesh.userData.id === hovered);
-                    if (fmWrapper) { fmWrapper.bounce = 1; soundManager.playVoice(fmWrapper.mesh.userData.name); }
+                    if (fmWrapper) { fmWrapper.bounce = 1; VoiceSounds.playDialogueBeep(fmWrapper.mesh.userData.name); }
                 } else {
-                    soundManager.playUiConfirm();
+                    UiSounds.playConfirm();
                     const typeMap: Record<string, string> = {
                         'armory': 'STATION_ARMORY',
                         'skills': 'STATION_SKILLS',
@@ -403,7 +405,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                     // --- DIRECT DOM MANIPULATION FOR PERFORMANCE ---
                     // Only trigger a React state change if the actual hover target changed
                     if (newHover !== hoveredRef.current) {
-                        if (newHover) soundManager.playUiHover();
+                        if (newHover) UiSounds.playHover();
                         hoveredRef.current = newHover;
                         setHoveredStation(newHover);
                         setTooltipData(newHover ? { text: toolTipText, subText: toolTipSubText } : null);
@@ -466,7 +468,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         };
     }, [isGameRunning, stats, currentLoadout, currentSector]);
 
-    const closeModal = () => { soundManager.playUiClick(); setActiveOverlay(null); };
+    const closeModal = () => { UiSounds.playClick(); setActiveOverlay(null); };
 
     return (
         <div className={`relative w-full h-full bg-black font-sans overflow-hidden`} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
