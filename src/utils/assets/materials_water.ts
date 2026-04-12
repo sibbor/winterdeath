@@ -116,8 +116,8 @@ export function createWaterMaterial(
                 float phaseXZ = worldPosition.x + worldPosition.z;
                 
                 // [VINTERDÖD REVERT] Original wave math with diagonal phase and slower speed
-                float w1 = pow(sin(phaseXZ * waveScale - uTime * 1.0) * 0.5 + 0.5, 3.2) * 0.45;
-                float w2 = pow(sin(phaseXZ * 0.7 - uTime * 0.8) * 0.5 + 0.5, 2.5) * 0.35;
+                float w1 = pow(max(0.0, sin(phaseXZ * waveScale - uTime * 1.0) * 0.5 + 0.5), 3.2) * 0.45;
+                float w2 = pow(max(0.0, sin(phaseXZ * 0.7 - uTime * 0.8) * 0.5 + 0.5), 2.5) * 0.35;
                 
                 // Edge dampening to keep shores calm
                 float edgeDist = 0.0;
