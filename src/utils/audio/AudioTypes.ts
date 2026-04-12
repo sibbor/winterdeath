@@ -81,6 +81,8 @@ export enum SoundID {
     VO_PLAYER_DEATH = 71,
     VO_PLAYER_COUGH = 72,
     VO_FAMILY_CRY = 73,
+    VO_FAMILY_CHEER = 74,  // Used in Sector 3 reunion: jumping & cheering
+    VO_FAMILY_KISS = 75,   // Used in Sector 3 reunion: kisses & hugs
 
     // --- AMBIENTS
     AMBIENT_WIND = 500,

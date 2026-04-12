@@ -11,6 +11,9 @@ export interface AnimState {
     isSpeaking: boolean;
     isThinking: boolean;
     isIdleLong: boolean;
+    isCelebrating?: boolean;   // Jump+cheer phase
+    isHugging?: boolean;       // Hug/embrace phase
+    celebrateStartTime?: number;
     isWading?: boolean;
     isSwimming?: boolean;
     isStrafing?: boolean;
@@ -65,18 +68,33 @@ export const PlayerAnimator = {
         else if (animState.isDodging) {
             const progress = Math.min(1.0, Math.max(0.0, (simTime - animState.dodgeStartTime) / 300));
             
-            // --- VINTERDÖD STYLE: Athletic Leap ---
-            // Lean heavily forward at start, then tuck slightly
             rotationX = 0.6 * (1.0 - progress * 0.5);
-            
             const archFactor = Math.sin(progress * Math.PI);
-            
-            // Stretch during takeoff/landing
             scaleY = 1.0 + (archFactor * 0.2); 
             scaleXZ = 1.0 - (archFactor * 0.1);
-            
-            // Height curve (45cm peak for "Proper Dodge" feel)
             positionY = archFactor * 0.45;
+        }
+
+        // Celebration: Jump + Cheer bounce (rapid vertical pulses)
+        else if (animState.isCelebrating) {
+            const t = animState.renderTime;
+            // Rapid jump frequency (4 bounces/sec)
+            const bounce = Math.abs(Math.sin(t * 0.025 + (animState.seed || 0)));
+            positionY = bounce * 0.55;
+            scaleY = 1.0 + bounce * 0.15;
+            scaleXZ = 1.0 - bounce * 0.07;
+            // Arms-up lean on each peak (rotX negative = lean back/arms up)
+            rotationX = -0.2 * bounce;
+            // Slight side swagger
+            rotationZ = Math.sin(t * 0.02 + (animState.seed || 0)) * 0.08;
+        }
+
+        // Hugging close embrace (lean forward + rock side to side)
+        else if (animState.isHugging) {
+            const t = animState.renderTime;
+            rotationX = 0.35 + Math.sin(t * 0.004 + (animState.seed || 0)) * 0.08;
+            rotationZ = Math.sin(t * 0.003 + (animState.seed || 0) * 1.7) * 0.12;
+            positionY = Math.sin(t * 0.003 + (animState.seed || 0)) * 0.04;
         }
 
         // Swimming Animation: Heavy lean, deep bobbing
