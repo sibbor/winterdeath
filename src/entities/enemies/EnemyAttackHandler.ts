@@ -8,13 +8,15 @@ import { DataResolver } from '../../utils/ui/DataResolver';
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
 
 export const EnemyAttackHandler = {
     executeAttack: (e: Enemy, att: AttackDefinition, distSq: number, playerPos: THREE.Vector3, callbacks: {
         onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, attackName?: any) => void,
         playSound: (id: string | number) => void,
         spawnPart?: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void,
-        applyDamage?: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => void
+        applyDamage?: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => void,
+        queryEnemies?: (pos: THREE.Vector3, radius: number) => Enemy[]
     }, delta: number, simTime: number, renderTime: number) => {
         if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
             const attackName = DataResolver.getAttackName(att.type, true);
@@ -97,6 +99,34 @@ export const EnemyAttackHandler = {
                 if (callbacks.spawnPart) callbacks.spawnPart(pos.x, 1.0, pos.z, 'large_fire', 5);
 
                 callbacks.playSound(SoundID.ZOMBIE_DEATH_EXPLODE);
+
+                // AOE EXPLOSION: Damage surrounding enemies
+                const radius = att.radius || 10.0;
+                if (callbacks.queryEnemies && callbacks.applyDamage) {
+                    const nearby = callbacks.queryEnemies(pos, radius + 3.0);
+                    const nLen = nearby.length;
+                    const radSq = radius * radius;
+
+                    for (let i = 0; i < nLen; i++) {
+                        const other = nearby[i];
+                        if (other === e || other.hp <= 0) continue;
+
+                        _v1.subVectors(other.mesh.position, pos);
+                        const dSq = _v1.lengthSq();
+                        const totalRad = radius + (other.originalScale * 0.5);
+
+                        if (dSq < totalRad * totalRad) {
+                            callbacks.applyDamage(other, att.damage, DamageID.EXPLOSION, true);
+
+                            // Apply knockback (physics)
+                            const force = 25.0 * (1.0 - Math.min(1.0, dSq / radSq));
+                            const mass = other.originalScale * other.widthScale;
+                            _v2.copy(_v1).normalize().multiplyScalar(force / mass).setY(2.0);
+                            other.knockbackVel.add(_v2);
+                        }
+                    }
+                }
+
                 e.hp = 0;
                 e.lastDamageType = DamageID.EXPLOSION;
                 if (callbacks.applyDamage) callbacks.applyDamage(e, 9999, DamageID.EXPLOSION, true);

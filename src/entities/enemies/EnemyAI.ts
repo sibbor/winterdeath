@@ -60,6 +60,7 @@ export const EnemyAI = {
             playSound: (id: SoundID) => void;
             spawnBubble: (text: string, duration: number) => void;
             spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void;
+            queryEnemies?: (pos: THREE.Vector3, radius: number) => Enemy[];
         },
         water: WaterSystem | null,
         delta: number,
@@ -130,8 +131,38 @@ export const EnemyAI = {
             else if (dmgType === DamageID.GRENADE || e.type === EnemyType.BOMBER || (e.statusFlags & EnemyFlags.BOSS) !== 0) {
                 e.deathState = EnemyDeathState.EXPLODED;
                 if (dmgType !== DamageID.GRENADE) {
-                    WeaponSounds.playExplosion(e.mesh.position);
+                    const pos = e.mesh.position;
+                    WeaponSounds.playExplosion(pos);
                     haptic.explosion();
+
+                    // VINTERDÖD: Bomber Death Detonation (Chain Reaction)
+                    if (e.type === EnemyType.BOMBER && callbacks.queryEnemies && callbacks.applyDamage) {
+                        const radius = 10.0;
+                        const damage = 60.0;
+                        const nearby = callbacks.queryEnemies(pos, radius + 3.0);
+                        const nLen = nearby.length;
+                        const radSq = radius * radius;
+
+                        for (let i = 0; i < nLen; i++) {
+                            const other = nearby[i];
+                            if (other === e || other.hp <= 0) continue;
+
+                            _v1.subVectors(other.mesh.position, pos);
+                            const dSq = _v1.lengthSq();
+                            const totalRad = radius + (other.originalScale * 0.5);
+
+                            if (dSq < totalRad * totalRad) {
+                                callbacks.applyDamage(other, damage, DamageID.EXPLOSION, true);
+
+                                // Apply knockback
+                                const force = 25.0 * (1.0 - Math.min(1.0, dSq / radSq));
+                                const mass = other.originalScale * other.widthScale;
+                                _v2.copy(_v1).normalize().multiplyScalar(force / mass).setY(2.0);
+                                other.knockbackVel.add(_v2);
+                            }
+                        }
+                    }
+
                     // VINTERDÖD: Hit-stop for Bomber/Boss detonations
                     WinterEngine.getInstance()?.triggerHitStop(e.type === EnemyType.BOMBER ? 40 : 50);
                 }

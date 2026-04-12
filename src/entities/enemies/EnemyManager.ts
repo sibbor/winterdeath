@@ -116,6 +116,7 @@ export interface AIContext {
     onEffectTick: ((e: Enemy, type: EnemyEffectType) => void) | null;
     playSound: (id: SoundID) => void;
     spawnBubble: ((text: string, duration: number) => void) | null;
+    queryEnemies: ((pos: THREE.Vector3, radius: number) => Enemy[]) | null;
     onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => void;
     _realOnPlayerHit: ((damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => void) | null;
 }
@@ -127,6 +128,7 @@ const _aiContext: AIContext = {
     onEffectTick: null,
     playSound: (id: SoundID) => audioEngine.playSound(id),
     spawnBubble: null,
+    queryEnemies: null,
     onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
         if (_aiContext._realOnPlayerHit) {
             _aiContext._realOnPlayerHit(damage, attacker, type, isDoT, effect, dur, intense, attackName);
@@ -175,6 +177,7 @@ export const EnemyManager = {
         _aiContext.spawnDecal = spawnDecal;
         _aiContext.applyDamage = applyDamage;
         _aiContext.spawnBubble = spawnBubble;
+        _aiContext.queryEnemies = (pos: THREE.Vector3, rad: number) => collisionGrid.getNearbyEnemies(pos, rad);
 
         const engine = WinterEngine.getInstance();
         const state = engine?.onUpdateContext?.state;
