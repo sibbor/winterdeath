@@ -193,5 +193,5 @@ PERKS[StatusEffectType.DROWNING] = {
     description: 'perks.DROWNING.description',
     category: PerkCategory.DEBUFF,
     duration: 3000,
-    dotDamage: 15,
+    dotDamage: 10,
 };

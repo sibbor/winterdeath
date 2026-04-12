@@ -307,14 +307,14 @@ export class PlayerMovementSystem implements System {
 
                 if (flatDepth > 1.25) {
                     isSwimming = true;
-                    speed *= 0.35;
+                    speed *= 0.525; // VINTERDÖD: 50% faster (0.35 * 1.5)
                 } else if (flatDepth > 0.95 && isSwimming) {
                     isSwimming = true;
-                    speed *= 0.35;
+                    speed *= 0.525; 
                 } else if (flatDepth > 0.4) {
                     isSwimming = false;
                     isWading = true;
-                    speed *= 0.6;
+                    speed *= 0.9; // VINTERDÖD: 50% faster (0.6 * 1.5)
                 } else {
                     isSwimming = false;
                     speed *= 0.85;

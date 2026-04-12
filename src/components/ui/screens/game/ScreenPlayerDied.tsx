@@ -81,7 +81,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
                     <p className={`${isMobileDevice ? 'text-3xl' : 'text-4xl md:text-5xl'} font-light italic leading-relaxed text-gray-100 drop-shadow-[0_0_15px_rgba(0,0,0,1)] z-20`}>
                         {deathDisplayText}
                     </p>
-                    {deathDescription && (
+                    {deathDescription && deathDescription !== 'ui.description_missing' && !deathDescription.startsWith('attacks.') && (
                         <p className={`${isMobileDevice ? 'text-base' : 'text-lg'} text-gray-400 font-medium italic max-w-2xl mt-4 leading-relaxed tracking-wide opacity-80 animate-fadeIn`}>
                             "{deathDescription}"
                         </p>

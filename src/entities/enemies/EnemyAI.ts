@@ -410,7 +410,7 @@ export const EnemyAI = {
         if (isTier2) shouldCheckSeparation = (frameOffset % 5 === 0);
         if (isTier3) shouldCheckSeparation = false;
 
-        if (shouldCheckSeparation && e.state !== AIState.ATTACK_CHARGE && e.state !== AIState.ATTACKING) {
+        if (shouldCheckSeparation && e.state !== AIState.ATTACK_CHARGE && e.state !== AIState.ATTACKING && e.state !== AIState.GRAPPLE) {
             const nearbyEnemies = collisionGrid.getNearbyEnemies(e.mesh.position, SEPARATION_RADIUS);
             for (let i = 0; i < nearbyEnemies.length; i++) {
                 const other = nearbyEnemies[i];

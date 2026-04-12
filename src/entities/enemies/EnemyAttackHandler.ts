@@ -66,6 +66,7 @@ export const EnemyAttackHandler = {
                         e.state = AIState.GRAPPLE;
                         e.statusFlags |= EnemyFlags.GRAPPLING;
                         e.grappleDuration = 2.0 + Math.random() * 1.0;
+                        e.attackTimer = -1; // VINTERDÖD: Yield control to Grapple system
                     }
 
                     if (callbacks.spawnPart) {
@@ -85,6 +86,7 @@ export const EnemyAttackHandler = {
                         e.state = AIState.GRAPPLE;
                         e.statusFlags |= EnemyFlags.GRAPPLING;
                         e.grappleDuration = 1.5 + Math.random() * 0.5;
+                        e.attackTimer = -1; // VINTERDÖD: Yield control to Grapple system
                     }
                 }
                 callbacks.playSound(SoundID.ZOMBIE_ATTACK_SMASH);

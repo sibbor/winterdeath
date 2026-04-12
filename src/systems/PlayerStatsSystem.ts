@@ -371,6 +371,7 @@ export class PlayerStatsSystem implements System {
         if (type === DamageID.EXPLOSION) state.playerDeathState = PlayerDeathState.GIBBED;
         else if (type === DamageID.BURN) state.playerDeathState = PlayerDeathState.BURNED;
         else if (type === DamageID.DROWNING) state.playerDeathState = PlayerDeathState.DROWNED;
+        else if (type === DamageID.ELECTRIC) state.playerDeathState = PlayerDeathState.ELECTROCUTED;
 
         if (attacker && (attacker.statusFlags & EnemyFlags.BOSS) !== 0 && attacker.bossId !== undefined) {
             state.killerName = this.t(`enemies.bosses.${attacker.bossId}.name`);

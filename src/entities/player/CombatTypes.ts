@@ -30,7 +30,8 @@ export enum PlayerDeathState {
     GIBBED = 2,
     BURNED = 3,
     FREEZED = 4,
-    DROWNED = 5
+    DROWNED = 5,
+    ELECTROCUTED = 6
 }
 
 /**

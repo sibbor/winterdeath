@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System } from './System';
 import { PlayerDeathState, DamageType, DamageID } from '../entities/player/CombatTypes';
-import { PLAYER_CHARACTER } from '../content/constants';
+import { PLAYER_DEATH_TIMER } from '../content/constants';
 import { MATERIALS } from '../utils/assets';
 import { VoiceSounds } from '../utils/audio/AudioLib';
 import { HudSystem } from './HudSystem';
@@ -119,7 +119,7 @@ export class DeathSystem implements System {
             HudStore.update(hudData);
 
         } else if (this.deathPhaseRef.current === 'ANIMATION') {
-            if (simTime - state.deathStartTime > 2500) {
+            if (simTime - state.deathStartTime > PLAYER_DEATH_TIMER) {
                 this.deathPhaseRef.current = 'MESSAGE';
                 this.setDeathPhase('MESSAGE');
             }
@@ -137,6 +137,8 @@ export class DeathSystem implements System {
 
             const isExploded = state.playerDeathState === PlayerDeathState.GIBBED;
             const isBurning = state.playerDeathState === PlayerDeathState.BURNED;
+            const isDrowning = state.playerDeathState === PlayerDeathState.DROWNED;
+            const isElectrocuted = state.playerDeathState === PlayerDeathState.ELECTROCUTED;
             const isBiting = state.killerType === DamageID.BITE;
 
 
@@ -163,7 +165,7 @@ export class DeathSystem implements System {
                 _v2.set(state.deathVel.x, 0, state.deathVel.z);
                 _v1.copy(pgPos).sub(_v2);
                 playerGroup.lookAt(_v1);
-            } else if (!isExploded && !state.playerBloodSpawned && renderTime - state.deathStartTime > 350) {
+            } else if (!isExploded && !isBurning && !isDrowning && !isElectrocuted && !state.playerBloodSpawned && renderTime - state.deathStartTime > 350) {
                 state.playerBloodSpawned = true;
                 const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 2.5 * baseScale, MATERIALS.bloodDecal);

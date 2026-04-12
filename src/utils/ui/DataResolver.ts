@@ -312,8 +312,15 @@ export const DataResolver = {
     /**
      * Resolves the localized description for an Enemy Attack.
      */
-    getAttackDescription(type: EnemyAttackType): string {
-        const attackKey = EnemyAttackType[type];
+    getAttackDescription(type: EnemyAttackType | DamageID): string {
+        // 1. Try EnemyAttackType Enum lookup
+        let attackKey = EnemyAttackType[type as number];
+        
+        // 2. Fallback to DamageID Enum lookup (Environmental causes)
+        if (!attackKey) {
+            attackKey = DamageID[type as number];
+        }
+
         return attackKey ? `attacks.${attackKey}.description` : 'ui.description_missing';
     },
 

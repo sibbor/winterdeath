@@ -11,6 +11,8 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
     const [isMinimized, setIsMinimized] = useState(() => localStorage.getItem('vinterdod_debug_minimized') === 'true');
     const [systemsExpanded, setSystemsExpanded] = useState(true);
     const [showLogs, setShowLogs] = useState(false);
+    const [tick, setTick] = useState(0);
+    const forceUpdate = () => setTick(t => t + 1);
 
     // --- HIGH-FREQUENCY REFS ---
     const fpsRef = useRef<HTMLSpanElement>(null);
@@ -185,7 +187,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                                     {systems.map(sys => {
                                         const timing = timings.breakdown[sys.id];
                                         return (
-                                            <div key={sys.id} onClick={(e) => { e.stopPropagation(); engine?.setSystemEnabled(sys.id, !sys.enabled); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'}`}>
+                                            <div key={sys.id} onClick={(e) => { e.stopPropagation(); engine?.setSystemEnabled(sys.id, !sys.enabled); forceUpdate(); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'}`}>
                                                 <span className="truncate mr-2">{sys.id}</span>
                                                 <span className="text-white/40">{timing !== undefined ? `${timing}ms` : '–'}</span>
                                             </div>
@@ -205,13 +207,14 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                                         e.stopPropagation();
                                         monitor.logsHijackEnabled = !monitor.logsHijackEnabled;
                                         if (monitor.logsHijackEnabled) setShowLogs(true);
+                                        forceUpdate();
                                     }}
                                     className={`px-2 py-0.5 rounded transition-colors font-bold tracking-wider ${monitor.logsHijackEnabled ? 'bg-blue-500 text-white' : 'bg-white/10 text-white/40 hover:bg-white/20'}`}
                                 >
                                     HIJACK
                                 </button>
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); setShowLogs(v => !v); }}
+                                    onClick={(e) => { e.stopPropagation(); setShowLogs(v => !v); forceUpdate(); }}
                                     className={`px-2 py-0.5 rounded transition-colors font-bold tracking-wider ${showLogs ? 'bg-green-500 text-black' : 'bg-white/10 text-white/40 hover:bg-white/20'}`}
                                 >
                                     LOG
@@ -221,6 +224,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         monitor.startRecording();
+                                        forceUpdate();
                                     }}
                                     className={`px-2 py-0.5 rounded transition-colors font-bold tracking-wider ${monitor.isRecordingActive
                                         ? 'bg-gray-500/20 text-gray-400 cursor-not-allowed animate-pulse'
@@ -231,15 +235,15 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                                 </button>
                             </div>
                         </div>
-                        <div onClick={(e) => { e.stopPropagation(); monitor.consoleLoggingEnabled = !monitor.consoleLoggingEnabled; }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
+                        <div onClick={(e) => { e.stopPropagation(); monitor.consoleLoggingEnabled = !monitor.consoleLoggingEnabled; forceUpdate(); }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
                             <span className="text-white/60">Engine Perf</span>
                             <span className={`font-bold ${monitor.consoleLoggingEnabled ? 'text-green-400' : 'text-red-400'}`}>{monitor.consoleLoggingEnabled ? 'ON' : 'OFF'}</span>
                         </div>
-                        <div onClick={(e) => { e.stopPropagation(); monitor.aiLoggingEnabled = !monitor.aiLoggingEnabled; }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
+                        <div onClick={(e) => { e.stopPropagation(); monitor.aiLoggingEnabled = !monitor.aiLoggingEnabled; forceUpdate(); }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
                             <span className="text-white/60">AI</span>
                             <span className={`font-bold ${monitor.aiLoggingEnabled ? 'text-green-400' : 'text-red-400'}`}>{monitor.aiLoggingEnabled ? 'ON' : 'OFF'}</span>
                         </div>
-                        <div onClick={(e) => { e.stopPropagation(); monitor.shaderLoggingEnabled = !monitor.shaderLoggingEnabled; }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
+                        <div onClick={(e) => { e.stopPropagation(); monitor.shaderLoggingEnabled = !monitor.shaderLoggingEnabled; forceUpdate(); }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
                             <span className="text-white/60">Shaders</span>
                             <span className={`font-bold ${monitor.shaderLoggingEnabled ? 'text-green-400' : 'text-red-400'}`}>{monitor.shaderLoggingEnabled ? 'ON' : 'OFF'}</span>
                         </div>
