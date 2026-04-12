@@ -356,8 +356,15 @@ export const WeaponHandler = {
                     WeaponSounds.playFlamethrowerEnd();
 
                     // VINTERDÖD: Spawn muzzle smoke on shutdown
-                    _v1.set(0.3, 1.4, 0.8).applyQuaternion(playerGroup.quaternion);
-                    _v2.copy(playerGroup.position).add(_v1);
+                    const gNode = playerGroup.getObjectByName('gun') || playerGroup.getObjectByName('weapon');
+                    if (gNode) {
+                        gNode.getWorldPosition(_v2);
+                        _v1.set(0, 0, 0.4).applyQuaternion(playerGroup.quaternion);
+                        _v2.add(_v1);
+                    } else {
+                        _v1.set(0.3, 1.4, 0.8).applyQuaternion(playerGroup.quaternion);
+                        _v2.copy(playerGroup.position).add(_v1);
+                    }
                     WeaponFX.createMuzzleSmoke(_v2);
                 }
             }
@@ -382,8 +389,16 @@ export const WeaponHandler = {
                     const tracker = session.getSystem('damage_tracker_system') as any;
                     if (tracker) tracker.recordShot(session, state.activeWeapon);
 
-                    _v1.set(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion);
-                    _v2.copy(playerGroup.position).add(_v1);
+                    const gNode = playerGroup.getObjectByName('gun') || playerGroup.getObjectByName('weapon');
+                    if (gNode) {
+                        gNode.getWorldPosition(_v2);
+                        // Forward 0.4 units to tip of the barrel using player's rotation
+                        _v1.set(0, 0, 0.4).applyQuaternion(playerGroup.quaternion);
+                        _v2.add(_v1);
+                    } else {
+                        _v1.set(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion);
+                        _v2.copy(playerGroup.position).add(_v1);
+                    }
 
                     WeaponSounds.playShot(state.activeWeapon);
                     haptic.gunshot();
