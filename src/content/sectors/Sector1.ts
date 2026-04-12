@@ -8,7 +8,6 @@ import { VegetationGenerator } from '../../core/world/generators/VegetationGener
 import { VEGETATION_TYPE } from '../../content/environment';
 import { POI_TYPE } from '../../content/pois';
 import { generateCaveSystem } from './Sector1_Cave';
-import { UiSounds } from '../../utils/audio/AudioLib';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { CAMERA_HEIGHT } from '../constants';
@@ -172,7 +171,7 @@ export const Sector1: SectorDef = {
     },
     groundType: 'SNOW',
     groundSize: { width: 600, depth: 600 },
-    ambientLoop: 'ambient_wind_loop',
+    ambientLoop: SoundID.AMBIENT_STORM,
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
     familySpawn: LOCATIONS.SPAWN.FAMILY,
     bossSpawn: LOCATIONS.SPAWN.BOSS,
@@ -450,7 +449,7 @@ export const Sector1: SectorDef = {
                     if (playerPos) {
                         sectorState.walkTarget = sectorState.walkTarget || new THREE.Vector3();
                         sectorState.walkTarget.set(playerPos.x, 0, playerPos.z);
-                        
+
                         _vS1.subVectors(playerPos, jordan?.position || new THREE.Vector3(25, 0, -193)).normalize();
                         sectorState.walkTarget.sub(_vS1.multiplyScalar(2.0));
                     } else {
@@ -470,8 +469,10 @@ export const Sector1: SectorDef = {
                             isMoving: true, isRushing: false, isDodging: false, dodgeStartTime: 0,
                             staminaRatio: 1.0, isSpeaking: gameState.speakingUntil > now,
                             isThinking: false, isIdleLong: false, isSwimming: false, isWading: false,
-                            seed: jordan.userData.seed || 0, renderTime: gameState.renderTime || now
-                        }, now);
+                            seed: jordan.userData.seed || 0, 
+                            renderTime: gameState.renderTime || now,
+                            simTime: now
+                        }, gameState.renderTime || now);
                     }
 
                     if (jordan.position.distanceTo(target) < 1.5) {
@@ -534,7 +535,7 @@ export const Sector1: SectorDef = {
                         if (r.id === 6 && Math.random() > 0.8) type = EnemyType.TANK;
                         if (r.id === 5 && Math.random() > 0.7) type = EnemyType.BOMBER;
                         else if (Math.random() > 0.7) type = EnemyType.RUNNER;
-                        
+
                         _vS1.set(r.x + offX, 0, r.z + offZ);
                         events.spawnZombie(type, _vS1);
                     }

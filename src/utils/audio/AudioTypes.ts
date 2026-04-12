@@ -19,14 +19,13 @@ export enum SoundID {
     UI_DISCOVERY = 9,
 
     // --- GAMEPLAY / WORLD ---
-    FOOTSTEP_L = 10,
-    FOOTSTEP_R = 11,
     FOOTSTEP_SNOW = 140,
     FOOTSTEP_METAL = 141,
     FOOTSTEP_WOOD = 142,
     FOOTSTEP_WATER = 143,
     FOOTSTEP_DIRT = 144,
     FOOTSTEP_GRAVEL = 145,
+    FOOTSTEP_VEGETATION = 146,
     IMPACT_FLESH = 12,
     IMPACT_METAL = 13,
     IMPACT_WOOD = 14,
@@ -34,13 +33,13 @@ export enum SoundID {
     IMPACT_STONE = 16,
     IMPACT_WATER = 105,
     HEAVY_SMASH = 104,
-    
+
     CHEST_OPEN = 17,
     LOOT_SCRAP = 18,
     DOOR_OPEN = 19,
     DOOR_SHUT = 20,
     DOOR_KNOCK = 21,
-    
+
     EXPLOSION = 22,
     GRENADE_IMPACT = 23,
     MOLOTOV_IMPACT = 24,
@@ -57,8 +56,7 @@ export enum SoundID {
     SHOT_MINIGUN = 35,
     SHOT_ARC_CANNON = 36,
     SHOT_FLAMETHROWER = 37,
-    SHOT_GRENADE_LAUNCHER = 38,
-    
+
     WEAPON_EMPTY = 39,
     WEAPON_RELOAD = 40,
     WEAPON_SWITCH = 41,
@@ -68,12 +66,12 @@ export enum SoundID {
     ZOMBIE_GROWL_RUNNER = 51,
     ZOMBIE_GROWL_TANK = 52,
     ZOMBIE_GROWL_BOMBER = 53,
-    
+
     ZOMBIE_ATTACK_HIT = 54,
     ZOMBIE_ATTACK_BITE = 55,
     ZOMBIE_ATTACK_SMASH = 56,
     ZOMBIE_ATTACK_SCREECH = 57,
-    
+
     ZOMBIE_DEATH_SHOT = 60,
     ZOMBIE_DEATH_EXPLODE = 61,
     ZOMBIE_DEATH_BURN = 62,
@@ -90,8 +88,9 @@ export enum SoundID {
     AMBIENT_CAVE = 502,
     AMBIENT_METAL = 503,
     AMBIENT_FIRE = 504,
-    AMBIENT_RADIO = 505,
+    AMBIENT_FOREST = 506,
 
+    RADIO = 505,
     DASH = 83,
 
     // --- VEHICLES ---
@@ -99,18 +98,17 @@ export enum SoundID {
     VEHICLE_ENGINE_CAR = 91,
     VEHICLE_SKID = 92,
     VEHICLE_IMPACT = 93,
-    VEHICLE_HORN = 94,
 
     // --- WILDLIFE ---
     OWL_HOOT = 95,
     BIRD_AMBIENCE = 96,
 
     // --- MISC COMBAT ---
-    BITE = 97,
     PASSIVE_GAINED = 98,
     BUFF_GAINED = 100,
     DEBUFF_GAINED = 101,
     STEAM_HISS = 99,
+    HEARTBEAT = 115,
 }
 
 export enum FXID {

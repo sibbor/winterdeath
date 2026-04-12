@@ -26,7 +26,8 @@ export enum AIState {
     SEARCH = 2,
     CHASE = 3,
     ATTACK_CHARGE = 4,
-    ATTACKING = 5
+    ATTACKING = 5,
+    GRAPPLE = 6
 }
 
 export enum EnemyDeathState {

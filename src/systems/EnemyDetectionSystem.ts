@@ -165,7 +165,8 @@ export class EnemyDetectionSystem implements System {
                     e.searchTimer = 0;
                     e.awareness = 1.0;
                     e.lastSeenTime = simTime;
-                    e.state = AIState.CHASE;
+                    const isAggressive = e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING;
+                    if (!isAggressive) e.state = AIState.CHASE;
 
                     // --- VINTERDÖD: Discovery Logic ---
                     const stats = state.sessionStats;

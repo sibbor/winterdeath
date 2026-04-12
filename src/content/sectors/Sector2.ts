@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
-import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
-import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
+import { SoundID } from '../../utils/audio/AudioTypes';
 import { VEGETATION_TYPE } from '../../content/environment';
 import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
 import { CAMERA_HEIGHT } from '../constants';
@@ -102,7 +101,7 @@ export const Sector2: SectorDef = {
 
     // Set to SNOW as requested for clear visual debugging
     groundType: 'SNOW',
-    ambientLoop: 'ambient_forest_loop',
+    ambientLoop: SoundID.AMBIENT_CAVE,
 
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
     familySpawn: LOCATIONS.SPAWN.FAMILY,

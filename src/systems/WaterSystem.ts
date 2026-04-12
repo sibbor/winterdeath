@@ -60,7 +60,9 @@ export class WaterSurface {
         // We ALWAYS use PlaneGeometry now, even for circles.
         // This ensures the mesh has internal vertices for waves/ripples to displace.
         // High resolution segments for crisp faceted jewelry look.
-        const res = Math.min(64, Math.max(16, Math.floor(Math.max(width, depth) / 4)));
+        // Increase resolution (res) to ensure Nyquist frequency for waveScale=0.45.
+        // We need ~1 vertex per meter for stable dFdx derivatives on 2m waves.
+        const res = Math.min(128, Math.max(32, Math.floor(Math.max(width, depth) * 0.8)));
         const geometry = new THREE.PlaneGeometry(
             shape === 'circle' ? Math.max(width, depth) : width,
             shape === 'circle' ? Math.max(width, depth) : depth,
@@ -119,7 +121,6 @@ export class WaterSystem implements System {
     public id = 'water';
     public enabled = true;
     public persistent = true;
-    public isFixedStep?: boolean;
 
     surfaces: WaterSurface[] = [];
     waterBodies: WaterBody[] = [];
@@ -617,6 +618,12 @@ export class WaterSystem implements System {
         this.rippleIndex = (this.rippleIndex + 1) % WATER_SYSTEM.MAX_RIPPLES;
     }
 
+    public spawnExplosionRipple(x: number, z: number, now: number, strength: number = 1.0): void {
+        this.spawnRipple(x, z, now, strength);
+        this.rippleData[this.rippleIndex].set(x, z, now * 2.0, strength / 2.0);
+        this.rippleIndex = (this.rippleIndex + 1) % WATER_SYSTEM.MAX_RIPPLES;
+    }
+
     private updateInstancedLilies(dt: number, now: number): void {
         if (!this.lilyPads || this.lilyData.length === 0) return;
 
@@ -679,13 +686,7 @@ export class WaterSystem implements System {
         }
     }
 
-    public spawnExplosionRipple(x: number, z: number, now: number, strength: number = 1.0): void {
-        this.spawnRipple(x, z, now, strength);
-        this.rippleData[this.rippleIndex].set(x, z, now * 2.0, strength / 2.0);
-        this.rippleIndex = (this.rippleIndex + 1) % WATER_SYSTEM.MAX_RIPPLES;
-    }
-
-    public checkBuoyancy(x: number, y: number, z: number, now: number = 0): void {
+    public checkBuoyancy(x: number, y: number, z: number, now: number): void {
         _buoyancyResult.inWater = false;
         _buoyancyResult.depth = 0;
         _buoyancyResult.maxDepth = 0;
@@ -726,15 +727,15 @@ export class WaterSystem implements System {
                 _buoyancyResult.inWater = true;
                 _buoyancyResult.maxDepth = body.def.maxDepth;
 
-                // Sync perfectly with HYPER-SHARP "V-shaped" waves
+                // Sync perfectly with the diagonal phase (x + z) and original timing
                 const waveScale = 0.45;
-                const phaseXZ = x * this.waterDirection.x + z * this.waterDirection.y;
+                const phaseXZ = x + z;
 
-                const sin1 = Math.sin(phaseXZ * waveScale - now * 0.0015) * 0.5 + 0.5;
-                const sin2 = Math.sin(phaseXZ * (waveScale * 1.6) + z * 0.2 - now * 0.002) * 0.5 + 0.5;
+                const sin1 = Math.sin(phaseXZ * waveScale - now * 0.001) * 0.5 + 0.5;
+                const sin2 = Math.sin(phaseXZ * 0.7 - now * 0.0008) * 0.5 + 0.5;
 
-                const w1 = (sin1 * sin1 * sin1) * 0.45;
-                const w2 = (sin2 * sin2) * 0.22;
+                const w1 = pow(sin1, 3.2) * 0.45;
+                const w2 = pow(sin2, 2.5) * 0.35;
 
                 const waveStrength = 0.4 + (this.waterStrength);
 
@@ -770,4 +771,9 @@ export class WaterSystem implements System {
         if (c.makeNoise) this.emitNoiseCb = c.makeNoise;
         if (c.spawnPart) this.spawnPartCb = c.spawnPart;
     }
+}
+
+// Math helpers
+function pow(a: number, b: number): number {
+    return Math.pow(Math.max(0, a), b);
 }

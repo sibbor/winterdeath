@@ -22,22 +22,23 @@ import { SoundID } from '../utils/audio/AudioTypes';
 
 // For footstep sounds
 export const FOOTSTEP_MAP: Partial<Record<MATERIAL_TYPE, SoundID>> = {
-    [MaterialType.GENERIC]: SoundID.FOOTSTEP_L,
+    [MaterialType.GENERIC]: SoundID.FOOTSTEP_SNOW,
     [MaterialType.SNOW]: SoundID.FOOTSTEP_SNOW,
     [MaterialType.WOOD]: SoundID.FOOTSTEP_WOOD,
     [MaterialType.METAL]: SoundID.FOOTSTEP_METAL,
-    [MaterialType.CONCRETE]: SoundID.FOOTSTEP_L,
-    [MaterialType.STONE]: SoundID.FOOTSTEP_L,
+    [MaterialType.CONCRETE]: SoundID.FOOTSTEP_SNOW,
+    [MaterialType.STONE]: SoundID.FOOTSTEP_SNOW,
     [MaterialType.DIRT]: SoundID.FOOTSTEP_DIRT,
     [MaterialType.GRAVEL]: SoundID.FOOTSTEP_GRAVEL,
-    [MaterialType.ASPHALT]: SoundID.FOOTSTEP_L,
-    [MaterialType.WATER]: SoundID.FOOTSTEP_WATER
+    [MaterialType.ASPHALT]: SoundID.FOOTSTEP_SNOW,
+    [MaterialType.WATER]: SoundID.FOOTSTEP_WATER,
+    [MaterialType.PLANT]: SoundID.FOOTSTEP_VEGETATION
 };
 
 // For impact sounds
 export const IMPACT_MAP: Partial<Record<MATERIAL_TYPE, SoundID>> = {
     [MaterialType.GENERIC]: SoundID.IMPACT_STONE,
-    [MaterialType.SNOW]: SoundID.FOOTSTEP_L,
+    [MaterialType.SNOW]: SoundID.NONE,
     [MaterialType.WOOD]: SoundID.IMPACT_WOOD,
     [MaterialType.METAL]: SoundID.IMPACT_METAL,
     [MaterialType.CONCRETE]: SoundID.IMPACT_STONE,

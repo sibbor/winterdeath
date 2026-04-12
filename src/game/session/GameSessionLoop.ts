@@ -427,9 +427,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             const maxHp = sb[PlayerStatID.MAX_HP];
 
             if (hp < maxHp * HEALTH_CRITICAL_THRESHOLD && !isDead) {
-                if (simTime - state.lastHeartbeat > 800) { // VINTERDÖD FIX: Använd simTime
+                if (simTime - state.lastHeartbeat > 800) {
                     state.lastHeartbeat = simTime;
-                    audioEngine.playSound(SoundID.PASSIVE_GAINED, 0.4);
+                    audioEngine.playSound(SoundID.HEARTBEAT, 0.5);
                 }
             }
 
@@ -596,15 +596,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         FootprintSystem.update(delta);
         monitor.end('footprints');
 
-        // 10. FX System
-        monitor.begin('fx');
-        try {
-            FXSystem.update(engine.scene, state.particles, state.bloodDecals, _fxCallbacks, delta, simTime, renderTime);
-        } catch (e) {
-            console.error("[GameSessionLoop] FXSystem.update failed:", e);
-        }
-        monitor.end('fx');
-
         // 11. Camera Processing
         if (!isCinematic && !isBossIntro) {
             if (refs.cameraOverrideRef.current && refs.cameraOverrideRef.current.active) {
@@ -769,7 +760,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 water,
                 delta,
                 simTime,
-                renderTime
+                renderTime,
+                state.statusFlags
             );
             monitor.end('enemies');
 

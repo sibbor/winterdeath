@@ -178,7 +178,8 @@ export const EnemySpawner = {
 
             fallStartY: 0,
             _accumulatedDamage: 0,
-            _lastDamageTextTime: 0
+            _lastDamageTextTime: 0,
+            attackOffset: 0
         };
 
         const s = enemy.originalScale;
@@ -197,6 +198,12 @@ export const EnemySpawner = {
         g.userData.ashPermanent = false;
         g.userData.isRagdolling = false;
         g.userData.targetPos = new THREE.Vector3();
+        g.userData.swingX = 0;
+        g.userData.swingZ = 0;
+        g.userData.swingVelX = 0;
+        g.userData.swingVelZ = 0;
+        g.userData.lastGrappleDmg = 0;
+        g.userData.prevP = new THREE.Vector3(0, -1000, 0);
 
         const enemyIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
         enemyIndicatorRing.rotation.x = -Math.PI / 2;
@@ -298,13 +305,20 @@ export const EnemySpawner = {
 
             fallStartY: 0,
             _accumulatedDamage: 0,
-            _lastDamageTextTime: 0
+            _lastDamageTextTime: 0,
+            attackOffset: 0
         };
 
         boss.userData.entity = enemy;
         boss.userData.targetPos = new THREE.Vector3();
         boss.userData.spinVel = new THREE.Vector3();
         boss.userData.hitDir = new THREE.Vector3();
+        boss.userData.swingX = 0;
+        boss.userData.swingZ = 0;
+        boss.userData.swingVelX = 0;
+        boss.userData.swingVelZ = 0;
+        boss.userData.lastGrappleDmg = 0;
+        boss.userData.prevP = new THREE.Vector3(0, -1000, 0);
 
         // Ensure boss has an indicator ring for its special attacks
         const bossIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);

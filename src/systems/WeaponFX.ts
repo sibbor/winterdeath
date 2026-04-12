@@ -266,17 +266,20 @@ export const WeaponFX = {
         ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), undefined, 1.5, 0.1);
         ctx.spawnPart(pos.x, pos.y + 0.1, pos.z, 'shockwave', 2, undefined, _v2, undefined, radius * 0.2, 0.4);
         ctx.spawnPart(pos.x, pos.y + 0.05, pos.z, 'blastRadius', 1, undefined, _v2, undefined, radius, 1.2);
-        
+
         // Massive Intensity Buff (5.0 -> 25.0)
         WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xffaa00, 25.0, radius * 6, 0.5, 'fire');
     },
 
     createMolotovImpact: (pos: THREE.Vector3, radius: number, hitWater: boolean, ctx: any) => {
-        if (hitWater) return;
+        if (hitWater) {
+            ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 12);
+            return;
+        }
         ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'glass', 15);
         ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), 0xff8800, 1.0, 0.15);
         ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'large_fire', 8, undefined, undefined, undefined, 1.8);
-        
+
         // Intensity Buff (3.0 -> 15.0)
         WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xff6600, 15.0, radius * 5, 0.4, 'fire');
         ctx.spawnDecal(pos.x, pos.z, radius * 2.0, MATERIALS.scorchDecal);
@@ -312,26 +315,65 @@ export const WeaponFX = {
     },
 
     createFlashbangImpact: (pos: THREE.Vector3, hitWater: boolean, ctx: any) => {
-        if (hitWater) return;
+        if (hitWater) {
+            ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 8);
+            return;
+        }
         ctx.spawnPart(pos.x, pos.y + 2, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), undefined, 8.0, 0.5);
         // Blinding Intensity (10.0 -> 45.0)
         WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xffffff, 45.0, 60.0, 1.5);
         ctx.spawnDecal(pos.x, pos.z, 2.0, MATERIALS.scorchDecal);
     },
 
-    createFlame: (start: THREE.Vector3, direction: THREE.Vector3) => {
+    createFlame: (start: THREE.Vector3, direction: THREE.Vector3, range: number = 10) => {
         const spread = 0.30;
         _v1.copy(direction).add(_v2.set((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread)).normalize();
+
+        const speed = 35 + Math.random() * 15;
+        // VINTERDÖD FIX: Dynamic Life based on Speed vs Range to ensure full reach
+        const life = (range / speed) * (1.1 + Math.random() * 0.2);
+
         const req = FXSystem._getSpawnRequest();
         req.scene = null as any;
         req.x = start.x; req.y = start.y; req.z = start.z;
         req.type = 'flamethrower_fire';
-        req.customVel.copy(_v1).multiplyScalar(35 + Math.random() * 20);
+        req.customVel.copy(_v1).multiplyScalar(speed);
         req.hasCustomVel = true;
-        req.scale = 0.1 + Math.random() * 0.2;
+        req.scale = 0.15 + Math.random() * 0.25;
         req.color = Math.random() > 0.8 ? 0xffcc00 : (Math.random() > 0.4 ? 0xff4400 : 0xaa1100);
-        req.life = 0.2 + Math.random() * 0.1; // Standardized to seconds
+        req.life = life;
         FXSystem.essentialQueue.push(req);
+    },
+
+    createMuzzleFire: (start: THREE.Vector3, direction: THREE.Vector3, scale: number = 1.0) => {
+        // High-density, short-lived muzzle fire
+        for (let i = 0; i < 3; i++) {
+            const req = FXSystem._getSpawnRequest();
+            req.scene = null as any;
+            req.x = start.x; req.y = start.y; req.z = start.z;
+            req.type = 'fire';
+            _v1.copy(direction).add(_v2.set((Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4)).normalize();
+            req.customVel.copy(_v1).multiplyScalar(4 + Math.random() * 3);
+            req.hasCustomVel = true;
+            req.scale = (0.2 + Math.random() * 0.3) * scale;
+            req.life = 0.08 + Math.random() * 0.08;
+            FXSystem.essentialQueue.push(req);
+        }
+    },
+
+    createMuzzleSmoke: (start: THREE.Vector3) => {
+        // Shutdown/Overheat smoke puff
+        for (let i = 0; i < 8; i++) {
+            const req = FXSystem._getSpawnRequest();
+            req.scene = null as any;
+            req.x = start.x; req.y = start.y; req.z = start.z;
+            req.type = 'smoke';
+            req.customVel.set((Math.random() - 0.5) * 2, 1 + Math.random() * 2, (Math.random() - 0.5) * 2);
+            req.hasCustomVel = true;
+            req.scale = 0.5 + Math.random() * 0.8;
+            req.life = 0.8 + Math.random() * 1.2;
+            FXSystem.essentialQueue.push(req);
+        }
     },
 
     createMuzzleFlash: (start: THREE.Vector3, direction: THREE.Vector3, isCyan: boolean = false) => {
@@ -341,9 +383,9 @@ export const WeaponFX = {
         req.type = 'fire';
         req.customVel.copy(direction).multiplyScalar(3 + Math.random() * 2);
         req.hasCustomVel = true;
-        req.scale = 0.3 + Math.random() * 0.3;
-        req.color = isCyan ? 0x00bfff : 0xffcc00;
-        req.life = 0.05 + Math.random() * 0.05; // Standardized to seconds (short, punchy strobe)
+        req.scale = 0.8 + Math.random() * 0.5;
+        req.color = isCyan ? 0x00ffff : 0xffcc00;
+        req.life = 0.05 + Math.random() * 0.05;
         FXSystem.essentialQueue.push(req);
     }
 };

@@ -60,6 +60,7 @@ const INITIAL_HUD_STATE: HudState = {
     interactionPrompt: { active: false, type: InteractionType.NONE, label: '', x: 0, y: 0, targetId: '' },
     hudVisible: false,
     sectorName: '',
+    isMobileDevice: false,
     discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 },
 
     // Nested structures pre-allocated to lock Hidden Class "Shapes"
@@ -172,6 +173,25 @@ class HudStoreClass {
                 this.listeners.pop();
             }
         };
+    }
+
+    /**
+     * Trigger a virtual key event (e.g. for mobile interaction taps).
+     * Dispatches a global event that the InputManager listens for.
+     */
+    public triggerInteraction(pressed: boolean): void {
+        window.dispatchEvent(new CustomEvent('hud-virtual-key', { 
+            detail: { key: 'e', pressed } 
+        }));
+    }
+
+    /**
+     * Trigger any virtual key pulse.
+     */
+    public triggerVirtualKey(key: string, pressed: boolean): void {
+        window.dispatchEvent(new CustomEvent('hud-virtual-key', { 
+            detail: { key, pressed } 
+        }));
     }
 
     /**

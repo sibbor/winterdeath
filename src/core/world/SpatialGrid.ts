@@ -36,10 +36,10 @@ export class SpatialGrid {
     private interactableCells: THREE.Object3D[][];
     private dynamicTriggers: any[] = []; // Triggers with familyId/ownerId
 
-    // --- GROUND MATERIAL GRID (DOD Flat TypedArray) ---
     private readonly GRID_SIZE = 1024;
     private readonly GRID_HALF = 512;
     private groundCells: Uint8Array;
+    private vegetationCells: Uint8Array;
 
     // Hook for external heightmap resolution
     private terrainHeightFn: ((x: number, z: number) => number) | null = null;
@@ -47,6 +47,7 @@ export class SpatialGrid {
     constructor(cellSize: number = 15) {
         this.cellSize = cellSize;
         this.groundCells = new Uint8Array(this.GRID_SIZE * this.GRID_SIZE);
+        this.vegetationCells = new Uint8Array(this.GRID_SIZE * this.GRID_SIZE);
 
         // Pre-allocate the entire grid to force V8 into PACKED_ELEMENTS mode
         this.obstacleCells = new Array(HASH_SIZE);
@@ -142,6 +143,42 @@ export class SpatialGrid {
      */
     fillGroundMaterial(material: number) {
         this.groundCells.fill(material);
+    }
+
+    /**
+     * Registers vegetation presence (e.g. Grass, Wheat) in the flat grid.
+     */
+    registerVegetation(x: number, z: number, radius: number, material: number) {
+        const startX = Math.max(0, Math.floor((x - radius) + this.GRID_HALF));
+        const endX = Math.min(this.GRID_SIZE - 1, Math.floor((x + radius) + this.GRID_HALF));
+        const startZ = Math.max(0, Math.floor((z - radius) + this.GRID_HALF));
+        const endZ = Math.min(this.GRID_SIZE - 1, Math.floor((z + radius) + this.GRID_HALF));
+
+        const radSq = radius * radius;
+
+        for (let ix = startX; ix <= endX; ix++) {
+            for (let iz = startZ; iz <= endZ; iz++) {
+                const dx = (ix - this.GRID_HALF) - x;
+                const dz = (iz - this.GRID_HALF) - z;
+                if (dx * dx + dz * dz <= radSq) {
+                    this.vegetationCells[iz * this.GRID_SIZE + ix] = material;
+                }
+            }
+        }
+    }
+
+    /**
+     * O(1) lookup for vegetation material at specific world coordinates.
+     */
+    getVegetationAt(x: number, z: number): number {
+        const ix = Math.floor(x + this.GRID_HALF);
+        const iz = Math.floor(z + this.GRID_HALF);
+
+        if (ix < 0 || ix >= this.GRID_SIZE || iz < 0 || iz >= this.GRID_SIZE) {
+            return 0; // MaterialType.NONE
+        }
+
+        return this.vegetationCells[iz * this.GRID_SIZE + ix];
     }
 
     // --- OBSTACLE MANAGEMENT ---
@@ -481,5 +518,7 @@ export class SpatialGrid {
         this._touchedEnemyCells.length = 0;
         this.dynamicTriggers.length = 0;
         this.terrainHeightFn = null;
+        this.groundCells.fill(0);
+        this.vegetationCells.fill(0);
     }
 }

@@ -80,8 +80,8 @@ export const VehicleManager = {
         state.vehicle.type = def.type;
         state.vehicle.active = true;
         const category = def.category === 'BOAT' ? 'BOAT' : 'CAR';
-        VehicleSounds.playEnter(category);
-        vehicle.userData.engineVoiceIdx = VehicleSounds.startEngine(category);
+        //VehicleSounds.playEnter(category);
+        //vehicle.userData.engineVoiceIdx = VehicleSounds.startEngine(category);
         vel.set(0, 0, 0);
         angVel.set(0, 0, 0);
 

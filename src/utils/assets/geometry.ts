@@ -118,23 +118,32 @@ const createSplatterGeo = () => {
     return geo;
 };
 
-const createBloodSplatGeo = () => {
-    const w = 0.3;
-    const h = 0.5;
+const createBloodSplatterGeo = () => {
+    // VINTERDÖD: High-fidelity blood droplet (crossed planes)
+    // Larger and more elongated than standard splash to feel heavier/visceral
+    const w = 0.35;
+    const h = 0.6;
+
     const plane1 = new THREE.PlaneGeometry(w, h);
-    plane1.translate(0, h / 2, 0);
+    plane1.translate(0, h / 2, 0); 
+
     const plane2 = plane1.clone();
     plane2.rotateY(Math.PI / 2);
+
     const geo = BufferGeometryUtils.mergeGeometries([plane1, plane2]);
     geo.computeVertexNormals();
+
     const count = geo.attributes.position.count;
     const colors = new Float32Array(count * 3);
     const pos = geo.attributes.position;
-    const topColor = new THREE.Color(0xaa0000);
-    const bottomColor = new THREE.Color(0x440000);
+    
+    // Blood Red Gradient
+    const topColor = new THREE.Color(0x880000); 
+    const bottomColor = new THREE.Color(0x330000); 
+
     for (let i = 0; i < count; i++) {
-        const y = pos.getY(i);
-        const t = (y + 1) / 2;
+        const y = pos.getY(i); 
+        const t = (y / h); 
         const c = topColor.clone().lerp(bottomColor, 1.0 - t);
         colors[i * 3] = c.r;
         colors[i * 3 + 1] = c.g;
@@ -143,6 +152,7 @@ const createBloodSplatGeo = () => {
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     return geo;
 };
+
 
 const createImpactSplatGeo = () => {
     const w = 0.35;
@@ -245,9 +255,9 @@ export const GEOMETRY = {
     flame: new THREE.TetrahedronGeometry(0.5, 1),
     reflexShield: new THREE.SphereGeometry(1.2, 32, 32),
     showInPreloader: true, // Marker for preloader
-    bloodSplat: createBloodSplatGeo(),
     impactSplat: createImpactSplatGeo(),
     splash: createSplashGeo(),
+    bloodSplatter: createBloodSplatterGeo(),
     buff_shield_bubble: new THREE.SphereGeometry(1.2, 32, 32),
 
     // Zombie:

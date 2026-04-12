@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Enemy, ENEMY_ATTACK_RANGE } from '../../entities/enemies/EnemyTypes';
+import { Enemy, ENEMY_ATTACK_RANGE, EnemyType, AIState, EnemyFlags } from '../../entities/enemies/EnemyTypes';
 import { AttackDefinition, EnemyAttackType, DamageType, DamageID } from '../../entities/player/CombatTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { SoundID } from '../../utils/audio/AudioTypes';
@@ -16,10 +16,10 @@ export const EnemyAttackHandler = {
         spawnPart?: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void,
         applyDamage?: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => void
     }, delta: number, simTime: number, renderTime: number) => {
-
         if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
-            const attackName = DataResolver.getAttackName(att.type);
-            console.log(`[EnemyAttackHandler] ${e.type}_${e.id} attacking with ${attackName} (${att.damage} dmg)`);
+            const attackName = DataResolver.getAttackName(att.type, true);
+            const enemyName = DataResolver.getEnemyName(e.type, e.bossId, true);
+            console.log(`[EnemyAttackHandler] ${enemyName} ${e.id} attacking with ${attackName} (${att.damage} dmg)`);
         }
 
         // Store target position for procedural animator
@@ -38,7 +38,9 @@ export const EnemyAttackHandler = {
 
     handleBasicHit: (e: Enemy, att: AttackDefinition, distSq: number, callbacks: any, delta: number, simTime: number, renderTime: number) => {
         const range = att.range || ENEMY_ATTACK_RANGE[e.type];
-        const inRange = distSq < (range * range);
+        // VINTERDÖD: Add 10% tolerance buffer for "fairness"
+        const bufferedRange = range * 1.1;
+        const inRange = distSq < (bufferedRange * bufferedRange);
 
         if (inRange) {
             callbacks.onPlayerHit(att.damage, e, DamageID.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
@@ -50,19 +52,41 @@ export const EnemyAttackHandler = {
     handleSpecialAttack: (e: Enemy, att: AttackDefinition, distSq: number, playerPos: THREE.Vector3, callbacks: any, delta: number, simTime: number, renderTime: number) => {
         const pos = e.mesh.position;
         const effectiveRange = att.radius || att.range || ENEMY_ATTACK_RANGE[e.type];
-        const inRange = distSq < (effectiveRange * effectiveRange);
+        // VINTERDÖD: 10% Tolerance Buffer
+        const bufferedRange = effectiveRange * 1.1;
+        const inRange = distSq < (bufferedRange * bufferedRange);
 
         switch (att.type) {
             case EnemyAttackType.BITE:
                 if (inRange) {
                     callbacks.onPlayerHit(att.damage, e, DamageID.BITE, false, att.effect, att.effectDuration, att.effectDamage, att.type);
-                    if (callbacks.spawnPart) callbacks.spawnPart(playerPos.x, playerPos.y + 1.0, playerPos.z, 'blood', 3);
+
+                    // VINTERDÖD: Walker Grapple Mechanic
+                    if (e.type === EnemyType.WALKER) {
+                        e.state = AIState.GRAPPLE;
+                        e.statusFlags |= EnemyFlags.GRAPPLING;
+                        e.grappleDuration = 2.0 + Math.random() * 1.0;
+                    }
+
+                    if (callbacks.spawnPart) {
+                        // Use high-fidelity blood_splatter physics particles
+                        callbacks.spawnPart(playerPos.x, playerPos.y + 1.0, playerPos.z, 'blood_splatter', 5);
+                    }
                 }
-                callbacks.playSound(SoundID.BITE);
+                callbacks.playSound(SoundID.ZOMBIE_ATTACK_BITE);
                 break;
 
             case EnemyAttackType.JUMP:
-                if (inRange) callbacks.onPlayerHit(att.damage, e, DamageID.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
+                if (inRange) {
+                    callbacks.onPlayerHit(att.damage, e, DamageID.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
+
+                    // VINTERDÖD: Runner Jump-to-Grapple Mechanic
+                    if (e.type === EnemyType.RUNNER) {
+                        e.state = AIState.GRAPPLE;
+                        e.statusFlags |= EnemyFlags.GRAPPLING;
+                        e.grappleDuration = 1.5 + Math.random() * 0.5;
+                    }
+                }
                 callbacks.playSound(SoundID.ZOMBIE_ATTACK_SMASH);
                 break;
 

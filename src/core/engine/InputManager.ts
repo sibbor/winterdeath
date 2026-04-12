@@ -123,6 +123,7 @@ export class InputManager {
         window.addEventListener('mouseup', this.handleMouseUp);
         window.addEventListener('wheel', this.handleWheel, { passive: true });
         window.addEventListener('resize', this.handleResize);
+        window.addEventListener('hud-virtual-key', this.handleVirtualKey as any);
         document.addEventListener('pointerlockchange', this.handleLockChange);
     }
 
@@ -134,6 +135,7 @@ export class InputManager {
         window.removeEventListener('mouseup', this.handleMouseUp);
         window.removeEventListener('wheel', this.handleWheel);
         window.removeEventListener('resize', this.handleResize);
+        window.removeEventListener('hud-virtual-key', this.handleVirtualKey as any);
         document.removeEventListener('pointerlockchange', this.handleLockChange);
     }
 
@@ -172,6 +174,15 @@ export class InputManager {
         }
 
         if (this.onKeyUp) this.onKeyUp(e.key);
+    };
+    
+    private handleVirtualKey = (e: CustomEvent) => {
+        if (!this.isEnabled) return;
+        const { key, pressed } = e.detail;
+        const stateKey = KEY_MAP[key] || key;
+        if (this.state[stateKey as keyof InputState] !== undefined) {
+             (this.state[stateKey as keyof InputState] as boolean) = pressed;
+        }
     };
 
     private handleMouseMove = (e: MouseEvent) => {

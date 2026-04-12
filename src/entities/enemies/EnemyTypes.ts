@@ -211,4 +211,5 @@ export interface Enemy {
     // --- DAMAGE TRACKING (Zero-GC) ---
     _accumulatedDamage: number;
     _lastDamageTextTime: number;
+    attackOffset: number;
 }

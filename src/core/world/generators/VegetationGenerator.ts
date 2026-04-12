@@ -440,6 +440,9 @@ const _placeGroundCover = (
         }
         _mat.compose(_pos, _quat, _scale);
         mesh.setMatrixAt(valid++, _mat);
+
+        // VINTERDÖD: Register foliage presence with larger radius for consistent audio coverage
+        ctx.collisionGrid.registerVegetation(x, z, 1.2, MaterialType.PLANT);
     }
 
     mesh.count = valid;
@@ -481,6 +484,9 @@ const _placeSunflowers = (ctx: SectorContext, region: Region, density: number) =
         sHead.setMatrixAt(valid, _mat);
         sCent.setMatrixAt(valid, _mat);
         valid++;
+
+        // VINTERDÖD: Register sunflower presence with larger radius
+        ctx.collisionGrid.registerVegetation(x, z, 1.5, MaterialType.PLANT);
     }
 
     sStem.count = valid; sHead.count = valid; sCent.count = valid;

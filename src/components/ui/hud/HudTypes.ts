@@ -167,5 +167,6 @@ export interface HudState {
   interactionPrompt: InteractionPromptData;
   hudVisible: boolean;
   sectorName: string;
+  isMobileDevice: boolean;
   discovery: DiscoveryEvent;
 }

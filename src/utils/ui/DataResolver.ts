@@ -116,19 +116,51 @@ export const DataResolver = {
 
     /**
      * Unified Enemy Name lookup (Handles both Bosses and Mob types).
+     * @param logFriendly If true, returns a localized or readable name (e.g. "Vandrare" or "Walker") 
+     * instead of a raw translation key.
      */
-    getEnemyName(type: EnemyType, bossId: number = -1): string {
+    getEnemyName(type: EnemyType, bossId: number = -1, logFriendly: boolean = false): string {
+        let key = '';
         if (type === EnemyType.BOSS && bossId !== -1) {
-            return this.getBossName(bossId);
+            key = this.getBossName(bossId);
+        } else {
+            key = this.getZombieName(type);
         }
-        return this.getZombieName(type);
+
+        if (logFriendly) return this._resolveLogName(key);
+        return key;
     },
 
     /**
      * Resolves the localized name key for an Enemy Attack.
      */
-    getAttackName(type: EnemyAttackType): string {
-        return ENEMY_ATTACK_NAMES[type] || 'ui.unknown';
+    getAttackName(type: EnemyAttackType, logFriendly: boolean = false): string {
+        const key = ENEMY_ATTACK_NAMES[type] || 'ui.unknown';
+        if (logFriendly) return this._resolveLogName(key);
+        return key;
+    },
+
+    /**
+     * Internal helper to resolve a translation key to its localized value for logs.
+     * ZERO-GC: Direct traversal of the locale object.
+     */
+    _resolveLogName(key: string): string {
+        if (!key) return 'Unknown';
+        const parts = key.split('.');
+        
+        // 1. Attempt O(N) traversal of the 'sv' locale object
+        let current: any = sv;
+        for (let i = 0; i < parts.length; i++) {
+            current = current?.[parts[i]];
+            if (!current) break;
+        }
+
+        if (typeof current === 'string') return current;
+
+        // 2. Fallback: Extract the most meaningful part (e.g. "perks.BLEEDING.title" -> "Bleeding")
+        // We take the penultimate part if it ends in .name or .title
+        const raw = (parts.length > 1) ? parts[parts.length - 2] : parts[0];
+        return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
     },
 
     /**
@@ -151,9 +183,11 @@ export const DataResolver = {
     /**
      * Resolves the localized name key for a Perk or Status Effect.
      */
-    getPerkName(id: StatusEffectType): string {
+    getPerkName(id: StatusEffectType, logFriendly: boolean = false): string {
         const perk = PERKS[id];
-        return perk ? perk.displayName : 'ui.unknown';
+        const key = perk ? perk.displayName : 'ui.unknown';
+        if (logFriendly) return this._resolveLogName(key);
+        return key;
     },
 
     /**

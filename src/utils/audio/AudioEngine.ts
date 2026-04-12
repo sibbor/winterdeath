@@ -9,6 +9,8 @@ class Voice {
     public source: AudioBufferSourceNode | null = null;
     public gain: GainNode;
     public isActive = false;
+    public isLooping = false;
+    public startTime = 0;
     public id: SoundID = SoundID.NONE;
 
     constructor(ctx: AudioContext, destination: AudioNode) {
@@ -29,6 +31,8 @@ class Voice {
         this.source.connect(this.gain);
         
         this.gain.gain.setValueAtTime(volume, ctx.currentTime);
+        this.startTime = ctx.currentTime;
+        this.isLooping = loop;
         this.source.start(0);
 
         this.source.onended = () => {
@@ -308,10 +312,25 @@ export class AudioEngine {
     }
 
     private getAvailableVoice(): Voice | null {
+        // 1. Fast path: check for idle voices
         for (let i = 0; i < this.MAX_VOICES; i++) {
             if (!this.voicePool[i].isActive) return this.voicePool[i];
         }
-        return null; // All voices busy
+
+        // 2. VINTERDÖD VOICE STEALING: Find oldest non-looping voice
+        let oldestVoice: Voice | null = null;
+        let oldestTime = Infinity;
+
+        for (let i = 0; i < this.MAX_VOICES; i++) {
+            const v = this.voicePool[i];
+            // Never steal looping sounds (Ambience/Engine) as it causes pops
+            if (!v.isLooping && v.startTime < oldestTime) {
+                oldestTime = v.startTime;
+                oldestVoice = v;
+            }
+        }
+
+        return oldestVoice; // Recycles the oldest non-looping voice
     }
 
     private generateImpulseResponse() {

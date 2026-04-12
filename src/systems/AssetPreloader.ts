@@ -40,10 +40,11 @@ const _NOOP_ASYNC = async () => { };
 const BUMP_MAPS = ['snow_bump', 'asphalt_bump', 'stone_bump', 'dirt_bump', 'concrete_bump', 'brick_bump', 'bark_rough_bump'];
 const FX_SOLID = ['debris', 'scrap', 'glass', 'gore'];
 const FX_GAS = [
-    'fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke', 'flash', 'splash', 'impact', 'blood', 'gore_splat',
+    'fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke', 'flash', 'splash', 'impact',
     'shockwave', 'frost_nova', 'screech_wave', 'electric_beam', 'magnetic_sparks', 'ground_impact', 'impact_splat',
-    'blood_splat', 'campfire_flame', 'campfire_spark', 'campfire_smoke', 'flamethrower_fire',
-    'enemy_effect_stun', 'electric_flash', 'enemy_effect_flame', 'enemy_effect_spark', 'blastRadius'
+    'campfire_flame', 'campfire_spark', 'campfire_smoke', 'flamethrower_fire',
+    'enemy_effect_stun', 'electric_flash', 'enemy_effect_flame', 'enemy_effect_spark', 'blastRadius',
+    'blood_splatter', 'black_smoke', 'debris_trail'
 ];
 const ALL_FX = [...FX_SOLID, ...FX_GAS];
 const DEAD_BODY_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, EnemyType.BOMBER];

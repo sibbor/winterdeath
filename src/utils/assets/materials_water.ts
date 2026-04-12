@@ -113,11 +113,11 @@ export function createWaterMaterial(
                 vec4 worldPosition = modelMatrix * vec4(position, 1.0);
                 
                 float waveScale = 0.45;
-                float phaseXZ = dot(worldPosition.xz, uWaterDirection);
+                float phaseXZ = worldPosition.x + worldPosition.z;
                 
-                // Procedural wave heights
-                float w1 = pow(sin(phaseXZ * waveScale - uTime * 1.5) * 0.5 + 0.5, 3.2) * 0.45;
-                float w2 = pow(sin(phaseXZ * (waveScale * 1.6) + worldPosition.z * 0.2 - uTime * 2.0) * 0.5 + 0.5, 2.5) * 0.22;
+                // [VINTERDÖD REVERT] Original wave math with diagonal phase and slower speed
+                float w1 = pow(sin(phaseXZ * waveScale - uTime * 1.0) * 0.5 + 0.5, 3.2) * 0.45;
+                float w2 = pow(sin(phaseXZ * 0.7 - uTime * 0.8) * 0.5 + 0.5, 2.5) * 0.35;
                 
                 // Edge dampening to keep shores calm
                 float edgeDist = 0.0;
@@ -247,7 +247,7 @@ export function createWaterMaterial(
                 float objFoam = smoothstep(0.3, 0.7, objProximity * foamNoise);
 
                 // Calculate Shoreline Foam
-                float breathe = sin(uTime * 1.2) * 0.2;
+                float breathe = sin(uTime * 0.8) * 0.2;
                 float shoreStroke = step(0.96, 1.0 - (distToEdge / (1.8 + breathe)));
                 float shoreFoam = shoreStroke * smoothstep(0.2, 0.8, foamNoise);
                 
@@ -315,10 +315,10 @@ export const patchWaterVegetationMaterial = <T extends THREE.Material>(material:
             vec4 wPos = instanceWorldMatrix * vec4(position, 1.0);
             
             float waveScale = 0.45;
-            float phaseXZ = dot(wPos.xz, uWaterDirection);
+            float phaseXZ = wPos.x + wPos.z;
             
-            float flowVelocity = cos(phaseXZ * waveScale - uTime * 1.5);
-            float crossVelocity = cos(phaseXZ * (waveScale * 1.6) + wPos.z * 0.2 - uTime * 2.0);
+            float flowVelocity = cos(phaseXZ * waveScale - uTime * 1.0);
+            float crossVelocity = cos(phaseXZ * 0.7 - uTime * 0.8);
 
             float waveSway = flowVelocity * (0.6 * uWaveStrength);
             float crossSway = crossVelocity * (0.25 * uWaveStrength);

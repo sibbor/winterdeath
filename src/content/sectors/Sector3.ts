@@ -67,7 +67,7 @@ export const Sector3: SectorDef = {
     },
     // Automatic Content
     groundType: 'DIRT',
-    ambientLoop: 'ambient_scrapyard_loop',
+    ambientLoop: SoundID.AMBIENT_FOREST,
     // --- SPAWN POINTS ---
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
     familySpawn: LOCATIONS.SPAWN.FAMILY,

@@ -13,7 +13,7 @@ import { FXSystem } from '../../systems/FXSystem';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
-import { FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, PLAYER_BASE_SPEED } from '../../content/constants';
+import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, PLAYER_BASE_SPEED } from '../../content/constants';
 import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
@@ -716,6 +716,18 @@ export class GameSessionSetup {
     }
 
     // --- HELPER METHOD: Define this in the same class ---
+    private static resetPlayerVisuals(root: THREE.Object3D, color: number) {
+        const _white = new THREE.Color(color);
+        root.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+                const mesh = child as THREE.Mesh;
+                if (mesh.material && (mesh.material as any).color) {
+                    (mesh.material as any).color.copy(_white);
+                }
+            }
+        });
+    }
+
     private static clearDynamicNodes(parent: THREE.Object3D) {
         const children = parent.children;
         for (let i = children.length - 1; i >= 0; i--) {
@@ -748,6 +760,29 @@ export class GameSessionSetup {
         state.vehicle.active = false;
         state.vehicle.mesh = null;
         state.vehicle.speed = 0;
+
+        // --- 1.1 RESET VISUALS (VINTERDÖD FIX) ---
+        const playerGroup = refs.playerGroupRef.current;
+        const playerMesh = refs.playerMeshRef.current;
+        if (playerMesh) {
+            playerMesh.visible = true;
+            const baseScale = playerMesh.userData.baseScale || 1.0;
+            playerMesh.scale.setScalar(baseScale);
+            playerMesh.rotation.set(0, 0, 0);
+
+            // Reset material colors (Reversing the "Burned" look)
+            this.resetPlayerVisuals(playerMesh, PLAYER_CHARACTER.color);
+        }
+
+        if (playerGroup) {
+            playerGroup.visible = true;
+        }
+
+        // Reset Persistent Visual Flags
+        state.playerBloodSpawned = false;
+        state.playerAshSpawned = false;
+        state.hasLastTrailPos = false;
+        state.lastBiteTime = 0;
         state.vehicle.engineState = 'OFF';
 
         // Reset Numeric Effect Buffers (Zero-GC: Filling contiguous arrays with 0)

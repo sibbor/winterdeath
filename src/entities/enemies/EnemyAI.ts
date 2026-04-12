@@ -24,6 +24,7 @@ import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { EnemyAnimator } from './EnemyAnimator';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
+import { DataResolver } from '../../utils/ui/DataResolver';
 
 const _waterCheckResult = { flatDepth: 0 };
 
@@ -41,40 +42,41 @@ const SEPARATION_RADIUS = 1.5;
 const SEPARATION_RADIUS_SQ = SEPARATION_RADIUS * SEPARATION_RADIUS;
 const INV_SEPARATION_RADIUS = 1.0 / SEPARATION_RADIUS;
 
-function logStateChange(simTime: number, e: Enemy, newState: AIState, reason?: string) {
-    if (PerformanceMonitor.getInstance().aiLoggingEnabled && e.state !== newState) {
-        const oldState = e.state;
-        const reasonStr = reason ? ` (${reason})` : '';
-        console.log(`[EnemyAI] ${e.type}_${e.id} changed state: ${AIState[oldState]} -> ${AIState[newState]}${reasonStr}`);
-    }
-}
+export const logStateChange = (simTime: number, e: Enemy, newState: AIState, reason?: string) => {
+    if (!PerformanceMonitor.getInstance().aiLoggingEnabled) return;
+    const typeName = DataResolver.getEnemyName(e.type, e.bossId, true);
+    console.log(`[EnemyAI] ${typeName} ${e.id} changed state: ${AIState[e.state]} -> ${AIState[newState]} ${reason ? `(${reason})` : ''}`);
+};
 
 export const EnemyAI = {
 
     updateEnemy: (
         e: Enemy,
         playerPos: THREE.Vector3,
+        playerStatusFlags: number,
         collisionGrid: SpatialGrid,
         isDead: boolean,
         callbacks: {
-            onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number) => void;
+            onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, attackName?: string) => void;
             applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => void;
             onEffectTick: (e: Enemy, type: EnemyEffectType) => void;
             playSound: (id: SoundID) => void;
             spawnBubble: (text: string, duration: number) => void;
-            spawnPart: (x: number, y: number, z: number, type: string, count: number) => void;
+            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void;
         },
         water: WaterSystem | null,
         delta: number,
         simTime: number,
         renderTime: number
     ) => {
+        const distSq = e.mesh.position.distanceToSquared(playerPos);
+        const radius = e.originalScale * 0.5;
+
         if (e.deathState === EnemyDeathState.DEAD || !e.mesh) return;
 
         // --- 0. DISTANCE CULLING (AI SLEEP) ---
         const dx = playerPos.x - e.mesh.position.x;
         const dz = playerPos.z - e.mesh.position.z;
-        const distSq = dx * dx + dz * dz;
 
         // --- AI LoD (Level of Detail) TIERS (+50% Distance) ---
         const isTier1 = distSq < 1406;
@@ -126,6 +128,7 @@ export const EnemyAI = {
             }
             else if ((e.statusFlags & EnemyFlags.BURNING) !== 0 || dmgType === DamageID.MOLOTOV || dmgType === DamageID.FLAMETHROWER || dmgType === DamageID.BURN) {
                 e.deathState = EnemyDeathState.BURNED;
+                callbacks.playSound(SoundID.ZOMBIE_DEATH_BURN);
             }
             else if (dmgType === DamageID.GRENADE || e.type === EnemyType.BOMBER || (e.statusFlags & EnemyFlags.BOSS) !== 0) {
                 e.deathState = EnemyDeathState.EXPLODED;
@@ -137,9 +140,11 @@ export const EnemyAI = {
             else if (weaponImpact === EnemyDeathState.GIBBED && isHighImpact) {
                 e.deathState = EnemyDeathState.GIBBED;
                 e.mesh.userData.gibbed = true;
+                callbacks.playSound(SoundID.ZOMBIE_DEATH_SHOT);
             }
             else if (weapon) {
                 e.deathState = EnemyDeathState.SHOT;
+                callbacks.playSound(SoundID.ZOMBIE_DEATH_SHOT);
                 _v1.subVectors(e.mesh.position, playerPos).normalize();
                 _v2.copy(_v1).negate();
 
@@ -154,6 +159,7 @@ export const EnemyAI = {
             }
             else {
                 e.deathState = EnemyDeathState.GENERIC;
+                callbacks.playSound(SoundID.ZOMBIE_DEATH_SHOT);
                 _v1.subVectors(e.mesh.position, playerPos).normalize();
                 _v2.copy(_v1).negate();
 
@@ -230,7 +236,7 @@ export const EnemyAI = {
                     const fallDamage = Math.min(e.maxHp * 0.6, (peakY - floorY) * 8);
                     e.hp -= fallDamage;
                     callbacks.applyDamage(e, fallDamage, DamageID.FALL, true);
-                    callbacks.spawnPart(e.mesh.position.x, 0.2, e.mesh.position.z, 'blood', 20);
+                    callbacks.spawnPart(e.mesh.position.x, 1.5, e.mesh.position.z, 'blood_splatter', 6);
 
                     if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
                         e.deathState = EnemyDeathState.FALL;
@@ -326,6 +332,10 @@ export const EnemyAI = {
         if (e.slowDuration > 0) e.slowDuration -= delta;
         if (e.blindDuration > 0) e.blindDuration -= delta;
 
+        // VINTERDÖD FIX: Decoupled Attack & Ability timers (Standardized to seconds)
+        if (e.attackTimer > 0) e.attackTimer = Math.max(0, e.attackTimer - delta);
+        if (e.abilityCooldown > 0) e.abilityCooldown = Math.max(0, e.abilityCooldown - delta);
+
         for (let i = 0; i < e.attacks.length; i++) {
             const atkType = e.attacks[i].type;
             const cd = e.attackCooldowns[atkType];
@@ -336,7 +346,18 @@ export const EnemyAI = {
 
         // --- 7. STUNS & RAGDOLLS ---
         if (e.stunDuration > 0) {
-            if (!e.mesh.userData.wasStunned) e.mesh.userData.wasStunned = true;
+            if (!e.mesh.userData.wasStunned) {
+                e.mesh.userData.wasStunned = true;
+                // VINTERDÖD: Immediate interruption of all attacks on stun start
+                if (e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING) {
+                    e.state = AIState.IDLE;
+                    e.attackTimer = 0;
+                    if (e.indicatorRing) {
+                        e.indicatorRing.visible = false;
+                        e.indicatorRing.matrixAutoUpdate = false;
+                    }
+                }
+            }
             e.stunDuration -= delta;
 
             if (e.mesh.userData.isRagdolling && e.mesh.userData.spinVel) {
@@ -600,6 +621,100 @@ export const EnemyAI = {
                     if (e.attackTimer <= 0) {
                         logStateChange(simTime, e, AIState.CHASE, 'VISUAL');
                         e.state = AIState.CHASE;
+                    }
+                }
+                break;
+
+            case AIState.GRAPPLE:
+                // VINTERDÖD: Advanced attachment & Inertia-driven Pendulum
+                e.grappleDuration -= delta;
+
+                // 1. Break Check (Rush = 1<<4, Dodge = 1<<8)
+                const isRushing = (playerStatusFlags & 16) !== 0;
+                const isDodging = (playerStatusFlags & 256) !== 0;
+
+                if (isRushing || isDodging || e.grappleDuration <= 0 || isDead) {
+                    logStateChange(simTime, e, AIState.CHASE, isRushing ? 'STRUGGLED_FREE' : (isDodging ? 'DODGED_FREE' : 'TIMEOUT'));
+                    e.state = AIState.CHASE;
+                    e.statusFlags &= ~EnemyFlags.GRAPPLING;
+                    e.grappleDuration = 0;
+                    e.attackCooldowns[EnemyAttackType.BITE] = 3000; 
+                    e.mesh.rotation.x = 0;
+                    e.mesh.rotation.z = 0;
+                    if (e.mesh.userData.prevP) (e.mesh.userData.prevP as THREE.Vector3).set(0, -1000, 0); // Reset inertia marker
+                    break;
+                }
+
+                // 2. High-Fidelity Physics (Zero-GC Pendulum)
+                // Pivot point: Neck Region (playerPos + 1.6 height)
+                const neckHeight = 1.6;
+                const orbitDist = e.attackOffset;
+                
+                // Track player displacement for inertia
+                if (!e.mesh.userData.prevP) e.mesh.userData.prevP = new THREE.Vector3().copy(playerPos);
+                const prevP = e.mesh.userData.prevP as THREE.Vector3;
+                
+                // VINTERDÖD FIX: Check for reset marker (y = -1000) to prevent first-frame physics explosion
+                if (prevP.y < -500) {
+                    prevP.copy(playerPos);
+                    _v1.set(0, 0, 0); 
+                } else {
+                    _v1.subVectors(playerPos, prevP); // _v1 = frame displacement
+                    prevP.copy(playerPos);
+                }
+
+                // Pivot direction (Horizontal plane)
+                _v2.subVectors(e.mesh.position, playerPos);
+                _v2.y = 0;
+                
+                // V8/Math Optimization: NaN Safety Check (Prevents disappearing enemies)
+                const currentDistSq = _v2.lengthSq();
+                if (currentDistSq > 0.0001) {
+                    _v2.divideScalar(Math.sqrt(currentDistSq));
+                } else {
+                    // Fallback to current forward or random if overlapping
+                    _v2.set(0, 0, 1);
+                }
+
+                // Target position (Horizontal orbit)
+                _v3.copy(_v2).multiplyScalar(orbitDist).add(playerPos);
+
+                // Inertia: Calculate "Hanging" angle based on player motion
+                const dot = _v1.dot(_v2); // Positive if player moves away from zombie
+                const sideDot = _v1.x * _v2.z - _v1.z * _v2.x; // Cross-product (Vertical component proxy)
+
+                // Update swing angles in userData (Smoothed pendulum)
+                const targetTilt = -dot * 3.5; 
+                const targetSwing = -sideDot * 5.0; 
+
+                // V8/Math Optimization: NaN Safety Check (Prevents disappearing enemies)
+                if (isNaN(e.mesh.userData.swingX)) e.mesh.userData.swingX = 0;
+                if (isNaN(e.mesh.userData.swingZ)) e.mesh.userData.swingZ = 0;
+
+                e.mesh.userData.swingX = THREE.MathUtils.lerp(e.mesh.userData.swingX, targetTilt, 5.0 * delta);
+                e.mesh.userData.swingZ = THREE.MathUtils.lerp(e.mesh.userData.swingZ, targetSwing, 5.0 * delta);
+
+                // 3. Final Mesh Transform
+                e.mesh.position.set(_v3.x, playerPos.y + neckHeight, _v3.z);
+                
+                // Rotation: Look at player (Y-axis facing)
+                // Note: X and Z tilt is handled by EnemyAnimator.updateAttackAnim using swingX/Z
+                e.mesh.rotation.y = Math.atan2(playerPos.x - e.mesh.position.x, playerPos.z - e.mesh.position.z);
+
+                // Vertical offset so zombie head is at pivot point
+                e.mesh.position.y -= (e.originalScale * 0.82);
+
+                // FINAL SAFETY: Clamp Y to ground to prevent "disappearing" below floor
+                if (e.mesh.position.y < -0.5) e.mesh.position.y = 0.1;
+
+                // 4. Periodic Damage & Visuals
+                if (simTime > (e.mesh.userData.lastGrappleDmg || 0) + 600) {
+                    e.mesh.userData.lastGrappleDmg = simTime;
+                    callbacks.onPlayerHit(4, e, DamageID.BITE, true, undefined, undefined, undefined, 'GRAPPLE_BITE');
+                    
+                    if (callbacks.spawnPart) {
+                        // VINTERDÖD: Improved blood feedback for grapple
+                        callbacks.spawnPart(playerPos.x, 1.5, playerPos.z, 'blood_splatter', 6);
                     }
                 }
                 break;

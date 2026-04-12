@@ -167,7 +167,7 @@ export class DeathSystem implements System {
                 state.playerBloodSpawned = true;
                 const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 2.5 * baseScale, MATERIALS.bloodDecal);
-                this.fxCallbacks.spawnPart(pgPos.x, 0.5, pgPos.z, 'blood', 20);
+                this.fxCallbacks.spawnPart(pgPos.x, 1.5, pgPos.z, 'blood_splatter', 6);
             }
 
             // Specialized Death Visuals
@@ -181,7 +181,7 @@ export class DeathSystem implements System {
                 playerMesh.position.z = Math.cos(renderTime * 0.05) * 0.1;
 
                 if (renderTime % 300 < 30) {
-                    this.fxCallbacks.spawnPart(pgPos.x, 0.8, pgPos.z, 'blood', 5);
+                    this.fxCallbacks.spawnPart(pgPos.x, 1.5, pgPos.z, 'blood_splatter', 6);
                 }
             }
 
@@ -253,7 +253,7 @@ export class DeathSystem implements System {
                 const baseScale = (playerMesh as any).userData.baseScale;
 
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 4.5 * baseScale, MATERIALS.bloodDecal);
-                this.fxCallbacks.spawnPart(pgPos.x, 1.0, pgPos.z, 'blood', 60);
+                this.fxCallbacks.spawnPart(pgPos.x, 1.0, pgPos.z, 'blood_splatter', 20);
                 this.fxCallbacks.spawnPart(pgPos.x, 1.5, pgPos.z, 'meat', 12);
             }
         } else if (playerMesh) {

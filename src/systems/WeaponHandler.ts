@@ -8,6 +8,7 @@ import { WinterEngine } from '../core/engine/WinterEngine';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
 import { _buoyancyResult } from './WaterSystem';
 import { DamageID } from '../entities/player/CombatTypes';
+import { WeaponFX } from './WeaponFX';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -259,6 +260,7 @@ export const WeaponHandler = {
         }
 
         if (state.activeWeapon === WeaponType.RADIO) {
+            if (input.fire) WeaponSounds.playRadio();
             state.throwChargeStart = 0;
             if (aimCrossMesh) aimCrossMesh.visible = false;
             if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
@@ -353,6 +355,11 @@ export const WeaponHandler = {
             } else {
                 if (state.activeWeapon === WeaponType.FLAMETHROWER && (state as any).lastFireState) {
                     WeaponSounds.playFlamethrowerEnd();
+
+                    // VINTERDÖD: Spawn muzzle smoke on shutdown
+                    _v1.set(0.3, 1.4, 0.8).applyQuaternion(playerGroup.quaternion);
+                    _v2.copy(playerGroup.position).add(_v1);
+                    WeaponFX.createMuzzleSmoke(_v2);
                 }
             }
             (state as any).lastFireState = !!input.fire;

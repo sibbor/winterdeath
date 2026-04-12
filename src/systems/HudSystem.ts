@@ -106,6 +106,7 @@ const createHudBuffer = () => ({
     hudVisible: true,
 
     sectorName: '',
+    isMobileDevice: false,
     discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 }
 });
 
@@ -341,6 +342,7 @@ export const HudSystem = {
         _current.fps = PerformanceMonitor.getInstance().getFps();
         _current.hudVisible = state.hudVisible ?? _current.hudVisible;
         _current.sectorName = state.sectorName || '';
+        _current.isMobileDevice = !!props.isMobileDevice;
 
         // --- SYNC INTERACTION PROMPT (Zero-GC) ---
         if (state.hasInteractionTarget && state.interactionTargetPos) {

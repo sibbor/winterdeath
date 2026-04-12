@@ -5,9 +5,8 @@ import { InteractionType } from '../../../systems/InteractionTypes';
 interface InteractionPromptProps {
     type: InteractionType;
     label?: string | null;
-    screenPos?: { x: number, y: number } | null; // Kept for backwards compatibility
     isMobileDevice?: boolean;
-    onInteract?: () => void;
+    onInteract?: (active: boolean) => void;
 }
 
 // ============================================================================
@@ -50,16 +49,32 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = React.memo(({
         translatedText = textKey;
     }
 
-    // ZERO-GC: Stable callback to prevent inline function allocation on every render
+    // Handle touch for engine-level edge detection
+    const handleTouchStart = useCallback((e: React.TouchEvent) => {
+        e.stopPropagation();
+        if (onInteract) onInteract(true);
+    }, [onInteract]);
+
+    const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+        e.stopPropagation();
+        if (onInteract) onInteract(false);
+    }, [onInteract]);
+
+    // Handle mouse click for desktop debugging/PC
     const handleClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
-        if (onInteract) onInteract();
-    }, [onInteract]);
+        if (!isMobileDevice && onInteract) {
+            onInteract(true);
+            setTimeout(() => onInteract(false), 50);
+        }
+    }, [onInteract, isMobileDevice]);
 
     return (
         <div
-            className="absolute flex flex-col items-center gap-2 pointer-events-auto z-40 transition-opacity duration-200 cursor-pointer"
+            className="flex flex-col items-center gap-2 pointer-events-auto z-[100] transition-opacity duration-200 cursor-pointer select-none active:scale-95"
             onClick={handleClick}
+            onTouchStart={isMobileDevice ? handleTouchStart : undefined}
+            onTouchEnd={isMobileDevice ? handleTouchEnd : undefined}
         >
             <div className={`hud-bar-container bg-black/80 backdrop-blur-md px-4 py-2 border flex items-center gap-3 shadow-2xl ${colorClass}`}>
                 <span className="w-6 h-6 flex items-center justify-center bg-white/20 border border-white/40 text-[10px] font-black text-white">

@@ -314,6 +314,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                         type={interactionType} 
                         label={interactionLabel} 
                         isMobileDevice={isMobileDevice} 
+                        onInteract={(active) => HudStore.triggerInteraction(active)}
                     />
                 </div>
             )}

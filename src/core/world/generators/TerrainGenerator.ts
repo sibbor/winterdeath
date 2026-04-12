@@ -4,6 +4,7 @@ import { MATERIALS } from '../../../utils/assets/materials';
 import { MaterialType } from '../../../content/environment';
 import { SectorContext } from '../../../game/session/SectorTypes';
 import { GeneratorUtils } from './GeneratorUtils';
+import { WinterEngine } from '../../engine/WinterEngine';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -50,6 +51,12 @@ export const TerrainGenerator = {
 
         // Zero-GC: Static plane
         GeneratorUtils.freezeStatic(mesh);
+
+        // VINTERDÖD: Register with water system to enable cutouts
+        const engine = WinterEngine.getInstance();
+        if (engine && engine.water) {
+            engine.water.registerGround(mesh);
+        }
 
         return mesh;
     },

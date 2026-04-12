@@ -117,8 +117,8 @@ export const EnemyAnimator = {
                             const safeScaleX = Math.max(0.01, targetScaleX);
                             e.indicatorRing.scale.setScalar(att.radius / safeScaleX);
 
-                            const flashSpeed = progress * 30;
-                            const pulse = 0.5 + 0.5 * Math.sin(renderTime * 0.01 * flashSpeed);
+                            const flashFreq = 5.0 + (progress * progress * 40.0);
+                            const pulse = Math.sin(renderTime * 0.01 * flashFreq) * 0.5 + 0.5;
                             if (e.indicatorRing.material) {
                                 const mat = e.indicatorRing.material as any;
                                 mat.opacity = 0.3 + progress * 0.6;
@@ -153,7 +153,7 @@ export const EnemyAnimator = {
                             targetScaleY = baseScale * (1.0 + 0.2 * biteSwing);
 
                             hijackPhysics = true;
-                            _v1.subVectors(mesh.userData.startPos, targetPos).normalize().multiplyScalar(0.8);
+                            _v1.subVectors(mesh.userData.startPos, targetPos).normalize().multiplyScalar(e.attackOffset);
                             _v2.copy(targetPos).add(_v1);
 
                             const latchProgress = Math.min(1.0, progress * 4.0);
@@ -168,8 +168,15 @@ export const EnemyAnimator = {
                             targetScaleY = baseScale * (1.0 + leapArc * 0.4);
 
                             hijackPhysics = true;
-                            targetPosX = THREE.MathUtils.lerp(mesh.userData.startPos.x, targetPos.x, progress);
-                            targetPosZ = THREE.MathUtils.lerp(mesh.userData.startPos.z, targetPos.z, progress);
+
+                            // VINTERDÖD: Prevent overlap! 
+                            // Calculate a landing offset so the enemy lands in front of the player
+                            // Based on player width (0.5) + enemy radius, +0.5 for a clean leap gap
+                            _v1.subVectors(mesh.userData.startPos, targetPos).normalize().multiplyScalar(e.attackOffset + 0.5);
+                            _v2.copy(targetPos).add(_v1); // Target is now dynamic based on body sizes
+
+                            targetPosX = THREE.MathUtils.lerp(mesh.userData.startPos.x, _v2.x, progress);
+                            targetPosZ = THREE.MathUtils.lerp(mesh.userData.startPos.z, _v2.z, progress);
                             break;
 
                         case EnemyAttackType.SMASH:
@@ -214,8 +221,16 @@ export const EnemyAnimator = {
             }
 
             const isMoving = e.state === AIState.CHASE || e.state === AIState.WANDER;
+            const isGrappling = e.state === AIState.GRAPPLE;
 
-            if (isMoving) {
+            if (isGrappling) {
+                // VINTERDÖD: Respect the pendulum swing calculated in AI
+                targetRotX = mesh.userData.swingX || 0;
+                targetRotZ = mesh.userData.swingZ || 0;
+                targetScaleY = baseScale * 1.05; // Slight stretch while hanging
+                targetPosY = mesh.position.y; // Keep current Y from AI displacement
+            }
+            else if (isMoving) {
                 const phaseOffset = mesh.position.x + mesh.position.z;
                 const speedFactor = (e.speed || 20.0) / 20.0;
                 const t = (renderTime * 0.008 * speedFactor) + phaseOffset;

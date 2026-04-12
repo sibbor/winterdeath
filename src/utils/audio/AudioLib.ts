@@ -132,19 +132,28 @@ export const Generators = {
     shot_shotgun: (ctx: AudioContext) => createGunshot(ctx, 0.3, 0.6, 'sawtooth', 100, 20, 0.6, 0.35),
     shot_minigun: (ctx: AudioContext) => createGunshot(ctx, 0.05, 0.2, 'sawtooth', 400, 200, 0.15, 0.06),
     shot_arc_cannon: (ctx: AudioContext) => {
-        const duration = 0.25;
-        const length = ctx.sampleRate * duration;
-        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < length; i++) {
-            const t = i / ctx.sampleRate;
-            const zap = Math.sin(2 * Math.PI * (1200 + Math.random() * 400) * t) * 0.4;
-            const buzz = (Math.sin(2 * Math.PI * 60 * t) > 0 ? 0.2 : -0.2);
-            const noise = (Math.random() * 2 - 1) * 0.3;
-            const env = Math.exp(-15 * t);
-            data[i] = (zap + buzz + noise) * env * 0.7;
+        const duration = 0.35;
+        const sr = ctx.sampleRate;
+        const buf = ctx.createBuffer(1, sr * duration, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            // VINTERDÖD: Aggressive electric transients
+            const f1 = 1200 + Math.random() * 800;
+            const f2 = 50 + Math.random() * 30;
+            const zap = Math.sin(2 * Math.PI * f1 * t) * 0.4;
+            const buzz = (Math.sin(2 * Math.PI * f2 * t) > 0 ? 0.3 : -0.3);
+            
+            // Random snaps (High-voltage discharge)
+            let snap = 0;
+            if (Math.random() > 0.98) snap = (Math.random() * 2 - 1) * 0.8;
+
+            const noise = (Math.random() * 2 - 1) * 0.35;
+            const pulse = 0.7 + 0.3 * Math.sin(t * 100);
+            const env = Math.exp(-12 * t);
+            d[i] = (zap + buzz + noise + snap) * env * pulse * 0.8;
         }
-        return buffer;
+        return buf;
     },
     shot_flamethrower: (ctx: AudioContext) => {
         const duration = 0.4;
@@ -166,8 +175,51 @@ export const Generators = {
     mech_mag_out: (ctx: AudioContext) => createTone(ctx, 'square', 150, 0.1, 0.5),
     mech_mag_in: (ctx: AudioContext) => createTone(ctx, 'square', 300, 0.1, 0.6),
     mech_empty_click: (ctx: AudioContext) => createTone(ctx, 'triangle', 1200, 0.05, 0.8),
+    buff_gain: (ctx: AudioContext) => createTone(ctx, 'sine', 880, 0.3, 0.4),
+    debuff_gain: (ctx: AudioContext) => createTone(ctx, 'square', 220, 0.3, 0.3),
+    level_up: (ctx: AudioContext) => {
+        const sr = ctx.sampleRate;
+        const dur = 1.0;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            const env = Math.exp(-3 * t);
+            const freq = 440 + t * 440; // Rising pitch
+            d[i] = Math.sin(2 * Math.PI * freq * t) * 0.4 * env;
+        }
+        return buf;
+    },
 
     explosion: (ctx: AudioContext) => createExplosion(ctx),
+    explosion_water: (ctx: AudioContext) => {
+        const sr = ctx.sampleRate;
+        const dur = 1.8;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            const env = Math.exp(-2.5 * t);
+            const noise = (Math.random() * 2 - 1) * 0.8 * env;
+            const rumble = Math.sin(2 * Math.PI * (40 + 20 * Math.sin(t * 10)) * t) * 0.4 * env;
+            d[i] = (noise + rumble) * 0.7;
+        }
+        return buf;
+    },
+    splash_water: (ctx: AudioContext) => {
+        const sr = ctx.sampleRate;
+        const dur = 0.6;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            const env = Math.exp(-6 * t);
+            const noise = (Math.random() * 2 - 1) * 0.5 * env;
+            const pop = Math.sin(2 * Math.PI * 120 * t) * 0.3 * Math.exp(-20 * t);
+            d[i] = (noise + pop) * 0.6;
+        }
+        return buf;
+    },
     grenade_impact: (ctx: AudioContext) => {
         const length = ctx.sampleRate * 0.25;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
@@ -218,9 +270,10 @@ export const Generators = {
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
             const noise = (Math.random() * 2 - 1);
-            const crunch = (noise - lp) * 0.12 * Math.exp(-25 * t);
+            // VINTERDÖD: Reduced crunch (0.12 -> 0.04) for a duller, heavier snow sound
+            const crunch = (noise - lp) * 0.04 * Math.exp(-25 * t);
             lp = lp + 0.1 * (noise - lp);
-            const thud = lp * 0.08 * Math.exp(-15 * t);
+            const thud = lp * 0.15 * Math.exp(-15 * t); // Increased thud mass
             data[i] = crunch + thud;
         }
         return buffer;
@@ -271,16 +324,17 @@ export const Generators = {
         return buffer;
     },
     step_dirt: (ctx: AudioContext) => {
-        const length = ctx.sampleRate * 0.2;
+        const length = ctx.sampleRate * 0.22;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
         let lp = 0;
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
             const noise = (Math.random() * 2 - 1);
-            const crunch = noise * 0.1 * Math.exp(-35 * t);
-            lp = lp + 0.15 * (noise - lp);
-            const thud = lp * 0.1 * Math.exp(-15 * t);
+            const crunch = noise * 0.06 * Math.exp(-40 * t);
+            // VINTERDÖD: Thick thud (lower cutoff, higher gain)
+            lp = lp + 0.08 * (noise - lp); 
+            const thud = lp * 0.25 * Math.exp(-12 * t);
             data[i] = crunch + thud;
         }
         return buffer;
@@ -293,10 +347,40 @@ export const Generators = {
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
             const noise = (Math.random() * 2 - 1);
-            const crunch = (noise * 0.15) * Math.exp(-40 * t);
-            lp = lp + 0.3 * (noise - lp);
-            const thud = lp * 0.05 * Math.exp(-20 * t);
-            data[i] = crunch + thud;
+            // VINTERDÖD: Gravel should sound like stone (sharp clicks, less crunch)
+            const click = Math.sin(2 * Math.PI * 1200 * t) * 0.15 * Math.exp(-60 * t);
+            const stone = (noise * 0.1) * Math.exp(-45 * t);
+            lp = lp + 0.4 * (noise - lp);
+            const thud = lp * 0.05 * Math.exp(-25 * t);
+            data[i] = click + stone + thud;
+        }
+        return buffer;
+    },
+    step_vegetation: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.35;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        let lp = 0;
+        let hp = 0;
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const noise = (Math.random() * 2 - 1);
+
+            // High-frequency brushing (rustle)
+            hp = noise - (hp * 0.85);
+            const rustle = hp * 0.08 * Math.exp(-10 * t);
+
+            // Low-frequency movement (thud/brush)
+            lp = lp + 0.1 * (noise - lp);
+            const thud = lp * 0.06 * Math.exp(-15 * t);
+
+            // Randomized snaps (snapping grass/twigs)
+            let snap = 0;
+            if (i > 0 && i % Math.floor(ctx.sampleRate * 0.02) === 0 && Math.random() > 0.7) {
+                snap = (Math.random() * 2 - 1) * 0.04 * Math.exp(-40 * t);
+            }
+
+            data[i] = (rustle + thud + snap) * 0.8;
         }
         return buffer;
     },
@@ -371,6 +455,68 @@ export const Generators = {
     tank_roar: (ctx: AudioContext) => createRoar(ctx, 80, 200, 2.0),
     bomber_beep: (ctx: AudioContext) => createSweep(ctx, 'sine', 800, 1200, 0.1, 0.1),
 
+    // --- DASH & UTILITY ---
+    dash: (ctx: AudioContext) => {
+        const sr = ctx.sampleRate;
+        const dur = 0.35;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        let last = 0;
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            const noise = Math.random() * 2 - 1;
+            last = (last + 0.2 * noise) / 1.2;
+            const sweep = 1.0 - (t / dur);
+            const env = Math.exp(-6 * t);
+            d[i] = last * sweep * env * 0.4;
+        }
+        return buf;
+    },
+    radio: (ctx: AudioContext) => {
+        const sr = ctx.sampleRate;
+        const dur = 0.5;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            // Lo-fi static burst
+            const staticN = (Math.random() * 2 - 1) * 0.15;
+            // High-pitched blip
+            const blip = Math.sin(2 * Math.PI * 1800 * t) * (t < 0.1 ? 0.2 : 0);
+            const env = Math.exp(-10 * t);
+            d[i] = (staticN + blip) * env;
+        }
+        return buf;
+    },
+
+    // --- ENEMY DEATH ---
+    zombie_death_shot: (ctx: AudioContext) => {
+        const sr = ctx.sampleRate;
+        const dur = 0.6;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            const impact = (Math.random() * 2 - 1) * Math.exp(-40 * t) * 0.4;
+            const thud = Math.sin(2 * Math.PI * 80 * t) * Math.exp(-15 * t) * 0.3;
+            d[i] = impact + thud;
+        }
+        return buf;
+    },
+    zombie_death_burn: (ctx: AudioContext) => {
+        const sr = ctx.sampleRate;
+        const dur = 1.2;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            const hiss = (Math.random() * 2 - 1) * Math.exp(-3 * t) * 0.2;
+            const crackle = (Math.random() > 0.99) ? (Math.random() * 2 - 1) * 0.3 : 0;
+            d[i] = hiss + crackle;
+        }
+        return buf;
+    },
+
     // --- AMBIENTS (Loops) ---
     ambient_wind: (ctx: AudioContext) => {
         const sr = ctx.sampleRate;
@@ -434,7 +580,56 @@ export const Generators = {
         }
         return buf;
     },
- 
+    ambient_storm: (ctx: AudioContext) => {
+        const sr = ctx.sampleRate;
+        const dur = 6.0;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        let lp = 0;
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            const noise = (Math.random() * 2 - 1);
+            lp = (lp + 0.01 * noise) / 1.01;
+            const howl = Math.sin(2 * Math.PI * (120 + 40 * Math.sin(t * 0.5)) * t) * 0.05;
+            const rumble = Math.sin(2 * Math.PI * 40 * t) * 0.08 * (0.8 + 0.2 * Math.sin(t * 2));
+            const fade = Math.min(1, Math.min(t / 0.2, (dur - t) / 0.2));
+            d[i] = (lp * 2.0 + howl + rumble) * fade;
+        }
+        return buf;
+    },
+    ambient_cave: (ctx: AudioContext) => {
+        const sr = ctx.sampleRate;
+        const dur = 10.0;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            const reverb = Math.sin(2 * Math.PI * 30 * t) * 0.02;
+            const noise = (Math.random() * 2 - 1) * 0.005;
+            // Random drip
+            let drip = 0;
+            if (Math.random() > 0.9997) drip = Math.sin(2 * Math.PI * 1500 * t) * 0.1 * Math.exp(-10 * (t % 0.1));
+            const fade = Math.min(1, Math.min(t / 0.1, (dur - t) / 0.1));
+            d[i] = (reverb + noise + drip) * fade;
+        }
+        return buf;
+    },
+    ambient_metal: (ctx: AudioContext) => {
+        const sr = ctx.sampleRate;
+        const dur = 8.0;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            const lowHum = Math.sin(2 * Math.PI * 50 * t) * 0.03;
+            const resonance = Math.sin(2 * Math.PI * 220 * t) * 0.01;
+            const air = (Math.random() * 2 - 1) * 0.015;
+            const fade = Math.min(1, Math.min(t / 0.1, (dur - t) / 0.1));
+            d[i] = (lowHum + resonance + air) * fade;
+        }
+        return buf;
+    },
+
     ui_discovery: (ctx: AudioContext) => {
         const duration = 1.5;
         const sr = ctx.sampleRate;
@@ -450,26 +645,58 @@ export const Generators = {
         }
         return buf;
     },
- 
+
     ambient_fire: (ctx: AudioContext) => {
         const sr = ctx.sampleRate;
         const dur = 4.0;
         const buf = ctx.createBuffer(1, sr * dur, sr);
         const d = buf.getChannelData(0);
+        let lp = 0, hp = 0;
+
         for (let i = 0; i < d.length; i++) {
             const t = i / sr;
-            // Constant low rumble
-            const rumble = (Math.random() * 2 - 1) * 0.1 * Math.sin(2 * Math.PI * 40 * t);
-            // Random crackles
-            const crackle = (Math.random() > 0.9997) ? (Math.random() * 2 - 1) * 0.8 : 0;
-            // White noise hiss
-            const hiss = (Math.random() * 2 - 1) * 0.05;
+            const noise = Math.random() * 2 - 1;
+
+            // 1. Deep Warm Rumble (30-60Hz)
+            lp = lp + 0.05 * (noise - lp);
+            const rumble = lp * 0.8 * (0.8 + 0.2 * Math.sin(t * 2));
+
+            // 2. Continuous Airy Hiss (Band-passed)
+            hp = noise - (hp * 0.92);
+            const hiss = hp * 0.15;
+
+            // 3. Sparse, impactful crackles
+            let crackle = 0;
+            if (Math.random() > 0.9992) crackle = (Math.random() * 2 - 1) * 0.7;
+
             const fade = Math.min(1, Math.min(t / 0.1, (dur - t) / 0.1));
-            d[i] = (rumble + crackle + hiss) * fade * 0.6;
+            d[i] = (rumble + hiss + crackle) * fade * 0.5;
         }
         return buf;
     },
- 
+    heartbeat: (ctx: AudioContext) => {
+        const dur = 0.6;
+        const sr = ctx.sampleRate;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            // Thump-Thump rhythm
+            const off1 = 0.0, off2 = 0.25;
+            let thump = 0;
+            if (t >= off1 && t < off1 + 0.15) {
+                const dt = t - off1;
+                thump += Math.sin(2 * Math.PI * 40 * dt) * Math.exp(-25 * dt);
+            }
+            if (t >= off2 && t < off2 + 0.15) {
+                const dt = t - off2;
+                thump += Math.sin(2 * Math.PI * 35 * dt) * Math.exp(-35 * dt);
+            }
+            d[i] = thump * 0.8;
+        }
+        return buf;
+    },
+
     // --- MUSIC ---
     music_prologue: (ctx: AudioContext) => _genMusicPrologue(ctx),
     music_boss: (ctx: AudioContext) => _genMusicBoss(ctx),
@@ -488,7 +715,7 @@ export const Generators = {
         }
         return buffer;
     },
- 
+
     ui_victory: (ctx: AudioContext) => {
         const duration = 2.0;
         const sr = ctx.sampleRate;
@@ -505,7 +732,7 @@ export const Generators = {
         }
         return buf;
     },
- 
+
     ui_defeat: (ctx: AudioContext) => {
         const duration = 3.0;
         const sr = ctx.sampleRate;
@@ -522,32 +749,44 @@ export const Generators = {
         }
         return buf;
     },
- 
+
     // --- VEHICLES ---
     vehicle_engine_car: (ctx: AudioContext) => {
-        const duration = 0.5;
+        const duration = 2.0; // Longer buffer for seamless looping
         const sr = ctx.sampleRate;
         const buf = ctx.createBuffer(1, sr * duration, sr);
         const d = buf.getChannelData(0);
+
+        // Pre-calculated noise for deterministic looping
+        const noise = new Float32Array(sr * 0.1);
+        for (let n = 0; n < noise.length; n++) noise[n] = Math.random() * 2 - 1;
+
         for (let i = 0; i < d.length; i++) {
             const t = i / sr;
-            const pulse = (Math.sin(2 * Math.PI * 60 * t) > 0 ? 0.3 : -0.3) + (Math.sin(2 * Math.PI * 120 * t) > 0 ? 0.1 : -0.1);
-            const noise = (Math.random() * 2 - 1) * 0.1;
-            d[i] = (pulse + noise) * 0.5;
+            // Piston Throb (Multi-harmonic square/sine hybrid)
+            const f = 55; // Base idle RPM freq
+            const s1 = Math.sin(2 * Math.PI * f * t);
+            const s2 = Math.sin(2 * Math.PI * f * 2 * t) * 0.5;
+            const sub = Math.sin(2 * Math.PI * (f / 2) * t) * 0.3;
+            const pulse = s1 + s2 + sub;
+
+            const n = noise[i % noise.length] * 0.15;
+            const fade = Math.min(1, Math.min(t / 0.02, (duration - t) / 0.02)); // Subtle edge fade to prevent click
+            d[i] = (pulse * 0.4 + n) * 0.6 * fade;
         }
         return buf;
     },
     vehicle_engine_boat: (ctx: AudioContext) => {
-        const duration = 0.5;
+        const duration = 2.0;
         const sr = ctx.sampleRate;
         const buf = ctx.createBuffer(1, sr * duration, sr);
         const d = buf.getChannelData(0);
         for (let i = 0; i < d.length; i++) {
             const t = i / sr;
-            const pulse = Math.sin(2 * Math.PI * 40 * t) * 0.4;
-            const noise = (Math.random() * 2 - 1) * 0.2;
-            const water = Math.sin(2 * Math.PI * 10 * t) * 0.2;
-            d[i] = (pulse + noise + water) * 0.5;
+            const pulse = (Math.sin(2 * Math.PI * 40 * t) > 0 ? 0.4 : -0.4) * (0.8 + 0.2 * Math.sin(t * 2));
+            const water = (Math.random() * 2 - 1) * 0.2 * (Math.sin(t * 10) * 0.5 + 0.5);
+            const fade = Math.min(1, Math.min(t / 0.02, (duration - t) / 0.02));
+            d[i] = (pulse + water) * 0.4 * fade;
         }
         return buf;
     },
@@ -583,7 +822,14 @@ export const GamePlaySounds = {
     playFootstep: (material: MATERIAL_TYPE, isRight: boolean, isRushing: boolean = false) => {
         const id = FOOTSTEP_MAP[material] || SoundID.FOOTSTEP_SNOW;
         const pitch = (isRushing ? 0.8 : 1.0) + (isRight ? 0.03 : -0.03) + (Math.random() - 0.5) * 0.1;
-        audioEngine.playSound(id, isRushing ? 0.2 : 0.15, pitch);
+        // VINTERDÖD: ~40% volume reduction globally (0.15 -> 0.09)
+        audioEngine.playSound(id, isRushing ? 0.12 : 0.09, pitch);
+    },
+    playVegetationStep: (isRight: boolean, velocityScale: number = 1.0) => {
+        const pitch = 0.9 + (isRight ? 0.05 : 0.0) + (Math.random() * 0.1);
+        // VINTERDÖD: Increased volume for better feedback (0.07 -> 0.15)
+        const volume = 0.15 * velocityScale;
+        audioEngine.playSound(SoundID.FOOTSTEP_VEGETATION, volume, pitch);
     },
     playImpact: (material: MATERIAL_TYPE, pos?: THREE.Vector3) => {
         const id = IMPACT_MAP[material] || SoundID.IMPACT_STONE;
@@ -605,7 +851,7 @@ export const WeaponSounds = {
         else if (weaponId === WeaponType.REVOLVER) id = SoundID.SHOT_REVOLVER;
         else if (weaponId === WeaponType.SHOTGUN) id = SoundID.SHOT_SHOTGUN;
         else if (weaponId === WeaponType.MINIGUN) id = SoundID.SHOT_MINIGUN;
-        
+
         const pitch = 0.95 + Math.random() * 0.1;
         audioEngine.playSound(id, 0.8, pitch);
     },
@@ -621,6 +867,8 @@ export const WeaponSounds = {
     playMolotovImpact: () => audioEngine.playSound(SoundID.MOLOTOV_IMPACT, 0.7),
     playFlashbangImpact: () => audioEngine.playSound(SoundID.FLASHBANG_IMPACT, 0.7),
     playArcCannonZap: () => audioEngine.playSound(SoundID.SHOT_ARC_CANNON, 0.5),
+    playDash: () => audioEngine.playSound(SoundID.DASH, 0.4, 0.9 + Math.random() * 0.2),
+    playRadio: () => audioEngine.playSound(SoundID.RADIO, 0.3),
     startFlamethrowerLoop: () => audioEngine.playLoop(SoundID.SHOT_FLAMETHROWER, 0.3, 1.0),
     startFireLoop: () => audioEngine.playLoop(SoundID.AMBIENT_FIRE, 0, 1.0),
 };
@@ -630,16 +878,16 @@ export const EnemySounds = {
         let id = SoundID.ZOMBIE_GROWL_WALKER;
         if (type === 'runner') id = SoundID.ZOMBIE_GROWL_RUNNER;
         else if (type === 'tank') id = SoundID.ZOMBIE_GROWL_TANK;
-        
+
         audioEngine.playSpatialSound(id, pos, 0.4, 30);
     },
 };
- 
+
 export const AmbientSounds = {
     startCampfire: () => audioEngine.playAmbience(SoundID.AMBIENT_FIRE, 1.0),
     stopCampfire: () => audioEngine.stopAmbience(1.0),
 };
- 
+
 export const VoiceSounds = {
     playDeathScream: () => audioEngine.playSound(SoundID.VO_PLAYER_DEATH, 0.6),
     playCough: () => audioEngine.playSound(SoundID.VO_PLAYER_COUGH, 0.4),
@@ -661,7 +909,7 @@ export const VoiceSounds = {
         else if (name === 'family' || name === 'member') pitch = 1.2;
         else if (name === 'mysterious') pitch = 0.6;
         else pitch = 0.9 + (Math.random() * 0.2); // Random variation for unknowns
- 
+
         audioEngine.playSound(SoundID.UI_CHIME, 0.15, pitch);
     }
 };
@@ -703,7 +951,7 @@ export const VehicleSounds = {
  */
 export function registerSoundGenerators() {
     const ctx = audioEngine.ctx;
-    
+
     const map = (id: SoundID, gen: any) => audioEngine.registerBuffer(id, gen(ctx));
     const mapMusic = (id: MusicID, gen: any) => audioEngine.registerBuffer(id, gen(ctx), true);
 
@@ -729,6 +977,7 @@ export function registerSoundGenerators() {
     map(SoundID.FOOTSTEP_WATER, Generators.step_water);
     map(SoundID.FOOTSTEP_DIRT, Generators.step_dirt);
     map(SoundID.FOOTSTEP_GRAVEL, Generators.step_gravel);
+    map(SoundID.FOOTSTEP_VEGETATION, Generators.step_vegetation);
 
     // Impacts
     map(SoundID.IMPACT_FLESH, Generators.impact_flesh);
@@ -755,6 +1004,9 @@ export function registerSoundGenerators() {
     map(SoundID.GRENADE_IMPACT, Generators.grenade_impact);
     map(SoundID.MOLOTOV_IMPACT, Generators.molotov_impact);
     map(SoundID.FLASHBANG_IMPACT, Generators.flashbang_impact);
+    map(SoundID.WATER_EXPLOSION, Generators.explosion_water);
+    map(SoundID.WATER_SPLASH, Generators.splash_water);
+    map(SoundID.HEARTBEAT, Generators.heartbeat);
 
     // Enemies
     map(SoundID.ZOMBIE_GROWL_WALKER, Generators.walker_groan);
@@ -764,14 +1016,26 @@ export function registerSoundGenerators() {
 
     // Ambients
     map(SoundID.AMBIENT_WIND, Generators.ambient_wind);
+    map(SoundID.AMBIENT_STORM, Generators.ambient_storm);
+    map(SoundID.AMBIENT_CAVE, Generators.ambient_cave);
+    map(SoundID.AMBIENT_METAL, Generators.ambient_metal);
+    map(SoundID.AMBIENT_FOREST, Generators.ambient_forest);
     map(SoundID.AMBIENT_FIRE, Generators.ambient_fire);
- 
+
+    // Utils & Tools
+    map(SoundID.RADIO, Generators.radio);
+    map(SoundID.DASH, Generators.dash);
+
+    // Enemy Death
+    map(SoundID.ZOMBIE_DEATH_SHOT, Generators.zombie_death_shot);
+    map(SoundID.ZOMBIE_DEATH_BURN, Generators.zombie_death_burn);
+
     // Voice
     map(SoundID.VO_PLAYER_DEATH, Generators.voice_death_scream);
     map(SoundID.VO_PLAYER_HURT, Generators.voice_hurt);
     map(SoundID.VO_PLAYER_COUGH, Generators.voice_hurt); // Fallback to hurt for cough
     map(SoundID.VO_FAMILY_CRY, Generators.voice_crying);
- 
+
     // Vehicles
     map(SoundID.VEHICLE_ENGINE_CAR, Generators.vehicle_engine_car);
     map(SoundID.VEHICLE_ENGINE_BOAT, Generators.vehicle_engine_boat);
@@ -835,14 +1099,30 @@ function createGunshot(ctx: AudioContext, noiseDur: number, noiseVol: number, os
 
 function createExplosion(ctx: AudioContext): AudioBuffer {
     const sr = ctx.sampleRate;
-    const dur = 1.0;
+    const dur = 1.6; // Increased duration for the tail
     const buf = ctx.createBuffer(1, sr * dur, sr);
     const d = buf.getChannelData(0);
+
     for (let i = 0; i < sr * dur; i++) {
         const t = i / sr;
-        const n = (Math.random() * 2 - 1) * 0.8 * Math.exp(-3 * t);
-        const r = Math.sin(2 * Math.PI * 50 * t) * 0.4 * Math.exp(-2 * t);
-        d[i] = n + r;
+
+        // 1. Initial "Crack" (High-frequency transient)
+        const crackEnv = Math.exp(-60 * t);
+        const crack = (Math.random() * 2 - 1) * 0.9 * crackEnv;
+
+        // 2. Sub-Bass "Thump" (Low-frequency power)
+        const thumpEnv = Math.exp(-12 * t);
+        const thump = Math.sin(2 * Math.PI * 55 * t) * 0.6 * thumpEnv;
+
+        // 3. Core "Body" (Filtered Noise)
+        const bodyEnv = Math.exp(-4 * t);
+        const body = (Math.random() * 2 - 1) * 0.5 * bodyEnv;
+
+        // 4. Tail "Rumble/Debris" (Slow release)
+        const tailEnv = t > 0.2 ? Math.exp(-2 * (t - 0.2)) : 0;
+        const tail = (Math.random() * 2 - 1) * 0.2 * tailEnv;
+
+        d[i] = (crack + thump + body + tail) * 0.8;
     }
     return buf;
 }

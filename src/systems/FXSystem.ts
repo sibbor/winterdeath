@@ -88,19 +88,18 @@ for (let i = 0; i < MAX_DECALS; i++) {
 
 // TTL mapped object for faster V8 property access
 const PHYSICS_TYPES: Record<string, boolean> = {
-    debris: true, glass: true, blood: true, gore: true, splash: true, black_smoke: true
+    debris: true, glass: true, gore: true, splash: true, blood_splatter: true, black_smoke: true
 };
 
 const INSTANCED_TYPES: Record<string, boolean> = {
-    blood: true, fire: true, large_fire: true, flash: true, flame: true,
-    spark: true, smoke: true, debris: true, large_smoke: true, glass: true,
+    fire: true, flame: true, large_fire: true, smoke: true, spark: true, muzzle: true,
     enemy_effect_stun: true, electric_flash: true, enemy_effect_flame: true,
-    enemy_effect_spark: true, gore: true, splash: true, blood_splat: true,
+    enemy_effect_spark: true, gore: true, splash: true,
     impact_splat: true, campfire_flame: true, campfire_spark: true,
     campfire_smoke: true, flamethrower_fire: true, ground_impact: true,
     shockwave: true, frost_nova: true, screech_wave: true, electric_beam: true,
     magnetic_sparks: true, impact: true, blastRadius: true,
-    black_smoke: true, debris_trail: true
+    black_smoke: true, debris_trail: true, blood_splatter: true
 };
 
 const PARTICLE_COLORS: Record<string, number> = {
@@ -109,7 +108,7 @@ const PARTICLE_COLORS: Record<string, number> = {
     enemy_effect_stun: 0x00ffff, campfire_spark: 0x00ffff, enemy_effect_spark: 0x00ffff, magnetic_sparks: 0x00ffff,
     spark: 0xffcc00, impact: 0xffcc00,
     smoke: 0x555555, large_smoke: 0x555555, campfire_smoke: 0x555555, black_smoke: 0x000000,
-    blood: 0x880000, gore: 0x880000, blood_splat: 0x880000,
+    blood_splatter: 0x880000, gore: 0x880000,
     glass: 0xffffff, flash: 0xffffff, electric_flash: 0xffffff, shockwave: 0xffffff,
     frost_nova: 0xffffff, screech_wave: 0xffffff,
     splash: 0x77bbcc,
@@ -118,14 +117,15 @@ const PARTICLE_COLORS: Record<string, number> = {
 };
 
 const ESSENTIAL_TYPES: Record<string, boolean> = {
-    flash: true, electric_flash: true, spark: true, splash: true, impact: true, enemy_effect_stun: true,
+    flash: true, electric_flash: true, spark: true, splash: true, blood_splatter: true, blood_splat: true, impact: true, enemy_effect_stun: true,
     muzzle: true, muzzle_flash: true, muzzle_spark: true, muzzle_smoke: true
 };
 
 let _whiteGoreMaterial: THREE.Material | null = null;
 
 const PARTICLE_TTL: Record<string, number> = {
-    blood: 1.5, debris: 2.0, large_fire: 0.8, large_smoke: 0.8, flame: 0.6, fire: 0.6,
+    blood_splatter: 1.8, splash: 1.0,
+    debris: 2.0, large_fire: 1.6, large_smoke: 1.6, flame: 1.4, fire: 1.4,
     smoke: 1.0, spark: 0.3, enemy_effect_flame: 0.6, enemy_effect_spark: 0.3,
     electric_beam: 0.2, ground_impact: 0.5, shockwave: 0.5, frost_nova: 0.5,
     screech_wave: 0.4, magnetic_sparks: 0.6, impact: 0.2, default: 0.5
@@ -355,7 +355,7 @@ export const FXSystem = {
             fs = (0.5 + Math.random() * 0.5) * s;
             p.scaleVec.set(fs, fs, fs);
         }
-        else if (t === 'splash') {
+        else if (t === 'splash' || t === 'blood_splatter') {
             fs = (0.5 + Math.random() * 0.7) * s;
             p.scaleVec.set(fs, fs, fs);
         }
@@ -375,16 +375,20 @@ export const FXSystem = {
         } else if (req.hasCustomVel) {
             p.vel.copy(req.customVel);
         } else {
-            const speedScale = (t === 'gore') ? 8.0 : (t === 'splash' || t === 'blood_splat' ? 12.0 : 1.0);
+            const isBlood = (t === 'blood_splatter');
+            const speedScale = (t === 'gore') ? 8.0 : (t === 'splash' || isBlood ? 9.0 : 1.0);
             const isFireFX = (t === 'flame' || t === 'fire' || t === 'spark' || t === 'smoke' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark');
             const isLargeFX = (t === 'large_fire' || t === 'large_smoke');
             const vyScale = isLargeFX ? 3.0 : (isFireFX ? 1.8 : 0.8);
             const hzScale = isLargeFX ? 2.0 : (isFireFX ? 1.2 : 1.0);
 
+            // VINTERDÖD TRAJECTORY: Blood eruptions launch up 12–18m/s to clear heads, then splash out.
+            const vertVel = isBlood ? (14.0 + Math.random() * 4.0) : Math.random() * speedScale * (t === 'splash' ? 1.5 : vyScale);
+
             p.vel.set(
-                (Math.random() - 0.5) * speedScale * hzScale,
-                Math.random() * speedScale * (t === 'splash' || t === 'blood_splat' ? 1.5 : vyScale),
-                (Math.random() - 0.5) * speedScale * hzScale
+                (Math.random() - 0.5) * speedScale * (isBlood ? 1.5 : hzScale),
+                vertVel,
+                (Math.random() - 0.5) * speedScale * (isBlood ? 1.5 : hzScale)
             );
         }
 
@@ -516,6 +520,16 @@ export const FXSystem = {
 
     update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[],
         callbacks: any, delta: number, simTime: number, renderTime: number) => {
+
+        // VINTERDÖD: Forced Scene Re-linking (Ensures FX persist across sector transitions)
+        const types = Object.keys(INSTANCED_TYPES);
+        for (let j = 0; j < types.length; j++) {
+            const imesh = FXSystem._instancedMeshes[types[j]];
+            if (imesh && imesh.parent !== scene) {
+                scene.add(imesh);
+            }
+        }
+
         const safeDelta = delta > 0.1 ? 0.1 : delta;
 
         const decay = safeDelta;
@@ -546,11 +560,13 @@ export const FXSystem = {
 
                 if (p.isPhysics) {
                     p.vel.y -= 150 * safeDelta;
-                    if (p.type !== 'blood' && p.type !== 'splash') {
+                    // VINTERDÖD FIX: Splashes and Blood droplets stay upright (no tumbling)
+                    if (p.type !== 'splash' && p.type !== 'blood_splatter') {
                         p.rot.x += p.rotVel.x * 60 * safeDelta;
                         p.rot.z += p.rotVel.z * 60 * safeDelta;
                     }
-                    if (pPos.y <= (p.type === 'splash' ? -5.0 : 0.05)) {
+                    // Y-Threshold: Matching splash depth for blood to allow falling into water/pits
+                    if (pPos.y <= (p.type === 'splash' || p.type === 'blood_splatter' ? -5.0 : 0.05)) {
                         FXSystem._handleLanding(p, i, particlesList, callbacks);
                         if (!p.inUse) continue;
                     }
@@ -709,9 +725,10 @@ export const FXSystem = {
     _handleLanding: (p: ParticleState, index: number, list: ParticleState[], callbacks: any) => {
         p.pos.y = 0.05;
 
-        if (p.type === 'blood') {
+        if (p.type === 'blood_splatter') {
             p.landed = true;
-            if (Math.random() < 0.20) callbacks.spawnDecal(p.pos.x, p.pos.z, 0.5 + Math.random() * 0.3, MATERIALS.bloodDecal);
+            // Higher decal probability for high-fidelity splatters
+            if (Math.random() < 0.40) callbacks.spawnDecal(p.pos.x, p.pos.z, 0.4 + Math.random() * 0.4, MATERIALS.bloodDecal);
             FXSystem._killParticle(index, list);
         } else if (p.type === 'gore') {
             p.landed = true;
@@ -737,7 +754,7 @@ export const FXSystem = {
     _getInstancedMesh: (scene: THREE.Scene, type: string): THREE.InstancedMesh => {
         if (!FXSystem._instancedMeshes[type]) {
             let geo: THREE.BufferGeometry = GEOMETRY.particle;
-            let mat: THREE.Material = MATERIALS.blood;
+            let mat: THREE.Material = MATERIALS.bullet;
 
             if (type === 'fire' || type === 'flame' || type === 'large_fire' || type === 'campfire_flame' || type === 'enemy_effect_flame' || type === 'flamethrower_fire') {
                 geo = GEOMETRY.flame;
@@ -755,7 +772,7 @@ export const FXSystem = {
             else if (type === 'enemy_effect_stun') { geo = GEOMETRY.shard; mat = MATERIALS.enemy_effect_stun; }
             else if (type === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
             else if (type === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
-            else if (type === 'blood_splat') { geo = GEOMETRY.bloodSplat; mat = MATERIALS.bloodSplat; }
+            else if (type === 'blood_splatter') { geo = GEOMETRY.bloodSplatter; mat = MATERIALS.bloodSplatter; }
             else if (type === 'impact_splat') { geo = GEOMETRY.impactSplat; mat = MATERIALS.impactSplat; }
             else if (type === 'blastRadius') { geo = GEOMETRY.blastRadius; mat = MATERIALS.blastRadius; }
             else if (type === 'bullet_shell') { geo = GEOMETRY.bullet; mat = MATERIALS.bullet; }

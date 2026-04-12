@@ -72,7 +72,7 @@ export const Sector4: SectorDef = {
     },
     atmosphereZones: SECTOR6_ZONES,
     groundType: 'SNOW',
-    ambientLoop: 'ambient_wind_loop',
+    ambientLoop: SoundID.AMBIENT_METAL,
 
     playerSpawn: { x: 0, z: 0 },
     familySpawn: { x: 0, z: 0 },

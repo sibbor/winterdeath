@@ -11,6 +11,7 @@ import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes'
 import { SoundID } from '../utils/audio/AudioTypes';
 import { EnemyType, EnemyFlags } from '../entities/enemies/EnemyTypes';
 import { KMH_TO_MS } from '../content/constants';
+import { DataResolver } from '../utils/ui/DataResolver';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -42,14 +43,14 @@ export class PlayerStatsSystem implements System {
         this.checkAdrenalinePatch(session, simTime);
         currentMask = this.updateBuffsAndDebuffs(session, delta, simTime, currentMask);
         this.applyStatusTicks(session, delta, simTime);
- 
+
         // --- STATUS TRANSITION SOUNDS (VINTERDÖD FIX: Debounced & Pulse-Protected) ---
         const startMask = state.previousPerkMask;
         if (currentMask !== startMask) {
             for (let i = 0; i < 32; i++) {
                 const isNew = (currentMask & (1 << i)) && !(startMask & (1 << i));
                 const isRemoved = !(currentMask & (1 << i)) && (startMask & (1 << i));
-                
+
                 if (isNew) {
                     const perk = PERKS[i];
                     if (perk) {
@@ -67,7 +68,7 @@ export class PlayerStatsSystem implements System {
                 }
             }
         }
- 
+
         // --- FINAL BAKE (Zero-GC) ---
         state.previousPerkMask = currentMask;
         this.bakeFinalStats(state.statsBuffer);
@@ -168,8 +169,9 @@ export class PlayerStatsSystem implements System {
         for (let i = 0; i < 32; i++) {
             // Clamping decrement before check
             state.effectDurations[i] = Math.max(0, state.effectDurations[i] - delta * 1000);
-            
+
             // --- DIAGNOSTIC: PERK DECAY (VINTERDÖD) ---
+            /*
             if (state.effectDurations[i] > 0) {
                 const perk = PERKS[i];
                 if (perk) {
@@ -177,7 +179,8 @@ export class PlayerStatsSystem implements System {
                     console.log(`[PlayerStatsSystem] Decay: ${perk.displayName} @ ${state.effectDurations[i].toFixed(1)}ms`);
                 }
             }
- 
+            */
+
             if (state.effectDurations[i] <= 0) continue;
 
             currentPerkMask |= (1 << i);
@@ -245,7 +248,7 @@ export class PlayerStatsSystem implements System {
 
                 // Visuals
                 if (i === StatusEffectType.BLEEDING) {
-                    FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.8 + Math.random(), this.playerGroup.position.z, 'blood', 3);
+                    FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.5, this.playerGroup.position.z, 'blood_splatter', 6);
                 } else if (i === StatusEffectType.BURNING) {
                     _v1.set(this.playerGroup.position.x + (Math.random() - 0.5) * 0.5, this.playerGroup.position.y + 1.8, this.playerGroup.position.z + (Math.random() - 0.5) * 0.5);
                     FXSystem.spawnPart(session.engine.scene, state.particles, _v1.x, _v1.y, _v1.z, 'flame', 1);
@@ -319,14 +322,15 @@ export class PlayerStatsSystem implements System {
             const perk = PERKS[effectType];
             if (perk) {
                 const duration = perk.duration || effectDuration || 0;
-                
+
                 // --- TIMER AUDIT (VINTERDÖD FIX) ---
                 const simDelta = session.state.lastSimDelta;
                 if (simDelta > 0.5) {
                     console.warn(`[PlayerStatsSystem] CRITICAL: Delta looks like milliseconds (${simDelta.toFixed(4)}). Expected seconds (0.016).`);
                 }
- 
-                console.log(`[PlayerStatsSystem] APPLY: ${perk.displayName} for ${duration}ms (ID: ${effectType}, Delta: ${simDelta.toFixed(4)})`);
+
+                const localizedPerk = DataResolver.getPerkName(effectType, true);
+                console.log(`[PlayerStatsSystem] APPLY: ${localizedPerk} for ${duration}ms (ID: ${effectType}, Delta: ${simDelta.toFixed(4)})`);
                 state.effectDurations[effectType] = duration;
                 state.effectMaxDurations[effectType] = duration; // Sync Max Duration for UI
                 state.effectIntensities[effectType] = effectIntensity !== undefined ? effectIntensity : 1;
@@ -343,7 +347,7 @@ export class PlayerStatsSystem implements System {
         state.lastDamageTime = now;
 
         if (state.particles && !isDoT) {
-            FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.3, this.playerGroup.position.z, 'blood_splat', 5);
+            FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.5, this.playerGroup.position.z, 'blood_splatter', 6);
         }
 
         if (state.statsBuffer[PlayerStatID.HP] <= 0) {

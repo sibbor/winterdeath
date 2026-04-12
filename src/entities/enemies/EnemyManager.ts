@@ -4,7 +4,7 @@ import { KMH_TO_MS } from '../../content/constants';
 import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_SCORE, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { DamageID } from '../../entities/player/CombatTypes';
 import { EnemySpawner } from './EnemySpawner';
-import { EnemyAI } from './EnemyAI';
+import { EnemyAI, logStateChange } from './EnemyAI';
 import { MaterialType } from '../../content/environment';
 import { GamePlaySounds, EnemySounds } from '../../utils/audio/AudioLib';
 import { audioEngine } from '../../utils/audio/AudioEngine';
@@ -163,7 +163,8 @@ export const EnemyManager = {
         water: WaterSystem | null,
         delta: number,
         simTime: number,
-        renderTime: number
+        renderTime: number,
+        playerStatusFlags: number = 0 // VINTERDÖD: Required for grapple breaks
     ) => {
 
         collisionGrid.updateEnemyGrid(enemies);
@@ -186,7 +187,7 @@ export const EnemyManager = {
 
             if (e.deathState === EnemyDeathState.ALIVE) {
                 // Let EnemyAI handle duration updates and physics!
-                EnemyAI.updateEnemy(e, playerPos, collisionGrid, isDead, _aiContext, water, delta, simTime, renderTime);
+                EnemyAI.updateEnemy(e, playerPos, playerStatusFlags, collisionGrid, isDead, _aiContext, water, delta, simTime, renderTime);
             }
 
             if (e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD) {
@@ -339,6 +340,7 @@ export const EnemyManager = {
         // Initialize collision radii
         e.hitRadius = e.originalScale * 0.5;
         e.combatRadius = e.originalScale * 1.5;
+        e.attackOffset = 0.5 + e.hitRadius;
 
         // Zero-out all status flags and timers
         e.statusFlags = 0;
@@ -366,7 +368,7 @@ export const EnemyManager = {
         e.lastSeenTime = 0;
         e.awareness = 0;
         e.lastHeardNoiseType = NoiseType.NONE;
-        
+
         // --- ZERO-GC VECTOR ALLOCATION (Pool warmup phase) ---
         if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3();
         if (!e.mesh.userData.targetPos) e.mesh.userData.targetPos = new THREE.Vector3();
@@ -374,8 +376,18 @@ export const EnemyManager = {
         // --- STALE DATA RESET (DOD) ---
         e.lastKnownPosition.copy(e.mesh.position);
         (e.mesh.userData.targetPos as THREE.Vector3).set(0, 0, 0);
-        
-        e.lastTrailPos.set(0, 0, 0); 
+
+        // VINTERDÖD: Advanced Physics Warmup (Zero-GC / Hidden Class stability)
+        e.mesh.userData.swingX = 0;
+        e.mesh.userData.swingZ = 0;
+        e.mesh.userData.swingVelX = 0;
+        e.mesh.userData.swingVelZ = 0;
+        e.mesh.userData.lastGrappleDmg = 0;
+
+        if (!e.mesh.userData.prevP) e.mesh.userData.prevP = new THREE.Vector3(0, -1000, 0);
+        else (e.mesh.userData.prevP as THREE.Vector3).set(0, -1000, 0);
+
+        e.lastTrailPos.set(0, 0, 0);
         e.hasLastTrailPos = false;
 
         // FIX: Ensure tackle time is reset to prevent NaN physics failures
@@ -393,6 +405,7 @@ export const EnemyManager = {
         e.slowDuration = 0;
         e.blindDuration = 0;
         e.burnDuration = 0;
+        e.grappleDuration = 0; // VINTERDÖD: Reset grapple
         e.burnTickTimer = 0;
         e.lastBurnTick = 0;
 
@@ -492,8 +505,7 @@ export const EnemyManager = {
         const enemyTopY = pos.y + enemy.originalScale * 1.8;
 
         if (callbacks.spawnPart) {
-            callbacks.spawnPart(pos.x, 1, pos.z, 'blood', bloodCount);
-            callbacks.spawnPart(pos.x, enemyTopY, pos.z, 'blood_splat', 3, undefined, undefined, undefined, 4.0);
+            callbacks.spawnPart(pos.x, 1.5, pos.z, 'blood_splatter', 6);
         }
 
         _v1.set(0, 0, 0);
@@ -715,9 +727,7 @@ export const EnemyManager = {
 
                 // --- VISUALS ---
                 if (ctx.particles) {
-                    // Blood amount scales with damage (min 2, max 10)
-                    const bloodDrops = Math.max(2, Math.min(10, Math.ceil(maxDamage * falloff * 1.5)));
-                    FXSystem.spawnPart(ctx.engine?.scene || ctx.scene, ctx.particles, e.mesh.position.x, 1.5, e.mesh.position.z, 'blood', bloodDrops);
+                    FXSystem.spawnPart(ctx.engine?.scene || ctx.scene, ctx.particles, e.mesh.position.x, 1.5, e.mesh.position.z, 'blood_splatter', 6);
                 }
             }
         }
@@ -737,6 +747,7 @@ export const EnemyManager = {
         // Apply baseline stun/slow for ALL impacts
         enemy.stunDuration = isDashing ? 2.0 : 0.5; // Short stun for regular hits
         enemy.slowDuration = isDashing ? 3.5 : 1.5;
+        logStateChange(simTime, enemy, AIState.IDLE, 'KNOCKBACK');
         enemy.state = AIState.IDLE;
         enemy.lastTackleTime = simTime;
 
@@ -844,7 +855,7 @@ export const EnemyManager = {
                 e.deathVel.copy(knockDir).multiplyScalar(pushForce);
                 e.deathVel.y = Math.max(4.0, upForce);
 
-                FXSystem.spawnPart(scene, state.particles, e.mesh.position.x, 1, e.mesh.position.z, 'blood', 20);
+                FXSystem.spawnPart(scene, state.particles, e.mesh.position.x, 1.5, e.mesh.position.z, 'blood_splatter', 6);
                 FXSystem.spawnDecal(scene, state.bloodDecals, e.mesh.position.x, e.mesh.position.z,
                     1.0 + Math.random() * 1.5, MATERIALS.bloodDecal);
 

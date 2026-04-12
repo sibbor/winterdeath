@@ -38,7 +38,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
 
         // Engine pre-localizes killerName and killerAttackName (BITE, FIRE, etc.)
         const hasSpecificAttack = killedByEnemy && deathReason && deathReason !== 'HIT' && deathReason !== 'HIDDEN';
-        
+
         let displayName = killerName.toUpperCase();
         if (hasSpecificAttack) {
             displayName = `${killerName.toUpperCase()} (${t(DataResolver.getAttackName(deathReason as any))})`;
@@ -46,11 +46,11 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
 
         const description = (hasSpecificAttack || !killedByEnemy) ? t(DataResolver.getAttackDescription(deathReason as any)) : '';
 
-        return { 
-            deathPhrase: phrase, 
+        return {
+            deathPhrase: phrase,
             deathDisplayText: displayName,
             deathDescription: description,
-            headerText: t('ui.player_died', { name: 'Sven' })
+            headerText: t('ui.player_died', { name: 'Robert' })
         };
     }, [killedByEnemy, killerName, deathReason]);
 

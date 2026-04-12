@@ -202,8 +202,9 @@ export const ProjectileSystem = {
 
         if (isBallistic) {
             WeaponFX.createMuzzleFlash(origin, dir);
-            // Quick punchy light (Strobe effect as per constraint #2)
-            WeaponFX.spawnDynamicLight(scene, origin, 0xffaa44, 12.0, 18.0, 0.08, 'fire');
+            WeaponFX.createMuzzleFire(origin, dir);
+            // Quick punchy light centered on the muzzle
+            WeaponFX.spawnDynamicLight(scene, origin, 0xffaa44, 20.0, 25.0, 0.08, 'fire');
         }
 
         projectiles.push(p);
@@ -278,22 +279,23 @@ export const ProjectileSystem = {
         switch (weapon) {
             case DamageID.FLAMETHROWER: {
                 if (Math.random() < 0.6) {
-                    WeaponFX.createMuzzleFlash(origin, direction, false);
+                    // VINTERDÖD: Bluish/Cyan ignition flash for the flamer
+                    WeaponFX.createMuzzleFlash(origin, direction, true);
                 }
 
                 if (Math.random() < 0.8) {
-                    _v4.copy(origin).addScaledVector(direction, 3.0);
-                    // Massive Intensity Buff (5.0 -> 25.0, Radius 30 -> 55)
+                    // VINTERDÖD: Pull light closer to muzzle (3.0 -> 1.5) for better barrel illumination
+                    _v4.copy(origin).addScaledVector(direction, 1.5);
                     WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0xff6600, 25.0, 55.0, 0.15, 'fire');
                 }
 
                 const count = 4;
+                const range = data.range || 15;
                 for (let i = 0; i < count; i++) {
                     _v1.copy(origin).addScaledVector(direction, 0.5 + Math.random() * 0.8);
-                    WeaponFX.createFlame(_v1, direction);
+                    WeaponFX.createFlame(_v1, direction, range);
                 }
 
-                const range = data.range || 15;
                 const rangeSq = range * range;
 
                 let maxReach = range;
@@ -433,6 +435,11 @@ export const ProjectileSystem = {
                     _v3.copy(origin);
                     const hitLen = _arcCannonHitList.length;
 
+                    // VINTERDÖD: Add local muzzle glow for the Arc-Cannon
+                    if (Math.random() < 0.5) {
+                        WeaponFX.spawnDynamicLight(ctx.scene, origin, 0x00ffff, 15.0, 20.0, 0.08, 'electric');
+                    }
+
                     if (Math.random() > 0.4) {
                         _v4.copy(target.mesh.position).addScaledVector(direction, -1.0);
                         // Arc-Cannon Lightning Buff (2.0 -> 18.0, Radius 14 -> 35)
@@ -509,7 +516,7 @@ export const ProjectileSystem = {
                 fz.life -= delta;
 
                 if ((frameCounter + i) % 2 === 0) {
-                    WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, delta * 2, ctx);
+                    WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, delta, ctx);
                 }
 
                 if (fz.audioPoolIdx !== -1) {
@@ -674,8 +681,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 enemy.knockbackVel.add(_v5);
 
                 const headY = enemy.mesh.position.y + enemy.originalScale * 1.8;
-                ctx.spawnPart(_v6.x, projectile.mesh.position.y, _v6.z, 'blood', 40);
-                ctx.spawnPart(_v6.x, headY, _v6.z, 'blood_splat', 1, undefined, undefined, undefined, 3.0);
+                ctx.spawnPart(_v6.x, 1.5, _v6.z, 'blood_splatter', 6);
                 GamePlaySounds.playImpact(MaterialType.FLESH);
 
                 if (projectile.piercing) {
@@ -739,8 +745,10 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
                 if (hitWater) {
                     GamePlaySounds.playWaterExplosion();
                     haptic.explosionWater();
+                    if (waterSystem) waterSystem.spawnExplosionRipple(_v1.x, _v1.z, ctx.session.state.renderTime, 2.5);
                 } else {
                     WeaponSounds.playGrenadeImpact();
+                    WeaponSounds.playExplosion(_v1); // VINTERDÖD: Punchy synth explosion
                     haptic.explosion();
                 }
                 const gnRadius = hitWater ? (NOISE_RADIUS[NoiseType.GRENADE] * 0.5) : NOISE_RADIUS[NoiseType.GRENADE];
@@ -785,6 +793,7 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
                     ctx.makeNoise(_v1, NoiseType.MOLOTOV, NOISE_RADIUS[NoiseType.BULLET_HIT]);
                     GamePlaySounds.playWaterSplash();
                     haptic.explosionWater();
+                    if (waterSystem) waterSystem.spawnRipple(_v1.x, _v1.z, ctx.session.state.renderTime, 1.2);
                 } else {
                     ctx.makeNoise(_v1, NoiseType.MOLOTOV, NOISE_RADIUS[NoiseType.MOLOTOV]);
                     WeaponSounds.playMolotovImpact();
@@ -852,6 +861,7 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
                     ctx.makeNoise(_v1, NoiseType.FLASHBANG, NOISE_RADIUS[NoiseType.BULLET_HIT]);
                     GamePlaySounds.playWaterSplash();
                     haptic.explosionWater();
+                    if (waterSystem) waterSystem.spawnRipple(_v1.x, _v1.z, ctx.session.state.renderTime, 1.2);
                 } else {
                     ctx.makeNoise(_v1, NoiseType.FLASHBANG, NOISE_RADIUS[NoiseType.FLASHBANG]);
                     WeaponSounds.playFlashbangImpact();

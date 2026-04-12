@@ -96,7 +96,8 @@ export class EnemySystem implements System {
                 session.engine.water,
                 delta,
                 simTime,
-                renderTime
+                renderTime,
+                state.statusFlags
             );
 
         }
