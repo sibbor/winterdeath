@@ -269,9 +269,8 @@ export const WeaponHandler = {
 
         // --- 0. ENERGY MANAGEMENT (Zero-GC) ---
         // Regenerate ALL energy weapons in the loadout simultaneously
-        const loadoutKeys = ['primary', 'secondary', 'throwable', 'special'];
         for (let i = 0; i < 4; i++) {
-            const wId = loadout[loadoutKeys[i]];
+            const wId = loadout[_SLOTS[i]];
             if (wId && (WEAPONS as any)[wId]?.isEnergy) {
                 const isFiring = input.fire && state.activeWeapon === wId;
                 if (!isFiring) {
