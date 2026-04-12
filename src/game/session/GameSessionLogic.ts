@@ -123,9 +123,9 @@ export class GameSessionLogic {
 
         // --- O(1) DISCOVERY OPTIMIZATION: Build sets from permanent stats ---
         const discoverySets = {
-            clues: new Set<string>(props.stats.cluesFound || []),
-            pois: new Set<string>(props.stats.discoveredPOIs || []),
-            collectibles: new Set<string>(props.stats.collectiblesDiscovered || []),
+            clues: new Set<string>((props.stats.cluesFound || []).map((c: any) => typeof c === 'string' ? c : (c.id || ''))),
+            pois: new Set<string>((props.stats.discoveredPOIs || []).map((p: any) => typeof p === 'string' ? p : (p.id || ''))),
+            collectibles: new Set<string>((props.stats.collectiblesDiscovered || []).map((c: any) => typeof c === 'string' ? c : (c.id || ''))),
             seenEnemies: new Set<number>(props.stats.seenEnemies || []),
             seenBosses: new Set<number>(props.stats.seenBosses || [])
         };

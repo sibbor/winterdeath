@@ -142,6 +142,20 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
     }, [refs]);
 
+    // --- PAUSE SYNCHRONIZATION (VINTERDÖD FIX: Centralized Prop-to-Engine Bridge) ---
+    useEffect(() => {
+        const engine = refs.engineRef.current;
+        if (engine) {
+            engine.isSimulationPaused = props.isPaused;
+            // Also pause rendering if hard-paused (screens like recap/death)
+            if (props.isPaused && (props.currentGameState?.screen === 5 || props.currentGameState?.screen === 2)) {
+                engine.isRenderingPaused = true;
+            } else {
+                engine.isRenderingPaused = false;
+            }
+        }
+    }, [props.isPaused, props.currentGameState?.screen, refs]);
+
     const gainSp = useCallback((amount: number) => {
         const session = refs.gameSessionRef.current;
         if (!session) return;
@@ -401,6 +415,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
                 break;
 
+            case 'CONCLUDE_SECTOR':
+                // Called manually from sector scripts (e.g. Sector 3 epilogue drive)
+                concludeSector(payload?.isExtraction ?? false);
+                break;
+
             default:
                 // GENERIC BRIDGE: Pass unknown triggers directly to the sector's state memory
                 if (actionType) {
@@ -408,7 +427,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
                 break;
         }
-    }, [gainXp, props.currentSectorData, props.familyAlreadyRescued, refs, spawnBubble]);
+    }, [concludeSector, gainXp, props.currentSectorData, props.familyAlreadyRescued, refs, spawnBubble]);
 
     // --- ZERO-GC DISCOVERY HANDLER ---
     const handleDiscovery = useCallback((type: string | number, id: any, titleKey: string, detailsKey: string, payload?: any) => {
@@ -474,8 +493,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 detailsKey = payload.detailsKey || DataResolver.getPoiName(id);
                 if (!sets.pois.has(id)) {
                     sets.pois.add(id);
-                    stats.discoveredPOIs.push(id);
-                    isNew = true;
+                    if (!stats.discoveredPOIs.includes(id)) {
+                        stats.discoveredPOIs.push(id);
+                        isNew = true;
+                    }
                     if (currentProps.onPOIdiscovered) currentProps.onPOIdiscovered(payload || id);
                 }
                 break;
@@ -485,8 +506,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 if (!sets.clues.has(id)) {
                     sets.clues.add(id);
                     const cluePayload = payload || { id, content: detailsKey };
-                    stats.cluesFound.push(cluePayload);
-                    isNew = true;
+                    // Deduplicate session stats logic
+                    const exists = stats.cluesFound.some((c: any) => c.id === id);
+                    if (!exists) {
+                        stats.cluesFound.push(cluePayload);
+                        isNew = true;
+                    }
                     if (currentProps.onClueDiscovered) currentProps.onClueDiscovered(cluePayload);
                 }
                 break;
@@ -869,9 +894,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     handleTriggerAction: (action: any, scene: THREE.Scene) => {
                         onAction(action);
                     },
-                    startCinematic: (mesh: any, scriptId?: number, params?: any) => {
+                    startCinematic: (mesh: any, sectorId?: number, dialogueId?: number, params?: any) => {
                         const sys = refs.gameSessionRef.current?.getSystem('cinematic') as any;
-                        sys?.startCinematic(mesh, scriptId || 0, params);
+                        sys?.startCinematic(mesh, sectorId ?? 0, dialogueId ?? 0, params);
                     },
                     playCinematicLine: (index: number) => {
                         const sys = refs.gameSessionRef.current?.getSystem('cinematic') as any;

@@ -73,7 +73,7 @@ export class WinterEngine {
     public simTime: number = 0;
 
     // Callbacks
-    public onUpdate: ((dt: number) => void) | null = null;
+    public onUpdate: ((dt: number, simTime: number, renderTime: number) => void) | null = null;
     public onRender: (() => void) | null = null;
 
     /**
@@ -83,8 +83,11 @@ export class WinterEngine {
     public clearUpdateContext() {
         this.onUpdateContext = null;
         this.lastTime = performance.now();
+        this._accumulator = 0;
         this.renderTime = 0;
         this.simTime = 0;
+        this.isSimulationPaused = false;
+        this.isRenderingPaused = false;
     }
 
     // VINTERDÖD FIX: Hard Paused stänger av allt (även miljö).
@@ -482,14 +485,15 @@ export class WinterEngine {
         // --- ENGINE HIT-STOP (Micro-Freeze) ---
         // VINTERDÖD SAFETY: Decrement hit-stop using raw realDelta (wall-clock) 
         // to prevent slow-mo logic causing elongated freezes (The "Matrix Lag" fix).
-        if (state && state.hitStopTime > 0) {
+        const hitStop = (state && state.hitStopTime) ? state.hitStopTime : 0;
+        if (hitStop > 0) {
             state.hitStopTime -= realDelta * 1000;
             // Early exit logic simulation but keep rendering/visuals
         }
 
         // --- 2. ACCUMULATE TIME ---
         // Only accumulate logic time if we are not currently micro-frozen
-        if (!state || state.hitStopTime <= 0) {
+        if (hitStop <= 0) {
             this._accumulator += realDelta;
         }
 
@@ -512,7 +516,7 @@ export class WinterEngine {
 
             // A. Trigger GameSessionLoop Logic (Always uses FIXED_DT in seconds)
             if (this.onUpdate) {
-                this.onUpdate(FIXED_DT);
+                this.onUpdate(FIXED_DT, this.simTime, this.renderTime);
             }
 
             // B. Update Logic Systems (Fixed-Step)
@@ -537,7 +541,7 @@ export class WinterEngine {
 
         // B. Camera Update (Smooth Tracking)
         monitor.begin('camera');
-        this.camera.update(realDelta, this.renderTime);
+        this.camera.update(context, realDelta, this.simTime, this.renderTime);
         monitor.end('camera');
 
         // --- 5. RENDER PASS ---
@@ -563,6 +567,7 @@ export class WinterEngine {
      */
     public resetTime = () => {
         this.lastTime = performance.now();
+        this._accumulator = 0;
     };
 
     public getSettings(): GameSettings {

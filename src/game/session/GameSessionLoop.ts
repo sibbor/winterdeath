@@ -91,7 +91,7 @@ function getCachedNumberString(num: number): string {
     return _numberStringCache[rounded];
 }
 
-export function createGameLoop(ctx: LoopContext): (dt: number) => void {
+export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, renderTime: number) => void {
     const { engine, session, state, refs, propsRef, callbacks } = ctx;
 
     let frame = 0;
@@ -288,7 +288,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
     let lastHudSyncTime = 0;
 
-    return (dt: number) => {
+    return (dt: number, simTime: number, renderTime: number) => {
         if (!refs.isMounted.current || refs.isBuildingSectorRef.current) return;
 
         let delta = dt;
@@ -310,11 +310,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         // --- Simulation & Visual Clocks ---
         state.lastSimDelta = delta;
         state.lastRenderDelta = delta;
-        state.renderTime = engine.renderTime;
-        state.simTime = engine.simTime;
+        state.renderTime = renderTime;
+        state.simTime = simTime;
 
-        const simTime = engine.simTime;
-        const renderTime = engine.renderTime;
         const now = performance.now();
 
         // Retrieve systems for the current tick

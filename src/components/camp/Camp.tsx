@@ -310,10 +310,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         window.addEventListener('resize', onResize);
 
         engine.onUpdate = (dt: number, simTime: number, renderTime: number) => {
-            const now = performance.now();
-
+            const frameStart = performance.now();
             if (nextWildlifeTime.current === 0) {
-                nextWildlifeTime.current = engine.renderTime + 5000 + Math.random() * 10000;
+                nextWildlifeTime.current = renderTime + 5000 + Math.random() * 10000;
             }
             const familyMembers = sceneFamilyMembersRef.current;
             const interactables = sceneInteractablesRef.current;
@@ -361,14 +360,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             const targetLookAt = isIdleRef.current ? CINEMATIC_LOOK_AT : BASE_LOOK_AT;
             camera.set('lookSpeed', isIdleRef.current ? 0.2 : 3.0);
             camera.lookAt(targetLookAt.x, targetLookAt.y, targetLookAt.z);
-            camera.update(dt, now);
 
             monitor.begin('raycasting');
-            const isMobileLabels = isMobileDevice && !isIdleRef.current;
 
             if (isGameRunning && !activeOverlayRef.current) {
-                if (mouseMoved && (now - lastRaycastTime > 100)) {
-                    lastRaycastTime = now;
+                if (mouseMoved && (renderTime - lastRaycastTime > 100)) {
+                    lastRaycastTime = renderTime;
                     mouseMoved = false;
 
                     raycaster.setFromCamera(mouse, camera.threeCamera);
@@ -458,7 +455,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             monitor.end('raycasting');
 
             lastDrawCallsRef.current = engine.renderer.info.render.calls;
-            monitor.printIfHeavy('Camp Performance', performance.now() - now, 50);
+            monitor.printIfHeavy('Camp Performance', performance.now() - frameStart, 50);
         };
 
         return () => {
