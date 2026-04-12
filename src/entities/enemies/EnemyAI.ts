@@ -652,9 +652,6 @@ export const EnemyAI = {
                 // VINTERDÖD: Advanced attachment & Inertia-driven Pendulum
                 e.grappleDuration -= delta;
 
-                if (PerformanceMonitor.getInstance().aiLoggingEnabled && (frameOffset % 30 === 0)) {
-                    console.log(`[EnemyAI] ${EnemyType[e.type]} ${e.id} GRAPPLING. Rem: ${e.grappleDuration.toFixed(2)}s, DistSq: ${distSq.toFixed(2)}`);
-                }
 
                 // 1. Break Check (Rush = 1<<4, Dodge = 1<<8)
                 const isRushing = (playerStatusFlags & 16) !== 0;
@@ -663,10 +660,6 @@ export const EnemyAI = {
                 if (isRushing || isDodging || e.grappleDuration <= 0 || isDead) {
                     const reason = isRushing ? 'STRUGGLED_FREE' : (isDodging ? 'DODGED_FREE' : (isDead ? 'DIED' : 'TIMEOUT'));
                     logStateChange(simTime, e, AIState.CHASE, reason);
-                    
-                    if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
-                        console.log(`[EnemyAI] ${EnemyType[e.type]} ${e.id} EXITED GRAPPLE. Reason: ${reason}`);
-                    }
 
                     e.state = AIState.CHASE;
                     e.statusFlags &= ~EnemyFlags.GRAPPLING;
