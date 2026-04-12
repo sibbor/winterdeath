@@ -461,10 +461,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     state.sessionCollectiblesDiscovered.push(id);
                     isNew = true;
                     if (currentProps.onCollectibleDiscovered) currentProps.onCollectibleDiscovered(id);
-                    
-                    // Trigger Full Screen Modal for Collectibles
-                    updateUiState({ activeModal: 'collectible', collectibleId: id });
                 }
+                
+                // Trigger Full Screen Modal for Collectibles ALWAYS
+                updateUiState({ activeModal: 'collectible', collectibleId: id });
                 break;
             case 'poi':
                 titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.POI);

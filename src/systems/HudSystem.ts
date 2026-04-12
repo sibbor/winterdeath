@@ -352,8 +352,8 @@ export const HudSystem = {
         _current.hudVisible = state.hudVisible ?? _current.hudVisible;
         _current.sectorName = state.sectorName || '';
         _current.currentSector = props.currentSector || 0;
-        _current.cluesFoundCount = state.sessionStats?.cluesFound?.length || 0;
-        _current.poisFoundCount = state.sessionStats?.discoveredPOIs?.length || 0;
+        _current.cluesFoundCount = state.discoverySets?.clues?.size || 0;
+        _current.poisFoundCount = state.discoverySets?.pois?.size || 0;
         _current.isMobileDevice = !!props.isMobileDevice;
 
         const hp = _current.hp;

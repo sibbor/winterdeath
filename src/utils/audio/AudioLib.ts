@@ -657,9 +657,9 @@ export const Generators = {
             const t = i / sr;
             const noise = Math.random() * 2 - 1;
 
-            // 1. Deep Warm Rumble (30-60Hz)
+            // 1. Deep Warm Rumble (30-60Hz) - Updated phase for seamless looping
             lp = lp + 0.05 * (noise - lp);
-            const rumble = lp * 0.8 * (0.8 + 0.2 * Math.sin(t * 2));
+            const rumble = lp * 0.8 * (0.8 + 0.2 * Math.sin(2 * Math.PI * 2 * t));
 
             // 2. Continuous Airy Hiss (Band-passed)
             hp = noise - (hp * 0.92);
@@ -669,7 +669,8 @@ export const Generators = {
             let crackle = 0;
             if (Math.random() > 0.9992) crackle = (Math.random() * 2 - 1) * 0.7;
 
-            const fade = Math.min(1, Math.min(t / 0.1, (dur - t) / 0.1));
+            // VINTERDÖD FIX: Reduced harsh 100ms fade to 10ms to prevent noticeable pulsing in the loop
+            const fade = Math.min(1, Math.min(t / 0.01, (dur - t) / 0.01));
             d[i] = (rumble + hiss + crackle) * fade * 0.5;
         }
         return buf;
@@ -862,7 +863,7 @@ export const WeaponSounds = {
     playEmptyClick: () => audioEngine.playSound(SoundID.WEAPON_EMPTY, 0.4),
     playWeaponSwap: () => audioEngine.playSound(SoundID.WEAPON_SWITCH, 0.3),
     playFlamethrowerEnd: () => audioEngine.playSound(SoundID.STEAM_HISS, 0.3),
-    playExplosion: (pos: THREE.Vector3) => audioEngine.playSpatialSound(SoundID.EXPLOSION, pos, 1.0),
+    playExplosion: (pos: THREE.Vector3) => audioEngine.playSpatialSound(SoundID.EXPLOSION, pos, 1.0, 120.0), // VINTERDÖD FIX: Extended spatial range to hit the high camera
     playGrenadeImpact: () => audioEngine.playSound(SoundID.GRENADE_IMPACT, 0.7),
     playMolotovImpact: () => audioEngine.playSound(SoundID.MOLOTOV_IMPACT, 0.7),
     playFlashbangImpact: () => audioEngine.playSound(SoundID.FLASHBANG_IMPACT, 0.7),

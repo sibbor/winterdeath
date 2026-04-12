@@ -309,7 +309,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         window.addEventListener('touchstart', onTS, { passive: false });
         window.addEventListener('resize', onResize);
 
-        engine.onUpdate = (dt: number) => {
+        engine.onUpdate = (dt: number, simTime: number, renderTime: number) => {
             const now = performance.now();
 
             if (nextWildlifeTime.current === 0) {
@@ -323,6 +323,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             // Zero-GC for Camp context
             const campState = campStateRef.current;
             if (campState) {
+                campState.simTime = simTime;
+                campState.renderTime = renderTime;
                 campState.lastSimDelta = dt;
                 campState.lastRenderDelta = dt;
                 campState.playerPos = camera.threeCamera.position;
