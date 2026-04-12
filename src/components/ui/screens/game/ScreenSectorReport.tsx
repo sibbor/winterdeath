@@ -61,7 +61,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
     const totalKills = (Object.values(stats.killsByType || {}) as number[]).reduce((a, b) => a + b, 0);
 
-    const bossKills = (stats.killsByType?.[EnemyType.BOSS] as number) || 0;
+    const bossKills = (stats.killsByType?.['Boss'] as number) || 0;
     const bossKilled = bossKills > 0;
     const familyStatusKey = (stats.familyFound || bossKilled) ? 'ui.family_member_rescued' : 'ui.family_member_missing';
     const bossStatusKey = bossKilled ? 'ui.boss_dead' : 'ui.boss_alive';
