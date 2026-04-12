@@ -142,7 +142,7 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: 'Robert', text: "dialogue.3_25" },
             {
                 speaker: 'Robert', text: "dialogue.3_26",
-                trigger: ['FAMILY_MEMBER_FOUND', 'FAMILY_MEMBER_FOLLOW', 'SPAWN_BOSS']
+                trigger: ['FAMILY_MEMBER_FOUND', 'RUSH_TO_NATHALIE', 'SPAWN_BOSS']
             }
         ]
     }

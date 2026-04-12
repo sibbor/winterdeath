@@ -8,56 +8,56 @@ export interface CollectibleDefinition {
 
 export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
     // Sector 0
-    's1_collectible_1': {
-        id: 's1_collectible_1',
+    's0_collectible_1': {
+        id: 's0_collectible_1',
         sector: 0,
         index: 0,
         modelType: 'phone'
     },
-    's1_collectible_2': {
-        id: 's1_collectible_2',
+    's0_collectible_2': {
+        id: 's0_collectible_2',
         sector: 0,
         index: 1,
         modelType: 'axe'
     },
 
     // Sector 1
-    's2_collectible_1': {
-        id: 's2_collectible_1',
+    's1_collectible_1': {
+        id: 's1_collectible_1',
         sector: 1,
         index: 0,
         modelType: 'pacifier'
     },
-    's2_collectible_2': {
-        id: 's2_collectible_2',
+    's1_collectible_2': {
+        id: 's1_collectible_2',
         sector: 1,
         index: 1,
         modelType: 'teddy'
     },
 
     // Sector 2
-    's3_collectible_1': {
-        id: 's3_collectible_1',
+    's2_collectible_1': {
+        id: 's2_collectible_1',
         sector: 2,
         index: 0,
         modelType: 'diary'
     },
-    's3_collectible_2': {
-        id: 's3_collectible_2',
+    's2_collectible_2': {
+        id: 's2_collectible_2',
         sector: 2,
         index: 1,
         modelType: 'jacket'
     },
 
     // Sector 3
-    's4_collectible_1': {
-        id: 's4_collectible_1',
+    's3_collectible_1': {
+        id: 's3_collectible_1',
         sector: 3,
         index: 0,
         modelType: 'ring'
     },
-    's4_collectible_2': {
-        id: 's4_collectible_2',
+    's3_collectible_2': {
+        id: 's3_collectible_2',
         sector: 3,
         index: 1,
         modelType: 'badge'

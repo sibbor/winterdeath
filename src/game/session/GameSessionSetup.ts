@@ -71,7 +71,7 @@ export interface SetupContext {
     callbacks: {
         t: (k: string) => string;
         spawnBubble: (text: string, duration?: number) => void;
-        startCinematic: (mesh: any, scriptId?: number, params?: any) => void;
+        startCinematic: (mesh: any, sectorId?: number, dialogueId?: number, params?: any) => void;
         endCinematic: () => void;
         playCinematicLine: (index: number) => void;
         spawnPart: (x: number, y: number, z: number, type: string, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
@@ -403,19 +403,25 @@ export class GameSessionSetup {
                     alreadyFound = sets.clues.has(id);
                     if (!alreadyFound) {
                         sets.clues.add(id);
-                        stats.cluesFound.push(payload || { id });
+                        if (!stats.cluesFound.some((c: any) => c.id === id)) {
+                            stats.cluesFound.push(payload || { id });
+                        }
                     }
                 } else if (type === DiscoveryType.POI) {
                     alreadyFound = sets.pois.has(id);
                     if (!alreadyFound) {
                         sets.pois.add(id);
-                        stats.discoveredPOIs.push(id);
+                        if (!stats.discoveredPOIs.includes(id)) {
+                            stats.discoveredPOIs.push(id);
+                        }
                     }
                 } else if (type === DiscoveryType.COLLECTIBLE) {
                     alreadyFound = sets.collectibles.has(id);
                     if (!alreadyFound) {
                         sets.collectibles.add(id);
-                        stats.collectiblesDiscovered.push(id);
+                        if (!stats.collectiblesDiscovered.includes(id)) {
+                            stats.collectiblesDiscovered.push(id);
+                        }
                         // Add payload info if available for the UI
                         if (payload) {
                             // Enrich for the discovery screen

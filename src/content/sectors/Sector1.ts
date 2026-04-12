@@ -176,8 +176,8 @@ export const Sector1: SectorDef = {
     familySpawn: LOCATIONS.SPAWN.FAMILY,
     bossSpawn: LOCATIONS.SPAWN.BOSS,
     collectibles: [
-        { id: 's2_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
-        { id: 's2_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
+        { id: 's1_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
+        { id: 's1_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
     ],
 
     cinematic: {
@@ -291,15 +291,15 @@ export const Sector1: SectorDef = {
         if (!ctx.isWarmup) {
             // Triggers produce no GPU state — skip during preloader ghost-render
             SectorBuilder.addTriggers(ctx, [
-                { id: 's2_start', position: LOCATIONS.TRIGGERS.START, radius: 10, type: TriggerType.THOUGHT, content: "clues.1.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-                { id: 's2_combat', position: LOCATIONS.TRIGGERS.COMBAT, radius: 10, type: TriggerType.SPEAK, content: "clues.1.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-                { id: 's2_cave_lights', position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: TriggerType.SPEAK, content: "clues.1.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-                { id: 's2_cave_loot', position: LOCATIONS.TRIGGERS.CAVE_LOOT_1, radius: 15, type: TriggerType.SPEAK, content: "clues.1.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-                { id: 's2_cave_loot_more', position: LOCATIONS.TRIGGERS.CAVE_LOOT_2, radius: 15, type: TriggerType.SPEAK, content: "clues.1.4.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-                { id: 's2_poi_campfire', position: LOCATIONS.POIS.CAMPFIRE, radius: 10, type: TriggerType.POI, content: "pois.1.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-                { id: 's2_poi_train_tunnel', position: LOCATIONS.POIS.TRAIN_TUNNEL, radius: 15, type: TriggerType.POI, content: "pois.1.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-                { id: 's2_poi_cave_entrance', position: LOCATIONS.POIS.CAVE_ENTRANCE, radius: 15, type: TriggerType.POI, content: "pois.1.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-                { id: 's2_poi_mountain_vault', position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: TriggerType.POI, content: "pois.1.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
+                { id: 's1_start', position: LOCATIONS.TRIGGERS.START, radius: 10, type: TriggerType.THOUGHT, content: "clues.1.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+                { id: 's1_combat', position: LOCATIONS.TRIGGERS.COMBAT, radius: 10, type: TriggerType.SPEAK, content: "clues.1.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+                { id: 's1_cave_lights', position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: TriggerType.SPEAK, content: "clues.1.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+                { id: 's1_cave_loot', position: LOCATIONS.TRIGGERS.CAVE_LOOT_1, radius: 15, type: TriggerType.SPEAK, content: "clues.1.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+                { id: 's1_cave_loot_more', position: LOCATIONS.TRIGGERS.CAVE_LOOT_2, radius: 15, type: TriggerType.SPEAK, content: "clues.1.4.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+                { id: 's1_poi_campfire', position: LOCATIONS.POIS.CAMPFIRE, radius: 10, type: TriggerType.POI, content: "pois.1.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+                { id: 's1_poi_train_tunnel', position: LOCATIONS.POIS.TRAIN_TUNNEL, radius: 15, type: TriggerType.POI, content: "pois.1.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+                { id: 's1_poi_cave_entrance', position: LOCATIONS.POIS.CAVE_ENTRANCE, radius: 15, type: TriggerType.POI, content: "pois.1.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+                { id: 's1_poi_mountain_vault', position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: TriggerType.POI, content: "pois.1.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
             ]);
         }
 
@@ -425,10 +425,11 @@ export const Sector1: SectorDef = {
             }
 
             // 3. STATE MACHINE TRANSITIONS
-            if (jcState === 1) { // KNOCKING -> START CINEMATIC
+            if (jcState === 1) { // KNOCKING -> START CINEMATIC (Sector 1, Dialogue 0: shelter door)
                 if (elapsed > 1500) {
                     if (doorFrame && (events as any).startCinematic) {
-                        (events as any).startCinematic(doorFrame, 1, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
+                        // Sector 1, Dialogue 0 = Robert knocking / voice from inside
+                        (events as any).startCinematic(doorFrame, 1, 0, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
                         sectorState.jordanEventState = 2; // CINEMATIC_1_RUNNING
                         sectorState.jordanEventTimer = simTime;
                     }
@@ -476,10 +477,11 @@ export const Sector1: SectorDef = {
                     }
 
                     if (jordan.position.distanceTo(target) < 1.5) {
-                        sectorState.jordanEventState = 5; // DIALOGUE_102
+                        sectorState.jordanEventState = 5; // DIALOGUE_1_1 (Jordan + Loke outside)
                         sectorState.jordanEventTimer = simTime;
                         if (events.startCinematic) {
-                            events.startCinematic(jordan, 102, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
+                            // Sector 1, Dialogue 1 = Jordan + Loke conversation outside
+                            events.startCinematic(jordan, 1, 1, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
                         }
                     }
                 }

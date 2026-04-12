@@ -121,8 +121,8 @@ export const Sector0: SectorDef = {
     bossSpawn: LOCATIONS.SPAWN.BOSS,
 
     collectibles: [
-        { id: 's1_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
-        { id: 's1_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
+        { id: 's0_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
+        { id: 's0_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
     ],
 
     cinematic: {
@@ -664,22 +664,22 @@ export const Sector0: SectorDef = {
     setupContent: async (ctx: SectorContext) => {
         if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
         SectorBuilder.addTriggers(ctx, [
-            { id: 's1_start_tracks', position: LOCATIONS.TRIGGERS.START_TRACKS, radius: 10, type: TriggerType.THOUGHT, content: "clues.0.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-            { id: 's1_blood_stains', position: LOCATIONS.TRIGGERS.BLOOD_STAINS, radius: 10, type: TriggerType.THOUGHT, content: "clues.0.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-            { id: 's1_they_must_be_scared', position: LOCATIONS.TRIGGERS.CHAOS_HERE, radius: 8, type: TriggerType.THOUGHT, content: "clues.0.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-            { id: 's1_still_tracking', position: LOCATIONS.TRIGGERS.STILL_TRACKING, radius: 15, type: TriggerType.THOUGHT, content: "clues.0.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-            { id: 's1_town_center', position: LOCATIONS.TRIGGERS.TOWN_CENTER, radius: 80, type: TriggerType.THOUGHT, content: "clues.0.4.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's0_start_tracks', position: LOCATIONS.TRIGGERS.START_TRACKS, radius: 10, type: TriggerType.THOUGHT, content: "clues.0.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's0_blood_stains', position: LOCATIONS.TRIGGERS.BLOOD_STAINS, radius: 10, type: TriggerType.THOUGHT, content: "clues.0.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's0_they_must_be_scared', position: LOCATIONS.TRIGGERS.CHAOS_HERE, radius: 8, type: TriggerType.THOUGHT, content: "clues.0.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's0_still_tracking', position: LOCATIONS.TRIGGERS.STILL_TRACKING, radius: 15, type: TriggerType.THOUGHT, content: "clues.0.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's0_town_center', position: LOCATIONS.TRIGGERS.TOWN_CENTER, radius: 80, type: TriggerType.THOUGHT, content: "clues.0.4.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
 
-            { id: 's1_poi_building_on_fire', position: LOCATIONS.POIS.SMU, size: { width: 60, depth: 60 }, type: TriggerType.POI, content: "pois.0.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's1_poi_church', position: LOCATIONS.POIS.CHURCH, size: { width: 30, depth: 30 }, type: TriggerType.POI, content: "pois.0.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's1_poi_cafe', position: LOCATIONS.POIS.CAFE, size: { width: 25, depth: 25 }, type: TriggerType.POI, content: "pois.0.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's1_poi_pizzeria', position: LOCATIONS.POIS.PIZZERIA, size: { width: 25, depth: 25 }, type: TriggerType.POI, content: "pois.0.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's1_poi_grocery', position: LOCATIONS.POIS.GROCERY, size: { width: 25, depth: 40 }, type: TriggerType.POI, content: "pois.0.4.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's1_poi_gym', position: LOCATIONS.POIS.GYM, size: { width: 45, depth: 25 }, type: TriggerType.POI, content: "pois.0.5.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's1_poi_train_yard', position: LOCATIONS.POIS.TRAIN_YARD, size: { width: 130, depth: 90 }, type: TriggerType.POI, content: "pois.0.6.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's0_poi_building_on_fire', position: LOCATIONS.POIS.SMU, size: { width: 60, depth: 60 }, type: TriggerType.POI, content: "pois.0.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's0_poi_church', position: LOCATIONS.POIS.CHURCH, size: { width: 30, depth: 30 }, type: TriggerType.POI, content: "pois.0.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's0_poi_cafe', position: LOCATIONS.POIS.CAFE, size: { width: 25, depth: 25 }, type: TriggerType.POI, content: "pois.0.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's0_poi_pizzeria', position: LOCATIONS.POIS.PIZZERIA, size: { width: 25, depth: 25 }, type: TriggerType.POI, content: "pois.0.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's0_poi_grocery', position: LOCATIONS.POIS.GROCERY, size: { width: 25, depth: 40 }, type: TriggerType.POI, content: "pois.0.4.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's0_poi_gym', position: LOCATIONS.POIS.GYM, size: { width: 45, depth: 25 }, type: TriggerType.POI, content: "pois.0.5.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's0_poi_train_yard', position: LOCATIONS.POIS.TRAIN_YARD, size: { width: 130, depth: 90 }, type: TriggerType.POI, content: "pois.0.6.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
 
             // THE NATIVE BUS EVENT TRIGGER
-            { id: 's1_event_tunnel_blocked', position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: TriggerType.SPEAK, content: "clues.0.5.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [] },
+            { id: 's0_event_tunnel_blocked', position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: TriggerType.SPEAK, content: "clues.0.5.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [] },
 
             // LOKE CINEMATIC TRIGGER — starts INACTIVE.
             // Activated by onUpdate State 9 only after the bus explosion settles,
@@ -793,7 +793,7 @@ export const Sector0: SectorDef = {
 
         // State 0: Wait for player to approach the bus
         if (sectorState.busEventState === 0) {
-            const busTrigger = gameState.triggers?.find((t: any) => t.id === 's1_event_tunnel_blocked');
+            const busTrigger = gameState.triggers?.find((t: any) => t.id === 's0_event_tunnel_blocked');
             if (busTrigger && busTrigger.triggered) {
                 sectorState.busEventState = 1;
                 sectorState.busEventTimer = simTime;

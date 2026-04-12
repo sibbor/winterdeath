@@ -6,9 +6,10 @@ import { SoundID } from '../../utils/audio/AudioTypes';
 import { VEGETATION_TYPE } from '../../content/environment';
 import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
 import { CAMERA_HEIGHT } from '../constants';
-import { EnemyType } from '../../entities/enemies/EnemyTypes';
+import { EnemyType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { POI_TYPE } from '../../content/pois';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
+import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 
 const LOCATIONS = {
     SPAWN: {
@@ -108,8 +109,8 @@ export const Sector2: SectorDef = {
     bossSpawn: LOCATIONS.SPAWN.BOSS,
 
     collectibles: [
-        { id: 's3_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
-        { id: 's3_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
+        { id: 's2_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
+        { id: 's2_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
     ],
 
     cinematic: {
@@ -352,33 +353,44 @@ export const Sector2: SectorDef = {
         if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
         // Triggers:
         SectorBuilder.addTriggers(ctx, [
+            // ESMERALDA CINEMATIC TRIGGER — starts INACTIVE.
+            // Activated by onUpdate once all mast-area zombies are cleared.
             {
-                id: 'found_esmeralda',
+                id: 's2_found_esmeralda',
                 position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA,
                 familyId: 2,
                 radius: 8,
                 type: TriggerType.EVENT,
                 content: '',
-                statusFlags: TriggerStatus.ACTIVE,
-                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { scriptId: 2 } }]
+                statusFlags: TriggerStatus.ONCE, // Starts INACTIVE — activated after kill clear
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: 2, sectorId: 2, scriptId: 0 } }]
             },
-            { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_AMBIENT, radius: 8, type: TriggerType.SPEAK, content: "clues.2.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            // MAST ZONE — player entering this activates the zombie kill event
             {
-                id: 's3_poi_mast',
+                id: 's2_mast_zone_enter',
+                position: LOCATIONS.TRIGGERS.POI_MAST,
+                radius: 40,
+                type: TriggerType.EVENT,
+                content: '',
+                statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                actions: [] // Consumed in onUpdate via mastEventState
+            },
+            { id: 's2_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_AMBIENT, radius: 8, type: TriggerType.SPEAK, content: "clues.2.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            {
+                id: 's2_poi_mast',
                 position: LOCATIONS.TRIGGERS.POI_MAST,
                 radius: 50,
                 type: TriggerType.POI,
                 content: "pois.2.0.reaction",
                 statusFlags: TriggerStatus.ACTIVE,
                 actions: [
-                    { type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } },
-                    { type: TriggerActionType.START_CINEMATIC, payload: { customPath: 'mast_flyover', targetName: 'POI_MAST' } }
+                    { type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }
                 ]
             },
-            { id: 's3_poi_farm', position: LOCATIONS.POIS.FARM, radius: 20, type: TriggerType.POI, content: "pois.2.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's3_tractor', position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: TriggerType.SPEAK, content: "clues.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: 's2_poi_farm', position: LOCATIONS.POIS.FARM, radius: 20, type: TriggerType.POI, content: "pois.2.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: 's2_tractor', position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: TriggerType.SPEAK, content: "clues.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
             { id: 's2_poi_egg_farm', position: LOCATIONS.POIS.EGG_FARM, radius: 20, type: TriggerType.POI, content: "pois.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's3_poi_barn', position: LOCATIONS.POIS.BARN, radius: 20, type: TriggerType.POI, content: "pois.2.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
+            { id: 's2_poi_barn', position: LOCATIONS.POIS.BARN, radius: 20, type: TriggerType.POI, content: "pois.2.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
         ]);
     },
 
@@ -397,11 +409,138 @@ export const Sector2: SectorDef = {
             const count = 5 + Math.floor(ctx.rng() * 5);
             ctx.spawnHorde(count, undefined, hordeSpots[i]);
         }
+
+        // ~20 zombies pre-placed at the mast area for the Esmeralda kill-clear event.
+        // Mixed types for variety: walkers, runners, and one tank.
+        const mastPos = LOCATIONS.POIS.MAST;
+        const mastZombieTypes = [
+            EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER,
+            EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER,
+            EnemyType.RUNNER, EnemyType.RUNNER, EnemyType.RUNNER, EnemyType.RUNNER, EnemyType.RUNNER,
+            EnemyType.RUNNER, EnemyType.RUNNER, EnemyType.RUNNER,
+            EnemyType.TANK, EnemyType.TANK
+        ];
+
+        for (let i = 0; i < mastZombieTypes.length; i++) {
+            // Spread across the fenced mast compound (~30x30 area), seeded for consistency
+            const angle = (i / mastZombieTypes.length) * Math.PI * 2;
+            const radius = 8 + ctx.rng() * 18;
+            const offX = Math.cos(angle) * radius;
+            const offZ = Math.sin(angle) * radius;
+            const spawnPos = new THREE.Vector3(mastPos.x + offX, 0, mastPos.z + offZ);
+            ctx.spawnHorde(1, mastZombieTypes[i], spawnPos);
+        }
     },
 
     onUpdate: (delta, simTime, renderTime, playerPos, gameState, sectorState, events) => {
+        // Rotating mast warning light (every frame, Zero-GC)
         if (sectorState.mastLightHub) {
             sectorState.mastLightHub.rotation.y += delta * 2.0;
         }
+
+        // =====================================================================
+        // MAST EVENT STATE MACHINE
+        // State 0: idle (player hasn't entered the mast area)
+        // State 1: mast_zone entered — watching for zombie clearance
+        // State 2: zombies cleared — Esmeralda walks out of building
+        // State 3: cinematic started (waiting for CinematicSystem to finish via dialogue triggers)
+        // =====================================================================
+        if (!sectorState.mastEventState) sectorState.mastEventState = 0;
+        const mes = sectorState.mastEventState;
+        const mesTimer = sectorState.mastEventTimer || 0;
+        const mesElapsed = simTime - mesTimer;
+
+        const mastX = LOCATIONS.POIS.MAST.x;
+        const mastZ = LOCATIONS.POIS.MAST.z;
+        const MAST_RADIUS_SQ = 40 * 40;
+
+        const sceneHost = (events as any).scene || (gameState as any).scene;
+        const scene = sceneHost as THREE.Scene;
+
+        if (mes === 0) {
+            // Check if mast_zone_enter trigger was consumed (pendingTrigger) OR player walked into zone
+            const dx = playerPos.x - mastX;
+            const dz = playerPos.z - mastZ;
+            if (dx * dx + dz * dz < MAST_RADIUS_SQ) {
+                sectorState.mastEventState = 1;
+                sectorState.mastEventTimer = simTime;
+                // Tell the player something is happening
+                events.setNotification({ text: (events as any).t?.('clues.2.mast_enter') || 'Zombies inside the compound...', duration: 3500 });
+            }
+        }
+
+        else if (mes === 1) {
+            // Count living enemies within the mast radius each tick (throttled to ~5fps)
+            if (mesElapsed > 200) {
+                sectorState.mastEventTimer = simTime; // Reset for throttle
+
+                const enemies = (gameState as any).enemies;
+                let aliveInZone = 0;
+                if (enemies) {
+                    for (let i = 0; i < enemies.length; i++) {
+                        const e = enemies[i];
+                        if (e.deathState !== EnemyDeathState.ALIVE) continue;
+                        const ex = e.mesh?.position.x ?? 0;
+                        const ez = e.mesh?.position.z ?? 0;
+                        const edx = ex - mastX;
+                        const edz = ez - mastZ;
+                        if (edx * edx + edz * edz < MAST_RADIUS_SQ) aliveInZone++;
+                    }
+                }
+
+                if (aliveInZone === 0 && (simTime - (sectorState.mastZombiesSpawnedAt || 0) > 2000)) {
+                    // All mast zombies dead — transition to Esmeralda exit
+                    sectorState.mastEventState = 2;
+                    sectorState.mastEventTimer = simTime;
+                    events.setNotification({ text: (events as any).t?.('clues.2.mast_clear') || 'The area is clear...', duration: 3000 });
+                }
+                sectorState.mastZombiesSpawnedAt = sectorState.mastZombiesSpawnedAt || simTime; // Set once
+            }
+        }
+
+        else if (mes === 2) {
+            // Wait 1.5s, then walk Esmeralda out of the building toward the player
+            if (mesElapsed > 1500 && scene) {
+                const esmeralda = scene.children.find(
+                    (c: any) => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Esmeralda'
+                ) as any;
+
+                if (esmeralda) {
+                    if (!sectorState.esmeraldaWalkTarget) {
+                        sectorState.esmeraldaWalkTarget = new THREE.Vector3(
+                            mastX,
+                            0,
+                            mastZ + 20 // Walk out from the building toward the road
+                        );
+                    }
+
+                    esmeralda.position.lerp(sectorState.esmeraldaWalkTarget, 0.04);
+
+                    if (esmeralda.position.distanceTo(sectorState.esmeraldaWalkTarget) < 2.0) {
+                        // Esmeralda has reached her mark — start the cinematic
+                        sectorState.mastEventState = 3;
+                        sectorState.mastEventTimer = simTime;
+
+                        if (events.startCinematic) {
+                            events.startCinematic(esmeralda, 2, 0); // Sector 2, Dialogue 0
+                        }
+
+                        // Activate the proximity trigger as a fallback (player walked in late)
+                        const esmeraldaTrigger = (gameState as any).triggers?.find((t: any) => t.id === 's2_found_esmeralda');
+                        if (esmeraldaTrigger) {
+                            esmeraldaTrigger.statusFlags = TriggerStatus.ACTIVE | TriggerStatus.ONCE;
+                            esmeraldaTrigger.triggered = false;
+                        }
+                    }
+                } else {
+                    // Esmeralda mesh not found — advance anyway after a timeout
+                    if (mesElapsed > 5000) {
+                        sectorState.mastEventState = 3;
+                        sectorState.mastEventTimer = simTime;
+                    }
+                }
+            }
+        }
+        // State 3: cinematic running — FAMILY_MEMBER_FOUND + SPAWN_BOSS handled by dialogue trigger array
     }
 };
