@@ -13,6 +13,7 @@ import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { FootprintSystem } from './FootprintSystem';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { SoundID } from '../utils/audio/AudioTypes';
+import { PlayerStatsSystem } from './PlayerStatsSystem';
 
 // --- SPEED AUDIT TELEMETRY (ZERO-GC) ---
 let _auditSimDist = 0;
@@ -382,6 +383,17 @@ export class PlayerMovementSystem implements System {
                 this.checkReflexShield(session, simTime);
                 audioEngine.playSound(SoundID.DASH);
                 session.makeNoise(playerGroup.position, NoiseType.PLAYER_DODGING, NOISE_RADIUS[NoiseType.PLAYER_DODGING]);
+
+                // VINTERDÖD: Proximity-Based Quick Finger (Witch Time)
+                if (session.state.collisionGrid) {
+                    const nearby = session.state.collisionGrid.getNearbyEnemies(playerGroup.position, 1.0);
+                    if (nearby.length > 0) {
+                        const statsSystem = session.engine.getSystem<PlayerStatsSystem>('player_stats');
+                        if (statsSystem) {
+                            statsSystem.triggerPerfectDodge(session);
+                        }
+                    }
+                }
 
                 FXSystem.spawnPart(
                     session.engine.scene, state.particles,

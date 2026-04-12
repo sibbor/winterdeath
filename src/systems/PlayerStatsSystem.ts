@@ -284,19 +284,6 @@ export class PlayerStatsSystem implements System {
 
         if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0 || state.sectorState?.isInvincible) return;
 
-        // VINTERDÖD: Perfect Dodge Logic
-        // If an attack lands while dodging, trigger QUICK_FINGER (Bullet Time)
-        if ((state.statusFlags & PlayerStatusFlags.DODGING) !== 0 && !isDoT) {
-            const cooldown = PERKS[StatusEffectType.QUICK_FINGER]?.cooldown || 30000;
-            if (now - state.lastPerfectDodgeTime > cooldown) {
-                state.lastPerfectDodgeTime = now;
-                this.triggerBuff(session, StatusEffectType.QUICK_FINGER, now);
-                state.globalTimeScale = 0.2; // ACTIVATE SLOWMO
-                audioEngine.playSound(SoundID.BUFF_GAINED);
-                return; // Negate Damage
-            }
-        }
-
         if (state.effectDurations[StatusEffectType.REFLEX_SHIELD] > 0 || state.effectDurations[StatusEffectType.ADRENALINE_PATCH] > 0) {
             // Reflex shield reduces damage by 50% in the calculation below, 
             // but we allow the hit to "land" for feedback.
@@ -471,6 +458,24 @@ export class PlayerStatsSystem implements System {
         if (perk) {
             state.effectDurations[type] = perk.duration || 3000;
             state.effectMaxDurations[type] = perk.duration || 3000;
+        }
+    }
+
+    public triggerPerfectDodge(session: GameSessionLogic) {
+        const state = session.state;
+        const now = state.simTime;
+        const cooldown = PERKS[StatusEffectType.QUICK_FINGER]?.cooldown || 30000;
+
+        if (now - state.lastPerfectDodgeTime > cooldown) {
+            state.lastPerfectDodgeTime = now;
+            this.triggerBuff(session, StatusEffectType.QUICK_FINGER, now);
+            state.globalTimeScale = 0.2; // ACTIVATE SLOWMO
+            audioEngine.playSound(SoundID.BUFF_GAINED);
+            
+            // Notification for the player
+            if (session.triggerDiscovery) {
+                session.triggerDiscovery('event', 'perfect_dodge', 'WITCH TIME', 'Proximity dodge triggered Bullet Time!');
+            }
         }
     }
 
