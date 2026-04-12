@@ -577,10 +577,15 @@ export const EnemyAI = {
                                 e.state = AIState.ATTACK_CHARGE;
                                 e.attackTimer = att.chargeTime * 0.001;
                             } else {
+                                // VINTERDÖD: State-Guard to prevent GRAPPLE being overwritten
+                                const prevState = e.state;
                                 EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
-                                logStateChange(simTime, e, AIState.ATTACKING);
-                                e.state = AIState.ATTACKING;
-                                e.attackTimer = (att.activeTime || 500) * 0.001;
+                                
+                                if (e.state === prevState) {
+                                    logStateChange(simTime, e, AIState.ATTACKING);
+                                    e.state = AIState.ATTACKING;
+                                    e.attackTimer = (att.activeTime || 500) * 0.001;
+                                }
                             }
                         }
                     }
@@ -597,10 +602,15 @@ export const EnemyAI = {
                     }
 
                     if (e.attackTimer <= 0) {
-                        logStateChange(simTime, e, AIState.ATTACKING);
-                        e.state = AIState.ATTACKING;
-                        e.attackTimer = (att.activeTime || 100) * 0.001;
+                        // VINTERDÖD: State-Guard for charge-finish
+                        const prevState = e.state;
                         EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
+
+                        if (e.state === prevState) {
+                            logStateChange(simTime, e, AIState.ATTACKING);
+                            e.state = AIState.ATTACKING;
+                            e.attackTimer = (att.activeTime || 100) * 0.001;
+                        }
                     }
                 }
                 break;
