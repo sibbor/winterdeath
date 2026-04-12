@@ -190,7 +190,7 @@ class FootprintSystemClass implements System {
             const data = this.footprintData[i];
             if (!data.active) continue;
 
-            data.life -= delta;
+            data.life -= delta * 1000;
 
             if (data.life <= 0) {
                 data.active = false;
