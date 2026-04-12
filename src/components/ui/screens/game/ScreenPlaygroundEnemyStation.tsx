@@ -170,7 +170,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                             return (
                                 <div key={type} className="flex flex-col gap-2">
                                     <div className="flex justify-between items-end">
-                                        <span className="text-zinc-200 text-sm font-bold uppercase tracking-tighter">{t(`enemies.zombies.${typeName}.name`)}</span>
+                                        <span className="text-zinc-200 text-sm font-bold uppercase tracking-tighter">{t(DataResolver.getZombieName(type))}</span>
                                         <span className={`text-[13px] font-mono ${val > 0 ? 'text-red-500' : 'text-zinc-600'}`}>{val}</span>
                                     </div>
                                     <input

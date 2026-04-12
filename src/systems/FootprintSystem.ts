@@ -181,7 +181,7 @@ class FootprintSystemClass implements System {
      * Main update loop for fading footprints.
      * Uses scale fading instead of opacity to allow single-material instancing.
      */
-    update(delta: number) {
+    update(ctx: any, delta: number, simTime: number, renderTime: number) {
         if (!this.enabled || !this.instancedMesh) return;
 
         let needsUpdate = false;

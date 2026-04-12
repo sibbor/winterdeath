@@ -24,9 +24,7 @@ export const TriggerHandler = {
             onDiscovery?: (type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
             playSound?: (id: SoundID) => void;
         },
-        delta: number,
-        simTime: number,
-        renderTime: number
+        simTime: number
     ) => {
         // OPTIMIZATION: Only fetch triggers within 40 units to save CPU cycles
         const triggers = state.collisionGrid.getNearbyTriggers(playerPos, 40.0);

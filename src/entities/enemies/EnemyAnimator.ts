@@ -15,7 +15,7 @@ export const EnemyAnimator = {
      * Uses pure mathematics (sin/cos/lerp) to deform and translate the mesh.
      * 100% Zero-GC (No object allocations).
      */
-    updateAttackAnim: (e: Enemy, simTime: number, renderTime: number, simDelta: number) => {
+    updateAttackAnim: (e: Enemy, renderTime: number, simDelta: number) => {
         const mesh = e.mesh;
         if (!mesh) return;
 
@@ -113,7 +113,7 @@ export const EnemyAnimator = {
                         if (att.radius) {
                             e.indicatorRing.visible = true;
                             e.indicatorRing.matrixAutoUpdate = true;
-                            e.indicatorRing.position.set(0, -targetPosY + 0.05, 0);
+                            e.indicatorRing.position.set(0, -targetPosY + 0.2, 0); // VINTERDÖD: Fixed offset
                             const safeScaleX = Math.max(0.01, targetScaleX);
                             e.indicatorRing.scale.setScalar(att.radius / safeScaleX);
 

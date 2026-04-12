@@ -11,9 +11,10 @@ import { StatusEffectType } from '../content/perks';
 import { SpatialGrid } from '../core/world/SpatialGrid';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { _buoyancyResult } from '../systems/WaterSystem';
-import { NoiseType, NOISE_RADIUS, EnemyFlags } from '../entities/enemies/EnemyTypes';
+import { NoiseType, NOISE_RADIUS, EnemyFlags, EnemyType } from '../entities/enemies/EnemyTypes';
 import { WeaponFX } from './WeaponFX';
 import { MaterialType } from '../content/environment';
+import { MASSIVE_DAMAGE_THRESHOLD } from '../content/constants';
 
 // --- INTERFACES ---
 
@@ -490,20 +491,21 @@ export const ProjectileSystem = {
     },
 
     update: (ctx: GameContext, projectiles: Projectile[], fireZones: FireZone[], delta: number, simTime: number, renderTime: number) => {
-        ctx.simTime = simTime;
-        ctx.renderTime = renderTime;
-
-        WeaponFX.updateFX(delta, ctx);
-
+        const globalTimeScale = ctx.session.state.globalTimeScale || 1.0;
         const waterSystem = WinterEngine.getInstance()?.water;
 
         for (let i = projectiles.length - 1; i >= 0; i--) {
             const p = projectiles[i];
 
+            // VINTERDÖD SAFETY: Player projectiles (1-15) run at 100% speed.
+            // Everything else (Acid, Traps) runs at globalTimeScale.
+            const isPlayerProj = p.weapon <= 15;
+            const scaledDelta = isPlayerProj ? delta : delta * globalTimeScale;
+
             if (p.type === ProjectileType.BULLET) {
-                updateBullet(p, i, delta, ctx, projectiles);
+                updateBullet(p, i, scaledDelta, ctx, projectiles);
             } else {
-                updateThrowable(p, i, delta, ctx, simTime, projectiles, waterSystem);
+                updateThrowable(p, i, scaledDelta, ctx, simTime, renderTime, projectiles, waterSystem);
             }
         }
 
@@ -652,7 +654,6 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
             if (_v6.distanceToSquared(_v5) < hitRad * hitRad) {
 
                 let isHighImpact = false;
-
                 if (projectile.highImpactDistSq > 0) {
                     const dx = _v6.x - projectile.origin.x;
                     const dz = _v6.z - projectile.origin.z;
@@ -662,6 +663,8 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                     if (projectile.damage >= projectile.baseDamage * projectile.highImpactDamageFactor) isHighImpact = true;
                 }
 
+                const isMassiveDamage = projectile.damage >= MASSIVE_DAMAGE_THRESHOLD;
+
                 projectile.hitEntities.add(enemy.id);
                 enemy.slowDuration = 0.5;
 
@@ -669,6 +672,14 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 if (tracker) tracker.recordHit(ctx.session, projectile.weapon);
 
                 const isKill = ctx.applyDamage(enemy, projectile.damage, projectile.weapon, isHighImpact);
+                const isHeavyKill = isKill && enemy.type === EnemyType.TANK;
+
+                // VINTERDÖD HIT-STOP: High Impact, Massive Damage, or Heavy Takedown
+                if (isHighImpact || isMassiveDamage || isHeavyKill) {
+                    const engine = WinterEngine.getInstance();
+                    if (engine) engine.triggerHitStop(isHeavyKill ? 45 : 35);
+                    if (isHeavyKill || isMassiveDamage) haptic.impact(0.8);
+                }
 
                 const mass = enemy.originalScale * enemy.widthScale;
                 const force = (projectile.damage / 3) / Math.max(0.3, mass);
@@ -680,7 +691,6 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 _v5.copy(projectile.vel).setY(0).normalize().multiplyScalar(force);
                 enemy.knockbackVel.add(_v5);
 
-                const headY = enemy.mesh.position.y + enemy.originalScale * 1.8;
                 ctx.spawnPart(_v6.x, 1.5, _v6.z, 'blood_splatter', 6);
                 GamePlaySounds.playImpact(MaterialType.FLESH);
 
@@ -705,7 +715,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
     }
 }
 
-function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameContext, simTime: number, projectiles: Projectile[], waterSystem: any) {
+function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameContext, simTime: number, renderTime: number, projectiles: Projectile[], waterSystem: any) {
     p.vel.y -= 30 * delta;
     p.mesh.position.addScaledVector(p.vel, delta);
     p.mesh.rotation.x += 8 * delta;
@@ -719,7 +729,7 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
     let hitY = 0;
 
     if (p.mesh.position.y < 2.0 && waterSystem) {
-        waterSystem.checkBuoyancy(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z, ctx.session.state.renderTime);
+        waterSystem.checkBuoyancy(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z, renderTime);
         if (_buoyancyResult.inWater && p.mesh.position.y <= _buoyancyResult.waterLevel) {
             destroyed = true;
             hitWater = true;
@@ -769,6 +779,11 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
 
                     if (distSq < totalRad * totalRad) {
                         const isKill = ctx.applyDamage(e, p.damage, DamageID.GRENADE, true);
+
+                        // VINTERDÖD HIT-STOP: High-yield explosions (Grenades/Flashbangs) trigger engine freeze
+                        if (p.weapon === DamageID.GRENADE || p.weapon === DamageID.FLASHBANG) {
+                            WinterEngine.getInstance()?.triggerHitStop(40);
+                        }
 
                         if (isKill) {
                             const forceMultiplier = hitWater ? 5.0 : 15.0;

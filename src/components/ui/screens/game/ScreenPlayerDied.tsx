@@ -36,12 +36,15 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
     const { deathPhrase, deathDisplayText, deathDescription, headerText } = useMemo(() => {
         const phrase = killedByEnemy ? t('ui.killed_by') : t('ui.died_from');
 
-        // Engine pre-localizes killerName and killerAttackName (BITE, FIRE, etc.)
+        // killerName and deathReason are now keys or pre-resolved names
+        const nameResolved = killerName.includes('.') ? t(killerName) : killerName;
+        const attackResolved = deathReason.includes('.') ? t(deathReason) : deathReason;
+
         const hasSpecificAttack = killedByEnemy && deathReason && deathReason !== 'HIT' && deathReason !== 'HIDDEN';
 
-        let displayName = killerName.toUpperCase();
+        let displayName = nameResolved.toUpperCase();
         if (hasSpecificAttack) {
-            displayName = `${killerName.toUpperCase()} (${t(DataResolver.getAttackName(deathReason as any))})`;
+            displayName = `${nameResolved.toUpperCase()} (${attackResolved})`;
         }
 
         const description = (hasSpecificAttack || !killedByEnemy) ? t(DataResolver.getAttackDescription(deathReason as any)) : '';

@@ -70,7 +70,7 @@ export class LightSystem implements System {
         }
     }
 
-    public update(context: any, delta: number, now: number): void {
+    public update(context: any, delta: number, simTime: number, renderTime: number): void {
         if (!context) return;
         const state = context.state || context;
         if (!state) return;
@@ -138,7 +138,7 @@ export class LightSystem implements System {
                     const rate = logicLight.flickerRate || 1;
                     
                     // Simple pulse + optional noise jump
-                    currentIntensity += Math.sin(now * speed) * spread;
+                    currentIntensity += Math.sin(renderTime * speed) * spread;
                     
                     if (Math.random() < rate) {
                          currentIntensity += (Math.random() - 0.5) * spread * 0.5;

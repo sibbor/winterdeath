@@ -40,6 +40,7 @@ import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { RuntimeState } from '../../core/RuntimeState';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { DataResolver } from '../../utils/ui/DataResolver';
+import { PerkFX } from '../../systems/PerkFX';
 
 import { InteractionType } from '../../systems/InteractionTypes';
 
@@ -597,6 +598,8 @@ export class GameSessionSetup {
 
         const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
         session.addSystem(playerStatsSystem);
+
+        session.perksFx = new PerkFX(playerGroup);
 
         session.addSystem(new EnemySystem(playerGroup, {
             spawnBubble: callbacks.spawnBubble,

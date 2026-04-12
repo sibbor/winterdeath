@@ -82,7 +82,7 @@ const createHudBuffer = () => ({
     distanceTraveled: 0,
     kills: 0,
 
-    sectorStats: { unlimitedAmmo: false, unlimitedThrowables: false, isInvincible: false, hordeTarget: 0, zombiesKilled: 0, zombiesKillTarget: 0 },
+    sectorStats: { unlimitedAmmo: false, unlimitedThrowables: false, isInvincible: false, hordeTarget: 0, zombiesKilled: 0, zombiesKillTarget: 0, zombieWaveActive: false },
 
     isDriving: false,
     vehicleSpeed: 0,
@@ -93,6 +93,15 @@ const createHudBuffer = () => ({
     killerName: '',
     killerAttackName: '',
     killedByEnemy: false,
+    currentSector: 0,
+    cluesFoundCount: 0,
+    poisFoundCount: 0,
+
+    // --- COMBAT FEEL & VIGNETTE ---
+    isCritical: false,
+    isGibMaster: false,
+    isQuickFinger: false,
+
     debugInfo: createDebugInfo(),
     mapItems: [] as any[],
     fps: 0,
@@ -342,7 +351,16 @@ export const HudSystem = {
         _current.fps = PerformanceMonitor.getInstance().getFps();
         _current.hudVisible = state.hudVisible ?? _current.hudVisible;
         _current.sectorName = state.sectorName || '';
+        _current.currentSector = props.currentSector || 0;
+        _current.cluesFoundCount = state.sessionStats?.cluesFound?.length || 0;
+        _current.poisFoundCount = state.sessionStats?.discoveredPOIs?.length || 0;
         _current.isMobileDevice = !!props.isMobileDevice;
+
+        const hp = _current.hp;
+        const maxHp = _current.maxHp;
+        _current.isCritical = hp > 0 && hp < maxHp * 0.25;
+        _current.isGibMaster = (state.statusFlags & PlayerStatusFlags.GIB_MASTER) !== 0;
+        _current.isQuickFinger = (state.statusFlags & PlayerStatusFlags.QUICK_FINGER) !== 0;
 
         // --- SYNC INTERACTION PROMPT (Zero-GC) ---
         if (state.hasInteractionTarget && state.interactionTargetPos) {

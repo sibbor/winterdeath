@@ -16,6 +16,7 @@ import { Obstacle } from '../../core/world/CollisionResolution';
 import { ParticleState } from '../../systems/FXSystem';
 import { PlayerStatID, PlayerStatusFlags, PlayerStatsUtils } from '../../entities/player/PlayerTypes';
 import { InteractionType } from '../../systems/InteractionTypes';
+import { PerkFX } from '../../systems/PerkFX';
 
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
@@ -23,6 +24,7 @@ export class GameSessionLogic {
     public debugMode: boolean = false;
     public cameraAngle: number = 0;
     public mapId: number = 0;
+    public perksFx: PerkFX | null = null;
 
     public engine: WinterEngine;
     public state!: RuntimeState;
@@ -197,9 +199,17 @@ export class GameSessionLogic {
             lastDodgeEndTime: 0,
             lastReflexShieldTime: 0,
             lastAdrenalinePatchTime: 0,
+            lastPerfectDodgeTime: 0,
             lastHeartbeat: 0,
             rushFactor: 0,
             currentSpeedRatio: 1.0,
+
+            // --- GAME FEEL & TIME DILATION ---
+            hitStopTime: 0,
+            globalTimeScale: 1.0,
+            killStreakBuffer: new Float32Array(5), // Rolling timestamps for GIB_MASTER
+            lastAdrenalineTime: 0,
+            lastGibMasterTime: 0,
 
             // --- OBJECT POOLS ---
             enemies: [] as Enemy[],
@@ -357,14 +367,24 @@ export class GameSessionLogic {
             // even if the simulation clock (now) is paused or slowed.
             if (enemy) enemy.hitRenderTime = this.state.renderTime;
 
-            // (Skicka bara vidare! Trackingen sköts redan perfekt inuti originalApplyDamage)
-            return originalApplyDamage(enemy, amount, type, isHighImpact);
+            const result = originalApplyDamage(enemy, amount, type, isHighImpact);
+
+            if (result && enemy.hp <= 0) {
+                const statsSys = this.getSystem('player_stats_system') as any;
+                if (statsSys) statsSys.onEnemyKilled(this, enemy, this.engine.simTime);
+            }
+
+            return result;
         };
     }
 
     update(dt: number, mapId: number = 0) {
         this.mapId = mapId;
         if (!this.state) return;
+
+        if (this.perksFx) {
+            this.perksFx.update(this, dt, this.state.simTime, this.state.renderTime);
+        }
     }
 
     /**

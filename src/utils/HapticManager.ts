@@ -41,4 +41,10 @@ export const haptic = {
     explosionWater(): void {
         doVibrate([20, 45, 30]);
     },
+
+    /** Generic impact pulse with variable intensity (1.5 - 1.0). */
+    impact(intensity: number): void {
+        const duration = Math.floor(30 + intensity * 40);
+        doVibrate(duration);
+    }
 };

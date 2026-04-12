@@ -37,6 +37,10 @@ export enum StatusEffectType {
     FREEZING = 11,
     ELECTRIFIED = 12,
     DROWNING = 13,
+
+    // --- NEW SYSTEM BUFFS (Phase 11) ---
+    GIB_MASTER = 14,
+    QUICK_FINGER = 15
 }
 
 export interface PerkStats {
@@ -101,13 +105,13 @@ PERKS[StatusEffectType.WINTERS_BONE] = {
 // --- BUFFS ---
 PERKS[StatusEffectType.REFLEX_SHIELD] = {
     id: StatusEffectType.REFLEX_SHIELD,
-    icon: '🌀',
+    icon: '🛡️',
     displayName: 'perks.REFLEX_SHIELD.title',
     description: 'perks.REFLEX_SHIELD.description',
     category: PerkCategory.BUFF,
-    duration: 2000,
-    cooldown: 10000,
-    damageResistModifier: 100, // 100% damage resistance
+    duration: 1000, // Linger duration
+    cooldown: 0,
+    damageResistModifier: 50, // 50% damage resistance
 };
 PERKS[StatusEffectType.ADRENALINE_PATCH] = {
     id: StatusEffectType.ADRENALINE_PATCH,
@@ -116,9 +120,27 @@ PERKS[StatusEffectType.ADRENALINE_PATCH] = {
     description: 'perks.ADRENALINE_PATCH.description',
     category: PerkCategory.BUFF,
     duration: 3000,
-    cooldown: 60000,
+    cooldown: 30000,
     speedModifier: 30,
     fireRateModifier: 20
+};
+PERKS[StatusEffectType.GIB_MASTER] = {
+    id: StatusEffectType.GIB_MASTER,
+    icon: '🎯',
+    displayName: 'perks.GIB_MASTER.title',
+    description: 'perks.GIB_MASTER.description',
+    category: PerkCategory.BUFF,
+    duration: 3000,
+    cooldown: 30000
+};
+PERKS[StatusEffectType.QUICK_FINGER] = {
+    id: StatusEffectType.QUICK_FINGER,
+    icon: '⏱️',
+    displayName: 'perks.QUICK_FINGER.title',
+    description: 'perks.QUICK_FINGER.description',
+    category: PerkCategory.BUFF,
+    duration: 5000,
+    cooldown: 30000
 };
 
 // --- DEBUFFS ---

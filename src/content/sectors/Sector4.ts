@@ -426,7 +426,7 @@ export const Sector4: SectorDef = {
         }
     },
 
-    onUpdate: (dt, now, playerPos, gameState, sectorState, events) => {
+    onUpdate: (dt, simTime, renderTime, playerPos, gameState, sectorState, events) => {
         // --- FLOATING BALL ---
         // Extract the ball from state
         const ball = sectorState.interactiveBall;
@@ -460,7 +460,7 @@ export const Sector4: SectorDef = {
 
         // --- BUS EXPLOSION EXPERIMENT ---
         if (sectorState.busPlanting && !sectorState.busExploded) {
-            const plantingElapsed = gameState.simTime - sectorState.busPlantingTime;
+            const plantingElapsed = simTime - (sectorState.busPlantingTime || 0);
 
             // Beep every 500ms
             const lastBeep = sectorState.lastBusBeep || 0;
@@ -477,7 +477,7 @@ export const Sector4: SectorDef = {
 
         if (sectorState.busExploded && !sectorState.busExplosionHandled) {
             sectorState.busExplosionHandled = true;
-            sectorState.busExplosionTime = now;
+            sectorState.busExplosionTime = renderTime;
 
             if (events.playSound) events.playSound(SoundID.EXPLOSION);
             if (events.cameraShake) events.cameraShake(5);
@@ -594,7 +594,7 @@ export const Sector4: SectorDef = {
             const bouncy = isTire ? 0.7 : 0.4;
             const data = rubble.userData;
             let stillMoving = false;
-            const elapsed = now - sectorState.busExplosionTime;
+            const elapsed = renderTime - (sectorState.busExplosionTime || 0);
 
             for (let i = 0; i < rubble.count; i++) {
                 const ix = i * 3;

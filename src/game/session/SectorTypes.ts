@@ -103,7 +103,8 @@ export interface SectorDef {
     generate?: (ctx: SectorContext) => Promise<void>;
     onUpdate: (
         delta: number,
-        now: number,
+        simTime: number,
+        renderTime: number,
         playerPos: THREE.Vector3,
         gameState: any,
         sectorState: SectorState,

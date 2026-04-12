@@ -218,7 +218,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                                 {sectorTheme.familyMemberId !== undefined && (
                                     <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
                                         {t('ui.family_member')}: {isRescued
-                                            ? t(DataResolver.getFamilyMembers()[sectorTheme.familyMemberId!]?.name)
+                                            ? t(DataResolver.getFamilyMemberName(sectorTheme.familyMemberId!))
                                             : t(familyStatusKey)}
                                     </div>
                                 )}

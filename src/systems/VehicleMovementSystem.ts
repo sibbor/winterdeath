@@ -43,7 +43,7 @@ export class VehicleMovementSystem implements System {
                     state,
                     delta,
                     session,
-                    simTime,
+                    renderTime,
                     def
                 );
             }

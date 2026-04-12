@@ -1,6 +1,6 @@
 import { DamageID, EnemyAttackType, ENEMY_ATTACK_NAMES, ENVIRONMENTAL_DAMAGE_NAMES } from '../../entities/player/CombatTypes';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
-import { WEAPONS, WEAPON_CATEGORY_NAMES, WeaponCategory } from '../../content/weapons';
+import { WEAPONS, WEAPON_CATEGORY_NAMES, WeaponCategory, WeaponType } from '../../content/weapons';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
 import { POIS } from '../../content/pois';
@@ -115,6 +115,38 @@ export const DataResolver = {
     },
 
     /**
+     * Resolves the localized name key for a specific Weapon.
+     */
+    getWeaponName(type: WeaponType): string {
+        const weapon = WEAPONS[type];
+        return weapon ? weapon.displayName : 'ui.unknown';
+    },
+
+    /**
+     * Resolves the localized description key for a specific Weapon.
+     */
+    getWeaponDescription(type: WeaponType): string {
+        const weapon = WEAPONS[type];
+        return weapon ? `${weapon.displayName}.description` : 'ui.description_missing';
+    },
+
+    /**
+     * Resolves the localized name key for a Family Member.
+     */
+    getFamilyMemberName(idOrIndex: number | string): string {
+        const member = typeof idOrIndex === 'number' ? FAMILY_MEMBERS[idOrIndex] : FAMILY_MEMBERS.find(m => m.id === Number(idOrIndex));
+        return member ? member.name : 'ui.unknown';
+    },
+
+    /**
+     * Resolves the localized name key for a Player Rank.
+     */
+    getRankName(level: number): string {
+        const rankKey = Math.min(Math.max(0, level - 1), 19);
+        return `ranks.${rankKey}`;
+    },
+
+    /**
      * Unified Enemy Name lookup (Handles both Bosses and Mob types).
      * @param logFriendly If true, returns a localized or readable name (e.g. "Vandrare" or "Walker") 
      * instead of a raw translation key.
@@ -219,6 +251,21 @@ export const DataResolver = {
             case DiscoveryType.ENEMY: return 'ui.new_threat';
             case DiscoveryType.BOSS: return 'ui.boss_encountered';
             case DiscoveryType.PERK: return 'ui.skill_point';
+            default: return 'ui.discovery';
+        }
+    },
+
+    /**
+     * Resolves the localized header key for Row 1 of the Discovery notification.
+     */
+    getDiscoveryHeader(type: DiscoveryType): string {
+        switch (type) {
+            case DiscoveryType.CLUE: return 'ui.discovered_clue';
+            case DiscoveryType.POI: return 'ui.discovered_poi';
+            case DiscoveryType.ENEMY: 
+            case DiscoveryType.BOSS: return 'ui.discovered_enemy';
+            case DiscoveryType.PERK: return 'ui.discovered_perk';
+            case DiscoveryType.COLLECTIBLE: return 'ui.collectible_discovered';
             default: return 'ui.discovery';
         }
     },

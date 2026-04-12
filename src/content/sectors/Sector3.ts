@@ -199,7 +199,7 @@ export const Sector3: SectorDef = {
         spawnSectorHordes(ctx);
     },
 
-    onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
+    onUpdate: (delta, simTime, renderTime, playerPos, gameState, sectorState, events) => {
         // Scrapyard ambushes
         if (Math.random() < 0.015 && gameState.enemies.length < 12) {
             const angle = Math.random() * Math.PI * 2;

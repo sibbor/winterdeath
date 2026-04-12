@@ -88,7 +88,7 @@ export class WindSystem implements System {
     this.setRandomWind(minStrength, maxStrength, baseAngle, angleVariance);
   }
 
-  update(ctx: any, renderDelta: number = 0.016, renderTime: number = 0): THREE.Vector2 {
+  update(ctx: any, delta: number, simTime: number, renderTime: number): THREE.Vector2 {
     if (this.boundUniforms.length === 0) {
       this.bindMaterial(MATERIALS.hedge);
       this.bindMaterial(MATERIALS.grass);
@@ -119,7 +119,7 @@ export class WindSystem implements System {
       this.nextChange = renderTime + 3000 + Math.random() * 5000;
     }
 
-    const lerpFactor = 1.0 - Math.exp(-0.6 * renderDelta);
+    const lerpFactor = 1.0 - Math.exp(-0.6 * delta);
     this.current.lerp(this.target, lerpFactor); this.direction.set(this.current.x, 0, this.current.y);
     this.strength = this.current.length();
 

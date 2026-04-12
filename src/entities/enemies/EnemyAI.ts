@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { WinterEngine } from '../../core/engine/WinterEngine';
 import {
     Enemy,
     AIState,
@@ -7,10 +8,6 @@ import {
     EnemyType,
     SEARCH_TIMERS,
     EnemyFlags,
-    ENEMY_MAX_HP,
-    ENEMY_BASE_SPEED,
-    ENEMY_SCALE,
-    ENEMY_WIDTH_SCALE,
     ENEMY_ATTACK_RANGE
 } from '../../entities/enemies/EnemyTypes';
 import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
@@ -18,7 +15,7 @@ import { EnemyAttackHandler } from './EnemyAttackHandler';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { WEAPONS } from '../../content/weapons';
 import { haptic } from '../../utils/HapticManager';
-import { WeaponSounds, EnemySounds } from '../../utils/audio/AudioLib';
+import { WeaponSounds } from '../../utils/audio/AudioLib';
 import { WaterSystem, _buoyancyResult } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { EnemyAnimator } from './EnemyAnimator';
@@ -135,9 +132,11 @@ export const EnemyAI = {
                 if (dmgType !== DamageID.GRENADE) {
                     WeaponSounds.playExplosion(e.mesh.position);
                     haptic.explosion();
+                    // VINTERDÖD: Hit-stop for Bomber/Boss detonations
+                    WinterEngine.getInstance()?.triggerHitStop(e.type === EnemyType.BOMBER ? 40 : 50);
                 }
             }
-            else if (weaponImpact === EnemyDeathState.GIBBED && isHighImpact) {
+            else if (weaponImpact === EnemyDeathState.GIBBED && (isHighImpact || (playerStatusFlags & (1 << 11)) !== 0)) {
                 e.deathState = EnemyDeathState.GIBBED;
                 e.mesh.userData.gibbed = true;
                 callbacks.playSound(SoundID.ZOMBIE_DEATH_SHOT);
@@ -169,6 +168,13 @@ export const EnemyAI = {
 
                 e.mesh.userData.spinDir = (Math.random() - 0.5) * 6.0;
             }
+
+            // VINTERDÖD: Heavy Kill Hit-stop for Tanks
+            if (e.type === EnemyType.TANK) {
+                WinterEngine.getInstance()?.triggerHitStop(45);
+                haptic.impact(0.8);
+            }
+
             return;
         }
 
@@ -201,7 +207,9 @@ export const EnemyAI = {
 
             // --- Friction (Horizontal only) ---
             const mass = e.originalScale * e.widthScale;
-            const friction = 1.0 + (mass * 2.0);
+            // VINTERDÖD: Increase friction significantly if ragdolling on ground to prevent "ice-skating"
+            const frictionMult = e.mesh.userData.isRagdolling ? 8.0 : 2.0;
+            const friction = 1.0 + (mass * frictionMult);
             const drag = Math.max(0, 1 - friction * delta);
             e.knockbackVel.x *= drag;
             e.knockbackVel.z *= drag;
@@ -232,20 +240,25 @@ export const EnemyAI = {
                 }
 
                 // Apply fall damage if not in water
-                if ((!water || !_buoyancyResult.inWater) && peakY > floorY + 1.5) {
-                    const fallDamage = Math.min(e.maxHp * 0.6, (peakY - floorY) * 8);
+                if ((!water || !_buoyancyResult.inWater) && peakY > floorY + 0.5) {
+                    const fallRatio = (peakY - floorY);
+                    const fallDamage = Math.min(e.maxHp * 0.9, fallRatio * 20);
+                    
                     e.hp -= fallDamage;
                     callbacks.applyDamage(e, fallDamage, DamageID.FALL, true);
-                    callbacks.spawnPart(e.mesh.position.x, 1.5, e.mesh.position.z, 'blood_splatter', 6);
+                    
+                    if (callbacks.spawnPart) {
+                        callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'blood_splatter', 6);
+                    }
 
                     if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
                         e.deathState = EnemyDeathState.FALL;
                     }
                 }
 
-                // --- RESTORED OLD BEHAVIOR: Instant hard stop on landing ---
+                // --- VINTERDÖD: Stay Down Mechanic ---
+                // Recovery is now handled by stunDuration logic in Step 7
                 e.knockbackVel.set(0, 0, 0);
-                e.mesh.userData.isRagdolling = false;
             }
         } else {
             e.mesh.userData.wasKnockedBack = false;
@@ -580,7 +593,7 @@ export const EnemyAI = {
                                 // VINTERDÖD: State-Guard to prevent GRAPPLE being overwritten
                                 const prevState = e.state;
                                 EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
-                                
+
                                 if (e.state === prevState) {
                                     logStateChange(simTime, e, AIState.ATTACKING);
                                     e.state = AIState.ATTACKING;
@@ -639,16 +652,26 @@ export const EnemyAI = {
                 // VINTERDÖD: Advanced attachment & Inertia-driven Pendulum
                 e.grappleDuration -= delta;
 
+                if (PerformanceMonitor.getInstance().aiLoggingEnabled && (frameOffset % 30 === 0)) {
+                    console.log(`[EnemyAI] ${EnemyType[e.type]} ${e.id} GRAPPLING. Rem: ${e.grappleDuration.toFixed(2)}s, DistSq: ${distSq.toFixed(2)}`);
+                }
+
                 // 1. Break Check (Rush = 1<<4, Dodge = 1<<8)
                 const isRushing = (playerStatusFlags & 16) !== 0;
                 const isDodging = (playerStatusFlags & 256) !== 0;
 
                 if (isRushing || isDodging || e.grappleDuration <= 0 || isDead) {
-                    logStateChange(simTime, e, AIState.CHASE, isRushing ? 'STRUGGLED_FREE' : (isDodging ? 'DODGED_FREE' : 'TIMEOUT'));
+                    const reason = isRushing ? 'STRUGGLED_FREE' : (isDodging ? 'DODGED_FREE' : (isDead ? 'DIED' : 'TIMEOUT'));
+                    logStateChange(simTime, e, AIState.CHASE, reason);
+                    
+                    if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+                        console.log(`[EnemyAI] ${EnemyType[e.type]} ${e.id} EXITED GRAPPLE. Reason: ${reason}`);
+                    }
+
                     e.state = AIState.CHASE;
                     e.statusFlags &= ~EnemyFlags.GRAPPLING;
                     e.grappleDuration = 0;
-                    e.attackCooldowns[EnemyAttackType.BITE] = 3000; 
+                    e.attackCooldowns[EnemyAttackType.BITE] = 3000;
                     e.mesh.rotation.x = 0;
                     e.mesh.rotation.z = 0;
                     if (e.mesh.userData.prevP) (e.mesh.userData.prevP as THREE.Vector3).set(0, -1000, 0); // Reset inertia marker
@@ -659,15 +682,15 @@ export const EnemyAI = {
                 // Pivot point: Neck Region (playerPos + 1.6 height)
                 const neckHeight = 1.6;
                 const orbitDist = e.attackOffset;
-                
+
                 // Track player displacement for inertia
                 if (!e.mesh.userData.prevP) e.mesh.userData.prevP = new THREE.Vector3().copy(playerPos);
                 const prevP = e.mesh.userData.prevP as THREE.Vector3;
-                
+
                 // VINTERDÖD FIX: Check for reset marker (y = -1000) to prevent first-frame physics explosion
                 if (prevP.y < -500) {
                     prevP.copy(playerPos);
-                    _v1.set(0, 0, 0); 
+                    _v1.set(0, 0, 0);
                 } else {
                     _v1.subVectors(playerPos, prevP); // _v1 = frame displacement
                     prevP.copy(playerPos);
@@ -676,7 +699,7 @@ export const EnemyAI = {
                 // Pivot direction (Horizontal plane)
                 _v2.subVectors(e.mesh.position, playerPos);
                 _v2.y = 0;
-                
+
                 // V8/Math Optimization: NaN Safety Check (Prevents disappearing enemies)
                 const currentDistSq = _v2.lengthSq();
                 if (currentDistSq > 0.0001) {
@@ -694,8 +717,8 @@ export const EnemyAI = {
                 const sideDot = _v1.x * _v2.z - _v1.z * _v2.x; // Cross-product (Vertical component proxy)
 
                 // Update swing angles in userData (Smoothed pendulum)
-                const targetTilt = -dot * 3.5; 
-                const targetSwing = -sideDot * 5.0; 
+                const targetTilt = -dot * 3.5;
+                const targetSwing = -sideDot * 5.0;
 
                 // V8/Math Optimization: NaN Safety Check (Prevents disappearing enemies)
                 if (isNaN(e.mesh.userData.swingX)) e.mesh.userData.swingX = 0;
@@ -706,7 +729,7 @@ export const EnemyAI = {
 
                 // 3. Final Mesh Transform
                 e.mesh.position.set(_v3.x, playerPos.y + neckHeight, _v3.z);
-                
+
                 // Rotation: Look at player (Y-axis facing)
                 // Note: X and Z tilt is handled by EnemyAnimator.updateAttackAnim using swingX/Z
                 e.mesh.rotation.y = Math.atan2(playerPos.x - e.mesh.position.x, playerPos.z - e.mesh.position.z);
@@ -721,7 +744,7 @@ export const EnemyAI = {
                 if (simTime > (e.mesh.userData.lastGrappleDmg || 0) + 600) {
                     e.mesh.userData.lastGrappleDmg = simTime;
                     callbacks.onPlayerHit(4, e, DamageID.BITE, true, undefined, undefined, undefined, 'GRAPPLE_BITE');
-                    
+
                     if (callbacks.spawnPart) {
                         // VINTERDÖD: Improved blood feedback for grapple
                         callbacks.spawnPart(playerPos.x, 1.5, playerPos.z, 'blood_splatter', 6);
@@ -731,7 +754,7 @@ export const EnemyAI = {
         }
 
         // --- 10. PROCEDURAL ANIMATION ---
-        EnemyAnimator.updateAttackAnim(e, simTime, renderTime, delta);
+        EnemyAnimator.updateAttackAnim(e, renderTime, delta);
     }
 };
 

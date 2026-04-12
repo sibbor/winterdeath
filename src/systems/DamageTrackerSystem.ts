@@ -10,7 +10,7 @@ export class DamageTrackerSystem implements System {
         // Breakdowns are now pre-allocated in GameSessionLogic.createInitialState
     }
 
-    update(session: GameSessionLogic, dt: number, now: number) {
+    update(ctx: any, delta: number, simTime: number, renderTime: number) {
         // Passive logger: No per-frame logic required
     }
 

@@ -109,8 +109,8 @@ export class OcclusionSystem implements System {
         this.activeFamilyMembers = activeFamilyMembers;
     }
 
-    update(session: GameSessionLogic, _dt: number, _now: number): void {
-        const state = session.state;
+    update(ctx: any, delta: number, simTime: number, renderTime: number): void {
+        const state = ctx.state;
 
         // 1. PLAYER ghost
         const playerGroup = this.playerGroup.current;

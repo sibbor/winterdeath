@@ -103,7 +103,7 @@ export class FogSystem implements System {
         }
     }
 
-    public update(ctx: any, dt: number, now: number): void {
+    public update(ctx: any, delta: number, simTime: number, renderTime: number): void {
         const engine = (window as any).WinterEngineInstance;
         if (!engine?.settings?.volumetricFog) {
             if (this.fogMesh && this.fogMesh.visible) this.fogMesh.visible = false;
@@ -125,15 +125,15 @@ export class FogSystem implements System {
         const matrixArray = this.fogMesh.instanceMatrix.array;
 
         if (this.fogMaterial) {
-            this.fogMaterial.uniforms.uTime.value = now * 0.001;
+            this.fogMaterial.uniforms.uTime.value = renderTime * 0.001;
         }
 
         for (let i = 0; i < this.fogCount; i++) {
             const i3 = i * 3;
 
-            let x = pos[i3 + 0] + (vel[i3 + 0] + wx) * dt;
+            let x = pos[i3 + 0] + (vel[i3 + 0] + wx) * delta;
             let y = pos[i3 + 1];
-            let z = pos[i3 + 2] + (vel[i3 + 2] + wz) * dt;
+            let z = pos[i3 + 2] + (vel[i3 + 2] + wz) * delta;
 
             // Wrap: Om dimman blåser iväg från kameran, flytta den till andra sidan
             while (x < centerX - areaHalf) x += FOG_AREA_SIZE;

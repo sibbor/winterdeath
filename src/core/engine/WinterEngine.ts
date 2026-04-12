@@ -476,13 +476,26 @@ export class WinterEngine {
         const realDelta = Math.min(0.25, (now - this.lastTime) / 1000);
         this.lastTime = now;
 
+        const context = this.onUpdateContext || { scene: this.scene, state: {} };
+        const state = context.state;
+
+        // --- ENGINE HIT-STOP (Micro-Freeze) ---
+        // VINTERDÖD SAFETY: Decrement hit-stop using raw realDelta (wall-clock) 
+        // to prevent slow-mo logic causing elongated freezes (The "Matrix Lag" fix).
+        if (state && state.hitStopTime > 0) {
+            state.hitStopTime -= realDelta * 1000;
+            // Early exit logic simulation but keep rendering/visuals
+        }
+
         // --- 2. ACCUMULATE TIME ---
-        this._accumulator += realDelta;
+        // Only accumulate logic time if we are not currently micro-frozen
+        if (!state || state.hitStopTime <= 0) {
+            this._accumulator += realDelta;
+        }
 
         const monitor = PerformanceMonitor.getInstance();
         monitor.startFrame();
 
-        const context = this.onUpdateContext || { scene: this.scene, state: {} };
         const FIXED_DT = WinterEngine.FIXED_DELTA;
 
         // --- 3. FIXED-STEP LOGIC HEARTBEAT (60Hz) ---
@@ -491,7 +504,7 @@ export class WinterEngine {
         monitor.begin('logic_simulation');
         while (this._accumulator >= FIXED_DT) {
             steps++;
-            
+
             // Increment simulation clock by EXACT milliseconds to prevent drift
             if (!this.isSimulationPaused) {
                 this.simTime += FIXED_DT * 1000;
@@ -586,6 +599,17 @@ export class WinterEngine {
     }
 
     /**
+     * Triggers a global micro-freeze for impact feel.
+     * During this window, logic/physics clocks are suspended but rendering continues.
+     */
+    public triggerHitStop(ms: number) {
+        const context = this.onUpdateContext;
+        if (context && context.state) {
+            context.state.hitStopTime = Math.max(context.state.hitStopTime || 0, ms);
+        }
+    }
+
+    /**
      * Unified system update loop (Zero-GC)
      * Provision standardized timing: env systems get renderTime; simulation systems get simTime.
      */
@@ -602,7 +626,7 @@ export class WinterEngine {
 
             // --- VINTERDÖD: FIXED-STEP & CLOCK GATING ---
             const isFixed = sys.isFixedStep || false;
-            
+
             // Skip systems that don't match the current loop cycle
             if (fixedOnly !== undefined && isFixed !== fixedOnly) continue;
 

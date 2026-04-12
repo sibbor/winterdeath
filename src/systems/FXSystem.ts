@@ -300,6 +300,12 @@ export const FXSystem = {
     _spawnPartImmediate: (req: SpawnRequest, particlesList: ParticleState[]) => {
         if (isNaN(req.x)) return;
 
+        // VINTERDÖD SAFETY: Aggressive Recycling (The "Max Payne" fix)
+        // If we hit the limit during slow-mo world saturation, overwrite the oldest particle.
+        if (particlesList.length >= 6000) {
+            FXSystem._killParticle(0, particlesList);
+        }
+
         const t = req.type;
         const isInstanced = !!INSTANCED_TYPES[t];
         const p = FXSystem.getPooledState();
@@ -518,10 +524,12 @@ export const FXSystem = {
         }
     },
 
-    update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[],
-        callbacks: any, delta: number, simTime: number, renderTime: number) => {
+    update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], callbacks: any, delta: number, simTime: number, renderTime: number, state: any) => {
+        // --- WORLD TIME SCALE (QUICK_FINGER) ---
+        const globalTimeScale = state?.globalTimeScale || 1.0;
+        const scaledDelta = delta * globalTimeScale;
 
-        // VINTERDÖD: Forced Scene Re-linking (Ensures FX persist across sector transitions)
+        // VINTERDÖD FIX: Forced Scene Re-linking (Ensures FX persist across sector transitions)
         const types = Object.keys(INSTANCED_TYPES);
         for (let j = 0; j < types.length; j++) {
             const imesh = FXSystem._instancedMeshes[types[j]];
@@ -530,7 +538,7 @@ export const FXSystem = {
             }
         }
 
-        const safeDelta = delta > 0.1 ? 0.1 : delta;
+        const safeDelta = scaledDelta > 0.1 ? 0.1 : scaledDelta;
 
         const decay = safeDelta;
         const airFriction = 1.0 - (30.0 * safeDelta);

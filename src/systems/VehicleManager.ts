@@ -52,7 +52,7 @@ export const VehicleManager = {
             // 2. Collision Logic (OPTIMIZED)
             if (state.vehicle.engineState !== 'OFF') {
                 const vel = vehicle.userData.velocity as THREE.Vector3;
-                VehicleManager.handleEnemyCollisions(vehicle, vel, def, session, simTime);
+                VehicleManager.handleEnemyCollisions(vehicle, vel, def, session, delta, simTime, renderTime);
                 VehicleManager.handleObstacleCollisions(vehicle, vel, def, session);
 
                 // --- ENGINE & MOVEMENT NOISE ---
@@ -201,7 +201,9 @@ export const VehicleManager = {
         vel: THREE.Vector3,
         def: VehicleDef,
         session: GameSessionLogic,
-        simTime: number
+        delta: number,
+        simTime: number,
+        renderTime: number
     ) => {
         const speedSq = vel.lengthSq();
         if (speedSq < SPEED_SQ_PUSH) return;
@@ -261,14 +263,17 @@ export const VehicleManager = {
             _vehicleKnockbackCtx.engine = session.engine;
             _vehicleKnockbackCtx.particles = state.particles;
 
-            // Execute the highly optimized knockback
-            EnemyManager.knockbackEnemies(
-                _vehicleKnockbackCtx,
-                _toEnemy,
-                hitRadius,
-                maxForce,
-                maxDamage,
-                DamageID.VEHICLE
+            // Execute the single-target impact handler
+            EnemyManager.ramEnemies(
+                e,
+                _knockDir,
+                speedMS,
+                def,
+                state,
+                session,
+                delta,
+                simTime,
+                renderTime
             );
 
             if (speedKmh > 30) isHeavyHit = true;

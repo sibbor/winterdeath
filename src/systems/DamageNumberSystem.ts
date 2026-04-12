@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { System } from './System';
-import { WeaponCategoryColors, WeaponType, WEAPONS } from '../content/weapons';
+import { WeaponCategoryColors, WEAPONS } from '../content/weapons';
 import { DamageID } from '../entities/player/CombatTypes';
 
 interface DamageText {
@@ -189,7 +189,7 @@ export class DamageNumberSystem implements System {
     }
 
     // --- 3. LIFECYCLE ANIMATION ---
-    update(session: any, delta: number, now: number) {
+    update(ctx: any, delta: number, simTime: number, renderTime: number) {
         const safeDelta = Math.min(delta, 0.1);
 
         for (let i = 0; i < this.pool.length; i++) {

@@ -168,7 +168,7 @@ export class CameraSystem {
         }
     }
 
-    public update(dt: number, _now: number) {
+    public update(ctx: any, delta: number, simTime: number, renderTime: number) {
         if (!this._initialized && this.threeCamera) {
             this._idealPos.copy(this.threeCamera.position);
             this._initialized = true;
@@ -177,7 +177,7 @@ export class CameraSystem {
         // 1. Follow Target Position Logic
         if (!this._isCinematic && this._followTarget) {
             // Smooth interpolation of rotation/pitch
-            const angleLerp = 1.0 - Math.exp(-8.0 * dt);
+            const angleLerp = 1.0 - Math.exp(-8.0 * delta);
             this._followAngle += (this._targetAngle - this._followAngle) * angleLerp;
             this._followHeightMod += (this._targetHeightMod - this._followHeightMod) * angleLerp;
 
@@ -195,7 +195,7 @@ export class CameraSystem {
                 this._idealPos.z = targetZ;
             } else {
                 // FPS-Independent Smooth Lerp: Heavy math, cinematic feel
-                const lerpFactor = 1.0 - Math.exp(-this._moveSpeed * dt);
+                const lerpFactor = 1.0 - Math.exp(-this._moveSpeed * delta);
                 this._idealPos.x += (targetX - this._idealPos.x) * lerpFactor;
                 this._idealPos.y += (targetY - this._idealPos.y) * lerpFactor;
                 this._idealPos.z += (targetZ - this._idealPos.z) * lerpFactor;
@@ -212,7 +212,7 @@ export class CameraSystem {
             this._currentLookAt.copy(this._idealLookAt);
         } else {
             // FPS-Independent Smooth Lerp for panning
-            const lookLerpFactor = 1.0 - Math.exp(-this._lookSpeed * dt);
+            const lookLerpFactor = 1.0 - Math.exp(-this._lookSpeed * delta);
             this._currentLookAt.lerp(this._idealLookAt, lookLerpFactor);
         }
 
@@ -222,14 +222,14 @@ export class CameraSystem {
         let currentShakeZ = 0;
 
         if (this._hurtIntensity > 0) {
-            this._hurtIntensity = Math.max(0, this._hurtIntensity - 4.0 * dt);
+            this._hurtIntensity = Math.max(0, this._hurtIntensity - 4.0 * delta);
             const amt = this._hurtIntensity * 0.5;
             currentShakeX += (Math.random() - 0.5) * amt;
             currentShakeZ += (Math.random() - 0.5) * amt;
         }
 
         if (this._shakeIntensity > 0) {
-            this._shakeIntensity = Math.max(0, this._shakeIntensity - 5.0 * dt);
+            this._shakeIntensity = Math.max(0, this._shakeIntensity - 5.0 * delta);
             const amt = this._shakeIntensity * 0.5;
             currentShakeX += (Math.random() - 0.5) * amt;
             currentShakeZ += (Math.random() - 0.5) * amt;

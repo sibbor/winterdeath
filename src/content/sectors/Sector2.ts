@@ -399,9 +399,9 @@ export const Sector2: SectorDef = {
         }
     },
 
-    onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
-        if (mastLightHubRef) {
-            mastLightHubRef.rotation.y += delta * 2.0;
+    onUpdate: (delta, simTime, renderTime, playerPos, gameState, sectorState, events) => {
+        if (sectorState.mastLightHub) {
+            sectorState.mastLightHub.rotation.y += delta * 2.0;
         }
     }
 };

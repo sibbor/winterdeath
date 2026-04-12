@@ -334,7 +334,7 @@ export const Sector1: SectorDef = {
         }
     },
 
-    onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
+    onUpdate: (delta, simTime, renderTime, playerPos, gameState, sectorState, events) => {
         // --- REVERB ---
         const insideCave = playerPos.z < -80;
         if (audioEngine.ctx) {
@@ -358,8 +358,8 @@ export const Sector1: SectorDef = {
                 following: true,
                 ring: ring,
                 seed: member.userData.seed || 0,
-                isSpeaking: (gameState.speakingUntil > now),
-                isThinking: (gameState.thinkingUntil > now)
+                isSpeaking: (gameState.speakingUntil > simTime),
+                isThinking: (gameState.thinkingUntil > simTime)
             };
 
             const body = member.userData.cachedBody || member.children.find((c: any) => c.userData.isBody);
@@ -372,8 +372,8 @@ export const Sector1: SectorDef = {
                     isSpeaking: familyObj.isSpeaking || false,
                     isThinking: familyObj.isThinking || false,
                     isIdleLong: false, isSwimming: false, isWading: false,
-                    seed: familyObj.seed, renderTime: now
-                }, now, delta);
+                    seed: familyObj.seed, renderTime: renderTime
+                }, renderTime, delta);
             }
         }
         */
@@ -382,7 +382,7 @@ export const Sector1: SectorDef = {
         if (!sectorState.jordanEventState) sectorState.jordanEventState = 0;
         const jcState = sectorState.jordanEventState;
         const jcTimer = sectorState.jordanEventTimer || 0;
-        const elapsed = now - jcTimer;
+        const elapsed = simTime - jcTimer;
 
         // Shared positions and refs
         const fixedCamTarget = new THREE.Vector3(60, 12, -193);
@@ -403,7 +403,7 @@ export const Sector1: SectorDef = {
             if (sectorState.pendingTrigger === 'SPAWN_JORDAN') {
                 sectorState.pendingTrigger = null; // Konsumera direkt (Zero-GC)
                 sectorState.jordanEventState = 3; // OPENING_DOORS
-                sectorState.jordanEventTimer = now;
+                sectorState.jordanEventTimer = simTime;
                 audioEngine.playSound(SoundID.DOOR_OPEN, 0.6);
 
                 window.dispatchEvent(new CustomEvent('hide_hud'));
@@ -413,7 +413,7 @@ export const Sector1: SectorDef = {
                         active: true,
                         targetPos: fixedCamTarget,
                         lookAtPos: fixedCamLookAt,
-                        endTime: now + 60000
+                        endTime: renderTime + 60000
                     });
                 }
             }
@@ -421,7 +421,7 @@ export const Sector1: SectorDef = {
             if (sectorState.pendingTrigger === 'CLOSE_DOORS') {
                 sectorState.pendingTrigger = null; // Konsumera direkt
                 sectorState.jordanEventState = 6; // DOORS_CLOSING
-                sectorState.jordanEventTimer = now;
+                sectorState.jordanEventTimer = simTime;
             }
 
             // 3. STATE MACHINE TRANSITIONS
@@ -430,7 +430,7 @@ export const Sector1: SectorDef = {
                     if (doorFrame && (events as any).startCinematic) {
                         (events as any).startCinematic(doorFrame, 1, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
                         sectorState.jordanEventState = 2; // CINEMATIC_1_RUNNING
-                        sectorState.jordanEventTimer = now;
+                        sectorState.jordanEventTimer = simTime;
                     }
                 }
             }
@@ -444,7 +444,7 @@ export const Sector1: SectorDef = {
 
                 if (elapsed > 2000) {
                     sectorState.jordanEventState = 4; // JORDAN_WALK
-                    sectorState.jordanEventTimer = now;
+                    sectorState.jordanEventTimer = simTime;
 
                     if (playerPos) {
                         sectorState.walkTarget = sectorState.walkTarget || new THREE.Vector3();
@@ -467,17 +467,17 @@ export const Sector1: SectorDef = {
                     if (body) {
                         PlayerAnimator.update(body, {
                             isMoving: true, isRushing: false, isDodging: false, dodgeStartTime: 0,
-                            staminaRatio: 1.0, isSpeaking: gameState.speakingUntil > now,
+                            staminaRatio: 1.0, isSpeaking: gameState.speakingUntil > simTime,
                             isThinking: false, isIdleLong: false, isSwimming: false, isWading: false,
                             seed: jordan.userData.seed || 0, 
-                            renderTime: gameState.renderTime || now,
-                            simTime: now
-                        }, gameState.renderTime || now);
+                            renderTime: renderTime,
+                            simTime: simTime
+                        }, renderTime);
                     }
 
                     if (jordan.position.distanceTo(target) < 1.5) {
                         sectorState.jordanEventState = 5; // DIALOGUE_102
-                        sectorState.jordanEventTimer = now;
+                        sectorState.jordanEventTimer = simTime;
                         if (events.startCinematic) {
                             events.startCinematic(jordan, 102, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
                         }
@@ -496,7 +496,7 @@ export const Sector1: SectorDef = {
 
                 if (elapsed > 1000) {
                     sectorState.jordanEventState = 7; // COMPLETE
-                    sectorState.jordanEventTimer = now;
+                    sectorState.jordanEventTimer = simTime;
                     if (events.setCameraOverride) events.setCameraOverride(null);
                     window.dispatchEvent(new CustomEvent('show_hud'));
 

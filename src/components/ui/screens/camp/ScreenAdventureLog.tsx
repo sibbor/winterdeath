@@ -221,8 +221,7 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Rea
     const scrapTotal = Math.floor(sb[PlayerStatID.TOTAL_SCRAP_COLLECTED]);
 
     const getRank = (lvl: number) => {
-        const rankKey = Math.min(Math.max(0, lvl - 1), 19);
-        return t(`ranks.${rankKey}`);
+        return t(DataResolver.getRankName(lvl));
     };
 
     const accuracy = stats.totalBulletsFired > 0
@@ -704,7 +703,7 @@ const PerksTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                         <div className="flex items-center gap-3">
                             <span className="text-2xl">{isFound ? perk.icon : '?'}</span>
                             <h3 className={`text-2xl font-semibold uppercase tracking-tighter ${isFound ? 'text-white' : 'text-zinc-800'}`}>
-                                {isFound ? t(perk.displayName) : '???'}
+                                {isFound ? t(DataResolver.getPerkName(perk.id)) : '???'}
                             </h3>
                         </div>
                         {isFound && (

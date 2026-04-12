@@ -76,7 +76,7 @@ export class PlayerInteractionSystem implements System {
         }
     }
 
-    update(session: GameSessionLogic, delta: number, simTime: number) {
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         const state = session.state;
         const input = session.engine.input.state;
 

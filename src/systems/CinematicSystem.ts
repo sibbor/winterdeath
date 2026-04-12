@@ -18,7 +18,8 @@ const _animState = {
     isSpeaking: false, isThinking: false, isIdleLong: false,
     isSwimming: false, isWading: false,
     seed: 0,
-    renderTime: 0
+    renderTime: 0,
+    simTime: 0
 };
 
 export class CinematicSystem implements System {
@@ -206,7 +207,7 @@ export class CinematicSystem implements System {
         this.callbacks.endCinematic();
     }
 
-    public update(context: any, renderDelta: number, renderTime: number) {
+    public update(context: any, delta: number, simTime: number, renderTime: number) {
         const cinematic = this.cinematicRef.current;
         if (!cinematic.active && !cinematic.isClosing) return;
 
@@ -361,6 +362,7 @@ export class CinematicSystem implements System {
                 _animState.isThinking = isThinking;
                 _animState.seed = mesh.userData.seed || 0;
                 _animState.renderTime = now;
+                _animState.simTime = now; // Cinematic uses render clock for visuals
 
                 PlayerAnimator.update(body as THREE.Mesh, _animState, now);
             }

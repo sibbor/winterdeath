@@ -173,7 +173,7 @@ export class WeatherSystem implements System {
         this._randIdx = 0;
     }
 
-    public update(ctx: any, dt: number, now: number) {
+    public update(ctx: any, delta: number, simTime: number, renderTime: number) {
         if (!this.instancedMesh || !this.instancedMesh.visible || this.count === 0) return;
 
         const windVec = this.wind.current;
@@ -203,9 +203,9 @@ export class WeatherSystem implements System {
             const vy = vel[i3 + 1];
             const vz = vel[i3 + 2] + wy;
 
-            let x = pos[i3 + 0] + vx * dt;
-            let y = pos[i3 + 1] + vy * dt;
-            let z = pos[i3 + 2] + vz * dt;
+            let x = pos[i3 + 0] + vx * delta;
+            let y = pos[i3 + 1] + vy * delta;
+            let z = pos[i3 + 2] + vz * delta;
 
             let needsReset = false;
 

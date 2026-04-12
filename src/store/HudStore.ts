@@ -43,7 +43,11 @@ const INITIAL_HUD_STATE: HudState = {
     isDriving: false,
     vehicleSpeed: 0,
     throttleState: 0,
+    currentSector: 0,
+    cluesFoundCount: 0,
+    poisFoundCount: 0,
     fps: 60,
+    sectorStats: { unlimitedAmmo: false, unlimitedThrowables: false, isInvincible: false, hordeTarget: 0, zombiesKilled: 0, zombiesKillTarget: 0, zombieWaveActive: false },
     statusEffects: [],
     isDisoriented: false,
     activePassives: [],
@@ -64,7 +68,6 @@ const INITIAL_HUD_STATE: HudState = {
     discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 },
 
     // Nested structures pre-allocated to lock Hidden Class "Shapes"
-    sectorStats: {},
     debugInfo: {
         aim: { x: 0, y: 0 },
         input: { w: 0, a: 0, s: 0, d: 0, fire: 0, reload: 0 },

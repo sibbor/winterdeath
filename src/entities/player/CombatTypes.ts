@@ -58,6 +58,7 @@ export enum DamageID {
     RADIO = 12,
     RUSH = 13,
     VEHICLE = 14,
+    DODGE = 15,
 
     // --- ENVIRONMENT & EFFECTS (20+) ---
     PHYSICAL = 21,
@@ -95,6 +96,7 @@ export const ENVIRONMENTAL_DAMAGE_NAMES: Partial<Record<DamageID, string>> = {
     [DamageID.VEHICLE_SPLATTER]: 'ui.vehicle_splatter',
     [DamageID.VEHICLE_RAM]: 'ui.vehicle_ram',
     [DamageID.VEHICLE_PUSH]: 'ui.vehicle_push',
+    [DamageID.DODGE]: 'ui.dodge',
 };
 
 // Deprecated alias for legacy code during transition

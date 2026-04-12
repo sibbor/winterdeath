@@ -104,9 +104,12 @@ export interface RuntimeState extends PlayerStats {
     lastDodgeEndTime: number;
     lastReflexShieldTime: number;
     lastAdrenalinePatchTime: number;
+    lastPerfectDodgeTime: number; // VINTERDÖD: Required for Bullet Time cooldowns
     lastHeartbeat: number;
     rushFactor: number; // 0.0 to 1.0 interpolation for Rush ability (2.0s ramp)
     currentSpeedRatio: number; // Current speed relative to base speed (for animations)
+
+    // --- GAME FEEL & TIME DILATION ---
 
     // --- OBJECT POOLS ---
     enemies: Enemy[];
@@ -241,4 +244,11 @@ export interface RuntimeState extends PlayerStats {
     lastRenderDelta: number;   // Raw/unclamped delta used for this frame's visuals
     previousPerkMask: number; // VINTERDÖD: Zero-GC bitmask for status effect transitions
     inputState: any; // VINTERDÖD: Stable proxy for InputManager.state to prevent React Ref-Render traps
+
+    // --- NEW COMBAT FEEL & BUFFS ---
+    hitStopTime: number;
+    globalTimeScale: number;
+    killStreakBuffer: Float32Array;
+    lastAdrenalineTime: number;
+    lastGibMasterTime: number;
 }

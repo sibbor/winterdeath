@@ -60,7 +60,13 @@ export enum PlayerStatusFlags {
     EXHAUSTED = 1 << 5,
     REGENERATING = 1 << 6,
     STUNNED = 1 << 7,
-    DODGING = 1 << 8
+    DODGING = 1 << 8,
+
+    // --- BUFFS (Phase 11) ---
+    REFLEX_SHIELD = 1 << 9,
+    ADRENALINE_SHOT = 1 << 10,
+    GIB_MASTER = 1 << 11,
+    QUICK_FINGER = 1 << 12
 }
 
 // StatusEffectID has been consolidated into StatusEffectType in perks.ts

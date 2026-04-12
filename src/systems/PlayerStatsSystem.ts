@@ -154,11 +154,21 @@ export class PlayerStatsSystem implements System {
 
 
     private updateBuffsAndDebuffs(session: GameSessionLogic, delta: number, simTime: number, initialMask: number): number {
-        let currentPerkMask = initialMask;
         const state = session.state;
         const stats = state.statsBuffer;
+        let currentPerkMask = initialMask;
 
-        state.statusFlags &= ~PlayerStatusFlags.DISORIENTED;
+        // --- SYNC BUFF FLAGS (Phase 11) ---
+        state.statusFlags &= ~(
+            PlayerStatusFlags.REFLEX_SHIELD | 
+            PlayerStatusFlags.ADRENALINE_SHOT | 
+            PlayerStatusFlags.GIB_MASTER | 
+            PlayerStatusFlags.QUICK_FINGER |
+            PlayerStatusFlags.DISORIENTED |
+            PlayerStatusFlags.STUNNED
+        );
+
+        // Reset active lists for HUD sync
         state.activeBuffs.length = 0;
         state.activeDebuffs.length = 0;
 
@@ -170,24 +180,25 @@ export class PlayerStatsSystem implements System {
             // Clamping decrement before check
             state.effectDurations[i] = Math.max(0, state.effectDurations[i] - delta * 1000);
 
-            // --- DIAGNOSTIC: PERK DECAY (VINTERDÖD) ---
-            /*
-            if (state.effectDurations[i] > 0) {
-                const perk = PERKS[i];
-                if (perk) {
-                    // Note: This generates high-frequency logs for ALL active effects as requested
-                    console.log(`[PlayerStatsSystem] Decay: ${perk.displayName} @ ${state.effectDurations[i].toFixed(1)}ms`);
+            if (state.effectDurations[i] <= 0) {
+                // Fade time back to normal when buff expires
+                if (i === StatusEffectType.QUICK_FINGER && state.globalTimeScale < 1.0) {
+                    state.globalTimeScale = Math.min(1.0, state.globalTimeScale + delta * 3.0);
                 }
+                continue;
             }
-            */
-
-            if (state.effectDurations[i] <= 0) continue;
 
             currentPerkMask |= (1 << i);
 
             const perk = PERKS[i];
             if (perk) {
-                // --- STEP 3 DOD REFACTOR: Additive Integer Stacking ---
+                // Sync Bitmask
+                if (i === StatusEffectType.REFLEX_SHIELD) state.statusFlags |= PlayerStatusFlags.REFLEX_SHIELD;
+                if (i === StatusEffectType.ADRENALINE_PATCH) state.statusFlags |= PlayerStatusFlags.ADRENALINE_SHOT;
+                if (i === StatusEffectType.GIB_MASTER) state.statusFlags |= PlayerStatusFlags.GIB_MASTER;
+                if (i === StatusEffectType.QUICK_FINGER) state.statusFlags |= PlayerStatusFlags.QUICK_FINGER;
+                if (i === StatusEffectType.STUNNED) state.statusFlags |= PlayerStatusFlags.STUNNED;
+
                 if (perk.speedModifier) speedMod += perk.speedModifier;
                 if (perk.reloadModifier) reloadMod += perk.reloadModifier;
                 if (perk.fireRateModifier) fireRateMod += perk.fireRateModifier;
@@ -273,8 +284,22 @@ export class PlayerStatsSystem implements System {
 
         if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0 || state.sectorState?.isInvincible) return;
 
+        // VINTERDÖD: Perfect Dodge Logic
+        // If an attack lands while dodging, trigger QUICK_FINGER (Bullet Time)
+        if ((state.statusFlags & PlayerStatusFlags.DODGING) !== 0 && !isDoT) {
+            const cooldown = PERKS[StatusEffectType.QUICK_FINGER]?.cooldown || 30000;
+            if (now - state.lastPerfectDodgeTime > cooldown) {
+                state.lastPerfectDodgeTime = now;
+                this.triggerBuff(session, StatusEffectType.QUICK_FINGER, now);
+                state.globalTimeScale = 0.2; // ACTIVATE SLOWMO
+                audioEngine.playSound(SoundID.BUFF_GAINED);
+                return; // Negate Damage
+            }
+        }
+
         if (state.effectDurations[StatusEffectType.REFLEX_SHIELD] > 0 || state.effectDurations[StatusEffectType.ADRENALINE_PATCH] > 0) {
-            return;
+            // Reflex shield reduces damage by 50% in the calculation below, 
+            // but we allow the hit to "land" for feedback.
         }
 
         let actualDmg = damage * state.statsBuffer[PlayerStatID.MULTIPLIER_DMG_RESIST];
@@ -353,7 +378,7 @@ export class PlayerStatsSystem implements System {
         if (state.statsBuffer[PlayerStatID.HP] <= 0) {
             let finalAttackName = specificAttackType || 'HIT';
             if (isDoT && effectType !== undefined) {
-                finalAttackName = StatusEffectType[effectType] || 'DOT';
+                finalAttackName = (StatusEffectType as any)[effectType] || 'DOT';
             }
             this.executePlayerDeath(session, attacker, type, finalAttackName, attackIndex, now);
         }
@@ -363,9 +388,7 @@ export class PlayerStatsSystem implements System {
         const state = session.state;
         state.statusFlags |= PlayerStatusFlags.DEAD;
         state.deathStartTime = now;
-
         state.killerType = type;
-
         state.playerDeathState = PlayerDeathState.NORMAL;
 
         if (type === DamageID.EXPLOSION) state.playerDeathState = PlayerDeathState.GIBBED;
@@ -374,30 +397,17 @@ export class PlayerStatsSystem implements System {
         else if (type === DamageID.ELECTRIC) state.playerDeathState = PlayerDeathState.ELECTROCUTED;
 
         if (attacker && (attacker.statusFlags & EnemyFlags.BOSS) !== 0 && attacker.bossId !== undefined) {
-            state.killerName = this.t(`enemies.bosses.${attacker.bossId}.name`);
+            state.killerName = DataResolver.getEnemyName(EnemyType.BOSS, attacker.bossId);
             state.killedByEnemy = true;
-            // For bosses, the specific attack name is often generic or uses the boss identity
-            state.killerAttackName = attackName;
+            state.killerAttackName = attackName; // Boss attacks might be custom strings
         } else if (attacker) {
-            const enemyNameKey = EnemyType[attacker.type] || 'other';
-            state.killerName = this.t(`enemies.zombies.${enemyNameKey}.name`);
+            state.killerName = DataResolver.getEnemyName(attacker.type);
             state.killedByEnemy = true;
-
-            // Map numeric attack type to Enum String for UI translation (e.g. "BITE")
-            const attackEnumName = EnemyAttackType[attackIndex] || attackName;
-            state.killerAttackName = attackEnumName;
+            state.killerAttackName = DataResolver.getAttackName(attackIndex);
         } else {
-            let envKey = 'ui.unknown_threat';
-            if (type === DamageID.DROWNING) envKey = 'ui.drowning';
-            else if (type === DamageID.BURN) envKey = 'ui.burning';
-            else if (type === DamageID.BLEED) envKey = 'ui.bleeding';
-            else if (type === DamageID.ELECTRIC) envKey = 'ui.electrified';
-            else if (type === DamageID.FALL) envKey = 'ui.falling';
-            else if (type === DamageID.EXPLOSION) envKey = 'ui.explosion';
-
-            state.killerName = this.t(envKey);
+            state.killerName = DataResolver.getDamageName(type);
             state.killedByEnemy = false;
-            state.killerAttackName = 'HIDDEN'; // Environment doesn't show attack title in parens
+            state.killerAttackName = 'HIDDEN';
         }
 
         const input = session.engine.input.state;
@@ -413,6 +423,55 @@ export class PlayerStatsSystem implements System {
             state.deathVel.set(0, 0, 12);
         }
         state.deathVel.y = 4;
+    }
+
+    public onEnemyKilled(session: GameSessionLogic, enemy: any, now: number) {
+        const state = session.state;
+
+        // Rolling kill streak (last 5 kills)
+        for (let i = 0; i < 4; i++) state.killStreakBuffer[i] = state.killStreakBuffer[i + 1];
+        state.killStreakBuffer[4] = now;
+
+        // Check for 3-kill streak (Adrenaline)
+        const kill3Time = state.killStreakBuffer[2]; // 3rd most recent
+        if (kill3Time > 0 && (now - kill3Time) < 3000) {
+            const cooldown = PERKS[StatusEffectType.ADRENALINE_PATCH]?.cooldown || 15000;
+            if (now - (state.lastAdrenalineTime || 0) > cooldown) {
+                state.lastAdrenalineTime = now;
+                this.triggerBuff(session, StatusEffectType.ADRENALINE_PATCH, now);
+            }
+        }
+
+        // Check for 5-kill streak (Gib Master)
+        const kill5Time = state.killStreakBuffer[0]; // 5th most recent
+        if (kill5Time > 0 && (now - kill5Time) < 5000) {
+            const cooldown = PERKS[StatusEffectType.GIB_MASTER]?.cooldown || 30000;
+            if (now - (state.lastGibMasterTime || 0) > cooldown) {
+                state.lastGibMasterTime = now;
+                this.triggerBuff(session, StatusEffectType.GIB_MASTER, now);
+            }
+        }
+    }
+
+    public triggerReflexShield(session: GameSessionLogic, now: number) {
+        const state = session.state;
+        const perkID = StatusEffectType.REFLEX_SHIELD;
+        const perk = PERKS[perkID];
+        for (let i = 0; i < 32; i++) {
+            const p = PERKS[i];
+            if (p && p.category === PerkCategory.DEBUFF) state.effectDurations[i] = 0;
+        }
+        state.effectDurations[perkID] = perk.duration || 1000;
+        state.effectMaxDurations[perkID] = perk.duration || 1000;
+    }
+
+    private triggerBuff(session: GameSessionLogic, type: StatusEffectType, now: number) {
+        const state = session.state;
+        const perk = PERKS[type];
+        if (perk) {
+            state.effectDurations[type] = perk.duration || 3000;
+            state.effectMaxDurations[type] = perk.duration || 3000;
+        }
     }
 
     clear() { }

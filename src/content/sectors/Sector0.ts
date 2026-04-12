@@ -701,12 +701,12 @@ export const Sector0: SectorDef = {
         }
     },
 
-    onUpdate: (dt, now, playerPos, gameState, sectorState, events) => {
+    onUpdate: (dt, simTime, renderTime, playerPos, gameState, sectorState, events) => {
         const state = gameState;
         if (!sectorState.spawns) sectorState.spawns = {};
 
         // --- 1. AMBIENT ZOMBIE SPAWNS ---
-        if (!sectorState.spawns.initial && now - state.startTime > 0) {
+        if (!sectorState.spawns.initial && simTime - state.startTime > 0) {
             sectorState.spawns.initial = true;
             for (let i = 0; i < 3; i++) {
                 if (events.spawnZombie) events.spawnZombie(EnemyType.WALKER, new THREE.Vector3(14, 0, 1));
@@ -768,8 +768,8 @@ export const Sector0: SectorDef = {
         // --- 2. TRAIN SMOKE ---
         if (events.spawnPart) {
             const interval = 80;
-            if (now - (sectorState.lastSmokeTime || 0) > interval) {
-                sectorState.lastSmokeTime = now;
+            if (simTime - (sectorState.lastSmokeTime || 0) > interval) {
+                sectorState.lastSmokeTime = simTime;
                 const tPos = LOCATIONS.POIS.TRAIN_YARD;
                 const yRot = -0.05;
                 const localX = 6, localY = 7.0, localZ = 0;
@@ -792,14 +792,14 @@ export const Sector0: SectorDef = {
             const busTrigger = gameState.triggers?.find((t: any) => t.id === 's1_event_tunnel_blocked');
             if (busTrigger && busTrigger.triggered) {
                 sectorState.busEventState = 1;
-                sectorState.busEventTimer = now;
+                sectorState.busEventTimer = simTime;
             }
         }
 
         // State 1: Wait 2.0s, then trigger first distant explosion
-        else if (sectorState.busEventState === 1 && now - sectorState.busEventTimer > 2000) {
+        else if (sectorState.busEventState === 1 && simTime - sectorState.busEventTimer > 2000) {
             sectorState.busEventState = 2;
-            sectorState.busEventTimer = now;
+            sectorState.busEventTimer = simTime;
 
             if (events.playSound) events.playSound(SoundID.EXPLOSION);
             if (events.cameraShake) events.cameraShake(1.0);
@@ -816,9 +816,9 @@ export const Sector0: SectorDef = {
         }
 
         // State 2: Wait 2s, then pan camera
-        else if (sectorState.busEventState === 2 && now - sectorState.busEventTimer > 2000) {
+        else if (sectorState.busEventState === 2 && simTime - sectorState.busEventTimer > 2000) {
             sectorState.busEventState = 3;
-            sectorState.busEventTimer = now;
+            sectorState.busEventTimer = simTime;
 
             if (events.setCameraOverride) {
                 _camOverrideTarget.copy(_trainYardPos).add(_offsetTrainYard);
@@ -833,9 +833,9 @@ export const Sector0: SectorDef = {
         }
 
         // State 3: Wait 2s for camera to arrive, then BIG explosion at train yard
-        else if (sectorState.busEventState === 3 && now - sectorState.busEventTimer > 2000) {
+        else if (sectorState.busEventState === 3 && simTime - sectorState.busEventTimer > 2000) {
             sectorState.busEventState = 4;
-            sectorState.busEventTimer = now;
+            sectorState.busEventTimer = simTime;
 
             if (events.playSound) events.playSound(SoundID.EXPLOSION);
             if (events.cameraShake) events.cameraShake(5.0);
@@ -846,9 +846,9 @@ export const Sector0: SectorDef = {
         }
 
         // State 4: Wait 2s on explosion view, then return camera and spawn wave
-        else if (sectorState.busEventState === 4 && now - sectorState.busEventTimer > 2000) {
+        else if (sectorState.busEventState === 4 && simTime - sectorState.busEventTimer > 2000) {
             sectorState.busEventState = 5;
-            sectorState.busEventTimer = now;
+            sectorState.busEventTimer = simTime;
 
             if (events.setCameraOverride) events.setCameraOverride(null);
 
@@ -890,7 +890,7 @@ export const Sector0: SectorDef = {
 
             if (sectorState.zombiesKilled >= sectorState.zombiesKillTarget) {
                 sectorState.busEventState = 6;
-                sectorState.busEventTimer = now;
+                sectorState.busEventTimer = simTime;
 
                 gameState.triggers.push({
                     id: 'dyn_speak_' + Date.now(),
@@ -915,8 +915,9 @@ export const Sector0: SectorDef = {
         // State 6: Wait for player to press [E]
         else if (sectorState.busEventState === 6 && sectorState.busInteractionTriggered) {
             sectorState.busEventState = 7;
-            sectorState.busEventTimer = now;
-            sectorState.lastBeepTime = now;
+            sectorState.busEventState = 7;
+            sectorState.busEventTimer = simTime;
+            sectorState.lastBeepTime = simTime;
 
             const busObj = (sectorState.ctx as any).busObject;
             if (busObj) {
@@ -931,7 +932,7 @@ export const Sector0: SectorDef = {
                         active: true,
                         targetPos: _camOverrideTarget,
                         lookAtPos: _camOverrideLookAt,
-                        endTime: performance.now() + 4000
+                        endTime: renderTime + 4000
                     });
                 }
 
@@ -951,7 +952,7 @@ export const Sector0: SectorDef = {
 
         // State 7: Bomb countdown sequence
         else if (sectorState.busEventState === 7) {
-            const elapsed = now - sectorState.busEventTimer;
+            const elapsed = simTime - sectorState.busEventTimer;
             const _busObjShake = (sectorState.ctx as any).busObject;
             const pos = (sectorState as any).originalBusPos || LOCATIONS.TRIGGERS.BUS;
             _busOriginalPos.copy(pos);
@@ -959,14 +960,15 @@ export const Sector0: SectorDef = {
             if (elapsed < 3000) {
                 // Beep sequence
                 const beepInterval = elapsed > 2000 ? 250 : 500;
-                if (now - sectorState.lastBeepTime > beepInterval) {
-                    sectorState.lastBeepTime = now;
+                if (simTime - sectorState.lastBeepTime > beepInterval) {
+                    sectorState.lastBeepTime = simTime;
                     if (events.playTone) events.playTone(880, 'sine', 0.1, 0.15);
                 }
 
                 // Pulsating visual effect on the ring
                 if (sectorState.busRing) {
-                    const pulse = (Math.sin(elapsed * 0.01) + 1) * 0.5;
+                    const elapsedRender = renderTime - (sectorState.busEventTimer || renderTime);
+                    const pulse = (Math.sin(elapsedRender * 0.01) + 1) * 0.5;
                     sectorState.busRing.material.opacity = 0.3 + (pulse * 0.5);
                     sectorState.busRing.scale.setScalar(1.0 + (pulse * 0.2));
                     sectorState.busRing.material.color.setRGB(1.0, pulse, 0.0);
@@ -986,7 +988,7 @@ export const Sector0: SectorDef = {
             } else {
                 // Trigger the actual explosion
                 sectorState.busEventState = 8;
-                sectorState.busEventTimer = now;
+                sectorState.busEventTimer = simTime;
 
                 if (sectorState.busRing) {
                     if (events.scene) events.scene.remove(sectorState.busRing);
@@ -1089,7 +1091,7 @@ export const Sector0: SectorDef = {
 
         // State 8: Explosion physics and post-explosion events
         else if (sectorState.busEventState === 8) {
-            const elapsed = now - sectorState.busEventTimer;
+            const elapsed = renderTime - sectorState.busEventTimer;
 
             // FIX: dt är redan i sekunder, rör inte denna!
             const dtSec = dt;
@@ -1140,8 +1142,8 @@ export const Sector0: SectorDef = {
 
                             if (data.hasLanded && !data.hasLanded[i] && events.playSound) {
                                 data.hasLanded[i] = 1;
-                                if (now - sectorState.lastMetalImpactTime > 80) {
-                                    sectorState.lastMetalImpactTime = now;
+                                if (renderTime - sectorState.lastMetalImpactTime > 80) {
+                                    sectorState.lastMetalImpactTime = renderTime;
                                     events.playSound(SoundID.IMPACT_METAL);
                                 }
                             }

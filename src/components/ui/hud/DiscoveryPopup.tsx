@@ -5,6 +5,8 @@ import { UiSounds } from '../../../utils/audio/AudioLib';
 import { DiscoveryType } from './HudTypes';
 import { DataResolver } from '../../../utils/ui/DataResolver';
 import { PERKS, PerkCategory } from '../../../content/perks';
+import { CLUES } from '../../../content/clues';
+import { POIS } from '../../../content/pois';
 
 interface DiscoveryPopupProps {
   onOpenAdventureLog: (tab?: string, itemId?: string) => void;
@@ -22,6 +24,9 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
   const id = useHudStore(s => s.discovery.id);
   const type = useHudStore(s => s.discovery.type);
   const isMobile = useHudStore(s => s.isMobileDevice);
+  const sector = useHudStore(s => s.currentSector);
+  const cluesFound = useHudStore(s => s.cluesFoundCount);
+  const poisFound = useHudStore(s => s.poisFoundCount);
 
   const [visible, setVisible] = useState(false);
   const [activeDiscovery, setActiveDiscovery] = useState<any>(null);
@@ -60,28 +65,36 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
     if (!activeDiscovery) return null;
     const { id, type } = activeDiscovery;
 
-    let icon = '🔍';
+    let title = '';
     let subtitle = '';
+    let icon = '';
 
     switch (type) {
       case DiscoveryType.CLUE:
+        title = t('ui.discovered_clue');
+        const totalClues = Object.values(CLUES).filter(c => c.sector === sector).length;
+        subtitle = `${t('ui.clue')} ${cluesFound}/${totalClues}`;
         icon = '🔍';
-        subtitle = t('ui.clue');
         break;
       case DiscoveryType.POI:
+        title = t('ui.discovered_poi');
+        const totalPois = Object.values(POIS).filter(p => p.sector === sector).length;
+        subtitle = `${t('ui.poi_short')} ${poisFound}/${totalPois}`;
         icon = '📍';
-        subtitle = t(DataResolver.getPoiName(id));
         break;
       case DiscoveryType.COLLECTIBLE:
-        icon = '📦';
+        title = t('ui.collectible_discovered');
         subtitle = t(DataResolver.getCollectibleName(id));
+        icon = '📦';
         break;
       case DiscoveryType.ENEMY:
       case DiscoveryType.BOSS:
+        title = t('ui.discovered_enemy');
         icon = type === DiscoveryType.BOSS ? '💀' : '🧟';
         subtitle = t(DataResolver.getEnemyName(Number(id), type === DiscoveryType.BOSS ? Number(id) : -1));
         break;
       case DiscoveryType.PERK:
+        title = t('ui.discovered_perk');
         const perk = PERKS[Number(id)];
         icon = perk?.icon || '✨';
         const catKey = perk?.category === PerkCategory.PASSIVE ? 'ui.passive' : (perk?.category === PerkCategory.BUFF ? 'ui.buff' : 'ui.debuff');
@@ -89,8 +102,8 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         break;
     }
 
-    return { icon, subtitle };
-  }, [activeDiscovery]);
+    return { icon, title, subtitle };
+  }, [activeDiscovery, sector, cluesFound, poisFound]);
 
   if (!activeDiscovery || !content) return null;
 
@@ -114,7 +127,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         {/* CONTENT */}
         <div className="flex flex-col flex-1">
           <span className="text-[10px] font-mono font-black text-white/40 tracking-[0.25em] uppercase leading-none mb-1">
-            {t('ui.discovery')}
+            {content.title}
           </span>
           <span className="text-sm font-mono font-bold text-white uppercase tracking-wider leading-tight">
             {content.subtitle}
@@ -123,9 +136,9 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
 
         {/* INTERACTION BUTTON */}
         <div className="flex items-center justify-center min-w-[48px] h-10 border border-zinc-700 rounded-lg bg-zinc-900 px-3 hover:bg-zinc-800 transition-all active:scale-95 shadow-inner">
-           <span className="text-xs font-mono font-black text-white tracking-widest uppercase">
-             {isMobile ? t('ui.tap') : t('ui.enter')}
-           </span>
+          <span className="text-xs font-mono font-black text-white tracking-widest uppercase">
+            {isMobile ? t('ui.tap') : t('ui.enter')}
+          </span>
         </div>
       </div>
 

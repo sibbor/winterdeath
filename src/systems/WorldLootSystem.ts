@@ -88,7 +88,7 @@ export class WorldLootSystem implements System {
         WorldLootSystem.instance = this;
     }
 
-    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
+    update(ctx: any, delta: number, simTime: number, renderTime: number) {
         // 1. Process pending spawns from ring buffer
         const pendingSpawns = this.spawnHead - this.spawnTail;
         if (pendingSpawns > 0) {
@@ -114,8 +114,8 @@ export class WorldLootSystem implements System {
             if (this.callbacks?.gainScrap) {
                 this.callbacks.gainScrap(collected);
             } else {
-                session.state.statsBuffer[PlayerStatID.SCRAP] += collected;
-                session.state.statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += collected;
+                ctx.state.statsBuffer[PlayerStatID.SCRAP] += collected;
+                ctx.state.statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += collected;
             }
         }
     }

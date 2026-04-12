@@ -213,7 +213,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                         <div className="min-w-0">
                                             <h3 className={`${isMobileDevice ? 'text-lg leading-tight' : 'text-2xl'} font-semibold uppercase tracking-tighter truncate mb-1`}
                                                 style={{ color: isEquipped ? categoryColor : 'white' }}>
-                                                {t(weapon.displayName)}
+                                                {t(DataResolver.getWeaponName(weapon.name))}
                                             </h3>
 
                                             <div className={`flex flex-col gap-y-2 ${isMobileDevice ? 'text-xs' : 'text-sm'} font-mono text-gray-400`}>

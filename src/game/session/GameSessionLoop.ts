@@ -94,7 +94,6 @@ function getCachedNumberString(num: number): string {
 export function createGameLoop(ctx: LoopContext): (dt: number) => void {
     const { engine, session, state, refs, propsRef, callbacks } = ctx;
 
-    let uiSyncTimer = 0;
     let frame = 0;
 
     const getActiveCallbacks = () => state.callbacks || callbacks || EMPTY_OBJECT;
@@ -341,7 +340,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
             // VINTERDÖD: Vi behåller renderingen igång även under station-interaktioner
             // för att se bakgrunden (snö, vind, etc).
-            engine.isRenderingPaused = false; 
+            engine.isRenderingPaused = false;
             return;
         } else {
             engine.isRenderingPaused = false;
@@ -353,7 +352,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         // 2. UI Throttling
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
         state.framesSinceHudUpdate++;
-        uiSyncTimer += delta;
 
         if (now - lastHudSyncTime >= 66) { // ~15 FPS
             lastHudSyncTime = now;
@@ -566,7 +564,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
             if (refs.playerMeshRef.current) {
                 const sb = state.statsBuffer;
-                
+
                 const sf = state.statusFlags;
                 _animStateScratch.staminaRatio = sb[PlayerStatID.STAMINA] / sb[PlayerStatID.MAX_STAMINA];
                 _animStateScratch.isMoving = state.isMoving;
@@ -593,7 +591,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         // 9. Footprints
         monitor.begin('footprints');
-        FootprintSystem.update(delta);
+        FootprintSystem.update(session, delta, simTime, renderTime);
         monitor.end('footprints');
 
         // 11. Camera Processing
@@ -785,7 +783,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _triggerOptionsScratch.onDiscovery = activeCallbacks.onDiscovery || callbacks.onDiscovery;
         _triggerOptionsScratch.playSound = (id: SoundID) => audioEngine.playSound(id);
         _triggerOptionsScratch.activeFamilyMembers = refs.activeFamilyMembers.current;
-        TriggerHandler.checkTriggers(playerGroup.position, state, _triggerOptionsScratch, delta, simTime, renderTime);
+        TriggerHandler.checkTriggers(playerGroup.position, state, _triggerOptionsScratch, simTime);
         monitor.end('triggers');
 
         // 17.5 Orchestration Fix: Finalize Stats & Sync HUD (ZERO-LATENCY)
@@ -794,7 +792,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (statsSystem) {
                 const oldMask = state.previousPerkMask;
                 statsSystem.update(session, delta, simTime, renderTime);
-                
+
                 // VINTERDÖD FIX: If any effect was added OR expired, bypass 15fps sync for instant HUD update
                 // This now catches everything from Enemies, Projectiles, Movement, and Triggers!
                 if (state.previousPerkMask !== oldMask) {
@@ -808,9 +806,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         // 18. Emitters Update
         monitor.begin('active_effects');
-        
+
         // VINTERDÖD: FXSystem update must run at render rate for visual smoothness.
-        FXSystem.update(engine.scene, state.particles, state.bloodDecals, _fxCallbacks, delta, simTime, renderTime);
+        FXSystem.update(engine.scene, state.particles, state.bloodDecals, _fxCallbacks, delta, simTime, renderTime, state);
 
         if (state.activeEffects.length > 0) {
             const isBacklogged = (FXSystem as any).ambientQueue && (FXSystem as any).ambientQueue.length > 1000;
@@ -912,7 +910,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 for (let i = 0; i < eCount; i++) {
                     const e = enemies[i];
                     if (e.deathState !== EnemyDeathState.ALIVE) continue;
-                    
+
                     const dx = e.mesh.position.x - pPos.x;
                     const dz = e.mesh.position.z - pPos.z;
                     const dSq = dx * dx + dz * dz;
@@ -920,7 +918,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     // Find furthest current slot to potentially replace
                     let furthestIdx = -1;
                     let maxDSq = -1;
-                    
+
                     for (let j = count; j < 8; j++) {
                         if (_bendDistSq[j] > maxDSq) {
                             maxDSq = _bendDistSq[j];

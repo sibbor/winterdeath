@@ -67,6 +67,10 @@ export const EnemyAttackHandler = {
                         e.statusFlags |= EnemyFlags.GRAPPLING;
                         e.grappleDuration = 2.0 + Math.random() * 1.0;
                         e.attackTimer = -1; // VINTERDÖD: Yield control to Grapple system
+
+                        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+                            console.log(`[EnemyAttackHandler] WALKER ${e.id} started GRAPPLE (BITE) for ${e.grappleDuration.toFixed(2)}s`);
+                        }
                     }
 
                     if (callbacks.spawnPart) {
@@ -87,6 +91,10 @@ export const EnemyAttackHandler = {
                         e.statusFlags |= EnemyFlags.GRAPPLING;
                         e.grappleDuration = 1.5 + Math.random() * 0.5;
                         e.attackTimer = -1; // VINTERDÖD: Yield control to Grapple system
+
+                        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+                            console.log(`[EnemyAttackHandler] RUNNER ${e.id} started GRAPPLE (JUMP) for ${e.grappleDuration.toFixed(2)}s`);
+                        }
                     }
                 }
                 callbacks.playSound(SoundID.ZOMBIE_ATTACK_SMASH);

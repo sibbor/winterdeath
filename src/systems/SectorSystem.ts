@@ -57,7 +57,7 @@ export class SectorSystem implements System {
         return SECTORS[mapId];
     }
 
-    update(session: GameSessionLogic, dt: number, now: number) {
+    update(session: GameSessionLogic, dt: number, simTime: number, renderTime: number) {
         const state = session.state;
         const scene = session.engine.scene;
         const pPos = this.playerGroup.position;
@@ -72,7 +72,7 @@ export class SectorSystem implements System {
         }
 
         // 1. Optimized Proximity Check (Zero-GC)
-        if (now - this.lastChimeTime > 2500) {
+        if (simTime - this.lastChimeTime > 2500) {
             const items = state.mapItems;
             const itemsLen = items.length;
             for (let i = 0; i < itemsLen; i++) {
@@ -86,7 +86,7 @@ export class SectorSystem implements System {
                     const dx = item.x - pPos.x;
                     const dz = item.z - pPos.z;
                     if (dx * dx + dz * dz < 64) {
-                        this.lastChimeTime = now;
+                        this.lastChimeTime = simTime;
                         break;
                     }
                 }
@@ -199,6 +199,6 @@ export class SectorSystem implements System {
 
         // 4. Centralized Atmosphere Update
         session.engine.updateAtmosphere(pPos, this.currentSector.environment, this.currentSector.atmosphereZones, state, dt);
-        this.currentSector.onUpdate(dt, now, pPos, state, state.sectorState, events);
+        this.currentSector.onUpdate(dt, simTime, renderTime, pPos, state, state.sectorState, events);
     }
 }

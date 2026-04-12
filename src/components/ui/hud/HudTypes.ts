@@ -96,6 +96,16 @@ export interface DiscoveryEvent {
   timestamp: number;
 }
 
+export interface SectorStatsData {
+  unlimitedAmmo: boolean;
+  unlimitedThrowables: boolean;
+  isInvincible: boolean;
+  hordeTarget: number;
+  zombiesKilled: number;
+  zombiesKillTarget: number;
+  zombieWaveActive: boolean;
+}
+
 export interface HudState {
   // --- DOD BUFFERS (Zero-GC / O(1)) ---
   statsBuffer: Float32Array;
@@ -140,8 +150,11 @@ export interface HudState {
   isDriving: boolean;
   vehicleSpeed: number;
   throttleState: number;
-  sectorStats: SectorState | null;
+  currentSector: number;
+  cluesFoundCount: number;
+  poisFoundCount: number;
   fps: number;
+  sectorStats: SectorStatsData;
 
   // Status & Buffs
   statusEffects: StatusEffectData[];

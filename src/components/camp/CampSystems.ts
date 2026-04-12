@@ -14,10 +14,10 @@ export class CampEffectsSystem implements System {
     id = 'camp_effects';
     enabled = true;
 
-    update(ctx: any, dt: number, now: number): void {
+    update(ctx: any, dt: number, simTime: number, renderTime: number): void {
         const { scene, envState } = ctx;
         if (envState) {
-            CampWorld.updateEffects(scene, envState, dt, now);
+            CampWorld.updateEffects(scene, envState, dt, renderTime);
         }
     }
 }
@@ -29,7 +29,7 @@ export class FamilyAnimationSystem implements System {
     id = 'family_anim';
     enabled = true;
 
-    update(ctx: any, dt: number, now: number): void {
+    update(ctx: any, dt: number, simTime: number, renderTime: number): void {
         const { familyMembers, activeChats, hoveredId } = ctx;
         if (!familyMembers) return;
 
@@ -40,7 +40,7 @@ export class FamilyAnimationSystem implements System {
             if (!isSpeaking) {
                 for (let j = 0; j < activeChats.length; j++) {
                     const c = activeChats[j];
-                    if (c.mesh.uuid === fm.mesh.uuid && now >= c.startTime && now <= c.startTime + c.duration) {
+                    if (c.mesh.uuid === fm.mesh.uuid && renderTime >= c.startTime && renderTime <= c.startTime + c.duration) {
                         isSpeaking = true;
                         break;
                     }
@@ -54,12 +54,13 @@ export class FamilyAnimationSystem implements System {
 
             PlayerAnimator.update(fm.mesh as any, {
                 isMoving: false, isRushing: false, isDodging: false, dodgeStartTime: 0, staminaRatio: 1.0,
-                isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed,
-                renderTime: now
-            }, now);
+                isSpeaking, isThinking: false, isIdleLong: renderTime > 5000, seed: fm.seed,
+                renderTime: renderTime,
+                simTime: simTime
+            }, renderTime);
 
             const isHov = hoveredId === (fm.mesh.userData.id);
-            const emissiveIntensity = isHov ? 0.5 + Math.sin(now * 0.005) * 0.5 : 0;
+            const emissiveIntensity = isHov ? 0.5 + Math.sin(renderTime * 0.005) * 0.5 : 0;
 
             for (let j = 0; j < fm.emissiveMaterials.length; j++) {
                 const mat = fm.emissiveMaterials[j];
@@ -78,18 +79,18 @@ export class CampChatterSystem implements System {
     id = 'camp_chatter';
     enabled = true;
 
-    update(ctx: any, dt: number, now: number): void {
+    update(ctx: any, dt: number, simTime: number, renderTime: number): void {
         const { isGameRunning, nextChatterTime, nextWildlifeTime, familyMembers, activeMembers, chatOverlay, activeChats, camera, container } = ctx;
         if (!isGameRunning) return;
 
         // 1. Ambient Wildlife
-        if (now > nextWildlifeTime.val) {
+        if (renderTime > nextWildlifeTime.val) {
             if (Math.random() > 0.5) audioEngine.playSound(SoundID.OWL_HOOT, 0.3);
-            nextWildlifeTime.set(now + 30000 + Math.random() * 60000);
+            nextWildlifeTime.set(renderTime + 30000 + Math.random() * 60000);
         }
 
         // 2. Chatter Generation
-        if (now > nextChatterTime.val && activeMembers.length > 1 && familyMembers && familyMembers.length > 0) {
+        if (renderTime > nextChatterTime.val && activeMembers.length > 1 && familyMembers && familyMembers.length > 0) {
             const numSpeakers = 1 + Math.floor(Math.random() * 2.5);
             let delayOffset = 0;
             for (let i = 0; i < numSpeakers; i++) {
@@ -111,10 +112,10 @@ export class CampChatterSystem implements System {
                     el.style.transform = 'translate3d(-50%, -100%, 0)';
 
                     activeChats.push({
-                        id: `chat_${now}_${i}`,
+                        id: `chat_${renderTime}_${i}`,
                         mesh: speaker.mesh,
                         text,
-                        startTime: now + delayOffset,
+                        startTime: renderTime + delayOffset,
                         duration,
                         element: el,
                         playedSound: false,
@@ -124,7 +125,7 @@ export class CampChatterSystem implements System {
                     delayOffset += duration + 500;
                 }
             }
-            nextChatterTime.set(now + delayOffset + 10000 + Math.random() * 20000);
+            nextChatterTime.set(renderTime + delayOffset + 10000 + Math.random() * 20000);
         }
 
         // 2. Chat Bubble Positioning & Expiry
@@ -135,20 +136,20 @@ export class CampChatterSystem implements System {
         for (let i = activeChats.length - 1; i >= 0; i--) {
             const c = activeChats[i];
 
-            if (now > c.startTime + c.duration) {
+            if (renderTime > c.startTime + c.duration) {
                 if (c.element.parentNode) c.element.parentNode.removeChild(c.element);
                 activeChats[i] = activeChats[activeChats.length - 1];
                 activeChats.pop();
             }
 
-            else if (now >= c.startTime) {
+            else if (renderTime >= c.startTime) {
                 if (!c.playedSound) {
                     c.playedSound = true;
                     UiSounds.playConfirm();
                 }
 
                 // 1. Opacity - update only if it actually changes
-                const targetOpacity = now < c.startTime + 500 ? String((now - c.startTime) / 500) : (now > c.startTime + c.duration - 500 ? String((c.startTime + c.duration - now) / 500) : '1');
+                const targetOpacity = renderTime < c.startTime + 500 ? String((renderTime - c.startTime) / 500) : (renderTime > c.startTime + c.duration - 500 ? String((c.startTime + c.duration - renderTime) / 500) : '1');
                 if (c.element.style.opacity !== targetOpacity) {
                     c.element.style.opacity = targetOpacity;
                 }

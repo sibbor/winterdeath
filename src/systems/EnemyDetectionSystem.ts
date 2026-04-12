@@ -131,7 +131,7 @@ export class EnemyDetectionSystem implements System {
         return true;
     }
 
-    update(context: any, simDelta: number, simTime: number) {
+    update(context: any, delta: number, simTime: number, renderTime: number) {
         const state = context.state;
         if (!state || !context.playerPos) return;
 
@@ -165,7 +165,7 @@ export class EnemyDetectionSystem implements System {
                     e.searchTimer = 0;
                     e.awareness = 1.0;
                     e.lastSeenTime = simTime;
-                    const isAggressive = e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING;
+                    const isAggressive = e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING || e.state === AIState.GRAPPLE;
                     if (!isAggressive) e.state = AIState.CHASE;
 
                     // --- VINTERDÖD: Discovery Logic ---
@@ -193,13 +193,13 @@ export class EnemyDetectionSystem implements System {
                     }
                 } else {
                     if (e.awareness > 0) {
-                        e.awareness = Math.max(0, e.awareness - simDelta * 0.2);
+                        e.awareness = Math.max(0, e.awareness - delta * 0.2);
                     }
                 }
             }
 
             // 3. AUDIO CHECK - Skip if already in an aggressive state
-            const isAggressive = e.state === AIState.CHASE || e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING;
+            const isAggressive = e.state === AIState.CHASE || e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING || e.state === AIState.GRAPPLE;
 
             if (!isAggressive) {
                 for (let j = 0; j < this.noiseEvents.length; j++) {

@@ -177,6 +177,10 @@ export const EnemyManager = {
         _aiContext.spawnBubble = spawnBubble;
 
         const engine = WinterEngine.getInstance();
+        const state = engine?.onUpdateContext?.state;
+        const globalTimeScale = state?.globalTimeScale ?? 1.0;
+        const scaledDelta = delta * globalTimeScale;
+
         const camera = engine.camera;
         const cameraPos = camera.threeCamera.position;
         const cameraDir = _camDir.set(0, 0, -1).applyQuaternion(camera.threeCamera.quaternion);
@@ -187,11 +191,11 @@ export const EnemyManager = {
 
             if (e.deathState === EnemyDeathState.ALIVE) {
                 // Let EnemyAI handle duration updates and physics!
-                EnemyAI.updateEnemy(e, playerPos, playerStatusFlags, collisionGrid, isDead, _aiContext, water, delta, simTime, renderTime);
+                EnemyAI.updateEnemy(e, playerPos, playerStatusFlags, collisionGrid, isDead, _aiContext, water, scaledDelta, simTime, renderTime);
             }
 
             if (e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD) {
-                EnemyManager.processDeathAnimation(e, _aiContext, delta, simTime, renderTime);
+                EnemyManager.processDeathAnimation(e, _aiContext, scaledDelta, simTime, renderTime);
             }
 
             const deathState = e.deathState;
@@ -308,7 +312,7 @@ export const EnemyManager = {
 
     spawn: (scene: THREE.Scene, playerPos: THREE.Vector3, forcedType?: EnemyType, forcedPos?: THREE.Vector3, bossSpawned: boolean = false, enemyCount: number = 0): Enemy | null => {
         let enemy: Enemy | null = null;
-        const newType = (forcedType !== undefined) ? forcedType : EnemySpawner.determineType(enemyCount, bossSpawned);
+        const newType = (forcedType !== undefined) ? forcedType : EnemySpawner.determineType(bossSpawned);
 
         if (enemyPool.length > 0) {
             enemy = enemyPool.pop()!;
@@ -655,6 +659,62 @@ export const EnemyManager = {
         }
     },
 
+    /**
+     * UNIFIED PERFORMANCE PHYSICS: The single source of truth for sending zombies flying.
+     * Handles horizontal knockback, vertical lift, ragdoll state initialization, and spin.
+     */
+    applyImpactForce: (
+        enemy: Enemy,
+        impactSourcePos: THREE.Vector3,
+        forceMag: number,
+        liftRatio: number,
+        stunDuration: number,
+        spinIntensity: number
+    ) => {
+        if (enemy.deathState !== EnemyDeathState.ALIVE) return;
+
+        // --- 1. DIRECTIONAL MATH (Zero-GC) ---
+        _v1.subVectors(enemy.mesh.position, impactSourcePos);
+        _v1.y = 0;
+        if (_v1.lengthSq() < 0.001) _v1.set(0, 0, 1);
+        else _v1.normalize();
+
+        const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
+        const force = forceMag / Math.max(0.5, mass);
+        const lift = forceMag * liftRatio / Math.max(0.5, mass);
+
+        // --- 2. APPLY VELOCITY ---
+        enemy.knockbackVel.set(_v1.x * force, lift, _v1.z * force);
+
+        // --- 3. STATE & INTERRUPTION ---
+        enemy.stunDuration = stunDuration;
+        enemy.slowDuration = Math.max(3.5, stunDuration + 1.5);
+
+        // Interrupt attacks
+        if (enemy.state === AIState.ATTACK_CHARGE || enemy.state === AIState.ATTACKING) {
+            enemy.attackTimer = 0;
+            if (enemy.indicatorRing) enemy.indicatorRing.visible = false;
+        }
+        enemy.state = AIState.IDLE;
+
+        // --- 4. RAGDOLL & SPIN ---
+        if ((enemy.statusFlags & EnemyFlags.BOSS) === 0) {
+            enemy.mesh.userData.isRagdolling = true;
+            const sVel = enemy.mesh.userData.spinVel as THREE.Vector3;
+            if (sVel) {
+                sVel.set(
+                    (Math.random() - 0.5) * spinIntensity,
+                    (Math.random() - 0.5) * spinIntensity * 1.2,
+                    (Math.random() - 0.5) * spinIntensity
+                );
+            }
+        }
+    },
+
+    /**
+     * Handles the physics and logic for multiple enemies being hit by
+     * player's Rush or Dodge.
+     */
     knockbackEnemies: (
         ctx: any,
         center: THREE.Vector3,
@@ -696,34 +756,23 @@ export const EnemyManager = {
                     else e.hp -= damage;
                 }
 
-                // --- PHYSICS ---
-                if (_v1.lengthSq() < 0.001) _v1.set(0, 0, 1);
-                _v1.normalize();
+                // --- PHYSICS (Using Unified Pipeline) ---
+                const isDodge = damageType === DamageID.DODGE;
+                const isRush = damageType === DamageID.RUSH;
 
-                const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
-                const force = (maxForce * falloff) / Math.max(0.5, mass);
+                const liftRatio = isDodge ? 0.15 : (isRush ? 0.75 : 0.45);
+                const spinScale = isRush ? 1.5 : 0.8;
+                const force = maxForce * falloff;
+                const stunDur = (1.5 + Math.random() * 0.5) * falloff;
 
-                // Dynamic scaling based on incoming force
-                const lift = maxForce * 0.45 * falloff;
-                e.knockbackVel.set(_v1.x * force, lift, _v1.z * force);
-
-                // Radius knockback: Set persistent slow for recovery window
-                e.stunDuration = Math.max(1.2, (maxForce * 0.05) * falloff);
-                e.slowDuration = 3.5;
-                e.state = AIState.IDLE;
-                e.attackTimer = 0; // BREAKOUT: Cancel any active bite/hit grip
-
-                // Always ragdoll non-bosses, scale spin intensity with force
-                if ((e.statusFlags & EnemyFlags.BOSS) === 0) {
-                    e.mesh.userData.isRagdolling = true;
-                    const sVel = e.mesh.userData.spinVel as THREE.Vector3;
-                    const spinMod = force * 0.8;
-                    sVel.set(
-                        (Math.random() - 0.5) * spinMod,
-                        (Math.random() - 0.5) * spinMod * 1.2,
-                        (Math.random() - 0.5) * spinMod
-                    );
-                }
+                EnemyManager.applyImpactForce(
+                    e,
+                    center,
+                    force,
+                    liftRatio,
+                    Math.max(0.8, stunDur),
+                    force * spinScale
+                );
 
                 // --- VISUALS ---
                 if (ctx.particles) {
@@ -735,77 +784,10 @@ export const EnemyManager = {
         if (hitAnyone) GamePlaySounds.playImpact(MaterialType.FLESH);
     },
 
-    applyKnockback: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, delta: number, simTime: number) => {
-        const canTackle = enemy.deathState === EnemyDeathState.ALIVE && (simTime - enemy.lastTackleTime > 300);
-        if (!canTackle) return;
-
-        // Cancel any active attacks BEFORE overwriting the state
-        if (enemy.state === AIState.ATTACK_CHARGE || enemy.state === AIState.ATTACKING) {
-            enemy.attackTimer = 0;
-        }
-
-        // Apply baseline stun/slow for ALL impacts
-        enemy.stunDuration = isDashing ? 2.0 : 0.5; // Short stun for regular hits
-        enemy.slowDuration = isDashing ? 3.5 : 1.5;
-        logStateChange(simTime, enemy, AIState.IDLE, 'KNOCKBACK');
-        enemy.state = AIState.IDLE;
-        enemy.lastTackleTime = simTime;
-
-        // If not a dash/heavy impact, apply light push and exit early
-        if (!isDashing) {
-            const push = ((enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 1.0 : 4.0) / (enemy.originalScale * enemy.originalScale);
-            _v2.subVectors(enemy.mesh.position, impactPos).setY(0).normalize().multiplyScalar(push);
-            enemy.knockbackVel.add(_v2);
-            return;
-        }
-
-        // Heavy impact (Dash/Vehicle) physics
-        const mass = (enemy.originalScale * enemy.originalScale * enemy.widthScale);
-        const pushMultiplier = ((enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 0.1 : 1.0) / Math.max(0.5, mass);
-
-        _v2.subVectors(enemy.mesh.position, impactPos).setY(0).normalize();
-        _v1.copy(moveVec).normalize();
-
-        // Prevent zombies from being sucked inward if impact angle is sharp
-        if (_v2.dot(_v1) > 0.3) {
-            _v1.set(moveVec.z, 0, -moveVec.x).normalize();
-            if (_v2.dot(_v1) < 0) _v1.negate();
-            _v2.lerp(_v1, 0.85).normalize();
-        }
-
-        const force = 30.0 * pushMultiplier;
-        const lift = 30.0 * pushMultiplier;
-
-        enemy.knockbackVel.set(_v2.x * force, lift, _v2.z * force);
-
-        // Apply dash damage (skip if damage was already handled by the vehicle system)
-        if (isDashing && enemy.lastDamageType !== DamageID.VEHICLE_RAM && enemy.lastDamageType !== DamageID.VEHICLE_SPLATTER) {
-            const tackleDamage = 10;
-            const applyDamage = (state as any).applyDamage;
-            if (applyDamage) applyDamage(enemy, tackleDamage, DamageID.RUSH);
-            else enemy.hp -= tackleDamage;
-
-            if (state.callbacks?.showDamageText) {
-                state.callbacks.showDamageText(enemy.mesh.position.x, 2.5, enemy.mesh.position.z, getCachedNumberString(tackleDamage), "#ffffff");
-            }
-        }
-
-        // Ragdoll visuals and spinning for standard enemies
-        if ((enemy.statusFlags & EnemyFlags.BOSS) === 0) {
-            enemy.mesh.userData.isRagdolling = true;
-            const sVel = enemy.mesh.userData.spinVel as THREE.Vector3;
-            sVel.set(
-                (Math.random() - 0.5) * 25,
-                (Math.random() - 0.5) * 30,
-                (Math.random() - 0.5) * 25
-            );
-        }
-
-        FXSystem.spawnPart(scene, state.particles, enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
-        GamePlaySounds.playImpact(MaterialType.FLESH);
-    },
-
-    applyVehicleHit: (
+    /**
+     * Handles the physics and logic for a single enemy being hit by a vehicle.
+      */
+    ramEnemies: (
         e: Enemy,
         knockDir: THREE.Vector3,
         speedMS: number,
@@ -813,7 +795,8 @@ export const EnemyManager = {
         state: any,
         session: any,
         delta: number,
-        simTime: number
+        simTime: number,
+        renderTime: number
     ): boolean => {
         const speedKmh = speedMS * 3.6;
         const mass = e.originalScale * e.widthScale;
@@ -823,7 +806,7 @@ export const EnemyManager = {
 
         e.hp -= baseDamage;
         e.hitTime = simTime;
-        e.hitRenderTime = (session.state as any).renderTime || 0;
+        e.hitRenderTime = renderTime;
 
         const scene = session.engine.scene;
 
@@ -879,7 +862,9 @@ export const EnemyManager = {
             _v3.copy(knockDir).multiplyScalar(speedMS);
             _v4.copy(e.mesh.position).addScaledVector(knockDir, -1.0);
 
-            EnemyManager.applyKnockback(e, _v4, _v3, true, state, scene, delta, simTime);
+            // Unified Physics Impact for vehicles
+            const liftRatio = 0.4 + (speedMS * 0.02); // Faster = more lift
+            EnemyManager.applyImpactForce(e, _v4, speedMS * 15, liftRatio, 1.5, speedMS * 2.0);
 
             e.slowDuration = 0.5;
             return false;

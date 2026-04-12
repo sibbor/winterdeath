@@ -52,11 +52,6 @@ export class PlayerMovementSystem implements System {
 
     constructor(private playerGroup: THREE.Group) {
         // VINTERDÖD: 100% Zero-GC Mesh Pre-allocation
-        this._buffShieldMesh = new THREE.Mesh(GEOMETRY.buff_shield_bubble, MATERIALS.buff_shield_bubble);
-        this._buffShieldMesh.position.y = 1.0;
-        this._buffShieldMesh.visible = false;
-        this.playerGroup.add(this._buffShieldMesh);
-
         this._invincibilityMesh = new THREE.Mesh(GEOMETRY.reflexShield, MATERIALS.reflexShield);
         this._invincibilityMesh.position.y = 1.0;
         this._invincibilityMesh.visible = false;
@@ -115,7 +110,6 @@ export class PlayerMovementSystem implements System {
         );
 
         this.updateInvincibleGlow(state, session.state.renderTime);
-        this.updateShieldBubble(session, delta);
 
         // --- ZERO-GC TELEMETRY LOGGING (Throttled @ 1000ms) ---
         _auditFrameCount++;
@@ -153,43 +147,6 @@ export class PlayerMovementSystem implements System {
         }
     }
 
-    private updateShieldBubble(session: GameSessionLogic, delta: number) {
-        const state = session.state;
-        const perkID = StatusEffectType.REFLEX_SHIELD;
-        const duration = state.effectDurations[perkID];
-        const maxDuration = state.effectMaxDurations[perkID] || 1000;
-
-        if (duration > 0 && this._buffShieldMesh) {
-            const mat = this._buffShieldMesh.material as THREE.MeshBasicMaterial;
-
-            // FADE LOGIC:
-            let targetOpacity = 0.4;
-            const elapsed = maxDuration - duration;
-
-            // Fade in (first ms)
-            if (elapsed < 150) {
-                targetOpacity = (elapsed / 150) * 0.4;
-            }
-            // Fade out (last ms)
-            else if (duration < 200) {
-                targetOpacity = (duration / 200) * 0.4;
-            }
-
-            mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 10 * delta);
-
-            // Interaction: Pulse scale
-            const pulse = 1.0 + Math.sin(state.renderTime * 0.015) * 0.05;
-            this._buffShieldMesh.scale.setScalar(pulse);
-            this._buffShieldMesh.rotation.y += delta * 2;
-            this._buffShieldMesh.visible = true;
-        } else if (this._buffShieldMesh) {
-            const mat = this._buffShieldMesh.material as THREE.MeshBasicMaterial;
-            mat.opacity = THREE.MathUtils.lerp(mat.opacity, 0, 15 * delta);
-            if (mat.opacity < 0.01) {
-                this._buffShieldMesh.visible = false;
-            }
-        }
-    }
 
     private checkReflexShield(session: GameSessionLogic, simTime: number) {
         const state = session.state;
@@ -197,20 +154,14 @@ export class PlayerMovementSystem implements System {
         const perk = PERKS[perkID];
         if (!perk) return;
 
-        // Trigger if off cooldown
         const cooldown = perk.cooldown ?? 10000;
         if (simTime - state.lastReflexShieldTime > cooldown) {
             state.lastReflexShieldTime = simTime;
 
-            // Add the buff (Zero-GC SoA)
-            const duration = perk.duration ?? 1000;
-            state.effectDurations[perkID] = duration;
-            state.effectMaxDurations[perkID] = duration;
-
-            // Discovery (Numeric SMI check)
-            if (!state.discoveredPerks.includes(perkID as any)) {
-                state.discoveredPerks.push(perkID as any);
-                session.triggerDiscovery('perk', perkID, perk.displayName, perk.description);
+            // Centralized Trigger (Clears debuffs!)
+            const statsSystem = session.getSystem('player_stats_system') as any;
+            if (statsSystem) {
+                statsSystem.triggerReflexShield(session, simTime);
             }
         }
     }
@@ -310,7 +261,7 @@ export class PlayerMovementSystem implements System {
                     speed *= 0.525; // VINTERDÖD: 50% faster (0.35 * 1.5)
                 } else if (flatDepth > 0.95 && isSwimming) {
                     isSwimming = true;
-                    speed *= 0.525; 
+                    speed *= 0.525;
                 } else if (flatDepth > 0.4) {
                     isSwimming = false;
                     isWading = true;
@@ -590,9 +541,9 @@ export class PlayerMovementSystem implements System {
                 this._knockbackCtx,
                 playerGroup.position,
                 searchRadius,
-                state.isDodging ? 25 : 15, // Max Force
-                state.isDodging ? 5 : 2,   // Max Damage
-                DamageID.PHYSICAL
+                state.isDodging ? 15 : 50, // Max Force
+                0,                         // Max Damage (VINTERDÖD: Damage only applied on landing!)
+                state.isDodging ? DamageID.DODGE : DamageID.RUSH
             );
         }
 

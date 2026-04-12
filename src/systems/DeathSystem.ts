@@ -2,7 +2,7 @@ import type React from 'react';
 import * as THREE from 'three';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System } from './System';
-import { PlayerDeathState, DamageType, DamageID } from '../entities/player/CombatTypes';
+import { PlayerDeathState, DamageID } from '../entities/player/CombatTypes';
 import { PLAYER_DEATH_TIMER } from '../content/constants';
 import { MATERIALS } from '../utils/assets';
 import { VoiceSounds } from '../utils/audio/AudioLib';

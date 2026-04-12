@@ -20,7 +20,7 @@ export const EnemySpawner = {
      * Logic to decide which type of zombie should spawn based on current game state.
      * Extracted from spawn() to allow EnemyManager to know the type BEFORE picking from pool.
      */
-    determineType: (enemyCount: number, bossSpawned: boolean): EnemyType => {
+    determineType: (bossSpawned: boolean): EnemyType => {
         // Difficulty modifier: If a boss is out, we primarily spawn Walkers to avoid chaos
         if (bossSpawned) return EnemyType.WALKER;
 
@@ -89,7 +89,7 @@ export const EnemySpawner = {
             z = playerPos.z + Math.sin(angle) * dist;
         }
 
-        const typeKey = (forcedType !== undefined) ? forcedType : EnemySpawner.determineType(enemyCount, bossSpawned);
+        const typeKey = (forcedType !== undefined) ? forcedType : EnemySpawner.determineType(bossSpawned);
         const typeData = (ZOMBIE_TYPES as any)[typeKey] || ZOMBIE_TYPES.WALKER;
 
         const g = ModelFactory.createZombie(typeKey, typeData);
@@ -207,6 +207,7 @@ export const EnemySpawner = {
 
         const enemyIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
         enemyIndicatorRing.rotation.x = -Math.PI / 2;
+        enemyIndicatorRing.position.y = 0.2; // VINTERDÖD: Match family ring height
         enemyIndicatorRing.visible = false;
         g.add(enemyIndicatorRing);
         enemy.indicatorRing = enemyIndicatorRing;
@@ -323,6 +324,7 @@ export const EnemySpawner = {
         // Ensure boss has an indicator ring for its special attacks
         const bossIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
         bossIndicatorRing.rotation.x = -Math.PI / 2;
+        bossIndicatorRing.position.y = 0.2; // VINTERDÖD: Match family ring height
         bossIndicatorRing.visible = false;
         boss.add(bossIndicatorRing);
         enemy.indicatorRing = bossIndicatorRing;
