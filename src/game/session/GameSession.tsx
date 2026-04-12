@@ -337,9 +337,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 if (target) {
                     const cinematicSystem = refs.gameSessionRef.current?.getSystem('cinematic') as any;
                     if (cinematicSystem) {
+                        const sectorId = payload.sectorId ?? (latestStateRef.current.props.currentSector ?? 0);
+                        const dialogueId = payload.scriptId ?? 0;
                         cinematicSystem.startCinematic(
                             target,
-                            payload.scriptId || 0,
+                            sectorId,
+                            dialogueId,
                             payload
                         );
                     }

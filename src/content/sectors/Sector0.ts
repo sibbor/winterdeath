@@ -680,15 +680,19 @@ export const Sector0: SectorDef = {
 
             // THE NATIVE BUS EVENT TRIGGER
             { id: 's1_event_tunnel_blocked', position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: TriggerType.SPEAK, content: "clues.0.5.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [] },
+
+            // LOKE CINEMATIC TRIGGER — starts INACTIVE.
+            // Activated by onUpdate State 9 only after the bus explosion settles,
+            // so the player cannot skip the cinematic by walking to Loke early.
             {
                 id: 'found_loke',
                 position: LOCATIONS.SPAWN.FAMILY,
                 familyId: 0,
-                radius: 5,
+                radius: 8,
                 type: TriggerType.EVENT,
                 content: '',
-                statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: 0 } }]
+                statusFlags: TriggerStatus.ONCE, // Starts INACTIVE — no ACTIVE flag
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: 0, scriptId: 0, sectorId: 0 } }]
             }
         ]);
     },
@@ -1178,6 +1182,7 @@ export const Sector0: SectorDef = {
 
             if (transitionToState9) {
                 sectorState.busEventState = 9;
+                sectorState.busEventTimer = simTime;
 
                 if (events.setCameraOverride) events.setCameraOverride(null);
 
@@ -1190,6 +1195,22 @@ export const Sector0: SectorDef = {
                     triggered: false,
                     actions: []
                 });
+            }
+        }
+
+        // State 9: Explosion settled — activate the Loke proximity trigger so the player
+        // can now walk through the tunnel and begin the cinematic encounter.
+        else if (sectorState.busEventState === 9 && !sectorState.lokeUnlocked) {
+            // Wait a beat (1.5s) for the rubble speech bubble to land before unlocking
+            if (simTime - sectorState.busEventTimer > 1500) {
+                sectorState.lokeUnlocked = true;
+
+                // Activate the found_loke trigger
+                const lokeTrigger = gameState.triggers?.find((t: any) => t.id === 'found_loke');
+                if (lokeTrigger) {
+                    lokeTrigger.statusFlags = TriggerStatus.ACTIVE | TriggerStatus.ONCE;
+                    lokeTrigger.triggered = false; // Ensure it fires fresh
+                }
             }
         }
     }
