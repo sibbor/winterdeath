@@ -36,9 +36,9 @@ const formatDistance = (meters: number) => {
  */
 const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRestartSector, onRespawn, onNextSector, currentSector, isMobileDevice }) => {
     const [activeTab, setActiveTab] = useState<0 | 1>(0);
- 
+
     const isFailed = !!deathDetails;
- 
+
     useEffect(() => {
         if (isFailed) {
             UiSounds.playDefeat();
@@ -87,50 +87,20 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
         }
     }
 
-    // --- REUSABLE SUB-COMPONENTS ---
-
-    const StatBox = ({ label, value, colorClass = 'text-white', borderColor = 'border-blue-500', bgColor = 'bg-blue-900/20' }: { label: string, value: string | number, colorClass?: string, borderColor?: string, bgColor?: string }) => (
-        <div className={`${bgColor} p-4 border-l-4 ${borderColor} shadow-lg flex flex-col justify-center min-h-[80px]`}>
-            <span className={`block text-[10px] uppercase font-black tracking-widest mb-1 opacity-70 ${colorClass}`}>{label}</span>
-            <span className={`text-2xl font-bold uppercase ${colorClass}`}>{value}</span>
-        </div>
-    );
-
-    const SmallStat = ({ label, value, colorClass = 'text-slate-400' }: { label: string, value: string | number, colorClass?: string }) => (
-        <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">{label}</span>
-            <span className={`text-lg font-bold ${colorClass}`}>{value}</span>
-        </div>
-    );
-
-    const TabButton = ({ index, label }: { index: 0 | 1, label: string }) => (
-        <button
-            onClick={() => {
-                setActiveTab(index);
-                UiSounds.playClick();
-            }}
-            className={`px-6 py-2 text-sm font-black uppercase tracking-widest transition-all border-b-2 ${activeTab === index ? 'border-white text-white' : 'border-transparent text-gray-500 hover:text-gray-300'}`}
-        >
-            {label}
-        </button>
-    );
-
-    const LineItem = ({ title, val, isHeal = false }: { title: string, val: number, isHeal?: boolean, key?: string | number }) => (
-        <div className="flex justify-between text-sm py-1 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors px-1 rounded">
-            <span className="text-white/80">{title}</span>
-            <span className={isHeal ? "text-green-400 font-mono" : "text-white font-mono"}>{Math.round(val)}</span>
-        </div>
-    );
-
     const incomingData = Object.values(stats.incomingDamageBreakdown || {}) as any[];
-    const totalIncoming = incomingData.reduce((acc: number, enemyMap: any) => {
+    const totalIncoming = React.useMemo(() => incomingData.reduce((acc: number, enemyMap: any) => {
         const enemyVals = Object.values(enemyMap || {}) as number[];
         const sum = enemyVals.reduce((s: number, v: number) => s + (v || 0), 0);
         return acc + sum;
-    }, 0);
+    }, 0), [incomingData]);
 
     const outgoingData = Object.values(stats.outgoingDamageBreakdown || {}) as number[];
-    const totalOutgoing = outgoingData.reduce((acc: number, val: number) => acc + (val || 0), 0);
+    const totalOutgoing = React.useMemo(() => outgoingData.reduce((acc: number, val: number) => acc + (val || 0), 0), [outgoingData]);
+
+    const handleTabChange = React.useCallback((index: 0 | 1) => {
+        setActiveTab(index);
+        UiSounds.playClick();
+    }, []);
 
     return (
         <ScreenModalLayout
@@ -147,8 +117,8 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
         >
             {/* Header / Pager */}
             <div className="flex justify-center mb-8 border-b border-gray-800">
-                <TabButton index={0} label={t('ui.summary')} />
-                <TabButton index={1} label={t('ui.details')} />
+                <TabButton isActive={activeTab === 0} index={0} label={t('ui.summary')} onClick={handleTabChange} />
+                <TabButton isActive={activeTab === 1} index={1} label={t('ui.details')} onClick={handleTabChange} />
             </div>
 
             {activeTab === 0 ? (
@@ -222,7 +192,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
             ) : (
                 /* PAGE 2: DETAILED COMBAT BREAKDOWN */
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <div className="bg-black/40 backdrop-blur-md rounded-xl p-5 border border-white/10 shadow-2xl">
+                    <div className="bg-black/40 backdrop-blur-sm rounded-xl p-5 border border-white/10 shadow-2xl">
                         <div className="flex justify-between items-end mb-4 border-b border-red-500/30 pb-2">
                             <h3 className="text-2xl font-black uppercase tracking-tighter text-red-500">{t('report.damage.incoming')}</h3>
                             <span className="text-xl font-mono text-red-400 font-bold">{Math.round(totalIncoming)}</span>
@@ -235,7 +205,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
                                 let attackerName = t('report.labels.unknown');
                                 const id = parseInt(enemyId);
-                                
+
                                 if (id === DamageID.BOSS) {
                                     attackerName = t('report.labels.boss');
                                 } else if (id < 20) { // Standard enemies or weapons
@@ -248,9 +218,9 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                                     <div key={enemyId} className="mb-2 last:mb-0">
                                         {Object.entries(enemyMapTyped).map(([attackId, dmg]) => {
                                             if (dmg <= 0) return null;
-                                            
+
                                             const atkName = t(DataResolver.getAttackName(parseInt(attackId)));
-                                            
+
                                             const label = `${attackerName} > ${atkName}`.toUpperCase();
                                             return <LineItem key={attackId} title={label} val={dmg} />;
                                         })}
@@ -260,7 +230,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                         </div>
                     </div>
 
-                    <div className="bg-black/40 backdrop-blur-md rounded-xl p-5 border border-white/10 shadow-2xl">
+                    <div className="bg-black/40 backdrop-blur-sm rounded-xl p-5 border border-white/10 shadow-2xl">
                         <div className="flex justify-between items-end mb-4 border-b border-green-500/30 pb-2">
                             <h3 className="text-2xl font-black uppercase tracking-tighter text-green-500">{t('report.damage.outgoing')}</h3>
                             <span className="text-xl font-mono text-green-400 font-bold">{Math.round(totalOutgoing)}</span>
@@ -269,10 +239,10 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                             {Object.entries(stats.outgoingDamageBreakdown || {}).map(([weaponId, damage]) => {
                                 const dmgVal = (damage as number) || 0;
                                 if (dmgVal <= 0) return null;
-                                
+
                                 const instrumentId = parseInt(weaponId);
                                 const name = t(DataResolver.getDamageName(instrumentId));
-                                
+
                                 return <LineItem key={weaponId} title={name.toUpperCase()} val={dmgVal} />;
                             })}
                         </div>
@@ -282,5 +252,37 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
         </ScreenModalLayout>
     );
 };
+
+// --- REUSABLE SUB-COMPONENTS (HOISTED) ---
+
+const StatBox = React.memo(({ label, value, colorClass = 'text-white', borderColor = 'border-blue-500', bgColor = 'bg-blue-900/20' }: { label: string, value: string | number, colorClass?: string, borderColor?: string, bgColor?: string }) => (
+    <div className={`${bgColor} p-4 border-l-4 ${borderColor} shadow-lg flex flex-col justify-center min-h-[80px]`}>
+        <span className={`block text-[10px] uppercase font-black tracking-widest mb-1 opacity-70 ${colorClass}`}>{label}</span>
+        <span className={`text-2xl font-bold uppercase ${colorClass}`}>{value}</span>
+    </div>
+));
+
+const SmallStat = React.memo(({ label, value, colorClass = 'text-slate-400' }: { label: string, value: string | number, colorClass?: string }) => (
+    <div className="flex flex-col">
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">{label}</span>
+        <span className={`text-lg font-bold ${colorClass}`}>{value}</span>
+    </div>
+));
+
+const TabButton = React.memo(({ index, label, isActive, onClick }: { index: 0 | 1, label: string, isActive: boolean, onClick: (idx: 0 | 1) => void }) => (
+    <button
+        onClick={() => onClick(index)}
+        className={`px-6 py-2 text-sm font-black uppercase tracking-widest transition-all border-b-2 ${isActive ? 'border-white text-white' : 'border-transparent text-gray-500 hover:text-gray-300'}`}
+    >
+        {label}
+    </button>
+));
+
+const LineItem = React.memo(({ title, val, isHeal = false }: { title: string, val: number, isHeal?: boolean }) => (
+    <div className="flex justify-between text-sm py-1 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors px-1 rounded">
+        <span className="text-white/80">{title}</span>
+        <span className={isHeal ? "text-green-400 font-mono" : "text-white font-mono"}>{Math.round(val)}</span>
+    </div>
+));
 
 export default ScreenSectorReport;

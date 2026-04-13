@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
 import { t } from '../../../../utils/i18n';
 import { useOrientation } from '../../../../hooks/useOrientation';
@@ -170,29 +170,43 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                     </div>
                 </div>
 
-                {/* Content Area */}
+                {/* Content Area - DYNAMIC MOUNTING (Performance Fix 1) */}
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar relative">
-                    <div className={activeTab === 'stats' ? 'block h-full' : 'hidden'}>
-                        <StatsTab stats={stats} isMobileDevice={!effectiveLandscape} />
-                    </div>
-                    <div className={activeTab === 'perks' ? 'block' : 'hidden'}>
-                        <PerksTab stats={stats} color={THEME_COLOR} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
-                    </div>
-                    <div className={activeTab === 'enemy' ? 'block' : 'hidden'}>
-                        <EnemyTab stats={stats} color={THEME_COLOR} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} />
-                    </div>
-                    <div className={activeTab === 'boss' ? 'block' : 'hidden'}>
-                        <BossTab stats={stats} color={THEME_COLOR} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
-                    </div>
-                    <div className={activeTab === 'collectibles' ? 'block' : 'hidden'}>
-                        <CollectiblesTab stats={stats} isMobileDevice={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
-                    </div>
-                    <div className={activeTab === 'clues' ? 'block' : 'hidden'}>
-                        <CluesTab stats={stats} color={'#eab308'} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
-                    </div>
-                    <div className={activeTab === 'poi' ? 'block' : 'hidden'}>
-                        <PoiTab stats={stats} color={'#3b82f6'} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
-                    </div>
+                    {activeTab === 'stats' && (
+                        <div className="h-full">
+                            <StatsTab stats={stats} isMobileDevice={!effectiveLandscape} />
+                        </div>
+                    )}
+                    {activeTab === 'perks' && (
+                        <div>
+                            <PerksTab stats={stats} color={THEME_COLOR} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
+                        </div>
+                    )}
+                    {activeTab === 'enemy' && (
+                        <div>
+                            <EnemyTab stats={stats} color={THEME_COLOR} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} />
+                        </div>
+                    )}
+                    {activeTab === 'boss' && (
+                        <div>
+                            <BossTab stats={stats} color={THEME_COLOR} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
+                        </div>
+                    )}
+                    {activeTab === 'collectibles' && (
+                        <div>
+                            <CollectiblesTab stats={stats} isMobileDevice={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
+                        </div>
+                    )}
+                    {activeTab === 'clues' && (
+                        <div>
+                            <CluesTab stats={stats} color={'#eab308'} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
+                        </div>
+                    )}
+                    {activeTab === 'poi' && (
+                        <div>
+                            <PoiTab stats={stats} color={'#3b82f6'} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -306,6 +320,8 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Rea
 });
 
 const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape }) => {
+    // PERFORMANCE FIX 2: useMemo for static arrays
+    const enemies = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.ENEMY), []);
 
     const getEnemyDescription = (type: number) => {
         return t(DataResolver.getZombieDescription(type as EnemyType));
@@ -313,9 +329,9 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
 
     return (
         <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'} pb-12`}>
-            {DataResolver.getDiscoveryList(DiscoveryType.ENEMY).map((data) => {
-                const key = data.id; // Correct key from data object
-                const typeSmi = EnemyType[key as keyof typeof EnemyType];
+            {enemies.map((data) => {
+                const typeSmi = data.type; // Use the numeric type directly
+                const key = data.id;
                 const isSeen = (stats.seenEnemies || EMPTY_ARRAY).includes(typeSmi) || (stats.killsByType && stats.killsByType[typeSmi] > 0);
                 if (!isSeen) return null;
                 const itemColor = `#${data.color.toString(16).padStart(6, '0')}`;
@@ -360,7 +376,7 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                         <div className="h-[1px] flex-1 bg-gray-800"></div>
                                     </div>
                                     <div className="grid grid-cols-1 gap-2">
-                                        {data.attacks.map((attack, idx) => {
+                                        {data.attacks.map((attack: any, idx: number) => {
                                             const attackSmi = attack.type;
                                             return (
                                                 <div key={idx} className="flex flex-col bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
@@ -401,6 +417,10 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
 });
 
 const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
+    // PERFORMANCE FIX 2: useMemo for static arrays
+    const sectorsList = useMemo(() => DataResolver.getSectors(), []);
+    const themesList = useMemo(() => DataResolver.getSectorThemes(), []);
+    const bossesList = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.BOSS), []);
 
     const getBossDescription = (bossId: number) => {
         return t(DataResolver.getBossDescription(bossId));
@@ -408,10 +428,9 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
 
     return (
         <div className="space-y-16 pb-12">
-            {DataResolver.getSectors().map(sectorIndex => {
-                const bosses = DataResolver.getDiscoveryList(DiscoveryType.BOSS);
-                const boss = bosses[sectorIndex];
-                const theme = DataResolver.getSectorThemes()[sectorIndex];
+            {sectorsList.map(sectorIndex => {
+                const boss = bossesList[sectorIndex];
+                const theme = themesList[sectorIndex];
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= sectorIndex;
                 const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorIndex)) : `Sector ${sectorIndex}`) : '???';
 
@@ -466,7 +485,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                                             <div className="h-[1px] flex-1 bg-gray-800"></div>
                                                         </div>
                                                         <div className="grid grid-cols-1 gap-2">
-                                                            {boss.attacks.map((attack, idx) => {
+                                                            {boss.attacks.map((attack: any, idx: number) => {
                                                                 const attackSmi = attack.type;
                                                                 return (
                                                                     <div key={idx} className="flex flex-col bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
@@ -515,13 +534,15 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
 
 const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
     const foundIds = stats.collectiblesDiscovered || EMPTY_ARRAY;
-    const COLLECTIBLES_ARRAY = DataResolver.getDiscoveryList(DiscoveryType.COLLECTIBLE);
+    // PERFORMANCE FIX 2: useMemo for static arrays
+    const COLLECTIBLES_ARRAY = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.COLLECTIBLE), []);
+    const themesList = useMemo(() => DataResolver.getSectorThemes(), []);
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
             {SECTORS.map(sectorId => {
                 const sectorCollectibles = COLLECTIBLES_ARRAY.filter(c => c.sector === sectorId);
-                const theme = DataResolver.getSectorThemes()[sectorId];
+                const theme = themesList[sectorId];
                 const isSectorUnlocked = isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId;
                 const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorId)) : `Sector ${sectorId}`) : '???';
 
@@ -560,12 +581,14 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
 
 const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
     const cluesFound = stats.cluesFound || EMPTY_ARRAY;
-    const CLUES_ARRAY = DataResolver.getDiscoveryList(DiscoveryType.CLUE);
+    // PERFORMANCE FIX 2: useMemo for static arrays
+    const CLUES_ARRAY = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.CLUE), []);
+    const themesList = useMemo(() => DataResolver.getSectorThemes(), []);
 
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
-                const theme = DataResolver.getSectorThemes()[sectorId];
+                const theme = themesList[sectorId];
                 const sectorClues = CLUES_ARRAY.filter(clue => clue.sector === sectorId);
                 const isSectorUnlocked = isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId;
                 const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorId)) : `Sector ${sectorId}`) : '???';
@@ -621,12 +644,14 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
 
 const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
     const visitedList = stats.discoveredPOIs || EMPTY_ARRAY;
-    const POIS_ARRAY = DataResolver.getDiscoveryList(DiscoveryType.POI);
+    // PERFORMANCE FIX 2: useMemo for static arrays
+    const POIS_ARRAY = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.POI), []);
+    const themesList = useMemo(() => DataResolver.getSectorThemes(), []);
 
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
-                const theme = DataResolver.getSectorThemes()[sectorId];
+                const theme = themesList[sectorId];
                 const sectorPOIs = POIS_ARRAY.filter(poi => poi.sector === sectorId);
                 const isSectorUnlocked = isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId;
                 const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorId)) : `Sector ${sectorId}`) : '???';
@@ -686,12 +711,16 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boo
 const PerksTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
     const discoveredList = stats.discoveredPerks || EMPTY_ARRAY;
 
-    // Categorize perks
-    const perks = DataResolver.getPerks();
-    const perksArray = Object.values(perks);
-    const buffs = perksArray.filter(p => p.category === PerkCategory.BUFF);
-    const debuffs = perksArray.filter(p => p.category === PerkCategory.DEBUFF);
-    const passives = perksArray.filter(p => p.category === PerkCategory.PASSIVE);
+    // PERFORMANCE FIX 2: useMemo for filtering
+    const { buffs, debuffs, passives } = useMemo(() => {
+        const perks = DataResolver.getPerks();
+        const perksArray = Object.values(perks);
+        return {
+            buffs: perksArray.filter(p => p.category === PerkCategory.BUFF),
+            debuffs: perksArray.filter(p => p.category === PerkCategory.DEBUFF),
+            passives: perksArray.filter(p => p.category === PerkCategory.PASSIVE)
+        };
+    }, []);
 
     const renderPerk = (perk: any) => {
         const isFound = isDebug || discoveredList.includes(perk.id);
@@ -754,7 +783,7 @@ const PerksTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
 });
 
 const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: string, id?: string, className?: string }> = React.memo(({ children, isLocked, color = '#6b7280', id, className = '' }) => (
-    <div id={id} className={`p-6 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800' : ''} ${className}`}
+    <div id={id} className={`p-6 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 backdrop-blur-md shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800' : ''} ${className}`}
         style={{ borderColor: isLocked ? '#1f2937' : `${color}66` }}
     >
         <div className="">

@@ -4,7 +4,7 @@ import { WEAPONS, WEAPON_CATEGORY_NAMES, WeaponCategory, WeaponType } from '../.
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
 import { POIS } from '../../content/pois';
-import { PERKS, StatusEffectType } from '../../content/perks';
+import { PERKS, PERK_CATALOG, PerkCategory, StatusEffectType } from '../../content/perks';
 import { FAMILY_MEMBERS } from '../../content/constants';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { CLUES } from '../../content/clues';
@@ -34,8 +34,8 @@ const DISCOVERY_BUCKETS: Record<string, any[]> = {
     POI: Object.values(POIS),
     COLLECTIBLE: Object.values(COLLECTIBLES),
     CLUE: Object.values(CLUES),
-    BOSS: Object.values(BOSSES),
-    ENEMY: Object.values(ZOMBIE_TYPES)
+    BOSS: Object.entries(BOSSES).map(([id, boss]) => ({ ...boss, id: Number(id) })),
+    ENEMY: Object.entries(ZOMBIE_TYPES).map(([type, data]) => ({ ...data, id: type, type: Number(type) }))
 };
 
 const SPEAKER_COLORS: Record<string, string> = {
@@ -104,7 +104,7 @@ export const DataResolver = {
      */
     getBossName(id: number): string {
         const boss = BOSSES[id];
-        return boss ? boss.name : 'ui.boss';
+        return boss ? `enemies.${boss.name}` : 'ui.boss';
     },
 
     /**
@@ -353,7 +353,7 @@ export const DataResolver = {
      */
     getBossDeathLore(id: number): string {
         const boss = BOSSES[id];
-        return boss ? (boss.deathStory || 'ui.boss_eliminated') : 'ui.boss_eliminated';
+        return boss ? `enemies.${boss.deathStory || 'ui.boss_eliminated'}` : 'ui.boss_eliminated';
     },
 
     /**
@@ -376,7 +376,8 @@ export const DataResolver = {
      */
     getPoiDescription(id: string): string {
         const poi = POIS[id];
-        return poi ? `pois.${poi.sector}.${poi.index}.description` : 'ui.description_missing';
+        if (!poi) return 'ui.description_missing';
+        return poi.descriptionKey || `pois.${poi.sector}.${poi.index}.description`;
     },
 
     /**
@@ -384,7 +385,8 @@ export const DataResolver = {
      */
     getPoiReaction(id: string): string {
         const poi = POIS[id];
-        return poi ? `pois.${poi.sector}.${poi.index}.reaction` : '';
+        if (!poi) return '';
+        return poi.reactionKey || `pois.${poi.sector}.${poi.index}.reaction`;
     },
 
     /**
@@ -433,5 +435,24 @@ export const DataResolver = {
     getSectorThemes(): typeof SECTOR_THEMES { return SECTOR_THEMES; },
     getSectors(): number[] { return [0, 1, 2, 3, 4]; },
     getWeapons(): WeaponStats[] { return WEAPONS; },
-    getFamilyMembers(): typeof FAMILY_MEMBERS { return FAMILY_MEMBERS; }
+    getFamilyMembers(): typeof FAMILY_MEMBERS { return FAMILY_MEMBERS; },
+
+    /**
+     * Returns a pre-computed list of perks by category (O(1)).
+     */
+    getPerksByCategory(cat: PerkCategory): any[] {
+        return PERK_CATALOG[cat] || [];
+    },
+
+    /**
+     * Resolves the localized label for a Perk Category for UI display.
+     */
+    getCategoryLabel(cat: PerkCategory): string {
+        switch (cat) {
+            case PerkCategory.PASSIVE: return 'ui.passive_abilities';
+            case PerkCategory.BUFF: return 'ui.buffs';
+            case PerkCategory.DEBUFF: return 'ui.debuffs';
+            default: return 'ui.unknown';
+        }
+    }
 };

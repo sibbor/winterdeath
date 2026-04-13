@@ -122,15 +122,21 @@ export const TriggerHandler = {
                     }
 
                     // --- FIRE NARRATIVE ---
-                    if (trig.content) {
-                        const translatedText = callbacks.t(trig.content);
+                    let narrativeContent = trig.content;
+                    if (!narrativeContent && trig.type === TriggerType.POI && trig.id) {
+                        narrativeContent = DataResolver.getPoiReaction(trig.id);
+                    }
+
+                    if (narrativeContent) {
+                        const translatedText = callbacks.t(narrativeContent);
                         const duration = 2000 + translatedText.length * 50;
                         callbacks.spawnBubble(translatedText, duration);
 
                         if (trig.type === TriggerType.SPEAK) {
                             if (callbacks.playSound) callbacks.playSound(SoundID.VO_PLAYER_COUGH);
                             callbacks.onTrigger(TriggerType.SPEAK, duration);
-                        } else if (trig.type === TriggerType.THOUGHT) {
+                        } else if (trig.type === TriggerType.THOUGHT || (trig.type === TriggerType.POI && !trig.content)) {
+                            // Default POI discovery bubbles to THOUGHT type for a more gritty, internal feel
                             if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
                             callbacks.onTrigger(TriggerType.THOUGHT, duration);
                         } else {

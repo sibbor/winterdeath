@@ -8,7 +8,7 @@ export { BOSSES } from './enemies/bosses';
 export { WEAPONS } from './weapons';
 
 // Sector constants
-export const OVERRIDE_DEFAULT_SECTOR = 3;       // Set to -1 to disable override
+export const OVERRIDE_DEFAULT_SECTOR = -1;       // Set to -1 to disable override
 
 // Player constants
 export const PLAYER_DEATH_TIMER = 3000;         // ms

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
-import { PlayerStats } from '../../entities/player/PlayerTypes';;
+import { PlayerStats, PlayerStatID } from '../../entities/player/PlayerTypes';;
 import { WeaponType } from '../../content/weapons';
-import { PLAYER_CHARACTER } from '../../content/constants';
+import { PLAYER_CHARACTER, PLAYER_BASE_SPEED } from '../../content/constants';
 import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
 import { UiSounds, AmbientSounds, VoiceSounds } from '../../utils/audio/AudioLib';
 import { audioEngine } from '../../utils/audio/AudioEngine';
@@ -388,7 +388,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                                 if (newHover === 'armory') {
                                     toolTipSubText = `${t(weaponName(currentLoadout.primary))} | ${t(weaponName(currentLoadout.secondary))} | ${t(weaponName(currentLoadout.throwable))} | ${t(weaponName(currentLoadout.special))}`;
                                 } else if (newHover === 'skills') {
-                                    toolTipSubText = `${t('camp_tooltips.vitality')}: ${stats.maxHp} | ${t('camp_tooltips.adrenaline')}: ${stats.maxStamina} | ${t('camp_tooltips.reflexes')}: ${Math.round(stats.speed * 100)}`;
+                                    toolTipSubText = `${t('camp_tooltips.vitality')}: ${stats.statsBuffer[PlayerStatID.MAX_HP]} | ${t('camp_tooltips.adrenaline')}: ${stats.statsBuffer[PlayerStatID.MAX_STAMINA]} | ${t('camp_tooltips.reflexes')}: ${Math.round((stats.statsBuffer[PlayerStatID.SPEED] / PLAYER_BASE_SPEED) * 100)}%`;
                                 } else if (newHover === 'adventure_log') {
                                     toolTipSubText = `${t('camp_tooltips.collectibles')}: ${stats.collectiblesDiscovered?.length || 0} | ${t('camp_tooltips.clues')}: ${stats.cluesFound?.length || 0} | ${t('camp_tooltips.poi')}: ${stats.discoveredPOIs?.length || 0} | ${t('camp_tooltips.enemies')}: ${stats.seenEnemies?.length || 0} | ${t('camp_tooltips.bosses')}: ${stats.seenBosses?.length || 0}`;
                                 } else if (newHover === 'sectors') {

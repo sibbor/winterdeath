@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';;
+import React, { useState, useCallback } from 'react';
+import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
@@ -7,9 +7,9 @@ import { LEVEL_CAP, PLAYER_BASE_SPEED } from '../../../../content/constants';
 import { useOrientation } from '../../../../hooks/useOrientation';
 
 const SKILLS_CONFIG = [
-    { statId: PlayerStatID.MAX_HP,      labelKey: 'skills.vitality',  descKey: 'skills.vitality_desc',  cost: 1, value: 20,  base: 100  },
-    { statId: PlayerStatID.MAX_STAMINA, labelKey: 'skills.adrenaline', descKey: 'skills.adrenaline_desc', cost: 1, value: 20,  base: 100  },
-    { statId: PlayerStatID.SPEED,       labelKey: 'skills.reflex',    descKey: 'skills.reflex_desc',   cost: 2, value: 0.5, base: PLAYER_BASE_SPEED }
+    { statId: PlayerStatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', cost: 1, value: 20, base: 100 },
+    { statId: PlayerStatID.MAX_STAMINA, labelKey: 'skills.adrenaline', descKey: 'skills.adrenaline_desc', cost: 1, value: 20, base: 100 },
+    { statId: PlayerStatID.SPEED, labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', cost: 2, value: 0.5, base: PLAYER_BASE_SPEED }
 ];
 
 interface ScreenPlayerSkillsProps {
@@ -19,25 +19,30 @@ interface ScreenPlayerSkillsProps {
     isMobileDevice?: boolean;
 }
 
-const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, onClose, isMobileDevice }) => {
+const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = React.memo(({ stats, onSave, onClose, isMobileDevice }) => {
     const { isLandscapeMode } = useOrientation();
     const [tempStats, setTempStats] = useState({ ...stats });
 
-    const handleUpgradeSkill = (statId: PlayerStatID, cost: number, value: number) => {
+    // PERFORMANCE FIX: useCallback prevents re-rendering all SkillCards when one is clicked
+    const handleUpgradeSkill = useCallback((statId: PlayerStatID, cost: number, value: number) => {
         UiSounds.playClick();
-        const sp = tempStats.statsBuffer[PlayerStatID.SKILL_POINTS];
-        if (sp >= cost) {
-            const newBuffer = new Float32Array(tempStats.statsBuffer);
-            newBuffer[PlayerStatID.SKILL_POINTS] -= cost;
-            newBuffer[statId] += value;
-            setTempStats({ ...tempStats, statsBuffer: newBuffer });
-        }
-    };
 
-    const handleConfirm = () => {
+        setTempStats(prevStats => {
+            const sp = prevStats.statsBuffer[PlayerStatID.SKILL_POINTS];
+            if (sp >= cost) {
+                const newBuffer = new Float32Array(prevStats.statsBuffer);
+                newBuffer[PlayerStatID.SKILL_POINTS] -= cost;
+                newBuffer[statId] += value;
+                return { ...prevStats, statsBuffer: newBuffer };
+            }
+            return prevStats;
+        });
+    }, []);
+
+    const handleConfirm = useCallback(() => {
         onSave(tempStats);
         onClose();
-    };
+    }, [onSave, onClose, tempStats]);
 
     const xpNeeded = stats.statsBuffer[PlayerStatID.NEXT_LEVEL_XP] - stats.statsBuffer[PlayerStatID.CURRENT_XP];
     const isMaxRank = stats.statsBuffer[PlayerStatID.LEVEL] >= LEVEL_CAP;
@@ -68,53 +73,70 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
                         </span>
                     </div>
                 </div>
-                {SKILLS_CONFIG.map(skill => {
-                    const currentVal = tempStats.statsBuffer[skill.statId];
-                    const cost = skill.cost;
-                    const canAfford = tempStats.statsBuffer[PlayerStatID.SKILL_POINTS] >= cost;
-
-                    const baseVal = skill.base;
-                    const upgradeVal = currentVal - baseVal;
-
-                    // Format for display
-                    const isSpeed = skill.statId === PlayerStatID.SPEED;
-                    const displayBase    = isSpeed ? baseVal.toFixed(1)    : baseVal;
-                    const displayUpgrade = isSpeed ? upgradeVal.toFixed(2) : upgradeVal;
-
-                    return (
-                        <div key={skill.statId} className={`${isMobileDevice ? 'p-4' : 'p-8'} bg-gray-900/40 border-2 border-purple-900/50 flex flex-col items-center text-center hover:border-purple-600/50 transition-colors relative group`}>
-                            <h3 className={`${isMobileDevice ? 'text-xl mb-1' : 'text-3xl mb-4'} font-semibold text-white uppercase tracking-tighter`}>{t(skill.labelKey)}</h3>
-                            <p className={`${isMobileDevice ? 'text-xs h-10 mb-2 leading-tight' : 'text-lg h-16 mb-2'} text-gray-400 leading-snug`}>{t(skill.descKey)}</p>
-
-                            <div className={`flex flex-col items-center justify-center gap-0 mt-0 mb-4`}>
-                                <div className="flex items-baseline gap-1">
-                                    <span className={`${isMobileDevice ? 'text-2xl' : 'text-5xl'} font-mono text-purple-500 font-bold leading-none`}>
-                                        {isSpeed ? currentVal.toFixed(2) : currentVal}
-                                    </span>
-                                    {isSpeed && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>{t('ui.speed_unit')}</span>}
-                                    {skill.statId === PlayerStatID.MAX_HP      && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>HP</span>}
-                                    {skill.statId === PlayerStatID.MAX_STAMINA && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>STM</span>}
-                                </div>
-                                <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-mono text-white font-bold opacity-80`}>
-                                    ({displayBase} + <span className="text-purple-400">{displayUpgrade}</span>)
-                                </span>
-                            </div>
-
-                            <button
-                                onClick={() => handleUpgradeSkill(skill.statId, cost, skill.value)}
-                                disabled={!canAfford}
-                                className={`w-full ${isMobileDevice ? 'py-2' : 'py-4'} font-bold uppercase tracking-wider border-2 transition-all ${canAfford
-                                    ? 'bg-purple-900/20 border-purple-500 text-purple-400 hover:bg-purple-900/40'
-                                    : 'bg-black border-gray-800 text-gray-600 cursor-not-allowed'}`}
-                            >
-                                <span className={`${isMobileDevice ? 'text-xs' : 'text-base'} block`}>{t('ui.upgrade')} ({cost} SP)</span>
-                            </button>
-                        </div>
-                    );
-                })}
+                {SKILLS_CONFIG.map(skill => (
+                    <SkillCard
+                        key={skill.statId}
+                        skill={skill}
+                        currentVal={tempStats.statsBuffer[skill.statId]}
+                        availableSP={tempStats.statsBuffer[PlayerStatID.SKILL_POINTS]}
+                        isMobileDevice={isMobileDevice}
+                        onUpgrade={handleUpgradeSkill}
+                    />
+                ))}
             </div>
         </ScreenModalLayout>
     );
-};
+});
+
+interface SkillCardProps {
+    skill: any;
+    currentVal: number;
+    availableSP: number;
+    isMobileDevice?: boolean;
+    onUpgrade: (statId: PlayerStatID, cost: number, value: number) => void;
+}
+
+const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, availableSP, isMobileDevice, onUpgrade }) => {
+    const cost = skill.cost;
+    const canAfford = availableSP >= cost;
+    const baseVal = skill.base;
+    const upgradeVal = currentVal - baseVal;
+
+    // Format for display
+    const isSpeed = skill.statId === PlayerStatID.SPEED;
+    const displayBase = isSpeed ? baseVal.toFixed(1) : baseVal;
+    const displayUpgrade = isSpeed ? upgradeVal.toFixed(2) : upgradeVal;
+
+    return (
+        <div className={`${isMobileDevice ? 'p-4' : 'p-8'} bg-gray-900/40 border-2 border-purple-900/50 flex flex-col items-center text-center hover:border-purple-600/50 transition-colors relative group`}>
+            <h3 className={`${isMobileDevice ? 'text-xl mb-1' : 'text-3xl mb-4'} font-semibold text-white uppercase tracking-tighter`}>{t(skill.labelKey)}</h3>
+            <p className={`${isMobileDevice ? 'text-xs h-10 mb-2 leading-tight' : 'text-lg h-16 mb-2'} text-gray-400 leading-snug`}>{t(skill.descKey)}</p>
+
+            <div className={`flex flex-col items-center justify-center gap-0 mt-0 mb-4`}>
+                <div className="flex items-baseline gap-1">
+                    <span className={`${isMobileDevice ? 'text-2xl' : 'text-5xl'} font-mono text-purple-500 font-bold leading-none`}>
+                        {isSpeed ? currentVal.toFixed(2) : currentVal}
+                    </span>
+                    {isSpeed && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>{t('ui.speed_unit')}</span>}
+                    {skill.statId === PlayerStatID.MAX_HP && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>HP</span>}
+                    {skill.statId === PlayerStatID.MAX_STAMINA && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>STM</span>}
+                </div>
+                <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-mono text-white font-bold opacity-80`}>
+                    ({displayBase} + <span className="text-purple-400">{displayUpgrade}</span>)
+                </span>
+            </div>
+
+            <button
+                onClick={() => onUpgrade(skill.statId, cost, skill.value)}
+                disabled={!canAfford}
+                className={`w-full ${isMobileDevice ? 'py-2' : 'py-4'} font-bold uppercase tracking-wider border-2 transition-all ${canAfford
+                    ? 'bg-purple-900/20 border-purple-500 text-purple-400 hover:bg-purple-900/40'
+                    : 'bg-black border-gray-800 text-gray-600 cursor-not-allowed'}`}
+            >
+                <span className={`${isMobileDevice ? 'text-xs' : 'text-base'} block`}>{t('ui.upgrade')} ({cost} SP)</span>
+            </button>
+        </div>
+    );
+});
 
 export default ScreenPlayerSkills;

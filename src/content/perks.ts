@@ -217,3 +217,19 @@ PERKS[StatusEffectType.DROWNING] = {
     duration: 3000,
     dotDamage: 10,
 };
+
+/**
+ * EXPERT OPTIMIZATION: PERK_CATALOG
+ * Groups perks by category during module load to avoid O(N) filtering in UI renders.
+ * STRICT: Category enums are numeric to support Zero-GC and Bitwise engine evaluations.
+ */
+export const PERK_CATALOG: Record<PerkCategory, PerkStats[]> = {
+    [PerkCategory.PASSIVE]: [],
+    [PerkCategory.BUFF]: [],
+    [PerkCategory.DEBUFF]: []
+};
+
+// Initialize catalog from the flat array (Run once on load)
+PERKS.forEach(p => {
+    if (p) PERK_CATALOG[p.category].push(p);
+});
