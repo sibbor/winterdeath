@@ -81,7 +81,8 @@ export const EnemyFlags = {
  * Master configuration for an enemy type.
  */
 export interface ZombieTypeData {
-    displayNameKey: string;
+    name: string;
+    story: string;
     hp: number;
     speed: number;
     score: number;
