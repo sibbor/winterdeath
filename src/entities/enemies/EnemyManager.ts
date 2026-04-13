@@ -3,6 +3,8 @@ import { MATERIALS } from '../../utils/assets';
 import { KMH_TO_MS } from '../../content/constants';
 import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_SCORE, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { DamageID } from '../../entities/player/CombatTypes';
+import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
+import { BOSSES } from '../../content/enemies/bosses';
 import { EnemySpawner } from './EnemySpawner';
 import { EnemyAI, logStateChange } from './EnemyAI';
 import { MaterialType } from '../../content/environment';
@@ -343,6 +345,11 @@ export const EnemyManager = {
         e.color = ENEMY_COLOR[newType];
         e.originalScale = ENEMY_SCALE[newType];
         e.widthScale = ENEMY_WIDTH_SCALE[newType];
+
+        // VINTERDÖD: Attack list initialization (Zero-GC pooling)
+        const typeData = (newType === EnemyType.BOSS) ? BOSSES[0] : ((ZOMBIE_TYPES as any)[newType] || ZOMBIE_TYPES.WALKER);
+        e.attacks = typeData.attacks || [];
+        if (e.attackCooldowns) e.attackCooldowns.fill(0);
 
         // Initialize collision radii
         e.hitRadius = e.originalScale * 0.5;

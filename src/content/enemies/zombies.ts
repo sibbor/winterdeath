@@ -116,6 +116,7 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
                 damage: 60,
                 range: 3.5,
                 radius: 10.0,
+                force: 25,
                 chargeTime: 2000,
                 cooldown: 0,
                 effect: StatusEffectType.DISORIENTED,

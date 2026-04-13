@@ -119,7 +119,7 @@ export const EnemyAttackHandler = {
                             callbacks.applyDamage(other, att.damage, DamageID.EXPLOSION, true);
 
                             // Apply knockback (physics)
-                            const force = 25.0 * (1.0 - Math.min(1.0, dSq / radSq));
+                            const force = att.force * (1.0 - Math.min(1.0, dSq / radSq));
                             const mass = other.originalScale * other.widthScale;
                             _v2.copy(_v1).normalize().multiplyScalar(force / mass).setY(2.0);
                             other.knockbackVel.add(_v2);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { AttackDefinition } from '../../entities/player/CombatTypes';
+import { AttackDefinition, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
 import {
@@ -93,6 +93,15 @@ Object.keys(ZOMBIE_TYPES).forEach(key => {
     else if (typeSMI === EnemyType.RUNNER) ENEMY_ATTACK_RANGE[typeSMI] = 2.0;
     else if (typeSMI === EnemyType.TANK) ENEMY_ATTACK_RANGE[typeSMI] = 2.5;
     else if (typeSMI === EnemyType.BOMBER) ENEMY_ATTACK_RANGE[typeSMI] = 3.5;
+
+    // VINTERDÖD: Ensure all attacks have defined force (Zero-GC safety for Handler)
+    if (data.attacks) {
+        data.attacks.forEach((att: any) => {
+            if (att.force === undefined) {
+                att.force = (att.type === EnemyAttackType.EXPLODE) ? 25.0 : 0.0;
+            }
+        });
+    }
 });
 
 // Initialize Boss stats from BOSSES registry
@@ -113,6 +122,15 @@ Object.keys(BOSSES).forEach(key => {
     ENEMY_SCALE[typeSMI] = data.scale || 3.0;
     ENEMY_WIDTH_SCALE[typeSMI] = data.widthScale || 1.0;
     ENEMY_ATTACK_RANGE[typeSMI] = 5.0;
+
+    // VINTERDÖD: Zero-GC force initialization for Boss attacks
+    if (data.attacks) {
+        data.attacks.forEach((att: any) => {
+            if (att.force === undefined) {
+                att.force = (att.type === EnemyAttackType.EXPLODE) ? 25.0 : 0.0;
+            }
+        });
+    }
 });
 
 /**

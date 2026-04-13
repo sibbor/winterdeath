@@ -109,6 +109,7 @@ export interface AttackDefinition {
     cooldown: number;
     range?: number;
     radius?: number;
+    force?: number;
     chargeTime?: number;
     activeTime?: number;
     effect?: StatusEffectType;
