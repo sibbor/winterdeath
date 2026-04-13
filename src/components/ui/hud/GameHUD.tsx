@@ -138,29 +138,33 @@ const FloatingReloadBar = ({ reloadBarRef, catColor, containerRef }: { reloadBar
     );
 };
 
-const VitalsPanel = React.memo(({ isMobileDevice, isBossIntro, hpBarRef, hpTextRef, stBarRef, xpBarRef }: any) => {
+const VitalsPanel = React.memo(({ isMobileDevice, isBossIntro, hpBarRef, hpTextRef, stBarRef, stTextRef, xpBarRef, xpTextRef }: any) => {
     return (
         <div className={`flex flex-col gap-1.5 ${isMobileDevice ? 'w-40' : 'w-80'} transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-            <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-5' : 'h-10'} w-full border border-red-500/30`}>
+            <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-5' : 'h-10'} w-full border border-red-500/30 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)] bg-slate-950`}>
                 <div className="h-full bg-red-900/20 relative">
-                    <div ref={hpBarRef} className="w-full h-full bg-[#ff3333] transition-transform duration-300 origin-left will-change-transform hud-bar-glow" style={{ transform: 'scaleX(0)' }} />
+                    {/* ZERO-GC: No CSS transition on vital bars. JS handles 60fps frame-perfect scaling. */}
+                    <div ref={hpBarRef} className="w-full h-full bg-[#ff3333] origin-left will-change-transform hud-bar-glow" style={{ transform: 'scaleX(0)' }} />
                     <div className="absolute inset-0 flex items-center justify-start px-3">
-                        <span ref={hpTextRef} className={`${isMobileDevice ? 'text-[10px]' : 'text-[13px]'} text-white font-mono font-bold tracking-tighter`}>
+                        <span ref={hpTextRef} className={`${isMobileDevice ? 'text-[10px]' : 'text-[13px]'} text-white font-mono font-bold tracking-tighter drop-shadow-md`}>
                             0 / 100
                         </span>
                     </div>
                 </div>
             </div>
 
-            <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-2' : 'h-4'} w-full border border-purple-500/30`}>
+            <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-2' : 'h-4'} w-full border border-purple-500/30 bg-slate-950`}>
                 <div className="h-full bg-purple-900/20 relative">
-                    <div ref={stBarRef} className="w-full h-full bg-[#a855f7] transition-transform duration-300 origin-left will-change-transform hud-bar-glow" style={{ transform: 'scaleX(0)' }} />
+                    <div ref={stBarRef} className="w-full h-full bg-[#a855f7] origin-left will-change-transform hud-bar-glow" style={{ transform: 'scaleX(0)' }} />
+                    <div className="absolute inset-0 flex items-center justify-start px-2 opacity-40 pointer-events-none">
+                         <span ref={stTextRef} className="text-[8px] text-white font-mono font-bold uppercase">STAMINA</span>
+                    </div>
                 </div>
             </div>
 
-            <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-1.5' : 'h-2.5'} w-full border border-cyan-500/30`}>
+            <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-1.5' : 'h-2.5'} w-full border border-cyan-500/30 bg-slate-950`}>
                 <div className="h-full bg-cyan-900/20 relative">
-                    <div ref={xpBarRef} className="w-full h-full bg-[#06b6d4] transition-transform duration-300 origin-left will-change-transform hud-bar-glow" style={{ transform: 'scaleX(0)' }} />
+                    <div ref={xpBarRef} className="w-full h-full bg-[#06b6d4] origin-left will-change-transform hud-bar-glow" style={{ transform: 'scaleX(0)' }} />
                 </div>
             </div>
         </div>
@@ -263,16 +267,13 @@ const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro, scrapTextRef, s
 const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
     // IMPORTANT: We only listen to static/slow values (active, name, maxHp). 
     // We NEVER listen to current HP here. That is handled by the DOM ref.
-    const bossActive = useHudStore(s => s.boss?.active || false);
-    const bossName = useHudStore(s => s.boss?.name || '');
-    const bossDefeated = useHudStore(s => s.bossDefeated);
-    const sectorStats = useHudStore(s => s.sectorStats);
+    const bossActive = useHudStore(s => (s.boss?.active || false) && !s.bossDefeated);
+    const bossName = useHudStore(s => s.boss?.active ? s.boss.name : '');
+    const waveActive = useHudStore(s => s.sectorStats?.zombieWaveActive || false);
 
-    const waveActive = sectorStats?.zombieWaveActive || false;
     const isWave = !bossActive && waveActive;
 
     if (!bossActive && !waveActive) return null;
-    if (bossActive && bossDefeated) return null;
 
     const displayName = bossActive ? bossName : 'zombie_wave';
 
@@ -303,8 +304,8 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
     const wep = DataResolver.getWeapons()[activeWeapon];
 
     const interactionActive = useHudStore(s => s.interactionPrompt.active);
-    const interactionType = useHudStore(s => s.interactionPrompt.type);
-    const interactionLabel = useHudStore(s => s.interactionPrompt.label);
+    const interactionType = useHudStore(s => interactionActive ? s.interactionPrompt.type : InteractionType.NONE);
+    const interactionLabel = useHudStore(s => interactionActive ? s.interactionPrompt.label : '');
 
     return (
         <div className={`absolute ${isMobileDevice ? 'bottom-4' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
@@ -426,6 +427,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const hpBarRef = useRef<HTMLDivElement>(null);
     const hpTextRef = useRef<HTMLSpanElement>(null);
     const staminaBarRef = useRef<HTMLDivElement>(null);
+    const staminaTextRef = useRef<HTMLSpanElement>(null);
     const xpBarRef = useRef<HTMLDivElement>(null);
     const ammoTextRef = useRef<HTMLSpanElement>(null);
     const reloadBarRef = useRef<HTMLDivElement>(null);
@@ -457,13 +459,22 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 hpBarRef.current.style.transform = `scaleX(${hpRatio})`;
             }
             if (hpTextRef.current) {
-                hpTextRef.current.innerText = `${Math.ceil(data.hp)} / ${data.maxHp}`;
+                const text = `${Math.ceil(data.hp)} / ${data.maxHp}`;
+                if (hpTextRef.current.innerText !== text) {
+                    hpTextRef.current.innerText = text;
+                }
             }
 
             // 2. Stamina Updates
             if (staminaBarRef.current) {
                 const stRatio = data.maxStamina > 0 ? (data.stamina / data.maxStamina) : 0;
                 staminaBarRef.current.style.transform = `scaleX(${stRatio})`;
+            }
+            if (staminaTextRef.current) {
+                const text = data.stamina < 30 ? 'LOW' : 'STAMINA';
+                if (staminaTextRef.current.innerText !== text) {
+                    staminaTextRef.current.innerText = text;
+                }
             }
 
             // 3. XP Updates
@@ -474,7 +485,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
             // 4. Ammo Updates
             if (ammoTextRef.current) {
-                const wep = DataResolver.getWeapons()[HudStore.getState().activeWeapon];
+                const activeId = HudStore.getState().activeWeapon;
+                const wep = DataResolver.getWeapons()[activeId];
                 const val = wep?.isEnergy 
                     ? Math.floor(data.ammo) + '%' 
                     : data.ammo.toString();
@@ -636,6 +648,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             hpBarRef={hpBarRef}
                             hpTextRef={hpTextRef}
                             stBarRef={staminaBarRef}
+                            stTextRef={staminaTextRef}
                             xpBarRef={xpBarRef}
                         />
                         {(!isMobileDevice || !isLandscapeMode) && (
