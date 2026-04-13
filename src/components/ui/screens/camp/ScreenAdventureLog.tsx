@@ -33,7 +33,7 @@ const TABS: { id: Tab, label: string }[] = [
     { id: 'enemy', label: 'ui.log_enemies' },
     { id: 'boss', label: 'ui.log_bosses' },
 ];
-const SECTORS = [0, 1, 2, 3, 4];
+const SECTORS = [0, 1, 2, 3];
 const THEME_COLOR = '#16a34a'; // green-600
 
 const darkenColor = (hex: string, percent: number) => {
@@ -323,8 +323,8 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
     // PERFORMANCE FIX 2: useMemo for static arrays
     const enemies = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.ENEMY), []);
 
-    const getEnemyDescription = (type: number) => {
-        return t(DataResolver.getZombieDescription(type as EnemyType));
+    const getEnemyStory = (type: number) => {
+        return t(DataResolver.getZombieStory(type as EnemyType));
     };
 
     return (
@@ -404,7 +404,7 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                     </div>
 
                                     <p className="text-sm text-gray-300 italic leading-relaxed pl-2 py-3">
-                                        "{getEnemyDescription(typeSmi)}"
+                                        "{getEnemyStory(typeSmi)}"
                                     </p>
                                 </div>
                             )}
@@ -422,8 +422,12 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
     const themesList = useMemo(() => DataResolver.getSectorThemes(), []);
     const bossesList = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.BOSS), []);
 
-    const getBossDescription = (bossId: number) => {
-        return t(DataResolver.getBossDescription(bossId));
+    const getBossStory = (bossId: number) => {
+        return t(DataResolver.getBossStory(bossId));
+    };
+
+    const getBossDeathStory = (bossId: number) => {
+        return t(DataResolver.getBossDeathStory(bossId));
     };
 
     return (
@@ -475,7 +479,13 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                                 <div></div>
                                             </div>
                                             <div className="space-y-4">
-                                                <p className="text-gray-400 text-sm leading-relaxed">{getBossDescription(sectorIndex)}</p>
+                                                <p className="text-gray-400 text-sm leading-relaxed">{getBossStory(sectorIndex)}</p>
+
+                                                {isDefeated && (
+                                                    <p className="text-lg italic leading-relaxed border-l-4 pl-4 py-1 text-gray-200" style={{ borderColor: color }}>
+                                                        "{getBossDeathStory(sectorIndex)}"
+                                                    </p>
+                                                )}
 
                                                 {boss.attacks && boss.attacks.length > 0 && (
                                                     <div className="space-y-2 mt-4">

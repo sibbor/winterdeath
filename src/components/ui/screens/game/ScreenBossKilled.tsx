@@ -34,7 +34,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
 
             <div className={`bg-black/50 ${isMobileDevice ? 'p-4' : 'p-8'} border-2 border-red-900 mb-6 md:mb-10 shadow-[0_0_30px_rgba(153,27,27,0.2)]`}>
                 <p className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} leading-relaxed font-light italic mb-4 md:mb-8 text-gray-200`}>
-                    "{t(DataResolver.getBossDeathLore(sectorIndex))}"
+                    "{t(DataResolver.getBossDeathStory(sectorIndex))}"
                 </p>
 
                 {stats && (

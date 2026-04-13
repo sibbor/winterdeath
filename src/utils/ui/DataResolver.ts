@@ -96,7 +96,15 @@ export const DataResolver = {
      */
     getZombieName(type: EnemyType): string {
         const data = ZOMBIE_TYPES[type];
-        return data ? data.displayNameKey : 'ui.unknown';
+        return data ? data.name : 'ui.unknown';
+    },
+
+    /**
+     * Resolves the localized name key for a specific Zombie Type.
+     */
+    getZombieStory(type: EnemyType): string {
+        const data = ZOMBIE_TYPES[type];
+        return data ? data.story : 'ui.unknown';
     },
 
     /**
@@ -104,7 +112,23 @@ export const DataResolver = {
      */
     getBossName(id: number): string {
         const boss = BOSSES[id];
-        return boss ? `enemies.${boss.name}` : 'ui.boss';
+        return boss ? boss.name : 'ui.boss';
+    },
+
+    /**
+     * Resolves the localized name key for a specific Boss ID.
+     */
+    getBossStory(id: number): string {
+        const boss = BOSSES[id];
+        return boss ? boss.story : 'ui.unknown';
+    },
+
+    /**
+     * Resolves the localized name key for a specific Boss ID.
+     */
+    getBossDeathStory(id: number): string {
+        const boss = BOSSES[id];
+        return boss ? boss.deathStory : 'ui.unknown';
     },
 
     /**
@@ -179,7 +203,7 @@ export const DataResolver = {
     _resolveLogName(key: string): string {
         if (!key) return 'Unknown';
         const parts = key.split('.');
-        
+
         // 1. Attempt O(N) traversal of the 'sv' locale object
         let current: any = sv;
         for (let i = 0; i < parts.length; i++) {
@@ -262,7 +286,7 @@ export const DataResolver = {
         switch (type) {
             case DiscoveryType.CLUE: return 'ui.discovered_clue';
             case DiscoveryType.POI: return 'ui.discovered_poi';
-            case DiscoveryType.ENEMY: 
+            case DiscoveryType.ENEMY:
             case DiscoveryType.BOSS: return 'ui.discovered_enemy';
             case DiscoveryType.PERK: return 'ui.discovered_perk';
             case DiscoveryType.COLLECTIBLE: return 'ui.collectible_discovered';
@@ -329,40 +353,12 @@ export const DataResolver = {
     },
 
     /**
-     * Resolves the localized long-form description for a Zombie Type.
-     */
-    getZombieDescription(type: EnemyType): string {
-        const nameKey = this.getZombieName(type);
-        if (nameKey === 'ui.unknown') return 'ui.description_missing';
-        const base = nameKey.substring(0, nameKey.lastIndexOf('.'));
-        return `${base}.description`;
-    },
-
-    /**
-     * Resolves the localized lore/description for a Boss.
-     */
-    getBossDescription(id: number): string {
-        const nameKey = this.getBossName(id);
-        if (nameKey === 'ui.boss') return 'ui.description_missing';
-        const base = nameKey.substring(0, nameKey.lastIndexOf('.'));
-        return `${base}.lore`;
-    },
-
-    /**
-     * Resolves the localized narrative 'death story' for a Boss.
-     */
-    getBossDeathLore(id: number): string {
-        const boss = BOSSES[id];
-        return boss ? `enemies.${boss.deathStory || 'ui.boss_eliminated'}` : 'ui.boss_eliminated';
-    },
-
-    /**
      * Resolves the localized description for an Enemy Attack.
      */
     getAttackDescription(type: EnemyAttackType | DamageID): string {
         // 1. Try EnemyAttackType Enum lookup
         let attackKey = EnemyAttackType[type as number];
-        
+
         // 2. Fallback to DamageID Enum lookup (Environmental causes)
         if (!attackKey) {
             attackKey = DamageID[type as number];
@@ -433,7 +429,7 @@ export const DataResolver = {
     getClues(): typeof CLUES { return CLUES; },
     getPerks(): typeof PERKS { return PERKS; },
     getSectorThemes(): typeof SECTOR_THEMES { return SECTOR_THEMES; },
-    getSectors(): number[] { return [0, 1, 2, 3, 4]; },
+    getSectors(): number[] { return [0, 1, 2, 3]; },
     getWeapons(): WeaponStats[] { return WEAPONS; },
     getFamilyMembers(): typeof FAMILY_MEMBERS { return FAMILY_MEMBERS; },
 

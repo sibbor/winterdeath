@@ -34,7 +34,8 @@ Status effects are defined in the PERKS database.
 
 export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<string, ZombieTypeData> = {
     [EnemyType.WALKER]: {
-        displayNameKey: 'enemies.zombies.WALKER.name',
+        name: 'enemies.zombies.WALKER.name',
+        story: 'enemies.zombies.WALKER.story',
         hp: 50,
         speed: 15,
         score: 20,
@@ -57,7 +58,8 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         ]
     },
     [EnemyType.RUNNER]: {
-        displayNameKey: 'enemies.zombies.RUNNER.name',
+        name: 'enemies.zombies.RUNNER.name',
+        story: 'enemies.zombies.RUNNER.story',
         hp: 30,
         speed: 20.0,
         score: 10,
@@ -80,7 +82,8 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         ]
     },
     [EnemyType.TANK]: {
-        displayNameKey: 'enemies.zombies.TANK.name',
+        name: 'enemies.zombies.TANK.name',
+        story: 'enemies.zombies.TANK.story',
         hp: 175,
         speed: 13.0,
         score: 50,
@@ -103,7 +106,8 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         ]
     },
     [EnemyType.BOMBER]: {
-        displayNameKey: 'enemies.zombies.BOMBER.name',
+        name: 'enemies.zombies.BOMBER.name',
+        story: 'enemies.zombies.BOMBER.story',
         hp: 80,
         speed: 12,
         score: 30,

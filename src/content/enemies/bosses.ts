@@ -1,6 +1,5 @@
 import { AttackDefinition, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { StatusEffectType } from '../perks';
-import { EnemyType } from '../../entities/enemies/EnemyBase';
 
 /*
 Boss data:
@@ -25,12 +24,17 @@ Special attacks with status effects for the player:
 Status effects are defined in the PERKS database.
 */
 
-export const BOSSES: Record<number, { id: number; name: string; hp: number; maxHp: number; speed: number; color: number; scale: number; widthScale?: number; deathStory: string; attacks?: AttackDefinition[] }> = {
+export const BOSSES: Record<number, { id: number; name: string; story: string; deathStory: string; hp: number; speed: number; color: number; scale: number; widthScale?: number; attacks?: AttackDefinition[] }> = {
     0: {
         id: 0,
         name: 'bosses.0.name',
-        hp: 500, maxHp: 500, speed: 15.0, color: 0x4a0404, scale: 3.0, widthScale: 3.5,
-        deathStory: "bosses.0.death",
+        story: 'bosses.0.story',
+        deathStory: 'bosses.0.deathStory',
+        hp: 500,
+        speed: 15.0,
+        color: 0x4a0404,
+        scale: 3.0,
+        widthScale: 3.5,
         attacks: [
             {
                 type: EnemyAttackType.HIT,
@@ -52,8 +56,13 @@ export const BOSSES: Record<number, { id: number; name: string; hp: number; maxH
     1: {
         id: 1,
         name: 'bosses.1.name',
-        hp: 800, maxHp: 800, speed: 20.0, color: 0x2c3e50, scale: 3.0, widthScale: 1.5,
-        deathStory: "bosses.1.death",
+        story: 'bosses.1.story',
+        deathStory: 'bosses.1.deathStory',
+        hp: 800,
+        speed: 20.0,
+        color: 0x2c3e50,
+        scale: 3.0,
+        widthScale: 1.5,
         attacks: [
             {
                 type: EnemyAttackType.HIT,
@@ -74,8 +83,13 @@ export const BOSSES: Record<number, { id: number; name: string; hp: number; maxH
     2: {
         id: 2,
         name: 'bosses.2.name',
-        hp: 600, maxHp: 600, speed: 15.0, color: 0x8e44ad, scale: 3.0, widthScale: 1.0,
-        deathStory: "bosses.2.death",
+        story: 'bosses.2.story',
+        deathStory: 'bosses.2.deathStory',
+        hp: 600,
+        speed: 15.0,
+        color: 0x8e44ad,
+        scale: 3.0,
+        widthScale: 1.0,
         attacks: [
             {
                 type: EnemyAttackType.HIT,
@@ -96,8 +110,13 @@ export const BOSSES: Record<number, { id: number; name: string; hp: number; maxH
     3: {
         id: 3,
         name: 'bosses.3.name',
-        hp: 1200, maxHp: 1200, speed: 15.0, color: 0xc0392b, scale: 3.5, widthScale: 1.8,
-        deathStory: "bosses.3.death",
+        story: 'bosses.3.story',
+        deathStory: 'bosses.3.deathStory',
+        hp: 1200,
+        speed: 15.0,
+        color: 0xc0392b,
+        scale: 3.5,
+        widthScale: 1.8,
         attacks: [
             {
                 type: EnemyAttackType.HIT,

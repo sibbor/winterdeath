@@ -231,6 +231,7 @@ export const sv = {
         log_perks: "FÖRMÅGOR",
         passive_abilities: "PASSIVA FÖRMÅGOR",
         buffs: "BUFFAR",
+        debuffs: "DEBUFFAR",
         electrified: "Elektrifiering",
         health: "Hälsa",
         speed: "Hastighet",
@@ -406,19 +407,19 @@ export const sv = {
     perks: {
         // Passives
         TRICKSTERS_HASTE: {
-            title: "Trickster's Haste",
+            title: "Bedragarens brådska",
             description: "20% snabbare omladdning"
         },
         EAGLES_SIGHT: {
-            title: "Eagle's Sight",
+            title: "Falkögon",
             description: "15% ökad räckvidd"
         },
         LEAD_FEVER: {
-            title: "Lead Fever",
+            title: "Blyfeber",
             description: "20% ökad eldhastighet"
         },
         WINTERS_BONE: {
-            title: "Winter's Bone",
+            title: "Vinterben",
             description: "10% skaderesistans"
         },
 
@@ -592,42 +593,42 @@ export const sv = {
         zombies: {
             WALKER: {
                 name: "Vandrare",
-                description: "Standard reanimerad kombattant. Lågt hot individuellt, farlig i svärmar. Sikta mot huvudet."
+                story: "Standard reanimerad kombattant. Lågt hot individuellt, farlig i svärmar. Sikta mot huvudet."
             },
             RUNNER: {
                 name: "Löpare",
-                description: "Hyperaggressiv mutation. Extremt snabb. Prioritera omedelbart."
+                story: "Hyperaggressiv mutation. Extremt snabb. Prioritera omedelbart."
             },
             TANK: {
                 name: "Tank",
-                description: "Kraftigt bepansrad juggernaut. Absorberar betydande mängder eld från lätta vapen. Explosivämnen rekommenderas."
+                story: "Kraftigt bepansrad juggernaut. Absorberar betydande mängder eld från lätta vapen. Explosivämnen rekommenderas."
             },
             BOMBER: {
                 name: "Bombare",
-                description: "Instabil biologisk last. Exploderar vid närhet. Håll säkert avstånd."
+                story: "Instabil biologisk last. Exploderar vid närhet. Håll säkert avstånd."
             }
         }
     },
     bosses: {
         0: {
             name: "Gårdsherren",
-            lore: "Entitet identifierad vid Gånghester Station. En före detta granne muterad till en enorm särling. Han svingar ett tungt järnvägsverktyg, hans massiva styrka orsakade den inledande splittringen av Roberts familj.",
-            death: "Varelsen som tvingade familjen isär är död. Det var detta vidunder som fick Nathalie och Esmeralda att fly in i de mörka skogarna och lämna Loke kvar i kaoset. Loke är säker nu, men spåren efter de andra leder djupt in i den iskalla skogen."
+            story: "Entitet identifierad vid Gånghester Station. En före detta granne muterad till en enorm särling. Han svingar ett tungt järnvägsverktyg, hans massiva styrka orsakade den inledande splittringen av Roberts familj.",
+            deathStory: "Varelsen som tvingade familjen isär är död. Det var detta vidunder som fick Nathalie och Esmeralda att fly in i de mörka skogarna och lämna Loke kvar i kaoset. Loke är säker nu, men spåren efter de andra leder djupt in i den iskalla skogen."
         },
         1: {
             name: "Valvväktaren",
-            lore: "Enrovlysten fasa som huserar i betonglabyrinterna i det kalla krigets skyddsrum. Den frodas i mörkret och livnär sig på terrorn hos de överlevande som fångats inuti. Den slår till med dödlig precision vid ljudet av en stängd dörr.",
-            death: "När den massiva ståldörren slogs igen och skickade ett dånande eko genom tunnlarna, slog Väktaren till. Robert, Loke och Jordan stod emot. Grottorna är tysta igen, och Jordan är äntligen tillbaka i Roberts famn."
+            story: "Enrovlysten fasa som huserar i betonglabyrinterna i det kalla krigets skyddsrum. Den frodas i mörkret och livnär sig på terrorn hos de överlevande som fångats inuti. Den slår till med dödlig precision vid ljudet av en stängd dörr.",
+            deathStory: "När den massiva ståldörren slogs igen och skickade ett dånande eko genom tunnlarna, slog Väktaren till. Robert, Loke och Jordan stod emot. Grottorna är tysta igen, och Jordan är äntligen tillbaka i Roberts famn."
         },
         2: {
             name: "Frekvensen",
-            lore: "En skrikande tekniker som förvandlats till en fasa. Tillsammans med ett annat best jagade den Esmeralda och Nathalie genom snåren. Den använder Häglaredsmasten för att förstärka sina biotoxiska skrik och koordinera den omgivande horden.",
-            death: "Störningarna klarnar. Nathalies modiga chansning – att locka bort den andra besten för att ge Esmeralda en chans att nå kontrollrummet – har gett resultat. Esmeralda är säker, radioutrustningen är lagad och en statisk röst svarar äntligen på anropet."
+            story: "En skrikande tekniker som förvandlats till en fasa. Tillsammans med ett annat best jagade den Esmeralda och Nathalie genom snåren. Den använder Häglaredsmasten för att förstärka sina biotoxiska skrik och koordinera den omgivande horden.",
+            deathStory: "Störningarna klarnar. Nathalies modiga chansning – att locka bort den andra besten för att ge Esmeralda en chans att nå kontrollrummet – har gett resultat. Esmeralda är säker, radioutrustningen är lagad och en statisk röst svarar äntligen på anropet."
         },
         3: {
             name: "Metallkrossaren",
-            lore: "Ett katastrofalt biomekaniskt hot vid bilskroten. Den förföljde Nathalie skoningslöst tills hon blev hörnad i ett trångt kontor. Den är en tornande massa av rostiga chassin och muterat kött.",
-            death: "Den sista barriären har brutits. Nathalie räddas från ruinerna av skrotgårdens kontor. Den långa natten i snön är över; men det är bara början."
+            story: "Ett katastrofalt biomekaniskt hot vid bilskroten. Den förföljde Nathalie skoningslöst tills hon blev hörnad i ett trångt kontor. Den är en tornande massa av rostiga chassin och muterat kött.",
+            deathStory: "Den sista barriären har brutits. Nathalie räddas från ruinerna av skrotgårdens kontor. Den långa natten i snön är över; men det är bara början."
         },
     },
     family: {

@@ -324,41 +324,41 @@ export const en = {
         zombies: {
             WALKER: {
                 name: "Walker",
-                description: "Standard reanimated combatant. Low threat individually, dangerous in swarms. Aim for the head."
+                story: "Standard reanimated combatant. Low threat individually, dangerous in swarms. Aim for the head."
             },
             RUNNER: {
                 name: "Runner",
-                description: "Hyper-aggressive mutation. Closing speed is extreme. Prioritize targets immediately."
+                story: "Hyper-aggressive mutation. Closing speed is extreme. Prioritize targets immediately."
             },
             TANK: {
                 name: "Tank",
-                description: "Heavily armored juggernaut. Absorbs significant small-arms fire. Explosives recommended."
+                story: "Heavily armored juggernaut. Absorbs significant small-arms fire. Explosives recommended."
             },
             BOMBER: {
                 name: "Bomber",
-                description: "Unstable biological payload. Explodes on proximity. Keep safe distance."
+                story: "Unstable biological payload. Explodes on proximity. Keep safe distance."
             }
         },
         bosses: {
             0: {
                 name: "The Yard Master",
-                lore: "Entity identified at Gånghester Station. A former neighbor mutated into a hulking brute. He wields a heavy railway tool, his massive strength causing the initial fracture of Robert’s family.",
-                death: "The creature that forced the family apart is dead. It was this monstrosity that made Nathalie and Esmeralda to flee into the dark woods, leaving Loke behind in the chaos. Loke is safe now, but the trail of the others leads deep into the freezing forest."
+                story: "Entity identified at Gånghester Station. A former neighbor mutated into a hulking brute. He wields a heavy railway tool, his massive strength causing the initial fracture of Robert’s family.",
+                deathStory: "The creature that forced the family apart is dead. It was this monstrosity that made Nathalie and Esmeralda to flee into the dark woods, leaving Loke behind in the chaos. Loke is safe now, but the trail of the others leads deep into the freezing forest."
             },
             1: {
                 name: "The Vault Stalker",
-                lore: "A predatory horror residing in the concrete labyrinths of the Cold War shelter. It thrives in the dark, feeding on the terror of the survivors trapped within. It strikes with lethal precision at the sound of a closing door.",
-                death: "As the massive steel door slammed shut, sending a thunderous echo through the tunnels, the Stalker struck. Robert, Loke, and Jordan stood their ground. The caves are silent once more, and Jordan is finally back in Robert's arms."
+                story: "A predatory horror residing in the concrete labyrinths of the Cold War shelter. It thrives in the dark, feeding on the terror of the survivors trapped within. It strikes with lethal precision at the sound of a closing door.",
+                deathStory: "As the massive steel door slammed shut, sending a thunderous echo through the tunnels, the Stalker struck. Robert, Loke, and Jordan stood their ground. The caves are silent once more, and Jordan is finally back in Robert's arms."
             },
             2: {
                 name: "The Frequency",
-                lore: "A screeching technician-turned-horror. Along with another beast, it pursued Esmeralda and Nathalie through the brush. It uses the Haglared Mast to amplify its bio-toxic screams, coordinating the surrounding horde.",
-                death: "The interference clears. Nathalie’s brave gamble—luring the other beast away to give Esmeralda a chance to reach the control room—has paid off. Esmeralda is safe, the radio equipment is repaired, and a static-filled voice finally answers the call."
+                story: "A screeching technician-turned-horror. Along with another beast, it pursued Esmeralda and Nathalie through the brush. It uses the Haglared Mast to amplify its bio-toxic screams, coordinating the surrounding horde.",
+                deathStory: "The interference clears. Nathalie’s brave gamble—luring the other beast away to give Esmeralda a chance to reach the control room—has paid off. Esmeralda is safe, the radio equipment is repaired, and a static-filled voice finally answers the call."
             },
             3: {
                 name: "The Metal Crusher",
-                lore: "A catastrophic bio-mechanical threat at the scrapyard. It pursued Nathalie relentlessly until she was cornered in a cramped office. It is a towering mass of rusted chassis and mutated flesh.",
-                death: "The final barrier has been broken. Nathalie is rescued from the ruins of the scrapyard office. The long night in the snow is over; but it's only the beginning."
+                story: "A catastrophic bio-mechanical threat at the scrapyard. It pursued Nathalie relentlessly until she was cornered in a cramped office. It is a towering mass of rusted chassis and mutated flesh.",
+                deathStory: "The final barrier has been broken. Nathalie is rescued from the ruins of the scrapyard office. The long night in the snow is over; but it's only the beginning."
             },
         },
     },
