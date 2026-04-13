@@ -99,6 +99,10 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
                 speaker: 'Robert', text: "dialogue.2_13",
                 trigger: ['FAMILY_MEMBER_FOUND', 'SPAWN_BOSS']
             }
+        ],
+        // mast_flyover intro
+        1: [
+            { speaker: 'Robert', text: "pois.2.0.reaction" }
         ]
     },
 
@@ -129,12 +133,12 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
         // Part 3
         2: [
             { speaker: 'Robert', text: "dialogue.3_14" },
-            { speaker: 'Loke, Esmeralda, Jordan', text: "dialogue.3_15" },
+            { speaker: 'Loke', text: "dialogue.3_15" },
             { speaker: 'Robert', text: "dialogue.3_16" },
             { speaker: 'Nathalie', text: "dialogue.3_17" },
             { speaker: 'Robert', text: "dialogue.3_18" },
             { speaker: 'Robert', text: "dialogue.3_19" },
-            { speaker: 'Barnen', text: "dialogue.3_20" },
+            { speaker: 'Loke', text: "dialogue.3_20" },
             { speaker: 'Robert', text: "dialogue.3_21" },
             { speaker: 'Nathalie', text: "dialogue.3_22" },
             { speaker: 'Robert', text: "dialogue.3_23" },

@@ -9,7 +9,6 @@ import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { POI_TYPE } from '../../content/pois';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
-import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 
 const LOCATIONS = {
     SPAWN: {
@@ -384,7 +383,8 @@ export const Sector2: SectorDef = {
                 content: "pois.2.0.reaction",
                 statusFlags: TriggerStatus.ACTIVE,
                 actions: [
-                    { type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }
+                    { type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } },
+                    { type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 2, scriptId: 1, customPath: 'mast_flyover' } }
                 ]
             },
             { id: 's2_poi_farm', position: LOCATIONS.POIS.FARM, radius: 20, type: TriggerType.POI, content: "pois.2.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },

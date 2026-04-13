@@ -900,8 +900,9 @@ export const Sector0: SectorDef = {
                     id: 'dyn_speak_' + Date.now(),
                     position: playerPos.clone(),
                     radius: 100,
-                    type: 'SPEAK',
+                    type: TriggerType.SPEAK,
                     content: "clues.0.7.reaction",
+                    statusFlags: TriggerStatus.ACTIVE,
                     triggered: false,
                     actions: []
                 });
@@ -1190,8 +1191,9 @@ export const Sector0: SectorDef = {
                     id: 'dyn_speak_' + Date.now(),
                     position: playerPos.clone(),
                     radius: 100,
-                    type: 'SPEAK',
+                    type: TriggerType.SPEAK,
                     content: "clues.0.8.reaction",
+                    statusFlags: TriggerStatus.ACTIVE,
                     triggered: false,
                     actions: []
                 });

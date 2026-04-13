@@ -251,7 +251,7 @@ export const Sector3: SectorDef = {
         }
         // Stamp when Part 2 cinematic has started
         if (!sectorState.part2Played && sectorState.pendingTrigger === null) {
-            // Mark Part 2 as played once s4_dialogue_2 trigger fires
+            // Mark Part 2 as played once s3_dialogue_2 trigger fires
             const d2 = gameState.triggers?.find((t: any) => t.id === 's3_dialogue_2');
             if (d2?.triggered) sectorState.part2Played = true;
         }

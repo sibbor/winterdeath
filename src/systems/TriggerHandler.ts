@@ -35,11 +35,14 @@ export const TriggerHandler = {
         const tLen = triggers.length;
         for (let i = 0; i < tLen; i++) {
             const trig = triggers[i];
-
-            // 1. QUICK EXIT: Skip if one-shot and already triggered
+            // 1. QUICK EXIT: Skip if inactive or already triggered
             const sFlags = trig.statusFlags;
             const isTriggered = (sFlags & TriggerStatus.TRIGGERED) !== 0;
             const resetOnExit = (sFlags & TriggerStatus.RESET_ON_EXIT) !== 0;
+
+            if ((sFlags & TriggerStatus.ACTIVE) === 0) {
+                continue;
+            }
 
             if (isTriggered && !resetOnExit && (!trig.repeatInterval || trig.repeatInterval <= 0)) {
                 continue;
@@ -95,6 +98,7 @@ export const TriggerHandler = {
                 if ((trig.statusFlags & TriggerStatus.TRIGGERED) === 0) {
                     // --- ON ENTER ---
                     trig.statusFlags |= TriggerStatus.TRIGGERED;
+                    (trig as any).triggered = true;
                     trig.lastTriggerTime = simTime;
 
                     // --- ADVENTURE LOG DISCOVERY ---
@@ -140,9 +144,11 @@ export const TriggerHandler = {
                 if ((trig.statusFlags & TriggerStatus.TRIGGERED) !== 0) {
                     if ((trig.statusFlags & TriggerStatus.RESET_ON_EXIT) !== 0) {
                         trig.statusFlags &= ~TriggerStatus.TRIGGERED;
+                        (trig as any).triggered = false;
                     } else if (trig.repeatInterval && trig.repeatInterval > 0) {
                         if (simTime - (trig.lastTriggerTime || 0) > trig.repeatInterval) {
                             trig.statusFlags &= ~TriggerStatus.TRIGGERED;
+                            (trig as any).triggered = false;
                         }
                     }
                 }
