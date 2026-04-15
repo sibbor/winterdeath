@@ -220,9 +220,9 @@ export class GameSessionSetup {
         for (let i = engineSystems.length - 1; i >= 0; i--) {
             const sys = engineSystems[i];
             if (!sys.persistent &&
-                sys.id !== 'light_system' && sys.id !== 'wind_system' &&
-                sys.id !== 'weather_system' && sys.id !== 'fog_system' &&
-                sys.id !== 'water_system') {
+                sys.id !== 'light_system' && sys.id !== 'wind' &&
+                sys.id !== 'weather' && sys.id !== 'fog' &&
+                sys.id !== 'water') {
                 engine.unregisterSystem(sys.id);
             }
         }
