@@ -7,6 +7,7 @@ import { VEGETATION_TYPE } from '../../content/environment';
 import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
+import { FamilyMemberID } from '../constants';
 import { POI_TYPE } from '../../content/pois';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
 
@@ -104,7 +105,6 @@ export const Sector2: SectorDef = {
     ambientLoop: SoundID.AMBIENT_CAVE,
 
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
-    familySpawn: LOCATIONS.SPAWN.FAMILY,
     bossSpawn: LOCATIONS.SPAWN.BOSS,
 
     collectibles: [
@@ -346,6 +346,9 @@ export const Sector2: SectorDef = {
         const mast = SectorBuilder.spawnPoi(ctx, POI_TYPE.MAST, mastPos.x, mastPos.z, 0);
         mast.name = "POI_MAST";
         ctx.sectorState.mastLightHub = mast.getObjectByName("mastWarningLights") || null;
+
+        // Esmeralda - Inside the building, not following yet
+        SectorBuilder.spawnFamily(ctx, FamilyMemberID.ESMERALDA, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, visible: false });
     },
 
     setupContent: async (ctx: SectorContext) => {
@@ -357,12 +360,12 @@ export const Sector2: SectorDef = {
             {
                 id: 's2_found_esmeralda',
                 position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA,
-                familyId: 2,
+                familyId: FamilyMemberID.ESMERALDA,
                 radius: 8,
                 type: TriggerType.EVENT,
                 content: '',
                 statusFlags: TriggerStatus.ONCE, // Starts INACTIVE — activated after kill clear
-                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: 2, sectorId: 2, scriptId: 0 } }]
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.ESMERALDA, sectorId: 2, scriptId: 0 } }]
             },
             // MAST ZONE — player entering this activates the zombie kill event
             {
@@ -529,7 +532,7 @@ export const Sector2: SectorDef = {
                         const esmeraldaTrigger = (gameState as any).triggers?.find((t: any) => t.id === 's2_found_esmeralda');
                         if (esmeraldaTrigger) {
                             esmeraldaTrigger.statusFlags = TriggerStatus.ACTIVE | TriggerStatus.ONCE;
-                            esmeraldaTrigger.triggered = false;
+                            esmeraldaTrigger.triggered = false; // Maintain boolean compatibility
                         }
                     }
                 } else {

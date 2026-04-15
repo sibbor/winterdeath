@@ -6,6 +6,7 @@ import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { VoiceSounds } from '../utils/audio/AudioLib';
 import { STORY_SCRIPTS } from '../content/dialogues';
 import { RuntimeState } from '../core/RuntimeState';
+import { FamilyMemberID } from '../content/constants';
 
 // Zero-GC Vektorer för kameramatte
 const _v1 = new THREE.Vector3();
@@ -347,11 +348,14 @@ export class CinematicSystem implements System {
         // --- VINTERDÖD FIX: Zero-GC Animator Sync ---
         for (let i = -1; i < familyMembers.length; i++) {
             const mesh = i === -1 ? this.playerMeshRef.current : familyMembers[i]?.mesh;
-            const name = i === -1 ? 'Robert' : familyMembers[i]?.name;
+            const memberId = i === -1 ? FamilyMemberID.PLAYER : familyMembers[i]?.id;
+            const memberName = i === -1 ? 'Robert' : familyMembers[i]?.name;
 
             if (!mesh) continue;
 
-            const isCurrentSpeaker = (name === currentSpeakerName) || (i === -1 && isPlayerSpeaking);
+            // Match speaker by ID if possible, otherwise by Name string (fallback for dynamic NPC/Radio)
+            const isPlayer = memberId === FamilyMemberID.PLAYER;
+            const isCurrentSpeaker = (memberName === currentSpeakerName) || (isPlayer && isPlayerSpeaking);
             const isSpeaking = isCurrentSpeaker && timeInLine < cinematic.typingDuration;
             const isThinking = isCurrentSpeaker && activeScriptLine?.type === 'thought';
 

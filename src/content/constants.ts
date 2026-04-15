@@ -181,11 +181,21 @@ export const PLAYER_CHARACTER = {
     scale: 1.0
 };
 
+export enum FamilyMemberID {
+    LOKE = 0,
+    JORDAN = 1,
+    ESMERALDA = 2,
+    NATHALIE = 3,
+    SOTIS = 4,
+    PANTER = 5,
+    PLAYER = 100
+}
+
 export const FAMILY_MEMBERS = [
-    { id: 0, name: 'Loke', race: 'human', gender: 'male', title: 'family.son', color: 0xfacc15, scale: 0.7 },
-    { id: 1, name: 'Jordan', race: 'human', gender: 'male', title: 'family.son', color: 0x4ade80, scale: 0.5 },
-    { id: 2, name: 'Esmeralda', race: 'human', gender: 'female', title: 'family.daughter', color: 0xe879f9, scale: 0.8 },
-    { id: 3, name: 'Nathalie', race: 'human', gender: 'female', title: 'family.wife', color: 0xf43f5e, scale: 0.95 },
-    { id: 4, name: 'Sotis', race: 'animal', gender: 'female', title: 'family.cat', color: 0xcccccc, scale: 0.6 },
-    { id: 5, name: 'Panter', race: 'animal', gender: 'male', title: 'family.cat', color: 0x222222, scale: 0.6 }
+    { id: FamilyMemberID.LOKE, name: 'Loke', race: 'human', gender: 'male', title: 'family.son', color: 0xfacc15, scale: 0.7 },
+    { id: FamilyMemberID.JORDAN, name: 'Jordan', race: 'human', gender: 'male', title: 'family.son', color: 0x4ade80, scale: 0.5 },
+    { id: FamilyMemberID.ESMERALDA, name: 'Esmeralda', race: 'human', gender: 'female', title: 'family.daughter', color: 0xe879f9, scale: 0.8 },
+    { id: FamilyMemberID.NATHALIE, name: 'Nathalie', race: 'human', gender: 'female', title: 'family.wife', color: 0xf43f5e, scale: 0.95 },
+    { id: FamilyMemberID.SOTIS, name: 'Sotis', race: 'animal', gender: 'female', title: 'family.cat', color: 0xcccccc, scale: 0.6 },
+    { id: FamilyMemberID.PANTER, name: 'Panter', race: 'animal', gender: 'male', title: 'family.cat', color: 0x222222, scale: 0.6 }
 ];

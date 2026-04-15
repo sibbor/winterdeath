@@ -1,3 +1,5 @@
+import { FamilyMemberID } from '../content/constants';
+
 /**
  * VINTERDÖD: Centralized Trigger Types & Statuses.
  * Numeric enums (SMI) are used for O(1) matching and to prevent heap allocations
@@ -63,7 +65,7 @@ export interface SectorTrigger {
   repeatInterval?: number;
   lastTriggerTime?: number;
   rotation?: number;
-  familyId?: number;
+  familyId?: FamilyMemberID;
   ownerId?: string;
   data?: any;
 }

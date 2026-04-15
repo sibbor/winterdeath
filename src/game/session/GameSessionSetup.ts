@@ -13,7 +13,7 @@ import { FXSystem } from '../../systems/FXSystem';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
-import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, PLAYER_BASE_SPEED } from '../../content/constants';
+import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, PLAYER_BASE_SPEED, FamilyMemberID } from '../../content/constants';
 import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
@@ -65,7 +65,7 @@ export interface SetupContext {
         setCurrentLine: (val: any) => void;
         setCinematicActive: (val: boolean) => void;
         setInteractionType: (val: any) => void;
-        setFoundMemberName?: (val: string) => void;
+        setFoundMember?: (id: FamilyMemberID) => void;
         setOverlay: (type: string | null) => void;
     };
     callbacks: {
@@ -150,6 +150,7 @@ export class GameSessionSetup {
             const playerGroup = this.setupPlayerAndCamera(engine, currentSector, refs, state);
 
             // 3. Create Sector Context
+            refs.activeFamilyMembers.current.length = 0;
             const sectorCtx = this.createSectorContext(ctx, currentSector, textures, flickeringLights, burningObjects, mapItems, rng, playerGroup, yielder);
             refs.sectorContextRef.current = sectorCtx;
             state.sectorState.ctx = sectorCtx;
@@ -349,7 +350,7 @@ export class GameSessionSetup {
             textures: textures, spawnZombie: realSpawnZombie, spawnHorde, spawnBoss,
             cluesFound: (props.stats.cluesFound || []) as string[], collectiblesDiscovered: (props.stats.collectiblesDiscovered || []) as string[],
             collectibles: [], dynamicLights: [], interactables: [], sectorId: props.currentSector, smokeEmitters: [],
-            sectorState: state.sectorState, state: state, yield: yielder,
+            sectorState: state.sectorState, state: state, activeFamilyMembers: ctx.refs.activeFamilyMembers.current, yield: yielder,
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => ctx.session.makeNoise(pos, type, radius),
 
             // --- VINTERDÖD FIX: Injecting the generic bridge into the sector events API ---
@@ -621,13 +622,17 @@ export class GameSessionSetup {
                 state.bossDefeatedTime = engine.simTime;
                 state.familyFound = true;
 
+                // Immediate SP/State updates via App.tsx props
+                if (props.onBossKilled) props.onBossKilled(id);
+
                 const tracker = session.getSystem('damage_tracker_system') as any;
                 if (tracker) tracker.recordKill(session, String(id), true);
 
                 const currentFM = refs.familyMemberRef.current;
                 if (currentFM && !currentFM.rescued) {
                     currentFM.rescued = true;
-                    if (!props.stats.rescuedFamilyIds.includes(currentFM.id)) props.stats.rescuedFamilyIds.push(currentFM.id);
+                    // Trigger immediate family rescue callback
+                    if (props.onFamilyRescued) props.onFamilyRescued(currentFM.id);
                 }
 
                 audioEngine.stopMusic();
@@ -667,7 +672,7 @@ export class GameSessionSetup {
         session.addSystem(new WorldLootSystem(playerGroup, engine.scene, { gainScrap: callbacks.gainScrap }));
 
         session.addSystem(new FamilySystem(playerGroup, refs.activeFamilyMembers, refs.cinematicRef, {
-            setFoundMemberName: (n: string) => ui.setFoundMemberName && ui.setFoundMemberName(n),
+            setFoundMember: (id: FamilyMemberID) => ctx.ui.setFoundMember && ctx.ui.setFoundMember(id),
             startCinematic: callbacks.startCinematic
         }));
 

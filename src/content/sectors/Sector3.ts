@@ -11,6 +11,7 @@ import { SoundID } from '../../utils/audio/AudioTypes';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { InteractionType } from '../../systems/InteractionTypes';
+import { FamilyMemberID } from '../constants';
 
 // ─── Zero-GC Scratchpads ──────────────────────────────────────────────────────
 const _vS3a = new THREE.Vector3();
@@ -18,29 +19,29 @@ const _vS3b = new THREE.Vector3();
 
 // ─── Epilogue state enum (stored as integer in sectorState.epilogueState) ─────
 const EP = {
-    IDLE:           0,
+    IDLE: 0,
     RUSH_TO_NATHALIE: 1, // Family rushing toward building
-    AWAIT_INSIDE:   2,   // Camera reset, player regains control
-    BOSS_FIGHT:     3,   // Boss fight window
+    AWAIT_INSIDE: 2,   // Camera reset, player regains control
+    BOSS_FIGHT: 3,   // Boss fight window
     // --- Post-boss ---
-    FAMILY_EXIT:    4,   // Family walk out from building
-    PLAYER_WALK:    5,   // Robert walks toward them
-    RING_FORM:      6,   // Everyone walks into ring formation
-    CELEBRATE:      7,   // Jump + cheer (3000 ms)
-    HUG:            8,   // Hug animation
-    CAR_ZOOM:       9,   // Camera pans to car (1500 ms)
-    DRIVE:          10,  // Player enters car + driving (5000 ms)
-    DONE:           11,
+    FAMILY_EXIT: 4,   // Family walk out from building
+    PLAYER_WALK: 5,   // Robert walks toward them
+    RING_FORM: 6,   // Everyone walks into ring formation
+    CELEBRATE: 7,   // Jump + cheer (3000 ms)
+    HUG: 8,   // Hug animation
+    CAR_ZOOM: 9,   // Camera pans to car (1500 ms)
+    DRIVE: 10,  // Player enters car + driving (5000 ms)
+    DONE: 11,
 } as const;
 
 const LOCATIONS = {
     SPAWN: {
         PLAYER: { x: 0, z: 0 },
         FAMILY: { x: -40, z: -150, y: 0 },
-        BOSS:   { x: -40, z: -150 }
+        BOSS: { x: -40, z: -150 }
     },
     CINEMATIC: {
-        OFFSET:  { x: 15, y: 12, z: 15 },
+        OFFSET: { x: 15, y: 12, z: 15 },
         LOOK_AT: { x: 0, y: 1.5, z: 0 }
     },
     COLLECTIBLES: {
@@ -48,11 +49,11 @@ const LOCATIONS = {
         C2: { x: -20, z: -60 }
     },
     TRIGGERS: {
-        NOISE:          { x: 0, z: -50 },
-        SHED_SIGHT:     { x: -20, z: -120 },
+        NOISE: { x: 0, z: -50 },
+        SHED_SIGHT: { x: -20, z: -120 },
         FOUND_NATHALIE: { x: -40, z: -150 },
-        DIALOGUE_1:     { x: 0, z: -20 },
-        DIALOGUE_2:     { x: 0, z: -50 }
+        DIALOGUE_1: { x: 0, z: -20 },
+        DIALOGUE_2: { x: 0, z: -50 }
     },
     POIS: {
         SHED: { x: -40, z: -150 }
@@ -65,11 +66,11 @@ const LOCATIONS = {
 
 // Ring offsets for the 5 characters: Loke, Jordan, Esmeralda, Nathalie, Robert
 const RING_OFFSETS: [number, number][] = [
-    [ 2.2,  0   ],
-    [-2.2,  0   ],
-    [ 0,    2.2 ],
-    [ 0,   -2.2 ],
-    [ 0,    0   ], // Robert (centre of group, slightly behind)
+    [2.2, 0],
+    [-2.2, 0],
+    [0, 2.2],
+    [0, -2.2],
+    [0, 0], // Robert (centre of group, slightly behind)
 ];
 
 export const Sector3: SectorDef = {
@@ -103,8 +104,7 @@ export const Sector3: SectorDef = {
     groundType: 'DIRT',
     ambientLoop: SoundID.AMBIENT_FOREST,
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
-    familySpawn: LOCATIONS.SPAWN.FAMILY,
-    bossSpawn:   LOCATIONS.SPAWN.BOSS,
+    bossSpawn: LOCATIONS.SPAWN.BOSS,
 
     collectibles: [
         { id: 's3_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
@@ -112,8 +112,8 @@ export const Sector3: SectorDef = {
     ],
 
     cinematic: {
-        offset:        LOCATIONS.CINEMATIC.OFFSET,
-        lookAtOffset:  LOCATIONS.CINEMATIC.LOOK_AT,
+        offset: LOCATIONS.CINEMATIC.OFFSET,
+        lookAtOffset: LOCATIONS.CINEMATIC.LOOK_AT,
         rotationSpeed: 0.05
     },
 
@@ -178,6 +178,9 @@ export const Sector3: SectorDef = {
             deadTree.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
             ctx.scene.add(deadTree);
         }
+
+        // Nathalie - At the dealership, not following yet
+        SectorBuilder.spawnFamily(ctx, FamilyMemberID.NATHALIE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, found: false });
     },
 
     setupContent: async (ctx: SectorContext) => {
@@ -209,12 +212,12 @@ export const Sector3: SectorDef = {
             {
                 id: 's3_found_nathalie',
                 position: LOCATIONS.TRIGGERS.FOUND_NATHALIE,
-                familyId: 3,
+                familyId: FamilyMemberID.NATHALIE,
                 radius: 18,
                 type: TriggerType.EVENT,
                 content: '',
                 statusFlags: TriggerStatus.ONCE, // INACTIVE — activated after Part 2
-                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 3, scriptId: 2 } }]
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.NATHALIE, sectorId: 3, scriptId: 2 } }]
             },
 
             { id: 's3_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: TriggerType.THOUGHT, content: "clues.3.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.PLAY_SOUND, payload: { id: SoundID.AMBIENT_METAL } }, { type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
@@ -247,7 +250,10 @@ export const Sector3: SectorDef = {
         if (!sectorState.nathalieUnlocked && sectorState.pendingTrigger === null && sectorState.part2Played) {
             sectorState.nathalieUnlocked = true;
             const t = gameState.triggers?.find((t: any) => t.id === 's3_found_nathalie');
-            if (t) { t.statusFlags = TriggerStatus.ACTIVE | TriggerStatus.ONCE; t.triggered = false; }
+            if (t) {
+                t.statusFlags = TriggerStatus.ACTIVE | TriggerStatus.ONCE;
+                t.triggered = false; // Maintain boolean compatibility
+            }
         }
         // Stamp when Part 2 cinematic has started
         if (!sectorState.part2Played && sectorState.pendingTrigger === null) {

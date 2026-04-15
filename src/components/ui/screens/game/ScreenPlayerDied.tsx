@@ -3,7 +3,7 @@ import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { useHudStore } from '../../../../hooks/useHudStore';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
-import { EnemyAttackType } from '../../../../entities/player/CombatTypes';
+import { FamilyMemberID } from '../../../../content/constants';
 
 interface ScreenPlayerDiedProps {
     onContinue: () => void;
@@ -53,7 +53,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
             deathPhrase: phrase,
             deathDisplayText: displayName,
             deathDescription: description,
-            headerText: t('ui.player_died', { name: 'Robert' })
+            headerText: t('ui.player_died', { name: DataResolver.getPlayerName() })
         };
     }, [killedByEnemy, killerName, deathReason]);
 

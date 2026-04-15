@@ -134,6 +134,8 @@ export interface GameCanvasProps {
   onPOIdiscovered: (poi: any) => void;
   onEnemyDiscovered?: (type: number) => void;
   onBossDiscovered?: (id: number) => void;
+  onBossKilled?: (id: number) => void;
+  onFamilyRescued?: (id: number) => void;
   isCollectibleOpen: boolean;
   onCollectibleClose: () => void;
   onDialogueStateChange: (active: boolean) => void;

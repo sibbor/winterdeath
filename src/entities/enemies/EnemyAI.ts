@@ -230,7 +230,7 @@ export const EnemyAI = {
                 e.mesh.userData.wasKnockedBack = true;
             }
 
-            // --- FIX: Apply pure velocity (EnemyManager already divided by mass!) ---
+            // --- Apply pure velocity (EnemyManager already divided by mass!) ---
             e.mesh.position.addScaledVector(e.knockbackVel, delta);
 
             // --- Snappy, heavy gravity ---
@@ -239,7 +239,7 @@ export const EnemyAI = {
             // --- Friction (Horizontal only) ---
             const mass = e.originalScale * e.widthScale;
             // VINTERDÖD: Increase friction significantly if ragdolling on ground to prevent "ice-skating"
-            const frictionMult = e.mesh.userData.isRagdolling ? 8.0 : 2.0;
+            const frictionMult = (e.mesh.userData.isRagdolling || !(e.statusFlags & EnemyFlags.AIRBORNE)) ? 12.0 : 2.5;
             const friction = 1.0 + (mass * frictionMult);
             const drag = Math.max(0, 1 - friction * delta);
             e.knockbackVel.x *= drag;
@@ -271,15 +271,23 @@ export const EnemyAI = {
                 }
 
                 // Apply fall damage if not in water
-                if ((!water || !_buoyancyResult.inWater) && peakY > floorY + 0.5) {
-                    const fallRatio = (peakY - floorY);
-                    const fallDamage = Math.min(e.maxHp * 0.9, fallRatio * 20);
-                    
+                const fallHeight = peakY - floorY;
+                if ((!water || !_buoyancyResult.inWater) && fallHeight > 0.5) {
+                    // VINTERDÖD: Quadratic fall damage for high-impact RUSH feel
+                    const fallRatio = fallHeight;
+                    const fallDamage = Math.min(e.maxHp * 0.95, fallRatio * fallRatio * 15);
+
                     e.hp -= fallDamage;
                     callbacks.applyDamage(e, fallDamage, DamageID.FALL, true);
-                    
+
+                    // High Fall Landing Stun (Stay Down)
+                    if (fallHeight > 2.5) {
+                        e.stunDuration = Math.max(e.stunDuration, 2.0);
+                        if (callbacks.playSound) callbacks.playSound(SoundID.IMPACT_METAL);
+                    }
+
                     if (callbacks.spawnPart) {
-                        callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'blood_splatter', 6);
+                        callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'blood_splatter', Math.floor(fallHeight * 4));
                     }
 
                     if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
@@ -288,7 +296,6 @@ export const EnemyAI = {
                 }
 
                 // --- VINTERDÖD: Stay Down Mechanic ---
-                // Recovery is now handled by stunDuration logic in Step 7
                 e.knockbackVel.set(0, 0, 0);
             }
         } else {

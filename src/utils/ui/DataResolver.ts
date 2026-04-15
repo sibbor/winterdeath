@@ -5,7 +5,7 @@ import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
 import { POIS } from '../../content/pois';
 import { PERKS, PERK_CATALOG, PerkCategory, StatusEffectType } from '../../content/perks';
-import { FAMILY_MEMBERS } from '../../content/constants';
+import { FAMILY_MEMBERS, FamilyMemberID, PLAYER_CHARACTER } from '../../content/constants';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { CLUES } from '../../content/clues';
 import { COLLECTIBLES } from '../../content/collectibles';
@@ -52,7 +52,6 @@ const CHATTER_MAP: Record<string, string[]> = (sv.chatter as Record<string, stri
 FAMILY_MEMBERS.forEach(m => {
     const colorHex = '#' + m.color.toString(16).padStart(6, '0');
     SPEAKER_COLORS[m.id] = colorHex;
-    SPEAKER_COLORS[m.name.toLowerCase()] = colorHex;
 });
 
 const VOICE_PARAMS_MAP: Record<number, VoiceParams> = {
@@ -61,16 +60,16 @@ const VOICE_PARAMS_MAP: Record<number, VoiceParams> = {
 
 FAMILY_MEMBERS.forEach(m => {
     let baseFreq = 220;
-    const name = m.name.toLowerCase();
-    if (name === 'nathalie') baseFreq = 380;
-    else if (name === 'esmeralda') baseFreq = 450;
-    else if (name === 'loke') baseFreq = 420;
-    else if (name === 'jordan') baseFreq = 500;
+    const id = m.id;
+    if (id === FamilyMemberID.NATHALIE) baseFreq = 380;
+    else if (id === FamilyMemberID.ESMERALDA) baseFreq = 450;
+    else if (id === FamilyMemberID.LOKE) baseFreq = 420;
+    else if (id === FamilyMemberID.JORDAN) baseFreq = 500;
     else if (m.race === 'animal') baseFreq = 700;
 
     VOICE_PARAMS_MAP[m.id] = {
         baseFreq,
-        oscType: name === 'nathalie' || m.race === 'animal' ? 'sine' : 'triangle',
+        oscType: id === FamilyMemberID.NATHALIE || m.race === 'animal' ? 'sine' : 'triangle',
         pitchScale: 1.0 / (m.scale || 1.0)
     };
 });
@@ -155,10 +154,19 @@ export const DataResolver = {
     },
 
     /**
+     * Resolves the name of the player character.
+     */
+    getPlayerName(): string {
+        return PLAYER_CHARACTER.name;
+    },
+
+    /**
      * Resolves the localized name key for a Family Member.
      */
     getFamilyMemberName(idOrIndex: number | string): string {
-        const member = typeof idOrIndex === 'number' ? FAMILY_MEMBERS[idOrIndex] : FAMILY_MEMBERS.find(m => m.id === Number(idOrIndex));
+        const id = Number(idOrIndex);
+        if (id === FamilyMemberID.PLAYER) return PLAYER_CHARACTER.name;
+        const member = typeof idOrIndex === 'number' ? FAMILY_MEMBERS[idOrIndex] : FAMILY_MEMBERS.find(m => m.id === id);
         return member ? member.name : 'ui.unknown';
     },
 
@@ -339,8 +347,9 @@ export const DataResolver = {
      * Returns localized chatter lines for a family member.
      * O(1) resolution via pre-mapped locale object.
      */
-    getChatterLines(idOrName: number | string): string[] {
-        const key = typeof idOrName === 'string' ? idOrName.toLowerCase() : FAMILY_MEMBERS[idOrName]?.name.toLowerCase();
+    getChatterLines(id: number): string[] {
+        const member = FAMILY_MEMBERS[id];
+        const key = member?.name.toLowerCase();
         return CHATTER_MAP[key] || ["..."];
     },
 

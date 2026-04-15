@@ -770,10 +770,15 @@ export const EnemyManager = {
                 const isDodge = damageType === DamageID.DODGE;
                 const isRush = damageType === DamageID.RUSH;
 
-                const liftRatio = isDodge ? 0.15 : (isRush ? 0.75 : 0.45);
-                const spinScale = isRush ? 1.5 : 0.8;
+                // VINTERDÖD: Dramatically increase RUSH lift and decrease DODGE lift for requested feedback
+                const liftRatio = isDodge ? 0.05 : (isRush ? 1.6 : 0.45);
+                const spinScale = isRush ? 2.5 : 0.8;
                 const force = maxForce * falloff;
-                const stunDur = (1.5 + Math.random() * 0.5) * falloff;
+                const stunDur = (isRush ? 2.0 : 1.2) * falloff;
+
+                // Add slight horizontal "Spread" variance
+                _v1.x += (Math.random() - 0.5) * (force * 0.1);
+                _v1.z += (Math.random() - 0.5) * (force * 0.1);
 
                 EnemyManager.applyImpactForce(
                     e,

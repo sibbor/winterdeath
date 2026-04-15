@@ -16,17 +16,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
  
     useEffect(() => {
         UiSounds.playLevelUp();
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' || e.key === 'Enter') {
-                e.preventDefault();
-                onClose();
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown, true);
-        return () => window.removeEventListener('keydown', handleKeyDown, true);
-    }, [onClose]);
+    }, []);
 
     if (!def) return null;
 
@@ -37,6 +27,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
         <ScreenModalLayout
             title={t('ui.collectible_discovered')}
             isMobileDevice={isMobileDevice}
+            onClose={onClose}
             onConfirm={onClose}
             confirmLabel={t('ui.continue')}
             isSmall={true}

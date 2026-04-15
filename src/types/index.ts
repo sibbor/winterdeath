@@ -1,5 +1,6 @@
 import { GameSettings, EnvironmentOverride } from '../core/engine/EngineTypes';
 import { WeaponType } from '../content/weapons';
+import { FamilyMemberID } from '../content/constants';
 import type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState } from '../components/ui/hud/HudTypes';
 import { WeatherType } from '../content/environment';
 import { TriggerType, TriggerAction, SectorTrigger } from '../systems/TriggerTypes';
@@ -50,7 +51,7 @@ export interface PlayerStats {
   prologueSeen?: boolean;
   // Legacy / Additional stats from constants.ts
   speed: number;
-  rescuedFamilyIds: number[];
+  rescuedFamilyIds: FamilyMemberID[];
   familyFoundCount: number;
   mostUsedWeapon: string;
   incomingDamageBreakdown?: Record<string, any>;
@@ -121,7 +122,7 @@ export interface GameState {
   weaponLevels: Record<WeaponType, number>;
   settings: GameSettings;
   deadBossIndices: number[];
-  rescuedFamilyIndices: number[];
+  rescuedFamilyIndices: FamilyMemberID[];
   sectorState?: SectorState;
   showFps?: boolean;
   sectorBriefing?: string;
@@ -146,7 +147,7 @@ export interface GameCanvasProps {
   weaponLevels: Record<WeaponType, number>;
   currentSector: number;
   deadBossIndices: number[];
-  rescuedFamilyIndices: number[];
+  rescuedFamilyIndices: FamilyMemberID[];
   debugMode?: boolean;
   isRushing: boolean;
   isPaused: boolean;

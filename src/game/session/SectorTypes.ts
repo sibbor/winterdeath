@@ -48,6 +48,7 @@ export interface SectorContext {
     sectorId: number;
     sectorState: SectorState;
     state: any; // RuntimeState (for systems like waterSystem, windSystem)
+    activeFamilyMembers: any[]; // List for the FamilySystem to track
     uniqueMeshes?: any[]; // For instanced meshes or unique geometry
     yield: () => Promise<void>;
     isWarmup?: boolean; // When true: skip triggers, enemies, and story logic (preloader ghost-render mode)
@@ -81,7 +82,7 @@ export interface SectorDef {
 
     // Spawns
     playerSpawn: SpawnPoint;
-    familySpawn: SpawnPoint;
+    familySpawn?: SpawnPoint;
     bossSpawn: SpawnPoint;
     initialAim?: { x: number, y: number }; // Optional initial aim direction for player
 

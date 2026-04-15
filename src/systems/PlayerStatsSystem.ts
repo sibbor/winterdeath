@@ -10,7 +10,7 @@ import { MaterialType } from '../content/environment';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { EnemyType, EnemyFlags } from '../entities/enemies/EnemyTypes';
-import { KMH_TO_MS } from '../content/constants';
+import { KMH_TO_MS, FamilyMemberID } from '../content/constants';
 import { DataResolver } from '../utils/ui/DataResolver';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -124,13 +124,13 @@ export class PlayerStatsSystem implements System {
             const member = family[i];
             if (!member.following) continue;
 
-            const name = member.name.toLowerCase();
+            const id = member.id;
             let passiveId: StatusEffectType | null = null;
 
-            if (name === 'loke') passiveId = StatusEffectType.TRICKSTERS_HASTE;
-            else if (name === 'jordan') passiveId = StatusEffectType.EAGLES_SIGHT;
-            else if (name === 'esmeralda') passiveId = StatusEffectType.LEAD_FEVER;
-            else if (name === 'nathalie') passiveId = StatusEffectType.WINTERS_BONE;
+            if (id === FamilyMemberID.LOKE) passiveId = StatusEffectType.TRICKSTERS_HASTE;
+            else if (id === FamilyMemberID.JORDAN) passiveId = StatusEffectType.EAGLES_SIGHT;
+            else if (id === FamilyMemberID.ESMERALDA) passiveId = StatusEffectType.LEAD_FEVER;
+            else if (id === FamilyMemberID.NATHALIE) passiveId = StatusEffectType.WINTERS_BONE;
 
             if (passiveId !== null) {
                 mask |= (1 << passiveId); // Set bit for mask

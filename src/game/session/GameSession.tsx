@@ -7,7 +7,7 @@ import { audioEngine } from '../../utils/audio/AudioEngine';
 import { UiSounds, WeaponSounds, GamePlaySounds } from '../../utils/audio/AudioLib';
 import { SoundID, MusicID } from '../../utils/audio/AudioTypes';
 import { t } from '../../utils/i18n';
-import { LEVEL_CAP, WEATHER_SYSTEM, WIND_SYSTEM } from '../../content/constants';
+import { LEVEL_CAP, WEATHER_SYSTEM, WIND_SYSTEM, FamilyMemberID } from '../../content/constants';
 import { useGameSessionState } from './useGameSessionState';
 import { useGameInput } from './useGameInput';
 import { GameSessionSetup, SetupContext } from './GameSessionSetup';
@@ -23,7 +23,7 @@ import { PlayerStatID } from '../../entities/player/PlayerTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { getCollectibleById } from '../../content/collectibles';
-import ScreenCollectibleDiscovered from '../../components/ui/screens/game/ScreenCollectibleDiscovered';
+// import ScreenCollectibleDiscovered from '../../components/ui/screens/game/ScreenCollectibleDiscovered'; // REMOVED: Managed by App.tsx
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -181,6 +181,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const { props: currentProps } = latestStateRef.current;
         if (currentProps.onInteractionStateChange) currentProps.onInteractionStateChange(null);
 
+        // Core UI State Cleanup (Fixes "Modal doesn't close" bugs)
+        updateUiState({
+            activeModal: null,
+            collectibleId: null,
+            stationOverlay: null
+        });
+
         const s = refs.gameSessionRef.current;
         if (s) {
             s.setSystemEnabled('player_combat', true);
@@ -190,7 +197,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (!currentProps.isMobileDevice && refs.containerRef.current) {
             refs.engineRef.current?.input.requestPointerLock(refs.containerRef.current);
         }
-    }, [refs]);
+    }, [refs, updateUiState]);
 
     /**
      * Central Action Handler - VINTERDÖD EDITION
@@ -267,16 +274,28 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
+                // Session-local state: Always set so the sector report reflects the rescue
                 state.familyFound = true;
                 state.sectorState.familyFound = true;
 
-                window.dispatchEvent(new CustomEvent('family-member-found', {
-                    detail: { id: targetId, name: targetName }
-                }));
+                // [VINTERDÖD GUARDRAIL] Only dispatch global event and play chime if not already rescued
+                // This ensures rewards and permanent progression only happen once.
+                if (!props.familyAlreadyRescued) {
+                    window.dispatchEvent(new CustomEvent('family-member-found', {
+                        detail: { id: targetId, name: targetName }
+                    }));
 
-                if (targetName) {
-                    spawnBubble(targetName + " " + t('ui.saved'), 3000);
-                    audioEngine.playSound(SoundID.UI_CHIME);
+                    if (targetName) {
+                        spawnBubble(targetName + " " + t('ui.saved'), 3000);
+                        audioEngine.playSound(SoundID.UI_CHIME);
+                    }
+                } else {
+                    // On Replay: Still fire the event for internal GameSession follow logic
+                    // but we could use a flag or just assume internal logic is safe.
+                    // Actually, handleFamilyMemberFound only sets fm.found/following.
+                    window.dispatchEvent(new CustomEvent('family-member-found', {
+                        detail: { id: targetId, name: targetName, isReplay: true }
+                    }));
                 }
                 break;
             }
@@ -298,7 +317,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
-                if (isFollowing || props.familyAlreadyRescued) {
+                // [VINTERDÖD FIX] Only skip if ALREADY following during the current session
+                if (isFollowing) {
                     const sectorData = props.currentSectorData || (window as any).SectorSystem?.getSector(props.currentSector || 0);
                     const bossPos = sectorData?.bossSpawn;
 
@@ -482,11 +502,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     stats.collectiblesDiscovered.push(id);
                     state.sessionCollectiblesDiscovered.push(id);
                     isNew = true;
-                    if (currentProps.onCollectibleDiscovered) currentProps.onCollectibleDiscovered(id);
                 }
                 
-                // Trigger Full Screen Modal for Collectibles ALWAYS
-                updateUiState({ activeModal: 'collectible', collectibleId: id });
+                // [VINTERDÖD FIX] Collectibles are now managed purely via App.tsx props
+                // ALWAYS trigger the prop callback to ensure the modal opens (even on replays),
+                // but rely on App.tsx to deduplicate the permanent reward logic.
+                if (currentProps.onCollectibleDiscovered) currentProps.onCollectibleDiscovered(id);
                 break;
             case 'poi':
                 titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.POI);
@@ -866,7 +887,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         if (latestStateRef.current.props.onDialogueStateChange) latestStateRef.current.props.onDialogueStateChange(val);
                     },
                     setInteractionType: (val: any) => updateUiState({ interactionType: val }),
-                    setFoundMemberName: (val: string) => updateUiState({ foundMemberName: val }),
+                    setFoundMember: (id: FamilyMemberID) => {
+                        const name = DataResolver.getFamilyMemberName(id);
+                        updateUiState({ foundMemberName: name });
+                    },
                     setOverlay: (val: string | null) => {
                         if (latestStateRef.current.props.onInteractionStateChange) latestStateRef.current.props.onInteractionStateChange(val);
                     }
@@ -1068,13 +1092,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     return (
         <>
             <GameSessionUI refs={refs} uiState={uiState} gameProps={props} callbacks={uiCallbacks} />
-            {uiState.activeModal === 'collectible' && uiState.collectibleId && (
-                <ScreenCollectibleDiscovered 
-                    collectibleId={uiState.collectibleId} 
-                    onClose={closeModal} 
-                    isMobileDevice={props.isMobileDevice}
-                />
-            )}
         </>
     );
 });

@@ -7,6 +7,7 @@ import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes'
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { _buoyancyResult } from './WaterSystem';
 import { DamageID } from '../entities/player/CombatTypes';
+import { FamilyMemberID } from '../content/constants';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3(); // Target Position / Offset
@@ -42,7 +43,7 @@ export class FamilySystem implements System {
     private activeFamilyMembers: React.MutableRefObject<any[]>;
     private isCinematicRef: React.MutableRefObject<{ active: boolean }>;
     private callbacks: {
-        setFoundMemberName: (name: string) => void;
+        setFoundMember: (id: FamilyMemberID) => void;
         startCinematic: (mesh: THREE.Group) => void;
     };
 
@@ -51,7 +52,7 @@ export class FamilySystem implements System {
         activeFamilyMembers: React.MutableRefObject<any[]>,
         isCinematicRef: React.MutableRefObject<{ active: boolean }>,
         callbacks: {
-            setFoundMemberName: (name: string) => void;
+            setFoundMember: (id: FamilyMemberID) => void;
             startCinematic: (mesh: THREE.Group) => void;
         }
     ) {

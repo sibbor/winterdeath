@@ -11,6 +11,7 @@ import { VehicleGenerator } from '../../core/world/generators/VehicleGenerator';
 import { GeneratorUtils } from '../../core/world/generators/GeneratorUtils';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
+import { FamilyMemberID } from '../constants';
 import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
 import { POI_TYPE } from '../../content/pois';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
@@ -63,6 +64,8 @@ const LOCATIONS = {
         new THREE.Vector3(20, 5, 364)
     ]
 } as const;
+const EXPLODING_BUS_ID = 'tunnel_bus';
+const EXPLODING_BUS_POS = LOCATIONS.TRIGGERS.BUS;
 
 const _v1 = new THREE.Vector3();
 
@@ -84,6 +87,215 @@ const _quat = new THREE.Quaternion();
 const _offsetTrainYard = new THREE.Vector3(0, 10, 22);
 const _zoomOffsetTarget = new THREE.Vector3(22, 10, 0);
 const _zoomOffsetLook = new THREE.Vector3(0, 2, 0);
+
+/**
+ * VINTERDÖD: Unified Bus Explosion Handler
+ * Reuses the optimized physics and FX logic from Sector 4.
+ */
+function explodeBus(dt: number, renderTime: number, gameState: any, sectorState: any, events: any) {
+    if (!sectorState.busExplosionHandled) {
+        sectorState.busExplosionHandled = true;
+        sectorState.busExplosionTime = renderTime;
+
+        if (events.playSound) events.playSound(SoundID.EXPLOSION);
+        if (events.cameraShake) events.cameraShake(5);
+
+        _busOriginalPos.set(EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.y, EXPLODING_BUS_POS.z);
+
+        if (events.spawnPart) {
+            // Use new scale parameter for massive cinematic explosion
+            events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'shockwave', 1, 2.5);
+            events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_smoke', 8, 2.0);
+        }
+
+        // Make noise to attract enemies
+        if (events.makeNoise) {
+            events.makeNoise(_busOriginalPos.clone(), NoiseType.OTHER, 100);
+        }
+
+        // Clear bus
+        const _busObj = (sectorState.ctx as any).busObject as THREE.Object3D | null;
+        if (_busObj) {
+            _busObj.position.set(0, -1000, 0);
+        }
+
+        const _obsArray = sectorState.ctx.obstacles;
+        if (_obsArray) {
+            for (let i = 0; i < _obsArray.length; i++) {
+                const o = _obsArray[i];
+                if (o && o.id === EXPLODING_BUS_ID) {
+                    o.collider.size?.set(0, 0, 0);
+                    if (o.position) o.position.set(99999, -1000, 99999);
+                    if (o.mesh) {
+                        o.mesh.position.set(99999, -1000, 99999);
+                    }
+                    _obsArray.splice(i, 1);
+                    break;
+                }
+            }
+        }
+
+        // Activate Rubble
+        const rMesh = (sectorState.ctx as any).busRubble;
+        if (rMesh) {
+            sectorState.busRubble = rMesh;
+            rMesh.position.set(0, 0, 0); // [VINTERDÖD FIX] Snap to origin so absolute instance coordinates work
+            rMesh.visible = true;
+            rMesh.userData.active = true;
+            if (rMesh.userData.hasLanded) rMesh.userData.hasLanded.fill(0);
+
+            const data = rMesh.userData;
+            for (let i = 0; i < rMesh.count; i++) {
+                const ix = i * 3;
+                const arcAngle = Math.random() * Math.PI * 2;
+                const power = 1.5 + Math.random();
+                const dirX = Math.cos(arcAngle) * power;
+                const dirZ = Math.sin(arcAngle) * power;
+                const dirY = 3.0 + Math.random() * 4.0; // More vertical burst
+                const speed = 15 + Math.random() * 25;
+
+                _v1.set(dirX, dirY, dirZ).normalize().multiplyScalar(speed);
+                data.velocities[ix] = _v1.x;
+                data.velocities[ix + 1] = _v1.y;
+                data.velocities[ix + 2] = _v1.z;
+
+                // [VINTERDÖD FIX] Use absolute world-space start coordinates
+                data.positions[ix] = EXPLODING_BUS_POS.x + (Math.random() - 0.5) * 8;
+                data.positions[ix + 1] = EXPLODING_BUS_POS.y + 1 + Math.random() * 2;
+                data.positions[ix + 2] = EXPLODING_BUS_POS.z + (Math.random() - 0.5) * 8;
+
+                if (!data.spin) data.spin = new Float32Array(rMesh.count * 3);
+                if (!data.rotations) data.rotations = new Float32Array(rMesh.count * 3);
+
+                data.spin[ix] = (Math.random() - 0.5) * 20;
+                data.spin[ix + 1] = (Math.random() - 0.5) * 20;
+                data.spin[ix + 2] = (Math.random() - 0.5) * 20;
+            }
+
+            // Activate Tires
+            const tires = (sectorState.ctx as any).busTires;
+            if (tires) {
+                sectorState.busTires = tires;
+                tires.position.set(0, 0, 0); // [VINTERDÖD FIX] Snap to origin
+                tires.visible = true;
+                tires.userData.active = true;
+                const tData = tires.userData;
+                tData.hasLanded.fill(0);
+                for (let i = 0; i < 4; i++) {
+                    const ix = i * 3;
+                    tData.positions[ix] = EXPLODING_BUS_POS.x + (Math.random() - 0.5) * 4;
+                    tData.positions[ix + 1] = EXPLODING_BUS_POS.y + 2;
+                    tData.positions[ix + 2] = EXPLODING_BUS_POS.z + (Math.random() - 0.5) * 4;
+
+                    const angle = Math.random() * Math.PI * 2;
+                    const tSpeed = 20 + Math.random() * 15;
+                    tData.velocities[ix] = Math.cos(angle) * tSpeed * 0.5;
+                    tData.velocities[ix + 1] = 18 + Math.random() * 12;
+                    tData.velocities[ix + 2] = Math.sin(angle) * tSpeed * 0.5;
+
+                    tData.spin[ix] = (Math.random() - 0.5) * 30;
+                    tData.spin[ix + 1] = (Math.random() - 0.5) * 30;
+                    tData.spin[ix + 2] = (Math.random() - 0.5) * 30;
+                }
+            }
+        }
+    }
+
+    // --- RUBBLE & TIRE PHYSICS ---
+    const activeMeshes = [];
+    if (sectorState.busRubble && sectorState.busRubble.userData.active) activeMeshes.push(sectorState.busRubble);
+    if (sectorState.busTires && sectorState.busTires.userData.active) activeMeshes.push(sectorState.busTires);
+
+    for (const rubble of activeMeshes) {
+        const isTire = rubble === sectorState.busTires;
+        const rubbleWeight = isTire ? 35.0 : 18.0;
+        const bouncy = isTire ? 0.7 : 0.4;
+        const data = rubble.userData;
+        let stillMoving = false;
+        const elapsed = renderTime - (sectorState.busExplosionTime || 0);
+
+        for (let i = 0; i < rubble.count; i++) {
+            const ix = i * 3;
+
+            // [VINTERDÖD FIX] Dynamic ground height lookup
+            const groundY = (gameState.collisionGrid && gameState.collisionGrid.getGroundHeight)
+                ? gameState.collisionGrid.getGroundHeight(data.positions[ix], data.positions[ix + 2])
+                : 0.1;
+            const minHeight = groundY + (isTire ? 0.8 : 0.2);
+
+            const isAboveGround = data.positions[ix + 1] > minHeight;
+            const hasVelY = Math.abs(data.velocities[ix + 1]) > 0.1;
+            const hasVelX = Math.abs(data.velocities[ix]) > 0.1;
+            const hasVelZ = Math.abs(data.velocities[ix + 2]) > 0.1;
+
+            if (isAboveGround || hasVelY || hasVelX || hasVelZ) {
+                stillMoving = true;
+                const safeDt = Math.min(dt, 0.05);
+
+                data.velocities[ix + 1] -= rubbleWeight * safeDt;
+                data.positions[ix] += data.velocities[ix] * safeDt;
+                data.positions[ix + 1] += data.velocities[ix + 1] * safeDt;
+                data.positions[ix + 2] += data.velocities[ix + 2] * safeDt;
+
+                if (data.positions[ix + 1] <= minHeight) {
+                    data.positions[ix + 1] = minHeight;
+                    data.velocities[ix] *= 0.6;
+                    data.velocities[ix + 2] *= 0.6;
+                    data.velocities[ix + 1] *= -bouncy;
+
+                    if (data.spin) {
+                        data.spin[ix] *= 0.6;
+                        data.spin[ix + 1] *= 0.6;
+                        data.spin[ix + 2] *= 0.6;
+                    }
+
+                    if (Math.abs(data.velocities[ix + 1]) < 1.0) data.velocities[ix + 1] = 0;
+                    if (Math.abs(data.velocities[ix]) < 0.2) data.velocities[ix] = 0;
+                    if (Math.abs(data.velocities[ix + 2]) < 0.2) data.velocities[ix + 2] = 0;
+
+                    if (data.hasLanded && !data.hasLanded[i] && events.playSound) {
+                        if (!isTire || Math.abs(data.velocities[ix + 1]) > 2) {
+                            events.playSound(isTire ? SoundID.IMPACT_METAL : SoundID.IMPACT_METAL);
+                        }
+                        if (Math.abs(data.velocities[ix + 1]) < 2) data.hasLanded[i] = 1;
+                    }
+                }
+
+                if (data.rotations && data.spin) {
+                    data.rotations[ix] += data.spin[ix] * safeDt;
+                    data.rotations[ix + 1] += data.spin[ix + 1] * safeDt;
+                    data.rotations[ix + 2] += data.spin[ix + 2] * safeDt;
+                }
+
+                _position.set(data.positions[ix], data.positions[ix + 1], data.positions[ix + 2]);
+                if (data.rotations) {
+                    _rotation.set(data.rotations[ix], data.rotations[ix + 1], data.rotations[ix + 2]);
+                    _quat.setFromEuler(_rotation);
+                } else {
+                    _quat.set(0, 0, 0, 1);
+                }
+
+                if (isTire) {
+                    _scale.set(1, 1, 1);
+                } else {
+                    const s = data.scales ? data.scales[i] : 1.0;
+                    // [VINTERDÖD OPT] Varied bus-like shapes: Panels, Beams, Scrap
+                    const type = i % 3;
+                    if (type === 0) _scale.set(4.0 * s, 0.4 * s, 6.0 * s); // Huge Panels
+                    else if (type === 1) _scale.set(1.5 * s, 0.5 * s, 10.0 * s); // Long Beams
+                    else _scale.set(1.5 * s, 1.5 * s, 1.5 * s); // Scrap
+                }
+
+                _matrix.compose(_position, _quat, _scale);
+                rubble.setMatrixAt(i, _matrix);
+            }
+        }
+        rubble.instanceMatrix.needsUpdate = true;
+        if (!stillMoving || elapsed > 15000) {
+            data.active = false;
+        }
+    }
+}
 
 export const Sector0: SectorDef = {
     id: 0,
@@ -405,14 +617,15 @@ export const Sector0: SectorDef = {
         colMesh.visible = false;
         GeneratorUtils.freezeStatic(colMesh);
         scene.add(colMesh);
-
-        const busIdx = obstacles.length;
-        const obstacle_bus = { id: 'tunnel_bus', mesh: colMesh, collider: { type: 'box' as const, size: busSize } };
-
         scene.add(bus);
-
-        SectorBuilder.addObstacle(ctx, obstacle_bus);
         SectorBuilder.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });
+
+        // Obstacle
+        const busIdx = obstacles.length;
+        const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: 'box' as const, size: busSize } };
+        SectorBuilder.addObstacle(ctx, obstacle_bus);
+
+        // Interactable
         SectorBuilder.addInteractable(ctx, bus, {
             id: 'tunnel_bus_explode',
             label: 'ui.interact_blow_up_bus',
@@ -435,6 +648,22 @@ export const Sector0: SectorDef = {
         rubble.frustumCulled = true;
         rubble.userData.hasLanded = new Uint8Array(rubble.count);
         (ctx as any).busRubble = rubble;
+
+        // Tires (4 bouncing tires)
+        const tireGeo = new THREE.DodecahedronGeometry(0.8, 1);
+        const tireMat = MATERIALS.vehicleTire;
+        const tires = new THREE.InstancedMesh(tireGeo, tireMat, 4);
+        tires.position.set(0, 0, 0);
+        tires.visible = false;
+        tires.userData.active = false;
+        tires.userData.hasLanded = new Uint8Array(4);
+        tires.userData.positions = new Float32Array(4 * 3);
+        tires.userData.velocities = new Float32Array(4 * 3);
+        tires.userData.rotations = new Float32Array(4 * 3);
+        tires.userData.spin = new Float32Array(4 * 3);
+        tires.userData.scales = new Float32Array(4).fill(1.0);
+        scene.add(tires);
+        (ctx as any).busTires = tires;
 
         // ----------------------------
         // Train yard - Fence
@@ -659,6 +888,9 @@ export const Sector0: SectorDef = {
         SectorBuilder.spawnChest(ctx, 45, 45, 'standard');
         SectorBuilder.spawnChest(ctx, 110, 80, 'standard');
         SectorBuilder.spawnChest(ctx, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z + 5, 'standard');
+
+        // Spawn Loke
+        SectorBuilder.spawnFamily(ctx, FamilyMemberID.LOKE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI);
     },
 
     setupContent: async (ctx: SectorContext) => {
@@ -687,12 +919,12 @@ export const Sector0: SectorDef = {
             {
                 id: 'found_loke',
                 position: LOCATIONS.SPAWN.FAMILY,
-                familyId: 0,
+                familyId: FamilyMemberID.LOKE,
                 radius: 8,
                 type: TriggerType.EVENT,
                 content: '',
-                statusFlags: TriggerStatus.ONCE, // Starts INACTIVE — no ACTIVE flag
-                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: 0, scriptId: 0, sectorId: 0 } }]
+                statusFlags: TriggerStatus.ONCE, // Starts INACTIVE (Missing ACTIVE bit)
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.LOKE, scriptId: 0, sectorId: 0 } }]
             }
         ]);
     },
@@ -831,7 +1063,7 @@ export const Sector0: SectorDef = {
                     active: true,
                     targetPos: _camOverrideTarget,
                     lookAtPos: _camOverrideLookAt,
-                    endTime: performance.now() + 4000
+                    endTime: renderTime + 4000
                 });
             }
         }
@@ -920,7 +1152,6 @@ export const Sector0: SectorDef = {
         // State 6: Wait for player to press [E]
         else if (sectorState.busEventState === 6 && sectorState.busInteractionTriggered) {
             sectorState.busEventState = 7;
-            sectorState.busEventState = 7;
             sectorState.busEventTimer = simTime;
             sectorState.lastBeepTime = simTime;
 
@@ -958,7 +1189,6 @@ export const Sector0: SectorDef = {
         // State 7: Bomb countdown sequence
         else if (sectorState.busEventState === 7) {
             const elapsed = simTime - sectorState.busEventTimer;
-            const _busObjShake = (sectorState.ctx as any).busObject;
             const pos = (sectorState as any).originalBusPos || LOCATIONS.TRIGGERS.BUS;
             _busOriginalPos.copy(pos);
 
@@ -978,18 +1208,6 @@ export const Sector0: SectorDef = {
                     sectorState.busRing.scale.setScalar(1.0 + (pulse * 0.2));
                     sectorState.busRing.material.color.setRGB(1.0, pulse, 0.0);
                 }
-
-                // Shake the bus to build tension
-                if (_busObjShake) {
-                    const shakeAmount = 0.05 + (elapsed / 3000) * 0.15;
-                    _busObjShake.position.x = _busOriginalPos.x + (Math.random() - 0.5) * shakeAmount;
-                    _busObjShake.position.z = _busOriginalPos.z + (Math.random() - 0.5) * shakeAmount;
-
-                    // FIX: Tvinga Three.js att uppdatera matrisen så vi undviker fysik-lagg!
-                    _busObjShake.updateMatrixWorld();
-
-                    if (events.cameraShake) events.cameraShake(0.5);
-                }
             } else {
                 // Trigger the actual explosion
                 sectorState.busEventState = 8;
@@ -1000,188 +1218,18 @@ export const Sector0: SectorDef = {
                     sectorState.busRing = null;
                 }
 
-                if (events.playSound) events.playSound(SoundID.EXPLOSION);
-                if (events.cameraShake) events.cameraShake(5);
-
-                // --- 1. USE NATIVE GAME ENGINE EXPLOSION (NO CRASHES) ---
-                if (events.spawnPart) {
-                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'shockwave', 1);
-                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_smoke', 5);
-                    events.spawnPart(_busOriginalPos.x, 3, _busOriginalPos.z, 'debris', 15);
-                }
-
-                // --- 2. CLEAR THE TUNNEL PASSAGE (ZERO-GC) ---
-                const _busObj = (sectorState.ctx as any).busObject as THREE.Object3D | null;
-                const _obsArray = sectorState.ctx.obstacles;
-
-                if (_busObj) {
-                    SectorBuilder.extinguishFire(sectorState.ctx, _busObj);
-
-                    // LAGG- & KROCK-FIX: Göm den visuella bussen och teleportera bort den.
-                    _busObj.visible = false;
-                    _busObj.position.set(0, -1000, 0);
-                    _busObj.updateMatrixWorld(true); // Tvinga motorn att fatta att den flyttat
-                    (sectorState.ctx as any).busObject = null;
-                }
-
-                if (_obsArray && _busOriginalPos) {
-                    for (let i = 0; i < _obsArray.length; i++) {
-                        const obs = _obsArray[i];
-                        if (obs && obs.collider && obs.collider.type === 'box' && obs.id === 'tunnel_bus') {
-
-                            // 1. Krymp krocklådan till absolut noll
-                            obs.collider.size.set(0, 0, 0);
-                            obs.radius = 0;
-
-                            // 2. Förvisa långt utanför kartan (X och Z är det som räknas i en platt värld!)
-                            if (obs.position) {
-                                obs.position.set(99999, -1000, 99999);
-                            }
-
-                            // 3. Teleportera och göm själva Three.js-meshen
-                            if (obs.mesh) {
-                                obs.mesh.position.set(99999, -1000, 99999);
-                                obs.mesh.visible = false;
-                                obs.mesh.updateMatrixWorld(true);
-                            }
-
-                            // 4. Ta bort den från legacy-arrayen
-                            _obsArray[i] = _obsArray[_obsArray.length - 1];
-                            _obsArray.pop();
-                            break;
-                        }
-                    }
-                }
-                (sectorState.ctx as any).busObjectIdx = undefined;
-
-                // --- 3. ACTIVATE PRE-ALLOCATED RUBBLE ---
-                sectorState.busRubble = (sectorState.ctx as any).busRubble;
-
-                if (sectorState.busRubble) {
-                    const rMesh = sectorState.busRubble;
-                    rMesh.position.set(_busOriginalPos.x, _busOriginalPos.y, _busOriginalPos.z);
-                    rMesh.visible = true;
-                    rMesh.userData.active = true;
-                    if (rMesh.userData.hasLanded) rMesh.userData.hasLanded.fill(0);
-
-                    const data = rMesh.userData;
-                    for (let i = 0; i < rMesh.count; i++) {
-                        const ix = i * 3;
-
-                        // [SPRIDNINGS-FIX] 
-                        // -Math.PI / 2 pekar rakt söderut (-Z, bort från tunneln). 
-                        // Vi sprider dem slumpmässigt +/- 80 grader åt väster och öster.
-                        const arcAngle = -Math.PI / 2 + (Math.random() - 0.5) * (Math.PI * 0.9);
-                        const power = 1.0 + Math.random();
-
-                        const dirX = Math.cos(arcAngle) * power;
-                        const dirZ = Math.sin(arcAngle) * power;
-                        const dirY = 1.0 + Math.random() * 1.5;
-                        const speed = 15 + Math.random() * 20;
-                        _v1.set(dirX, dirY, dirZ).normalize().multiplyScalar(speed);
-
-                        data.velocities[ix] = _v1.x;
-                        data.velocities[ix + 1] = _v1.y;
-                        data.velocities[ix + 2] = _v1.z;
-
-                        // Resetta positionerna relativt till _busOriginalPos
-                        data.positions[ix] = (Math.random() - 0.5) * 4;
-                        data.positions[ix + 1] = 2 + Math.random() * 2;
-                        data.positions[ix + 2] = (Math.random() - 0.5) * 4;
-                    }
-                }
-                sectorState.lastMetalImpactTime = 0;
+                sectorState.busExploded = true;
             }
         }
 
-        // State 8: Explosion physics and post-explosion events
+        // State 8: Explosion physics and post-explosion timer
         else if (sectorState.busEventState === 8) {
-            const elapsed = renderTime - sectorState.busEventTimer;
+            const elapsed = simTime - sectorState.busEventTimer;
 
-            // FIX: dt är redan i sekunder, rör inte denna!
-            const dtSec = dt;
+            // PHYSICS UPDATE
+            explodeBus(dt, renderTime, gameState, sectorState, events);
 
-            let transitionToState9 = false;
-
-            // Animate rubble physics using TypedArrays
-            if (sectorState.busRubble && sectorState.busRubble.userData.active) {
-                const rubble = sectorState.busRubble;
-                const rubbleWeight = 100;
-                const data = rubble.userData;
-                let stillMoving = false;
-
-                for (let i = 0; i < rubble.count; i++) {
-                    const ix = i * 3;
-
-                    const isAboveGround = data.positions[ix + 1] > 0.5;
-                    const hasVelY = Math.abs(data.velocities[ix + 1]) > 0.1;
-                    const hasVelX = Math.abs(data.velocities[ix]) > 0.1;
-                    const hasVelZ = Math.abs(data.velocities[ix + 2]) > 0.1;
-
-                    if (isAboveGround || hasVelY || hasVelX || hasVelZ) {
-                        stillMoving = true;
-
-                        // [VINTERDÖD FIX] Cap delta time to prevent physics explosions on lag spikes
-                        const safeDt = Math.min(dtSec, 0.05);
-
-                        data.velocities[ix + 1] -= rubbleWeight * safeDt; // Gravity
-
-                        data.positions[ix] += data.velocities[ix] * safeDt;
-                        data.positions[ix + 1] += data.velocities[ix + 1] * safeDt;
-                        data.positions[ix + 2] += data.velocities[ix + 2] * safeDt;
-
-                        if (data.positions[ix + 1] <= 0.5) {
-                            data.positions[ix + 1] = 0.5;
-
-                            data.velocities[ix] *= 0.6; // Mindre dämpning för att tillåta glidning
-                            data.velocities[ix + 2] *= 0.6;
-                            data.velocities[ix + 1] *= -0.4; // Dampened bounce
-
-                            data.spin[ix] *= 0.5;
-                            data.spin[ix + 1] *= 0.5;
-                            data.spin[ix + 2] *= 0.5;
-
-                            if (Math.abs(data.velocities[ix + 1]) < 1.0) data.velocities[ix + 1] = 0;
-                            if (Math.abs(data.velocities[ix]) < 0.2) data.velocities[ix] = 0;
-                            if (Math.abs(data.velocities[ix + 2]) < 0.2) data.velocities[ix + 2] = 0;
-
-                            if (data.hasLanded && !data.hasLanded[i] && events.playSound) {
-                                data.hasLanded[i] = 1;
-                                if (renderTime - sectorState.lastMetalImpactTime > 80) {
-                                    sectorState.lastMetalImpactTime = renderTime;
-                                    events.playSound(SoundID.IMPACT_METAL);
-                                }
-                            }
-                        }
-
-                        data.rotations[ix] += data.spin[ix] * safeDt;
-                        data.rotations[ix + 1] += data.spin[ix + 1] * safeDt;
-                        data.rotations[ix + 2] += data.spin[ix + 2] * safeDt;
-
-                        _position.set(data.positions[ix], data.positions[ix + 1], data.positions[ix + 2]);
-                        _rotation.set(data.rotations[ix], data.rotations[ix + 1], data.rotations[ix + 2]);
-                        _quat.setFromEuler(_rotation);
-
-                        // [VINTERDÖD FIX] Återställ rätt rektangulära proportioner från ObjectGenerator istället för att platta till!
-                        const s = data.scales ? data.scales[i] : 1.0;
-                        _scale.set(1.5 * s, 0.05 * s, 3.0 * s);
-
-                        _matrix.compose(_position, _quat, _scale);
-                        rubble.setMatrixAt(i, _matrix);
-                    }
-                }
-
-                rubble.instanceMatrix.needsUpdate = true;
-
-                if (!stillMoving || elapsed > 10000) {
-                    data.active = false;
-                    transitionToState9 = true;
-                }
-            } else if (elapsed > 2000) {
-                transitionToState9 = true;
-            }
-
-            if (transitionToState9) {
+            if (elapsed > 10000 || (!sectorState.busRubble?.userData.active)) {
                 sectorState.busEventState = 9;
                 sectorState.busEventTimer = simTime;
 
@@ -1210,8 +1258,8 @@ export const Sector0: SectorDef = {
                 // Activate the found_loke trigger
                 const lokeTrigger = gameState.triggers?.find((t: any) => t.id === 'found_loke');
                 if (lokeTrigger) {
-                    lokeTrigger.statusFlags = TriggerStatus.ACTIVE | TriggerStatus.ONCE;
-                    lokeTrigger.triggered = false; // Ensure it fires fresh
+                    lokeTrigger.statusFlags |= TriggerStatus.ACTIVE;
+                    lokeTrigger.triggered = false; // Maintain boolean compatibility
                 }
             }
         }

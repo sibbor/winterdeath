@@ -310,9 +310,41 @@ const App: React.FC = () => {
         });
     }, []);
 
-    const handleDialogueStateChangeAction = useCallback((val: boolean) => setActiveOverlay(val ? 'DIALOGUE' : null), []);
-    const handleDeathStateChangeAction = useCallback((val: boolean) => setActiveOverlay(val ? 'DEATH' : null), []);
-    const handleBossIntroStateChangeAction = useCallback((val: boolean) => setActiveOverlay(val ? 'INTRO' : null), []);
+    const handleDialogueStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? 'DIALOGUE' : null), []);
+    const handleDeathStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? 'DEATH' : null), []);
+    const handleBossIntroStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? 'INTRO' : null), []);
+
+    const handleBossDefeatedAction = useCallback((bossId: number) => {
+        setGameState(prev => {
+            if (prev.deadBossIndices.includes(prev.currentSector)) return prev;
+
+            return {
+                ...prev,
+                deadBossIndices: [...prev.deadBossIndices, prev.currentSector],
+                stats: {
+                    ...prev.stats,
+                    skillPoints: prev.stats.skillPoints + 1,
+                    totalSkillPointsEarned: prev.stats.totalSkillPointsEarned + 1
+                }
+            };
+        });
+    }, []);
+
+    const handleFamilyRescuedAction = useCallback((familyId: number) => {
+        setGameState(prev => {
+            if (prev.rescuedFamilyIndices.includes(prev.currentSector)) return prev;
+
+            return {
+                ...prev,
+                rescuedFamilyIndices: [...prev.rescuedFamilyIndices, prev.currentSector],
+                stats: {
+                    ...prev.stats,
+                    skillPoints: prev.stats.skillPoints + 1,
+                    totalSkillPointsEarned: prev.stats.totalSkillPointsEarned + 1
+                }
+            };
+        });
+    }, []);
 
     const handleUpdateLoadoutAction = useCallback((loadout: any, levels: any) => {
         setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));
@@ -489,31 +521,14 @@ const App: React.FC = () => {
     const aggregatePendingStats = useCallback(() => {
         if (!sectorStats) return;
         setGameState(prev => {
-            let newUniqueAchievements = 0;
-            const bossKilled = sectorStats.killsByType && (
-                (sectorStats.killsByType['Boss'] || 0) > 0 ||
-                (sectorStats.killsByType[DataResolver.getBossName(prev.currentSector)] || 0) > 0
-            );
-
-            const newBosses = [...prev.deadBossIndices];
-            if (bossKilled && !prev.deadBossIndices.includes(prev.currentSector)) {
-                newBosses.push(prev.currentSector);
-                newUniqueAchievements++;
-            }
-
-            const newFamily = [...prev.rescuedFamilyIndices];
-            if ((sectorStats.familyFound || bossKilled) && !prev.rescuedFamilyIndices.includes(prev.currentSector)) {
-                newFamily.push(prev.currentSector);
-                newUniqueAchievements++;
-            }
-
-            const newStats = aggregateStats(prev.stats, sectorStats, !!deathDetails, !!sectorStats.aborted, newUniqueAchievements);
+            // VINTERDÖD FIX: Unique achievements (Boss/Family) are now awarded immediately during gameplay.
+            // We pass 0 as newUniqueAchievements to aggregateStats to reflect this shift.
+            const newStats = aggregateStats(prev.stats, sectorStats, !!deathDetails, !!sectorStats.aborted, 0);
 
             return {
                 ...prev,
-                stats: newStats,
-                deadBossIndices: newBosses,
-                rescuedFamilyIndices: newFamily
+                stats: newStats
+                // Indices are already updated in real-time
             };
         });
         setSectorStats(null);
@@ -801,6 +816,8 @@ const App: React.FC = () => {
                                     isMobileDevice={isMobileDevice}
                                     weather={gameState.weather}
                                     sectorState={gameState.sectorState}
+                                    onBossKilled={handleBossDefeatedAction}
+                                    onFamilyRescued={handleFamilyRescuedAction}
                                 />
 
                                 {showHUD && (

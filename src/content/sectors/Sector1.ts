@@ -13,6 +13,7 @@ import { SoundID } from '../../utils/audio/AudioTypes';
 import { CAMERA_HEIGHT } from '../constants';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
+import { FamilyMemberID } from '../constants';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
 
 const _vS1 = new THREE.Vector3(); // Zero-GC Scratchpad
@@ -173,7 +174,6 @@ export const Sector1: SectorDef = {
     groundSize: { width: 600, depth: 600 },
     ambientLoop: SoundID.AMBIENT_STORM,
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
-    familySpawn: LOCATIONS.SPAWN.FAMILY,
     bossSpawn: LOCATIONS.SPAWN.BOSS,
     collectibles: [
         { id: 's1_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
@@ -283,6 +283,9 @@ export const Sector1: SectorDef = {
         PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(157, 0, -58), new THREE.Vector3(150, 0, -63), new THREE.Vector3(147, 0, -71), new THREE.Vector3(135, 0, -75), new THREE.Vector3(122, 0, -78), new THREE.Vector3(110, 0, -76), new THREE.Vector3(100, 0, -80)
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
+
+        // Jordan - Inside the shelter, not following yet
+        SectorBuilder.spawnFamily(ctx, FamilyMemberID.JORDAN, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, visible: false });
     },
 
     setupContent: async (ctx: SectorContext) => {
@@ -470,7 +473,7 @@ export const Sector1: SectorDef = {
                             isMoving: true, isRushing: false, isDodging: false, dodgeStartTime: 0,
                             staminaRatio: 1.0, isSpeaking: gameState.speakingUntil > simTime,
                             isThinking: false, isIdleLong: false, isSwimming: false, isWading: false,
-                            seed: jordan.userData.seed || 0, 
+                            seed: jordan.userData.seed || 0,
                             renderTime: renderTime,
                             simTime: simTime
                         }, renderTime);
@@ -506,7 +509,7 @@ export const Sector1: SectorDef = {
                     // NU, när dörren är stängd, skickar vi the globala händelserna!
                     if (events.onAction) {
                         events.onAction([
-                            { type: 'FAMILY_MEMBER_FOUND', payload: { name: 'Jordan', id: 1 } },
+                            { type: 'FAMILY_MEMBER_FOUND', payload: { id: FamilyMemberID.JORDAN } },
                             { type: 'FAMILY_MEMBER_FOLLOW' },
                             { type: 'SPAWN_BOSS', payload: { pos: LOCATIONS.SPAWN.BOSS } }
                         ]);

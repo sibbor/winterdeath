@@ -15,7 +15,7 @@ import { SectorTrigger, TriggerType, TriggerAction, TriggerStatus } from '../../
 import { WaterBodyType, WaterBody } from '../../systems/WaterSystem';
 import { GEOMETRY } from '../../utils/assets';
 import { WinterEngine } from '../engine/WinterEngine';
-import { LIGHT_SYSTEM } from '../../content/constants';
+import { LIGHT_SYSTEM, FAMILY_MEMBERS, FamilyMemberID } from '../../content/constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
 import { POI_TYPE } from '../../content/pois';
@@ -187,6 +187,7 @@ export const SectorBuilder = {
             textures: {} as any,
             sectorState: {} as any,
             state: {} as any,
+            activeFamilyMembers: [],
             yield: yieldFn ?? (() => new Promise<void>(resolve => setTimeout(resolve, 0))),
             spawnZombie: NOOP as any,
             spawnHorde: NOOP as any,
@@ -1341,6 +1342,57 @@ export const SectorBuilder = {
         });
 
         return terminal;
+    },
+
+    spawnFamily: (ctx: SectorContext, id: FamilyMemberID, x: number, z: number, rotation: number = 0, opts?: { following?: boolean, found?: boolean, visible?: boolean }) => {
+        const fmData = FAMILY_MEMBERS.find(f => f.id === id);
+        if (!fmData) return null;
+
+        const mesh = ModelFactory.createFamilyMember(fmData);
+        mesh.position.set(x, 0, z);
+        mesh.rotation.y = rotation;
+        mesh.userData.id = id;
+        mesh.userData.name = fmData.name;
+        mesh.userData.isFamilyMember = true;
+        mesh.visible = opts?.visible !== false;
+
+        // VINTERDÖD: Pulsing marker ring
+        const markerGroup = new THREE.Group();
+        markerGroup.userData.isRing = true;
+        markerGroup.position.y = 0.2;
+
+        const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
+        const fillMat = MATERIALS.familyRingFill.clone();
+        fillMat.color.set(darkColor);
+        const fill = new THREE.Mesh(GEOMETRY.familyRingFill, fillMat);
+        markerGroup.add(fill);
+
+        const borderMat = MATERIALS.familyRingBorder.clone();
+        borderMat.color.set(fmData.color);
+        const border = new THREE.Mesh(GEOMETRY.familyRingBorder, borderMat);
+        markerGroup.add(border);
+        mesh.add(markerGroup);
+
+        ctx.scene.add(mesh);
+
+        const memberObj = {
+            mesh,
+            found: opts?.found !== false, 
+            following: opts?.following === true,
+            rescued: opts?.found !== false, 
+            name: fmData.name,
+            id: fmData.id,
+            scale: fmData.scale,
+            seed: Math.random() * 100,
+            ring: markerGroup,
+            spawnPos: mesh.position.clone()
+        };
+
+        if (ctx.activeFamilyMembers) {
+            ctx.activeFamilyMembers.push(memberObj);
+        }
+
+        return mesh;
     }
 
 };

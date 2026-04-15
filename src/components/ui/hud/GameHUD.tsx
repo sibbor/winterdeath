@@ -11,6 +11,7 @@ import DamageVignette from './DamageVignette';
 import DiscoveryPopup from './DiscoveryPopup';
 import InteractionPrompt from './InteractionPrompt';
 import { InteractionType } from '../../../systems/InteractionTypes';
+import { FamilyMemberID } from '../../../content/constants';
 
 interface GameHUDProps {
     loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
@@ -22,16 +23,6 @@ interface GameHUDProps {
     onToggleMap?: () => void;
     onSelectWeapon?: (slot: string) => void;
     onRotateCamera?: (dir: number) => void;
-}
-
-// --- ENUMS FOR TYPE SAFETY ---
-export enum FamilyMember {
-    LOKE = 'LOKE',
-    JORDAN = 'JORDAN',
-    ESMERALDA = 'ESMERALDA',
-    NATHALIE = 'NATHALIE',
-    SOTIS = 'SOTIS',
-    PANTER = 'PANTER'
 }
 
 // --- PERFORMANCE: Static CSS ---
@@ -59,12 +50,14 @@ const getStatusIcon = (type: StatusEffectType | string) => {
 };
 
 const getPassiveIcon = (type: StatusEffectType | string) => {
-    // Special cases for pets (which might still be names)
+    // Special cases for pets (which might still be names or IDs)
     if (typeof type === 'string') {
         const n = type.toUpperCase();
-        if (n === 'SOTIS' || n === 'PANTER') return '🐱';
         return getStatusIcon(n);
     }
+
+    // Direct enum lookup for FamilyMemberID (if passed as an ID)
+    //if (type === FamilyMemberID.SOTIS || type === FamilyMemberID.PANTER) return '🐱';
 
     // Direct enum lookup
     return DataResolver.getPerks()[type]?.icon || '❓';
@@ -157,7 +150,7 @@ const VitalsPanel = React.memo(({ isMobileDevice, isBossIntro, hpBarRef, hpTextR
                 <div className="h-full bg-purple-900/20 relative">
                     <div ref={stBarRef} className="w-full h-full bg-[#a855f7] origin-left will-change-transform hud-bar-glow" style={{ transform: 'scaleX(0)' }} />
                     <div className="absolute inset-0 flex items-center justify-start px-2 opacity-40 pointer-events-none">
-                         <span ref={stTextRef} className="text-[8px] text-white font-mono font-bold uppercase">STAMINA</span>
+                        <span ref={stTextRef} className="text-[8px] text-white font-mono font-bold uppercase">STAMINA</span>
                     </div>
                 </div>
             </div>
@@ -248,15 +241,15 @@ const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro, scrapTextRef, s
     return (
         <div className={`flex flex-col gap-3 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
             {/* SCRAP BOX (CampHUD Style) */}
-            <div ref={scrapBoxRef} 
-                 className={`${size} aspect-square border bg-yellow-950/80 border-yellow-700 shadow-[0_0_15px_rgba(234,179,8,0.2)] flex flex-col items-center justify-center gap-0 transition-all pointer-events-auto`}>
+            <div ref={scrapBoxRef}
+                className={`${size} aspect-square border bg-yellow-950/80 border-yellow-700 shadow-[0_0_15px_rgba(234,179,8,0.2)] flex flex-col items-center justify-center gap-0 transition-all pointer-events-auto`}>
                 <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold text-yellow-500 leading-tight`}>{t('ui.scrap')}</span>
                 <span ref={scrapTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-yellow-500 leading-none`}>0</span>
             </div>
 
             {/* SP BOX (CampHUD Style) */}
-            <div ref={spBoxRef} 
-                 className={`${size} aspect-square border bg-purple-950/80 border-purple-700 shadow-[0_0_15px_rgba(168,85,247,0.2)] flex flex-col items-center justify-center gap-0 transition-all pointer-events-auto`}>
+            <div ref={spBoxRef}
+                className={`${size} aspect-square border bg-purple-950/80 border-purple-700 shadow-[0_0_15px_rgba(168,85,247,0.2)] flex flex-col items-center justify-center gap-0 transition-all pointer-events-auto`}>
                 <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold text-purple-500 leading-tight`}>{t('ui.sp')}</span>
                 <span ref={spTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-purple-500 leading-none`}>0</span>
             </div>
@@ -311,10 +304,10 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
         <div className={`absolute ${isMobileDevice ? 'bottom-4' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
             {interactionActive && interactionType !== InteractionType.NONE && (
                 <div className="mb-4 animate-in fade-in slide-in-from-bottom-2 duration-300 pointer-events-auto">
-                    <InteractionPrompt 
-                        type={interactionType} 
-                        label={interactionLabel} 
-                        isMobileDevice={isMobileDevice} 
+                    <InteractionPrompt
+                        type={interactionType}
+                        label={interactionLabel}
+                        isMobileDevice={isMobileDevice}
                         onInteract={(active) => HudStore.triggerInteraction(active)}
                     />
                 </div>
@@ -487,8 +480,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             if (ammoTextRef.current) {
                 const activeId = HudStore.getState().activeWeapon;
                 const wep = DataResolver.getWeapons()[activeId];
-                const val = wep?.isEnergy 
-                    ? Math.floor(data.ammo) + '%' 
+                const val = wep?.isEnergy
+                    ? Math.floor(data.ammo) + '%'
                     : data.ammo.toString();
 
                 if (ammoTextRef.current.innerText !== val) {
@@ -551,7 +544,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         // Reset to theme base (Zero-GC bypass for 60fps responsiveness)
                         scrapBoxRef.current.style.backgroundColor = 'rgba(66, 32, 6, 0.8)'; // dark yellow
                         scrapBoxRef.current.style.borderColor = '#a16207'; // yellow-700
- 
+
                         UiSounds.playPickUp();
                     }
                 }
@@ -568,7 +561,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
                         spBoxRef.current.style.backgroundColor = 'rgba(88, 28, 135, 0.8)'; // dark purple
                         spBoxRef.current.style.borderColor = '#7e22ce'; // purple-700
- 
+
                         UiSounds.playPickUp();
                     }
                 }
