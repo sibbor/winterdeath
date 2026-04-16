@@ -24,6 +24,7 @@ import { DataResolver } from '../../utils/ui/DataResolver';
 import { VehicleManager } from '../../systems/VehicleManager';
 import { InteractionType } from '../../systems/InteractionTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
+import { NavigationSystem } from '../../systems/NavigationSystem';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -541,8 +542,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         monitor.begin('session_update');
         if (playerGroup) {
             session.playerPos = playerGroup.position;
-            // VINTERDÖD DOD FIX: Sync player pos to sound manager for positional culling/attenuation
-            // Removed spatial ref hackplayerGroup.position);
+            
+            // VINTERDÖD: Update the hardened navigation grid
+            NavigationSystem.update(playerGroup.position, simTime);
         }
 
         session.update(delta, propsRef.current.mapId || 0);

@@ -22,6 +22,7 @@ import { POI_TYPE } from '../../content/pois';
 import { FootprintSystem } from '../../systems/FootprintSystem';
 import { PoiGenerator } from './generators/PoiGenerator';
 import { InteractionType } from '../../systems/InteractionTypes';
+import { NavigationSystem } from '../../systems/NavigationSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1_sg = new THREE.Vector3();
@@ -230,8 +231,18 @@ export const SectorBuilder = {
 
         if (def.setupProps) await def.setupProps(ctx);
         if (def.setupContent) await def.setupContent(ctx);
-        if (def.setupZombies) await def.setupZombies(ctx);
-        if (def.generate) await def.generate(ctx); // Legacy fallback
+        
+        // VINTERDÖD: Skip expensive entity and system initialization during asset warmup
+        if (!ctx.isWarmup) {
+            if (def.setupZombies) await def.setupZombies(ctx);
+            if (def.generate) await def.generate(ctx); // Legacy fallback
+
+            // VINTERDÖD: Final world discovery - find all Ground_* meshes for the footprint system
+            FootprintSystem.init(ctx.scene);
+
+            // VINTERDÖD: Final block - initialize the Navigation FlowField grid
+            NavigationSystem.init(ctx);
+        }
 
         // ========================================================
         // VINTERDÖD AUTOMAGIC DEBUGGER (Zero memory overhead in production)
@@ -240,9 +251,6 @@ export const SectorBuilder = {
             const { DebugVisualizer } = await import('../../utils/DebugVisualizer');
             DebugVisualizer.visualizeSector(ctx, def);
         }
-
-        // VINTERDÖD: Final world discovery - find all Ground_* meshes for the footprint system
-        FootprintSystem.init(ctx.scene);
     },
 
     generateGround: async (ctx: SectorContext, type: 'SNOW' | 'GRAVEL' | 'DIRT', size: { width: number, depth: number }) => {

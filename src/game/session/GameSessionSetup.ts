@@ -352,6 +352,7 @@ export class GameSessionSetup {
             collectibles: [], dynamicLights: [], interactables: [], sectorId: props.currentSector, smokeEmitters: [],
             sectorState: state.sectorState, state: state, activeFamilyMembers: ctx.refs.activeFamilyMembers.current, yield: yielder,
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => ctx.session.makeNoise(pos, type, radius),
+            isWarmup: props.isWarmup,
 
             // --- VINTERDÖD FIX: Injecting the generic bridge into the sector events API ---
             onAction: callbacks.onAction

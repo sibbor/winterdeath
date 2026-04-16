@@ -22,6 +22,8 @@ import { EnemyAnimator } from './EnemyAnimator';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
+import { NavigationSystem } from '../../systems/NavigationSystem';
+import { applyCollisionResolution } from '../../core/world/CollisionResolution';
 
 const _waterCheckResult = { flatDepth: 0 };
 
@@ -791,61 +793,71 @@ export const EnemyAI = {
 
 // --- HELPERS ---
 function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid, sepForce: THREE.Vector3, simTime: number, renderTime: number, isChasing: boolean, isTier1: boolean, isTier2: boolean, frameOffset: number) {
-    _v1.set(target.x, e.mesh.position.y, target.z);
-    _v2.subVectors(_v1, e.mesh.position);
-    const dist = _v2.length();
-    if (dist < 0.01) return;
+    // 1. NAVIGATION: Get desired steering vector from FlowField
+    NavigationSystem.getFlowVector(e.mesh.position.x, e.mesh.position.z, _v1);
 
-    // Normalize directional vector
-    const invDist = 1.0 / dist;
-    _v2.x *= invDist;
-    _v2.y *= invDist;
-    _v2.z *= invDist;
+    // Fallback to straight-line to target if outside flow grid or target reached
+    if (_v1.x === 0 && _v1.z === 0) {
+        _v1.set(target.x, e.mesh.position.y, target.z);
+        _v1.sub(e.mesh.position);
+        _v1.y = 0;
+        const distSq = _v1.lengthSq();
+        if (distSq > 0.0001) _v1.normalize();
+    }
 
-    // Apply Status Effect Slows (50% reduction)
+    // 2. STATUS EFFECTS: Apply Slows (50% reduction)
     if (e.slowDuration > 0 || (e.statusFlags & EnemyFlags.SLOWED) !== 0) {
         speed *= 0.5;
     }
 
-    // 2. Set Base Velocity Vector
-    _v3.copy(_v2).multiplyScalar(speed);
+    // 3. SET BASE VELOCITY (Steering Vector * Target Speed)
+    _v3.copy(_v1).multiplyScalar(speed);
 
-    // 3. Apply Separation Force (if any)
+    // 4. SEPARATION: Apply push force from neighboring enemies
     if (Math.abs(sepForce.x) > 0.001 || Math.abs(sepForce.z) > 0.001) {
         _v3.addScaledVector(sepForce, 1.2);
 
-        // ZERO-GC CLAMP: Prevent "Crowd Surfing"
+        // CLAMP: Prevent "Crowd Surfing" at high density
         if (_v3.lengthSq() > speed * speed) {
             _v3.normalize().multiplyScalar(speed);
         }
     }
 
-    // Save actual physics velocity for other systems
+    // Save actual physics velocity for other systems (FX, ragdolls)
     e.velocity.copy(_v3);
 
-    // 4. Convert velocity to frame delta displacement
+    // 5. DISPLACEMENT: Velocity -> Frame Delta
     _v3.multiplyScalar(delta);
 
+    // New Trial position (_v4)
     _v4.set(
         e.mesh.position.x + _v3.x,
         e.mesh.position.y + _v3.y,
         e.mesh.position.z + _v3.z
     );
 
-    // 5. ANIMATION & ROTATION
-    if (isChasing) e.mesh.rotation.y = Math.atan2(_v2.x, _v2.z);
-    else e.mesh.rotation.y = THREE.MathUtils.lerp(e.mesh.rotation.y, Math.atan2(_v2.x, _v2.z), 5 * delta);
+    // 6. COLLISION RESOLUTION: Harden path against world obstacles
+    // Use Tier-based distance to optimize collision query
+    // TODO: accept a "scratchpad-array" as an argument
+    // (ex: collisionGrid.getNearbyObstacles(_v4, 4.0, _reusableArray))
+    const nearbyObs = collisionGrid.getNearbyObstacles(_v4, 4.0);
+    const rad = (e.originalScale || 1.0) * (e.widthScale || 1.0) * 0.5;
+    for (let i = 0; i < nearbyObs.length; i++) {
+        applyCollisionResolution(_v4, rad, nearbyObs[i]);
+    }
+
+    // 7. ANIMATION & ROTATION
+    // Steering direction (_v1) is already normalized and reliable for rotation
+    if (isChasing) e.mesh.rotation.y = Math.atan2(_v1.x, _v1.z);
+    else e.mesh.rotation.y = THREE.MathUtils.lerp(e.mesh.rotation.y, Math.atan2(_v1.x, _v1.z), 5 * delta);
 
     const speedRatio = speed / (e.speed || 1);
     const animFreq = isChasing ? 0.055 * speedRatio : 0.035 * speedRatio;
     const bounceOffset = Math.abs(Math.sin(renderTime * animFreq)) * 0.12;
 
-    const baseScale = e.originalScale;
-    const widthScale = e.widthScale;
-
     const hijackY = e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING;
     if ((e.statusFlags & EnemyFlags.AIRBORNE) === 0 && !hijackY) {
-        _v4.y = (1.0 * baseScale) + bounceOffset;
+        _v4.y = (1.0 * (e.originalScale || 1.0)) + bounceOffset;
     }
 
     e.mesh.position.copy(_v4);
