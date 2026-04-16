@@ -396,7 +396,7 @@ const App: React.FC = () => {
     }, []);
 
     const handleOpenStatisticsAction = useCallback((tab?: string, itemId?: string) => {
-        setInitialStatisticsTab(tab || 'statistics');
+        setInitialStatisticsTab(tab || 'overview');
         setInitialStatisticsItem(itemId || null);
         setActiveOverlay('STATION_STATISTICS');
         UiSounds.playConfirm();

@@ -149,8 +149,8 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                                         whitespace-nowrap md:whitespace-normal snap-center 
                                         flex flex-col justify-center items-start 
                                         border-2 border-zinc-700 transition-all duration-200
-                                        ${locked ? 'opacity-50 cursor-not-allowed bg-black text-zinc-600' : 'cursor-pointer hover:bg-zinc-900 hover:scale-[1.02] active:scale-95'}
-                                        ${isSel && !locked ? 'text-white animate-tab-pulsate' : (locked ? '' : 'bg-black text-zinc-400')}
+                                        ${locked ? 'opacity-50 cursor-not-allowed bg-transparent text-zinc-600' : 'cursor-pointer hover:bg-white/5 hover:scale-[1.02] active:scale-95'}
+                                        ${isSel && !locked ? 'text-white animate-tab-pulsate' : (locked ? '' : 'bg-transparent text-zinc-400')}
                                         ${!effectiveLandscape ? 'min-w-[120px] py-3 px-4' : 'mx-2'}
     `}
                                     style={isSel && !locked ? {

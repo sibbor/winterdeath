@@ -417,7 +417,7 @@ export const TacticalTab: React.FC<{
     className?: string
 }> = React.memo(({ label, isActive, onClick, orientation = 'horizontal', className = '' }) => {
     const baseStyle = "px-6 py-2 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700 relative overflow-hidden group/tab font-bold uppercase tracking-widest transition-all";
-    const activeStyle = isActive ? "text-white animate-tab-pulsate border-white" : "bg-black text-zinc-400 hover:bg-zinc-900 border-zinc-700";
+    const activeStyle = isActive ? "text-white animate-tab-pulsate border-white" : "bg-transparent text-zinc-400 hover:bg-white/5 border-zinc-700";
     const orientationStyle = orientation === 'vertical' ? "w-full text-left p-4 md:p-6 text-xl tracking-wider mx-2" : "text-[10px] md:text-lg";
 
     return (

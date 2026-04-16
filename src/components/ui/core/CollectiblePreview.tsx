@@ -5,6 +5,7 @@ import { ModelFactory } from '../../../utils/assets';
 interface CollectiblePreviewProps {
     type: string;
     isLocked?: boolean;
+    autoReady?: boolean;
 }
 
 /**
@@ -46,10 +47,10 @@ const disposeMaterialTextures = (material: THREE.Material) => {
     if (m.envMap) m.envMap.dispose();
 };
 
-const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked }) => {
+const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked, autoReady }) => {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [isVisible, setIsVisible] = useState(false);
-    const [isReady, setIsReady] = useState(false);
+    const [isVisible, setIsVisible] = useState(autoReady || false);
+    const [isReady, setIsReady] = useState(autoReady || false);
 
     // [VINTERDÖD] Optimization: Use refs for THREE objects to ensure they are 
     // preserved during visibility changes but disposed of correctly on unmount.
@@ -60,21 +61,22 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
     const groupRef = useRef<THREE.Group | null>(null);
 
     useEffect(() => {
-        if (!containerRef.current) return;
+        if (!containerRef.current || autoReady) return;
         const observer = new IntersectionObserver(
             ([entry]) => setIsVisible(entry.isIntersecting),
             { threshold: 0.1 }
         );
         observer.observe(containerRef.current);
         return () => observer.disconnect();
-    }, []);
+    }, [autoReady]);
 
     useEffect(() => {
+        if (autoReady) return;
         if (isVisible && !isLocked) {
             const timer = setTimeout(() => setIsReady(true), 150);
             return () => clearTimeout(timer);
         }
-    }, [isVisible, isLocked]);
+    }, [isVisible, isLocked, autoReady]);
 
     // --- THREE.js INITIALIZATION ---
     useEffect(() => {

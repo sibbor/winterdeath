@@ -26,28 +26,37 @@ const TYPE_CONFIG = [
 
 const DEFAULT_CONFIG = TYPE_CONFIG[0];
 
-const InteractionPrompt: React.FC<InteractionPromptProps> = React.memo(({
-    type,
-    label,
+const InteractionPrompt = React.forwardRef<any, InteractionPromptProps>(({
     isMobileDevice,
     onInteract
-}) => {
-    if (type === InteractionType.NONE) return null;
+}, ref) => {
+    const labelRef = React.useRef<HTMLSpanElement>(null);
+    const containerRef = React.useRef<HTMLDivElement>(null);
+
+    React.useImperativeHandle(ref, () => ({
+        update: (type: InteractionType, label: string) => {
+            if (!labelRef.current || !containerRef.current) return;
+            
+            const config = TYPE_CONFIG[type] || DEFAULT_CONFIG;
+            const textKey = label ? label : config.key;
+            
+            let translatedText = t(textKey);
+            if (!translatedText || translatedText.trim() === '') {
+                translatedText = textKey;
+            }
+            
+            if (labelRef.current.innerText !== translatedText) {
+                labelRef.current.innerText = translatedText;
+            }
+
+            // Update color classes via direct className manipulation
+            // Note: We're replacing the specific border/text colors
+            const baseClass = "hud-bar-container bg-black/80 backdrop-blur-md px-4 py-2 border flex items-center gap-3 shadow-2xl";
+            containerRef.current.className = `${baseClass} ${config.color}`;
+        }
+    }));
 
     const inputKey = isMobileDevice ? "TAP" : "E";
-
-    // Select color and default text key based on interaction type
-    const config = TYPE_CONFIG[type] || DEFAULT_CONFIG;
-
-    // Overrides logic: If a label is explicitly provided by the game system, ALWAYS use it
-    const textKey = label ? label : config.key;
-    const colorClass = config.color;
-
-    // Failsafe: If i18n cannot find the word, show 'textKey' instead of an empty text box
-    let translatedText = t(textKey);
-    if (!translatedText || translatedText.trim() === '') {
-        translatedText = textKey;
-    }
 
     // Handle touch for engine-level edge detection
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -76,12 +85,12 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = React.memo(({
             onTouchStart={isMobileDevice ? handleTouchStart : undefined}
             onTouchEnd={isMobileDevice ? handleTouchEnd : undefined}
         >
-            <div className={`hud-bar-container bg-black/80 backdrop-blur-md px-4 py-2 border flex items-center gap-3 shadow-2xl ${colorClass}`}>
+            <div ref={containerRef} className={`hud-bar-container bg-black/80 backdrop-blur-md px-4 py-2 border flex items-center gap-3 shadow-2xl ${DEFAULT_CONFIG.color}`}>
                 <span className="w-6 h-6 flex items-center justify-center bg-white/20 border border-white/40 text-[10px] font-black text-white">
                     {inputKey}
                 </span>
-                <span className="text-xs font-black tracking-widest uppercase hud-text-glow">
-                    {translatedText}
+                <span ref={labelRef} className="text-xs font-black tracking-widest uppercase hud-text-glow">
+                    {t(DEFAULT_CONFIG.key)}
                 </span>
             </div>
         </div>

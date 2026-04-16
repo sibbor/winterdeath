@@ -9,7 +9,8 @@ import { InteractionType } from '../systems/InteractionTypes';
 // preventing "cannot read property x of null" errors.
 // ============================================================================
 const INITIAL_HUD_STATE: HudState = {
-    statsBuffer: new Float32Array(32), // Safety buffer size
+    statsBuffer: new Float32Array(64), // Expanded for Phase 12
+    vectorBuffer: new Float32Array(256), // 128 entities (x, z pairs)
     statusFlags: 0,
     hp: 100,
     maxHp: 100,
@@ -87,6 +88,7 @@ const INITIAL_HUD_STATE: HudState = {
 };
 
 type Listener = (state: HudState) => void;
+export type HudFastUpdateListener = (data: any) => void;
 
 class HudStoreClass {
     private state: HudState = INITIAL_HUD_STATE;
@@ -95,6 +97,8 @@ class HudStoreClass {
     // otherwise React's shallow checks skip re-renders for lists.
     private standbyState: HudState = {
         ...INITIAL_HUD_STATE,
+        statsBuffer: new Float32Array(64),
+        vectorBuffer: new Float32Array(256),
         statusEffects: [],
         activePassives: [],
         activeBuffs: [],
@@ -103,6 +107,7 @@ class HudStoreClass {
         systems: []
     };
     private listeners: Listener[] = [];
+    private fastListeners: HudFastUpdateListener[] = [];
 
     /**
      * Updates the store with a completely new HUD buffer.
@@ -179,10 +184,40 @@ class HudStoreClass {
     }
 
     /**
-     * Trigger a virtual key event (e.g. for mobile interaction taps).
-     * Dispatches a global event that the InputManager listens for.
+     * Subscribes to high-frequency (120FPS) telemetry updates.
+     * ZERO-GC: Bypasses React and the browser event bus entirely.
+     */
+    public subscribeFastUpdate(listener: HudFastUpdateListener): () => void {
+        this.fastListeners.push(listener);
+        return () => {
+            const index = this.fastListeners.indexOf(listener);
+            if (index !== -1) {
+                const lastIndex = this.fastListeners.length - 1;
+                if (index !== lastIndex) this.fastListeners[index] = this.fastListeners[lastIndex];
+                this.fastListeners.pop();
+            }
+        };
+    }
+
+    /**
+     * Emits a high-frequency telemetry update block to all subscribers.
+     * Called directly by HudSystem.emitFastUpdate.
+     * ZERO-GC: Transmits data as a reference without allocating Event objects.
+     */
+    public emitFastUpdate(data: any): void {
+        const len = this.fastListeners.length;
+        for (let i = 0; i < len; i++) {
+            this.fastListeners[i](data);
+        }
+    }
+
+    /**
+     * Performance-Hardened triggers for virtual inputs.
+     * Currently still uses window events for inter-system compatibility, 
+     * but could be migrated to a dedicated input registry if needed.
      */
     public triggerInteraction(pressed: boolean): void {
+        // Note: Interaction triggers are low-frequency compared to 120fps telemetry
         window.dispatchEvent(new CustomEvent('hud-virtual-key', { 
             detail: { key: 'e', pressed } 
         }));

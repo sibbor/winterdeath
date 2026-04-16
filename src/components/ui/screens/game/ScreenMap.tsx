@@ -194,6 +194,56 @@ const MapCanvas = React.memo(({ mapItems, bounds, groupedEntities, setTooltipDat
     );
 });
 
+// ZERO_GC: High-performance pool for up to 128 entities (SIMD-like lane)
+const LiveEnemyDots = React.memo(({ bounds }: { bounds: any }) => {
+    const poolRef = useRef<HTMLDivElement[]>([]);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleUpdate = (data: any) => {
+            if (!containerRef.current) return;
+            const state = HudStore.getState();
+            const vecBuf = state.vectorBuffer; // 256 length (x, z pairs)
+            
+            const pool = poolRef.current;
+            for (let i = 0; i < 128; i++) {
+                const dot = pool[i];
+                if (!dot) continue;
+                
+                const idx = i * 2;
+                const ex = vecBuf[idx];
+                const ez = vecBuf[idx + 1];
+                
+                // -99999 is our sentinel value from HudSystem for inactive slots
+                if (ex < -90000) {
+                    dot.style.display = 'none';
+                } else {
+                    const pos = getMapPercent(ex, ez, bounds);
+                    dot.style.display = 'block';
+                    dot.style.left = `${pos.x}%`;
+                    dot.style.top = `${pos.y}%`;
+                }
+            }
+        };
+
+        return HudStore.subscribeFastUpdate(handleUpdate);
+    }, [bounds]);
+
+    // Pre-allocate the pool elements (128 entities)
+    return (
+        <div ref={containerRef} className="absolute inset-0 pointer-events-none">
+            {Array.from({ length: 128 }).map((_, i) => (
+                <div
+                    key={i}
+                    ref={el => { if (el) poolRef.current[i] = el; }}
+                    className="absolute w-1.5 h-1.5 bg-red-500 rounded-full border border-black/40 -translate-x-1/2 -translate-y-1/2 will-change-[left,top]"
+                    style={{ display: 'none' }}
+                />
+            ))}
+        </div>
+    );
+});
+
 // ZERO-GC: Live Map Entities perfectly decoupled from the heavy SVG re-renders
 const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
     const playerRef = useRef<HTMLDivElement>(null);
@@ -201,7 +251,9 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
     const bossRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        return HudStore.subscribe((state) => {
+        const handleUpdate = (data: any) => {
+            const state = HudStore.getState();
+            
             // Update Player
             if (playerRef.current) {
                 const posP = getMapPercent(state.playerPos.x, state.playerPos.z, bounds);
@@ -224,7 +276,6 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
             // Update Family
             if (familyRef.current) {
                 if (state.activeWeapon === DamageID.RADIO && state.familyPos) {
-
                     const posF = getMapPercent(state.familyPos.x, state.familyPos.z, bounds);
                     familyRef.current.style.display = 'block';
                     familyRef.current.style.left = `${posF.x}%`;
@@ -233,11 +284,14 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
                     familyRef.current.style.display = 'none';
                 }
             }
-        });
+        };
+
+        return HudStore.subscribeFastUpdate(handleUpdate);
     }, [bounds]);
 
     return (
         <>
+            <LiveEnemyDots bounds={bounds} />
             <div
                 ref={playerRef}
                 className="absolute -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none will-change-[left,top]"

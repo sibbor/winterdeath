@@ -3,18 +3,17 @@ import { PlayerStats, PlayerStatID, StatEnemyIndex } from '../../../../entities/
 import { DamageID } from '../../../../entities/player/CombatTypes';
 import { t } from '../../../../utils/i18n';
 import { useOrientation } from '../../../../hooks/useOrientation';
-import ScreenModalLayout, { 
-    HORIZONTAL_HATCHING_STYLE, 
-    TacticalCard, 
+import ScreenModalLayout, {
+    HORIZONTAL_HATCHING_STYLE,
+    TacticalCard,
     TacticalButton,
-    GRITTY_HEADER_TITLE_STYLE 
+    GRITTY_HEADER_TITLE_STYLE
 } from '../../layout/ScreenModalLayout';
 import CollectiblePreview from '../../core/CollectiblePreview';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
-import { PERKS, PerkCategory, PerkColor } from '../../../../content/perks';
-import { WEAPONS, WeaponCategory, WeaponCategoryColors } from '../../../../content/weapons';
-import { LEVEL_CAP } from '../../../../content/constants';
+import { PERKS, PerkCategory } from '../../../../content/perks';
+import { WEAPONS, WeaponCategory } from '../../../../content/weapons';
 
 interface ScreenStatisticsProps {
     stats: PlayerStats;
@@ -23,16 +22,16 @@ interface ScreenStatisticsProps {
     onMarkCollectiblesViewed?: (collectibleIds: string[]) => void;
     isMobileDevice?: boolean;
     debugMode?: boolean;
-    initialTab?: 'statistics' | 'combat' | 'weapons' | 'perks';
+    initialTab?: 'overview' | 'performance' | 'combat' | 'weapons' | 'perks';
     initialItemId?: string | null;
 }
 
-type Tab = 'overview' | 'prestation' | 'combat' | 'weapons' | 'perks';
+type Tab = 'overview' | 'performance' | 'combat' | 'weapons' | 'perks';
 
 // --- ZERO-GC STATIC ARRAYS & CONFIGS ---
 const TABS: { id: Tab, label: string }[] = [
     { id: 'overview', label: 'ui.overview' },
-    { id: 'prestation', label: 'ui.performance' },
+    { id: 'performance', label: 'ui.performance' },
     { id: 'combat', label: 'ui.combat' },
     { id: 'weapons', label: 'ui.weapons' },
     { id: 'perks', label: 'ui.perks' },
@@ -91,9 +90,7 @@ const findNemesis = (deathsRecord: Record<number, number>) => {
 const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onOpenDiscovery, isMobileDevice, debugMode, initialTab, initialItemId }) => {
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
-    const [activeTab, setActiveTab] = useState<Tab>(initialTab === 'statistics' ? 'overview' : (initialTab || 'overview'));
-
-    const isDebugMode = (debugMode !== undefined ? debugMode : false) || (window as any).gameEngine?.sectorContext?.debugMode || (window as any).WD_DEBUG === true || localStorage.getItem('wd_debug') === 'true';
+    const [activeTab, setActiveTab] = useState<Tab>(initialTab || 'overview');
 
     const { level, currentXp, nextLevelXp } = useMemo(() => ({
         level: Math.floor(stats.statsBuffer[PlayerStatID.LEVEL]),
@@ -151,15 +148,15 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
                             const isActive = activeTab === tab.id;
                             return (
                                 <button key={tab.id} onClick={() => handleTabChange(tab.id as Tab)}
-                                    className={`px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700 relative overflow-hidden group/tab
-                                        ${isActive ? 'text-white animate-tab-pulsate' : 'bg-black text-zinc-400 hover:bg-zinc-900'} 
+                                    className={`px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 relative overflow-hidden group/tab
+                                        ${isActive ? 'text-white animate-tab-pulsate border-white' : 'bg-transparent text-zinc-400 hover:bg-white/5 border-zinc-700'} 
                                         ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
                                     `}
                                     style={isActive ? { backgroundColor: darkenColor(THEME_COLOR, 20), '--pulse-color': THEME_COLOR } as any : {}}
                                 >
                                     {isActive && (
-                                        <div className="absolute inset-0 opacity-20 transition-opacity" 
-                                            style={HORIZONTAL_HATCHING_STYLE} 
+                                        <div className="absolute inset-0 opacity-20 transition-opacity"
+                                            style={HORIZONTAL_HATCHING_STYLE}
                                         />
                                     )}
                                     <span className="relative z-10">{t(tab.label)}</span>
@@ -181,7 +178,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
                             onOpenDiscovery={onOpenDiscovery}
                         />
                     )}
-                    {activeTab === 'prestation' && (
+                    {activeTab === 'performance' && (
                         <PerformanceTab
                             stats={stats}
                             level={level}
@@ -280,7 +277,7 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent opacity-50 relative z-10" />
                     <span className="text-blue-500/60 text-[10px] font-black uppercase tracking-[0.3em] mb-3">{t('ui.current_rank')}</span>
                     <h1 className="text-4xl font-light text-white uppercase tracking-tighter mb-4 leading-none">{getRank(level)}</h1>
-                    
+
                     <div className="w-full bg-blue-950/40 h-1.5 border border-blue-900/50 relative mb-2">
                         <div className="h-full bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.6)] transition-all duration-1000" style={{ width: `${nextLevelXp > 0 ? (currentXp / nextLevelXp) * 100 : 0}%` }} />
                     </div>
@@ -321,7 +318,7 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <span className="text-blue-500/60 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.global_explorer')}</span>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{totalDistanceKm} <span className="text-xs">KM</span></span>
-                    
+
                     <div className="mt-auto pt-2 relative z-10">
                         <div className="w-full bg-blue-950/40 h-1 rounded-full overflow-hidden">
                             <div className="h-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,1)]" style={{ width: `${marathonProgress}%` }}></div>
@@ -433,19 +430,19 @@ const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: n
 
 const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
     const sb = stats.statsBuffer;
-    
+
     const { efficiency, kdRatio, lethality, longestKillstreak, crisisSaves, nemesis, peakAggression, time } = useMemo(() => {
         const kills = Math.floor(sb[PlayerStatID.TOTAL_KILLS] || 0);
         const deaths = Math.max(1, stats.deaths);
         const time = sb[PlayerStatID.TOTAL_GAME_TIME] || 1;
         const shots = stats.totalBulletsFired || 1;
         const hits = stats.totalBulletsHit || 0;
-        
+
         const accuracy = (hits / shots) * 100;
         const efficiency = (kills / (time / 60));
         const crisisSaves = Math.floor(sb[PlayerStatID.TOTAL_CRISIS_SAVES] || 0);
         const peakAggression = Math.floor(sb[PlayerStatID.LONGEST_KILLSTREAK] || 0);
-        
+
         const nemesisData = findNemesis(stats.deathsByEnemyType);
         const nemesisName = nemesisData.id !== -1 ? DataResolver.getEnemyName(nemesisData.id, -1, true) : t('ui.none');
 
@@ -518,7 +515,7 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
                     <span className="text-2xl font-light text-white font-mono relative z-10">{(time / 3600).toFixed(1)}H</span>
                 </div>
             </div>
-            
+
             {killLogData.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-zinc-800 bg-zinc-900/10">
                     <span className="text-zinc-600 font-black text-xs uppercase tracking-[0.4em] mb-2 text-center">{t('ui.no_intel_gained')}</span>
@@ -539,13 +536,13 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
             )}
         </div>
     );
-});const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
+}); const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
     const { weaponItems, signature, comfort, throwables } = useMemo(() => {
         const items = WEAPONS.filter(w => w && w.name !== DamageID.RADIO && (stats.weaponDamageDealt[w.name - 1] || 0) > 0);
-        
+
         const sig = findSignatureWeapon(stats.weaponKills);
         const com = findComfortWeapon(stats.weaponTimeActive);
-        
+
         const sigData = sig.id !== -1 ? WEAPONS[sig.id] : null;
         const comData = com.id !== -1 ? WEAPONS[com.id] : null;
 
@@ -635,12 +632,12 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
 
 const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effectiveLandscape: boolean }> = React.memo(({ stats, t, effectiveLandscape }) => {
     const sb = stats.statsBuffer;
-    
+
     const { uptime, resilience, roiDealt, roiAbsorb, totalROI } = useMemo(() => {
         const time = sb[PlayerStatID.TOTAL_GAME_TIME] || 1;
         const uptime = Math.min(100, ((sb[PlayerStatID.TOTAL_BUFF_TIME] || 0) / time) * 100);
         const resisted = Math.floor(sb[PlayerStatID.TOTAL_DEBUFFS_RESISTED] || 0);
-        
+
         // Sum total perk ROI
         let dealt = 0;
         let absorb = 0;
@@ -664,13 +661,15 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
 
     const renderPerk = (perk: any) => {
         return (
-            <div key={perk.id} className="bg-zinc-900/40 border border-zinc-800 p-6 relative group overflow-hidden">
+            <div key={perk.id} id={`log-item-${perk.id}`} className="bg-zinc-900/40 border border-zinc-800 p-6 relative group overflow-hidden">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
                 <div className="flex flex-col relative z-10">
                     <div className="flex justify-between items-start mb-4 border-b border-zinc-800 pb-2">
                         <div className="flex flex-col">
                             <span className="text-blue-500/80 text-[10px] font-black uppercase tracking-widest mb-1">{t(perk.displayName)}</span>
-                            <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-tighter">{t(`perks.category.${perk.category.toLowerCase()}`)}</span>
+                            <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-tighter">
+                                {t(perk.category === PerkCategory.PASSIVE ? 'ui.passive' : (perk.category === PerkCategory.BUFF ? 'ui.buff' : 'ui.debuff'))}
+                            </span>
                         </div>
                         <div className="flex flex-col items-end">
                             <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">{t('ui.activations')}</span>

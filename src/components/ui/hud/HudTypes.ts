@@ -43,6 +43,7 @@ export interface StatusEffectData {
   duration: number;
   maxDuration: number;
   intensity: number;
+  progress: number;
 }
 
 export interface DebugInfoData {
@@ -109,6 +110,7 @@ export interface SectorStatsData {
 export interface HudState {
   // --- DOD BUFFERS (Zero-GC / O(1)) ---
   statsBuffer: Float32Array;
+  vectorBuffer: Float32Array; // SMI-indexed (x, z) pairs for entities
   statusFlags: number;
 
   hp: number;

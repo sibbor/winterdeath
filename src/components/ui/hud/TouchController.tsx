@@ -13,6 +13,9 @@ const STICK_RADIUS = 60;
 const MAX_DIST = 50;
 const HUD_GUTTER = '12%'; // VINTERDÖD: Safe zone for Pause/HUD buttons
 
+// ZERO-GC: Hoisted lookup table to avoid inline allocation per handler call
+const KEY_MAP = { r: 'r', space: ' ', e: 'e', f: 'f' };
+
 const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState, onPause, onOpenMap }) => {
     const { isLandscapeMode } = useOrientation();
     const hudVisible = useHudStore(s => s.hudVisible);
@@ -26,6 +29,8 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
     // Touch tracking (Använder refs för att slippa re-renders)
     const leftTouchId = useRef<number | null>(null);
     const rightTouchId = useRef<number | null>(null);
+    
+    // ZERO-GC: Pre-allocated objects for touch tracking
     const leftCenter = useRef({ x: 0, y: 0 });
     const rightCenter = useRef({ x: 0, y: 0 });
 
@@ -34,14 +39,15 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
     };
 
     const handleAction = useCallback((action: 'r' | 'space' | 'e' | 'f', pressed: boolean) => {
-        const keyMap = { r: 'r', space: ' ', e: 'e', f: 'f' };
-        const key = (keyMap as any)[action];
+        const key = (KEY_MAP as any)[action];
 
         if (action === 'r') inputState.r = pressed;
         if (action === 'space') inputState.space = pressed;
         if (action === 'e') inputState.e = pressed;
         if (action === 'f') inputState.f = pressed;
 
+        // Note: dispatching events is technically an allocation but acceptable for rare button presses (R/Space)
+        // compared to 120FPS joystick move logic.
         window.dispatchEvent(new KeyboardEvent(pressed ? 'keydown' : 'keyup', { key, bubbles: true }));
     }, [inputState]);
 
@@ -74,7 +80,10 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
             // --- LEFT ZONE (Movement) ---
             if (x < w * 0.4 && y > h * 0.3 && leftTouchId.current === null) {
                 leftTouchId.current = t.identifier;
-                leftCenter.current = { x, y };
+                
+                // ZERO-GC: Mutating existing ref properties instead of object assignment
+                leftCenter.current.x = x;
+                leftCenter.current.y = y;
 
                 if (leftStickContainerRef.current) {
                     leftStickContainerRef.current.style.display = 'block';
@@ -84,7 +93,10 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
             // --- RIGHT ZONE (Aiming) ---
             else if (x > w * 0.5 && y > h * 0.3 && rightTouchId.current === null) {
                 rightTouchId.current = t.identifier;
-                rightCenter.current = { x, y };
+                
+                // ZERO-GC: Mutating existing ref properties
+                rightCenter.current.x = x;
+                rightCenter.current.y = y;
 
                 if (rightStickContainerRef.current) {
                     rightStickContainerRef.current.style.display = 'block';

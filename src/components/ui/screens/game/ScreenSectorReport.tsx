@@ -130,7 +130,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
             {activeTab === 0 ? (
                 /* PAGE 1: OVERVIEW SUMMARY */
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-4 items-start">
 
                     {/* COL 1: PRESTATION */}
                     <div className="space-y-6">
@@ -172,39 +172,35 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                         <h3 className="text-white font-light uppercase text-xl border-b border-gray-800 pb-2 tracking-tighter">{t('ui.exploration')}</h3>
                         <div className="space-y-3">
                             <StatBox label={t('ui.collectible')} value={`${stats.collectiblesDiscovered?.length || 0} / 2`} colorClass="text-orange-400" borderColor="border-orange-500" bgColor="bg-orange-900/10" />
-                            <StatBox label={t('ui.clues_found')} value={stats.cluesFound?.length || 0} colorClass="text-orange-300" borderColor="border-orange-600" bgColor="bg-orange-900/10" />
-                            <StatBox label={t('ui.pois_discovered')} value={stats.discoveredPOIs?.length || 0} colorClass="text-orange-200" borderColor="border-orange-700" bgColor="bg-orange-900/10" />
+                            <StatBox label={t('ui.clues_found')} value={stats.cluesFound?.length || 0} colorClass="text-orange-400" borderColor="border-orange-500" bgColor="bg-orange-900/10" />
+                            <StatBox label={t('ui.pois_discovered')} value={stats.discoveredPOIs?.length || 0} colorClass="text-orange-400" borderColor="border-orange-500" bgColor="bg-orange-900/10" />
                         </div>
-                        <div className="pt-2 grid grid-cols-2 gap-4">
-                            <SmallStat label={t('ui.time_elapsed')} value={formatTime(stats.timeElapsed)} colorClass="text-blue-300" />
-                            <SmallStat label={t('ui.distance_traveled')} value={formatDistance(stats.distanceTraveled || 0)} colorClass="text-blue-300" />
+                        <div className="space-y-3">
+                            <StatBox label={t('ui.time_elapsed')} value={formatTime(stats.timeElapsed)} colorClass="text-orange-400" borderColor="border-orange-500" bgColor="bg-orange-900/10" />
+                            <StatBox label={t('ui.distance_traveled')} value={formatDistance(stats.distanceTraveled || 0)} colorClass="text-orange-400" borderColor="border-orange-500" bgColor="bg-orange-900/10" />
                         </div>
                     </div>
 
                     {/* COL 4: STRID */}
                     <div className="space-y-6">
                         <h3 className="text-white font-light uppercase text-xl border-b border-gray-800 pb-2 tracking-tighter">{t('ui.combat')}</h3>
-                        <div className="space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
-                                <SmallStat label={t('report.stats.shots')} value={stats.shotsFired} colorClass="text-red-300" />
-                                <SmallStat label={t('report.stats.accuracy')} value={`${accuracy}%`} colorClass="text-red-300" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4 pt-2">
-                                <StatBox label={t('report.stats.kills')} value={totalKills} colorClass="text-red-500" borderColor="border-red-500" bgColor="bg-red-900/10" />
-                                <StatBox label={t('report.stats.throwables')} value={stats.throwablesThrown || 0} colorClass="text-red-400" borderColor="border-red-600" bgColor="bg-red-900/10" />
-                            </div>
+                        <div className="space-y-3">
+                            <StatBox label={t('report.stats.shots')} value={stats.shotsFired} colorClass="text-red-400" borderColor="border-red-500" bgColor="bg-red-900/10" />
+                            <StatBox label={t('report.stats.accuracy')} value={`${accuracy}%`} colorClass="text-red-400" borderColor="border-red-500" bgColor="bg-red-900/10" />
+                            <StatBox label={t('report.stats.kills')} value={totalKills} colorClass="text-red-500" borderColor="border-red-500" bgColor="bg-red-900/10" />
+                            <StatBox label={t('report.stats.throwables')} value={stats.throwablesThrown || 0} colorClass="text-red-400" borderColor="border-red-600" bgColor="bg-red-900/10" />
                         </div>
                     </div>
                 </div>
             ) : (
                 /* PAGE 2: DETAILED COMBAT BREAKDOWN */
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-300 items-start">
                     <TacticalCard color="#ef4444" className="p-5">
                         <div className="flex justify-between items-end mb-4 border-b border-red-500/30 pb-2">
                             <h3 className="text-2xl font-black uppercase tracking-tighter text-red-500">{t('report.damage.incoming')}</h3>
                             <span className="text-xl font-mono text-red-400 font-bold">{Math.round(totalIncoming)}</span>
                         </div>
-                        <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                        <div className="space-y-4 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
                             {Object.entries(stats.incomingDamageBreakdown || {}).map(([enemyId, damageMap]) => {
                                 const enemyMapTyped = damageMap as Record<string, number>;
                                 const enemyDmg = Object.values(enemyMapTyped || {}).reduce((s: number, v: number) => s + (v || 0), 0);
@@ -215,22 +211,25 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
                                 if (id === DamageID.BOSS) {
                                     attackerName = t('report.labels.boss');
-                                } else if (id < 20) { // Standard enemies or weapons
+                                } else if (id < 20) { 
                                     attackerName = t(DataResolver.getEnemyName(id as number));
                                 } else {
                                     attackerName = t(DataResolver.getDamageName(id));
                                 }
 
                                 return (
-                                    <div key={enemyId} className="mb-2 last:mb-0">
-                                        {Object.entries(enemyMapTyped).map(([attackId, dmg]) => {
-                                            if (dmg <= 0) return null;
-
-                                            const atkName = t(DataResolver.getAttackName(parseInt(attackId)));
-
-                                            const label = `${attackerName} > ${atkName}`.toUpperCase();
-                                            return <LineItem key={attackId} title={label} val={dmg} />;
-                                        })}
+                                    <div key={enemyId} className="bg-red-950/10 border border-red-500/20 p-3 rounded shadow-inner">
+                                        <div className="flex justify-between items-center mb-2 border-b border-red-500/10 pb-1">
+                                            <span className="text-red-400 text-xs font-black uppercase tracking-widest">{attackerName}</span>
+                                            <span className="text-red-500 font-mono font-bold text-xs">{Math.round(enemyDmg)}</span>
+                                        </div>
+                                        <div className="space-y-1 pl-2 border-l-2 border-red-500/10">
+                                            {Object.entries(enemyMapTyped).map(([attackId, dmg]) => {
+                                                if (dmg <= 0) return null;
+                                                const atkName = t(DataResolver.getAttackName(parseInt(attackId)));
+                                                return <LineItem key={attackId} title={atkName.toUpperCase()} val={dmg} />;
+                                            })}
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -242,8 +241,8 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                             <h3 className="text-2xl font-black uppercase tracking-tighter text-green-500">{t('report.damage.outgoing')}</h3>
                             <span className="text-xl font-mono text-green-400 font-bold">{Math.round(totalOutgoing)}</span>
                         </div>
-                        <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                            {Object.entries(stats.outgoingDamageBreakdown || {}).map(([weaponId, damage]) => {
+                        <div className="space-y-1 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
+                            {Object.entries(stats.outgoingDamageBreakdown || {}).sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).map(([weaponId, damage]) => {
                                 const dmgVal = (damage as number) || 0;
                                 if (dmgVal <= 0) return null;
 

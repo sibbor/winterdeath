@@ -56,7 +56,10 @@ export class DamageTrackerSystem implements System {
         if (isBoss) stats.bossDamageTaken += amount;
 
         const breakdown = stats.incomingDamageBreakdown;
-        const source = (breakdown as any)[sourceName];
+        if (!breakdown[sourceName]) {
+            breakdown[sourceName] = {};
+        }
+        const source = breakdown[sourceName];
 
         if (source) {
             if (source[attackType] !== undefined) {
@@ -85,6 +88,13 @@ export class DamageTrackerSystem implements System {
         const idx = weaponId - 1;
         if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
             stats.weaponDamageDealt[idx] += amount;
+        }
+
+        // Track specific weapon breakdown for the report
+        if (stats.outgoingDamageBreakdown[weaponId] !== undefined) {
+            stats.outgoingDamageBreakdown[weaponId] += amount;
+        } else {
+            stats.outgoingDamageBreakdown[weaponId] = amount;
         }
     }
 

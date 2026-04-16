@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { useHudStore } from '../../../hooks/useHudStore';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { HudStore } from '../../../store/HudStore';
 import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import { DiscoveryType } from './HudTypes';
@@ -13,70 +13,80 @@ interface DiscoveryPopupProps {
 }
 
 /**
- * DiscoveryPopup - VINTERDÖD CUSTOM UI
- * Minimal, visual discovery notifications with mobile/desktop parity.
+ * DiscoveryPopup - ZERO-GC OPTIMIZED
  */
-let lastProcessedTimestamp = 0;
-
 const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdventureLog }) => {
-  const isActive = useHudStore(s => s.discovery.active);
-  const timestamp = useHudStore(s => s.discovery.timestamp);
-  const id = useHudStore(s => s.discovery.id);
-  const type = useHudStore(s => s.discovery.type);
-  const isMobile = useHudStore(s => s.isMobileDevice);
-  const sector = useHudStore(s => s.currentSector);
-  const cluesFound = useHudStore(s => s.cluesFoundCount);
-  const poisFound = useHudStore(s => s.poisFoundCount);
-
-  const [visible, setVisible] = useState(false);
+  // ZERO-GC: Replaced 8 reactive selectors with a single trigger state
   const [activeDiscovery, setActiveDiscovery] = useState<any>(null);
+  const [visible, setVisible] = useState(false);
+  const lastTimestamp = useRef(0);
 
   useEffect(() => {
-    if (isActive && timestamp > lastProcessedTimestamp) {
-      lastProcessedTimestamp = timestamp;
-      setActiveDiscovery({ id, type, timestamp });
-      setVisible(true);
-      UiSounds.playDiscovery();
-    }
-  }, [isActive, timestamp, id, type]);
+    // Synchronous listener: Only trigger react when discovery.timestamp genuinely increments
+    return HudStore.subscribe(() => {
+        const state = HudStore.getState();
+        const d = state.discovery;
+        
+        if (d.active && d.timestamp > lastTimestamp.current) {
+            lastTimestamp.current = d.timestamp;
+            
+            // Resolve content once and push to state
+            setActiveDiscovery({ 
+                id: d.id, 
+                type: d.type, 
+                title: d.title,
+                details: d.details,
+                timestamp: d.timestamp,
+                isMobile: state.isMobileDevice,
+                sector: state.currentSector,
+                cluesFound: state.cluesFoundCount,
+                poisFound: state.poisFoundCount
+            });
+            setVisible(true);
+            UiSounds.playDiscovery();
+        }
+    });
+  }, []);
 
   const handleInteraction = useCallback(() => {
-    setVisible(prevVisible => {
-      if (!prevVisible) return prevVisible;
-      UiSounds.playDiscovery();
-      
-      const isPerkVal = activeDiscovery?.type === DiscoveryType.PERK;
-      
-      if (isPerkVal) {
-        window.dispatchEvent(new CustomEvent('open-statistics', { 
-            detail: { tab: 'perks', itemId: activeDiscovery?.id } 
-        }));
-      } else {
-        const tab = DataResolver.getAdventureLogTab(activeDiscovery?.type);
-        onOpenAdventureLog(tab, activeDiscovery?.id);
-      }
-      
-      return false;
-    });
-  }, [activeDiscovery, onOpenAdventureLog]);
+    if (!visible || !activeDiscovery) return;
+    UiSounds.playDiscovery();
+    
+    const isPerkVal = activeDiscovery.type === DiscoveryType.PERK;
+    if (isPerkVal) {
+      window.dispatchEvent(new CustomEvent('open-statistics', { 
+          detail: { tab: 'perks', itemId: activeDiscovery.id } 
+      }));
+    } else {
+      const tab = DataResolver.getAdventureLogTab(activeDiscovery.type);
+      onOpenAdventureLog(tab, activeDiscovery.id);
+    }
+    setVisible(false);
+  }, [activeDiscovery, visible, onOpenAdventureLog]);
 
   useEffect(() => {
+    if (!visible) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') handleInteraction();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleInteraction();
+      }
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [handleInteraction]);
+  }, [visible, handleInteraction]);
 
   const handleAnimationEnd = () => setVisible(false);
 
   // --- CONTENT RESOLUTION ---
   const content = useMemo(() => {
     if (!activeDiscovery) return null;
-    const { id, type } = activeDiscovery;
+    const { id, type, sector, cluesFound, poisFound } = activeDiscovery;
 
-    let title = '';
-    let subtitle = '';
+    let title = activeDiscovery.title ? t(activeDiscovery.title) : '';
+    let subtitle = activeDiscovery.details ? t(activeDiscovery.details) : '';
     let icon = '';
 
     switch (type) {
@@ -110,10 +120,14 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         const catKey = perk?.category === PerkCategory.PASSIVE ? 'ui.passive' : (perk?.category === PerkCategory.BUFF ? 'ui.buff' : 'ui.debuff');
         subtitle = `${t(catKey)}: ${t(perk?.displayName || '')}`;
         break;
+      default:
+        // Use default title/subtitle if type is unhandled but strings exist
+        if (!icon) icon = '✨';
+        break;
     }
 
     return { icon, title, subtitle };
-  }, [activeDiscovery, sector, cluesFound, poisFound]);
+  }, [activeDiscovery]);
 
   if (!activeDiscovery || !content) return null;
 
@@ -147,7 +161,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         {/* INTERACTION BUTTON */}
         <div className="flex items-center justify-center min-w-[48px] h-10 border border-zinc-700 rounded-lg bg-zinc-900 px-3 hover:bg-zinc-800 transition-all active:scale-95 shadow-inner">
           <span className="text-xs font-mono font-black text-white tracking-widest uppercase">
-            {isMobile ? t('ui.tap') : t('ui.enter')}
+            {activeDiscovery.isMobile ? t('ui.tap') : t('ui.enter')}
           </span>
         </div>
       </div>

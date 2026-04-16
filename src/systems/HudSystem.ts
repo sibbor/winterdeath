@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { StatusEffectType } from '../content/perks';
 import { InteractionType } from './InteractionTypes';
+import { HudStore } from '../store/HudStore';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { DataResolver } from '../utils/ui/DataResolver';
@@ -39,7 +40,8 @@ const createDebugInfo = () => ({
 });
 
 const createHudBuffer = () => ({
-    statsBuffer: new Float32Array(32),
+    statsBuffer: new Float32Array(64),
+    vectorBuffer: new Float32Array(256), // 128 (x, z) entity pairs
     statusFlags: 0,
     isDisoriented: false,
     statusEffects: [] as any[],
@@ -136,12 +138,19 @@ const _fastUpdateDetail = {
     currentXp: 0,
     nextLevelXp: 0,
     reloadProgress: 0,
-    bossHpP: -1, 
+    bossHpP: -1,
     vehicleSpeed: 0,
     throttleState: 0,
     kills: 0,
     scrap: 0,
-    spEarned: 0
+    spEarned: 0,
+    // Phase 12 Expansion
+    isCritical: false,
+    interactionActive: false,
+    interactionType: 0,
+    interactionLabel: '',
+    interactionX: 0,
+    interactionY: 0
 };
 
 export const HudSystem = {
@@ -149,21 +158,20 @@ export const HudSystem = {
         const wep = DataResolver.getWeapons()[state.activeWeapon];
         const stats = state.statsBuffer;
 
-        // Clamp reloadProgress mellan 0 och 1 för stabil CSS-rendering
+        // Clamp reloadProgress for stable rendering
         const reloadDuration = (wep?.reloadTime || 1000) + (input.fire ? 1000 : 0);
         const reloadRemaining = state.reloadEndTime - now;
         const reloadProgress = state.isReloading
             ? Math.max(0, Math.min(1, 1 - (reloadRemaining / reloadDuration)))
             : 0;
 
-        // Fast-path for boss/wave detection
+        // Boss/Wave logic
         let bossHpP = -1;
         const enemies = state.enemies;
         let activeBossObj = null;
         for (let i = 0; i < enemies.length; i++) {
-            const enemy = enemies[i];
-            if (enemy.isBoss) {
-                activeBossObj = enemy;
+            if (enemies[i].isBoss) {
+                activeBossObj = enemies[i];
                 break;
             }
         }
@@ -171,7 +179,6 @@ export const HudSystem = {
         if (activeBossObj) {
             bossHpP = activeBossObj.hp / activeBossObj.maxHp;
         } else if (state.sectorState && state.sectorState.hordeTarget > 0) {
-            // Wave progress
             const kills = state.sectorState.zombiesKilled || 0;
             const target = state.sectorState.zombiesKillTarget || state.sectorState.hordeTarget;
             bossHpP = (target > 0) ? kills / target : 0;
@@ -192,7 +199,24 @@ export const HudSystem = {
         _fastUpdateDetail.scrap = (props.stats?.statsBuffer?.[PlayerStatID.SCRAP] || 0) + state.statsBuffer[PlayerStatID.SCRAP];
         _fastUpdateDetail.spEarned = state.sessionStats.spGained;
 
-        window.dispatchEvent(new CustomEvent('hud-fast-update', { detail: _fastUpdateDetail }));
+        // Phase 12 Additions
+        _fastUpdateDetail.isCritical = _fastUpdateDetail.hp > 0 && _fastUpdateDetail.hp < _fastUpdateDetail.maxHp * 0.25;
+
+        if (state.hasInteractionTarget && state.interactionTargetPos) {
+            _fastUpdateDetail.interactionActive = true;
+            _fastUpdateDetail.interactionType = state.interaction.type;
+            _fastUpdateDetail.interactionLabel = state.interaction.label;
+
+            // Interaction screen projection (usually needs camera, but we can emit raw and let hud calc or pass projected)
+            // For now, emit availability so HUD can toggle visibility via refs
+            _fastUpdateDetail.interactionX = 0; // Handled in getHudData projection or passed if pre-calced
+            _fastUpdateDetail.interactionY = 0;
+        } else {
+            _fastUpdateDetail.interactionActive = false;
+        }
+
+        // ZERO-GC: Replaced CustomEvent with direct callback registry
+        HudStore.emitFastUpdate(_fastUpdateDetail);
     },
 
     getHudData: (
@@ -209,30 +233,44 @@ export const HudSystem = {
         _useBufferA = !_useBufferA;
         const _current = _useBufferA ? _bufferA : _bufferB;
 
-        // Fast-path for boss detection
-        let activeBossObj = null;
+        // --- 1. MINIMAP ENTITY PROJECTION (Zero-GC SIMD Lane) ---
+        // Pre-clear the vectorBuffer (Zero-GC loop)
+        const vecBuf = _current.vectorBuffer;
+        for (let i = 0; i < 256; i++) vecBuf[i] = -99999; // Sentinel value for "Inactive"
+
         const enemies = state.enemies;
-        for (let i = 0; i < enemies.length; i++) {
-            if (enemies[i].isBoss) {
-                activeBossObj = enemies[i];
-                break;
-            }
+        let activeBossObj = null;
+        let entitiesWritten = 0;
+
+        // Write enemies (Max 100 to leave space for loot/points)
+        const enemyLimit = Math.min(enemies.length, 100);
+        for (let i = 0; i < enemyLimit; i++) {
+            const ent = enemies[i];
+            if (ent.isBoss) activeBossObj = ent;
+
+            const idx = entitiesWritten * 2;
+            vecBuf[idx] = ent.mesh.position.x;
+            vecBuf[idx + 1] = ent.mesh.position.z;
+            entitiesWritten++;
         }
 
+        // --- 2. REST OF DATA SYNC ---
         if (activeBossObj) {
             _current.boss.active = true;
             _current.boss.name = activeBossObj.bossId !== undefined ? DataResolver.getBossName(activeBossObj.bossId) : 'BOSS';
             _current.boss.hp = activeBossObj.hp;
             _current.boss.maxHp = activeBossObj.maxHp;
+            _current.bossPos.x = activeBossObj.mesh.position.x;
+            _current.bossPos.z = activeBossObj.mesh.position.z;
         } else if (state.sectorState && state.sectorState.hordeTarget > 0 && state.sectorState.zombiesKilled < state.sectorState.zombiesKillTarget) {
             _current.boss.active = true;
             _current.boss.name = 'ui.zombie_wave';
             _current.boss.hp = Math.max(0, state.sectorState.hordeTarget - state.sectorState.zombiesKilled);
             _current.boss.maxHp = state.sectorState.hordeTarget;
+            _current.boss.active = true;
         } else {
             _current.boss.active = false;
         }
-
 
         let famSignal = 0;
         if (state.activeWeapon === WeaponType.RADIO && familyMemberMesh) {
@@ -247,13 +285,6 @@ export const HudSystem = {
             _current.familyPos.z = familyMemberMesh.position.z;
         }
 
-
-        if (activeBossObj) {
-            _current.bossPos.x = activeBossObj.mesh.position.x;
-            _current.bossPos.z = activeBossObj.mesh.position.z;
-        }
-
-
         const wep = DataResolver.getWeapons()[state.activeWeapon];
         _current.reloadProgress = state.isReloading
             ? 1 - ((state.reloadEndTime - now) / ((wep?.reloadTime || 1000) + (input.fire ? 1000 : 0)))
@@ -261,13 +292,12 @@ export const HudSystem = {
 
         const spGained = state.sessionStats.spGained;
 
-        // Status Effects (Zero-GC Pool Extraction into the active buffer)
+        // Status Effects (Zero-GC Pool Extraction)
         _current.statusEffects.length = 0;
         const effectDurations = state.effectDurations;
         const effectIntensities = state.effectIntensities;
         let effectIndex = 0;
-        
-        // Loop through all possible effects (SMI direct index)
+
         const totalEffects = 32; // Buffer size
         for (let i = 0; i < totalEffects; i++) {
             const duration = effectDurations[i];
@@ -281,7 +311,7 @@ export const HudSystem = {
                     poolItem.intensity = effectIntensities[i];
                     poolItem.progress = Math.max(0, Math.min(1, duration / maxDur));
                     _current.statusEffects.push(poolItem);
-                    effectIndex++;
+                    if (effectIndex < 15) effectIndex++; // Pool safety
                 }
             }
         }
@@ -291,17 +321,17 @@ export const HudSystem = {
 
         _current.isDisoriented = (state.statusFlags & PlayerStatusFlags.DISORIENTED) !== 0;
 
-        // --- ZERO-GC COPY: Avoid passing mutable state array references directly to React ---
+        // Zero-GC Buffer Copy
         _current.statusFlags = state.statusFlags;
         _current.activePassives.length = 0;
-        for (let i = 0; i < (state.activePassives?.length || 0); i++) _current.activePassives.push(state.activePassives[i]);
+        for (let i = 0; i < (state.activePassives?.length || 0); i++) if (i < 16) _current.activePassives.push(state.activePassives[i]);
 
         _current.activeBuffs.length = 0;
-        for (let i = 0; i < (state.activeBuffs?.length || 0); i++) _current.activeBuffs.push(state.activeBuffs[i]);
+        for (let i = 0; i < (state.activeBuffs?.length || 0); i++) if (i < 16) _current.activeBuffs.push(state.activeBuffs[i]);
 
         _current.activeDebuffs.length = 0;
-        for (let i = 0; i < (state.activeDebuffs?.length || 0); i++) _current.activeDebuffs.push(state.activeDebuffs[i]);
-        // Zero-GC Buffer Copy
+        for (let i = 0; i < (state.activeDebuffs?.length || 0); i++) if (i < 16) _current.activeDebuffs.push(state.activeDebuffs[i]);
+
         _current.statsBuffer.set(state.statsBuffer);
 
         _current.hp = state.statsBuffer[PlayerStatID.HP];
@@ -322,7 +352,7 @@ export const HudSystem = {
         _current.level = state.statsBuffer[PlayerStatID.LEVEL];
         _current.currentXp = state.statsBuffer[PlayerStatID.CURRENT_XP];
         _current.nextLevelXp = state.statsBuffer[PlayerStatID.NEXT_LEVEL_XP];
-        _current.throwableAmmo = state.weaponAmmo[props.loadout.throwable] || 0;
+        _current.throwableAmmo = state.weaponAmmo[props.loadout?.throwable] || 0;
         _current.distanceTraveled = Math.floor(distanceTraveled);
         _current.kills = state.sessionStats.kills;
         _current.discovery = state.discovery;
@@ -335,7 +365,6 @@ export const HudSystem = {
             _current.sectorStats.zombiesKilled = state.sectorState.zombiesKilled || 0;
             _current.sectorStats.zombiesKillTarget = state.sectorState.zombiesKillTarget || 0;
         }
-
 
         _current.isDriving = !!state.vehicle.active;
         _current.vehicleSpeed = state.vehicle.speed || 0;
@@ -362,11 +391,10 @@ export const HudSystem = {
         _current.isGibMaster = (state.statusFlags & PlayerStatusFlags.GIB_MASTER) !== 0;
         _current.isQuickFinger = (state.statusFlags & PlayerStatusFlags.QUICK_FINGER) !== 0;
 
-        // --- SYNC INTERACTION PROMPT (Zero-GC) ---
+        // Sync interaction (BOTH buffers)
         if (state.hasInteractionTarget && state.interactionTargetPos) {
             _v1.copy(state.interactionTargetPos);
             _v1.project(camera);
-
             const screenX = (0.5 + _v1.x * 0.5) * window.innerWidth;
             const screenY = (0.5 - _v1.y * 0.5) * window.innerHeight;
 
@@ -388,14 +416,10 @@ export const HudSystem = {
             _bufferB.interactionPrompt.active = false;
         }
 
-
-        // --- SYNC CINEMATIC STATE (Zero-GC) ---
-        // We sync to BOTH buffers to prevent 1-frame flickering during swaps
         _bufferA.cinematicActive = !!state.cinematicActive;
         _bufferA.currentLine.active = !!state.cinematicActive;
         _bufferA.currentLine.speaker = state.cinematicLine.speaker || '';
         _bufferA.currentLine.text = state.cinematicLine.text || '';
-
         _bufferB.cinematicActive = !!state.cinematicActive;
         _bufferB.currentLine.active = !!state.cinematicActive;
         _bufferB.currentLine.speaker = state.cinematicLine.speaker || '';
@@ -412,8 +436,7 @@ export const HudSystem = {
             _current.discovery.active = false;
         }
 
-
-        // Debug Info Mapping
+        // Debug mapping
         if (input.aimVector) {
             _current.debugInfo.aim.x = truncate2(input.aimVector.x);
             _current.debugInfo.aim.y = truncate2(input.aimVector.y);
@@ -427,11 +450,9 @@ export const HudSystem = {
         _current.debugInfo.input.d = input.d ? 1 : 0;
         _current.debugInfo.input.fire = input.fire ? 1 : 0;
         _current.debugInfo.input.reload = input.reload ? 1 : 0;
-
         _current.debugInfo.cam.x = truncate1(camera.position.x);
         _current.debugInfo.cam.y = truncate1(camera.position.y);
         _current.debugInfo.cam.z = truncate1(camera.position.z);
-
         _current.debugInfo.camera.x = _current.debugInfo.cam.x;
         _current.debugInfo.camera.y = _current.debugInfo.cam.y;
         _current.debugInfo.camera.z = _current.debugInfo.cam.z;
@@ -439,10 +460,8 @@ export const HudSystem = {
         _current.debugInfo.camera.rotY = camera.rotation.y;
         _current.debugInfo.camera.rotZ = camera.rotation.z;
         _current.debugInfo.camera.fov = (camera as THREE.PerspectiveCamera).fov;
-
         _current.debugInfo.coords.x = truncate1(playerPos.x);
         _current.debugInfo.coords.z = truncate1(playerPos.z);
-
         _current.debugInfo.performance.cpu = PerformanceMonitor.getInstance().getTimings();
         const perfMem = (performance as any).memory;
         if (perfMem) {
@@ -450,9 +469,7 @@ export const HudSystem = {
             _current.debugInfo.performance.memory.heapTotal = Math.round(perfMem.totalJSHeapSize / 1048576);
             _current.debugInfo.performance.memory.heapUsed = Math.round(perfMem.usedJSHeapSize / 1048576);
         }
-
         _current.debugInfo.modes = state.interaction.active ? state.interaction.type : InteractionType.NONE;
-
         _current.debugInfo.enemies = enemies.length;
         _current.debugInfo.objects = state.obstacles?.length || 0;
 
