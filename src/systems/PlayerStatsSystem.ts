@@ -527,7 +527,10 @@ export class PlayerStatsSystem implements System {
             
             // Notification for the player
             if (session.triggerDiscovery) {
-                session.triggerDiscovery('event', 'perfect_dodge', 'WITCH TIME', 'Proximity dodge triggered Bullet Time!');
+                const perk = PERKS[StatusEffectType.QUICK_FINGER];
+                if (perk) {
+                    session.triggerDiscovery('perk', StatusEffectType.QUICK_FINGER, perk.displayName, perk.description);
+                }
             }
         }
     }

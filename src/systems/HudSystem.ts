@@ -428,7 +428,18 @@ export const HudSystem = {
         if (state.discovery.active) {
             _current.discovery.active = true;
             _current.discovery.id = state.discovery.id;
-            _current.discovery.type = state.discovery.type as any;
+            
+            // map from string-based triggers to the numeric enum if necessary
+            let dType = DiscoveryType.CLUE;
+            const rawType = state.discovery.type;
+            if (rawType === 'perk') dType = DiscoveryType.PERK;
+            else if (rawType === 'poi') dType = DiscoveryType.POI;
+            else if (rawType === 'collectible') dType = DiscoveryType.COLLECTIBLE;
+            else if (rawType === 'enemy') dType = DiscoveryType.ENEMY;
+            else if (rawType === 'boss') dType = DiscoveryType.BOSS;
+            else if (typeof rawType === 'number') dType = rawType;
+
+            _current.discovery.type = dType;
             _current.discovery.title = state.discovery.title;
             _current.discovery.details = state.discovery.details;
             _current.discovery.timestamp = state.discovery.timestamp;
