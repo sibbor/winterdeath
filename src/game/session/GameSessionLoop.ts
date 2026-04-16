@@ -376,20 +376,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             }
 
             const hudMesh = refs.playerMeshRef.current;
-            monitor.begin('hud_sync');
-            const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, refs.distanceTraveledRef.current, engine.camera.threeCamera);
-            monitor.end('hud_sync');
-
-            hudData.debugInfo.drawCalls = refs.lastDrawCallsRef.current;
-            state.renderCpuTime = engine.renderer.info.render.frame || 0;
-            state.drawCalls = engine.renderer.info.render.calls;
-            state.triangles = engine.renderer.info.render.triangles;
-
-            (hudData as any).debugMode = propsRef.current.debugMode;
-            (hudData as any).systems = session.getSystems();
-            (hudData as any).interactionPrompt = HudStore.getState().interactionPrompt;
-
-            HudStore.update(hudData);
         }
 
         // 3. Boss Intro overrides
@@ -935,6 +921,25 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             }
 
             windSystem.setInteractors(_bendInteractors);
+        }
+
+        // --- HUD TELEMETRY SYNC (RE-ORDERED TO FIX DISCOVERY RACE CONDITION) ---
+        if (frame % 4 === 0) {
+            monitor.begin('hud_sync');
+            const hudMesh = refs.playerMeshRef.current;
+            const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, refs.distanceTraveledRef.current, engine.camera.threeCamera);
+            monitor.end('hud_sync');
+
+            hudData.debugInfo.drawCalls = refs.lastDrawCallsRef.current;
+            state.renderCpuTime = engine.renderer.info.render.frame || 0;
+            state.drawCalls = engine.renderer.info.render.calls;
+            state.triangles = engine.renderer.info.render.triangles;
+
+            (hudData as any).debugMode = propsRef.current.debugMode;
+            (hudData as any).systems = session.getSystems();
+            (hudData as any).interactionPrompt = HudStore.getState().interactionPrompt;
+
+            HudStore.update(hudData);
         }
 
         // 21. High-frequency HUD update
