@@ -47,6 +47,7 @@ const INITIAL_HUD_STATE: HudState = {
     currentSector: 0,
     cluesFoundCount: 0,
     poisFoundCount: 0,
+    collectiblesFoundCount: 0,
     fps: 60,
     sectorStats: { unlimitedAmmo: false, unlimitedThrowables: false, isInvincible: false, hordeTarget: 0, zombiesKilled: 0, zombiesKillTarget: 0, zombieWaveActive: false },
     statusEffects: [],

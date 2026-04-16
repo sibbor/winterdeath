@@ -7,6 +7,7 @@ import { DataResolver } from '../../../utils/ui/DataResolver';
 import { PERKS, PerkCategory } from '../../../content/perks';
 import { CLUES } from '../../../content/clues';
 import { POIS } from '../../../content/pois';
+import { COLLECTIBLES } from '../../../content/collectibles';
 
 interface DiscoveryPopupProps {
   onOpenAdventureLog: (tab?: string, itemId?: string) => void;
@@ -40,7 +41,8 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
                 isMobile: state.isMobileDevice,
                 sector: state.currentSector,
                 cluesFound: state.cluesFoundCount,
-                poisFound: state.poisFoundCount
+                poisFound: state.poisFoundCount,
+                collectiblesFound: state.collectiblesFoundCount
             });
             setVisible(true);
             UiSounds.playDiscovery();
@@ -83,7 +85,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
   // --- CONTENT RESOLUTION ---
   const content = useMemo(() => {
     if (!activeDiscovery) return null;
-    const { id, type, sector, cluesFound, poisFound } = activeDiscovery;
+    const { id, type, sector, cluesFound, poisFound, collectiblesFound } = activeDiscovery;
 
     let title = activeDiscovery.title ? t(activeDiscovery.title) : '';
     let subtitle = activeDiscovery.details ? t(activeDiscovery.details) : '';
@@ -104,7 +106,8 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         break;
       case DiscoveryType.COLLECTIBLE:
         title = t('ui.collectible_discovered');
-        subtitle = t(DataResolver.getCollectibleName(id));
+        const totalCollectibles = Object.values(COLLECTIBLES).filter(c => c.sector === sector).length;
+        subtitle = `${t(DataResolver.getCollectibleName(id))} (${collectiblesFound}/${totalCollectibles})`;
         icon = '📦';
         break;
       case DiscoveryType.ENEMY:

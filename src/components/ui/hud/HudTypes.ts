@@ -155,6 +155,7 @@ export interface HudState {
   currentSector: number;
   cluesFoundCount: number;
   poisFoundCount: number;
+  collectiblesFoundCount: number;
   fps: number;
   sectorStats: SectorStatsData;
 

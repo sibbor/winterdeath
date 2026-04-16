@@ -7,6 +7,9 @@ import { DiscoveryType } from '../components/ui/hud/HudTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { DataResolver } from '../utils/ui/DataResolver';
 import { WeaponType } from '../content/weapons';
+import { CLUES } from '../content/clues';
+import { POIS } from '../content/pois';
+import { COLLECTIBLES } from '../content/collectibles';
 
 // Performance Scratchpads (Zero-GC)
 const _v1 = new THREE.Vector3();
@@ -98,6 +101,7 @@ const createHudBuffer = () => ({
     currentSector: 0,
     cluesFoundCount: 0,
     poisFoundCount: 0,
+    collectiblesFoundCount: 0,
 
     // --- COMBAT FEEL & VIGNETTE ---
     isCritical: false,
@@ -381,8 +385,32 @@ export const HudSystem = {
         _current.hudVisible = state.hudVisible ?? _current.hudVisible;
         _current.sectorName = state.sectorName || '';
         _current.currentSector = props.currentSector || 0;
-        _current.cluesFoundCount = state.discoverySets?.clues?.size || 0;
-        _current.poisFoundCount = state.discoverySets?.pois?.size || 0;
+        
+        // --- ZERO-GC SECTOR-SPECIFIC DISCOVERY TALLYING ---
+        let cCount = 0;
+        if (state.discoverySets?.clues) {
+            for (const id of state.discoverySets.clues) {
+                if (CLUES[id]?.sector === _current.currentSector) cCount++;
+            }
+        }
+        _current.cluesFoundCount = cCount;
+
+        let pCount = 0;
+        if (state.discoverySets?.pois) {
+            for (const id of state.discoverySets.pois) {
+                if (POIS[id]?.sector === _current.currentSector) pCount++;
+            }
+        }
+        _current.poisFoundCount = pCount;
+
+        let colCount = 0;
+        if (state.discoverySets?.collectibles) {
+            for (const id of state.discoverySets.collectibles) {
+                if (COLLECTIBLES[id]?.sector === _current.currentSector) colCount++;
+            }
+        }
+        _current.collectiblesFoundCount = colCount;
+
         _current.isMobileDevice = !!props.isMobileDevice;
 
         const hp = _current.hp;
