@@ -256,7 +256,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                         'armory': 'STATION_ARMORY',
                         'skills': 'STATION_SKILLS',
                         'sectors': 'STATION_SECTORS',
-                        'stats': 'ADVENTURE_LOG',
+                        'stats': 'STATION_STATISTICS',
                         'adventure_log': 'ADVENTURE_LOG',
                         'settings': 'SETTINGS'
                     };
@@ -386,13 +386,13 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                             } else {
                                 toolTipText = t(`stations.${target.userData.name || newHover}`);
                                 if (newHover === 'armory') {
-                                    toolTipSubText = `${t(weaponName(currentLoadout.primary))} | ${t(weaponName(currentLoadout.secondary))} | ${t(weaponName(currentLoadout.throwable))} | ${t(weaponName(currentLoadout.special))}`;
-                                } else if (newHover === 'skills') {
-                                    toolTipSubText = `${t('camp_tooltips.vitality')}: ${stats.statsBuffer[PlayerStatID.MAX_HP]} | ${t('camp_tooltips.adrenaline')}: ${stats.statsBuffer[PlayerStatID.MAX_STAMINA]} | ${t('camp_tooltips.reflexes')}: ${Math.round((stats.statsBuffer[PlayerStatID.SPEED] / PLAYER_BASE_SPEED) * 100)}%`;
+                                    toolTipSubText = `${t(weaponName(currentLoadout.primary))} • ${t(weaponName(currentLoadout.secondary))} • ${t(weaponName(currentLoadout.throwable))} • ${t(weaponName(currentLoadout.special))}`;
                                 } else if (newHover === 'adventure_log') {
-                                    toolTipSubText = `${t('camp_tooltips.collectibles')}: ${stats.collectiblesDiscovered?.length || 0} | ${t('camp_tooltips.clues')}: ${stats.cluesFound?.length || 0} | ${t('camp_tooltips.poi')}: ${stats.discoveredPOIs?.length || 0} | ${t('camp_tooltips.enemies')}: ${stats.seenEnemies?.length || 0} | ${t('camp_tooltips.bosses')}: ${stats.seenBosses?.length || 0}`;
+                                    toolTipSubText = `${t('camp_tooltips.collectibles')}: ${stats.collectiblesDiscovered?.length || 0} • ${t('camp_tooltips.clues')}: ${stats.cluesFound?.length || 0} • ${t('camp_tooltips.poi')}: ${stats.discoveredPOIs?.length || 0} • ${t('camp_tooltips.enemies')}: ${stats.seenEnemies?.length || 0} • ${t('camp_tooltips.bosses')}: ${stats.seenBosses?.length || 0}`;
                                 } else if (newHover === 'sectors') {
-                                    toolTipSubText = `${t('camp_tooltips.finished_sectors')}: ${stats.sectorsCompleted} | ${t('camp_tooltips.selected_sector')}: ${t(SECTOR_THEMES[currentSector]?.name || '')}`;
+                                    toolTipSubText = `${t('camp_tooltips.finished_sectors')}: ${stats.sectorsCompleted} • ${t('camp_tooltips.selected_sector')}: ${t(SECTOR_THEMES[currentSector]?.name || '')}`;
+                                } else if (newHover === 'skills') {
+                                    toolTipSubText = `${t('camp_tooltips.vitality')}: ${stats.statsBuffer[PlayerStatID.MAX_HP]} • ${t('camp_tooltips.adrenaline')}: ${stats.statsBuffer[PlayerStatID.MAX_STAMINA]} • ${t('camp_tooltips.reflexes')}: ${stats.statsBuffer[PlayerStatID.SPEED].toFixed(1)} ${t('ui.speed_unit')}`;
                                 }
                             }
                             const vec = _v1; target.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
@@ -507,7 +507,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 <CampHUD
                     stats={stats} hoveredStation={hoveredStation} currentSectorName={t(SECTOR_THEMES[currentSector]?.name || '')} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
                     currentLoadoutNames={{ pri: t(weaponName(currentLoadout.primary)), sec: t(weaponName(currentLoadout.secondary)), thr: t(weaponName(currentLoadout.throwable)) }}
-                    onOpenStats={() => onInteractionStateChange('ADVENTURE_LOG')}
+                    onOpenStats={() => onInteractionStateChange('STATION_STATISTICS')}
                     onOpenArmory={() => onInteractionStateChange('STATION_ARMORY')}
                     onOpenSkills={() => onInteractionStateChange('STATION_SKILLS')}
                     onOpenSettings={() => setActiveOverlay('SETTINGS')}

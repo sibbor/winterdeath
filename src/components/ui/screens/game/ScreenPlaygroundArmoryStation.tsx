@@ -6,7 +6,7 @@ import { t } from '../../../../utils/i18n';
 import { SCRAP_COST_BASE } from '../../../../content/constants';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
-import ScreenModalLayout from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { TacticalTab } from '../../layout/ScreenModalLayout';
 
 interface ScreenPlaygroundArmoryStationProps {
     stats: PlayerStats;
@@ -134,23 +134,14 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                 {/* Tabs bar */}
                 <div className="relative shrink-0">
                     <div className="flex gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto no-scrollbar pt-2 min-h-[50px] md:min-h-[80px] items-end scroll-smooth">
-                        {[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL].map(cat => {
-                            const isActive = activeTab === cat;
-                            return (
-                                <button
-                                    key={cat}
-                                    onClick={() => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
-                                    className={`px-4 md:px-8 py-2 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-3 group whitespace-nowrap
-                                        ${isActive
-                                            ? 'bg-white text-black font-black italic'
-                                            : 'bg-zinc-900/40 text-zinc-500 hover:bg-zinc-800 font-bold'
-                                        }
-                                    `}
-                                >
-                                    <span className="text-[10px] md:text-sm uppercase tracking-widest">{t(`categories.${WeaponCategory[cat].toLowerCase()}`)}</span>
-                                </button>
-                            );
-                        })}
+                        {[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL].map(cat => (
+                            <TacticalTab
+                                key={cat}
+                                label={t(`categories.${WeaponCategory[cat].toLowerCase()}`)}
+                                isActive={activeTab === cat}
+                                onClick={() => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
+                            />
+                        ))}
                     </div>
                 </div>
 

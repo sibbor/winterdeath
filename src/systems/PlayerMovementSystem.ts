@@ -208,6 +208,9 @@ export class PlayerMovementSystem implements System {
                         state.isDodging = true;
                         state.dodgeStartTime = simTime; // VINTERDÖD FIX: Logic MUST use simTime for parity
                         state.dodgeDir.set(0, 0, 0); // Reset to recalc next frame
+
+                        // --- TRACK NEW METRIC ---
+                        stats[PlayerStatID.TOTAL_DODGES]++;
                     }
                 }
             }
@@ -238,6 +241,9 @@ export class PlayerMovementSystem implements System {
                         state.lastStaminaUseTime = simTime;
                         state.statusFlags |= PlayerStatusFlags.RUSHING; // Set immediately
                         this.checkReflexShield(session, simTime);
+
+                        // --- TRACK NEW METRIC ---
+                        stats[PlayerStatID.TOTAL_RUSHES]++;
                     }
                 }
             }
@@ -565,8 +571,13 @@ export class PlayerMovementSystem implements System {
             // --- TRACK SIMULATED DISTANCE ---
             const dx = _v3.x - playerGroup.position.x;
             const dz = _v3.z - playerGroup.position.z;
-            _auditSimDist += Math.sqrt(dx * dx + dz * dz);
+            const distMoved = Math.sqrt(dx * dx + dz * dz);
+            _auditSimDist += distMoved;
             _auditSteps++;
+
+            if (state.isRushing) {
+                session.state.statsBuffer[PlayerStatID.TOTAL_RUSH_DISTANCE] += distMoved;
+            }
 
             const nearbyObs = state.collisionGrid.getNearbyObstacles(_v3, 2.5);
             const nLen = nearbyObs.length;

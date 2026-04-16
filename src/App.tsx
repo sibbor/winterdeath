@@ -17,6 +17,7 @@ import ScreenSectorReport from './components/ui/screens/game/ScreenSectorReport'
 import ScreenBossKilled from './components/ui/screens/game/ScreenBossKilled';
 import ScreenCollectibleDiscovered from './components/ui/screens/game/ScreenCollectibleDiscovered';
 import ScreenAdventureLog from './components/ui/screens/camp/ScreenAdventureLog';
+import ScreenStatistics from './components/ui/screens/camp/ScreenStatistics';
 import ScreenSettings from './components/ui/screens/camp/ScreenSettings';
 import ScreenPlaygroundArmoryStation from './components/ui/screens/game/ScreenPlaygroundArmoryStation';
 import { ScreenPlaygroundEnemyStation } from './components/ui/screens/game/ScreenPlaygroundEnemyStation';
@@ -79,6 +80,8 @@ const App: React.FC = () => {
     const [sectorStats, setSectorStats] = useState<SectorStats | null>(null);
     const [initialAdventureLogTab, setInitialAdventureLogTab] = useState<any>(null);
     const [initialAdventureLogItem, setInitialAdventureLogItem] = useState<string | null>(null);
+    const [initialStatisticsTab, setInitialStatisticsTab] = useState<string | null>(null);
+    const [initialStatisticsItem, setInitialStatisticsItem] = useState<string | null>(null);
     const showFPS = !!gameState.showFps;
 
     const gameCanvasRef = React.useRef<GameSessionHandle>(null);
@@ -386,9 +389,16 @@ const App: React.FC = () => {
 
     const handleOpenSettingsAction = useCallback(() => setActiveOverlay('SETTINGS'), []);
     const handleOpenAdventureLogAction = useCallback((tab?: string, itemId?: string) => {
-        if (tab) setInitialAdventureLogTab(tab);
-        if (itemId) setInitialAdventureLogItem(itemId);
+        setInitialAdventureLogTab(tab || 'clues');
+        setInitialAdventureLogItem(itemId || null);
         setActiveOverlay('ADVENTURE_LOG');
+        UiSounds.playConfirm();
+    }, []);
+
+    const handleOpenStatisticsAction = useCallback((tab?: string, itemId?: string) => {
+        setInitialStatisticsTab(tab || 'statistics');
+        setInitialStatisticsItem(itemId || null);
+        setActiveOverlay('STATION_STATISTICS');
         UiSounds.playConfirm();
     }, []);
 
@@ -483,6 +493,19 @@ const App: React.FC = () => {
     }, []);
 
     const handleCancelReset = useCallback(() => setActiveOverlay('SETTINGS'), []);
+
+    // --- GLOBAL EVENT LISTENERS (For UI Bridge) ---
+    useEffect(() => {
+        const onOpenLog = (e: any) => handleOpenAdventureLogAction(e.detail?.tab, e.detail?.itemId);
+        const onOpenStats = (e: any) => handleOpenStatisticsAction(e.detail?.tab, e.detail?.itemId);
+
+        window.addEventListener('open-adventure-log', onOpenLog);
+        window.addEventListener('open-statistics', onOpenStats);
+        return () => {
+            window.removeEventListener('open-adventure-log', onOpenLog);
+            window.removeEventListener('open-statistics', onOpenStats);
+        };
+    }, [handleOpenAdventureLogAction, handleOpenStatisticsAction]);
 
 
     const handleSectorEnded = useCallback((stats: SectorStats) => {
@@ -845,6 +868,7 @@ const App: React.FC = () => {
                             onOpenMap={handleToggleMapAction}
                             onOpenSettings={handleOpenSettingsAction}
                             onOpenAdventureLog={handleOpenAdventureLogAction}
+                            onOpenStatistics={handleOpenStatisticsAction}
                             isMobileDevice={isMobileDevice}
                         />
                     )}
@@ -881,11 +905,14 @@ const App: React.FC = () => {
                     )}
 
                     {activeOverlay === 'STATION_STATISTICS' && (
-                        <ScreenAdventureLog
-                            stats={gameState.stats}
-                            onClose={handleOverlayClose}
+                        <ScreenStatistics
+                            stats={gameState.screen === GameScreen.SECTOR ? (gameCanvasRef.current?.getMergedSessionStats() || gameState.stats) : gameState.stats}
+                            onClose={handleCloseAction}
+                            onOpenDiscovery={() => handleOpenAdventureLogAction('clues')}
                             isMobileDevice={isMobileDevice}
                             debugMode={gameState.debugMode}
+                            initialTab={initialStatisticsTab as any}
+                            initialItemId={initialStatisticsItem}
                         />
                     )}
 

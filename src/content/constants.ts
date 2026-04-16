@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PlayerStats, PlayerStatID } from '../entities/player/PlayerTypes';
+import { PlayerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../entities/player/PlayerTypes';
 import { GameSettings } from '../core/engine/EngineTypes';
 
 // Re-export Data
@@ -139,6 +139,21 @@ export const INITIAL_STATS: PlayerStats = {
     effectDurations: new Float32Array(32),
     effectMaxDurations: new Float32Array(32),
     effectIntensities: new Float32Array(32),
+    
+    weaponKills: new Float64Array(StatWeaponIndex.COUNT),
+    weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
+    weaponShotsFired: new Float64Array(StatWeaponIndex.COUNT),
+    weaponShotsHit: new Float64Array(StatWeaponIndex.COUNT),
+    weaponTimeActive: new Float64Array(StatWeaponIndex.COUNT),
+    weaponEngagementDistSq: new Float64Array(StatWeaponIndex.COUNT),
+
+    perkTimesGained: new Float64Array(StatPerkIndex.COUNT),
+    perkDamageAbsorbed: new Float64Array(StatPerkIndex.COUNT),
+    perkDamageDealt: new Float64Array(StatPerkIndex.COUNT),
+    perkDebuffsCleansed: new Float64Array(StatPerkIndex.COUNT),
+
+    enemyKills: new Float64Array(StatEnemyIndex.COUNT),
+
     statusFlags: 0,
     activePassives: [],
     activeBuffs: [],

@@ -62,8 +62,14 @@ export class PlayerStatsSystem implements System {
 
                         if (!state.discoveredPerks.includes(i)) {
                             state.discoveredPerks.push(i);
+                            if (state.sessionStats.discoveredPerks && !state.sessionStats.discoveredPerks.includes(i)) {
+                                state.sessionStats.discoveredPerks.push(i);
+                            }
                             session.triggerDiscovery('perk', i, perk.displayName, perk.description);
                         }
+                        
+                        // Increment activation count
+                        state.perkTimesGained[i]++;
                     }
                 }
             }
@@ -104,8 +110,14 @@ export class PlayerStatsSystem implements System {
 
                 if (!state.discoveredPerks.includes(perkID)) {
                     state.discoveredPerks.push(perkID);
+                    if (state.sessionStats.discoveredPerks && !state.sessionStats.discoveredPerks.includes(perkID)) {
+                        state.sessionStats.discoveredPerks.push(perkID);
+                    }
                     session.triggerDiscovery('perk', perkID, perk.displayName, perk.description);
                 }
+
+                // Increment Crisis Management tracking
+                state.statsBuffer[PlayerStatID.TOTAL_CRISIS_SAVES]++;
             }
         }
     }
@@ -139,6 +151,9 @@ export class PlayerStatsSystem implements System {
 
                 if (perk && !state.discoveredPerks.includes(passiveId)) {
                     state.discoveredPerks.push(passiveId);
+                    if (state.sessionStats.discoveredPerks && !state.sessionStats.discoveredPerks.includes(passiveId)) {
+                        state.sessionStats.discoveredPerks.push(passiveId);
+                    }
                     session.triggerDiscovery('perk', passiveId, perk.displayName, perk.description);
                 }
             }
@@ -215,6 +230,11 @@ export class PlayerStatsSystem implements System {
             }
         }
 
+        // --- TRACK BUFF UPTIME (Zero-GC Accumulation) ---
+        if (state.activeBuffs.length > 0) {
+            stats[PlayerStatID.TOTAL_BUFF_TIME] += delta;
+        }
+
         // Add modifiers from current passives too
         for (let j = 0; j < state.activePassives.length; j++) {
             const perk = PERKS[state.activePassives[j]];
@@ -257,6 +277,9 @@ export class PlayerStatsSystem implements System {
 
                 this.handlePlayerHit(session, perk.dotDamage, null, dmgID, true);
 
+                // Track Perk Damage Dealt (DoT)
+                state.perkDamageDealt[i] += perk.dotDamage;
+
                 // Visuals
                 if (i === StatusEffectType.BLEEDING) {
                     FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.5, this.playerGroup.position.z, 'blood_splatter', 6);
@@ -290,6 +313,13 @@ export class PlayerStatsSystem implements System {
         }
 
         let actualDmg = damage * state.statsBuffer[PlayerStatID.MULTIPLIER_DMG_RESIST];
+        
+        // Track Damage Absorbed specifically by Reflex Shield (vinterdöd Step 2)
+        if (state.effectDurations[StatusEffectType.REFLEX_SHIELD] > 0) {
+            // Shield is 50% reduction.
+            state.perkDamageAbsorbed[StatusEffectType.REFLEX_SHIELD] += (damage * 0.5);
+        }
+
         const isBite = type === DamageID.BITE;
 
         if (!isDoT) {
@@ -438,18 +468,38 @@ export class PlayerStatsSystem implements System {
                 this.triggerBuff(session, StatusEffectType.GIB_MASTER, now);
             }
         }
+
+        // --- OPTIMIZED KILL TRACKING (Zero-GC / Step 2) ---
+        if (enemy.type !== undefined) {
+            state.enemyKills[enemy.type]++;
+        }
     }
 
     public triggerReflexShield(session: GameSessionLogic, now: number) {
         const state = session.state;
         const perkID = StatusEffectType.REFLEX_SHIELD;
         const perk = PERKS[perkID];
+        
+        let cleansedCount = 0;
         for (let i = 0; i < 32; i++) {
             const p = PERKS[i];
-            if (p && p.category === PerkCategory.DEBUFF) state.effectDurations[i] = 0;
+            if (p && p.category === PerkCategory.DEBUFF && state.effectDurations[i] > 0) {
+                state.effectDurations[i] = 0;
+                cleansedCount++;
+            }
         }
+        
+        if (cleansedCount > 0) {
+            state.perkDebuffsCleansed[perkID] += cleansedCount;
+            // Track total resistance
+            state.statsBuffer[PlayerStatID.TOTAL_DEBUFFS_RESISTED] += cleansedCount;
+        }
+
         state.effectDurations[perkID] = perk.duration || 1000;
         state.effectMaxDurations[perkID] = perk.duration || 1000;
+
+        // Activation count for manual trigger
+        state.perkTimesGained[perkID]++;
     }
 
     private triggerBuff(session: GameSessionLogic, type: StatusEffectType, now: number) {
@@ -458,6 +508,9 @@ export class PlayerStatsSystem implements System {
         if (perk) {
             state.effectDurations[type] = perk.duration || 3000;
             state.effectMaxDurations[type] = perk.duration || 3000;
+            
+            // Activation count
+            state.perkTimesGained[type]++;
         }
     }
 

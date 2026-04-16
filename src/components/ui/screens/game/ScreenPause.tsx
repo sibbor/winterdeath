@@ -1,7 +1,7 @@
 import React from 'react';
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
-import ScreenModalLayout from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { TacticalButton } from '../../layout/ScreenModalLayout';
 
 interface ScreenPauseProps {
     onResume: () => void;
@@ -9,11 +9,12 @@ interface ScreenPauseProps {
     onOpenMap: () => void;
     onOpenSettings: () => void;
     onOpenAdventureLog: () => void;
+    onOpenStatistics: () => void;
     onQuit: () => void;
     isMobileDevice?: boolean;
 }
 
-const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap, onOpenSettings, onOpenAdventureLog, isMobileDevice, onQuit }) => {
+const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap, onOpenSettings, onOpenAdventureLog, onOpenStatistics, isMobileDevice, onQuit }) => {
     const buttonStyle = `w-full ${isMobileDevice ? 'py-3 text-sm' : 'py-4'} font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95`;
 
     return (
@@ -24,34 +25,30 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
             showCloseButton={false}
             isSmallScreen={true}
         >
-            <div className="space-y-6">
-                <button onClick={() => { UiSounds.playClick(); onResume(); }} className={`${buttonStyle} bg-white text-black border-white hover:bg-gray-200`}>
-                    <span>{t('ui.continue')}</span>
-                </button>
-                <button
-                    onClick={() => { UiSounds.playClick(); onOpenAdventureLog(); }}
-                    className={`${buttonStyle} bg-transparent text-gray-400 border-gray-600 hover:text-white hover:border-white`}
-                >
-                    <span>{t('ui.adventure_log')}</span>
-                </button>
-                <button
-                    onClick={() => { UiSounds.playClick(); onOpenMap(); }}
-                    className={`${buttonStyle} bg-transparent text-gray-400 border-gray-600 hover:text-white hover:border-white`}
-                >
-                    <span>{t('ui.map_btn')}</span>
-                </button>
-                <button
-                    onClick={() => { UiSounds.playClick(); onOpenSettings(); }}
-                    className={`${buttonStyle} bg-transparent text-gray-400 border-gray-600 hover:text-white hover:border-white`}
-                >
-                    <span>{t('ui.settings')}</span>
-                </button>
-                <button
-                    onClick={() => { UiSounds.playClick(); onAbort(); }}
-                    className={`${buttonStyle} bg-black text-red-600 border-red-800 hover:bg-red-900/10 shadow-[0_0_20px_rgba(220,38,38,0.2)]`}
-                >
-                    <span>{t('ui.end_game')}</span>
-                </button>
+            <div className={`space-y-4 md:space-y-6 ${isMobileDevice ? 'px-2' : ''}`}>
+                <TacticalButton onClick={onResume} className="w-full">
+                    {t('ui.continue')}
+                </TacticalButton>
+
+                <TacticalButton onClick={onOpenAdventureLog} variant="secondary" className="w-full">
+                    {t('ui.adventure_log')}
+                </TacticalButton>
+
+                <TacticalButton onClick={onOpenStatistics} variant="secondary" className="w-full">
+                    {t('ui.statistics')}
+                </TacticalButton>
+
+                <TacticalButton onClick={onOpenMap} variant="secondary" className="w-full">
+                    {t('ui.map_btn')}
+                </TacticalButton>
+
+                <TacticalButton onClick={onOpenSettings} variant="secondary" className="w-full">
+                    {t('ui.settings')}
+                </TacticalButton>
+
+                <TacticalButton onClick={onAbort} variant="danger" className="w-full mt-4 md:mt-8">
+                    {t('ui.end_game')}
+                </TacticalButton>
             </div>
         </ScreenModalLayout>
     );

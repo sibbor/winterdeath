@@ -3,8 +3,8 @@ import { t, setLocale, getLocale } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { GameSettings } from '../../../../core/engine/EngineTypes';
 import { SHADOW_PRESETS } from '../../../../content/constants';
-import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { useOrientation } from '../../../../hooks/useOrientation';
+import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalButton, TacticalTab } from '../../layout/ScreenModalLayout';
 
 interface ScreenSettingsProps {
     onClose: () => void;
@@ -97,27 +97,15 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, set
             <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
                 <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
                     <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide'}`}>
-                        {['graphics', 'general'].map(tab => {
-                            const isActive = activeTab === tab;
-                            const tabColor = '#3b82f6';
-                            const tabKey = 'ui.' + tab;
-
-                            return (
-                                <button key={tab} onClick={() => { setActiveTab(tab as 'graphics' | 'general'); UiSounds.playClick(); }}
-                                    className={`px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
-                                        ${isActive ? 'text-white animate-tab-pulsate' : 'bg-black text-zinc-400 hover:bg-zinc-900 shadow-none'} 
-                                        ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
-                                    `}
-                                    style={isActive ? {
-                                        backgroundColor: darkenColor(tabColor, 20),
-                                        '--pulse-color': tabColor
-                                    } as any : {}}
-                                >
-                                    <span>{t(tabKey)}</span>
-                                    {isActive && effectiveLandscape && <span className="text-white font-bold ml-2">→</span>}
-                                </button>
-                            );
-                        })}
+                        {['graphics', 'general'].map(tab => (
+                            <TacticalTab
+                                key={tab}
+                                label={t('ui.' + tab)}
+                                isActive={activeTab === tab}
+                                onClick={() => { setActiveTab(tab as 'graphics' | 'general'); UiSounds.playClick(); }}
+                                orientation={effectiveLandscape ? 'vertical' : 'horizontal'}
+                            />
+                        ))}
                     </div>
                 </div>
 
@@ -140,12 +128,12 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, set
                             {t('ui.reload_desc')}
                         </p>
                         <div className="flex gap-4 mt-4">
-                            <button onClick={() => { UiSounds.playClick(); confirmReload(); }} className="px-8 py-3 bg-zinc-800 border-2 border-zinc-700 text-zinc-400 font-black uppercase tracking-widest hover:bg-zinc-700 transition-all">
+                            <TacticalButton onClick={confirmReload} className="px-8 py-3">
                                 {t('ui.reload_now')}
-                            </button>
-                            <button onClick={() => { UiSounds.playClick(); setShowReloadConfirm(false); onClose(); }} className="px-8 py-3 bg-zinc-100 border-2 border-zinc-100 text-black font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)]">
+                            </TacticalButton>
+                            <TacticalButton onClick={() => { setShowReloadConfirm(false); onClose(); }} variant="secondary" className="px-8 py-3">
                                 {t('ui.reload_later')}
-                            </button>
+                            </TacticalButton>
                         </div>
                     </div>
                 </div>
@@ -180,7 +168,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
 
     return (
         <div className="flex flex-col items-center justify-start h-full max-w-2xl mx-auto space-y-6 overflow-y-auto pr-4 custom-scrollbar py-4 px-2">
-            <div className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white rounded-lg group gap-4">
+            <TacticalCard color="#3b82f6" className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
                 <div className="flex-1">
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.resolution')}</h3>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.resolution_sub')}</p>
@@ -206,39 +194,41 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                         <span className={tempGraphics.pixelRatio > 0.85 ? 'text-white font-bold' : ''}>{t('ui.res_native').substring(0, 6)}</span>
                     </div>
                 </div>
-            </div>
+            </TacticalCard>
 
-            <div className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white rounded-lg group gap-4">
+            <TacticalCard color="#3b82f6" className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.shadow_quality')}</h3>
                     <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">(Needs reload)</p>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.shadow_sub')}</p>
                 </div>
                 <div className="flex gap-1 md:gap-2 flex-wrap">
-                    <button
-                        onClick={() => { setTempGraphics(prev => ({ ...prev, ...SHADOW_PRESETS.OFF })); UiSounds.playClick(); }}
-                        className={`px-3 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${!tempGraphics.shadows ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}
+                    <TacticalButton
+                        onClick={() => { setTempGraphics(prev => ({ ...prev, ...SHADOW_PRESETS.OFF })); }}
+                        variant={!tempGraphics.shadows ? 'primary' : 'secondary'}
+                        className="px-4 py-2 text-xs"
                     >
                         {t('ui.off')}
-                    </button>
+                    </TacticalButton>
                     {[
                         { label: t('ui.quality_low'), preset: SHADOW_PRESETS.LOW },
                         { label: t('ui.quality_med'), preset: SHADOW_PRESETS.MEDIUM },
                         { label: t('ui.quality_high'), preset: SHADOW_PRESETS.HIGH },
                         { label: t('ui.quality_vhigh'), preset: SHADOW_PRESETS.VERYHIGH }
                     ].map(q => (
-                        <button
+                        <TacticalButton
                             key={q.label}
-                            onClick={() => { setTempGraphics(prev => ({ ...prev, ...q.preset })); UiSounds.playClick(); }}
-                            className={`px-2 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${tempGraphics.shadows && tempGraphics.shadowMapType === q.preset.shadowMapType ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}
+                            onClick={() => { setTempGraphics(prev => ({ ...prev, ...q.preset })); }}
+                            variant={tempGraphics.shadows && tempGraphics.shadowMapType === q.preset.shadowMapType ? 'primary' : 'secondary'}
+                            className="px-4 py-2 text-xs"
                         >
                             {q.label}
-                        </button>
+                        </TacticalButton>
                     ))}
                 </div>
-            </div>
+            </TacticalCard>
 
-            <div className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white rounded-lg group gap-4">
+            <TacticalCard color="#3b82f6" className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.texture_quality')}</h3>
                     <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">(Needs reload)</p>
@@ -250,36 +240,57 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                         { val: 0.75, label: t('ui.quality_med') },
                         { val: 1.0, label: t('ui.quality_high') }
                     ].map(q => (
-                        <button key={q.val} onClick={() => { setTempGraphics(prev => ({ ...prev, textureQuality: q.val })); UiSounds.playClick(); }} className={`px-3 py-1 font-bold uppercase border-2 transition-all ${tempGraphics.textureQuality === q.val ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>
+                        <TacticalButton
+                            key={q.val}
+                            onClick={() => { setTempGraphics(prev => ({ ...prev, textureQuality: q.val })); }}
+                            variant={tempGraphics.textureQuality === q.val ? 'primary' : 'secondary'}
+                            className="px-4 py-1"
+                        >
                             {q.label}
-                        </button>
+                        </TacticalButton>
                     ))}
                 </div>
-            </div>
+            </TacticalCard>
 
-            <div onClick={toggleVolumetricFog} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-blue-400 cursor-pointer group rounded-lg gap-4">
+            <TacticalCard
+                onClick={toggleVolumetricFog}
+                color="#3b82f6"
+                className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+            >
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.volumetric_fog')}</h3>
                     <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">(Needs reload)</p>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.volumetric_fog_sub')}</p>
                 </div>
                 <div className="flex gap-2">
-                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${tempGraphics.volumetricFog ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
-                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!tempGraphics.volumetricFog ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
+                    <TacticalButton variant={tempGraphics.volumetricFog ? 'primary' : 'secondary'} className="px-6 py-1">
+                        {t('ui.on')}
+                    </TacticalButton>
+                    <TacticalButton variant={!tempGraphics.volumetricFog ? 'primary' : 'secondary'} className="px-6 py-1">
+                        {t('ui.off')}
+                    </TacticalButton>
                 </div>
-            </div>
+            </TacticalCard>
 
-            <div onClick={toggleAntialias} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-blue-400 cursor-pointer group rounded-lg gap-4">
+            <TacticalCard
+                onClick={toggleAntialias}
+                color="#3b82f6"
+                className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+            >
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.antialias')}</h3>
                     <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">(Needs reload)</p>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.antialias_sub')}</p>
                 </div>
                 <div className="flex gap-2">
-                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${tempGraphics.antialias ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
-                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!tempGraphics.antialias ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
+                    <TacticalButton variant={tempGraphics.antialias ? 'primary' : 'secondary'} className="px-6 py-1">
+                        {t('ui.on')}
+                    </TacticalButton>
+                    <TacticalButton variant={!tempGraphics.antialias ? 'primary' : 'secondary'} className="px-6 py-1">
+                        {t('ui.off')}
+                    </TacticalButton>
                 </div>
-            </div>
+            </TacticalCard>
         </div>
     );
 });
@@ -294,38 +305,50 @@ interface GeneralTabProps {
 
 const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ showFps, onToggleShowFps, tempGraphics, setTempGraphics, setTick }) => (
     <div className="flex flex-col items-center justify-start h-full max-w-2xl mx-auto space-y-6 overflow-y-auto pr-4 custom-scrollbar py-4 px-2">
-        <div onClick={() => { const current = getLocale(); setLocale(current === 'en' ? 'sv' : 'en'); setTick(t => t + 1); UiSounds.playClick(); }} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white cursor-pointer group rounded-lg gap-4">
+        <TacticalCard
+            onClick={() => { const current = getLocale(); setLocale(current === 'en' ? 'sv' : 'en'); setTick(t => t + 1); UiSounds.playClick(); }}
+            color="#3b82f6"
+            className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+        >
             <div>
                 <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.language')}</h3>
                 <p className="text-gray-400 text-xs font-mono">{t('ui.language_sub')}</p>
             </div>
             <div className="flex gap-2">
-                <button onClick={(e) => { e.stopPropagation(); setLocale('en'); setTick(t => t + 1); UiSounds.playClick(); }} className={`px-4 py-1 font-bold uppercase border-2 transition-all ${getLocale() === 'en' ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>EN</button>
-                <button onClick={(e) => { e.stopPropagation(); setLocale('sv'); setTick(t => t + 1); UiSounds.playClick(); }} className={`px-4 py-1 font-bold uppercase border-2 transition-all ${getLocale() === 'sv' ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>SV</button>
+                <TacticalButton variant={getLocale() === 'en' ? 'primary' : 'secondary'} onClick={() => { setLocale('en'); setTick(t => t + 1); }} className="px-6 py-1">EN</TacticalButton>
+                <TacticalButton variant={getLocale() === 'sv' ? 'primary' : 'secondary'} onClick={() => { setLocale('sv'); setTick(t => t + 1); }} className="px-6 py-1">SV</TacticalButton>
             </div>
-        </div>
+        </TacticalCard>
 
-        <div onClick={onToggleShowFps} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white cursor-pointer group rounded-lg gap-4">
+        <TacticalCard
+            onClick={onToggleShowFps}
+            color="#3b82f6"
+            className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+        >
             <div>
                 <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">Show FPS</h3>
                 <p className="text-gray-400 text-xs font-mono">Display current frames per second in the top-right corner.</p>
             </div>
             <div className="flex gap-2">
-                <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${showFps ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
-                <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!showFps ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
+                <TacticalButton variant={showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
+                <TacticalButton variant={!showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
             </div>
-        </div>
+        </TacticalCard>
 
-        <div onClick={() => { setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: !prev.showDiscoveryPopups })); UiSounds.playClick(); }} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white cursor-pointer group rounded-lg gap-4">
+        <TacticalCard
+            onClick={() => { setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: !prev.showDiscoveryPopups })); UiSounds.playClick(); }}
+            color="#3b82f6"
+            className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+        >
             <div>
                 <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.discovery_popups')}</h3>
                 <p className="text-gray-400 text-xs font-mono">{t('ui.discovery_popups_sub')}</p>
             </div>
             <div className="flex gap-2">
-                <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${tempGraphics.showDiscoveryPopups ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
-                <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!tempGraphics.showDiscoveryPopups ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
+                <TacticalButton variant={tempGraphics.showDiscoveryPopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
+                <TacticalButton variant={!tempGraphics.showDiscoveryPopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
             </div>
-        </div>
+        </TacticalCard>
     </div>
 ));
 

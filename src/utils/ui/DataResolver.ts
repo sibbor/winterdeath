@@ -310,9 +310,8 @@ export const DataResolver = {
             case DiscoveryType.CLUE: return 'clues';
             case DiscoveryType.POI: return 'poi';
             case DiscoveryType.COLLECTIBLE: return 'collectibles';
-            case DiscoveryType.ENEMY: return 'enemy';
-            case DiscoveryType.BOSS: return 'boss';
-            case DiscoveryType.PERK: return 'perks';
+            case DiscoveryType.ENEMY: return 'zombies';
+            case DiscoveryType.BOSS: return 'bosses';
             default: return 'clues';
         }
     },
@@ -457,6 +456,18 @@ export const DataResolver = {
             case PerkCategory.PASSIVE: return 'ui.passive_abilities';
             case PerkCategory.BUFF: return 'ui.buffs';
             case PerkCategory.DEBUFF: return 'ui.debuffs';
+            default: return 'ui.unknown';
+        }
+    },
+
+    /**
+     * Resolves the translation key for a Perk Category (short version).
+     */
+    getPerkCategoryKey(cat: PerkCategory): string {
+        switch (cat) {
+            case PerkCategory.PASSIVE: return 'categories.passive';
+            case PerkCategory.BUFF: return 'categories.buff';
+            case PerkCategory.DEBUFF: return 'categories.debuff';
             default: return 'ui.unknown';
         }
     }

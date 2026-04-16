@@ -830,7 +830,12 @@ export const EnemyManager = {
 
         if (e.hp <= 0) {
             e.statusFlags |= EnemyFlags.DEAD;
-            if (tracker) tracker.recordKill(session, DamageID.VEHICLE, (e.statusFlags & EnemyFlags.BOSS) !== 0);
+            if (tracker) {
+                _v1.copy(e.mesh.position).setY(0);
+                const pPos = session.playerPos;
+                const dSq = pPos ? _v1.distanceToSquared(pPos) : 0;
+                tracker.recordKill(session, DamageID.VEHICLE, (e.statusFlags & EnemyFlags.BOSS) !== 0, -1, DamageID.VEHICLE, dSq);
+            }
 
             if (speedKmh >= 80) {
                 e.deathState = EnemyDeathState.GIBBED;
@@ -951,7 +956,12 @@ export const EnemyManager = {
                 const session = callbacks.getSession ? callbacks.getSession() : null;
                 if (session) {
                     const tracker = session.getSystem('damage_tracker_system') as any;
-                    if (tracker) tracker.recordKill(session, e.type, (e.statusFlags & EnemyFlags.BOSS) !== 0);
+                    if (tracker) {
+                        _v1.copy(e.mesh.position).setY(0);
+                        const pPos = session.playerPos;
+                        const dSq = pPos ? _v1.distanceToSquared(pPos) : 0;
+                        tracker.recordKill(session, e.type, (e.statusFlags & EnemyFlags.BOSS) !== 0, e.bossId, e.lastDamageType as any, dSq);
+                    }
                 }
                 if (callbacks.gainXp) callbacks.gainXp(e.score || 10);
 

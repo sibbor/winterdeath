@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react'
 import { MapItem, MapItemType } from '../../hud/HudTypes';
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
-import ScreenModalLayout from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { TacticalCard } from '../../layout/ScreenModalLayout';
 import { useHudStore } from '../../../../hooks/useHudStore';
 import { HudStore } from '../../../../store/HudStore';
 import { DamageID } from '../../../../entities/player/CombatTypes';
@@ -371,17 +371,17 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
                 <div className="flex items-center gap-2">🔍 {t('ui.clue')}</div>
             </div>
             <div className="flex gap-4 justify-center">
-                <div className="bg-blue-900/20 px-3 py-1 border border-blue-500/30">
-                    <span className="text-[10px] text-blue-400 font-bold uppercase mr-2">{t('ui.player')}</span>
+                <TacticalCard color="#3b82f6" className="px-3 py-1 flex items-center gap-2">
+                    <span className="text-[10px] text-blue-400 font-bold uppercase">{t('ui.player')}</span>
                     <LivePlayerCoordinates />
-                </div>
+                </TacticalCard>
                 {!isMobileDevice && mouseCoords && (
-                    <div className="bg-gray-900/40 px-3 py-1 border border-gray-700/50">
-                        <span className="text-[10px] text-gray-400 font-bold uppercase mr-2">{t('ui.coordinates')}</span>
+                    <TacticalCard color="#94a3b8" className="px-3 py-1 flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400 font-bold uppercase">{t('ui.coordinates')}</span>
                         <span className="text-sm font-mono text-white font-bold">
                             {`${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}`}
                         </span>
-                    </div>
+                    </TacticalCard>
                 )}
             </div>
         </div>

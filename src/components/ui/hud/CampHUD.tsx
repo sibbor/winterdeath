@@ -80,6 +80,9 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
                             <div className="h-full bg-blue-400" style={{ width: `${(stats.statsBuffer[PlayerStatID.CURRENT_XP] / Math.max(1, stats.statsBuffer[PlayerStatID.NEXT_LEVEL_XP])) * 100}%` }} />
                         </div>
                     </div>
+                    <div className="text-[10px] text-blue-400/40 font-bold uppercase tracking-[0.2em] mt-1.5 text-center w-full">
+                        {t('ui.show_stats_hint')}
+                    </div>
                 </div>
 
                 <div className="flex gap-4 pointer-events-auto">

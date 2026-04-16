@@ -87,7 +87,7 @@ function _executeThrow(
     if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
 
     const tracker = session.getSystem('damage_tracker_system') as any;
-    if (tracker) tracker.recordThrowable(session);
+    if (tracker) tracker.recordThrowable(session, state.activeWeapon);
 
     // VINTERDÖD FIX: Use the locked CHARGE rotation, not the current character rotation
     // which may have snapped towards the move direction during release.

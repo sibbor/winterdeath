@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
-import ScreenModalLayout from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { TacticalCard } from '../../layout/ScreenModalLayout';
 import { getCollectibleById } from '../../../../content/collectibles';
 import CollectiblePreview from '../../core/CollectiblePreview';
 
@@ -45,9 +45,9 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
                 {/* Collector Icon/Preview */}
                 <div className="w-48 h-48 sm:w-64 sm:h-64 my-6 relative flex items-center justify-center">
                     <div className="absolute inset-0 bg-yellow-500/5 rounded-full blur-3xl animate-pulse"></div>
-                    <div className="relative w-full h-full border border-white/10 p-4 bg-black/40 backdrop-blur-md">
+                    <TacticalCard color="#eab308" className="relative w-full h-full p-4">
                         <CollectiblePreview type={def.modelType} />
-                    </div>
+                    </TacticalCard>
                 </div>
 
                 <div className="max-w-md px-4 mt-4">

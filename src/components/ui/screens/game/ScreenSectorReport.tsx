@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { t } from '../../../../utils/i18n';
 import { SectorStats } from '../../../../game/session/SessionTypes';
-import ScreenModalLayout from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { TacticalCard, TacticalTab } from '../../layout/ScreenModalLayout';
 import { DamageID } from '../../../../entities/player/CombatTypes';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
 
 interface ScreenSectorReportProps {
@@ -117,8 +116,16 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
         >
             {/* Header / Pager */}
             <div className="flex justify-center mb-8 border-b border-gray-800">
-                <TabButton isActive={activeTab === 0} index={0} label={t('ui.summary')} onClick={handleTabChange} />
-                <TabButton isActive={activeTab === 1} index={1} label={t('ui.details')} onClick={handleTabChange} />
+                <TacticalTab
+                    label={t('ui.summary')}
+                    isActive={activeTab === 0}
+                    onClick={() => handleTabChange(0)}
+                />
+                <TacticalTab
+                    label={t('ui.details')}
+                    isActive={activeTab === 1}
+                    onClick={() => handleTabChange(1)}
+                />
             </div>
 
             {activeTab === 0 ? (
@@ -192,7 +199,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
             ) : (
                 /* PAGE 2: DETAILED COMBAT BREAKDOWN */
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <div className="bg-black/40 backdrop-blur-sm rounded-xl p-5 border border-white/10 shadow-2xl">
+                    <TacticalCard color="#ef4444" className="p-5">
                         <div className="flex justify-between items-end mb-4 border-b border-red-500/30 pb-2">
                             <h3 className="text-2xl font-black uppercase tracking-tighter text-red-500">{t('report.damage.incoming')}</h3>
                             <span className="text-xl font-mono text-red-400 font-bold">{Math.round(totalIncoming)}</span>
@@ -228,9 +235,9 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                                 );
                             })}
                         </div>
-                    </div>
+                    </TacticalCard>
 
-                    <div className="bg-black/40 backdrop-blur-sm rounded-xl p-5 border border-white/10 shadow-2xl">
+                    <TacticalCard color="#22c55e" className="p-5">
                         <div className="flex justify-between items-end mb-4 border-b border-green-500/30 pb-2">
                             <h3 className="text-2xl font-black uppercase tracking-tighter text-green-500">{t('report.damage.outgoing')}</h3>
                             <span className="text-xl font-mono text-green-400 font-bold">{Math.round(totalOutgoing)}</span>
@@ -246,7 +253,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                                 return <LineItem key={weaponId} title={name.toUpperCase()} val={dmgVal} />;
                             })}
                         </div>
-                    </div>
+                    </TacticalCard>
                 </div>
             )}
         </ScreenModalLayout>
@@ -256,10 +263,13 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 // --- REUSABLE SUB-COMPONENTS (HOISTED) ---
 
 const StatBox = React.memo(({ label, value, colorClass = 'text-white', borderColor = 'border-blue-500', bgColor = 'bg-blue-900/20' }: { label: string, value: string | number, colorClass?: string, borderColor?: string, bgColor?: string }) => (
-    <div className={`${bgColor} p-4 border-l-4 ${borderColor} shadow-lg flex flex-col justify-center min-h-[80px]`}>
+    <TacticalCard
+        color={borderColor.includes('blue') ? '#3b82f6' : (borderColor.includes('red') ? '#ef4444' : (borderColor.includes('green') ? '#22c55e' : (borderColor.includes('yellow') ? '#eab308' : '#3b82f6')))}
+        className="flex flex-col justify-center min-h-[80px]"
+    >
         <span className={`block text-[10px] uppercase font-black tracking-widest mb-1 opacity-70 ${colorClass}`}>{label}</span>
         <span className={`text-2xl font-bold uppercase ${colorClass}`}>{value}</span>
-    </div>
+    </TacticalCard>
 ));
 
 const SmallStat = React.memo(({ label, value, colorClass = 'text-slate-400' }: { label: string, value: string | number, colorClass?: string }) => (
@@ -267,15 +277,6 @@ const SmallStat = React.memo(({ label, value, colorClass = 'text-slate-400' }: {
         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">{label}</span>
         <span className={`text-lg font-bold ${colorClass}`}>{value}</span>
     </div>
-));
-
-const TabButton = React.memo(({ index, label, isActive, onClick }: { index: 0 | 1, label: string, isActive: boolean, onClick: (idx: 0 | 1) => void }) => (
-    <button
-        onClick={() => onClick(index)}
-        className={`px-6 py-2 text-sm font-black uppercase tracking-widest transition-all border-b-2 ${isActive ? 'border-white text-white' : 'border-transparent text-gray-500 hover:text-gray-300'}`}
-    >
-        {label}
-    </button>
 ));
 
 const LineItem = React.memo(({ title, val, isHeal = false }: { title: string, val: number, isHeal?: boolean }) => (

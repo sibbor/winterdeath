@@ -3,7 +3,7 @@ import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTyp
 import { SectorState } from '../../../../game/session/SessionTypes';;
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
-import ScreenModalLayout from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { TacticalButton, TacticalCard } from '../../layout/ScreenModalLayout';
 
 const SKILLS_CONFIG = [
     { id: PlayerStatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', value: 20 },
@@ -60,21 +60,22 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                             const displayVal = skill.id === PlayerStatID.SPEED ? val.toFixed(2) : Math.round(val);
 
                             return (
-                                <div key={skill.id} className="bg-zinc-900/40 border border-zinc-800 p-4 flex justify-between items-center group hover:bg-zinc-800/40 transition-all rounded-lg">
+                                <TacticalCard key={skill.id} showHatching={true} className="flex justify-between items-center group transition-all rounded-lg p-4">
                                     <div className="flex-1">
                                         <div className="text-white font-black uppercase text-[13px] tracking-widest mb-1">{t(skill.labelKey)}</div>
                                         <div className="text-zinc-500 text-[11px] uppercase font-bold">{t(skill.descKey)}</div>
                                     </div>
                                     <div className="flex items-center gap-4">
                                         <div className="text-2xl font-mono font-light text-green-500">{displayVal}</div>
-                                        <button
+                                        <TacticalButton
                                             onClick={() => handleUpgradeSkill(skill.id, skill.value)}
-                                            className="w-10 h-10 flex items-center justify-center text-xl font-black bg-zinc-800 border border-zinc-700 hover:bg-green-600 hover:text-black hover:border-green-600 transition-all active:scale-95 text-green-500"
+                                            className="w-10 h-10 flex items-center justify-center p-0"
+                                            variant="secondary"
                                         >
                                             +
-                                        </button>
+                                        </TacticalButton>
                                     </div>
-                                </div>
+                                </TacticalCard>
                             );
                         })}
                     </div>
@@ -85,36 +86,34 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                     <label className="text-zinc-500 uppercase text-sm font-bold tracking-widest">{t('ui.temporary_modifiers')}</label>
                     <div className="grid grid-cols-1 gap-3">
                         {/* Invincibility */}
-                        <div
-                            className={`p-4 border-2 transition-all cursor-pointer flex items-center gap-4 rounded-lg
-                                ${tempSectorState.isInvincible ? 'bg-red-950/20 border-red-600 text-red-500 shadow-[0_0_15px_rgba(220,38,38,0.2)]' : 'bg-black border-zinc-800 text-zinc-500 hover:border-zinc-700'}
-                            `}
+                        <TacticalButton
                             onClick={() => { UiSounds.playClick(); setTempSectorState({ ...tempSectorState, isInvincible: !tempSectorState.isInvincible }); }}
+                            variant={tempSectorState.isInvincible ? 'danger' : 'secondary'}
+                            className="p-4 h-auto flex flex-row items-center gap-4 justify-start text-left"
                         >
-                            <div className={`w-6 h-6 border flex items-center justify-center transition-all ${tempSectorState.isInvincible ? 'bg-red-600 border-red-600' : 'border-zinc-800'}`}>
+                            <div className={`w-6 h-6 border flex items-center justify-center transition-all shrink-0 ${tempSectorState.isInvincible ? 'bg-red-600 border-red-600' : 'border-zinc-800'}`}>
                                 {tempSectorState.isInvincible && <div className="text-black font-black text-xs">✓</div>}
                             </div>
                             <div>
                                 <div className="font-black uppercase tracking-widest text-sm">{t('ui.invincible')}</div>
                                 <div className="text-[11px] uppercase font-bold opacity-60 mt-1">{t('ui.no_damage_hint')}</div>
                             </div>
-                        </div>
+                        </TacticalButton>
 
                         {/* Unlimited Ammo */}
-                        <div
-                            className={`p-4 border-2 transition-all cursor-pointer flex items-center gap-4 rounded-lg
-                                ${tempSectorState.unlimitedAmmo ? 'bg-zinc-100 border-zinc-100 text-black' : 'bg-black border-zinc-800 text-zinc-500 hover:border-zinc-700'}
-                            `}
+                        <TacticalButton
                             onClick={() => { UiSounds.playClick(); setTempSectorState({ ...tempSectorState, unlimitedAmmo: !tempSectorState.unlimitedAmmo, noReload: !tempSectorState.unlimitedAmmo }); }}
+                            variant={tempSectorState.unlimitedAmmo ? 'primary' : 'secondary'}
+                            className="p-4 h-auto flex flex-row items-center gap-4 justify-start text-left"
                         >
-                            <div className={`w-6 h-6 border flex items-center justify-center transition-all ${tempSectorState.unlimitedAmmo ? 'bg-black border-black' : 'border-zinc-800'}`}>
-                                {tempSectorState.unlimitedAmmo && <div className="text-zinc-100 font-black text-xs">✓</div>}
+                            <div className={`w-6 h-6 border flex items-center justify-center transition-all shrink-0 ${tempSectorState.unlimitedAmmo ? 'bg-black border-black' : 'border-zinc-800'}`}>
+                                {tempSectorState.unlimitedAmmo && <div className="text-zinc-500/50 font-black text-xs">✓</div>}
                             </div>
                             <div>
                                 <div className="font-black uppercase tracking-widest text-sm">{t('ui.unlimited_ammo_no_reload')}</div>
                                 <div className="text-[11px] uppercase font-bold opacity-60 mt-1">{t('ui.playground_only')}</div>
                             </div>
-                        </div>
+                        </TacticalButton>
                     </div>
                 </div>
 

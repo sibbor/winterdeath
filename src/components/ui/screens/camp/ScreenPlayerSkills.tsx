@@ -2,9 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
-import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { LEVEL_CAP, PLAYER_BASE_SPEED } from '../../../../content/constants';
 import { useOrientation } from '../../../../hooks/useOrientation';
+import ScreenModalLayout, { TacticalCard, TacticalButton } from '../../layout/ScreenModalLayout';
 
 const SKILLS_CONFIG = [
     { statId: PlayerStatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', cost: 1, value: 20, base: 100 },
@@ -108,7 +108,7 @@ const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, ava
     const displayUpgrade = isSpeed ? upgradeVal.toFixed(2) : upgradeVal;
 
     return (
-        <div className={`${isMobileDevice ? 'p-4' : 'p-8'} bg-gray-900/40 border-2 border-purple-900/50 flex flex-col items-center text-center hover:border-purple-600/50 transition-colors relative group`}>
+        <TacticalCard color="#a855f7" className="flex flex-col items-center text-center">
             <h3 className={`${isMobileDevice ? 'text-xl mb-1' : 'text-3xl mb-4'} font-semibold text-white uppercase tracking-tighter`}>{t(skill.labelKey)}</h3>
             <p className={`${isMobileDevice ? 'text-xs h-10 mb-2 leading-tight' : 'text-lg h-16 mb-2'} text-gray-400 leading-snug`}>{t(skill.descKey)}</p>
 
@@ -126,16 +126,16 @@ const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, ava
                 </span>
             </div>
 
-            <button
+            <TacticalButton
                 onClick={() => onUpgrade(skill.statId, cost, skill.value)}
                 disabled={!canAfford}
-                className={`w-full ${isMobileDevice ? 'py-2' : 'py-4'} font-bold uppercase tracking-wider border-2 transition-all ${canAfford
-                    ? 'bg-purple-900/20 border-purple-500 text-purple-400 hover:bg-purple-900/40'
-                    : 'bg-black border-gray-800 text-gray-600 cursor-not-allowed'}`}
+                variant={canAfford ? 'primary' : 'ghost'}
+                className="w-full"
+                style={canAfford ? { backgroundColor: 'rgba(147, 51, 234, 0.1)', color: '#a855f7', borderColor: '#a855f744' } : {}}
             >
-                <span className={`${isMobileDevice ? 'text-xs' : 'text-base'} block`}>{t('ui.upgrade')} ({cost} SP)</span>
-            </button>
-        </div>
+                {t('ui.upgrade')} ({cost} SP)
+            </TacticalButton>
+        </TacticalCard>
     );
 });
 

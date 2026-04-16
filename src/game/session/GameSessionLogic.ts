@@ -14,7 +14,7 @@ import { ScrapItem } from '../../systems/WorldLootSystem';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { Obstacle } from '../../core/world/CollisionResolution';
 import { ParticleState } from '../../systems/FXSystem';
-import { PlayerStatID, PlayerStatusFlags, PlayerStatsUtils } from '../../entities/player/PlayerTypes';
+import { PlayerStatID, PlayerStatusFlags, PlayerStatsUtils, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
 import { InteractionType } from '../../systems/InteractionTypes';
 import { PerkFX } from '../../systems/PerkFX';
 
@@ -34,47 +34,38 @@ export class GameSessionLogic {
     static createDefaultSessionStats(props: GameCanvasProps): SectorStats {
         // --- V8 HIDDEN CLASS OPTIMIZATION: Pre-allocate all combat keys ---
         const killsByType: Record<string, number> = {};
-        const outgoingDamageBreakdown: Record<string, number> = {};
-        const incomingDamageBreakdown: Record<string, Record<string, number>> = {};
+        const incomingDamageBreakdown: Record<number, Record<number, number>> = {};
 
-        // Pre-allocate Weapons
-        for (const key in WEAPONS) {
-            outgoingDamageBreakdown[key] = 0;
+        // VINTERDÖD: Pre-allocate standard breakdown structures to prevent runtime GC
+        const weapons = [
+            DamageID.SMG, DamageID.SHOTGUN, DamageID.RIFLE, DamageID.PISTOL,
+            DamageID.REVOLVER, DamageID.GRENADE, DamageID.MOLOTOV, DamageID.FLASHBANG,
+            DamageID.MINIGUN, DamageID.FLAMETHROWER, DamageID.ARC_CANNON, DamageID.RADIO,
+            DamageID.RUSH, DamageID.VEHICLE, DamageID.DODGE
+        ];
+
+        for (let i = 0; i < weapons.length; i++) {
+            const wId = weapons[i];
+            incomingDamageBreakdown[wId] = {};
+            // Pre-allocate attack slots for weapons (e.g. 0-5)
+            for (let aIdx = 0; aIdx < 6; aIdx++) incomingDamageBreakdown[wId][aIdx] = 0;
         }
-        // Virtual Weapons (Tackles/Vehicles)
-        outgoingDamageBreakdown[WeaponType.RUSH] = 0;
-        outgoingDamageBreakdown[WeaponType.VEHICLE] = 0;
 
         // Pre-allocate Enemies
         for (const key in ZOMBIE_TYPES) {
             killsByType[key] = 0;
-            // Standardize attack keys to match EnemyAttackType names
-            incomingDamageBreakdown[key] = {
-                BITE: 0, HIT: 0, JUMP: 0, SMASH: 0, EXPLODE: 0,
-                SCREECH: 0, LUNGE: 0, CLAW: 0, SWIPE: 0, PUNCH: 0
+            const enemyId = Number(key);
+            if (enemyId) incomingDamageBreakdown[enemyId] = {
+                0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 // Enum mapping for EnemyAttackType
             };
         }
         killsByType['Boss'] = 0;
-        killsByType[WeaponType.RUSH] = 0;
-        killsByType[WeaponType.VEHICLE] = 0;
 
-        // --- BOSS DATA (Bitmask compliant) ---
-        // Pre-allocate slots for potential boss encounters (0-3) using special DamageID.BOSS grouping
-        incomingDamageBreakdown[DamageID.BOSS] = {};
-        for (let i = 0; i < 4; i++) {
-            // BOSS damage is grouped by DamageID.BOSS, but we can also use specific boss IDs as keys if needed
-            // For now, follow the user's focus on DamageID.
-            incomingDamageBreakdown[DamageID.BOSS][i] = 0;
+        // Environment & DoTs
+        const envIds = [DamageID.PHYSICAL, DamageID.BURN, DamageID.BLEED, DamageID.DROWNING, DamageID.FALL, DamageID.EXPLOSION, DamageID.ELECTRIC];
+        for (let i = 0; i < envIds.length; i++) {
+            incomingDamageBreakdown[envIds[i]] = { 0: 0 };
         }
-
-        // Environment & DoTs (Standard DamageIDs)
-        incomingDamageBreakdown[DamageID.PHYSICAL] = { 0: 0 };
-        incomingDamageBreakdown[DamageID.BURN] = { 0: 0 };
-        incomingDamageBreakdown[DamageID.BLEED] = { 0: 0 };
-        incomingDamageBreakdown[DamageID.DROWNING] = { 0: 0 };
-        incomingDamageBreakdown[DamageID.FALL] = { 0: 0 };
-        incomingDamageBreakdown[DamageID.EXPLOSION] = { 0: 0 };
-        incomingDamageBreakdown[DamageID.ELECTRIC] = { 0: 0 };
 
         return {
             kills: 0,
@@ -95,6 +86,25 @@ export class GameSessionLogic {
             score: 0,
             cluesFound: [],
 
+            maxKillstreak: 0,
+            engagementDistSqKills: 0,
+
+            // --- ZERO-GC WEAPON BUFFERS (Phase 12) ---
+            weaponKills: new Float64Array(StatWeaponIndex.COUNT),
+            weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
+            weaponShotsFired: new Float64Array(StatWeaponIndex.COUNT),
+            weaponShotsHit: new Float64Array(StatWeaponIndex.COUNT),
+            weaponTimeActive: new Float64Array(StatWeaponIndex.COUNT),
+            weaponEngagementDistSq: new Float64Array(StatWeaponIndex.COUNT),
+
+            // --- ZERO-GC PERK BUFFERS (Step 2) ---
+            perkTimesGained: new Float64Array(StatPerkIndex.COUNT),
+            perkDamageAbsorbed: new Float64Array(StatPerkIndex.COUNT),
+            perkDamageDealt: new Float64Array(StatPerkIndex.COUNT),
+            perkDebuffsCleansed: new Float64Array(StatPerkIndex.COUNT),
+
+            enemyKills: new Float64Array(StatEnemyIndex.COUNT),
+
             discoveredPOIs: [],
             seenEnemies: [],
             seenBosses: [],
@@ -106,9 +116,10 @@ export class GameSessionLogic {
             familyExtracted: false,
             isExtraction: false,
             incomingDamageBreakdown,
-            outgoingDamageBreakdown,
+            outgoingDamageBreakdown: {}, // Deprecated: Weapon damage is now in weaponDamageDealt buffer
             bossDamageDealt: 0,
-            bossDamageTaken: 0
+            bossDamageTaken: 0,
+            discoveredPerks: []
         };
     }
 
@@ -146,6 +157,9 @@ export class GameSessionLogic {
         statsBuffer[PlayerStatID.SKILL_POINTS] = props.stats.statsBuffer[PlayerStatID.SKILL_POINTS];
         statsBuffer[PlayerStatID.SCRAP] = props.stats.statsBuffer[PlayerStatID.SCRAP];
 
+        // --- INITIALIZE PERSISTENT SESSION TRACKING ---
+        statsBuffer[PlayerStatID.TOTAL_SESSIONS_STARTED]++;
+
         // --- INITIALIZE MULTIPLIERS (1.0) ---
         statsBuffer[PlayerStatID.MULTIPLIER_SPEED] = 1.0;
         statsBuffer[PlayerStatID.MULTIPLIER_RELOAD] = 1.0;
@@ -163,6 +177,15 @@ export class GameSessionLogic {
             // --- DOD BUFFER OVERRIDES (Phase 9) ---
             ...buffers,
             statusFlags: PlayerStatusFlags.NONE,
+            
+            // --- ENEMY STATS BUFFER RESET ---
+            enemyKills: new Float64Array(StatEnemyIndex.COUNT),
+            
+            // --- PERK STATS BUFFER RESET ---
+            perkTimesGained: new Float64Array(StatPerkIndex.COUNT),
+            perkDamageAbsorbed: new Float64Array(StatPerkIndex.COUNT),
+            perkDamageDealt: new Float64Array(StatPerkIndex.COUNT),
+            perkDebuffsCleansed: new Float64Array(StatPerkIndex.COUNT),
 
             // --- SESSION STATE ---
             startTime: performance.now(),
@@ -381,6 +404,10 @@ export class GameSessionLogic {
     update(dt: number, mapId: number = 0) {
         this.mapId = mapId;
         if (!this.state) return;
+
+        // --- TRACK PERSISTENT GAME TIME (Zero-GC) ---
+        this.state.statsBuffer[PlayerStatID.TOTAL_GAME_TIME] += dt;
+        this.state.sessionStats.timePlayed += dt;
 
         if (this.perksFx) {
             this.perksFx.update(this, dt, this.state.simTime, this.state.renderTime);

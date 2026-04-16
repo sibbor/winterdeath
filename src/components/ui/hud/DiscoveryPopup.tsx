@@ -44,8 +44,18 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
     setVisible(prevVisible => {
       if (!prevVisible) return prevVisible;
       UiSounds.playDiscovery();
-      const tab = DataResolver.getAdventureLogTab(activeDiscovery?.type);
-      onOpenAdventureLog(tab, activeDiscovery?.id);
+      
+      const isPerkVal = activeDiscovery?.type === DiscoveryType.PERK;
+      
+      if (isPerkVal) {
+        window.dispatchEvent(new CustomEvent('open-statistics', { 
+            detail: { tab: 'perks', itemId: activeDiscovery?.id } 
+        }));
+      } else {
+        const tab = DataResolver.getAdventureLogTab(activeDiscovery?.type);
+        onOpenAdventureLog(tab, activeDiscovery?.id);
+      }
+      
       return false;
     });
   }, [activeDiscovery, onOpenAdventureLog]);

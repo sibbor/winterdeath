@@ -9,6 +9,168 @@ const HALF_PI = Math.PI * 0.5;
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
+// --- SHARED ANIMATION STATE ---
+// V8 optimizes this monomorphic object, acting as a high-performance struct.
+// Eliminates parameter passing overhead and object instantiation (Zero-GC).
+const _animState = {
+    targetRotX: 0,
+    targetRotZ: 0,
+    targetPosY: 0,
+    targetScaleX: 1,
+    targetScaleY: 1,
+    targetScaleZ: 1,
+    targetPosX: 0,
+    targetPosZ: 0,
+    hijackPhysics: false,
+    baseScale: 1,
+    widthScale: 1,
+    baseY: 0,
+    progress: 0,
+    renderTime: 0,
+    startPos: _v1 // Reference initialized later
+};
+
+type AnimHandler = (e: Enemy, targetPos: THREE.Vector3) => void;
+
+// --- JUMP TABLES (O(1) Lookup) ---
+// Pre-allocating max expected size avoids V8 array deoptimization
+const MAX_ATTACKS = 20;
+const _chargeHandlers: AnimHandler[] = new Array(MAX_ATTACKS).fill(null);
+const _executeHandlers: AnimHandler[] = new Array(MAX_ATTACKS).fill(null);
+
+// ==========================================
+// SPECIFIC ATTACK ANIMATION HANDLERS
+// ==========================================
+
+// --- HIT ---
+_chargeHandlers[EnemyAttackType.HIT] = () => {
+    _animState.targetRotX = -0.3 * _animState.progress;
+    _animState.targetRotZ = 0.3 * Math.sin(_animState.progress * HALF_PI);
+    _animState.targetScaleY = _animState.baseScale * (1.0 - 0.1 * _animState.progress);
+};
+_executeHandlers[EnemyAttackType.HIT] = (e, targetPos) => {
+    const swing = Math.sin(_animState.progress * PI);
+    _animState.targetRotX = 0.4 * swing;
+    _animState.targetRotZ = -0.5 * swing;
+
+    _animState.hijackPhysics = true;
+    _animState.targetPosX = THREE.MathUtils.lerp(_animState.startPos.x, targetPos.x, swing * 0.2);
+    _animState.targetPosZ = THREE.MathUtils.lerp(_animState.startPos.z, targetPos.z, swing * 0.2);
+};
+
+// --- BITE ---
+_chargeHandlers[EnemyAttackType.BITE] = () => {
+    _animState.targetRotX = -0.4 * _animState.progress;
+    _animState.targetScaleX = _animState.baseScale * _animState.widthScale * (1.0 + 0.15 * _animState.progress);
+};
+_executeHandlers[EnemyAttackType.BITE] = (e, targetPos) => {
+    const biteSwing = Math.sin(_animState.progress * PI);
+    _animState.targetRotX = 0.7 * biteSwing;
+    _animState.targetScaleY = _animState.baseScale * (1.0 + 0.2 * biteSwing);
+
+    _animState.hijackPhysics = true;
+    _v1.subVectors(_animState.startPos, targetPos).normalize().multiplyScalar(e.attackOffset);
+    _v2.copy(targetPos).add(_v1);
+
+    const latchProgress = Math.min(1.0, _animState.progress * 4.0);
+    _animState.targetPosX = THREE.MathUtils.lerp(_animState.startPos.x, _v2.x, latchProgress);
+    _animState.targetPosZ = THREE.MathUtils.lerp(_animState.startPos.z, _v2.z, latchProgress);
+};
+
+// --- JUMP ---
+_chargeHandlers[EnemyAttackType.JUMP] = () => {
+    _animState.targetScaleY = _animState.baseScale * (1.0 - 0.6 * _animState.progress);
+    _animState.targetScaleX = _animState.baseScale * _animState.widthScale * (1.0 + 0.4 * _animState.progress);
+    _animState.targetScaleZ = _animState.baseScale * _animState.widthScale * (1.0 + 0.4 * _animState.progress);
+    _animState.targetRotX = 0.4 * _animState.progress;
+    _animState.targetPosY = _animState.baseY - 0.3 * _animState.progress;
+};
+_executeHandlers[EnemyAttackType.JUMP] = (e, targetPos) => {
+    const leapArc = Math.sin(_animState.progress * PI);
+    _animState.targetPosY = _animState.baseY + leapArc * 3.5;
+    _animState.targetRotX = 0.6;
+    _animState.targetScaleY = _animState.baseScale * (1.0 + leapArc * 0.4);
+
+    _animState.hijackPhysics = true;
+
+    // Prevent overlap! Calculate a landing offset so the enemy lands in front of the player
+    _v1.subVectors(_animState.startPos, targetPos).normalize().multiplyScalar(e.attackOffset + 0.5);
+    _v2.copy(targetPos).add(_v1);
+
+    _animState.targetPosX = THREE.MathUtils.lerp(_animState.startPos.x, _v2.x, _animState.progress);
+    _animState.targetPosZ = THREE.MathUtils.lerp(_animState.startPos.z, _v2.z, _animState.progress);
+};
+
+// --- SMASH & FREEZE JUMP ---
+const chargeSmashHandler: AnimHandler = () => {
+    _animState.targetRotX = -0.6 * _animState.progress;
+    _animState.targetScaleY = _animState.baseScale * (1.0 + 0.3 * _animState.progress);
+    _animState.targetPosY = _animState.baseY + 0.5 * _animState.progress;
+};
+const executeSmashHandler: AnimHandler = () => {
+    if (_animState.progress < 0.2) {
+        const slam = _animState.progress * 5.0;
+        _animState.targetRotX = -0.6 + (1.4 * slam);
+        _animState.targetPosY = _animState.baseY + 0.5 * (1.0 - slam);
+        _animState.targetScaleY = _animState.baseScale * (1.0 - 0.2 * slam);
+    } else {
+        const recover = (_animState.progress - 0.2) * 1.25;
+        _animState.targetRotX = 0.8 * (1.0 - recover);
+    }
+};
+
+_chargeHandlers[EnemyAttackType.SMASH] = chargeSmashHandler;
+_chargeHandlers[EnemyAttackType.FREEZE_JUMP] = chargeSmashHandler;
+_executeHandlers[EnemyAttackType.SMASH] = executeSmashHandler;
+_executeHandlers[EnemyAttackType.FREEZE_JUMP] = executeSmashHandler;
+
+// --- EXPLODE ---
+_chargeHandlers[EnemyAttackType.EXPLODE] = () => {
+    const swell = 1.0 + _animState.progress * 0.8;
+    _animState.targetScaleX = _animState.baseScale * _animState.widthScale * swell;
+    _animState.targetScaleY = _animState.baseScale * swell;
+    _animState.targetScaleZ = _animState.baseScale * _animState.widthScale * swell;
+    const shake = 0.2 * _animState.progress;
+    _animState.targetRotX += (Math.random() - 0.5) * shake;
+    _animState.targetRotZ += (Math.random() - 0.5) * shake;
+};
+_executeHandlers[EnemyAttackType.EXPLODE] = () => {
+    _animState.targetScaleX = _animState.baseScale * _animState.widthScale * 1.8;
+    _animState.targetScaleY = _animState.baseScale * 1.8;
+    _animState.targetScaleZ = _animState.baseScale * _animState.widthScale * 1.8;
+    _animState.targetRotX += (Math.random() - 0.5) * 0.4;
+    _animState.targetRotZ += (Math.random() - 0.5) * 0.4;
+};
+
+// --- SCREECH ---
+_chargeHandlers[EnemyAttackType.SCREECH] = () => {
+    _animState.targetRotX = -0.4 * _animState.progress;
+    _animState.targetScaleX = _animState.baseScale * _animState.widthScale * (1.0 + 0.25 * _animState.progress);
+    _animState.targetScaleZ = _animState.baseScale * _animState.widthScale * (1.0 + 0.25 * _animState.progress);
+    _animState.targetRotZ = (Math.random() - 0.5) * 0.2 * _animState.progress;
+};
+// Executing screech uses default handling or can be expanded if a physical reaction is needed.
+
+// --- ELECTRIC BEAM & MAGNETIC CHAIN ---
+const chargeBeamHandler: AnimHandler = () => {
+    _animState.targetPosY = _animState.baseY + 1.0 * _animState.progress;
+    _animState.targetPosY += Math.sin(_animState.renderTime * 0.01) * 0.2 * _animState.progress;
+    _animState.targetScaleY = _animState.baseScale * (1.0 + 0.2 * _animState.progress);
+};
+const executeBeamHandler: AnimHandler = () => {
+    _animState.targetPosY = _animState.baseY + 1.0 + Math.sin(_animState.renderTime * 0.03) * 0.3;
+    const pulse = 1.0 + Math.sin(_animState.renderTime * 0.08) * 0.1;
+    _animState.targetScaleX = _animState.baseScale * _animState.widthScale * pulse;
+    _animState.targetScaleY = _animState.baseScale * pulse;
+    _animState.targetScaleZ = _animState.baseScale * _animState.widthScale * pulse;
+};
+
+_chargeHandlers[EnemyAttackType.ELECTRIC_BEAM] = chargeBeamHandler;
+_chargeHandlers[EnemyAttackType.MAGNETIC_CHAIN] = chargeBeamHandler;
+_executeHandlers[EnemyAttackType.ELECTRIC_BEAM] = executeBeamHandler;
+_executeHandlers[EnemyAttackType.MAGNETIC_CHAIN] = executeBeamHandler;
+
+
 export const EnemyAnimator = {
     /**
      * Procedural animation system for enemy movement and attacks.
@@ -22,7 +184,7 @@ export const EnemyAnimator = {
         // --- ZERO-GC STATE TRACKING ---
         if (!mesh.userData.startPos) mesh.userData.startPos = new THREE.Vector3();
 
-        // Läs in targetPos som vi just satte i EnemyAttackHandler!
+        // Load targetPos that was just set in EnemyAttackHandler!
         const targetPos = mesh.userData.targetPos || _v2.set(mesh.position.x, mesh.position.y, mesh.position.z);
 
         if (e.state !== mesh.userData.lastState) {
@@ -30,20 +192,23 @@ export const EnemyAnimator = {
             mesh.userData.startPos.copy(mesh.position);
         }
 
-        const baseY = mesh.userData.baseY || 0;
-        const baseScale = e.originalScale || 1.0;
-        const widthScale = e.widthScale || 1.0;
+        // Initialize state struct for this frame
+        _animState.baseY = mesh.userData.baseY || 0;
+        _animState.baseScale = e.originalScale || 1.0;
+        _animState.widthScale = e.widthScale || 1.0;
+        _animState.renderTime = renderTime;
+        _animState.startPos = mesh.userData.startPos;
 
-        let targetRotX = 0;
-        let targetRotZ = 0;
-        let targetPosY = baseY;
-        let targetScaleX = baseScale * widthScale;
-        let targetScaleY = baseScale;
-        let targetScaleZ = baseScale * widthScale;
+        _animState.targetRotX = 0;
+        _animState.targetRotZ = 0;
+        _animState.targetPosY = _animState.baseY;
+        _animState.targetScaleX = _animState.baseScale * _animState.widthScale;
+        _animState.targetScaleY = _animState.baseScale;
+        _animState.targetScaleZ = _animState.baseScale * _animState.widthScale;
 
-        let targetPosX = mesh.position.x;
-        let targetPosZ = mesh.position.z;
-        let hijackPhysics = false;
+        _animState.targetPosX = mesh.position.x;
+        _animState.targetPosZ = mesh.position.z;
+        _animState.hijackPhysics = false;
 
         const isAttacking = (e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING);
 
@@ -55,73 +220,25 @@ export const EnemyAnimator = {
                 // --- PHASE 1: CHARGING THE ATTACK ---
                 if (e.state === AIState.ATTACK_CHARGE && e.attackTimer !== undefined) {
                     const totalCharge = (att.chargeTime || 1000) * 0.001;
-                    const progress = totalCharge > 0 ? Math.min(1.0, Math.max(0, 1.0 - (e.attackTimer / totalCharge))) : 1.0;
+                    _animState.progress = totalCharge > 0 ? Math.min(1.0, Math.max(0, 1.0 - (e.attackTimer / totalCharge))) : 1.0;
 
-                    switch (att.type) {
-                        case EnemyAttackType.HIT:
-                            targetRotX = -0.3 * progress;
-                            targetRotZ = 0.3 * Math.sin(progress * HALF_PI);
-                            targetScaleY = baseScale * (1.0 - 0.1 * progress);
-                            break;
+                    const handler = _chargeHandlers[att.type];
+                    if (handler) handler(e, targetPos);
 
-                        case EnemyAttackType.BITE:
-                            targetRotX = -0.4 * progress;
-                            targetScaleX = baseScale * widthScale * (1.0 + 0.15 * progress);
-                            break;
-
-                        case EnemyAttackType.JUMP:
-                            targetScaleY = baseScale * (1.0 - 0.6 * progress);
-                            targetScaleX = baseScale * widthScale * (1.0 + 0.4 * progress);
-                            targetScaleZ = baseScale * widthScale * (1.0 + 0.4 * progress);
-                            targetRotX = 0.4 * progress;
-                            targetPosY = baseY - 0.3 * progress;
-                            break;
-
-                        case EnemyAttackType.SMASH:
-                        case EnemyAttackType.FREEZE_JUMP:
-                            targetRotX = -0.6 * progress;
-                            targetScaleY = baseScale * (1.0 + 0.3 * progress);
-                            targetPosY = baseY + 0.5 * progress;
-                            break;
-
-                        case EnemyAttackType.EXPLODE:
-                            const swell = 1.0 + progress * 0.8;
-                            targetScaleX = baseScale * widthScale * swell;
-                            targetScaleY = baseScale * swell;
-                            targetScaleZ = baseScale * widthScale * swell;
-                            const shake = 0.2 * progress;
-                            targetRotX += (Math.random() - 0.5) * shake;
-                            targetRotZ += (Math.random() - 0.5) * shake;
-                            break;
-
-                        case EnemyAttackType.SCREECH:
-                            targetRotX = -0.4 * progress;
-                            targetScaleX = baseScale * widthScale * (1.0 + 0.25 * progress);
-                            targetScaleZ = baseScale * widthScale * (1.0 + 0.25 * progress);
-                            targetRotZ = (Math.random() - 0.5) * 0.2 * progress;
-                            break;
-
-                        case EnemyAttackType.ELECTRIC_BEAM:
-                        case EnemyAttackType.MAGNETIC_CHAIN:
-                            targetPosY = baseY + 1.0 * progress;
-                            targetPosY += Math.sin(renderTime * 0.01) * 0.2 * progress;
-                            targetScaleY = baseScale * (1.0 + 0.2 * progress);
-                            break;
-                    }
-
+                    // Indicator Ring handling
                     if (e.indicatorRing) {
                         if (att.radius) {
                             e.indicatorRing.visible = true;
                             e.indicatorRing.matrixAutoUpdate = true;
-                            e.indicatorRing.position.set(0, -targetPosY + 0.2, 0); // VINTERDÖD: Fixed offset
-                            const safeScaleX = Math.max(0.01, targetScaleX);
+                            e.indicatorRing.position.set(0, -_animState.targetPosY + 0.2, 0);
+                            const safeScaleX = Math.max(0.01, _animState.targetScaleX);
                             e.indicatorRing.scale.setScalar(att.radius / safeScaleX);
 
-                            const flashFreq = 5.0 + (progress * progress * 40.0);
+                            const flashFreq = 5.0 + (_animState.progress * _animState.progress * 40.0);
                             const pulse = Math.sin(renderTime * 0.01 * flashFreq) * 0.5 + 0.5;
                             if (e.indicatorRing.material) {
                                 const mat = e.indicatorRing.material as any;
-                                mat.opacity = 0.3 + progress * 0.6;
+                                mat.opacity = 0.3 + _animState.progress * 0.6;
                                 mat.color.setHex(pulse > 0.5 ? 0xffffff : 0xff0000);
                             }
                         } else {
@@ -134,86 +251,15 @@ export const EnemyAnimator = {
                 // --- PHASE 2: EXECUTING THE ATTACK ---
                 else if (e.state === AIState.ATTACKING && e.attackTimer !== undefined) {
                     const totalActive = (att.activeTime || 500) * 0.001;
-                    const progress = totalActive > 0 ? Math.min(1.0, Math.max(0, 1.0 - (e.attackTimer / totalActive))) : 1.0;
+                    _animState.progress = totalActive > 0 ? Math.min(1.0, Math.max(0, 1.0 - (e.attackTimer / totalActive))) : 1.0;
 
-                    switch (att.type) {
-                        case EnemyAttackType.HIT:
-                            const swing = Math.sin(progress * PI);
-                            targetRotX = 0.4 * swing;
-                            targetRotZ = -0.5 * swing;
-
-                            hijackPhysics = true;
-                            targetPosX = THREE.MathUtils.lerp(mesh.userData.startPos.x, targetPos.x, swing * 0.2);
-                            targetPosZ = THREE.MathUtils.lerp(mesh.userData.startPos.z, targetPos.z, swing * 0.2);
-                            break;
-
-                        case EnemyAttackType.BITE:
-                            const biteSwing = Math.sin(progress * PI);
-                            targetRotX = 0.7 * biteSwing;
-                            targetScaleY = baseScale * (1.0 + 0.2 * biteSwing);
-
-                            hijackPhysics = true;
-                            _v1.subVectors(mesh.userData.startPos, targetPos).normalize().multiplyScalar(e.attackOffset);
-                            _v2.copy(targetPos).add(_v1);
-
-                            const latchProgress = Math.min(1.0, progress * 4.0);
-                            targetPosX = THREE.MathUtils.lerp(mesh.userData.startPos.x, _v2.x, latchProgress);
-                            targetPosZ = THREE.MathUtils.lerp(mesh.userData.startPos.z, _v2.z, latchProgress);
-                            break;
-
-                        case EnemyAttackType.JUMP:
-                            const leapArc = Math.sin(progress * PI);
-                            targetPosY = baseY + leapArc * 3.5;
-                            targetRotX = 0.6;
-                            targetScaleY = baseScale * (1.0 + leapArc * 0.4);
-
-                            hijackPhysics = true;
-
-                            // VINTERDÖD: Prevent overlap! 
-                            // Calculate a landing offset so the enemy lands in front of the player
-                            // Based on player width (0.5) + enemy radius, +0.5 for a clean leap gap
-                            _v1.subVectors(mesh.userData.startPos, targetPos).normalize().multiplyScalar(e.attackOffset + 0.5);
-                            _v2.copy(targetPos).add(_v1); // Target is now dynamic based on body sizes
-
-                            targetPosX = THREE.MathUtils.lerp(mesh.userData.startPos.x, _v2.x, progress);
-                            targetPosZ = THREE.MathUtils.lerp(mesh.userData.startPos.z, _v2.z, progress);
-                            break;
-
-                        case EnemyAttackType.SMASH:
-                        case EnemyAttackType.FREEZE_JUMP:
-                            if (progress < 0.2) {
-                                const slam = progress * 5.0;
-                                targetRotX = -0.6 + (1.4 * slam);
-                                targetPosY = baseY + 0.5 * (1.0 - slam);
-                                targetScaleY = baseScale * (1.0 - 0.2 * slam);
-                            } else {
-                                const recover = (progress - 0.2) * 1.25;
-                                targetRotX = 0.8 * (1.0 - recover);
-                            }
-                            break;
-
-                        case EnemyAttackType.EXPLODE:
-                            targetScaleX = baseScale * widthScale * 1.8;
-                            targetScaleY = baseScale * 1.8;
-                            targetScaleZ = baseScale * widthScale * 1.8;
-                            targetRotX += (Math.random() - 0.5) * 0.4;
-                            targetRotZ += (Math.random() - 0.5) * 0.4;
-                            break;
-
-                        case EnemyAttackType.ELECTRIC_BEAM:
-                        case EnemyAttackType.MAGNETIC_CHAIN:
-                            targetPosY = baseY + 1.0 + Math.sin(renderTime * 0.03) * 0.3;
-                            const pulse = 1.0 + Math.sin(renderTime * 0.08) * 0.1;
-                            targetScaleX = baseScale * widthScale * pulse;
-                            targetScaleY = baseScale * pulse;
-                            targetScaleZ = baseScale * widthScale * pulse;
-                            break;
-                    }
+                    const handler = _executeHandlers[att.type];
+                    if (handler) handler(e, targetPos);
                 }
             }
         }
 
-        // --- PHASE 3: ZOMBIE WALK CYCLE & DEFAULT STATE ---
+        // --- PHASE 3: WALK CYCLE & DEFAULT STATE ---
         else {
             if (e.indicatorRing) {
                 e.indicatorRing.visible = false;
@@ -224,33 +270,39 @@ export const EnemyAnimator = {
             const isGrappling = e.state === AIState.GRAPPLE;
 
             if (isGrappling) {
-                // VINTERDÖD: Respect the pendulum swing calculated in AI
-                targetRotX = mesh.userData.swingX || 0;
-                targetRotZ = mesh.userData.swingZ || 0;
-                targetScaleY = baseScale * 1.05; // Slight stretch while hanging
-                targetPosY = mesh.position.y; // Keep current Y from AI displacement
+                // Respect the pendulum swing calculated in AI
+                _animState.targetRotX = mesh.userData.swingX || 0;
+                _animState.targetRotZ = mesh.userData.swingZ || 0;
+                _animState.targetScaleY = _animState.baseScale * 1.05; // Slight stretch while hanging
+                _animState.targetPosY = mesh.position.y; // Keep current Y from AI displacement
             }
             else if (isMoving) {
                 const phaseOffset = mesh.position.x + mesh.position.z;
                 const speedFactor = (e.speed || 20.0) / 20.0;
                 const t = (renderTime * 0.008 * speedFactor) + phaseOffset;
 
-                targetRotX = 0.15;
-                targetRotZ = Math.sin(t) * 0.18;
-                targetPosY = baseY + Math.abs(Math.sin(t)) * 0.15;
+                _animState.targetRotX = 0.15;
+                _animState.targetRotZ = Math.sin(t) * 0.18;
+                _animState.targetPosY = _animState.baseY + Math.abs(Math.sin(t)) * 0.15;
+
+                // Extra breathing detail while walking
+                _animState.targetScaleY = _animState.baseScale * (1.0 + Math.sin(t * 2) * 0.02);
+                _animState.targetScaleX = _animState.baseScale * _animState.widthScale * (1.0 - Math.sin(t * 2) * 0.015);
             } else {
                 const idleT = renderTime * 0.002 + (mesh.position.x);
-                targetScaleY = baseScale * (1.0 + Math.sin(idleT) * 0.02);
+                _animState.targetScaleY = _animState.baseScale * (1.0 + Math.sin(idleT) * 0.02);
+                // Breathe radially to feel more organic
+                _animState.targetScaleX = _animState.baseScale * _animState.widthScale * (1.0 - Math.sin(idleT) * 0.01);
+                _animState.targetScaleZ = _animState.baseScale * _animState.widthScale * (1.0 - Math.sin(idleT) * 0.01);
             }
         }
 
         // --- APPLY TRANSFORMS (SMOOTH LERPING) ---
-
         let currentRotX = mesh.userData.animRotX || 0;
         let currentRotZ = mesh.userData.animRotZ || 0;
 
-        currentRotX += (targetRotX - currentRotX) * 15 * simDelta;
-        currentRotZ += (targetRotZ - currentRotZ) * 15 * simDelta;
+        currentRotX += (_animState.targetRotX - currentRotX) * 15 * simDelta;
+        currentRotZ += (_animState.targetRotZ - currentRotZ) * 15 * simDelta;
 
         mesh.userData.animRotX = currentRotX;
         mesh.userData.animRotZ = currentRotZ;
@@ -258,25 +310,32 @@ export const EnemyAnimator = {
         mesh.rotation.x = currentRotX;
         mesh.rotation.z = currentRotZ;
 
-        mesh.scale.x += (targetScaleX - mesh.scale.x) * 15 * simDelta;
-        mesh.scale.y += (targetScaleY - mesh.scale.y) * 15 * simDelta;
-        mesh.scale.z += (targetScaleZ - mesh.scale.z) * 15 * simDelta;
+        mesh.scale.x += (_animState.targetScaleX - mesh.scale.x) * 15 * simDelta;
+        mesh.scale.y += (_animState.targetScaleY - mesh.scale.y) * 15 * simDelta;
+        mesh.scale.z += (_animState.targetScaleZ - mesh.scale.z) * 15 * simDelta;
 
-        // 3. Position (Y & Hijacked X/Z)
-        if (hijackPhysics) {
-            mesh.position.x = targetPosX;
-            mesh.position.z = targetPosZ;
+        // Position (Y & Hijacked X/Z)
+        if (_animState.hijackPhysics) {
+            mesh.position.x = _animState.targetPosX;
+            mesh.position.z = _animState.targetPosZ;
         }
 
         if (isAttacking) {
             const att = e.attacks![e.currentAttackIndex!];
-            if (e.state === AIState.ATTACK_CHARGE || (att && (att.type === EnemyAttackType.JUMP || att.type === EnemyAttackType.SMASH || att.type === EnemyAttackType.MAGNETIC_CHAIN || att.type === EnemyAttackType.ELECTRIC_BEAM))) {
-                mesh.position.y = targetPosY;
+            const forceYPos = e.state === AIState.ATTACK_CHARGE || (att && (
+                att.type === EnemyAttackType.JUMP ||
+                att.type === EnemyAttackType.SMASH ||
+                att.type === EnemyAttackType.MAGNETIC_CHAIN ||
+                att.type === EnemyAttackType.ELECTRIC_BEAM
+            ));
+
+            if (forceYPos) {
+                mesh.position.y = _animState.targetPosY;
             } else {
-                mesh.position.y += (targetPosY - mesh.position.y) * 10 * simDelta;
+                mesh.position.y += (_animState.targetPosY - mesh.position.y) * 10 * simDelta;
             }
         } else {
-            mesh.position.y += (targetPosY - mesh.position.y) * 15 * simDelta;
+            mesh.position.y += (_animState.targetPosY - mesh.position.y) * 15 * simDelta;
         }
 
         if (e.mesh.userData.isFlashing && (renderTime - (e.hitRenderTime || 0)) < 200) {

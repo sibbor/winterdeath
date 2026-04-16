@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { t } from '../../../../utils/i18n';
 import { useOrientation } from '../../../../hooks/useOrientation';
-import ScreenModalLayout from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard } from '../../layout/ScreenModalLayout';
 import { PlayerStats } from '../../../../entities/player/PlayerTypes';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
@@ -158,6 +158,11 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                                         '--pulse-color': pulseColor
                                     } as any : {}}
                                 >
+                                    {isSel && !locked && (
+                                        <div className="absolute inset-0 opacity-20 transition-opacity" 
+                                            style={HORIZONTAL_HATCHING_STYLE} 
+                                        />
+                                    )}
                                     {/* Sector Number (placed above name) */}
                                     <h2 className={`${isMobileDevice ? 'text-[8px]' : 'text-xs'} font-light uppercase tracking-tighter opacity-80 mb-1`}>
                                         {t('ui.sector')} 00{i}
@@ -181,7 +186,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                 </div>
 
                 {/* RIGHT: Detail View */}
-                <div className={`flex-1 flex flex-col bg-black/40 border-2 border-gray-800 p-4 md:p-8 relative pr-safe ${!effectiveLandscape ? 'min-h-[300px]' : ''}`}>
+                <TacticalCard color="#ef4444" className={`flex-1 flex flex-col p-4 md:p-8 relative pr-safe ${!effectiveLandscape ? 'min-h-[300px]' : ''}`}>
                     {/* Header */}
                     <div className="flex flex-col gap-4 mb-6 border-b border-gray-800 pb-4">
                         <div>
@@ -231,7 +236,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                         <span ref={textRef}></span>
                         <span className="animate-pulse inline-block w-2 h-4 bg-red-500 ml-1 align-middle"></span>
                     </div>
-                </div>
+                </TacticalCard>
             </div>
         </ScreenModalLayout>
     );

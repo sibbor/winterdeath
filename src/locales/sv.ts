@@ -33,7 +33,6 @@ export const sv = {
         rescued_family_members: "Räddade Familjemedlemmar",
         clues_found: "Ledtrådar",
         none: "Inga",
-        combat: "STRID",
         performance: "PRESTATION",
         scavenging: "PLUNDRING",
         outcome: "RESULTAT",
@@ -99,6 +98,60 @@ export const sv = {
         off: "AV",
         debug_mode: "DEBUG-LÄGE",
         show_fps: "VISA FPS",
+        next_rank: "NÄSTA RANK",
+        weapon_performance_log: "VAPENPRESTATIONSLOGG",
+        no_weapon_data: "Ingen vapendata tillgänglig",
+        continue_to_play_weapons: "använd vapen i fält för att logga prestation",
+        buff_uptime: "BUFF-UPPTID",
+        tactical_sync: "TAKTIK-SYNKRONISERING",
+        crisis_saves: "KRISRÄDDNINGAR",
+        adrenaline_mgmt: "ADRENALINHANTERING",
+        intel_resistance: "RESISTENS",
+        debuffs_neutralized: "DEBUFFS NEUTRALISERADE",
+        activations: "AKTIVERINGAR",
+        damage_absorbed: "SKADA ABSORBERAD",
+        debuffs_cleansed: "DEBUFFS RENADE",
+        no_intel_gained: "Ingen underrättelse insamlad",
+        continue_to_play_perks: "fortsätt spela för att upptäcka förmågor och perks",
+        continue_to_play_performance: "fortsätt spela för att logga prestationsanalys",
+        continue_to_play_combat: "möt fiender i fält för att logga stridsunderrättelser",
+        longest_killstreak: "LÅNG KILLSTREAK",
+        lethality: "DÖDLIGHET",
+        kd_ratio: "K/D-RATIO",
+        global_explorer: "VÄRLDSUTFORSKARE",
+        survival_legacy: "ÖVERLEVNADSARV",
+        world_discovery: "VÄRLDSUPPTÄCKT",
+        family_savior: "FAMILJERÄDDARE",
+        on_field_time: "TID I FÄLT",
+        total_intel_found: "TOTAL UNDERRÄTTELSE FUNNEN",
+        members_protected: "MEDLEMMAR SKYDDADE",
+        dossier_highlights: "DOSSIER-HÖJDPUNKTER",
+        augmentation_roi: "FÖRMÅGS-ROI",
+        career_runs: "KARRIÄRSTURER",
+        career_impact: "KARRIÄRPÅVERKAN",
+        total_sacrifices: "TOTALA OFFER",
+        run_success_rate: "GENOMFÖRANDEGRAD",
+        scrap_density: "SKRAPDENSITET",
+        crisis_averted: "KRISRÄDDNINGAR",
+        nemesis_id: "NEMESIS-IDENTIFIERING",
+        peak_aggression: "TOPPAGGRESSION",
+        tactical_usage: "TAKTISK ANVÄNDNING",
+        signature_weapon: "SIGNATURVAPEN",
+        comfort_weapon: "KOMFORTVAPEN",
+        enhanced_state: "FÖRSTÄRKT TILLSTÅND",
+        resilience: "MOTSTÅNDSKRAFT",
+        perk_roi: "FÖRMÅGS-ROI",
+        perk_roi_desc: "SAMMANLAGD DATA",
+        perk_damage_dealt_short: "UTDELAD",
+        perk_damage_absorbed_short: "ABSORBERAD",
+        killed_most_by: "DÖDAD MEST AV",
+        marathon_progress: "MARATONFRAMSTEG",
+        combat_efficiency: "STRIDSEFFEKTIVITET",
+        weapons: "VAPEN",
+        perks: "FÖRMÅGOR",
+        times_rushed: "ANTAL RUSHES",
+        times_dodged: "ANTAL DODGES",
+        rushed_distance: "RUSHDISTANS",
         save_settings: "SPARA INSTÄLLNINGAR",
         reload_required: "Omstart krävs",
         reload_desc: "Vissa inställningar kräver att VINTERDÖD startas om innan de får effekt. Starta om spelet?",
@@ -179,9 +232,6 @@ export const sv = {
         discovered: "UPPTÄCKTA",
         collected: "SAMLADE",
         discovery: "UPPTÄCKT",
-        passive: "Passiv",
-        buff: "Buff",
-        debuff: "Debuff",
         tap: "TRYCK",
         enter: "ENTER",
         enemy_encountered: "FIENDE PÅTRÄFFAD",
@@ -211,7 +261,9 @@ export const sv = {
         coordinates: "KOORDINATER",
         you: "DU",
         current_rank: "NUVARANDE RANG",
+        upcoming_rank: "KOMMANDE RANG",
         family_header: "FAMILJ",
+        show_stats_hint: "VISA STATS",
         deaths: "Dödsfall",
         kill_log: "Logg",
         lvl: "LVL",
@@ -224,11 +276,12 @@ export const sv = {
         boss: "Boss",
         adventure_log: "ÄVENTYRSLOGG",
         log_poi: "INTRESSEPUNKTER",
-        log_enemies: "FIENDER",
+        log_zombies: "ZOMBIES",
         log_bosses: "BOSSAR",
         log_collectibles: "SAMLAROBJEKT",
         log_clues: "LEDTRÅDAR",
         log_perks: "FÖRMÅGOR",
+        log_weapons: "VAPEN",
         passive_abilities: "PASSIVA FÖRMÅGOR",
         buffs: "BUFFAR",
         debuffs: "DEBUFFAR",
@@ -300,6 +353,24 @@ export const sv = {
         spread: "SPRIDNING",
         spawn_location: "SPAWNPLATS",
         spawn: "SKAPA",
+        debug_show_all: "VISA ALLA",
+        most_lethal: "MEST DÖDLIG",
+        preferred: "FÖREDRAGEN",
+        uses: "ANVÄNDNINGAR",
+        thrown: "KASTADE",
+        total_damage: "TOTAL SKADA",
+        enemy_undiscovered_hint: "Möt denna fiende i ödemarken för att låsa upp dess biologiska data och stridsstatistik.",
+        perk_undiscovered_hint: "Dra nytta av denna perk under ett uppdrag för att låsa upp dess detaljerade prestandaanalys och taktiska beskrivning.",
+        avg_distance: "SNITTAVSTÅND / SEKTOR",
+        aggression_ratio: "AGGRESSIONSRATIO",
+        engagement_range: "SNITTAVSTÅND STRID",
+        total_game_time: "TOTAL SPELTID",
+        avg_game_time: "SNITTID / SEKTOR",
+        engagement_metric: "meter",
+        times_gained: "Gånger erhållna",
+        statistics: "STATISTIK",
+        overview: "ÖVERSIKT",
+        combat: "STRID"
     },
     report: {
         damage: {
@@ -307,7 +378,8 @@ export const sv = {
             outgoing: "UTGÅENDE SKADA",
         },
         time: {
-            unit_min: " min"
+            unit_min: " min",
+            unit_h: " t"
         },
         distance: {
             unit_m: " m",
@@ -327,7 +399,8 @@ export const sv = {
             shots: "SKOTT",
             accuracy: "PRICKSÄKERHET",
             kills: "DÖDADE",
-            throwables: "KASTVAPEN"
+            throwables: "KASTVAPEN",
+            unit_kpm: "D/M"
         }
     },
     location: {
@@ -354,7 +427,10 @@ export const sv = {
         secondary: "SEKUNDÄR",
         throwable: "KASTVAPEN",
         special: "SPECIAL",
-        tool: "VERKTYG"
+        tool: "VERKTYG",
+        passive: "PASSIV",
+        buff: "BUFF",
+        debuff: "DEBUFF"
     },
     weather: {
         none: "INGET",
@@ -432,6 +508,14 @@ export const sv = {
             title: "Adrenalinplåster",
             description: "3s odödlighet när hälsan sjunker under 25%. 60s cooldown."
         },
+        GIB_MASTER: {
+            title: "Gibb-mästare",
+            description: "Explosioner och hårda träffar har en betydligt högre chans att slita fiender i stycken."
+        },
+        QUICK_FINGER: {
+            title: "Snabba fingrar",
+            description: "Manuell omladdning är 30% snabbare under en kort tid efter ett dödande skott."
+        },
 
         // Debuffs
         BLEEDING: {
@@ -443,7 +527,7 @@ export const sv = {
             description: "Intensiv hetta som ger kontinuerlig skada och saktar ner dig något."
         },
         STUNNED: {
-            title: "Stunned",
+            title: "Bedövad",
             description: "Rörelse och handlingar är helt inaktiverade."
         },
         DISORIENTED: {

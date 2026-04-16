@@ -33,6 +33,25 @@ export interface SectorStats {
   bossDamageDealt: number;
   bossDamageTaken: number;
 
+  maxKillstreak: number;
+  engagementDistSqKills: number;
+
+  // --- WEAPON PERFORMANCE BUFFERS (Zero-GC / Phase 12) ---
+  weaponKills: Float64Array;
+  weaponDamageDealt: Float64Array;
+  weaponShotsFired: Float64Array;
+  weaponShotsHit: Float64Array;
+  weaponTimeActive: Float64Array;
+  weaponEngagementDistSq: Float64Array;
+
+  // --- PERK PERFORMANCE BUFFERS (Zero-GC / Phase 12) ---
+  perkTimesGained: Float64Array;
+  perkDamageAbsorbed: Float64Array;
+  perkDamageDealt: Float64Array;
+  perkDebuffsCleansed: Float64Array;
+
+  // --- ENEMY STATS BUFFERS ---
+  enemyKills: Float64Array;
 
   // VINTERDÖD FIX: cluesFound is an array of objects {id, content}, not strings
   cluesFound: any[];
@@ -50,6 +69,7 @@ export interface SectorStats {
   isExtraction: boolean;
   incomingDamageBreakdown: Record<number, Record<number, number>>;
   outgoingDamageBreakdown: Record<number, number>;
+  discoveredPerks: number[];
 
   // VINTERDÖD FIX: Standardized wave naming
   waveActive?: boolean;

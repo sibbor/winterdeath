@@ -2,21 +2,45 @@ import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System } from './System';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
 import { DamageID } from '../entities/player/CombatTypes';
+import { StatWeaponIndex, PlayerStatID } from '../entities/player/PlayerTypes';
+
+// Zero-GC: Pre-allocate boss keys to prevent template literal string allocations during runtime
+const MAX_BOSS_IDS = 32;
+const _bossKeyCache: string[] = new Array(MAX_BOSS_IDS);
+for (let i = 0; i < MAX_BOSS_IDS; i++) {
+    _bossKeyCache[i] = `Boss_${i}`;
+}
 
 export class DamageTrackerSystem implements System {
     id = 'damage_tracker_system';
 
+    private currentKillstreak = 0;
+
     init(session: GameSessionLogic) {
-        // Breakdowns are now pre-allocated in GameSessionLogic.createInitialState
+        this.currentKillstreak = 0;
     }
 
-    update(ctx: any, delta: number, simTime: number, renderTime: number) {
-        // Passive logger: No per-frame logic required
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
+        // --- TRACK WEAPON USAGE (TIME ACTIVE) ---
+        const state = session.state;
+        const activeWeapon = state.activeWeapon;
+        if (activeWeapon !== DamageID.NONE && activeWeapon !== DamageID.RADIO) {
+            const idx = activeWeapon - 1;
+            if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
+                state.sessionStats.weaponTimeActive[idx] += delta;
+            }
+        }
+    }
+
+    /**
+     * Guards against recording TOOL/RADIO stats.
+     */
+    private isTechnical(id: DamageID): boolean {
+        return id === DamageID.RADIO || id === DamageID.NONE;
     }
 
     /**
      * Records damage taken by the player.
-     * V8-Opt: Keys are pre-allocated in GameSessionLogic.
      */
     recordIncomingDamage(
         session: GameSessionLogic,
@@ -25,14 +49,21 @@ export class DamageTrackerSystem implements System {
         attackType: number,
         isBoss: boolean = false
     ) {
+        if (this.isTechnical(sourceName)) return;
+
         const stats = session.state.sessionStats;
         stats.damageTaken += amount;
         if (isBoss) stats.bossDamageTaken += amount;
 
         const breakdown = stats.incomingDamageBreakdown;
         const source = (breakdown as any)[sourceName];
+
         if (source) {
-            source[attackType] = (source[attackType] || 0) + amount;
+            if (source[attackType] !== undefined) {
+                source[attackType] += amount;
+            } else {
+                source[attackType] = amount;
+            }
         }
     }
 
@@ -42,54 +73,107 @@ export class DamageTrackerSystem implements System {
     recordOutgoingDamage(
         session: GameSessionLogic,
         amount: number,
-        weaponName: string,
+        weaponId: DamageID,
         isBoss: boolean = false
     ) {
+        if (this.isTechnical(weaponId)) return;
+
         const stats = session.state.sessionStats;
         stats.damageDealt += amount;
         if (isBoss) stats.bossDamageDealt += amount;
 
-        const breakdown = stats.outgoingDamageBreakdown;
-        // Weapon keys are pre-allocated for all known types
-        if (breakdown[weaponName] !== undefined) {
-            breakdown[weaponName] += amount;
+        const idx = weaponId - 1;
+        if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
+            stats.weaponDamageDealt[idx] += amount;
         }
     }
 
     /**
      * Records a shot fired by the player.
      */
-    recordShot(session: GameSessionLogic, weaponName: string) {
+    recordShot(session: GameSessionLogic, weaponId: DamageID) {
+        if (this.isTechnical(weaponId)) return;
+
         const stats = session.state.sessionStats;
         stats.shotsFired++;
+
+        const idx = weaponId - 1;
+        if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
+            stats.weaponShotsFired[idx]++;
+        }
     }
 
     /**
      * Records a shot hit by the player.
      */
-    recordHit(session: GameSessionLogic, weaponName: string) {
+    recordHit(session: GameSessionLogic, weaponId: DamageID) {
+        if (this.isTechnical(weaponId)) return;
+
         const stats = session.state.sessionStats;
         stats.shotsHit++;
+
+        const idx = weaponId - 1;
+        if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
+            stats.weaponShotsHit[idx]++;
+        }
     }
 
     /**
      * Records an enemy kill.
      */
-    recordKill(session: GameSessionLogic, enemyType: number | string, isBoss: boolean = false, bossId?: number) {
+    recordKill(
+        session: GameSessionLogic,
+        enemyType: number | string,
+        isBoss: boolean = false,
+        bossId?: number,
+        weaponId?: DamageID,
+        distSq?: number
+    ) {
         const stats = session.state.sessionStats;
         stats.kills++;
-        
+
+        // Killstreak handling
+        this.currentKillstreak++;
+        if (this.currentKillstreak > stats.maxKillstreak) {
+            stats.maxKillstreak = this.currentKillstreak;
+        }
+
+        // Engagement distance (Squared)
+        if (distSq !== undefined) {
+            stats.engagementDistSqKills += distSq;
+        }
+
+        if (weaponId && !this.isTechnical(weaponId)) {
+            const idx = weaponId - 1;
+            if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
+                stats.weaponKills[idx]++;
+                if (distSq !== undefined) {
+                    stats.weaponEngagementDistSq[idx] += distSq;
+                }
+            }
+        }
+
         let key = typeof enemyType === 'number' ? EnemyType[enemyType] : enemyType;
-        
+
         if (isBoss && bossId !== undefined) {
-            key = `Boss_${bossId}`;
-            // Also update the legacy generic boss stat for backward compatibility if needed
-            stats.killsByType['Boss'] = (stats.killsByType['Boss'] || 0) + 1;
+            key = bossId < MAX_BOSS_IDS ? _bossKeyCache[bossId] : `Boss_${bossId}`;
+            if (stats.killsByType['Boss'] !== undefined) {
+                stats.killsByType['Boss']++;
+            } else {
+                stats.killsByType['Boss'] = 1;
+            }
         }
 
         if (key && stats.killsByType[key] !== undefined) {
             stats.killsByType[key]++;
         }
+    }
+
+    /**
+     * Resets killstreak (e.g. on player hit or session start)
+     */
+    resetKillstreak() {
+        this.currentKillstreak = 0;
     }
 
     /**
@@ -109,10 +193,19 @@ export class DamageTrackerSystem implements System {
     /**
      * Records a throwable thrown by the player.
      */
-    recordThrowable(session: GameSessionLogic) {
-        session.state.sessionStats.throwablesThrown++;
+    recordThrowable(session: GameSessionLogic, weaponId: DamageID) {
+        if (this.isTechnical(weaponId)) return;
+
+        const stats = session.state.sessionStats;
+        stats.throwablesThrown++;
+
+        const idx = weaponId - 1;
+        if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
+            stats.weaponShotsFired[idx]++; // For throwables, fired = hit attempt
+        }
     }
 
     clear() {
+        // System state is held in session.state, no local cleanup needed
     }
 }

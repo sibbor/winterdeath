@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
-import ScreenModalLayout from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { TacticalCard } from '../../layout/ScreenModalLayout';
 import { SectorStats } from '../../../../game/session/SessionTypes';
 import { DamageID } from '../../../../entities/player/CombatTypes';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
@@ -32,7 +32,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                 <span className="text-base md:text-2xl text-red-500 font-light tracking-[0.2em] mb-1 md:mb-2 uppercase opacity-90">{t('ui.boss_killed')}</span>
             </div>
 
-            <div className={`bg-black/50 ${isMobileDevice ? 'p-4' : 'p-8'} border-2 border-red-900 mb-6 md:mb-10 shadow-[0_0_30px_rgba(153,27,27,0.2)]`}>
+            <TacticalCard color="#ef4444" className={`${isMobileDevice ? 'p-4' : 'p-8'} mb-6 md:mb-10 shadow-[0_0_30px_rgba(153,27,27,0.2)]`}>
                 <p className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} leading-relaxed font-light italic mb-4 md:mb-8 text-gray-200`}>
                     "{t(DataResolver.getBossDeathStory(sectorIndex))}"
                 </p>
@@ -78,7 +78,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                         </div>
                     </div>
                 )}
-            </div>
+            </TacticalCard>
         </ScreenModalLayout>
     );
 };

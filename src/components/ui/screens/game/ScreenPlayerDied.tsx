@@ -3,6 +3,7 @@ import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { useHudStore } from '../../../../hooks/useHudStore';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { HORIZONTAL_HATCHING_STYLE, HORIZONTAL_HATCHING_STYLE_DARK } from '../../layout/ScreenModalLayout';
 import { FamilyMemberID } from '../../../../content/constants';
 
 interface ScreenPlayerDiedProps {
@@ -98,6 +99,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
                     <button
                         onClick={onRespawn}
                         className={`group relative ${isMobileDevice ? 'px-10 py-4' : 'px-14 py-5'} bg-red-600 text-white border-4 border-black shadow-[0_0_40px_rgba(255,0,0,0.2)] transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[240px] pointer-events-auto`}>
+                        <div className="absolute inset-0 opacity-10 group-hover:opacity-30 transition-opacity" style={HORIZONTAL_HATCHING_STYLE_DARK} />
                         <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
                         <span className={`relative z-10 ${isMobileDevice ? 'text-lg' : 'text-xl'} font-black tracking-[0.2em] uppercase`}>
                             {t('ui.respawn')}
@@ -108,6 +110,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
                     <button
                         onClick={onContinue}
                         className={`group relative ${isMobileDevice ? 'px-10 py-4' : 'px-14 py-5'} bg-white text-black border-4 border-black hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[240px] shadow-[0_0_30px_rgba(255,255,255,0.1)] pointer-events-auto`}>
+                        <div className="absolute inset-0 opacity-10 group-hover:opacity-20 transition-opacity" style={HORIZONTAL_HATCHING_STYLE_DARK} />
                         <span className={`relative z-10 ${isMobileDevice ? 'text-lg' : 'text-xl'} font-black tracking-[0.2em] uppercase`}>
                             {t('ui.continue')}
                         </span>

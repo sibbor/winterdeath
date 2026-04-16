@@ -6,7 +6,7 @@ import { SCRAP_COST_BASE } from '../../../../content/constants';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
 import { useOrientation } from '../../../../hooks/useOrientation';
-import ScreenModalLayout from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalButton } from '../../layout/ScreenModalLayout';
 
 interface ScreenArmoryProps {
     stats: PlayerStats;
@@ -141,21 +141,25 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
                             const catName = DataResolver.getWeaponCategoryName(cat);
 
                             return (
-                                <button key={cat} onClick={() => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
-                                    className={`px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
+                                <button 
+                                    key={cat} 
+                                    onClick={() => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
+                                    className={`relative px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
                                         ${isActive
                                             ? 'text-white animate-tab-pulsate'
                                             : 'bg-black text-zinc-400 hover:bg-zinc-900 shadow-none'
                                         } 
                                         ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
                                     `}
-                                    style={isActive ? {
-                                        backgroundColor: darkenColor(catColor as string, 20),
-                                        '--pulse-color': catColor
-                                    } as React.CSSProperties : {}}
+                                    style={isActive ? { backgroundColor: catColor + '33' } : {}}
                                 >
-                                    <span>{t(catName)}</span>
-                                    {isActive && effectiveLandscape && <span className="text-white font-bold ml-2">→</span>}
+                                    {isActive && (
+                                        <div className="absolute inset-0 opacity-20 transition-opacity" 
+                                            style={HORIZONTAL_HATCHING_STYLE} 
+                                        />
+                                    )}
+                                    <span className="relative z-10">{t(catName)}</span>
+                                    {isActive && effectiveLandscape && <span className="text-white font-bold ml-2 relative z-10">→</span>}
                                 </button>
                             );
                         })}
@@ -244,16 +248,18 @@ interface WeaponCardProps {
     onUpgrade: (e: React.MouseEvent, weapon: WeaponType) => void;
 }
 
-const WeaponCard: React.FC<WeaponCardProps> = React.memo(({ weapon, level, cost, isEquipped, canAfford, categoryColor, isEquippable, isUpgradeable, isMobileDevice, onEquip, onUpgrade }) => {
+const WeaponCard: React.FC<WeaponCardProps> = React.memo(({ 
+    weapon, level, cost, isEquipped, canAfford, categoryColor, 
+    isEquippable, isUpgradeable, isMobileDevice, onEquip, onUpgrade 
+}) => {
     return (
-        <div
+        <TacticalCard
             onClick={() => !isEquipped && isEquippable && onEquip(weapon.name, weapon.category)}
-            className={`relative border-2 transition-all group overflow-hidden flex self-start flex-col
-                ${isEquipped ? 'cursor-default' : (isEquippable ? 'hover:bg-gray-800/60 cursor-pointer' : 'cursor-default')}
-            `}
+            isLocked={!isEquipped && !isEquippable}
+            color={isEquipped ? categoryColor : '#3b82f6'}
+            className={`flex flex-col p-0 ${isEquipped ? 'cursor-default' : (isEquippable ? 'hover:bg-gray-800/60 cursor-pointer' : 'cursor-default')}`}
             style={{
                 borderColor: isEquipped ? categoryColor : '#374151',
-                backgroundColor: isEquipped ? `${categoryColor}15` : 'rgba(17, 24, 39, 0.4)',
                 boxShadow: isEquipped ? `0 0 15px ${categoryColor}44` : 'none',
                 minHeight: isMobileDevice ? 'auto' : '300px'
             }}
@@ -272,16 +278,15 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({ weapon, level, cost,
                 </div>
 
                 {isUpgradeable && (
-                    <button
+                    <TacticalButton
                         onClick={(e) => onUpgrade(e, weapon.name)}
                         disabled={!canAfford}
-                        className={`w-full py-2.5 px-2 text-[10px] font-bold uppercase transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center transform ${canAfford
-                            ? 'bg-yellow-950/20 text-yellow-500 hover:bg-yellow-950/40 shadow-inner'
-                            : 'bg-black text-gray-700 cursor-not-allowed'
-                            }`}
+                        variant={canAfford ? 'primary' : 'ghost'}
+                        className="w-full h-10 text-[10px]"
+                        style={canAfford ? { backgroundColor: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderColor: '#eab30844' } : {}}
                     >
                         {t('ui.upgrade')} ({cost})
-                    </button>
+                    </TacticalButton>
                 )}
 
                 <div className={`absolute top-0 left-0 bg-gray-900/80 ${isMobileDevice ? 'text-[9px] px-1.5 py-0.5' : 'text-sm px-3 py-1'} font-bold text-gray-400 border-r border-b border-gray-700`}>
@@ -339,8 +344,13 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({ weapon, level, cost,
                         )}
                     </div>
                 </div>
+                {!isEquipped && isEquippable && (
+                    <TacticalButton variant="primary" onClick={() => onEquip(weapon.name, weapon.category)} className="w-full mt-2">
+                        {t('ui.equip')}
+                    </TacticalButton>
+                )}
             </div>
-        </div>
+        </TacticalCard>
     );
 });
 
