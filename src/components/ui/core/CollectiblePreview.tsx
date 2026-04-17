@@ -54,6 +54,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
 
     // [VINTERDÖD] Optimization: Use refs for THREE objects to ensure they are 
     // preserved during visibility changes but disposed of correctly on unmount.
+    const [size, setSize] = useState({ width: 0, height: 0 });
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
     const meshRef = useRef<THREE.Object3D | null>(null);
@@ -71,20 +72,34 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
     }, [autoReady]);
 
     useEffect(() => {
-        if (autoReady) return;
-        if (isVisible && !isLocked) {
-            const timer = setTimeout(() => setIsReady(true), 150);
-            return () => clearTimeout(timer);
-        }
+        if (!containerRef.current) return;
+        
+        const container = containerRef.current;
+        const observer = new ResizeObserver((entries) => {
+            if (!entries.length) return;
+            const { width, height } = entries[0].contentRect;
+            // Only update if size is valid to avoid redundant renders of 0x0
+            if (width > 0 && height > 0) {
+                setSize({ width, height });
+            }
+        });
+
+        observer.observe(container);
+        return () => observer.disconnect();
+    }, []);
+
+    useEffect(() => {
+        if (autoReady || !isVisible || isLocked) return;
+        const timer = setTimeout(() => setIsReady(true), 150);
+        return () => clearTimeout(timer);
     }, [isVisible, isLocked, autoReady]);
 
     // --- THREE.js INITIALIZATION ---
     useEffect(() => {
-        if (!isReady || isLocked || !containerRef.current) return;
+        if (!isReady || isLocked || !containerRef.current || size.width === 0 || size.height === 0) return;
 
         const container = containerRef.current;
-        const width = container.clientWidth;
-        const height = container.clientHeight;
+        const { width, height } = size;
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 100);
@@ -155,7 +170,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
             cameraRef.current = null;
             groupRef.current = null;
         };
-    }, [type, isLocked, isReady]);
+    }, [type, isLocked, isReady, size]);
 
     // --- ANIMATION LOOP ---
     // Controlled independently by isVisible to allow pausing without re-allocating
