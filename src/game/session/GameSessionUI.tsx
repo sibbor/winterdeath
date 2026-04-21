@@ -1,5 +1,5 @@
 import React, { useCallback, memo } from 'react';
-import { GameCanvasProps } from '../../game/session/SessionTypes';
+import { GameCanvasProps } from '../../types/CanvasTypes';
 import { UIState } from './useGameSessionState';
 import TouchController from '../../components/ui/hud/TouchController';
 import CinematicBubble from '../../components/ui/hud/CinematicBubble';

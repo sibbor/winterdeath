@@ -1,10 +1,11 @@
 import React, { useEffect, useImperativeHandle, useCallback, useRef } from 'react';
 import * as THREE from 'three';
-import { GameCanvasProps, SectorStats } from '../../game/session/SessionTypes';
+import { GameCanvasProps } from '../../types/CanvasTypes';
+import { SectorStats } from '../../types/StateTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { audioEngine } from '../../utils/audio/AudioEngine';
-import { UiSounds, WeaponSounds, GamePlaySounds } from '../../utils/audio/AudioLib';
+import { UiSounds, WeaponSounds } from '../../utils/audio/AudioLib';
 import { SoundID, MusicID } from '../../utils/audio/AudioTypes';
 import { t } from '../../utils/i18n';
 import { LEVEL_CAP, WEATHER_SYSTEM, WIND_SYSTEM, FamilyMemberID } from '../../content/constants';
@@ -22,8 +23,6 @@ import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { PlayerStatID } from '../../entities/player/PlayerTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
-import { getCollectibleById } from '../../content/collectibles';
-// import ScreenCollectibleDiscovered from '../../components/ui/screens/game/ScreenCollectibleDiscovered'; // REMOVED: Managed by App.tsx
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -230,7 +229,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             case 'PLAY_SOUND':
                 const soundId = payload.id || action.id;
                 if (soundId === 'explosion') {
-                    WeaponSounds.playExplosion(refs.playerGroupRef.current?.position || _spawnPosScratch.set(0,0,0));
+                    WeaponSounds.playExplosion(refs.playerGroupRef.current?.position || _spawnPosScratch.set(0, 0, 0));
                     if ((window as any).haptic) (window as any).haptic.explosion();
                 } else {
                     audioEngine.playSound(soundId || SoundID.UI_HOVER);
@@ -496,14 +495,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             case 'collectible':
                 titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.COLLECTIBLE);
                 detailsKey = detailsKey || payload?.detailsKey || DataResolver.getCollectibleName(id);
-                
+
                 if (!sets.collectibles.has(id)) {
                     sets.collectibles.add(id);
                     stats.collectiblesDiscovered.push(id);
                     state.sessionCollectiblesDiscovered.push(id);
                     isNew = true;
                 }
-                
+
                 // [VINTERDÖD FIX] Collectibles are now managed purely via App.tsx props
                 // ALWAYS trigger the prop callback to ensure the modal opens (even on replays),
                 // but rely on App.tsx to deduplicate the permanent reward logic.

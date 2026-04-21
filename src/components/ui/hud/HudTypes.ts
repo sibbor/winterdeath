@@ -1,5 +1,4 @@
 import { WeaponType } from '../../../content/weapons';
-import { SectorState, GameScreen } from '../../../game/session/SessionTypes';
 import { InteractionType } from '../../../systems/InteractionTypes';
 import { StatusEffectType } from '../../../content/perks';
 

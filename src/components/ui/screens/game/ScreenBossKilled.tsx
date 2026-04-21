@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import ScreenModalLayout, { TacticalCard } from '../../layout/ScreenModalLayout';
-import { SectorStats } from '../../../../game/session/SessionTypes';
+import { SectorStats } from '../../../../types/StateTypes';
 import { DamageID } from '../../../../entities/player/CombatTypes';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
 

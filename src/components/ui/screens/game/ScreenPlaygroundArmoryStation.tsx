@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { PlayerStats } from '../../../../entities/player/PlayerTypes';
-import { SectorState } from '../../../../game/session/SessionTypes';;
+import { PlayerStats, SectorState } from '../../../../types/StateTypes';
 import { WeaponType, WeaponCategory, WeaponCategoryColors } from '../../../../content/weapons';
 import { t } from '../../../../utils/i18n';
 import { SCRAP_COST_BASE } from '../../../../content/constants';

@@ -1,6 +1,7 @@
-import { useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
-import { GameCanvasProps, DeathPhase } from '../../game/session/SessionTypes';
+import { useRef, useState, useEffect } from 'react';
+import { GameCanvasProps } from '../../types/CanvasTypes';
+import { DeathPhase } from '../../types/SessionTypes';
 import { SectorContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';

@@ -1,6 +1,5 @@
-import React, { useEffect, useImperativeHandle, useCallback, useRef } from 'react';
 import * as THREE from 'three';
-import { GameCanvasProps } from '../../game/session/SessionTypes';
+import { GameCanvasProps } from '../../types/CanvasTypes';
 import { MapItem, DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { SectorContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
@@ -41,9 +40,7 @@ import { RuntimeState } from '../../core/RuntimeState';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { DataResolver } from '../../utils/ui/DataResolver';
 import { PerkFX } from '../../systems/PerkFX';
-
 import { InteractionType } from '../../systems/InteractionTypes';
-
 
 const seededRandom = (seed: number) => {
     let s = seed % 2147483647;
@@ -661,7 +658,7 @@ export class GameSessionSetup {
             },
 
             playSound: (id: SoundID) => audioEngine.playSound(id),
-            playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => {},
+            playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => { },
             cameraShake: (amount: number) => engine.camera.shake(amount), scene: engine.scene,
             setCameraOverride: (params: any) => { refs.cameraOverrideRef.current = params; engine.camera.setCinematic(!!params); },
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),

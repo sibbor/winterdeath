@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { SectorTrigger } from '../systems/TriggerTypes';
-import { SectorState, SectorStats } from '../game/session/SessionTypes';
+import { SectorState, SectorStats } from '../types/StateTypes';
 import { PlayerStats } from '../entities/player/PlayerTypes';
-import { PlayerDeathState, ActiveStatusEffect, DamageID } from '../entities/player/CombatTypes';
-
+import { PlayerDeathState, DamageID } from '../entities/player/CombatTypes';
 import { StatusEffectType } from '../content/perks';
 import { WeaponType } from '../content/weapons';
 import { Obstacle } from './world/CollisionResolution';

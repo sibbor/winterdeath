@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
-import { SectorState } from '../../../../game/session/SessionTypes';;
+import { PlayerStatID } from '../../../../entities/player/PlayerTypes';
+import { PlayerStats, SectorState } from '../../../../types/StateTypes';
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import ScreenModalLayout, { TacticalButton, TacticalCard } from '../../layout/ScreenModalLayout';

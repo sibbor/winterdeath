@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { UiSounds } from '../utils/audio/AudioLib';
 import { OverlayType } from '../App';
-import { GameScreen } from '../game/session/SessionTypes';;
+import { GameScreen } from '../types/SessionTypes';
 import { HudStore } from '../store/HudStore';
 
 interface UIActions {

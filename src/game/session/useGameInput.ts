@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { GameCanvasProps } from '../../game/session/SessionTypes';
+import { GameCanvasProps } from '../../types/CanvasTypes';
 import { UiSounds } from '../../utils/audio/AudioLib';
 import { FLASHLIGHT } from '../../content/constants';
-import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
+import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 
 export const useGameInput = (
     refs: any,

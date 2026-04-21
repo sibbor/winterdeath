@@ -1,5 +1,8 @@
 import * as THREE from 'three';
-import { SectorTrigger, MapItem, WeatherType, SectorState } from '../../types';
+import { SectorTrigger } from '../../systems/TriggerTypes';
+import { MapItem } from '../../components/ui/hud/HudTypes';
+import { WeatherType } from '../../core/engine/EngineTypes';
+import { SectorState } from '../../types/StateTypes';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';

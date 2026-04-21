@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GameState, GameScreen, SectorStats } from './game/session/SessionTypes';
+import { GameState, SectorStats } from './types/StateTypes';
+import { GameScreen } from './types/SessionTypes';
 import { PlayerStats } from './entities/player/PlayerTypes';
 import { SectorTrigger } from './systems/TriggerTypes';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';

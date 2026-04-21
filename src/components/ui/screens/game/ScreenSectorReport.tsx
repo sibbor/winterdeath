@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { t } from '../../../../utils/i18n';
-import { SectorStats } from '../../../../game/session/SessionTypes';
+import { SectorStats } from '../../../../types/StateTypes';
 import ScreenModalLayout, { TacticalCard, TacticalTab } from '../../layout/ScreenModalLayout';
 import { DamageID } from '../../../../entities/player/CombatTypes';
 import { UiSounds } from '../../../../utils/audio/AudioLib';

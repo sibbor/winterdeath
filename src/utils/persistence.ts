@@ -1,4 +1,5 @@
-import { GameState, GameScreen } from '../game/session/SessionTypes';
+import { GameState } from '../types/StateTypes';
+import { GameScreen } from '../types/SessionTypes';
 import { WeaponType } from '../content/weapons';
 import { INITIAL_STATS, DEFAULT_SETTINGS, OVERRIDE_DEFAULT_SECTOR } from '../content/constants';
 import { PlayerStatsUtils } from '../entities/player/PlayerTypes';

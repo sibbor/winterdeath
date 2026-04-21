@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { WinterEngine } from '../../core/engine/WinterEngine';
-import { GameCanvasProps, SectorStats } from '../../game/session/SessionTypes';
-import { Enemy, EnemyFlags, NoiseType } from '../../entities/enemies/EnemyTypes';
+import { GameCanvasProps } from '../../types/CanvasTypes';
+import { SectorStats } from '../../types/StateTypes';
+import { Enemy, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { SectorTrigger } from '../../systems/TriggerTypes';
-import { WeaponType } from '../../content/weapons';
 import { RuntimeState } from '../../core/RuntimeState';
 import { System } from '../../systems/System';
 import { PlayerDeathState, DamageID } from '../../entities/player/CombatTypes';
@@ -177,10 +177,10 @@ export class GameSessionLogic {
             // --- DOD BUFFER OVERRIDES (Phase 9) ---
             ...buffers,
             statusFlags: PlayerStatusFlags.NONE,
-            
+
             // --- ENEMY STATS BUFFER RESET ---
             enemyKills: new Float64Array(StatEnemyIndex.COUNT),
-            
+
             // --- PERK STATS BUFFER RESET ---
             perkTimesGained: new Float64Array(StatPerkIndex.COUNT),
             perkDamageAbsorbed: new Float64Array(StatPerkIndex.COUNT),

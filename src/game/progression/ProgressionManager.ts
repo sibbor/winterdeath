@@ -1,7 +1,6 @@
 import { PlayerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
-import { SectorStats } from '../../game/session/SessionTypes';
+import { SectorStats } from '../../types/StateTypes';
 import { LEVEL_CAP } from '../../content/constants';
-
 
 /**
  * Aggregates sector performance into overall player statistics.
@@ -17,10 +16,10 @@ export const aggregateStats = (
     newUniqueAchievements: number = 0
 ): PlayerStats => {
     // VINTERDÖD FIX: Clone BOTH the object and the statsBuffer to ensure React immutability
-    const s = { 
+    const s = {
         ...prevStats,
         statsBuffer: new Float32Array(prevStats.statsBuffer),
-        
+
         // --- WEAPON PERFORMANCE BUFFERS (Zero-GC Clone) ---
         weaponKills: new Float64Array(prevStats.weaponKills),
         weaponDamageDealt: new Float64Array(prevStats.weaponDamageDealt),
@@ -67,7 +66,7 @@ export const aggregateStats = (
     sb[PlayerStatID.TOTAL_DAMAGE_DEALT] += (sectorStats.damageDealt || 0);
     sb[PlayerStatID.TOTAL_DAMAGE_TAKEN] += (sectorStats.damageTaken || 0);
     sb[PlayerStatID.TOTAL_DISTANCE_TRAVELED] += (sectorStats.distanceTraveled || 0);
-    
+
     // Analytics (Phase 12)
     sb[PlayerStatID.TOTAL_ENGAGEMENT_DISTANCE_SQ] += (sectorStats.engagementDistSqKills || 0);
     if (sectorStats.maxKillstreak > sb[PlayerStatID.LONGEST_KILLSTREAK]) {
