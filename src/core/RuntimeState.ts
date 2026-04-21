@@ -9,7 +9,7 @@ import { Obstacle } from './world/CollisionResolution';
 import { Enemy } from '../entities/enemies/EnemyManager';
 import { ScrapItem } from '../systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';
-import { ParticleState } from '../systems/FXSystem';
+import { ParticleState } from '../types/FXTypes';
 import { InteractionType } from '../systems/InteractionTypes';
 
 export interface PreallocatedInitialAim {

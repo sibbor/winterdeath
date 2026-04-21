@@ -7,6 +7,7 @@ import { FXSystem } from '../../systems/FXSystem';
 import { WorldLootSystem } from '../../systems/WorldLootSystem';
 import { DamageID } from '../player/CombatTypes';
 import { PlayerStatusFlags } from '../player/PlayerTypes';
+import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 
 // --- TYPE DEFINITIONS ---
 interface Callbacks {
@@ -32,10 +33,10 @@ export class EnemySystem implements System {
     ) {
         // Initialize callbacks exactly once to prevent GC allocation and closure memory leaks
         this.updateCallbacks = {
-            spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: THREE.Object3D, v?: THREE.Vector3, col?: number, s?: number) => {
-                if (this.currentSession) this.spawnPart(this.currentSession, x, y, z, t, c, m, v, col, s);
+            spawnParticle: (x: number, y: number, z: number, t: FXParticleType, c: number, m?: THREE.Object3D, v?: THREE.Vector3, col?: number, s?: number) => {
+                if (this.currentSession) this.spawnParticle(this.currentSession, x, y, z, t, c, m, v, col, s);
             },
-            spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => {
+            spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type: FXDecalType = FXDecalType.DECAL) => {
                 if (this.currentSession) this.spawnDecal(this.currentSession, x, z, s, mat, type);
             },
             applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact: boolean = false) => {
@@ -53,7 +54,7 @@ export class EnemySystem implements System {
         };
 
         this.cleanupCallbacks = {
-            spawnPart: this.updateCallbacks.spawnPart,
+            spawnParticle: this.updateCallbacks.spawnParticle,
             spawnDecal: this.updateCallbacks.spawnDecal,
             spawnScrap: (x: number, z: number, amt: number) => {
                 if (!this.currentSession) return;
@@ -89,7 +90,7 @@ export class EnemySystem implements System {
                 state.collisionGrid,
                 (state.statusFlags & PlayerStatusFlags.DEAD) !== 0,
                 this.callbacks.onPlayerHit,
-                this.updateCallbacks.spawnPart,
+                this.updateCallbacks.spawnParticle,
                 this.updateCallbacks.spawnDecal,
                 this.updateCallbacks.applyDamage,
                 this.updateCallbacks.spawnBubble,
@@ -112,12 +113,12 @@ export class EnemySystem implements System {
         );
     }
 
-    private spawnPart(session: GameSessionLogic, x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) {
+    private spawnParticle(session: GameSessionLogic, x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) {
         if (!session.state.particles) return;
-        FXSystem.spawnPart(session.engine.scene, session.state.particles, x, y, z, type, count, mesh, vel, color, scale);
+        FXSystem.spawnParticle(session.engine.scene, session.state.particles, x, y, z, type, count, mesh, vel, color, scale);
     }
 
-    private spawnDecal(session: GameSessionLogic, x: number, z: number, scale: number, mat?: THREE.Material, type?: string) {
+    private spawnDecal(session: GameSessionLogic, x: number, z: number, scale: number, mat?: THREE.Material, type: FXDecalType = FXDecalType.DECAL) {
         if (!session.state.bloodDecals) return;
         FXSystem.spawnDecal(session.engine.scene, session.state.bloodDecals, x, z, scale, mat, type);
     }

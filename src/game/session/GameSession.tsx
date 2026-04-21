@@ -23,6 +23,7 @@ import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { PlayerStatID } from '../../entities/player/PlayerTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
+import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -56,12 +57,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     useGameInput(refs, props, setUiState);
 
     // --- CORE CALLBACKS ---
-    const spawnPart = useCallback((x: number, y: number, z: number, type: string, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number) => {
+    const spawnParticle = useCallback((x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number) => {
         const engine = refs.engineRef.current;
-        if (engine) FXSystem.spawnPart(engine.scene, refs.stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
+        if (engine) FXSystem.spawnParticle(engine.scene, refs.stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
     }, [refs]);
 
-    const spawnDecal = useCallback((x: number, z: number, scale: number, material?: any, type: string = 'decal') => {
+    const spawnDecal = useCallback((x: number, z: number, scale: number, material?: any, type: FXDecalType = FXDecalType.DECAL) => {
         const engine = refs.engineRef.current;
         if (engine) FXSystem.spawnDecal(engine.scene, refs.stateRef.current.bloodDecals, x, z, scale, material, type);
     }, [refs]);
@@ -901,10 +902,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     spawnBubble: (text: string, duration?: number) => {
                         window.dispatchEvent(new CustomEvent('spawn-bubble', { detail: { text, duration: duration || 3000 } }));
                     },
-                    spawnPart: (x, y, z, type, count, customMesh, customVel, color, scale) => {
-                        FXSystem.spawnPart(engine.scene, refs.stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
+                    spawnParticle: (x, y, z, type: FXParticleType, count, customMesh, customVel, color, scale) => {
+                        FXSystem.spawnParticle(engine.scene, refs.stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
                     },
-                    spawnDecal: (x, z, scale, material, type = 'decal') => {
+                    spawnDecal: (x, z, scale, material, type: FXDecalType = FXDecalType.DECAL) => {
                         FXSystem.spawnDecal(engine.scene, refs.stateRef.current.bloodDecals, x, z, scale, material, type);
                     },
                     onTrigger: (type: string, duration: number) => {
@@ -1001,7 +1002,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             callbacks: {
                 concludeSector,
                 gainXp,
-                spawnPart,
+                spawnParticle,
                 spawnDecal,
                 showDamageText,
                 t,

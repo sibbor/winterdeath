@@ -5,6 +5,7 @@ import { MaterialType } from '../content/environment';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
 import { System } from './System';
+import { FXParticleType, FXDecalType } from '../types/FXTypes';
 
 const MAX_FOOTPRINTS = 100; // Vi kan dubbla antalet nu när det är Instanced!
 const FADE_DURATION = 15000; // 15 seconds life
@@ -98,11 +99,11 @@ class FootprintSystemClass implements System {
         if (inWater) {
             if (isSwimming) {
                 GamePlaySounds.playSwimming();
-                FXSystem.spawnPart(
+                FXSystem.spawnParticle(
                     this.scene,
                     session.state.particles,
                     position.x, position.y + 1.0, position.z,
-                    'splash',
+                    FXParticleType.SPLASH,
                     10
                 );
                 session.engine.water?.spawnRipple(position.x, position.z, session.state.simTime, 4.0);
@@ -167,11 +168,11 @@ class FootprintSystemClass implements System {
         }
 
         if (isRushing) {
-            FXSystem.spawnPart(
+            FXSystem.spawnParticle(
                 this.scene,
                 session.state.particles,
                 spawnX, spawnY, spawnZ,
-                'large_smoke',
+                FXParticleType.LARGE_SMOKE,
                 1
             );
         }

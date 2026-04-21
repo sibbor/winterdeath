@@ -12,6 +12,7 @@ import { Sector3 } from '../content/sectors/Sector3';
 import { Sector4 } from '../content/sectors/Sector4';
 import { InteractionType } from './InteractionTypes';
 import { SoundID } from '../utils/audio/AudioTypes';
+import { FXParticleType, FXDecalType } from '../types/FXTypes';
 
 export const SECTORS: Record<number, SectorDef> = {
     0: Sector0,
@@ -36,7 +37,7 @@ export class SectorSystem implements System {
         private callbacks: {
             setNotification: (notification: any) => void;
             t: (key: string) => string;
-            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number, life?: number) => void;
+            spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: any, vel?: any, color?: number, scale?: number, life?: number) => void;
             startCinematic: (target: THREE.Object3D, id: number, params?: any) => void;
             setInteraction: (interaction: any | null) => void;
             playSound: (id: SoundID) => void;
@@ -65,7 +66,7 @@ export class SectorSystem implements System {
         if (!this.waterInitialized && session.engine.water) {
             session.engine.water.setPlayerRef(this.playerGroup);
             session.engine.water.setCallbacks({
-                spawnPart: this.callbacks.spawnPart,
+                spawnParticle: this.callbacks.spawnParticle,
                 makeNoise: this.callbacks.makeNoise
             });
             this.waterInitialized = true;
@@ -111,7 +112,7 @@ export class SectorSystem implements System {
                 cameraShake: this.callbacks.cameraShake,
                 t: this.callbacks.t,
                 scene: scene,
-                spawnPart: (x: number, y: number, z: number, type: string, count: number, scale?: number, life?: number) => this.callbacks.spawnPart(x, y, z, type, count, undefined, undefined, undefined, scale, life),
+                spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, scale?: number, life?: number) => this.callbacks.spawnParticle(x, y, z, type, count, undefined, undefined, undefined, scale, life),
                 startCinematic: (target: THREE.Object3D, id: number, params?: any) => this.callbacks.startCinematic(target, id, params),
                 setCameraOverride: this.callbacks.setCameraOverride,
                 setWind: (direction: number, strength: number) => session.engine.wind.setOverride(direction, strength),

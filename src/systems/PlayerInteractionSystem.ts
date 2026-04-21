@@ -6,6 +6,7 @@ import { WorldLootSystem } from './WorldLootSystem';
 import { getCollectibleById } from '../content/collectibles';
 import { FXSystem } from './FXSystem';
 import { InteractionType, InteractionShape } from './InteractionTypes';
+import { FXParticleType, FXDecalType } from '../types/FXTypes';
 import { TriggerType, TriggerStatus } from './TriggerTypes';
 import type React from 'react';
 
@@ -479,7 +480,7 @@ export class PlayerInteractionSystem implements System {
 
         for (let i = 0; i < 15; i++) {
             _v1.set((Math.random() - 0.5) * 2, 10 + Math.random() * 10, (Math.random() - 0.5) * 2);
-            FXSystem.spawnPart(session.engine.scene, session.state.particles, collectible.position.x, 0.1, collectible.position.z, 'spark', 1, undefined, _v1);
+            FXSystem.spawnParticle(session.engine.scene, session.state.particles, collectible.position.x, 0.1, collectible.position.z, FXParticleType.SPARK, 1, undefined, _v1);
         }
     }
 
@@ -518,7 +519,7 @@ export class PlayerInteractionSystem implements System {
                 glowRing.visible = false;
             }
 
-            FXSystem.spawnPart(session.engine.scene, state.particles, c.mesh.position.x, 1.0, c.mesh.position.z, 'spark', 15);
+            FXSystem.spawnParticle(session.engine.scene, state.particles, c.mesh.position.x, 1.0, c.mesh.position.z, FXParticleType.SPARK, 15);
 
             const lid = c.mesh.children[1];
             if (lid) {

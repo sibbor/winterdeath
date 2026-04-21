@@ -4,6 +4,7 @@ import { WATER_SYSTEM } from '../content/constants';
 import { MATERIALS } from '../utils/assets/materials';
 import { NoiseType } from '../entities/enemies/EnemyTypes';
 import { System } from './System';
+import { FXParticleType } from '../types/FXTypes';
 
 interface WaterBind {
     uTime: { value: number };
@@ -155,7 +156,7 @@ export class WaterSystem implements System {
 
     // Callbacks for GameSession
     private emitNoiseCb: ((pos: THREE.Vector3, type: NoiseType, radius?: number) => void) | null = null;
-    private spawnPartCb: ((x: number, y: number, z: number, type: string, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number) => void) | null = null;
+    private spawnParticleCb: ((x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number) => void) | null = null;
 
     constructor(private scene: THREE.Scene) {
         for (let i = 0; i < WATER_SYSTEM.MAX_RIPPLES; i++) this.rippleData.push(new THREE.Vector4(0, 0, -1000, 0));
@@ -508,8 +509,8 @@ export class WaterSystem implements System {
                         this.spawnRipple(p.position.x, p.position.z, renderTime, 0.7);
 
                         // Generate splash particles if moving very fast (e.g. boat driving)
-                        if (speedSq > 10.0 && this.spawnPartCb && Math.random() < 0.6) {
-                            this.spawnPartCb(p.position.x, p.position.y + 0.2, p.position.z, 'splash', 3);
+                        if (speedSq > 10.0 && this.spawnParticleCb && Math.random() < 0.6) {
+                            this.spawnParticleCb(p.position.x, p.position.y + 0.2, p.position.z, FXParticleType.SPLASH, 3);
                         }
 
                         // Sätt nästa tillåtna plask till om 150-250 millisekunder
@@ -768,9 +769,9 @@ export class WaterSystem implements System {
 
     public setPlayerRef(g: THREE.Group) { this.playerGroup = g; }
 
-    public setCallbacks(c: { makeNoise?: any, spawnPart?: any }) {
+    public setCallbacks(c: { makeNoise?: any, spawnParticle?: any }) {
         if (c.makeNoise) this.emitNoiseCb = c.makeNoise;
-        if (c.spawnPart) this.spawnPartCb = c.spawnPart;
+        if (c.spawnParticle) this.spawnParticleCb = c.spawnParticle;
     }
 }
 

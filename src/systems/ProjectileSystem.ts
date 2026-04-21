@@ -15,6 +15,7 @@ import { NoiseType, NOISE_RADIUS, EnemyFlags, EnemyType } from '../entities/enem
 import { WeaponFX } from './WeaponFX';
 import { MaterialType } from '../content/environment';
 import { MASSIVE_DAMAGE_THRESHOLD } from '../content/constants';
+import { FXParticleType, FXDecalType } from '../types/FXTypes';
 
 // --- INTERFACES ---
 
@@ -31,7 +32,7 @@ export interface GameContext {
     scene: THREE.Scene;
     enemies: Enemy[];
     collisionGrid: SpatialGrid;
-    spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number, life?: number) => void;
+    spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: any, vel?: any, color?: number, scale?: number, life?: number) => void;
     explodeEnemy: (e: Enemy, force: THREE.Vector3) => void;
     addScore: (amt: number) => void;
     fireZones: FireZone[];
@@ -197,9 +198,9 @@ export const ProjectileSystem = {
         p.highImpactDamageFactor = (weapon === DamageID.REVOLVER) ? 0.5 : 0;
 
         // VINTERDÖD FIX: Inject engine-wide Muzzle FX for ballistic firearms
-        const isBallistic = weapon === DamageID.SMG || weapon === DamageID.SHOTGUN || 
-                           weapon === DamageID.RIFLE || weapon === DamageID.PISTOL || 
-                           weapon === DamageID.REVOLVER || weapon === DamageID.MINIGUN;
+        const isBallistic = weapon === DamageID.SMG || weapon === DamageID.SHOTGUN ||
+            weapon === DamageID.RIFLE || weapon === DamageID.PISTOL ||
+            weapon === DamageID.REVOLVER || weapon === DamageID.MINIGUN;
 
         if (isBallistic) {
             WeaponFX.createMuzzleFlash(origin, dir);
@@ -328,9 +329,9 @@ export const ProjectileSystem = {
 
                     // VINTERDÖD: Sqrt Purge! 
                     if (distSq > rangeSq) continue;
-                    
+
                     // Optimization: Check dot product BEFORE reach to cull most targets
-                    _v2.copy(_v1).normalize(); 
+                    _v2.copy(_v1).normalize();
                     if (direction.dot(_v2) <= FLAMETHROWER_CONE_ANGLE) continue;
 
                     const dist = Math.sqrt(distSq);
@@ -338,7 +339,7 @@ export const ProjectileSystem = {
 
                     if ((e.statusFlags & EnemyFlags.IN_WATER) !== 0) {
                         if (Math.random() < 0.1) {
-                            ctx.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'large_smoke', 1);
+                            ctx.spawnParticle(e.mesh.position.x, 0.5, e.mesh.position.z, FXParticleType.LARGE_SMOKE, 1);
                         }
                         continue;
                     }
@@ -691,7 +692,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 _v5.copy(projectile.vel).setY(0).normalize().multiplyScalar(force);
                 enemy.knockbackVel.add(_v5);
 
-                ctx.spawnPart(_v6.x, 1.5, _v6.z, 'blood_splatter', 6);
+                ctx.spawnParticle(_v6.x, 1.5, _v6.z, FXParticleType.BLOOD_SPLATTER, 6);
                 GamePlaySounds.playImpact(MaterialType.FLESH);
 
                 if (projectile.piercing) {

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
+import { FXParticleType, FXDecalType } from '../types/FXTypes';
 import { VehicleSounds } from '../utils/audio/AudioLib';
 import { audioEngine } from '../utils/audio/AudioEngine';
 import { VehicleDef } from '../content/vehicles';
@@ -385,12 +386,12 @@ export class VehicleMovementSystem implements System {
                 if (speedSq > 4.0) {
                     if (Math.random() < speedRatio * 0.3) {
                         _v1.copy(_forward).multiplyScalar(-def.size.z * 0.45);
-                        FXSystem.spawnPart(session.engine.scene, state.particles, vehicle.position.x + _v1.x, 0.2, vehicle.position.z + _v1.z, 'smoke', 1, undefined, undefined, 0xaaaaaa, 0.4);
+                        FXSystem.spawnParticle(session.engine.scene, state.particles, vehicle.position.x + _v1.x, 0.2, vehicle.position.z + _v1.z, FXParticleType.SMOKE, 1, undefined, undefined, 0xaaaaaa, 0.4);
                     }
                     if (isSkidding && Math.random() < 0.6) {
                         _v1.copy(_forward).multiplyScalar(-def.size.z * 0.45);
                         _v1.addScaledVector(_right, currentLatSpeed > 0 ? -0.5 : 0.5);
-                        FXSystem.spawnPart(session.engine.scene, state.particles, vehicle.position.x + _v1.x, 0.2, vehicle.position.z + _v1.z, 'large_smoke', 1, undefined, undefined, 0xcccccc, 0.8 + Math.random() * 0.5);
+                        FXSystem.spawnParticle(session.engine.scene, state.particles, vehicle.position.x + _v1.x, 0.2, vehicle.position.z + _v1.z, FXParticleType.LARGE_SMOKE, 1, undefined, undefined, 0xcccccc, 0.8 + Math.random() * 0.5);
                     }
                 }
             }

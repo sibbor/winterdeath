@@ -9,6 +9,7 @@ import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { FXSystem } from '../../systems/FXSystem';
+import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
@@ -71,8 +72,8 @@ export interface SetupContext {
         startCinematic: (mesh: any, sectorId?: number, dialogueId?: number, params?: any) => void;
         endCinematic: () => void;
         playCinematicLine: (index: number) => void;
-        spawnPart: (x: number, y: number, z: number, type: string, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
-        spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: string) => void;
+        spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
+        spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
         showDamageText: (x: number, y: number, z: number, text: string, color?: string) => void;
         spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => void;
         concludeSector: (isExtraction: boolean) => void;
@@ -360,7 +361,7 @@ export class GameSessionSetup {
         const { engine, session, state, callbacks, refs, props } = ctx;
 
         state.callbacks = {
-            spawnPart: callbacks.spawnPart,
+            spawnParticle: callbacks.spawnParticle,
             spawnDecal: callbacks.spawnDecal,
             showDamageText: callbacks.showDamageText,
             spawnBubble: callbacks.spawnBubble,
@@ -581,7 +582,7 @@ export class GameSessionSetup {
         if (engine.water) {
             engine.water.setPlayerRef(playerGroup);
             engine.water.setCallbacks({
-                spawnPart: (x, y, z, type, count) => callbacks.spawnPart(x, y, z, type, count),
+                spawnParticle: (x, y, z, type, count) => callbacks.spawnParticle(x, y, z, type, count),
                 makeNoise: (pos, type, rad) => session.makeNoise(pos, type as NoiseType, rad)
             });
         }
@@ -643,7 +644,7 @@ export class GameSessionSetup {
 
         session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
             setNotification: (n: any) => { if (n && n.visible && n.text) callbacks.spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000); },
-            t: callbacks.t, spawnPart: callbacks.spawnPart, startCinematic: callbacks.startCinematic,
+            t: callbacks.t, spawnParticle: callbacks.spawnParticle, startCinematic: callbacks.startCinematic,
             setInteraction: (interaction: any) => {
                 if (interaction) {
                     state.interaction.active = true;

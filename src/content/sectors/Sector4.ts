@@ -485,10 +485,10 @@ export const Sector4: SectorDef = {
 
             _busOriginalPos.set(EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.y, EXPLODING_BUS_POS.z);
 
-            if (events.spawnPart) {
+            if (events.spawnParticle) {
                 // [VINTERDÖD FIX] Use new scale parameter for massive cinematic explosion
-                events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'shockwave', 1, 2.5);
-                events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_smoke', 8, 2.0);
+                events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, 'shockwave', 1, 2.5);
+                events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_smoke', 8, 2.0);
             }
 
             if (events.makeNoise) {

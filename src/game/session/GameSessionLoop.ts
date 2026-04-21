@@ -25,6 +25,7 @@ import { VehicleManager } from '../../systems/VehicleManager';
 import { InteractionType } from '../../systems/InteractionTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { NavigationSystem } from '../../systems/NavigationSystem';
+import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -35,8 +36,8 @@ interface LoopContext {
     callbacks: {
         concludeSector: (val: boolean) => void;
         gainXp: (val: number) => void;
-        spawnPart: (x: number, y: number, z: number, type: string, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => void;
-        spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: string) => void;
+        spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => void;
+        spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
         showDamageText: (x: number, y: number, z: number, text: string, color?: string) => void;
         t: (k: string) => string;
         spawnBubble: (text: string, duration?: number) => void;
@@ -66,7 +67,7 @@ const _bendDistSq = new Float32Array(8);
 
 // Pre-define ALL properties to lock V8 Hidden Classes (Shapes)
 const _fxCallbacks: any = {
-    spawnPart: null,
+    spawnParticle: null,
     spawnDecal: null,
     onPlayerHit: null
 };
@@ -100,7 +101,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
     const getActiveCallbacks = () => state.callbacks || callbacks || EMPTY_OBJECT;
 
     // Initial binding for FX (will be updated in loop if needed)
-    _fxCallbacks.spawnPart = callbacks.spawnPart;
+    _fxCallbacks.spawnParticle = callbacks.spawnParticle;
     _fxCallbacks.spawnDecal = callbacks.spawnDecal;
     _fxCallbacks.onPlayerHit = (damage: number, attacker: any, type: string, isDoT: boolean, effectType?: any, effectDuration?: number, effectDamage?: number, attackName?: string) => {
         const statsSystem = session.getSystem('player_stats_system') as any;
@@ -157,7 +158,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         enemies: null,
         obstacles: null,
         collisionGrid: null,
-        spawnPart: null,
+        spawnParticle: null,
         spawnDecal: null,
         showDamageText: null,
         simTime: 0,
@@ -451,7 +452,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                                 _vInteraction.z += (Math.random() - 0.5) * (eff.spread || 0.4);
                             }
 
-                            callbacks.spawnPart(_vInteraction.x, _vInteraction.y, _vInteraction.z, eff.particle, 1, undefined, undefined, eff.color);
+                            callbacks.spawnParticle(_vInteraction.x, _vInteraction.y, _vInteraction.z, eff.particle as any, 1, undefined, undefined, eff.color);
                         }
                     }
                 }
@@ -495,7 +496,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             }
 
             playerGroup.position.set(tgt.x, 0, tgt.z);
-            callbacks.spawnPart(tgt.x, 1, tgt.z, 'flash', 1, undefined, undefined, undefined, 2);
+            callbacks.spawnParticle(tgt.x, 1, tgt.z, FXParticleType.FLASH, 1, undefined, undefined, undefined, 2);
             audioEngine.playSound(SoundID.UI_CHIME);
 
             for (let i = 0; i < refs.activeFamilyMembers.current.length; i++) {
@@ -504,7 +505,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                     const offX = (Math.random() - 0.5) * 3;
                     const offZ = (Math.random() - 0.5) * 3;
                     fm.mesh.position.set(tgt.x + offX, 0, tgt.z + offZ);
-                    callbacks.spawnPart(tgt.x + offX, 1, tgt.z + offZ, 'smoke', 10);
+                    callbacks.spawnParticle(tgt.x + offX, 1, tgt.z + offZ, FXParticleType.SMOKE, 10);
                 }
             }
 
@@ -528,7 +529,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         monitor.begin('session_update');
         if (playerGroup) {
             session.playerPos = playerGroup.position;
-            
+
             // VINTERDÖD: Update the hardened navigation grid
             NavigationSystem.update(playerGroup.position, simTime);
         }
@@ -712,7 +713,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         _gameContext.enemies = state.enemies;
         _gameContext.obstacles = state.obstacles;
         _gameContext.collisionGrid = state.collisionGrid;
-        _gameContext.spawnPart = activeCallbacks.spawnPart || callbacks.spawnPart;
+        _gameContext.spawnParticle = activeCallbacks.spawnParticle || callbacks.spawnParticle;
         _gameContext.spawnDecal = activeCallbacks.spawnDecal || callbacks.spawnDecal;
         _gameContext.showDamageText = activeCallbacks.showDamageText || callbacks.showDamageText;
 
@@ -737,7 +738,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 state.collisionGrid,
                 (state.statusFlags & PlayerStatusFlags.DEAD) !== 0,
                 _fxCallbacks.onPlayerHit,
-                _fxCallbacks.spawnPart,
+                _fxCallbacks.spawnParticle,
                 _fxCallbacks.spawnDecal,
                 _gameContext.applyDamage,
                 activeCallbacks.spawnBubble,
@@ -829,7 +830,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                                 _vInteraction.z += (Math.random() - 0.5) * eff.spread;
                             }
 
-                            callbacks.spawnPart(_vInteraction.x, _vInteraction.y, _vInteraction.z, eff.particle, eff.count || 1, undefined, undefined, eff.color);
+                            callbacks.spawnParticle(_vInteraction.x, _vInteraction.y, _vInteraction.z, eff.particle, eff.count || 1, undefined, undefined, eff.color);
                         }
                     }
                 }

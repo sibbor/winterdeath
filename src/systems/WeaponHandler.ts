@@ -30,7 +30,7 @@ interface ContinuousContext {
     scene: THREE.Scene | null;
     enemies: any[];
     collisionGrid: any;
-    spawnPart: Function | null;
+    spawnParticle: Function | null;
     showDamageText: Function;
     spawnDecal: Function | null;
     explodeEnemy: Function | null;
@@ -52,7 +52,7 @@ const _continuousCtx: ContinuousContext = {
     scene: null,
     enemies: [],
     collisionGrid: null,
-    spawnPart: null,
+    spawnParticle: null,
     showDamageText: _NOOP_DAMAGE_TEXT,
     spawnDecal: null,
     explodeEnemy: null,
@@ -314,7 +314,7 @@ export const WeaponHandler = {
                     _continuousCtx.scene = scene;
                     _continuousCtx.enemies = state.enemies || [];
                     _continuousCtx.collisionGrid = state.collisionGrid;
-                    _continuousCtx.spawnPart = cb?.spawnPart;
+                    _continuousCtx.spawnParticle = cb?.spawnParticle;
                     _continuousCtx.showDamageText = cb?.showDamageText || _NOOP_DAMAGE_TEXT;
                     _continuousCtx.spawnDecal = cb?.spawnDecal;
                     _continuousCtx.explodeEnemy = cb?.explodeEnemy;

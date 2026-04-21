@@ -10,6 +10,7 @@ import { HudSystem } from './HudSystem';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { HudStore } from '../store/HudStore';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
+import { FXParticleType, FXDecalType } from '../types/FXTypes';
 import { PlayerStatusFlags, PlayerStatID } from '../entities/player/PlayerTypes';
 
 
@@ -64,7 +65,10 @@ export class DeathSystem implements System {
     private cameraRef: () => THREE.Camera;
     private propsRef: React.MutableRefObject<any>;
     private distanceTraveledRef: React.MutableRefObject<number>;
-    private fxCallbacks: any;
+    private fxCallbacks: {
+        spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number, life?: number) => void;
+        spawnDecal: (x: number, z: number, scale: number, material?: any, type?: FXDecalType) => void;
+    };
     private setDeathPhase: (phase: any) => void;
 
     constructor(opts: {
@@ -77,7 +81,10 @@ export class DeathSystem implements System {
         cameraRef: () => THREE.Camera;
         propsRef: React.MutableRefObject<any>;
         distanceTraveledRef: React.MutableRefObject<number>;
-        fxCallbacks: any;
+        fxCallbacks: {
+            spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number, life?: number) => void;
+            spawnDecal: (x: number, z: number, scale: number, material?: any, type?: FXDecalType) => void;
+        };
         setDeathPhase: (phase: any) => void;
     }) {
         this.playerGroupRef = opts.playerGroupRef;
@@ -169,13 +176,13 @@ export class DeathSystem implements System {
                 state.playerBloodSpawned = true;
                 const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 2.5 * baseScale, MATERIALS.bloodDecal);
-                this.fxCallbacks.spawnPart(pgPos.x, 1.5, pgPos.z, 'blood_splatter', 6);
+                this.fxCallbacks.spawnParticle(pgPos.x, 1.5, pgPos.z, FXParticleType.BLOOD_SPLATTER, 6);
             }
 
             // Specialized Death Visuals
             if (isBurning && renderTime % 500 < 50) {
-                this.fxCallbacks.spawnPart(pgPos.x, 0.5, pgPos.z, 'smoke', 1);
-                this.fxCallbacks.spawnPart(pgPos.x, 0.5, pgPos.z, 'spark', 1);
+                this.fxCallbacks.spawnParticle(pgPos.x, 0.5, pgPos.z, FXParticleType.SMOKE, 1);
+                this.fxCallbacks.spawnParticle(pgPos.x, 0.5, pgPos.z, FXParticleType.SPARK, 1);
             }
 
             if (isBiting && this.deathPhaseRef.current === 'ANIMATION') {
@@ -183,7 +190,7 @@ export class DeathSystem implements System {
                 playerMesh.position.z = Math.cos(renderTime * 0.05) * 0.1;
 
                 if (renderTime % 300 < 30) {
-                    this.fxCallbacks.spawnPart(pgPos.x, 1.5, pgPos.z, 'blood_splatter', 6);
+                    this.fxCallbacks.spawnParticle(pgPos.x, 1.5, pgPos.z, FXParticleType.BLOOD_SPLATTER, 6);
                 }
             }
 
@@ -196,7 +203,7 @@ export class DeathSystem implements System {
 
                 if (this.deathPhaseRef.current === 'ANIMATION') {
                     if (renderTime % 500 < 50) {
-                        this.fxCallbacks.spawnPart(pgPos.x, pgPos.y + 1.0, pgPos.z, 'splash', 2);
+                        this.fxCallbacks.spawnParticle(pgPos.x, pgPos.y + 1.0, pgPos.z, FXParticleType.SPLASH, 2);
                     }
                 }
             } else if (state.playerDeathState === PlayerDeathState.BURNED) {
@@ -215,7 +222,7 @@ export class DeathSystem implements System {
                 }
 
                 if (renderTime % 100 < 16) {
-                    this.fxCallbacks.spawnPart(pgPos.x, pgPos.y + 1.8, pgPos.z, 'enemy_effect_flame', 1);
+                    this.fxCallbacks.spawnParticle(pgPos.x, pgPos.y + 1.8, pgPos.z, FXParticleType.ENEMY_EFFECT_FLAME, 1);
                 }
 
                 // Shrink and Char
@@ -255,8 +262,8 @@ export class DeathSystem implements System {
                 const baseScale = (playerMesh as any).userData.baseScale;
 
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 4.5 * baseScale, MATERIALS.bloodDecal);
-                this.fxCallbacks.spawnPart(pgPos.x, 1.0, pgPos.z, 'blood_splatter', 20);
-                this.fxCallbacks.spawnPart(pgPos.x, 1.5, pgPos.z, 'meat', 12);
+                this.fxCallbacks.spawnParticle(pgPos.x, 1.0, pgPos.z, FXParticleType.BLOOD_SPLATTER, 20);
+                this.fxCallbacks.spawnParticle(pgPos.x, 1.5, pgPos.z, FXParticleType.MEAT, 12);
             }
         } else if (playerMesh) {
             _deathAnimState.deathStartTime = state.deathStartTime;

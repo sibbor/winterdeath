@@ -19,6 +19,7 @@ import { audioEngine } from '../utils/audio/AudioEngine';
 import { FXSystem } from './FXSystem';
 import { COLLECTIBLES } from '../content/collectibles';
 import { WEAPONS } from '../content/weapons';
+import { FXParticleType, FXDecalType } from '../types/FXTypes';
 import { checkIsMobileDevice } from '../utils/device';
 
 const warmedModules = new Set<string>();
@@ -39,13 +40,16 @@ const _NOOP_ASYNC = async () => { };
 
 // Static arrays to prevent GC allocations
 const BUMP_MAPS = ['snow_bump', 'asphalt_bump', 'stone_bump', 'dirt_bump', 'concrete_bump', 'brick_bump', 'bark_rough_bump'];
-const FX_SOLID = ['debris', 'scrap', 'glass', 'gore'];
+const FX_SOLID = [FXParticleType.DEBRIS, FXParticleType.SCRAP, FXParticleType.GLASS, FXParticleType.GORE];
 const FX_GAS = [
-    'fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke', 'flash', 'splash', 'impact',
-    'shockwave', 'frost_nova', 'screech_wave', 'electric_beam', 'magnetic_sparks', 'ground_impact', 'impact_splat',
-    'campfire_flame', 'campfire_spark', 'campfire_smoke', 'flamethrower_fire',
-    'enemy_effect_stun', 'electric_flash', 'enemy_effect_flame', 'enemy_effect_spark', 'blastRadius',
-    'blood_splatter', 'black_smoke', 'debris_trail'
+    FXParticleType.FIRE, FXParticleType.LARGE_FIRE, FXParticleType.FLAME, FXParticleType.SPARK, FXParticleType.SMOKE, 
+    FXParticleType.LARGE_SMOKE, FXParticleType.FLASH, FXParticleType.SPLASH, FXParticleType.IMPACT,
+    FXParticleType.SHOCKWAVE, FXParticleType.FROST_NOVA, FXParticleType.SCREECH_WAVE, FXParticleType.ELECTRIC_BEAM, 
+    FXParticleType.MAGNETIC_SPARKS, FXParticleType.GROUND_IMPACT, FXParticleType.IMPACT_SPLAT,
+    FXParticleType.CAMPFIRE_FLAME, FXParticleType.CAMPFIRE_SPARK, FXParticleType.CAMPFIRE_SMOKE, FXParticleType.FLAMETHROWER_FIRE,
+    FXParticleType.ENEMY_EFFECT_STUN, FXParticleType.ELECTRIC_FLASH, FXParticleType.ENEMY_EFFECT_FLAME, 
+    FXParticleType.ENEMY_EFFECT_SPARK, FXParticleType.BLAST_RADIUS,
+    FXParticleType.BLOOD_SPLATTER, FXParticleType.BLACK_SMOKE, FXParticleType.DEBRIS_TRAIL
 ];
 const ALL_FX = [...FX_SOLID, ...FX_GAS];
 const DEAD_BODY_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, EnemyType.BOMBER];

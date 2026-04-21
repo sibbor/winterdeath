@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
+import { FXParticleType } from '../types/FXTypes';
 import { DamageID } from '../entities/player/CombatTypes';
 import { PERKS, StatusEffectType } from '../content/perks';
 import { applyCollisionResolution } from '../core/world/CollisionResolution';
@@ -401,10 +402,10 @@ export class PlayerMovementSystem implements System {
                     }
                 }
 
-                FXSystem.spawnPart(
+                FXSystem.spawnParticle(
                     session.engine.scene, state.particles,
                     playerGroup.position.x, 0.5, playerGroup.position.z,
-                    'large_smoke', 2, undefined, undefined, 0xcccccc, 1.2
+                    FXParticleType.LARGE_SMOKE, 2, undefined, undefined, 0xcccccc, 1.2
                 );
             }
 

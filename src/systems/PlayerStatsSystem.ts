@@ -12,6 +12,7 @@ import { SoundID } from '../utils/audio/AudioTypes';
 import { EnemyType, EnemyFlags } from '../entities/enemies/EnemyTypes';
 import { KMH_TO_MS, FamilyMemberID } from '../content/constants';
 import { DataResolver } from '../utils/ui/DataResolver';
+import { FXParticleType, FXDecalType } from '../types/FXTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -67,7 +68,7 @@ export class PlayerStatsSystem implements System {
                             }
                             session.triggerDiscovery('perk', i, perk.displayName, perk.description);
                         }
-                        
+
                         // Increment activation count
                         state.perkTimesGained[i]++;
                     }
@@ -175,9 +176,9 @@ export class PlayerStatsSystem implements System {
 
         // --- SYNC BUFF FLAGS (Phase 11) ---
         state.statusFlags &= ~(
-            PlayerStatusFlags.REFLEX_SHIELD | 
-            PlayerStatusFlags.ADRENALINE_SHOT | 
-            PlayerStatusFlags.GIB_MASTER | 
+            PlayerStatusFlags.REFLEX_SHIELD |
+            PlayerStatusFlags.ADRENALINE_SHOT |
+            PlayerStatusFlags.GIB_MASTER |
             PlayerStatusFlags.QUICK_FINGER |
             PlayerStatusFlags.DISORIENTED |
             PlayerStatusFlags.STUNNED
@@ -282,10 +283,10 @@ export class PlayerStatsSystem implements System {
 
                 // Visuals
                 if (i === StatusEffectType.BLEEDING) {
-                    FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.5, this.playerGroup.position.z, 'blood_splatter', 6);
+                    FXSystem.spawnParticle(session.engine.scene, state.particles, this.playerGroup.position.x, 1.5, this.playerGroup.position.z, FXParticleType.BLOOD_SPLATTER, 6);
                 } else if (i === StatusEffectType.BURNING) {
                     _v1.set(this.playerGroup.position.x + (Math.random() - 0.5) * 0.5, this.playerGroup.position.y + 1.8, this.playerGroup.position.z + (Math.random() - 0.5) * 0.5);
-                    FXSystem.spawnPart(session.engine.scene, state.particles, _v1.x, _v1.y, _v1.z, 'flame', 1);
+                    FXSystem.spawnParticle(session.engine.scene, state.particles, _v1.x, _v1.y, _v1.z, FXParticleType.FLAME, 1);
                 }
             }
         }
@@ -313,7 +314,7 @@ export class PlayerStatsSystem implements System {
         }
 
         let actualDmg = damage * state.statsBuffer[PlayerStatID.MULTIPLIER_DMG_RESIST];
-        
+
         // Track Damage Absorbed specifically by Reflex Shield (vinterdöd Step 2)
         if (state.effectDurations[StatusEffectType.REFLEX_SHIELD] > 0) {
             // Shield is 50% reduction.
@@ -389,7 +390,7 @@ export class PlayerStatsSystem implements System {
         state.lastDamageTime = now;
 
         if (state.particles && !isDoT) {
-            FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.5, this.playerGroup.position.z, 'blood_splatter', 6);
+            FXSystem.spawnParticle(session.engine.scene, state.particles, this.playerGroup.position.x, 1.5, this.playerGroup.position.z, FXParticleType.BLOOD_SPLATTER, 6);
         }
 
         if (state.statsBuffer[PlayerStatID.HP] <= 0) {
@@ -479,7 +480,7 @@ export class PlayerStatsSystem implements System {
         const state = session.state;
         const perkID = StatusEffectType.REFLEX_SHIELD;
         const perk = PERKS[perkID];
-        
+
         let cleansedCount = 0;
         for (let i = 0; i < 32; i++) {
             const p = PERKS[i];
@@ -488,7 +489,7 @@ export class PlayerStatsSystem implements System {
                 cleansedCount++;
             }
         }
-        
+
         if (cleansedCount > 0) {
             state.perkDebuffsCleansed[perkID] += cleansedCount;
             // Track total resistance
@@ -508,7 +509,7 @@ export class PlayerStatsSystem implements System {
         if (perk) {
             state.effectDurations[type] = perk.duration || 3000;
             state.effectMaxDurations[type] = perk.duration || 3000;
-            
+
             // Activation count
             state.perkTimesGained[type]++;
         }
@@ -524,7 +525,7 @@ export class PlayerStatsSystem implements System {
             this.triggerBuff(session, StatusEffectType.QUICK_FINGER, now);
             state.globalTimeScale = 0.2; // ACTIVATE SLOWMO
             audioEngine.playSound(SoundID.BUFF_GAINED);
-            
+
             // Notification for the player
             if (session.triggerDiscovery) {
                 const perk = PERKS[StatusEffectType.QUICK_FINGER];

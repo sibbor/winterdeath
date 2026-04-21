@@ -13,7 +13,7 @@ import { WEAPONS, ZOMBIE_TYPES, PLAYER_BASE_SPEED } from '../../content/constant
 import { ScrapItem } from '../../systems/WorldLootSystem';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { Obstacle } from '../../core/world/CollisionResolution';
-import { ParticleState } from '../../systems/FXSystem';
+import { ParticleState } from '../../types/FXTypes';
 import { PlayerStatID, PlayerStatusFlags, PlayerStatsUtils, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
 import { InteractionType } from '../../systems/InteractionTypes';
 import { PerkFX } from '../../systems/PerkFX';

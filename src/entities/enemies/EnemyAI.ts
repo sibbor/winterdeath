@@ -61,7 +61,7 @@ export const EnemyAI = {
             onEffectTick: (e: Enemy, type: EnemyEffectType) => void;
             playSound: (id: SoundID) => void;
             spawnBubble: (text: string, duration: number) => void;
-            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void;
+            spawnParticle: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void;
             queryEnemies?: (pos: THREE.Vector3, radius: number) => Enemy[];
         },
         water: WaterSystem | null,
@@ -288,8 +288,8 @@ export const EnemyAI = {
                         if (callbacks.playSound) callbacks.playSound(SoundID.IMPACT_METAL);
                     }
 
-                    if (callbacks.spawnPart) {
-                        callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'blood_splatter', Math.floor(fallHeight * 4));
+                    if (callbacks.spawnParticle) {
+                        callbacks.spawnParticle(e.mesh.position.x, 0.5, e.mesh.position.z, 'blood_splatter', Math.floor(fallHeight * 4));
                     }
 
                     if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
@@ -363,7 +363,7 @@ export const EnemyAI = {
             if (e.drownDmgTimer >= 0.15) {
                 e.drownDmgTimer = 0;
                 if (water) water.spawnRipple(e.mesh.position.x, e.mesh.position.z, 0.9, 1.2);
-                callbacks.spawnPart(e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z, 'splash', 4);
+                callbacks.spawnParticle(e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z, 'splash', 4);
 
                 const tickDmg = e.maxHp * 0.05;
                 e.hp -= tickDmg;
@@ -778,9 +778,9 @@ export const EnemyAI = {
                     e.mesh.userData.lastGrappleDmg = simTime;
                     callbacks.onPlayerHit(4, e, DamageID.BITE, true, undefined, undefined, undefined, 'GRAPPLE_BITE');
 
-                    if (callbacks.spawnPart) {
+                    if (callbacks.spawnParticle) {
                         // VINTERDÖD: Improved blood feedback for grapple
-                        callbacks.spawnPart(playerPos.x, 1.5, playerPos.z, 'blood_splatter', 6);
+                        callbacks.spawnParticle(playerPos.x, 1.5, playerPos.z, 'blood_splatter', 6);
                     }
                 }
                 break;

@@ -3,6 +3,7 @@ import { FXSystem } from './FXSystem';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { MATERIALS } from '../utils/assets';
 import { LogicalLight } from './LightSystem';
+import { FXParticleType, FXDecalType } from '../types/FXTypes';
 
 // --- ZERO-GC SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
@@ -235,7 +236,7 @@ export const WeaponFX = {
         const req = FXSystem._getSpawnRequest();
         req.scene = null as any;
         req.x = pos.x; req.y = pos.y; req.z = pos.z;
-        req.type = 'enemy_effect_stun';
+        req.type = FXParticleType.ENEMY_EFFECT_STUN;
         req.customVel.set((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
         req.hasCustomVel = true;
         req.scale = 0.1 + Math.random() * 0.2;
@@ -249,7 +250,7 @@ export const WeaponFX = {
             req.x = pos.x + (Math.random() - 0.5);
             req.y = pos.y + 1.0 + (Math.random() - 0.5);
             req.z = pos.z + (Math.random() - 0.5);
-            req.type = 'enemy_effect_stun';
+            req.type = FXParticleType.ENEMY_EFFECT_STUN;
             req.customVel.set((Math.random() - 0.5) * 6, Math.random() * 5, (Math.random() - 0.5) * 6);
             req.hasCustomVel = true;
             req.scale = 0.2 + Math.random() * 0.2;
@@ -259,13 +260,13 @@ export const WeaponFX = {
 
     createGrenadeImpact: (pos: THREE.Vector3, radius: number, hitWater: boolean, ctx: any) => {
         if (hitWater) {
-            ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 85);
+            ctx.spawnParticle(pos.x, pos.y, pos.z, FXParticleType.SPLASH, 85);
             return;
         }
         // VINTERDÖD FIX: Standardized to seconds-based life (0.1s flash, 0.4s shockwave, 1.2s blast)
-        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), undefined, 1.5, 0.1);
-        ctx.spawnPart(pos.x, pos.y + 0.1, pos.z, 'shockwave', 2, undefined, _v2, undefined, radius * 0.2, 0.4);
-        ctx.spawnPart(pos.x, pos.y + 0.05, pos.z, 'blastRadius', 1, undefined, _v2, undefined, radius, 1.2);
+        ctx.spawnParticle(pos.x, pos.y + 0.5, pos.z, FXParticleType.FLASH, 1, undefined, _v2.set(0, 0, 0), undefined, 1.5, 0.1);
+        ctx.spawnParticle(pos.x, pos.y + 0.1, pos.z, FXParticleType.SHOCKWAVE, 2, undefined, _v2, undefined, radius * 0.2, 0.4);
+        ctx.spawnParticle(pos.x, pos.y + 0.05, pos.z, FXParticleType.BLAST_RADIUS, 1, undefined, _v2, undefined, radius, 1.2);
 
         // Massive Intensity Buff (5.0 -> 25.0)
         WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xffaa00, 25.0, radius * 6, 0.5, 'fire');
@@ -273,16 +274,16 @@ export const WeaponFX = {
 
     createMolotovImpact: (pos: THREE.Vector3, radius: number, hitWater: boolean, ctx: any) => {
         if (hitWater) {
-            ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 12);
+            ctx.spawnParticle(pos.x, pos.y, pos.z, FXParticleType.SPLASH, 12);
             return;
         }
-        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'glass', 15);
-        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), 0xff8800, 1.0, 0.15);
-        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'large_fire', 8, undefined, undefined, undefined, 1.8);
+        ctx.spawnParticle(pos.x, pos.y + 0.5, pos.z, FXParticleType.GLASS, 15);
+        ctx.spawnParticle(pos.x, pos.y + 0.5, pos.z, FXParticleType.FLASH, 1, undefined, _v2.set(0, 0, 0), 0xff8800, 1.0, 0.15);
+        ctx.spawnParticle(pos.x, pos.y + 0.5, pos.z, FXParticleType.LARGE_FIRE, 8, undefined, undefined, undefined, 1.8);
 
         // Intensity Buff (3.0 -> 15.0)
         WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xff6600, 15.0, radius * 5, 0.4, 'fire');
-        ctx.spawnDecal(pos.x, pos.z, radius * 2.0, MATERIALS.scorchDecal);
+        ctx.spawnDecal(pos.x, pos.z, radius * 2.0, MATERIALS.scorchDecal, FXDecalType.SCORCH);
     },
 
     updateFireZoneVisuals: (pos: THREE.Vector3, radius: number, delta: number, ctx: any) => {
@@ -304,7 +305,7 @@ export const WeaponFX = {
             const y = 0.3 + (core * 2.2);
             const color = Math.random() > 0.6 ? 0xffcc00 : (Math.random() > 0.3 ? 0xff8800 : 0xff4400);
 
-            ctx.spawnPart(fx, y, fzZ, 'fire', 1, undefined, undefined, color, scale);
+            ctx.spawnParticle(fx, y, fzZ, FXParticleType.FIRE, 1, undefined, undefined, color, scale);
         }
 
         if (Math.random() < 0.1) {
@@ -316,13 +317,13 @@ export const WeaponFX = {
 
     createFlashbangImpact: (pos: THREE.Vector3, hitWater: boolean, ctx: any) => {
         if (hitWater) {
-            ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 8);
+            ctx.spawnParticle(pos.x, pos.y, pos.z, FXParticleType.SPLASH, 8);
             return;
         }
-        ctx.spawnPart(pos.x, pos.y + 2, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), undefined, 8.0, 0.5);
+        ctx.spawnParticle(pos.x, pos.y + 2, pos.z, FXParticleType.FLASH, 1, undefined, _v2.set(0, 0, 0), undefined, 8.0, 0.5);
         // Blinding Intensity (10.0 -> 45.0)
         WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xffffff, 45.0, 60.0, 1.5);
-        ctx.spawnDecal(pos.x, pos.z, 2.0, MATERIALS.scorchDecal);
+        ctx.spawnDecal(pos.x, pos.z, 2.0, MATERIALS.scorchDecal, FXDecalType.SCORCH);
     },
 
     createFlame: (start: THREE.Vector3, direction: THREE.Vector3, range: number = 10) => {
@@ -336,7 +337,7 @@ export const WeaponFX = {
         const req = FXSystem._getSpawnRequest();
         req.scene = null as any;
         req.x = start.x; req.y = start.y; req.z = start.z;
-        req.type = 'flamethrower_fire';
+        req.type = FXParticleType.FLAMETHROWER_FIRE;
         req.customVel.copy(_v1).multiplyScalar(speed);
         req.hasCustomVel = true;
         req.scale = 0.15 + Math.random() * 0.25;
@@ -351,7 +352,7 @@ export const WeaponFX = {
             const req = FXSystem._getSpawnRequest();
             req.scene = null as any;
             req.x = start.x; req.y = start.y; req.z = start.z;
-            req.type = 'fire';
+            req.type = FXParticleType.FIRE;
             _v1.copy(direction).add(_v2.set((Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4)).normalize();
             req.customVel.copy(_v1).multiplyScalar(4 + Math.random() * 3);
             req.hasCustomVel = true;
@@ -367,7 +368,7 @@ export const WeaponFX = {
             const req = FXSystem._getSpawnRequest();
             req.scene = null as any;
             req.x = start.x; req.y = start.y; req.z = start.z;
-            req.type = 'smoke';
+            req.type = FXParticleType.SMOKE;
             req.customVel.set((Math.random() - 0.5) * 2, 1 + Math.random() * 2, (Math.random() - 0.5) * 2);
             req.hasCustomVel = true;
             req.scale = 0.5 + Math.random() * 0.8;
@@ -380,7 +381,7 @@ export const WeaponFX = {
         const req = FXSystem._getSpawnRequest();
         req.scene = null as any;
         req.x = start.x; req.y = start.y; req.z = start.z;
-        req.type = 'fire';
+        req.type = FXParticleType.FIRE;
         req.customVel.copy(direction).multiplyScalar(3 + Math.random() * 2);
         req.hasCustomVel = true;
         req.scale = 0.8 + Math.random() * 0.5;

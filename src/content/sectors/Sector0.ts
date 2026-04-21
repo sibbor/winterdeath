@@ -103,10 +103,10 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
 
         _busOriginalPos.set(EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.y, EXPLODING_BUS_POS.z);
 
-        if (events.spawnPart) {
+        if (events.spawnParticle) {
             // Use new scale parameter for massive cinematic explosion
-            events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'shockwave', 1, 2.5);
-            events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_smoke', 8, 2.0);
+            events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, 'shockwave', 1, 2.5);
+            events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_smoke', 8, 2.0);
         }
 
         // Make noise to attract enemies
@@ -1003,7 +1003,7 @@ export const Sector0: SectorDef = {
         }
 
         // --- 2. TRAIN SMOKE ---
-        if (events.spawnPart) {
+        if (events.spawnParticle) {
             const interval = 80;
             if (simTime - (sectorState.lastSmokeTime || 0) > interval) {
                 sectorState.lastSmokeTime = simTime;
@@ -1013,7 +1013,7 @@ export const Sector0: SectorDef = {
                 const wx = tPos.x + (localX * Math.cos(yRot) - localZ * Math.sin(yRot));
                 const wz = tPos.z + (localX * Math.sin(yRot) + localZ * Math.cos(yRot));
 
-                events.spawnPart(wx, localY, wz, 'black_smoke', 1);
+                events.spawnParticle(wx, localY, wz, 'black_smoke', 1);
             }
         }
 
