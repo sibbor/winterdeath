@@ -8,6 +8,7 @@ import { haptic } from '../utils/HapticManager';
 import { WEAPONS } from '../content/weapons';
 import { DamageID } from '../entities/player/CombatTypes';
 import { StatusEffectType } from '../content/perks';
+import { Obstacle, PhysicsGroup } from '../core/world/CollisionResolution';
 import { SpatialGrid } from '../core/world/SpatialGrid';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { _buoyancyResult } from '../systems/WaterSystem';
@@ -620,7 +621,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
         if (_v6.distanceToSquared(_v5) < rad * rad) {
             destroyBullet = true;
 
-            const isGround = obs.mesh?.name?.startsWith('Ground_');
+            const isGround = obs.physicsGroup === PhysicsGroup.GROUND;
             if (!isGround) {
                 const material = obs.materialId || (obs.mesh as any)?.userData?.materialId || MaterialType.GENERIC;
                 GamePlaySounds.playImpact(material);

@@ -11,6 +11,7 @@ import { ScrapItem } from '../systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';
 import { ParticleState } from '../types/FXTypes';
 import { InteractionType } from '../systems/InteractionTypes';
+import { DiscoveryType } from '../components/ui/hud/HudTypes';
 
 export interface PreallocatedInitialAim {
     active: boolean;
@@ -21,7 +22,7 @@ export interface PreallocatedInitialAim {
 export interface PreallocatedDiscoveryState {
     active: boolean;
     id: string | number;
-    type: string;
+    type: DiscoveryType; // VINTERDÖD: Numeric SMI instead of string
     title: string;
     details: string;
     timestamp: number;

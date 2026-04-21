@@ -6,6 +6,7 @@ import { SectorBuilder } from '../SectorBuilder';
 import { VegetationGenerator } from './VegetationGenerator';
 import { MaterialType, MATERIAL_TYPE } from '../../../content/environment';
 import { GeneratorUtils } from './GeneratorUtils';
+import { PhysicsGroup } from '../CollisionResolution';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -82,7 +83,8 @@ export const PathGenerator = {
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, len) },
                 type: 'Boundary',
                 id: `${name}_${i}`,
-                materialId: MaterialType.CONCRETE
+                materialId: MaterialType.CONCRETE,
+                physicsGroup: PhysicsGroup.WALL
             });
         }
     },
@@ -373,7 +375,8 @@ export const PathGenerator = {
                 position: mid.clone(),
                 quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(0.2, height, dist) },
-                materialId: color === 'mesh' ? MaterialType.METAL : MaterialType.WOOD
+                materialId: color === 'mesh' ? MaterialType.METAL : MaterialType.WOOD,
+                physicsGroup: PhysicsGroup.WALL
             });
             i++;
         });
@@ -410,7 +413,8 @@ export const PathGenerator = {
                 position: mid.clone(),
                 quaternion: _quat.clone(), // already set above
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.2) },
-                materialId: MaterialType.WOOD
+                materialId: MaterialType.WOOD,
+                physicsGroup: PhysicsGroup.WALL
             });
             i++;
         });
@@ -435,7 +439,8 @@ export const PathGenerator = {
                 position: mid.clone(),
                 quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, dist) },
-                materialId: MaterialType.STONE
+                materialId: MaterialType.STONE,
+                physicsGroup: PhysicsGroup.WALL
             });
             i++;
         });
@@ -474,7 +479,8 @@ export const PathGenerator = {
                 position: mid.clone().setY(floating ? mid.y : mid.y / 2),
                 quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(0.2, floating ? 0.3 : mid.y + 0.2, dist) },
-                materialId: MaterialType.METAL
+                materialId: MaterialType.METAL,
+                physicsGroup: PhysicsGroup.WALL
             });
         }
         postIM.instanceMatrix.needsUpdate = true;
@@ -540,7 +546,8 @@ export const PathGenerator = {
                     position: mid.clone().setY(height / 2),
                     quaternion: _quat_local.clone(),
                     collider: { type: 'box', size: new THREE.Vector3(width + 4.0, height, dist) },
-                    materialId: MaterialType.STONE
+                    materialId: MaterialType.STONE,
+                    physicsGroup: PhysicsGroup.WALL
                 });
             }
         }

@@ -23,6 +23,7 @@ import { FootprintSystem } from '../../systems/FootprintSystem';
 import { PoiGenerator } from './generators/PoiGenerator';
 import { InteractionType } from '../../systems/InteractionTypes';
 import { NavigationSystem } from '../../systems/NavigationSystem';
+import { PhysicsGroup } from './CollisionResolution';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1_sg = new THREE.Vector3();
@@ -72,6 +73,15 @@ export const SectorBuilder = {
         // VINTERDÖD: Mandatory material identifier propagation from mesh to obstacle
         if (!obstacle.materialId && obstacle.mesh?.userData?.materialId) {
             obstacle.materialId = obstacle.mesh.userData.materialId;
+        }
+
+        // VINTERDÖD: PhysicsGroup propagation
+        if (obstacle.physicsGroup === undefined) {
+            if (obstacle.mesh?.userData?.physicsGroup !== undefined) {
+                obstacle.physicsGroup = obstacle.mesh.userData.physicsGroup;
+            } else {
+                obstacle.physicsGroup = PhysicsGroup.OBJECT; // Safe default
+            }
         }
 
         if (obstacle.mesh) {
@@ -277,7 +287,8 @@ export const SectorBuilder = {
         SectorBuilder.addObstacle(ctx, {
             position: new THREE.Vector3(x, height / 2, z),
             quaternion: _q1_sg.clone(), // Must clone since obstacle struct needs its own reference
-            collider: { type: 'box', size: new THREE.Vector3(width, height, depth) }
+            collider: { type: 'box', size: new THREE.Vector3(width, height, depth) },
+            physicsGroup: PhysicsGroup.WALL
         });
     },
 
@@ -291,7 +302,8 @@ export const SectorBuilder = {
         const createWall = (x: number, z: number, sx: number, sz: number) => {
             SectorBuilder.addObstacle(ctx, {
                 position: new THREE.Vector3(x, h / 2, z),
-                collider: { type: 'box' as const, size: new THREE.Vector3(sx, h, sz) }
+                collider: { type: 'box' as const, size: new THREE.Vector3(sx, h, sz) },
+                physicsGroup: PhysicsGroup.WALL
             });
         };
 
@@ -326,7 +338,8 @@ export const SectorBuilder = {
             collider: {
                 type: 'box',
                 size: boxSize.clone()
-            }
+            },
+            physicsGroup: PhysicsGroup.OBJECT
         };
 
         ctx.chests.push(obs);
@@ -513,8 +526,12 @@ export const SectorBuilder = {
         bale.rotation.y = rotation;
         GeneratorUtils.freezeStatic(bale);
         ctx.scene.add(bale);
-
-        SectorBuilder.addObstacle(ctx, { mesh: bale, collider: { type: 'sphere' as const, radius: 1.2 * scale } });
+        
+        SectorBuilder.addObstacle(ctx, { 
+            mesh: bale, 
+            collider: { type: 'sphere' as const, radius: 1.2 * scale },
+            physicsGroup: PhysicsGroup.OBJECT
+        });
     },
 
     spawnTimberPile: (ctx: SectorContext, x: number, z: number, rotation: number = 0, scale: number = 1.0) => {
@@ -532,7 +549,8 @@ export const SectorBuilder = {
             position: timber.position,
             quaternion: timber.quaternion,
             collider: { type: 'box' as const, size: baseSize, center: baseCenter },
-            type: 'TimberPile'
+            type: 'TimberPile',
+            physicsGroup: PhysicsGroup.DEBRIS
         });
     },
 
@@ -574,7 +592,8 @@ export const SectorBuilder = {
             collider: {
                 type: 'box',
                 size: (building.userData.size as THREE.Vector3).clone(),
-            }
+            },
+            physicsGroup: PhysicsGroup.WALL
         });
 
         return building;
@@ -583,7 +602,11 @@ export const SectorBuilder = {
     createScarecrow(ctx: SectorContext, x: number, y: number) {
         const scarecrow = ObjectGenerator.createScarecrow(x, y);
         ctx.scene.add(scarecrow);
-        SectorBuilder.addObstacle(ctx, { mesh: scarecrow, collider: { type: 'sphere', radius: 0.5 } });
+        SectorBuilder.addObstacle(ctx, { 
+            mesh: scarecrow, 
+            collider: { type: 'sphere', radius: 0.5 },
+            physicsGroup: PhysicsGroup.OBJECT
+        });
     },
 
     spawnVehicle: (ctx: SectorContext, x: number, z: number, rotation: number, type: 'station wagon' | 'sedan' | 'police' | 'ambulance' | 'suv' | 'minivan' | 'pickup' | 'bus' | 'tractor' | 'timber_truck' = 'station wagon', colorOverride?: number, addSnow?: boolean) => {
@@ -607,7 +630,8 @@ export const SectorBuilder = {
                 size: size,
                 center: new THREE.Vector3(0, size.y / 2, 0)
             },
-            type: `Vehicle_${type}`
+            type: `Vehicle_${type}`,
+            physicsGroup: PhysicsGroup.OBJECT
         });
 
         return vehicle;
@@ -656,7 +680,8 @@ export const SectorBuilder = {
                 type: 'box' as const,
                 size: boxSize.clone(),
             },
-            type: `Vehicle_${vehicleType}`
+            type: `Vehicle_${vehicleType}`,
+            physicsGroup: PhysicsGroup.OBJECT
         };
 
         SectorBuilder.addObstacle(ctx, obs);
@@ -770,7 +795,8 @@ export const SectorBuilder = {
                 type: 'box',
                 size: new THREE.Vector3(8.0, 3.0, 2.5),
                 center: new THREE.Vector3(0, 1.5, 0)
-            }
+            },
+            physicsGroup: PhysicsGroup.OBJECT
         });
 
         return container;
@@ -793,13 +819,13 @@ export const SectorBuilder = {
         lightGroup.rotation.y = rotation;
         GeneratorUtils.freezeStatic(lightGroup);
         ctx.scene.add(lightGroup);
-
-        SectorBuilder.addObstacle(ctx, {
-            mesh: lightGroup,
-            position: lightGroup.position,
-            collider: { type: 'sphere', radius: 1.0 }
+        
+        SectorBuilder.addObstacle(ctx, { 
+            mesh: lightGroup, 
+            position: lightGroup.position, 
+            collider: { type: 'sphere', radius: 1.0 },
+            physicsGroup: PhysicsGroup.OBJECT
         });
-
 
         return lightGroup;
     },

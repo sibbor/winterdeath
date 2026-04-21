@@ -17,6 +17,7 @@ import { ParticleState } from '../../types/FXTypes';
 import { PlayerStatID, PlayerStatusFlags, PlayerStatsUtils, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
 import { InteractionType } from '../../systems/InteractionTypes';
 import { PerkFX } from '../../systems/PerkFX';
+import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
@@ -343,7 +344,7 @@ export class GameSessionLogic {
             flashlightOn: false,
             hasCurrentInteraction: false,
             currentInteractionPayload: {},
-            discovery: { active: false, id: '', type: '', title: '', details: '', timestamp: 0 },
+            discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 },
             cinematicActive: false,
             cinematicLine: { active: false, speaker: '', text: '' },
             callbacks: {
@@ -417,7 +418,7 @@ export class GameSessionLogic {
     /**
      * Registers a discovery (POI, Clue, Perk, etc.) and triggers the HUD popup.
      */
-    triggerDiscovery(type: string, id: string | number, title: string, details: string) {
+    triggerDiscovery(type: DiscoveryType, id: string | number, title: string, details: string) {
         if (!this.state) return;
         this.state.discovery.active = true;
         this.state.discovery.type = type;

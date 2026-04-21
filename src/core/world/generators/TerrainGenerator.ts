@@ -5,6 +5,7 @@ import { MaterialType } from '../../../content/environment';
 import { SectorContext } from '../../../game/session/SectorTypes';
 import { GeneratorUtils } from './GeneratorUtils';
 import { WinterEngine } from '../../engine/WinterEngine';
+import { PhysicsGroup } from '../CollisionResolution';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -45,6 +46,7 @@ export const TerrainGenerator = {
         const mesh = new THREE.Mesh(geo, mat);
         mesh.name = `Ground_Surface`;
         mesh.userData.materialId = type === 'SNOW' ? MaterialType.SNOW : (type === 'GRAVEL' ? MaterialType.GRAVEL : MaterialType.DIRT);
+        mesh.userData.physicsGroup = PhysicsGroup.GROUND; // VINTERDÖD
         mesh.rotation.x = -Math.PI / 2;
         mesh.position.y = -0.05;
         mesh.receiveShadow = true;
@@ -112,6 +114,7 @@ export const TerrainGenerator = {
         mesh.rotation.x = -Math.PI / 2;
         mesh.receiveShadow = true;
         mesh.userData.materialId = MaterialType.DIRT; // VINTERDÖD
+        mesh.userData.physicsGroup = PhysicsGroup.GROUND; // VINTERDÖD
 
         GeneratorUtils.freezeStatic(mesh);
 

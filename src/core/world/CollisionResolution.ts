@@ -1,6 +1,16 @@
 import * as THREE from 'three';
 import { MATERIAL_TYPE } from '../../content/environment';
 
+export enum PhysicsGroup {
+    NONE = 0,
+    GROUND = 1,
+    WALL = 2,
+    DEBRIS = 3,
+    OBJECT = 4,
+    ACTOR = 5,
+    WATER = 6
+}
+
 export type ColliderType = 'sphere' | 'box';
 
 export interface ColliderData {
@@ -20,6 +30,7 @@ export interface Obstacle {
     collider?: ColliderData;
     id?: string;
     type?: string;
+    physicsGroup?: PhysicsGroup; // VINTERDÖD: Numeric collision group for Zero-GC hot-paths
     materialId?: MATERIAL_TYPE; // High-performance lookup for impact sounds/FX
 }
 

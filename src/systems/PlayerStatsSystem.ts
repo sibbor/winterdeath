@@ -13,6 +13,7 @@ import { EnemyType, EnemyFlags } from '../entities/enemies/EnemyTypes';
 import { KMH_TO_MS, FamilyMemberID } from '../content/constants';
 import { DataResolver } from '../utils/ui/DataResolver';
 import { FXParticleType, FXDecalType } from '../types/FXTypes';
+import { DiscoveryType } from '../components/ui/hud/HudTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -66,7 +67,7 @@ export class PlayerStatsSystem implements System {
                             if (state.sessionStats.discoveredPerks && !state.sessionStats.discoveredPerks.includes(i)) {
                                 state.sessionStats.discoveredPerks.push(i);
                             }
-                            session.triggerDiscovery('perk', i, perk.displayName, perk.description);
+                            session.triggerDiscovery(DiscoveryType.PERK, i, perk.displayName, perk.description);
                         }
 
                         // Increment activation count
@@ -114,7 +115,7 @@ export class PlayerStatsSystem implements System {
                     if (state.sessionStats.discoveredPerks && !state.sessionStats.discoveredPerks.includes(perkID)) {
                         state.sessionStats.discoveredPerks.push(perkID);
                     }
-                    session.triggerDiscovery('perk', perkID, perk.displayName, perk.description);
+                    session.triggerDiscovery(DiscoveryType.PERK, perkID, perk.displayName, perk.description);
                 }
 
                 // Increment Crisis Management tracking
@@ -155,7 +156,7 @@ export class PlayerStatsSystem implements System {
                     if (state.sessionStats.discoveredPerks && !state.sessionStats.discoveredPerks.includes(passiveId)) {
                         state.sessionStats.discoveredPerks.push(passiveId);
                     }
-                    session.triggerDiscovery('perk', passiveId, perk.displayName, perk.description);
+                    session.triggerDiscovery(DiscoveryType.PERK, passiveId, perk.displayName, perk.description);
                 }
             }
         }
@@ -530,7 +531,7 @@ export class PlayerStatsSystem implements System {
             if (session.triggerDiscovery) {
                 const perk = PERKS[StatusEffectType.QUICK_FINGER];
                 if (perk) {
-                    session.triggerDiscovery('perk', StatusEffectType.QUICK_FINGER, perk.displayName, perk.description);
+                    session.triggerDiscovery(DiscoveryType.PERK, StatusEffectType.QUICK_FINGER, perk.displayName, perk.description);
                 }
             }
         }
