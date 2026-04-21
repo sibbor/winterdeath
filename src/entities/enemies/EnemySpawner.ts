@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ZOMBIE_TYPES, BOSSES } from '../../content/constants';
 import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
 import { EnemySounds } from '../../utils/audio/AudioLib';
-import { Enemy, AIState, EnemyDeathState, EnemyType, EnemyFlags, ENEMY_HP, ENEMY_SPEED, ENEMY_SCORE, NoiseType } from '../../entities/enemies/EnemyTypes';
+import { Enemy, AIState, EnemyDeathState, EnemyType, EnemyFlags, ENEMY_HP, ENEMY_SPEED, ENEMY_SCORE, NoiseType, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { KMH_TO_MS } from '../../content/constants';
 import { DamageID } from '../../entities/player/CombatTypes';
@@ -217,7 +217,7 @@ export const EnemySpawner = {
         boss.position.set(pos.x, 0, pos.z);
         scene.add(boss);
 
-        EnemySounds.playGrowl("tank", _v1);
+        EnemySounds.playGrowl(EnemyGrowlType.TANK, _v1);
 
         const currentPoolId = _nextPoolId++;
 

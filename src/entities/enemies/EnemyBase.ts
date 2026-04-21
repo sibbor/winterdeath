@@ -57,6 +57,19 @@ export enum EnemyType {
     BOSS = 4
 }
 
+export enum EnemyDeathDecal {
+    NONE = 0,
+    BLOOD = 1,
+    SCORCH = 2
+}
+
+export enum EnemyGrowlType {
+    NONE = 0,
+    WALKER = 1,
+    RUNNER = 2,
+    TANK = 3
+}
+
 /**
  * STATUS BITMASKING (SMI Flags)
  */

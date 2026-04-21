@@ -2,8 +2,7 @@ import * as THREE from 'three';
 import { WeaponType } from '../../content/weapons';
 import { SoundID, MusicID } from './AudioTypes';
 import { MATERIAL_TYPE, FOOTSTEP_MAP, IMPACT_MAP } from '../../content/environment';
-import { DataResolver } from '../ui/DataResolver';
-import { FAMILY_MEMBERS } from '../../content/constants';
+import { EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { audioEngine } from './AudioEngine';
 
 /**
@@ -143,7 +142,7 @@ export const Generators = {
             const f2 = 50 + Math.random() * 30;
             const zap = Math.sin(2 * Math.PI * f1 * t) * 0.4;
             const buzz = (Math.sin(2 * Math.PI * f2 * t) > 0 ? 0.3 : -0.3);
-            
+
             // Random snaps (High-voltage discharge)
             let snap = 0;
             if (Math.random() > 0.98) snap = (Math.random() * 2 - 1) * 0.8;
@@ -333,7 +332,7 @@ export const Generators = {
             const noise = (Math.random() * 2 - 1);
             const crunch = noise * 0.06 * Math.exp(-40 * t);
             // VINTERDÖD: Thick thud (lower cutoff, higher gain)
-            lp = lp + 0.08 * (noise - lp); 
+            lp = lp + 0.08 * (noise - lp);
             const thud = lp * 0.25 * Math.exp(-12 * t);
             data[i] = crunch + thud;
         }
@@ -875,13 +874,15 @@ export const WeaponSounds = {
 };
 
 export const EnemySounds = {
-    playGrowl: (type: string, pos: THREE.Vector3) => {
+
+    playGrowl: (type: EnemyGrowlType, pos: THREE.Vector3) => {
         let id = SoundID.ZOMBIE_GROWL_WALKER;
-        if (type === 'runner') id = SoundID.ZOMBIE_GROWL_RUNNER;
-        else if (type === 'tank') id = SoundID.ZOMBIE_GROWL_TANK;
+        if (type === EnemyGrowlType.RUNNER) id = SoundID.ZOMBIE_GROWL_RUNNER;
+        else if (type === EnemyGrowlType.TANK) id = SoundID.ZOMBIE_GROWL_TANK;
 
         audioEngine.playSpatialSound(id, pos, 0.4, 30);
     },
+
 };
 
 export const AmbientSounds = {

@@ -172,11 +172,16 @@ export const EnemyAttackHandler = {
         const r = att.range || 10.0;
         const rangeSq = r * r;
 
+        // VINTERDÖD: Hoist distance calc if within potential range
+        let dist = -1;
+        if (currentDistSq < rangeSq * 2.25) { // 1.5x range buffer
+            dist = Math.sqrt(currentDistSq);
+        }
+
         switch (att.type) {
             case EnemyAttackType.ELECTRIC_BEAM:
                 if (callbacks.spawnParticle) {
-                    const dist = Math.sqrt(currentDistSq);
-                    const invDist = dist > 0.0001 ? 5.0 / dist : 0.0;
+                    const invDist = (dist > 0.0001) ? 5.0 / dist : 0.0;
                     if (invDist > 0.0) {
                         _v2.set(dx * invDist, dy * invDist, dz * invDist);
                         callbacks.spawnParticle(pos.x, pos.y + 1.8, pos.z, 'electric_beam', 1, undefined, _v2);
@@ -194,8 +199,7 @@ export const EnemyAttackHandler = {
                     callbacks.onPlayerHit(att.damage * delta, e, DamageType.PHYSICAL, true, att.effect, att.effectDuration, att.effectDamage, att.type);
 
                     if (callbacks.applyExternalForce) {
-                        const dist = Math.sqrt(currentDistSq);
-                        const invDist = dist > 0.0001 ? -1.0 / dist : 0.0;
+                        const invDist = (dist > 0.0001) ? -1.0 / dist : 0.0;
                         if (invDist !== 0.0) {
                             _v2.set(dx * invDist, dy * invDist, dz * invDist);
                             callbacks.applyExternalForce(_v2, 0.9);

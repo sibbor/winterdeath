@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../../utils/assets';
 import { KMH_TO_MS } from '../../content/constants';
-import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_SCORE, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType } from '../../entities/enemies/EnemyTypes';
+import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_SCORE, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType, EnemyDeathDecal, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { DamageID } from '../../entities/player/CombatTypes';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
 import { EnemySpawner } from './EnemySpawner';
-import { EnemyAI, logStateChange } from './EnemyAI';
+import { EnemyAI } from './EnemyAI';
 import { MaterialType } from '../../content/environment';
 import { GamePlaySounds, EnemySounds } from '../../utils/audio/AudioLib';
 import { audioEngine } from '../../utils/audio/AudioEngine';
@@ -14,7 +14,7 @@ import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { ZombieRenderer } from '../../core/renderers/ZombieRenderer';
 import { CorpseRenderer } from '../../core/renderers/CorpseRenderer';
 import { AshRenderer } from '../../core/renderers/AshRenderer';
-import { FXParticleType, FXDecalType } from '../../types/FXTypes';
+import { FXParticleType } from '../../types/FXTypes';
 import { FXSystem } from '../../systems/FXSystem';
 import { WaterSystem } from '../../systems/WaterSystem';
 import { WinterEngine } from '../../core/engine/WinterEngine';
@@ -864,9 +864,10 @@ export const EnemyManager = {
                 e.targetPos.copy(e.mesh.position);
                 e.baseY = e.mesh.position.y;
                 if (!(e.statusFlags & EnemyFlags.EXPLODED)) {
-                    if (e.type === EnemyType.RUNNER) EnemySounds.playGrowl('runner', e.mesh.position);
-                    else if (e.type === EnemyType.TANK) EnemySounds.playGrowl('tank', e.mesh.position);
-                    else EnemySounds.playGrowl('walker', e.mesh.position);
+                    let growlType = EnemyGrowlType.WALKER;
+                    if (e.type === EnemyType.RUNNER) growlType = EnemyGrowlType.RUNNER;
+                    else if (e.type === EnemyType.TANK) growlType = EnemyGrowlType.TANK;
+                    EnemySounds.playGrowl(growlType, e.mesh.position);
                 }
             }
 
@@ -874,46 +875,44 @@ export const EnemyManager = {
 
             if (shouldCleanup) {
                 let leaveCorpse = false;
-                let bloodType = '';
+                let deathDecal = EnemyDeathDecal.NONE;
 
                 if (e.statusFlags & EnemyFlags.EXPLODED) {
                     EnemyManager.explodeEnemy(e, callbacks, _up);
-                    bloodType = 'none';
                 }
                 else if (e.statusFlags & EnemyFlags.GIBBED) {
                     if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
-                    bloodType = 'none';
                 }
                 else if (e.statusFlags & EnemyFlags.ASH_SPAWNED) {
                     if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
                 }
                 else if (e.statusFlags & EnemyFlags.ELECTROCUTED) {
                     leaveCorpse = true;
-                    bloodType = 'scorch';
+                    deathDecal = EnemyDeathDecal.SCORCH;
                 }
                 else if (e.deathState === EnemyDeathState.DROWNED || e.lastDamageType === DamageID.DROWNING) {
                     leaveCorpse = true;
-                    bloodType = 'none';
                 }
                 else {
                     leaveCorpse = true;
-                    bloodType = 'blood';
+                    deathDecal = EnemyDeathDecal.BLOOD;
                 }
 
                 if (e.mesh.parent) scene.remove(e.mesh);
 
                 if (leaveCorpse && (e.statusFlags & EnemyFlags.BOSS) === 0) {
-                    const corpseColor = bloodType === 'scorch' ? _color.setHex(e.color || 0xffffff).multiplyScalar(0.4).getHex() : e.color;
+                    const corpseColor = deathDecal === EnemyDeathDecal.SCORCH ? _color.setHex(e.color || 0xffffff).multiplyScalar(0.4).getHex() : e.color;
                     EnemyManager.createCorpse(e, corpseColor);
                 }
 
-                if (!e.bloodSpawned && bloodType === 'blood') {
+                if (!e.bloodSpawned && deathDecal === EnemyDeathDecal.BLOOD) {
                     if (callbacks.spawnDecal) callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, (1.5 + Math.random() * 2.5) * (e.originalScale || 1.0), MATERIALS.bloodDecal);
                     e.bloodSpawned = true;
-                } else if (!e.bloodSpawned && bloodType === 'scorch') {
+                } else if (!e.bloodSpawned && deathDecal === EnemyDeathDecal.SCORCH) {
                     if (callbacks.spawnDecal) callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, (1.2 + Math.random() * 0.5) * (e.originalScale || 1.0), MATERIALS.scorchDecal);
                     e.bloodSpawned = true;
                 }
+
                 const session = callbacks.getSession ? callbacks.getSession() : null;
                 if (session) {
                     const tracker = session.getSystem('damage_tracker_system') as any;

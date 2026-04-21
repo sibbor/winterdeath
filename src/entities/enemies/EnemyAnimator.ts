@@ -301,19 +301,25 @@ export const EnemyAnimator = {
                 const speedFactor = (e.speed || 20.0) / 20.0;
                 const t = (renderTime * 0.008 * speedFactor) + phaseOffset;
 
+                // Hoisted Trig
+                const sinT = Math.sin(t);
+                const sinT2 = Math.sin(t * 2);
+
                 _animState.targetRotX = 0.15;
-                _animState.targetRotZ = Math.sin(t) * 0.18;
-                _animState.targetPosY = _animState.baseY + Math.abs(Math.sin(t)) * 0.15;
+                _animState.targetRotZ = sinT * 0.18;
+                _animState.targetPosY = _animState.baseY + Math.abs(sinT) * 0.15;
 
                 // Extra breathing detail while walking
-                _animState.targetScaleY = _animState.baseScale * (1.0 + Math.sin(t * 2) * 0.02);
-                _animState.targetScaleX = _animState.baseScale * _animState.widthScale * (1.0 - Math.sin(t * 2) * 0.015);
+                _animState.targetScaleY = _animState.baseScale * (1.0 + sinT2 * 0.02);
+                _animState.targetScaleX = _animState.baseScale * _animState.widthScale * (1.0 - sinT2 * 0.015);
             } else {
                 const idleT = renderTime * 0.002 + (mesh.position.x);
-                _animState.targetScaleY = _animState.baseScale * (1.0 + Math.sin(idleT) * 0.02);
+                const sinIdle = Math.sin(idleT);
+
+                _animState.targetScaleY = _animState.baseScale * (1.0 + sinIdle * 0.02);
                 // Breathe radially to feel more organic
-                _animState.targetScaleX = _animState.baseScale * _animState.widthScale * (1.0 - Math.sin(idleT) * 0.01);
-                _animState.targetScaleZ = _animState.baseScale * _animState.widthScale * (1.0 - Math.sin(idleT) * 0.01);
+                _animState.targetScaleX = _animState.baseScale * _animState.widthScale * (1.0 - sinIdle * 0.01);
+                _animState.targetScaleZ = _animState.baseScale * _animState.widthScale * (1.0 - sinIdle * 0.01);
                 
                 const s = e.originalScale;
                 e.baseY = THREE.MathUtils.lerp(e.baseY, 1.0 * s, 10 * simDelta);
