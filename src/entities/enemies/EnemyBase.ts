@@ -74,7 +74,9 @@ export const EnemyFlags = {
     BOSS: 1 << 10,
     DEAD: 1 << 11,
     STAGGERED: 1 << 12,
-    SLOWED: 1 << 13
+    SLOWED: 1 << 13,
+    RAGDOLLING: 1 << 14,
+    KNOCKED_BACK: 1 << 15
 };
 
 /**

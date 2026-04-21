@@ -228,8 +228,8 @@ export const EnemyAI = {
 
         // --- 4. MASS-BASED KNOCKBACK PHYSICS ---
         if (e.knockbackVel.lengthSq() > 0.001) {
-            if (!e.mesh.userData.wasKnockedBack) {
-                e.mesh.userData.wasKnockedBack = true;
+            if (!(e.statusFlags & EnemyFlags.KNOCKED_BACK)) {
+                e.statusFlags |= EnemyFlags.KNOCKED_BACK;
             }
 
             // --- Apply pure velocity (EnemyManager already divided by mass!) ---
@@ -241,7 +241,7 @@ export const EnemyAI = {
             // --- Friction (Horizontal only) ---
             const mass = e.originalScale * e.widthScale;
             // VINTERDÖD: Increase friction significantly if ragdolling on ground to prevent "ice-skating"
-            const frictionMult = (e.mesh.userData.isRagdolling || !(e.statusFlags & EnemyFlags.AIRBORNE)) ? 12.0 : 2.5;
+            const frictionMult = ((e.statusFlags & EnemyFlags.RAGDOLLING) || !(e.statusFlags & EnemyFlags.AIRBORNE)) ? 12.0 : 2.5;
             const friction = 1.0 + (mass * frictionMult);
             const drag = Math.max(0, 1 - friction * delta);
             e.knockbackVel.x *= drag;
@@ -254,7 +254,7 @@ export const EnemyAI = {
             e.statusFlags |= EnemyFlags.AIRBORNE;
 
             // 4. Floor Collision & Landing Logic
-            const isRagdolling = e.mesh.userData.isRagdolling === true || e.deathState !== EnemyDeathState.ALIVE;
+            const isRagdolling = (e.statusFlags & EnemyFlags.RAGDOLLING) !== 0 || e.deathState !== EnemyDeathState.ALIVE;
             const floorY = isRagdolling ? 0.2 : e.originalScale;
 
             if (e.mesh.position.y <= floorY) {
@@ -301,7 +301,7 @@ export const EnemyAI = {
                 e.knockbackVel.set(0, 0, 0);
             }
         } else {
-            e.mesh.userData.wasKnockedBack = false;
+            e.statusFlags &= ~EnemyFlags.KNOCKED_BACK;
             if ((e.statusFlags & EnemyFlags.AIRBORNE) !== 0) {
                 e.statusFlags &= ~EnemyFlags.AIRBORNE;
                 e.fallStartY = 0;
@@ -399,8 +399,8 @@ export const EnemyAI = {
 
         // --- 7. STUNS & RAGDOLLS ---
         if (e.stunDuration > 0) {
-            if (!e.mesh.userData.wasStunned) {
-                e.mesh.userData.wasStunned = true;
+            if (!(e.statusFlags & EnemyFlags.STUNNED)) {
+                e.statusFlags |= EnemyFlags.STUNNED;
                 // VINTERDÖD: Immediate interruption of all attacks on stun start
                 if (e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING) {
                     e.state = AIState.IDLE;
@@ -413,7 +413,7 @@ export const EnemyAI = {
             }
             e.stunDuration -= delta;
 
-            if (e.mesh.userData.isRagdolling && e.mesh.userData.spinVel) {
+            if ((e.statusFlags & EnemyFlags.RAGDOLLING) && e.mesh.userData.spinVel) {
                 e.mesh.rotation.x += e.mesh.userData.spinVel.x * delta;
                 e.mesh.rotation.y += e.mesh.userData.spinVel.y * delta;
                 e.mesh.rotation.z += e.mesh.userData.spinVel.z * delta;
@@ -443,14 +443,14 @@ export const EnemyAI = {
             if (e.stunDuration <= 0) {
                 logStateChange(simTime, e, AIState.CHASE);
                 e.state = AIState.CHASE;
-                e.mesh.userData.isRagdolling = false;
+                e.statusFlags &= ~(EnemyFlags.RAGDOLLING | EnemyFlags.STUNNED);
                 e.mesh.rotation.x = 0;
                 e.mesh.rotation.z = 0;
                 e.mesh.quaternion.setFromEuler(e.mesh.rotation);
             }
             return;
         } else {
-            e.mesh.userData.wasStunned = false;
+            e.statusFlags &= ~EnemyFlags.STUNNED;
         }
 
         // --- 8. SENSORS & SEPARATION ---

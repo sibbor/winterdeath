@@ -436,6 +436,9 @@ export const EnemyManager = {
         e.mesh.userData.isFlashing = false;
         e.mesh.userData.wasKnockedBack = false;
         e.mesh.userData.wasStunned = false;
+        
+        // Ensure new bitmask flags are also cleared
+        e.statusFlags &= ~(EnemyFlags.RAGDOLLING | EnemyFlags.KNOCKED_BACK | EnemyFlags.STUNNED);
 
         // Reset spin velocity to zero (No truthy check, V8 Shape Locking guarantees existence)
         (e.mesh.userData.spinVel as THREE.Vector3).set(0, 0, 0);
@@ -709,6 +712,7 @@ export const EnemyManager = {
 
         // --- 4. RAGDOLL & SPIN ---
         if ((enemy.statusFlags & EnemyFlags.BOSS) === 0) {
+            enemy.statusFlags |= EnemyFlags.RAGDOLLING;
             enemy.mesh.userData.isRagdolling = true;
             const sVel = enemy.mesh.userData.spinVel as THREE.Vector3;
             if (sVel) {
