@@ -243,6 +243,11 @@ export class GameSessionSetup {
         const playerGroup = ModelFactory.createPlayer();
         refs.playerGroupRef.current = playerGroup;
 
+        // --- VINTERDÖD: PERFORMANCE CACHE (Phase 13) ---
+        // Purging getObjectByName from hot-paths by caching nodes during setup
+        state.baseScale = playerGroup.userData.baseScale || 1.0;
+        state.baseY = playerGroup.userData.baseY || 0;
+
         let bodyMesh = playerGroup.children[0];
         const pLen = playerGroup.children.length;
         for (let i = 0; i < pLen; i++) {
@@ -252,6 +257,23 @@ export class GameSessionSetup {
             }
         }
         refs.playerMeshRef.current = bodyMesh as THREE.Group;
+
+        // Cache Equipment Nodes for O(1) access
+        state.nodes.gun = bodyMesh.getObjectByName('gun') || null;
+        state.nodes.laserSight = bodyMesh.getObjectByName('laserSight') as THREE.Mesh || null;
+        
+        // Find or create barrel tip (Combat optimization)
+        if (state.nodes.gun) {
+            state.nodes.barrelTip = state.nodes.gun.getObjectByName('barrelTip') || null;
+            if (!state.nodes.barrelTip) {
+                // If not defined in geometry, we place it at the muzzle end
+                const tip = new THREE.Object3D();
+                tip.name = 'barrelTip';
+                tip.position.set(0, 0, 0.5); // Standard forward offset for our Gun box
+                state.nodes.gun.add(tip);
+                state.nodes.barrelTip = tip;
+            }
+        }
 
         if (state.initialAim.active && engine.input?.state) {
             engine.input.state.aimVector.x = state.initialAim.x;

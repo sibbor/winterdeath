@@ -569,6 +569,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 _animStateScratch.simTime = state.simTime;
                 _animStateScratch.currentSpeedRatio = state.currentSpeedRatio;
                 _animStateScratch.seed = 0;
+                // VINTERDÖD: CACHED ENTITY STATE (Phase 13)
+                _animStateScratch.nodes = state.nodes;
+                _animStateScratch.baseScale = state.baseScale;
+                _animStateScratch.baseY = state.baseY;
 
                 monitor.begin('player_animation');
                 PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, renderTime);

@@ -184,6 +184,12 @@ export const INITIAL_STATS: PlayerStats = {
     deathsByEnemyType: {},
     incomingDamageBreakdown: {},
     outgoingDamageBreakdown: {},
+
+    // --- VINTERDÖD: CACHED ENTITY STATE (Phase 13) ---
+    velocity: new THREE.Vector3(),
+    nodes: { gun: null, barrelTip: null, laserSight: null },
+    baseScale: 1.0,
+    baseY: 0,
 };
 
 export const PLAYER_CHARACTER = {

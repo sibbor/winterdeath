@@ -50,6 +50,7 @@ export class PlayerMovementSystem implements System {
 
     private _invincibilityMesh: THREE.Mesh | null = null;
     private _buffShieldMesh: THREE.Mesh | null = null;
+    private _statsSystem: PlayerStatsSystem | null = null;
 
 
     constructor(private playerGroup: THREE.Group) {
@@ -58,6 +59,10 @@ export class PlayerMovementSystem implements System {
         this._invincibilityMesh.position.y = 1.0;
         this._invincibilityMesh.visible = false;
         this.playerGroup.add(this._invincibilityMesh);
+    }
+
+    init(session: GameSessionLogic) {
+        this._statsSystem = session.getSystem('player_stats_system') as PlayerStatsSystem;
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
@@ -70,9 +75,7 @@ export class PlayerMovementSystem implements System {
         // --- CINEMATIC LOCK (Zero-Velocity) ---
         if (state.cinematicActive) {
             state.isMoving = false;
-            if (this.playerGroup.userData.velocity) {
-                this.playerGroup.userData.velocity.set(0, 0, 0);
-            }
+            state.velocity.set(0, 0, 0);
             return;
         }
 
@@ -161,9 +164,8 @@ export class PlayerMovementSystem implements System {
             state.lastReflexShieldTime = simTime;
 
             // Centralized Trigger (Clears debuffs!)
-            const statsSystem = session.getSystem('player_stats_system') as any;
-            if (statsSystem) {
-                statsSystem.triggerReflexShield(session, simTime);
+            if (this._statsSystem) {
+                this._statsSystem.triggerReflexShield(session, simTime);
             }
         }
     }
@@ -395,9 +397,8 @@ export class PlayerMovementSystem implements System {
                 if (session.state.collisionGrid) {
                     const nearby = session.state.collisionGrid.getNearbyEnemies(playerGroup.position, 1.0);
                     if (nearby.length > 0) {
-                        const statsSystem = session.engine.getSystem<PlayerStatsSystem>('player_stats');
-                        if (statsSystem) {
-                            statsSystem.triggerPerfectDodge(session);
+                        if (this._statsSystem) {
+                            this._statsSystem.triggerPerfectDodge(session);
                         }
                     }
                 }

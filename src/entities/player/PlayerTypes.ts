@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { StatusEffectType } from '../../content/perks';
 
 /**
@@ -131,11 +132,26 @@ export enum PlayerStatusFlags {
 }
 
 /**
+ * SMI-indexed IDs for player skeletal/equipment nodes.
+ * Used for O(1) access in Animator and Combat systems.
+ */
+export interface PlayerNodes {
+    gun: THREE.Object3D | null;
+    laserSight: THREE.Mesh | null;
+    barrelTip: THREE.Object3D | null;
+}
+
+/**
  * REFACTORED: PlayerStats (Phase 9 DOD SoA)
  * Removes individual high-frequency fields in favor of contiguous Float32Arrays.
  * No Getters/Setters: Use raw buffer access for Zero-GC performance.
  */
 export interface PlayerStats {
+    // --- VOLATILE ENTITY STATE (Zero-GC / Phase 13) ---
+    velocity: THREE.Vector3;        // Bypasses userData indirection
+    nodes: PlayerNodes;             // O(1) bone/equipment lookup
+    baseScale: number;              // Cached from ModelFactory
+    baseY: number;                  // Cached from ModelFactory
     // --- DOD BUFFERS (Zero-GC / O(1)) ---
     statsBuffer: Float32Array;      // Sized by PlayerStatID.COUNT
     effectDurations: Float32Array;  // Sized by StatusEffectType (e.g. 16/32)
@@ -246,6 +262,11 @@ export const PlayerStatsUtils = {
     initBuffers: () => {
         const effectCount = 32; // Over-allocated for expansion
         return {
+            velocity: new THREE.Vector3(),
+            nodes: { gun: null, laserSight: null, barrelTip: null } as PlayerNodes,
+            baseScale: 1.0,
+            baseY: 0,
+
             statsBuffer: new Float32Array(PlayerStatID.COUNT),
             effectDurations: new Float32Array(effectCount),
             effectMaxDurations: new Float32Array(effectCount),
