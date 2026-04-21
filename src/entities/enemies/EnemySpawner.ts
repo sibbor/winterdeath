@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { ZOMBIE_TYPES, BOSSES } from '../../content/constants';
 import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
-import { UiSounds, EnemySounds } from '../../utils/audio/AudioLib';
+import { EnemySounds } from '../../utils/audio/AudioLib';
 import { Enemy, AIState, EnemyDeathState, EnemyType, EnemyFlags, ENEMY_HP, ENEMY_SPEED, ENEMY_SCORE, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
-import { WeaponType } from '../../content/weapons';
 import { KMH_TO_MS } from '../../content/constants';
+import { DamageID } from '../../entities/player/CombatTypes';
 
 const _v1 = new THREE.Vector3();
 
@@ -124,58 +124,63 @@ export const EnemySpawner = {
             widthScale: typeData.widthScale || 1.0,
             hitRadius: 0.5 * baseScale,
             combatRadius: 1.2 * baseScale,
-
             state: AIState.IDLE,
             idleTimer: 1.0 + Math.random() * 2.0,
             searchTimer: 0,
-            lastBurnTick: 0,
-
             spawnPos: new THREE.Vector3(x, 0, z),
             lastSeenTime: 0,
             lastKnownPosition: new THREE.Vector3(x, 0, z),
             hearingThreshold: 1.0,
             awareness: 0,
             lastHeardNoiseType: NoiseType.NONE,
-
-            statusFlags: bossSpawned ? EnemyFlags.BOSS : 0,
             bossId: -1,
             hitTime: 0,
             hitRenderTime: 0,
             lastStepTime: 0,
             lastTackleTime: 0,
             lastVehicleHit: 0,
-
             currentAttackIndex: -1,
             attackTimer: 0,
-
-            stunDuration: 0,
-            blindDuration: 0,
-            burnDuration: 0,
             burnTickTimer: 0,
+            lastBurnTick: 0,
+            burnDuration: 0,
+            blindDuration: 0,
             slowDuration: 0,
+            stunDuration: 0,
             grappleDuration: 0,
-
             explosionTimer: 0,
-
             velocity: new THREE.Vector3(0, 0, 0),
             knockbackVel: new THREE.Vector3(0, 0, 0),
             deathVel: new THREE.Vector3(0, 0, 0),
-
-            deathState: EnemyDeathState.ALIVE,
-            deathTimer: 0,
+            targetPos: new THREE.Vector3(),
+            spinVel: new THREE.Vector3(),
+            hitDir: new THREE.Vector3(),
+            prevP: new THREE.Vector3(0, -1000, 0),
+            animStartPos: new THREE.Vector3(),
+            swingX: 0,
+            swingZ: 0,
+            swingVelX: 0,
+            swingVelZ: 0,
+            animRotX: 0,
+            animRotZ: 0,
+            baseY: 0,
+            originalColor: typeData.color,
+            lastAIState: AIState.IDLE,
+            lastGrappleDmg: 0,
+            lastDamageType: DamageID.NONE,
             lastHitWasHighImpact: false,
-            lastDamageType: WeaponType.NONE,
+            deathTimer: 0,
             hasLastTrailPos: false,
             lastTrailPos: new THREE.Vector3(),
             fallForward: Math.random() > 0.5,
             bloodSpawned: false,
             lastKnockback: 0,
-
+            deathState: EnemyDeathState.ALIVE,
+            statusFlags: 0,
             swimDistance: 0,
             maxSwimDistance: 1 + Math.random() * 4,
             drownTimer: 0,
             drownDmgTimer: 0,
-
             fallStartY: 0,
             _accumulatedDamage: 0,
             _lastDamageTextTime: 0,
@@ -186,24 +191,6 @@ export const EnemySpawner = {
         const w = enemy.widthScale;
         g.scale.set(s * w, s, s * w);
         g.userData.entity = enemy;
-
-        // --- ZERO-GC PRE-ALLOCATION (VINTERDÖD) ---
-        g.userData.spinVel = new THREE.Vector3();
-        g.userData.hitDir = new THREE.Vector3();
-        g.userData.isFlashing = false;
-        g.userData.exploded = false;
-        g.userData.gibbed = false;
-        g.userData.electrocuted = false;
-        g.userData.ashSpawned = false;
-        g.userData.ashPermanent = false;
-        g.userData.isRagdolling = false;
-        g.userData.targetPos = new THREE.Vector3();
-        g.userData.swingX = 0;
-        g.userData.swingZ = 0;
-        g.userData.swingVelX = 0;
-        g.userData.swingVelZ = 0;
-        g.userData.lastGrappleDmg = 0;
-        g.userData.prevP = new THREE.Vector3(0, -1000, 0);
 
         const enemyIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
         enemyIndicatorRing.rotation.x = -Math.PI / 2;
@@ -242,14 +229,12 @@ export const EnemySpawner = {
             indicatorRing: null as any,
             ashPile: null,
             type: EnemyType.BOSS,
-            maxHp: bossData.hp,
+            statusFlags: EnemyFlags.BOSS,
             hp: bossData.hp,
+            maxHp: bossData.hp,
             speed: bossData.speed * KMH_TO_MS,
             score: 3000,
             color: bossData.color,
-            attacks: bossData.attacks || [],
-            attackCooldowns: new Float32Array(32),
-            abilityCooldown: 0,
             originalScale: scale,
             widthScale: widthMod,
             hitRadius: 0.5 * baseScale,
@@ -257,40 +242,50 @@ export const EnemySpawner = {
             state: AIState.IDLE,
             idleTimer: 2.0,
             searchTimer: 0,
-            lastBurnTick: 0,
+            attackCooldowns: new Float32Array(32),
+            abilityCooldown: 0,
             spawnPos: new THREE.Vector3(pos.x, 0, pos.z),
             lastSeenTime: 0,
             lastKnownPosition: new THREE.Vector3(pos.x, 0, pos.z),
             hearingThreshold: 1.5,
             awareness: 0.2,
             lastHeardNoiseType: NoiseType.NONE,
-
-            statusFlags: EnemyFlags.BOSS,
             bossId: bossData.id,
             hitTime: 0,
             hitRenderTime: 0,
             lastStepTime: 0,
             lastTackleTime: 0,
             lastVehicleHit: 0,
-
+            attacks: bossData.attacks || [],
             currentAttackIndex: -1,
             attackTimer: 0,
-
-            stunDuration: 0,
-            blindDuration: 0,
-            burnDuration: 0,
             burnTickTimer: 0,
+            lastBurnTick: 0,
+            burnDuration: 0,
+            blindDuration: 0,
             slowDuration: 0,
+            stunDuration: 0,
             grappleDuration: 0,
-
             explosionTimer: 0,
-
             velocity: new THREE.Vector3(0, 0, 0),
             knockbackVel: new THREE.Vector3(0, 0, 0),
             deathVel: new THREE.Vector3(0, 0, 0),
-
-            deathState: EnemyDeathState.ALIVE,
-            lastDamageType: WeaponType.NONE,
+            targetPos: new THREE.Vector3(),
+            spinVel: new THREE.Vector3(),
+            hitDir: new THREE.Vector3(),
+            prevP: new THREE.Vector3(0, -1000, 0),
+            animStartPos: new THREE.Vector3(),
+            swingX: 0,
+            swingZ: 0,
+            swingVelX: 0,
+            swingVelZ: 0,
+            animRotX: 0,
+            animRotZ: 0,
+            baseY: 0,
+            originalColor: bossData.color,
+            lastAIState: AIState.IDLE,
+            lastGrappleDmg: 0,
+            lastDamageType: DamageID.NONE,
             lastHitWasHighImpact: false,
             deathTimer: 0,
             hasLastTrailPos: false,
@@ -298,12 +293,11 @@ export const EnemySpawner = {
             fallForward: false,
             bloodSpawned: false,
             lastKnockback: 0,
-
+            deathState: EnemyDeathState.ALIVE,
             swimDistance: 0,
             maxSwimDistance: 1 + Math.random() * 4,
             drownTimer: 0,
             drownDmgTimer: 0,
-
             fallStartY: 0,
             _accumulatedDamage: 0,
             _lastDamageTextTime: 0,
@@ -311,15 +305,6 @@ export const EnemySpawner = {
         };
 
         boss.userData.entity = enemy;
-        boss.userData.targetPos = new THREE.Vector3();
-        boss.userData.spinVel = new THREE.Vector3();
-        boss.userData.hitDir = new THREE.Vector3();
-        boss.userData.swingX = 0;
-        boss.userData.swingZ = 0;
-        boss.userData.swingVelX = 0;
-        boss.userData.swingVelZ = 0;
-        boss.userData.lastGrappleDmg = 0;
-        boss.userData.prevP = new THREE.Vector3(0, -1000, 0);
 
         // Ensure boss has an indicator ring for its special attacks
         const bossIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);

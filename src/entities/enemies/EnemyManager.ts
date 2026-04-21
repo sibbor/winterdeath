@@ -209,7 +209,7 @@ export const EnemyManager = {
                 e.mesh.visible = true;
                 e.mesh.matrixAutoUpdate = true;
             }
-            else if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !e.mesh.userData.exploded && deathState !== EnemyDeathState.DEAD) {
+            else if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !(e.statusFlags & EnemyFlags.EXPLODED) && deathState !== EnemyDeathState.DEAD) {
                 let isVisible = true;
                 if (cameraPos && cameraDir) {
                     _v2.subVectors(e.mesh.position, cameraPos);
@@ -238,12 +238,14 @@ export const EnemyManager = {
                 if ((e.statusFlags & EnemyFlags.BOSS) !== 0 && e.mesh && e.color !== undefined) {
                     const timeSinceHit = simTime - e.hitTime;
                     if (timeSinceHit < 100) {
-                        if (!e.mesh.userData.isFlashing) {
-                            e.mesh.userData.isFlashing = true;
+                        if (!(e.statusFlags & EnemyFlags.FLASH_ACTIVE)) {
+                            e.statusFlags |= EnemyFlags.FLASH_ACTIVE;
                             const isArc = e.lastDamageType === DamageID.ARC_CANNON;
 
                             if (isArc) _flashColor.setHex(0x00ffff).lerp(_white, 0.4);
                             else _flashColor.setHex(0xffffff);
+
+                            const intensity = isArc ? 2.0 : 1.0;
 
                             _traverseStack.length = 0;
                             _traverseStack.push(e.mesh);
@@ -251,37 +253,27 @@ export const EnemyManager = {
                                 const c = _traverseStack.pop() as any;
                                 if (c.isMesh && c.material && c.material.emissive) {
                                     c.material.emissive.copy(_flashColor);
-                                    c.material.emissiveIntensity = isArc ? 2.0 : 1.0;
+                                    c.material.emissiveIntensity = intensity;
                                 }
-                                for (let k = 0; k < c.children.length; k++) {
-                                    _traverseStack.push(c.children[k]);
+                                if (c.children) {
+                                    for (let k = 0; k < c.children.length; k++) {
+                                        _traverseStack.push(c.children[k]);
+                                    }
                                 }
                             }
                         }
                     } else {
-                        if (e.mesh.userData.isFlashing) {
-                            e.mesh.userData.isFlashing = false;
-
-                            _traverseStack.length = 0;
-                            _traverseStack.push(e.mesh);
-                            while (_traverseStack.length > 0) {
-                                const c = _traverseStack.pop() as any;
-                                if (c.isMesh && c.material && c.material.emissive) {
-                                    c.material.emissive.setHex(0x000000);
-                                    c.material.emissiveIntensity = 0.0;
-                                }
-                                for (let k = 0; k < c.children.length; k++) {
-                                    _traverseStack.push(c.children[k]);
-                                }
-                            }
+                        if (e.statusFlags & EnemyFlags.FLASH_ACTIVE) {
+                            e.statusFlags &= ~EnemyFlags.FLASH_ACTIVE;
+                            resetMaterialEmissive(e.mesh);
                         }
                     }
                 } else if ((e.statusFlags & EnemyFlags.BOSS) === 0 && e.color !== undefined) {
                     const timeSinceHit = simTime - e.hitTime;
                     if (timeSinceHit < 100) {
-                        if (!e.mesh.userData.isFlashing) {
-                            e.mesh.userData.isFlashing = true;
-                            e.mesh.userData.originalColor = e.color;
+                        if (!(e.statusFlags & EnemyFlags.FLASH_ACTIVE)) {
+                            e.statusFlags |= EnemyFlags.FLASH_ACTIVE;
+                            e.originalColor = e.color;
                             const isArc = e.lastDamageType === DamageID.ARC_CANNON;
                             if (isArc) {
                                 e.color = _flashColor.setHex(0x00ffff).lerp(_white, 0.4).getHex();
@@ -290,9 +282,9 @@ export const EnemyManager = {
                             }
                         }
                     } else {
-                        if (e.mesh.userData.isFlashing) {
-                            e.mesh.userData.isFlashing = false;
-                            e.color = e.mesh.userData.originalColor as number;
+                        if (e.statusFlags & EnemyFlags.FLASH_ACTIVE) {
+                            e.statusFlags &= ~EnemyFlags.FLASH_ACTIVE;
+                            e.color = e.originalColor;
                         }
                     }
                 }
@@ -385,21 +377,15 @@ export const EnemyManager = {
 
         // --- ZERO-GC VECTOR ALLOCATION (Pool warmup phase) ---
         if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3();
-        if (!e.mesh.userData.targetPos) e.mesh.userData.targetPos = new THREE.Vector3();
+        e.targetPos.set(0, 0, 0);
 
-        // --- STALE DATA RESET (DOD) ---
-        e.lastKnownPosition.copy(e.mesh.position);
-        (e.mesh.userData.targetPos as THREE.Vector3).set(0, 0, 0);
+        // VINTERDÖD: Advanced Physics Warmup
+        e.swingX = 0;
+        e.swingZ = 0;
+        e.swingVelX = 0;
+        e.swingVelZ = 0;
 
-        // VINTERDÖD: Advanced Physics Warmup (Zero-GC / Hidden Class stability)
-        e.mesh.userData.swingX = 0;
-        e.mesh.userData.swingZ = 0;
-        e.mesh.userData.swingVelX = 0;
-        e.mesh.userData.swingVelZ = 0;
-        e.mesh.userData.lastGrappleDmg = 0;
-
-        if (!e.mesh.userData.prevP) e.mesh.userData.prevP = new THREE.Vector3(0, -1000, 0);
-        else (e.mesh.userData.prevP as THREE.Vector3).set(0, -1000, 0);
+        e.prevP.set(0, -1000, 0);
 
         e.lastTrailPos.set(0, 0, 0);
         e.hasLastTrailPos = false;
@@ -427,29 +413,13 @@ export const EnemyManager = {
         e.drownDmgTimer = 0;
         e.fallStartY = 0;
 
-        e.mesh.userData.exploded = false;
-        e.mesh.userData.gibbed = false;
-        e.mesh.userData.electrocuted = false;
-        e.mesh.userData.ashSpawned = false;
-        e.mesh.userData.ashPermanent = false;
-        e.mesh.userData.isRagdolling = false;
-        e.mesh.userData.isFlashing = false;
-        e.mesh.userData.wasKnockedBack = false;
-        e.mesh.userData.wasStunned = false;
-        
-        // Ensure new bitmask flags are also cleared
-        e.statusFlags &= ~(EnemyFlags.RAGDOLLING | EnemyFlags.KNOCKED_BACK | EnemyFlags.STUNNED);
-
-        // Reset spin velocity to zero (No truthy check, V8 Shape Locking guarantees existence)
-        (e.mesh.userData.spinVel as THREE.Vector3).set(0, 0, 0);
-        (e.mesh.userData.hitDir as THREE.Vector3).set(0, 0, 0);
-        e.mesh.userData.ashPermanent = false;
-        e.mesh.userData.isFlashing = false;
-        e.mesh.userData.isRagdolling = false;
+        e.spinVel.set(0, 0, 0);
+        e.hitDir.set(0, 0, 0);
+        e.baseY = 0;
+        e.animRotX = 0;
+        e.animRotZ = 0;
+        e.lastAIState = AIState.IDLE;
         e.ashPile = null;
-
-        (e.mesh.userData.spinVel as THREE.Vector3).set(0, 0, 0);
-        (e.mesh.userData.hitDir as THREE.Vector3).set(0, 0, 0);
 
         if (e.indicatorRing) {
             e.indicatorRing.visible = false;
@@ -497,8 +467,9 @@ export const EnemyManager = {
     },
 
     explodeEnemy: (enemy: Enemy, callbacks: any, velocity?: THREE.Vector3, isGibbed: boolean = false) => {
-        if (enemy.mesh.userData.exploded) return;
-        enemy.mesh.userData.exploded = true;
+        if (enemy.statusFlags & EnemyFlags.EXPLODED) return;
+        enemy.statusFlags |= EnemyFlags.EXPLODED;
+        if (isGibbed) enemy.statusFlags |= EnemyFlags.GIBBED;
 
         const enemyScale = enemy.originalScale * enemy.widthScale;
         const pos = enemy.mesh.position;
@@ -567,8 +538,8 @@ export const EnemyManager = {
                 const duration = 1500;
                 const progress = Math.min(1.0, age / duration);
 
-                if (!e.mesh.userData.ashSpawned) {
-                    e.mesh.userData.ashSpawned = true;
+                if (!(e.statusFlags & EnemyFlags.ASH_SPAWNED)) {
+                    e.statusFlags |= EnemyFlags.ASH_SPAWNED;
                     if (ashRenderer) {
                         ashRenderer.addAsh(e.mesh.position, e.mesh.rotation, e.originalScale, e.widthScale, e.color, simTime, 1500);
                     }
@@ -584,8 +555,8 @@ export const EnemyManager = {
                 setBaseColor(e.mesh, _color);
 
                 if (progress >= 1.0) {
-                    if (!e.mesh.userData.ashPermanent) {
-                        e.mesh.userData.ashPermanent = true;
+                    if (!(e.statusFlags & EnemyFlags.ASH_PERMANENT)) {
+                        e.statusFlags |= EnemyFlags.ASH_PERMANENT;
                         if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
                     }
                     e.deathState = EnemyDeathState.DEAD;
@@ -593,28 +564,27 @@ export const EnemyManager = {
                 break;
 
             case EnemyDeathState.ELECTROCUTED:
-                if (!e.mesh.userData.electrocuted) {
-                    e.mesh.userData.electrocuted = true;
-                    e.mesh.userData.deathPosX = e.mesh.position.x;
-                    e.mesh.userData.deathPosZ = e.mesh.position.z;
-                    e.mesh.userData.deathPosY = e.mesh.position.y;
+                if (!(e.statusFlags & EnemyFlags.ELECTROCUTED)) {
+                    e.statusFlags |= EnemyFlags.ELECTROCUTED;
+                    e.targetPos.copy(e.mesh.position); // Reusing as deathPos
+                    e.baseY = e.mesh.position.y; // Reusing as deathPosY
 
-                    e.mesh.userData.fallDuration = 400 + Math.random() * 200;
-                    e.mesh.userData.twitchDuration = 1800 + Math.random() * 500;
+                    e.stunDuration = 400 + Math.random() * 200; // Reusing for fallDuration
+                    e.slowDuration = 1800 + Math.random() * 500; // Reusing for twitchDuration
 
-                    e.mesh.userData.targetRotX = -Math.PI / 2.1;
-                    e.mesh.userData.targetRotZ = (Math.random() - 0.5) * 0.5;
+                    e.swingX = -Math.PI / 2.1; // Reusing for targetRotX
+                    e.swingZ = (Math.random() - 0.5) * 0.5; // Reusing for targetRotZ
                 }
 
-                const fallDur = e.mesh.userData.fallDuration;
-                const twitchDur = e.mesh.userData.twitchDuration;
+                const fallDur = e.stunDuration;
+                const twitchDur = e.slowDuration;
 
                 if (age < twitchDur) {
                     const fallProgress = Math.min(1.0, age / fallDur);
 
-                    e.mesh.rotation.x = THREE.MathUtils.lerp(0, e.mesh.userData.targetRotX, fallProgress);
-                    e.mesh.rotation.z = THREE.MathUtils.lerp(0, e.mesh.userData.targetRotZ, fallProgress);
-                    e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.userData.deathPosY, 0.2, fallProgress);
+                    e.mesh.rotation.x = THREE.MathUtils.lerp(0, e.swingX, fallProgress);
+                    e.mesh.rotation.z = THREE.MathUtils.lerp(0, e.swingZ, fallProgress);
+                    e.mesh.position.y = THREE.MathUtils.lerp(e.baseY, 0.2, fallProgress);
 
                     const pulse = Math.sin(renderTime * 0.05) * 0.5 + 0.5;
                     _color.copy(_cyan).lerp(_white, Math.random() * 0.3);
@@ -625,9 +595,9 @@ export const EnemyManager = {
 
                     if (Math.random() > 0.85 && callbacks.spawnParticle) {
                         _v1.set(
-                            e.mesh.userData.deathPosX + (Math.random() - 0.5),
+                            e.targetPos.x + (Math.random() - 0.5),
                             e.mesh.position.y + 0.5,
-                            e.mesh.userData.deathPosZ + (Math.random() - 0.5)
+                            e.targetPos.z + (Math.random() - 0.5)
                         );
                         callbacks.spawnParticle(_v1.x, _v1.y, _v1.z, 'spark', 1);
                     }
@@ -636,9 +606,9 @@ export const EnemyManager = {
                     resetMaterialEmissive(e.mesh);
                     setBaseColor(e.mesh, _color);
 
-                    e.mesh.position.x = e.mesh.userData.deathPosX;
+                    e.mesh.position.x = e.targetPos.x;
                     e.mesh.position.y = 0.2;
-                    e.mesh.position.z = e.mesh.userData.deathPosZ;
+                    e.mesh.position.z = e.targetPos.z;
 
                     e.deathState = EnemyDeathState.DEAD;
                 }
@@ -653,14 +623,6 @@ export const EnemyManager = {
                 if (e.mesh.position.y <= 0.2) {
                     e.mesh.position.y = 0.2;
                     e.deathVel.set(0, 0, 0);
-                }
-
-                const targetRot = (Math.PI / 2) * (e.fallForward ? 1 : -1);
-                e.mesh.rotation.x += (targetRot - e.mesh.rotation.x) * 0.12;
-
-                if (e.mesh.userData.spinDir) {
-                    e.mesh.rotation.y += e.mesh.userData.spinDir * delta;
-                    e.mesh.userData.spinDir *= 0.9;
                 }
 
                 e.mesh.quaternion.setFromEuler(e.mesh.rotation);
@@ -713,15 +675,11 @@ export const EnemyManager = {
         // --- 4. RAGDOLL & SPIN ---
         if ((enemy.statusFlags & EnemyFlags.BOSS) === 0) {
             enemy.statusFlags |= EnemyFlags.RAGDOLLING;
-            enemy.mesh.userData.isRagdolling = true;
-            const sVel = enemy.mesh.userData.spinVel as THREE.Vector3;
-            if (sVel) {
-                sVel.set(
-                    (Math.random() - 0.5) * spinIntensity,
-                    (Math.random() - 0.5) * spinIntensity * 1.2,
-                    (Math.random() - 0.5) * spinIntensity
-                );
-            }
+            enemy.spinVel.set(
+                (Math.random() - 0.5) * spinIntensity,
+                (Math.random() - 0.5) * spinIntensity * 1.2,
+                (Math.random() - 0.5) * spinIntensity
+            );
         }
     },
 
@@ -903,34 +861,33 @@ export const EnemyManager = {
 
             if (!e.deathTimer) {
                 e.deathTimer = simTime;
-                e.mesh.userData.deathPx = e.mesh.position.x;
-                e.mesh.userData.deathPy = e.mesh.position.y;
-                e.mesh.userData.deathPz = e.mesh.position.z;
-                if (!e.mesh.userData.exploded) {
+                e.targetPos.copy(e.mesh.position);
+                e.baseY = e.mesh.position.y;
+                if (!(e.statusFlags & EnemyFlags.EXPLODED)) {
                     if (e.type === EnemyType.RUNNER) EnemySounds.playGrowl('runner', e.mesh.position);
                     else if (e.type === EnemyType.TANK) EnemySounds.playGrowl('tank', e.mesh.position);
                     else EnemySounds.playGrowl('walker', e.mesh.position);
                 }
             }
 
-            const shouldCleanup = (e.deathState === EnemyDeathState.DEAD) || e.mesh.userData.exploded || e.mesh.userData.gibbed;
+            const shouldCleanup = (e.deathState === EnemyDeathState.DEAD) || (e.statusFlags & (EnemyFlags.EXPLODED | EnemyFlags.GIBBED)) !== 0;
 
             if (shouldCleanup) {
                 let leaveCorpse = false;
                 let bloodType = '';
 
-                if (e.mesh.userData.exploded) {
+                if (e.statusFlags & EnemyFlags.EXPLODED) {
                     EnemyManager.explodeEnemy(e, callbacks, _up);
                     bloodType = 'none';
                 }
-                else if (e.mesh.userData.gibbed) {
+                else if (e.statusFlags & EnemyFlags.GIBBED) {
                     if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
                     bloodType = 'none';
                 }
-                else if (e.mesh.userData.ashSpawned) {
+                else if (e.statusFlags & EnemyFlags.ASH_SPAWNED) {
                     if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
                 }
-                else if (e.mesh.userData.electrocuted) {
+                else if (e.statusFlags & EnemyFlags.ELECTROCUTED) {
                     leaveCorpse = true;
                     bloodType = 'scorch';
                 }

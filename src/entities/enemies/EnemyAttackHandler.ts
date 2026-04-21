@@ -25,7 +25,7 @@ export const EnemyAttackHandler = {
         }
 
         // Store target position for procedural animator
-        (e.mesh.userData.targetPos as THREE.Vector3).copy(playerPos);
+        e.targetPos.copy(playerPos);
 
         if (e.attackCooldowns) {
             e.attackCooldowns[att.type] = att.cooldown;

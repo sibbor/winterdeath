@@ -205,6 +205,24 @@ export interface Enemy {
     velocity: THREE.Vector3;
     knockbackVel: THREE.Vector3;
     deathVel: THREE.Vector3;
+    
+    // VINTERDÖD: Direct properties instead of userData indirection
+    targetPos: THREE.Vector3;
+    spinVel: THREE.Vector3;
+    hitDir: THREE.Vector3;
+    prevP: THREE.Vector3;
+    animStartPos: THREE.Vector3;
+    
+    swingX: number;
+    swingZ: number;
+    swingVelX: number;
+    swingVelZ: number;
+    animRotX: number;
+    animRotZ: number;
+    baseY: number;
+    originalColor: number;
+    lastAIState: AIState;
+    lastGrappleDmg: number;
 
     // Death & Cleanup
     lastDamageType: number; // Migrated to Unified DamageID

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Enemy, AIState } from '../../entities/enemies/EnemyTypes';
+import { Enemy, AIState, EnemyFlags } from '../../entities/enemies/EnemyTypes';
 import { EnemyAttackType } from '../../entities/player/CombatTypes';
 
 const PI = Math.PI;
@@ -180,24 +180,46 @@ export const EnemyAnimator = {
     updateAttackAnim: (e: Enemy, renderTime: number, simDelta: number) => {
         const mesh = e.mesh;
         if (!mesh) return;
+        const state = e.state;
+        const isAttacking = state === AIState.ATTACK_CHARGE || state === AIState.ATTACKING;
+        const lastState = e.lastAIState;
 
-        // --- ZERO-GC STATE TRACKING ---
-        if (!mesh.userData.startPos) mesh.userData.startPos = new THREE.Vector3();
-
-        // Load targetPos that was just set in EnemyAttackHandler!
-        const targetPos = mesh.userData.targetPos || _v2.set(mesh.position.x, mesh.position.y, mesh.position.z);
-
-        if (e.state !== mesh.userData.lastState) {
-            mesh.userData.lastState = e.state;
-            mesh.userData.startPos.copy(mesh.position);
+        if (isAttacking && lastState !== state) {
+            e.animStartPos.copy(e.mesh.position);
+            e.lastAIState = state;
         }
 
+        if (!isAttacking && lastState !== state) {
+            e.lastAIState = state;
+        }
+
+        const hitDir = e.hitDir;
+        const spinVel = e.spinVel;
+
+        const isRagdoll = (e.statusFlags & EnemyFlags.RAGDOLLING) !== 0;
+
+        if (isRagdoll) {
+            const spinAmount = simDelta * 1.5;
+            e.mesh.rotation.x += spinVel.x * spinAmount;
+            e.mesh.rotation.y += spinVel.y * spinAmount;
+            e.mesh.rotation.z += spinVel.z * spinAmount;
+
+            spinVel.multiplyScalar(Math.pow(0.95, simDelta * 60));
+
+            if (spinVel.lengthSq() < 0.01) {
+                e.statusFlags &= ~EnemyFlags.RAGDOLLING;
+            }
+        }
+
+        // Load targetPos that was just set in EnemyAttackHandler!
+        const targetPos = e.targetPos || _v2.set(mesh.position.x, mesh.position.y, mesh.position.z);
+
         // Initialize state struct for this frame
-        _animState.baseY = mesh.userData.baseY || 0;
+        _animState.baseY = e.baseY || 0;
         _animState.baseScale = e.originalScale || 1.0;
         _animState.widthScale = e.widthScale || 1.0;
         _animState.renderTime = renderTime;
-        _animState.startPos = mesh.userData.startPos;
+        _animState.startPos = e.animStartPos;
 
         _animState.targetRotX = 0;
         _animState.targetRotZ = 0;
@@ -210,15 +232,13 @@ export const EnemyAnimator = {
         _animState.targetPosZ = mesh.position.z;
         _animState.hijackPhysics = false;
 
-        const isAttacking = (e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING);
-
         // --- PHASE 1 & 2: ATTACK LOGIC ---
         if (isAttacking && e.currentAttackIndex !== undefined && e.attacks) {
             const att = e.attacks[e.currentAttackIndex];
 
             if (att) {
                 // --- PHASE 1: CHARGING THE ATTACK ---
-                if (e.state === AIState.ATTACK_CHARGE && e.attackTimer !== undefined) {
+                if (state === AIState.ATTACK_CHARGE && e.attackTimer !== undefined) {
                     const totalCharge = (att.chargeTime || 1000) * 0.001;
                     _animState.progress = totalCharge > 0 ? Math.min(1.0, Math.max(0, 1.0 - (e.attackTimer / totalCharge))) : 1.0;
 
@@ -249,7 +269,7 @@ export const EnemyAnimator = {
                 }
 
                 // --- PHASE 2: EXECUTING THE ATTACK ---
-                else if (e.state === AIState.ATTACKING && e.attackTimer !== undefined) {
+                else if (state === AIState.ATTACKING && e.attackTimer !== undefined) {
                     const totalActive = (att.activeTime || 500) * 0.001;
                     _animState.progress = totalActive > 0 ? Math.min(1.0, Math.max(0, 1.0 - (e.attackTimer / totalActive))) : 1.0;
 
@@ -266,13 +286,13 @@ export const EnemyAnimator = {
                 e.indicatorRing.matrixAutoUpdate = false;
             }
 
-            const isMoving = e.state === AIState.CHASE || e.state === AIState.WANDER;
-            const isGrappling = e.state === AIState.GRAPPLE;
+            const isMoving = state === AIState.CHASE || state === AIState.WANDER;
+            const isGrappling = state === AIState.GRAPPLE;
 
             if (isGrappling) {
                 // Respect the pendulum swing calculated in AI
-                _animState.targetRotX = mesh.userData.swingX || 0;
-                _animState.targetRotZ = mesh.userData.swingZ || 0;
+                _animState.targetRotX = e.swingX || 0;
+                _animState.targetRotZ = e.swingZ || 0;
                 _animState.targetScaleY = _animState.baseScale * 1.05; // Slight stretch while hanging
                 _animState.targetPosY = mesh.position.y; // Keep current Y from AI displacement
             }
@@ -294,21 +314,24 @@ export const EnemyAnimator = {
                 // Breathe radially to feel more organic
                 _animState.targetScaleX = _animState.baseScale * _animState.widthScale * (1.0 - Math.sin(idleT) * 0.01);
                 _animState.targetScaleZ = _animState.baseScale * _animState.widthScale * (1.0 - Math.sin(idleT) * 0.01);
+                
+                const s = e.originalScale;
+                e.baseY = THREE.MathUtils.lerp(e.baseY, 1.0 * s, 10 * simDelta);
+                e.mesh.position.y = e.baseY;
+
+                e.animRotX = THREE.MathUtils.lerp(e.animRotX, 0, 10 * simDelta);
+                e.animRotZ = THREE.MathUtils.lerp(e.animRotZ, 0, 10 * simDelta);
+                e.mesh.rotation.x = e.animRotX;
+                e.mesh.rotation.z = e.animRotZ;
             }
         }
 
         // --- APPLY TRANSFORMS (SMOOTH LERPING) ---
-        let currentRotX = mesh.userData.animRotX || 0;
-        let currentRotZ = mesh.userData.animRotZ || 0;
+        e.animRotX += (_animState.targetRotX - e.animRotX) * 15 * simDelta;
+        e.animRotZ += (_animState.targetRotZ - e.animRotZ) * 15 * simDelta;
 
-        currentRotX += (_animState.targetRotX - currentRotX) * 15 * simDelta;
-        currentRotZ += (_animState.targetRotZ - currentRotZ) * 15 * simDelta;
-
-        mesh.userData.animRotX = currentRotX;
-        mesh.userData.animRotZ = currentRotZ;
-
-        mesh.rotation.x = currentRotX;
-        mesh.rotation.z = currentRotZ;
+        mesh.rotation.x = e.animRotX;
+        mesh.rotation.z = e.animRotZ;
 
         mesh.scale.x += (_animState.targetScaleX - mesh.scale.x) * 15 * simDelta;
         mesh.scale.y += (_animState.targetScaleY - mesh.scale.y) * 15 * simDelta;
@@ -338,7 +361,7 @@ export const EnemyAnimator = {
             mesh.position.y += (_animState.targetPosY - mesh.position.y) * 15 * simDelta;
         }
 
-        if (e.mesh.userData.isFlashing && (renderTime - (e.hitRenderTime || 0)) < 200) {
+        if ((e.statusFlags & EnemyFlags.FLASH_ACTIVE) && (renderTime - (e.hitRenderTime || 0)) < 200) {
             const jitter = 0.15;
             mesh.rotation.x += (Math.random() - 0.5) * jitter;
             mesh.rotation.z += (Math.random() - 0.5) * jitter;

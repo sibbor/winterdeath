@@ -76,7 +76,13 @@ export const EnemyFlags = {
     STAGGERED: 1 << 12,
     SLOWED: 1 << 13,
     RAGDOLLING: 1 << 14,
-    KNOCKED_BACK: 1 << 15
+    KNOCKED_BACK: 1 << 15,
+    EXPLODED: 1 << 16,
+    GIBBED: 1 << 17,
+    ELECTROCUTED: 1 << 18,
+    ASH_SPAWNED: 1 << 19,
+    ASH_PERMANENT: 1 << 20,
+    FLASH_ACTIVE: 1 << 21
 };
 
 /**

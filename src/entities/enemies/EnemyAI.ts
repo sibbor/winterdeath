@@ -171,7 +171,7 @@ export const EnemyAI = {
             }
             else if (weaponImpact === EnemyDeathState.GIBBED && (isHighImpact || (playerStatusFlags & (1 << 11)) !== 0)) {
                 e.deathState = EnemyDeathState.GIBBED;
-                e.mesh.userData.gibbed = true;
+                e.statusFlags |= EnemyFlags.GIBBED;
                 callbacks.playSound(SoundID.ZOMBIE_DEATH_SHOT);
             }
             else if (weapon) {
@@ -186,8 +186,6 @@ export const EnemyAI = {
 
                 const impactForce = weapon.damage * 0.15;
                 e.deathVel.addScaledVector(_v1, impactForce).setY(weapon.damage > 20 ? 3.5 : 2.0);
-
-                e.mesh.userData.spinDir = (Math.random() - 0.5) * 5.0;
             }
             else {
                 e.deathState = EnemyDeathState.GENERIC;
@@ -198,8 +196,6 @@ export const EnemyAI = {
                 const forwardMomentum = e.velocity.dot(_v2);
                 e.fallForward = forwardMomentum > 1.5;
                 e.deathVel.copy(_v1).multiplyScalar(8.0).setY(3.0);
-
-                e.mesh.userData.spinDir = (Math.random() - 0.5) * 6.0;
             }
 
             // VINTERDÖD: Heavy Kill Hit-stop for Tanks
@@ -413,16 +409,17 @@ export const EnemyAI = {
             }
             e.stunDuration -= delta;
 
-            if ((e.statusFlags & EnemyFlags.RAGDOLLING) && e.mesh.userData.spinVel) {
-                e.mesh.rotation.x += e.mesh.userData.spinVel.x * delta;
-                e.mesh.rotation.y += e.mesh.userData.spinVel.y * delta;
-                e.mesh.rotation.z += e.mesh.userData.spinVel.z * delta;
+            if ((e.statusFlags & EnemyFlags.RAGDOLLING)) {
+                const sVel = e.spinVel;
+                e.mesh.rotation.x += sVel.x * delta;
+                e.mesh.rotation.y += sVel.y * delta;
+                e.mesh.rotation.z += sVel.z * delta;
                 e.mesh.quaternion.setFromEuler(e.mesh.rotation);
 
                 if (e.mesh.position.y <= 0.1) {
-                    e.mesh.userData.spinVel.x *= Math.max(0, 1 - 6.0 * delta);
-                    e.mesh.userData.spinVel.y *= Math.max(0, 1 - 6.0 * delta);
-                    e.mesh.userData.spinVel.z *= Math.max(0, 1 - 6.0 * delta);
+                    sVel.x *= Math.max(0, 1 - 6.0 * delta);
+                    sVel.y *= Math.max(0, 1 - 6.0 * delta);
+                    sVel.z *= Math.max(0, 1 - 6.0 * delta);
                 }
 
                 if (e.stunDuration < 0.6) {
@@ -706,8 +703,10 @@ export const EnemyAI = {
                     e.grappleDuration = 0;
                     e.attackCooldowns[EnemyAttackType.BITE] = 3000;
                     e.mesh.rotation.x = 0;
-                    e.mesh.rotation.z = 0;
-                    if (e.mesh.userData.prevP) (e.mesh.userData.prevP as THREE.Vector3).set(0, -1000, 0); // Reset inertia marker
+                    _v1.copy(e.mesh.position);
+                    _v2.copy(e.prevP);
+                    e.prevP.copy(_v1);
+                    e.prevP.set(0, -1000, 0); // Reset inertia marker
                     break;
                 }
 
@@ -717,8 +716,7 @@ export const EnemyAI = {
                 const orbitDist = e.attackOffset;
 
                 // Track player displacement for inertia
-                if (!e.mesh.userData.prevP) e.mesh.userData.prevP = new THREE.Vector3().copy(playerPos);
-                const prevP = e.mesh.userData.prevP as THREE.Vector3;
+                const prevP = e.prevP;
 
                 // VINTERDÖD FIX: Check for reset marker (y = -1000) to prevent first-frame physics explosion
                 if (prevP.y < -500) {
@@ -749,16 +747,16 @@ export const EnemyAI = {
                 const dot = _v1.dot(_v2); // Positive if player moves away from zombie
                 const sideDot = _v1.x * _v2.z - _v1.z * _v2.x; // Cross-product (Vertical component proxy)
 
-                // Update swing angles in userData (Smoothed pendulum)
+                // Update swing angles (Smoothed pendulum)
                 const targetTilt = -dot * 3.5;
                 const targetSwing = -sideDot * 5.0;
 
-                // V8/Math Optimization: NaN Safety Check (Prevents disappearing enemies)
-                if (isNaN(e.mesh.userData.swingX)) e.mesh.userData.swingX = 0;
-                if (isNaN(e.mesh.userData.swingZ)) e.mesh.userData.swingZ = 0;
+                // V8/Math Optimization: NaN Safety Check
+                if (isNaN(e.swingX)) e.swingX = 0;
+                if (isNaN(e.swingZ)) e.swingZ = 0;
 
-                e.mesh.userData.swingX = THREE.MathUtils.lerp(e.mesh.userData.swingX, targetTilt, 5.0 * delta);
-                e.mesh.userData.swingZ = THREE.MathUtils.lerp(e.mesh.userData.swingZ, targetSwing, 5.0 * delta);
+                e.swingX = THREE.MathUtils.lerp(e.swingX, targetTilt, 5.0 * delta);
+                e.swingZ = THREE.MathUtils.lerp(e.swingZ, targetSwing, 5.0 * delta);
 
                 // 3. Final Mesh Transform
                 e.mesh.position.set(_v3.x, playerPos.y + neckHeight, _v3.z);
@@ -774,8 +772,8 @@ export const EnemyAI = {
                 if (e.mesh.position.y < -0.5) e.mesh.position.y = 0.1;
 
                 // 4. Periodic Damage & Visuals
-                if (simTime > (e.mesh.userData.lastGrappleDmg || 0) + 600) {
-                    e.mesh.userData.lastGrappleDmg = simTime;
+                if (simTime > (e.lastGrappleDmg || 0) + 600) {
+                    e.lastGrappleDmg = simTime;
                     callbacks.onPlayerHit(4, e, DamageID.BITE, true, undefined, undefined, undefined, 'GRAPPLE_BITE');
 
                     if (callbacks.spawnParticle) {
