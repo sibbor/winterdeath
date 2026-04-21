@@ -65,9 +65,10 @@ export interface SectorStats {
 
   // VINTERDÖD FIX: Standardized wave naming
   waveActive?: boolean;
-  zombiesKilled?: number;
-  targetKills?: number;
-  hordeTarget?: number;
+  waveKills?: number;
+  waveTarget?: number;
+  currentWave?: number;
+  totalWaves?: number;
 }
 
 export interface SectorState {
@@ -80,9 +81,10 @@ export interface SectorState {
 
   // VINTERDÖD FIX: Standardized wave naming
   waveActive?: boolean;
-  zombiesKilled?: number;
-  targetKills?: number;
-  hordeTarget?: number;
+  waveKills?: number;
+  waveTarget?: number;
+  currentWave?: number;
+  totalWaves?: number;
 
   // VINTERDÖD FIX: The Generic Bridge API
   pendingTrigger?: string | null;
@@ -113,4 +115,5 @@ export interface GameState {
   debugMode?: boolean;
   weather: WeatherType;
   environmentOverrides?: Record<number, EnvironmentOverride>;
+  sessionToken: number;
 }

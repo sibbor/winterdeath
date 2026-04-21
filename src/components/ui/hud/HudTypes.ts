@@ -100,10 +100,11 @@ export interface SectorStatsData {
   unlimitedAmmo: boolean;
   unlimitedThrowables: boolean;
   isInvincible: boolean;
-  hordeTarget: number;
-  zombiesKilled: number;
-  zombiesKillTarget: number;
-  zombieWaveActive: boolean;
+  waveActive: boolean;
+  waveKills: number;
+  waveTarget: number;
+  currentWave: number;
+  totalWaves: number;
 }
 
 export interface HudState {
@@ -146,7 +147,6 @@ export interface HudState {
   // Statistics & Run info
   kills: number;
   spEarned: number;
-  skillPoints: number;
   isDead: boolean;
   isDriving: boolean;
   vehicleSpeed: number;

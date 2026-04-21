@@ -10,6 +10,7 @@ import { EnemyType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { FamilyMemberID } from '../constants';
 import { POI_TYPE } from '../../content/pois';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
+import { WeatherType } from '../../core/engine/EngineTypes';
 
 const LOCATIONS = {
     SPAWN: {
@@ -89,7 +90,7 @@ export const Sector2: SectorDef = {
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: {
-            type: 'rain',
+            type: WeatherType.RAIN,
             particles: 3000
         },
         wind: {

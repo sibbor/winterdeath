@@ -10,7 +10,17 @@ export interface GameSettings {
   showDiscoveryPopups: boolean;
 }
 
-export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'ember';
+/**
+ * SMI Enum for Weather type.
+ * Zero-GC: integer comparison replaces string equality checks in hot loops.
+ */
+export enum WeatherType {
+  NONE = 0,
+  SNOW = 1,
+  RAIN = 2,
+  ASH = 3,
+  EMBER = 4,
+}
 
 export interface EnvironmentalFog {
   density: number; // 0-40 (Antal plan för FogSystem)

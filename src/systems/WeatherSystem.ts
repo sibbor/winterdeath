@@ -22,7 +22,7 @@ export class WeatherSystem implements System {
     private velocities: Float32Array;
 
     private scene: THREE.Scene;
-    public type: WeatherType = 'none';
+    public type: WeatherType = WeatherType.NONE;
     private count: number = 0;
     private areaSize: number = 100;
     private wind: WindSystem;
@@ -60,19 +60,19 @@ export class WeatherSystem implements System {
         this.count = actualCount;
         this.areaSize = areaSize;
 
-        if (type === 'none' || actualCount <= 0) {
+        if (type === WeatherType.NONE || actualCount <= 0) {
             if (this.instancedMesh) this.instancedMesh.visible = false;
             return;
         }
 
         let selectedMaterial: THREE.Material;
-        if (type === 'rain') {
+        if (type === WeatherType.RAIN) {
             selectedMaterial = MATERIALS.particle_rain;
             this.swayMult = 5.0; // Heavy, low sway
-        } else if (type === 'ash') {
+        } else if (type === WeatherType.ASH) {
             selectedMaterial = MATERIALS.particle_ash;
             this.swayMult = 15.0; // Light, drifting
-        } else if (type === 'ember') {
+        } else if (type === WeatherType.EMBER) {
             selectedMaterial = MATERIALS.particle_ember;
             this.swayMult = 25.0; // Very light, erratic
         } else {
@@ -101,8 +101,8 @@ export class WeatherSystem implements System {
         const vel = this.velocities;
         const matrixArray = this.instancedMesh.instanceMatrix.array;
 
-        const sX = type === 'rain' ? 0.4 : 1.0;
-        const sY = type === 'rain' ? 4.0 : 1.0;
+        const sX = type === WeatherType.RAIN ? 0.4 : 1.0;
+        const sY = type === WeatherType.RAIN ? 4.0 : 1.0;
         const sZ = 1.0;
         const areaHalf = areaSize * 0.5;
 
@@ -128,15 +128,15 @@ export class WeatherSystem implements System {
             pos[i3 + 1] = y;
             pos[i3 + 2] = z;
 
-            if (type === 'snow') {
+            if (type === WeatherType.SNOW) {
                 vel[i3 + 0] = (Math.random() - 0.5) * 1.5;
                 vel[i3 + 1] = -(8 + Math.random() * 7);
                 vel[i3 + 2] = (Math.random() - 0.5) * 1.5;
-            } else if (type === 'ash') {
+            } else if (type === WeatherType.ASH) {
                 vel[i3 + 0] = (Math.random() - 0.5) * 2;
                 vel[i3 + 1] = -(2 + Math.random() * 3);
                 vel[i3 + 2] = (Math.random() - 0.5) * 2;
-            } else if (type === 'ember') {
+            } else if (type === WeatherType.EMBER) {
                 vel[i3 + 0] = (Math.random() - 0.5) * 3;
                 vel[i3 + 1] = (1 + Math.random() * 4); // Rises UP
                 vel[i3 + 2] = (Math.random() - 0.5) * 3;
@@ -186,7 +186,7 @@ export class WeatherSystem implements System {
         const areaSize = this.areaSize;
         const areaHalf = areaSize * 0.5;
 
-        const isRain = this.type === 'rain';
+        const isRain = this.type === WeatherType.RAIN;
         const sY = isRain ? 4.0 : 1.0;
 
         const centerX = this.camera.position?.x || 0;
@@ -249,15 +249,15 @@ export class WeatherSystem implements System {
                 // Generate a completely new velocity
                 if (isRain) {
                     vel[i3 + 1] = -(50 + r2 * 30);
-                } else if (this.type === 'snow') {
+                } else if (this.type === WeatherType.SNOW) {
                     vel[i3 + 1] = -(8 + r2 * 7);
                     vel[i3 + 0] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 1.5;
                     vel[i3 + 2] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 1.5;
-                } else if (this.type === 'ash') {
+                } else if (this.type === WeatherType.ASH) {
                     vel[i3 + 1] = -(2 + r2 * 3);
                     vel[i3 + 0] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 2;
                     vel[i3 + 2] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 2;
-                } else if (this.type === 'ember') {
+                } else if (this.type === WeatherType.EMBER) {
                     vel[i3 + 1] = (1 + r2 * 4);
                     vel[i3 + 0] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 3;
                     vel[i3 + 2] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 3;

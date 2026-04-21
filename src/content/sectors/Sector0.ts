@@ -13,6 +13,7 @@ import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { FamilyMemberID } from '../constants';
 import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
+import { WeatherType } from '../../core/engine/EngineTypes';
 import { POI_TYPE } from '../../content/pois';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
 
@@ -321,7 +322,7 @@ export const Sector0: SectorDef = {
             height: 10
         },
         weather: {
-            type: 'snow',
+            type: WeatherType.SNOW,
             particles: 2000
         },
     },

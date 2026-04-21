@@ -12,6 +12,7 @@ import { InteractionType } from '../../systems/InteractionTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { NoiseType } from '../../entities/enemies/EnemyBase';
 import { VEGETATION_TYPE } from '../../content/environment';
+import { WeatherType } from '../../core/engine/EngineTypes';
 import { CAMERA_HEIGHT } from '../constants';
 
 const _v1 = new THREE.Vector3();
@@ -35,11 +36,11 @@ const EXPLODING_BUS_ID = 'playground_bus_explode';
 const EXPLODING_BUS_POS = { x: 40, y: 1.5, z: -40 };
 
 export const SECTOR6_ZONES: AtmosphereZone[] = [
-    { label: "FOREST OF SHADOWS", x: 0, z: -360, weather: 'rain', bgColor: 0xff0000, fogDensity: 0.005, ambient: 0.2 },
-    { label: "ABANDONED FARM", x: 342, z: 111, weather: 'none', bgColor: 0xff00ff, fogDensity: 0.005, ambient: 0.5 },
-    { label: "THE VILLAGE", x: 211, z: -291, weather: 'ash', bgColor: 0xffeeee, fogDensity: 0.004, ambient: 0.3 },
-    { label: "CRYSTAL LAKE", x: -211, z: -291, weather: 'snow', bgColor: 0x111133, fogDensity: 0.002, ambient: 0.35 },
-    { label: "ANCIENT RUINS", x: -342, z: 111, weather: 'ember', bgColor: 0x0000ff, fogDensity: 0.003, ambient: 0.4 }
+    { label: "FOREST OF SHADOWS", x: 0, z: -360, weather: WeatherType.RAIN, bgColor: 0xff0000, fogDensity: 0.005, ambient: 0.2 },
+    { label: "ABANDONED FARM", x: 342, z: 111, weather: WeatherType.NONE, bgColor: 0xff00ff, fogDensity: 0.005, ambient: 0.5 },
+    { label: "THE VILLAGE", x: 211, z: -291, weather: WeatherType.ASH, bgColor: 0xffeeee, fogDensity: 0.004, ambient: 0.3 },
+    { label: "CRYSTAL LAKE", x: -211, z: -291, weather: WeatherType.SNOW, bgColor: 0x111133, fogDensity: 0.002, ambient: 0.35 },
+    { label: "ANCIENT RUINS", x: -342, z: 111, weather: WeatherType.EMBER, bgColor: 0x0000ff, fogDensity: 0.003, ambient: 0.4 }
 ];
 
 export const Sector4: SectorDef = {
@@ -60,7 +61,7 @@ export const Sector4: SectorDef = {
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: {
-            type: 'snow',
+            type: WeatherType.SNOW,
             particles: 2000
         },
         wind: {

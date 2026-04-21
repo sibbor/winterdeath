@@ -15,6 +15,7 @@ import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { FamilyMemberID } from '../constants';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
+import { WeatherType } from '../../core/engine/EngineTypes';
 
 const _vS1 = new THREE.Vector3(); // Zero-GC Scratchpad
 
@@ -162,7 +163,7 @@ export const Sector1: SectorDef = {
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: {
-            type: 'snow',
+            type: WeatherType.SNOW,
             particles: 3000
         }, wind: {
             strengthMin: 0.3,

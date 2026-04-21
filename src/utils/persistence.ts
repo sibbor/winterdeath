@@ -3,6 +3,7 @@ import { GameScreen } from '../types/SessionTypes';
 import { WeaponType } from '../content/weapons';
 import { INITIAL_STATS, DEFAULT_SETTINGS, OVERRIDE_DEFAULT_SECTOR } from '../content/constants';
 import { PlayerStatsUtils } from '../entities/player/PlayerTypes';
+import { WeatherType } from '../core/engine/EngineTypes';
 
 export const DEFAULT_STATE: GameState = {
     screen: GameScreen.PROLOGUE,
@@ -32,7 +33,7 @@ export const DEFAULT_STATE: GameState = {
     rescuedFamilyIndices: [],
     deadBossIndices: [],
     settings: DEFAULT_SETTINGS,
-    weather: 'snow',
+    weather: WeatherType.SNOW,
     environmentOverrides: {},
     midRunCheckpoint: null,
     sectorState: {
@@ -40,7 +41,8 @@ export const DEFAULT_STATE: GameState = {
         noReload: false,
         unlimitedThrowables: false,
         isInvincible: false
-    }
+    },
+    sessionToken: 0
 };
 
 export const getPersistentState = (state: GameState) => {
@@ -49,7 +51,19 @@ export const getPersistentState = (state: GameState) => {
             ...state.stats,
             statsBuffer: Array.from(state.stats.statsBuffer),
             effectDurations: Array.from(state.stats.effectDurations),
-            effectIntensities: Array.from(state.stats.effectIntensities)
+            effectMaxDurations: Array.from(state.stats.effectMaxDurations || []),
+            effectIntensities: Array.from(state.stats.effectIntensities),
+            weaponKills: Array.from(state.stats.weaponKills || []),
+            weaponDamageDealt: Array.from(state.stats.weaponDamageDealt || []),
+            weaponShotsFired: Array.from(state.stats.weaponShotsFired || []),
+            weaponShotsHit: Array.from(state.stats.weaponShotsHit || []),
+            weaponTimeActive: Array.from(state.stats.weaponTimeActive || []),
+            weaponEngagementDistSq: Array.from(state.stats.weaponEngagementDistSq || []),
+            perkTimesGained: Array.from(state.stats.perkTimesGained || []),
+            perkDamageAbsorbed: Array.from(state.stats.perkDamageAbsorbed || []),
+            perkDamageDealt: Array.from(state.stats.perkDamageDealt || []),
+            perkDebuffsCleansed: Array.from(state.stats.perkDebuffsCleansed || []),
+            enemyKills: Array.from(state.stats.enemyKills || [])
         },
         currentSector: state.currentSector,
         loadout: state.loadout,
@@ -61,7 +75,8 @@ export const getPersistentState = (state: GameState) => {
         settings: state.settings,
         weather: state.weather,
         environmentOverrides: state.environmentOverrides,
-        sectorState: state.sectorState
+        sectorState: state.sectorState,
+        sessionToken: state.sessionToken
     };
 };
 
@@ -81,8 +96,20 @@ export const loadGameState = (): GameState => {
                     ...DEFAULT_STATE.stats,
                     ...(loaded.stats || {}),
                     statsBuffer: PlayerStatsUtils.deserializeStats(loaded.stats?.statsBuffer || Array.from(INITIAL_STATS.statsBuffer)),
-                    effectDurations: new Float32Array(loaded.stats?.effectDurations || 14),
-                    effectIntensities: new Float32Array(loaded.stats?.effectIntensities || 14)
+                    effectDurations: new Float32Array(loaded.stats?.effectDurations || 32),
+                    effectMaxDurations: new Float32Array(loaded.stats?.effectMaxDurations || 32),
+                    effectIntensities: new Float32Array(loaded.stats?.effectIntensities || 32),
+                    weaponKills: new Float64Array(loaded.stats?.weaponKills || 20),
+                    weaponDamageDealt: new Float64Array(loaded.stats?.weaponDamageDealt || 20),
+                    weaponShotsFired: new Float64Array(loaded.stats?.weaponShotsFired || 20),
+                    weaponShotsHit: new Float64Array(loaded.stats?.weaponShotsHit || 20),
+                    weaponTimeActive: new Float64Array(loaded.stats?.weaponTimeActive || 20),
+                    weaponEngagementDistSq: new Float64Array(loaded.stats?.weaponEngagementDistSq || 20),
+                    perkTimesGained: new Float64Array(loaded.stats?.perkTimesGained || 32),
+                    perkDamageAbsorbed: new Float64Array(loaded.stats?.perkDamageAbsorbed || 32),
+                    perkDamageDealt: new Float64Array(loaded.stats?.perkDamageDealt || 32),
+                    perkDebuffsCleansed: new Float64Array(loaded.stats?.perkDebuffsCleansed || 32),
+                    enemyKills: new Float64Array(loaded.stats?.enemyKills || 8)
                 },
                 loadout: { ...DEFAULT_STATE.loadout, ...(loaded.loadout || {}) },
                 weaponLevels: { ...DEFAULT_STATE.weaponLevels, ...(loaded.weaponLevels || {}) },

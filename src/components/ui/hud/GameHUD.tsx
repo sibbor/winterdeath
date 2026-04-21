@@ -353,7 +353,7 @@ const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
     // We NEVER listen to current HP here. That is handled by the DOM ref.
     const bossActive = useHudStore(s => (s.boss?.active || false) && !s.bossDefeated);
     const bossName = useHudStore(s => s.boss?.active ? s.boss.name : '');
-    const waveActive = useHudStore(s => s.sectorStats?.zombieWaveActive || false);
+    const waveActive = useHudStore(s => s.sectorStats?.waveActive || false);
 
     const isWave = !bossActive && waveActive;
 

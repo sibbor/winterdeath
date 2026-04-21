@@ -3,6 +3,7 @@ import { WinterEngine } from '../core/engine/WinterEngine';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProceduralTextures, TREE_DEPTH_MATS } from '../utils/assets';
 import { TEXTURES } from '../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../utils/assets/materials_water';
+import { WeatherType } from '../core/engine/EngineTypes';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, LIGHT_SETTINGS, FLASHLIGHT } from '../content/constants';
 import { VEGETATION_TYPE } from '../content/environment';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
@@ -226,7 +227,7 @@ export const AssetPreloader = {
                 _dummyScene.add(new THREE.Points(GEOMETRY.box, MATERIALS.camp_star));
                 _dummyScene.add(new THREE.Sprite(MATERIALS.camp_moonHalo));
 
-                await CampWorld.build(_dummyScene, textures as any, 'snow', true);
+                await CampWorld.build(_dummyScene, textures as any, WeatherType.SNOW, true);
 
                 let lampsInScene = 0;
                 _dummyScene.traverse((obj) => { if (obj instanceof THREE.PointLight) lampsInScene++; });

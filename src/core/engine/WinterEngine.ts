@@ -743,12 +743,12 @@ export class WinterEngine {
         }
 
         // 4. Weather Sync
-        if (env.weather && this.weather) {
+        if (env.weather !== undefined && this.weather) {
             this.weather.reAttach(scene);
             const w = env.weather as EnvironmentalWeather;
-            const type = typeof w === 'string' ? w : w.type;
-            const count = typeof w === 'string' ? 2000 : w.particles;
-            this.weather.sync(type as WeatherType, count);
+            const type: WeatherType = (typeof w === 'number') ? w : w.type;
+            const count = (typeof w === 'number') ? 2000 : w.particles;
+            this.weather.sync(type, count);
         }
 
         // 5. Water Sync
@@ -819,7 +819,7 @@ export class WinterEngine {
         let targetFogDensity = defaultEnv.fog?.density ?? 0;
         let targetAmbient = defaultEnv.ambientIntensity;
         let targetGroundColor = defaultEnv.groundColor ?? 0xffffff;
-        let activeWeather: any = defaultEnv.weather?.type || 'none';
+        let activeWeather: WeatherType = defaultEnv.weather?.type ?? WeatherType.NONE;
         let maxWeight = 0;
 
         const px = playerPos.x;
@@ -889,9 +889,9 @@ export class WinterEngine {
 
             if (override.fov !== undefined) this.camera.set('fov', override.fov);
             if (override.weather !== undefined) {
-                const type = typeof override.weather === 'string' ? override.weather : override.weather.type;
-                const count = typeof override.weather === 'string' ? (override.weatherDensity ?? 1.0) * 2000 : override.weather.particles;
-                this.weather.sync(type as WeatherType, count);
+                const type: WeatherType = (typeof override.weather === 'number') ? override.weather : (override.weather as EnvironmentalWeather).type;
+                const count = (typeof override.weather === 'number') ? (override.weatherDensity ?? 1.0) * 2000 : (override.weather as EnvironmentalWeather).particles;
+                this.weather.sync(type, count);
             }
 
             const skyLight = this._cachedSkyLight;

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState, SectorStats } from './types/StateTypes';
 import { GameScreen } from './types/SessionTypes';
-import { PlayerStats } from './entities/player/PlayerTypes';
+import { PlayerStats, PlayerStatID } from './entities/player/PlayerTypes';
+import { WeatherType } from './core/engine/EngineTypes';
 import { SectorTrigger } from './systems/TriggerTypes';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';
 import { aggregateStats } from './game/progression/ProgressionManager';
@@ -258,12 +259,16 @@ const App: React.FC = () => {
         setActiveOverlay('COLLECTIBLE');
         setGameState(prev => {
             if (prev.stats.collectiblesDiscovered.includes(id)) return prev;
+            
+            const newStatsBuffer = new Float32Array(prev.stats.statsBuffer);
+            newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
+
             return {
                 ...prev,
                 stats: {
                     ...prev.stats,
                     collectiblesDiscovered: [...prev.stats.collectiblesDiscovered, id],
-                    skillPoints: prev.stats.skillPoints + 1,
+                    statsBuffer: newStatsBuffer,
                     totalSkillPointsEarned: prev.stats.totalSkillPointsEarned + 1
                 }
             };
@@ -322,12 +327,15 @@ const App: React.FC = () => {
         setGameState(prev => {
             if (prev.deadBossIndices.includes(prev.currentSector)) return prev;
 
+            const newStatsBuffer = new Float32Array(prev.stats.statsBuffer);
+            newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
+
             return {
                 ...prev,
                 deadBossIndices: [...prev.deadBossIndices, prev.currentSector],
                 stats: {
                     ...prev.stats,
-                    skillPoints: prev.stats.skillPoints + 1,
+                    statsBuffer: newStatsBuffer,
                     totalSkillPointsEarned: prev.stats.totalSkillPointsEarned + 1
                 }
             };
@@ -338,12 +346,15 @@ const App: React.FC = () => {
         setGameState(prev => {
             if (prev.rescuedFamilyIndices.includes(prev.currentSector)) return prev;
 
+            const newStatsBuffer = new Float32Array(prev.stats.statsBuffer);
+            newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
+
             return {
                 ...prev,
                 rescuedFamilyIndices: [...prev.rescuedFamilyIndices, prev.currentSector],
                 stats: {
                     ...prev.stats,
-                    skillPoints: prev.stats.skillPoints + 1,
+                    statsBuffer: newStatsBuffer,
                     totalSkillPointsEarned: prev.stats.totalSkillPointsEarned + 1
                 }
             };
@@ -582,7 +593,7 @@ const App: React.FC = () => {
                     stats: finalStats, 
                     screen: GameScreen.CAMP, 
                     currentSector: nextSector, 
-                    weather: 'snow',
+                    weather: WeatherType.SNOW,
                     sectorState: nextSector === 4 ? prev.sectorState : undefined // Clear if leaving playground
                 };
             });
@@ -600,7 +611,7 @@ const App: React.FC = () => {
             // But if it slips through, fallback to camp.
             if (nextSector > 3) {
                 AssetPreloader.releaseSectorAssets(latestStateRef.current.gameState.currentSector);
-                setGameState(prev => ({ ...prev, screen: GameScreen.CAMP, currentSector: 3, weather: 'snow' }));
+                setGameState(prev => ({ ...prev, screen: GameScreen.CAMP, currentSector: 3, weather: WeatherType.SNOW }));
                 return;
             }
 

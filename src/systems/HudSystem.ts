@@ -87,7 +87,7 @@ const createHudBuffer = () => ({
     distanceTraveled: 0,
     kills: 0,
 
-    sectorStats: { unlimitedAmmo: false, unlimitedThrowables: false, isInvincible: false, hordeTarget: 0, zombiesKilled: 0, zombiesKillTarget: 0, zombieWaveActive: false },
+    sectorStats: { unlimitedAmmo: false, unlimitedThrowables: false, isInvincible: false, waveActive: false, waveKills: 0, waveTarget: 0, currentWave: 0, totalWaves: 0 },
 
     isDriving: false,
     vehicleSpeed: 0,
@@ -182,9 +182,9 @@ export const HudSystem = {
 
         if (activeBossObj) {
             bossHpP = activeBossObj.hp / activeBossObj.maxHp;
-        } else if (state.sectorState && state.sectorState.hordeTarget > 0) {
-            const kills = state.sectorState.zombiesKilled || 0;
-            const target = state.sectorState.zombiesKillTarget || state.sectorState.hordeTarget;
+        } else if (state.sectorState && state.sectorState.waveActive) {
+            const kills = state.sectorState.waveKills || 0;
+            const target = state.sectorState.waveTarget || 0;
             bossHpP = (target > 0) ? kills / target : 0;
         }
 
@@ -266,12 +266,11 @@ export const HudSystem = {
             _current.boss.maxHp = activeBossObj.maxHp;
             _current.bossPos.x = activeBossObj.mesh.position.x;
             _current.bossPos.z = activeBossObj.mesh.position.z;
-        } else if (state.sectorState && state.sectorState.hordeTarget > 0 && state.sectorState.zombiesKilled < state.sectorState.zombiesKillTarget) {
+        } else if (state.sectorState && state.sectorState.waveActive && (state.sectorState.waveKills || 0) < (state.sectorState.waveTarget || 0)) {
             _current.boss.active = true;
             _current.boss.name = 'ui.zombie_wave';
-            _current.boss.hp = Math.max(0, state.sectorState.hordeTarget - state.sectorState.zombiesKilled);
-            _current.boss.maxHp = state.sectorState.hordeTarget;
-            _current.boss.active = true;
+            _current.boss.hp = Math.max(0, (state.sectorState.waveTarget || 0) - (state.sectorState.waveKills || 0));
+            _current.boss.maxHp = state.sectorState.waveTarget || 0;
         } else {
             _current.boss.active = false;
         }
@@ -365,16 +364,17 @@ export const HudSystem = {
             _current.sectorStats.unlimitedAmmo = !!state.sectorState.unlimitedAmmo;
             _current.sectorStats.unlimitedThrowables = !!state.sectorState.unlimitedThrowables;
             _current.sectorStats.isInvincible = !!state.sectorState.isInvincible;
-            _current.sectorStats.hordeTarget = state.sectorState.hordeTarget || 0;
-            _current.sectorStats.zombiesKilled = state.sectorState.zombiesKilled || 0;
-            _current.sectorStats.zombiesKillTarget = state.sectorState.zombiesKillTarget || 0;
+            _current.sectorStats.waveActive = !!state.sectorState.waveActive;
+            _current.sectorStats.waveKills = state.sectorState.waveKills || 0;
+            _current.sectorStats.waveTarget = state.sectorState.waveTarget || 0;
+            _current.sectorStats.currentWave = state.sectorState.currentWave || 0;
+            _current.sectorStats.totalWaves = state.sectorState.totalWaves || 0;
         }
 
         _current.isDriving = !!state.vehicle.active;
         _current.vehicleSpeed = state.vehicle.speed || 0;
         _current.throttleState = state.vehicleThrottle || 0;
         _current.spEarned = spGained;
-        _current.skillPoints = (props.stats?.statsBuffer?.[PlayerStatID.SKILL_POINTS] || 0) + state.statsBuffer[PlayerStatID.SKILL_POINTS];
 
         _current.isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
         _current.killerName = state.killerName;

@@ -48,10 +48,6 @@ export const IMPACT_MAP: Partial<Record<MATERIAL_TYPE, SoundID>> = {
     [MaterialType.FLESH]: SoundID.IMPACT_FLESH
 };
 
-// WeatherType
-// Used by the weather system (and sectors definition)
-export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'ember';
-
 /**
  * Standardized vegetation types for environment generation
  */

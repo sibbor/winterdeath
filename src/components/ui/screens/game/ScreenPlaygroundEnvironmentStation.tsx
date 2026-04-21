@@ -145,12 +145,18 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                 <div className="bg-zinc-900/40 p-6 border border-zinc-800 rounded-lg">
                     <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-4 block">{t('ui.weather')}</label>
                     <div className="flex gap-2 flex-wrap mb-6">
-                        {['none', 'rain', 'snow', 'ash', 'ember'].map((w) => (
+                        {[
+                            { id: WeatherType.NONE, key: 'none' },
+                            { id: WeatherType.RAIN, key: 'rain' },
+                            { id: WeatherType.SNOW, key: 'snow' },
+                            { id: WeatherType.ASH, key: 'ash' },
+                            { id: WeatherType.EMBER, key: 'ember' }
+                        ].map((w) => (
                             <TacticalTab
-                                key={w}
-                                label={t(`weather.${w}`)}
-                                isActive={currentWeather === w}
-                                onClick={() => { UiSounds.playClick(); onWeatherChange(w as WeatherType); }}
+                                key={w.id}
+                                label={t(`weather.${w.key}`)}
+                                isActive={currentWeather === w.id}
+                                onClick={() => { UiSounds.playClick(); onWeatherChange(w.id); }}
                             />
                         ))}
                     </div>

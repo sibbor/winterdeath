@@ -12,6 +12,7 @@ import { audioEngine } from '../../utils/audio/AudioEngine';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { InteractionType } from '../../systems/InteractionTypes';
 import { FamilyMemberID } from '../constants';
+import { WeatherType } from '../../core/engine/EngineTypes';
 
 // ─── Zero-GC Scratchpads ──────────────────────────────────────────────────────
 const _vS3a = new THREE.Vector3();
@@ -91,7 +92,7 @@ export const Sector3: SectorDef = {
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: {
-            type: 'ember',
+            type: WeatherType.EMBER,
             particles: 2000
         },
         wind: {
