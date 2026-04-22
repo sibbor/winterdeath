@@ -107,7 +107,14 @@ export const TriggerHandler = {
 
                     // --- ADVENTURE LOG DISCOVERY ---
                     if (trig.id && callbacks.onDiscovery) {
-                        const dType = trig.type === TriggerType.POI ? DiscoveryType.POI : DiscoveryType.CLUE;
+                        let dType: DiscoveryType;
+                        switch (trig.type) {
+                            case TriggerType.POI:         dType = DiscoveryType.POI;         break;
+                            case TriggerType.COLLECTIBLE: dType = DiscoveryType.COLLECTIBLE; break;
+                            case TriggerType.BOSS:        dType = DiscoveryType.BOSS;        break;
+                            case TriggerType.ENEMY:       dType = DiscoveryType.ENEMY;       break;
+                            default:                      dType = DiscoveryType.CLUE;        break;
+                        }
                         callbacks.onDiscovery(
                             DataResolver.getAdventureLogTab(dType),
                             trig.id,

@@ -83,7 +83,7 @@ export interface SetupContext {
         handleTriggerAction: (action: any, scene: THREE.Scene) => void;
         onSectorLoaded?: () => void;
         gainXp: (amount: number) => void;
-        onTrigger: (type: string, duration: number) => void;
+        onTrigger: (type: TriggerType, duration: number) => void;
         onBossKilled: (id: number) => void;
         onAction: (action: any) => void;
         collectedCluesRef: any;

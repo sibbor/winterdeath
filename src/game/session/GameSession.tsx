@@ -25,6 +25,7 @@ import { DataResolver } from '../../utils/ui/DataResolver';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { SystemID } from '../../systems/System';
+import { TriggerType } from '../../systems/TriggerTypes';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -909,10 +910,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     spawnDecal: (x, z, scale, material, type: FXDecalType = FXDecalType.DECAL) => {
                         FXSystem.spawnDecal(engine.scene, refs.stateRef.current.bloodDecals, x, z, scale, material, type);
                     },
-                    onTrigger: (type: string, duration: number) => {
+                    onTrigger: (type: TriggerType, duration: number) => {
                         const state = refs.stateRef.current;
                         const simTime = refs.engineRef.current?.simTime || 0;
-                        if (type === 'SPEAK') state.speakingUntil = simTime + duration;
+                        if (type === TriggerType.SPEAK) state.speakingUntil = simTime + duration;
                         else state.thinkingUntil = simTime + duration;
                     },
                     onAction: (action: any) => onAction(action),

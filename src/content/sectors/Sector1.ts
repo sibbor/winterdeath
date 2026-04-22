@@ -509,11 +509,14 @@ export const Sector1: SectorDef = {
                     // --- VINTERDÖD ACTION API ---
                     // NU, när dörren är stängd, skickar vi the globala händelserna!
                     if (events.onAction) {
-                        events.onAction([
+                        const _s1Actions = [
                             { type: 'FAMILY_MEMBER_FOUND', payload: { id: FamilyMemberID.JORDAN } },
                             { type: 'FAMILY_MEMBER_FOLLOW' },
                             { type: 'SPAWN_BOSS', payload: { pos: LOCATIONS.SPAWN.BOSS } }
-                        ]);
+                        ];
+                        for (let _i = 0; _i < _s1Actions.length; _i++) {
+                            events.onAction(_s1Actions[_i]);
+                        }
                     }
                 }
             }

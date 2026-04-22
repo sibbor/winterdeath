@@ -179,7 +179,8 @@ export const SectorBuilder = {
             addObstacle: NOOP, removeObstacle: NOOP,
             addInteractable: NOOP, removeInteractable: NOOP,
             addTrigger: NOOP, removeTrigger: NOOP,
-            updateObstacle: NOOP, clear: NOOP, update: NOOP,
+            updateObstacle: NOOP, updateInteractable: NOOP, clear: NOOP, update: NOOP,
+            updateEnemyGrid: NOOP, clearEnemies: NOOP, fillGroundMaterial: NOOP,
             getNearbyEnemies: NOOP_ARRAY, getNearbyObstacles: NOOP_ARRAY,
             getNearbyInteractables: NOOP_ARRAY, getNearbyTriggers: NOOP_ARRAY,
         };
