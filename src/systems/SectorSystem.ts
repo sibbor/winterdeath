@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { System } from './System';
+import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { SectorDef } from '../game/session/SectorTypes';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
@@ -23,7 +23,10 @@ export const SECTORS: Record<number, SectorDef> = {
 };
 
 export class SectorSystem implements System {
+    readonly systemId = SystemID.SECTOR;
     id = 'sector_system';
+    enabled = true;
+    persistent = true;
     private currentSector: SectorDef;
     private lastChimeTime = 0;
     private waterInitialized = false;

@@ -9,6 +9,8 @@ import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
 import { _buoyancyResult } from './WaterSystem';
 import { DamageID } from '../entities/player/CombatTypes';
 import { WeaponFX } from './WeaponFX';
+import { SystemID } from './System';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -66,13 +68,13 @@ const _continuousCtx: ContinuousContext = {
     noiseEvents: null,
     makeNoise: null,
     applyDamage: null,
-    onPlayerHit: null,            // <-- TILLAGD
-    weaponHandler: null           // <-- TILLAGD
+    onPlayerHit: null,
+    weaponHandler: null
 };
 
 // Extracted to prevent closure allocations per frame during throwing charge
 function _executeThrow(
-    session: any,
+    session: GameSessionLogic,
     scene: THREE.Scene,
     playerGroup: THREE.Group,
     state: any,
@@ -86,7 +88,7 @@ function _executeThrow(
     const isUnlimited = !!state.sectorState?.unlimitedThrowables;
     if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
 
-    const tracker = session.getSystem('damage_tracker_system') as any;
+    const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
     if (tracker) tracker.recordThrowable(session, state.activeWeapon);
 
     // VINTERDÖD FIX: Use the locked CHARGE rotation, not the current character rotation
@@ -125,7 +127,14 @@ function _executeThrow(
     if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 }
 
+
+
+
 export const WeaponHandler = {
+    systemId: SystemID.WEAPON_HANDLER,
+    id: 'weapon_handler',
+    enabled: true,
+    persistent: true,
 
     // Handle switching weapons via 1-4 keys
     handleSlotSwitch: (state: any, loadout: any, key: string) => {
@@ -248,7 +257,7 @@ export const WeaponHandler = {
     },
 
     // --- CORE FIRING LOGIC ---
-    handleFiring: (session: any, scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh: THREE.Mesh | null | undefined, delta: number, simTime: number, renderTime: number) => {
+    handleFiring: (session: GameSessionLogic, scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh: THREE.Mesh | null | undefined, delta: number, simTime: number, renderTime: number) => {
         if (state.vehicle.active || state.cinematicActive) return;
         if (state.isDodging || state.isReloading) return;
 
@@ -300,7 +309,7 @@ export const WeaponHandler = {
                             state.weaponAmmo[state.activeWeapon]--;
                             state.lastShotTime = simTime;
 
-                            const tracker = session.getSystem('damage_tracker_system') as any;
+                            const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                             if (tracker) tracker.recordShot(session, state.activeWeapon);
                         }
                     }
@@ -385,7 +394,7 @@ export const WeaponHandler = {
                     state.lastShotTime = simTime;
                     if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
 
-                    const tracker = session.getSystem('damage_tracker_system') as any;
+                    const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                     if (tracker) tracker.recordShot(session, state.activeWeapon);
 
                     // VINTERDÖD: O(1) Node Lookup (Phase 13)

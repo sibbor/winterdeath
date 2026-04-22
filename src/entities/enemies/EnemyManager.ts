@@ -19,6 +19,7 @@ import { FXSystem } from '../../systems/FXSystem';
 import { WaterSystem } from '../../systems/WaterSystem';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { SoundID } from '../../utils/audio/AudioTypes';
+import { System, SystemID } from '../../systems/System';
 
 export type { Enemy };
 
@@ -140,6 +141,10 @@ const _aiContext: AIContext = {
 };
 
 export const EnemyManager = {
+    systemId: SystemID.ENEMY_MANAGER,
+    id: 'enemy_manager',
+    enabled: true,
+    persistent: true,
 
     init: (scene: THREE.Scene) => {
         if (!zombieRenderer) zombieRenderer = new ZombieRenderer(scene);

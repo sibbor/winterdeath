@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Enemy, ENEMY_DETECTION, NoiseType, NOISE_RADIUS, AIState, EnemyFlags, EnemyType } from '../entities/enemies/EnemyTypes';
 import { SpatialGrid } from '../core/world/SpatialGrid';
-import { System } from './System';
+import { System, SystemID } from './System';
 
 export interface NoiseEvent {
     pos: THREE.Vector3;
@@ -11,7 +11,10 @@ export interface NoiseEvent {
 }
 
 export class EnemyDetectionSystem implements System {
+    readonly systemId = SystemID.ENEMY_DETECTION;
     id = 'enemy_detection_system';
+    enabled = true;
+    persistent = true;
     isFixedStep = true;
     private noiseEvents: NoiseEvent[] = [];
     private raycaster = new THREE.Raycaster();

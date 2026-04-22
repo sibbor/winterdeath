@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SystemID } from './System';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { StatusEffectType } from '../content/perks';
 import { InteractionType } from './InteractionTypes';
@@ -158,6 +159,10 @@ const _fastUpdateDetail = {
 };
 
 export const HudSystem = {
+    systemId: SystemID.HUD,
+    id: 'hud_system',
+    enabled: true,
+    persistent: true,
     emitFastUpdate: (state: any, input: any, now: number, props: any) => {
         const wep = DataResolver.getWeapons()[state.activeWeapon];
         const stats = state.statsBuffer;
@@ -385,7 +390,7 @@ export const HudSystem = {
         _current.hudVisible = state.hudVisible ?? _current.hudVisible;
         _current.sectorName = state.sectorName || '';
         _current.currentSector = props.currentSector || 0;
-        
+
         // --- ZERO-GC SECTOR-SPECIFIC DISCOVERY TALLYING ---
         let cCount = 0;
         if (state.discoverySets?.clues) {
@@ -456,7 +461,7 @@ export const HudSystem = {
         if (state.discovery.active) {
             _current.discovery.active = true;
             _current.discovery.id = state.discovery.id;
-            
+
             _current.discovery.type = state.discovery.type;
             _current.discovery.title = state.discovery.title;
             _current.discovery.details = state.discovery.details;

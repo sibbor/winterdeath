@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { System } from './System';
+import { System, SystemID } from './System';
 import { LIGHT_SYSTEM, LIGHT_SETTINGS } from '../content/constants';
 
 export interface LogicalLight {
@@ -26,10 +26,11 @@ export interface LogicalLight {
 const _tempLights: LogicalLight[] = [];
 
 export class LightSystem implements System {
+    readonly systemId = SystemID.LIGHT;
     public id: string = 'light_system';
     public enabled: boolean = true;
     public persistent: boolean = true;
-    
+
     private scene: THREE.Scene;
     private proxyPool: THREE.PointLight[] = [];
     private maxProxies: number;
@@ -136,12 +137,12 @@ export class LightSystem implements System {
                     const speed = logicLight.flickerSpeed;
                     const spread = logicLight.flickerSpread || 0;
                     const rate = logicLight.flickerRate || 1;
-                    
+
                     // Simple pulse + optional noise jump
                     currentIntensity += Math.sin(renderTime * speed) * spread;
-                    
+
                     if (Math.random() < rate) {
-                         currentIntensity += (Math.random() - 0.5) * spread * 0.5;
+                        currentIntensity += (Math.random() - 0.5) * spread * 0.5;
                     }
                 }
 

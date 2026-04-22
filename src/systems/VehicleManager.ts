@@ -9,6 +9,7 @@ import { FLASHLIGHT } from '../content/constants';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
 import { VehicleState, VehicleNodes, VehicleTypes, VehicleCategory } from '../entities/vehicles/VehicleTypes';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
+import { SystemID } from './SystemID';
 
 const HIT_COOLDOWN_MS = 350;
 const SPEED_SQ_PUSH = 1.0;
@@ -28,8 +29,10 @@ const _vehicleKnockbackCtx: any = {
 };
 
 export const VehicleManager = {
+    systemId: SystemID.VEHICLE_MANAGER,
+    id: 'vehicle_manager',
 
-    update: (session: GameSessionLogic, playerGroup: THREE.Group, delta: number, simTime: number, renderTime: number) => {
+    tick: (session: GameSessionLogic, playerGroup: THREE.Group, delta: number, simTime: number, renderTime: number) => {
         const state = session.state;
         const input = session.engine.input.state;
 

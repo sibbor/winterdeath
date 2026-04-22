@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { System } from './System';
+import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
 import { FXParticleType } from '../types/FXTypes';
@@ -36,7 +36,10 @@ const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
 
 export class PlayerMovementSystem implements System {
+    readonly systemId = SystemID.PLAYER_MOVEMENT;
     id = 'player_movement';
+    enabled = true;
+    persistent = true;
     isFixedStep = true;
 
     // Zero-GC context bridge for EnemyManager physics 
@@ -62,7 +65,7 @@ export class PlayerMovementSystem implements System {
     }
 
     init(session: GameSessionLogic) {
-        this._statsSystem = session.getSystem('player_stats_system') as PlayerStatsSystem;
+        this._statsSystem = session.getSystem<PlayerStatsSystem>(SystemID.PLAYER_STATS);
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {

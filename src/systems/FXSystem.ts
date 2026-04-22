@@ -3,6 +3,7 @@ import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { MaterialType } from '../content/environment';
 import { FXParticleType, FXDecalType, ParticleState, FXSpawnRequest } from '../types/FXTypes';
+import { SystemID } from './SystemID';
 
 type FXMaterial = THREE.Material & {
     opacity?: number;
@@ -169,6 +170,8 @@ for (let i = 0; i < 10000; i++) {
 }
 
 export const FXSystem = {
+    systemId: SystemID.FX,
+    id: 'fx_system',
 
     essentialQueue: [] as FXSpawnRequest[],
     ambientQueue: [] as FXSpawnRequest[],
@@ -488,7 +491,7 @@ export const FXSystem = {
         }
     },
 
-    update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], callbacks: any, delta: number, simTime: number, renderTime: number, state: any) => {
+    updateFX: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], callbacks: any, delta: number, simTime: number, renderTime: number, state: any) => {
         const globalTimeScale = state?.globalTimeScale || 1.0;
         const scaledDelta = delta * globalTimeScale;
         const safeDelta = scaledDelta > 0.1 ? 0.1 : scaledDelta;

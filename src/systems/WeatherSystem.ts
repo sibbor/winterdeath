@@ -3,13 +3,14 @@ import { WindSystem } from './WindSystem';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { WeatherType } from '../core/engine/EngineTypes';
 import { WEATHER_SYSTEM } from '../content/constants';
-import { System } from './System';
+import { System, SystemID } from './System';
 
 /**
  * WeatherSystem
  * Handles millions of particles with zero GC and high-performance buffer manipulation.
  */
 export class WeatherSystem implements System {
+    readonly systemId = SystemID.WEATHER;
     public id = 'weather';
     public enabled = true;
     public persistent = true;

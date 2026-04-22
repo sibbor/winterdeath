@@ -4,9 +4,13 @@ import { RuntimeState } from '../core/RuntimeState';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { DataResolver } from '../utils/ui/DataResolver';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
-import { WeaponStats } from '../content/weapons';
+import { SystemID } from './SystemID';
 
 export const TriggerHandler = {
+    systemId: SystemID.TRIGGER_HANDLER,
+    id: 'trigger_handler',
+    enabled: true,
+    persistent: true,
     /**
      * Checks all sector triggers against player position.
      * Optimized for 60fps execution with minimal memory pressure.

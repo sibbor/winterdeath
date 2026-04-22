@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { FXSystem } from './FXSystem';
-import { WinterEngine } from '../core/engine/WinterEngine';
 import { MATERIALS } from '../utils/assets';
 import { LogicalLight } from './LightSystem';
 import { FXParticleType, FXDecalType } from '../types/FXTypes';
@@ -86,7 +85,6 @@ const initPools = (scene: THREE.Scene) => {
 };
 
 export const WeaponFX = {
-
     updateFX: (delta: number, ctx?: any) => {
         if (!_poolsInitialized) return;
 

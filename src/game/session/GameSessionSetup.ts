@@ -8,6 +8,7 @@ import { NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
+import { SystemID } from '../../systems/System';
 import { FXSystem } from '../../systems/FXSystem';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
@@ -37,6 +38,8 @@ import { DeathSystem } from '../../systems/DeathSystem';
 import { HudStore } from '../../store/HudStore';
 import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
+import { TriggerHandler } from '../../systems/TriggerHandler';
+import { HudSystem } from '../../systems/HudSystem';
 import { RuntimeState } from '../../core/RuntimeState';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { DataResolver } from '../../utils/ui/DataResolver';
@@ -217,11 +220,13 @@ export class GameSessionSetup {
         const engineSystems = engine.getSystems();
         for (let i = engineSystems.length - 1; i >= 0; i--) {
             const sys = engineSystems[i];
-            if (!sys.persistent &&
-                sys.id !== 'light_system' && sys.id !== 'wind' &&
-                sys.id !== 'weather' && sys.id !== 'fog' &&
-                sys.id !== 'water') {
-                engine.unregisterSystem(sys.id);
+            if (sys && !sys.persistent &&
+                sys.systemId !== SystemID.LIGHT &&
+                sys.systemId !== SystemID.WIND &&
+                sys.systemId !== SystemID.WEATHER &&
+                sys.systemId !== SystemID.FOG &&
+                sys.systemId !== SystemID.WATER) {
+                engine.unregisterSystem(sys.systemId);
             }
         }
 
@@ -261,7 +266,7 @@ export class GameSessionSetup {
         // Cache Equipment Nodes for O(1) access
         state.nodes.gun = bodyMesh.getObjectByName('gun') || null;
         state.nodes.laserSight = bodyMesh.getObjectByName('laserSight') as THREE.Mesh || null;
-        
+
         // Find or create barrel tip (Combat optimization)
         if (state.nodes.gun) {
             state.nodes.barrelTip = state.nodes.gun.getObjectByName('barrelTip') || null;
@@ -400,15 +405,15 @@ export class GameSessionSetup {
             },
             explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, sectorCtx, force),
             gainXp: (amount: number) => {
-                const tracker = session.getSystem('damage_tracker_system') as any;
+                const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                 if (tracker) tracker.recordXp(session, amount);
             },
             gainSp: (amount: number) => {
-                const tracker = session.getSystem('damage_tracker_system') as any;
+                const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                 if (tracker) tracker.recordSp(session, amount);
             },
             onPlayerHit: (damage: number, attacker: any, type: string, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
-                const statsSystem = session.getSystem('player_stats_system') as any;
+                const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
                 if (statsSystem) {
                     statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName);
                 }
@@ -454,7 +459,7 @@ export class GameSessionSetup {
                 // First time discovery awards SP (Plan overhaul)
                 if (!alreadyFound) {
                     // Update session stats (for end-of-sector report)
-                    const tracker = session.getSystem('damage_tracker_system') as any;
+                    const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                     if (tracker) tracker.recordSp(session, 1);
 
                     // Update live DOD buffer (for HUD)
@@ -483,7 +488,7 @@ export class GameSessionSetup {
                     state.bossesDefeated.push(id);
                     state.bossDefeatedTime = engine.simTime;
 
-                    const tracker = session.getSystem('damage_tracker_system') as any;
+                    const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                     if (tracker) {
                         tracker.recordKill(session, idStr, true);
                         tracker.recordSp(session, 2); // Boss Kill = +2 SP
@@ -616,6 +621,11 @@ export class GameSessionSetup {
         session.addSystem(detectionSys);
         session.detectionSystem = detectionSys;
 
+        // Register passive global managers in the system registry
+        engine.registerSystem(SystemID.TRIGGER_HANDLER, TriggerHandler);
+        engine.registerSystem(SystemID.ENEMY_MANAGER, EnemyManager);
+        engine.registerSystem(SystemID.HUD, HudSystem);
+
         session.addSystem(new PlayerMovementSystem(playerGroup));
         session.addSystem(new VehicleMovementSystem(playerGroup));
         session.addSystem(new PlayerCombatSystem(playerGroup));
@@ -627,7 +637,7 @@ export class GameSessionSetup {
         const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
         session.addSystem(playerStatsSystem);
 
-        session.perksFx = new PerkFX(playerGroup);
+        PerkFX.init(playerGroup);
 
         session.addSystem(new EnemySystem(playerGroup, {
             spawnBubble: callbacks.spawnBubble,
@@ -646,7 +656,7 @@ export class GameSessionSetup {
                 // Immediate SP/State updates via App.tsx props
                 if (props.onBossKilled) props.onBossKilled(id);
 
-                const tracker = session.getSystem('damage_tracker_system') as any;
+                const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                 if (tracker) tracker.recordKill(session, String(id), true);
 
                 const currentFM = refs.familyMemberRef.current;
@@ -878,7 +888,7 @@ export class GameSessionSetup {
         }
 
         // --- 3. PASSIVES, BUFFS & DEBUFFS ---
-        const statsSystem = engine.getSystem('player_stats_system') as any;
+        const statsSystem = engine.getSystem<any>(SystemID.PLAYER_STATS);
         if (statsSystem && statsSystem.updatePassives) {
             statsSystem.updatePassives(session);
         }

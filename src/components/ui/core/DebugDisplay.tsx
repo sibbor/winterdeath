@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PerformanceMonitor } from '../../../systems/PerformanceMonitor';
 import { WinterEngine } from '../../../core/engine/WinterEngine';
 import { HudStore } from '../../../store/HudStore';
+import { SystemID } from '../../../systems/SystemID';
 
 interface DebugDisplayProps {
     debugMode: boolean;
@@ -185,10 +186,10 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                             {systemsExpanded && (
                                 <div className="space-y-0.5">
                                     {systems.map(sys => {
-                                        const timing = timings.breakdown[sys.id];
+                                        const timing = timings.breakdown[sys.systemId];
                                         return (
-                                            <div key={sys.id} onClick={(e) => { e.stopPropagation(); engine?.setSystemEnabled(sys.id, !sys.enabled); forceUpdate(); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'}`}>
-                                                <span className="truncate mr-2">{sys.id}</span>
+                                            <div key={sys.systemId} onClick={(e) => { e.stopPropagation(); engine?.setSystemEnabled(sys.systemId as SystemID, !sys.enabled); forceUpdate(); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'}`}>
+                                                <span className="truncate mr-2">{SystemID[sys.systemId] || `SYS_${sys.systemId}`}</span>
                                                 <span className="text-white/40">{timing !== undefined ? `${timing}ms` : '–'}</span>
                                             </div>
                                         );

@@ -47,7 +47,11 @@ export const logStateChange = (simTime: number, e: Enemy, newState: AIState, rea
     console.log(`[EnemyAI] ${typeName} ${e.id} changed state: ${AIState[e.state]} -> ${AIState[newState]} ${reason ? `(${reason})` : ''}`);
 };
 
+import { SystemID } from '../../systems/SystemID';
+
 export const EnemyAI = {
+    systemId: SystemID.ENEMY_AI,
+    id: 'enemy_ai',
 
     updateEnemy: (
         e: Enemy,

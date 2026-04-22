@@ -1,9 +1,13 @@
+import { SystemID } from './SystemID';
+export { SystemID };
+
 /**
  * Base interface for all game systems.
  * Systems are updated every frame within the main engine loop.
  */
 export interface System {
-    id: string;
+    readonly systemId: SystemID;
+    id: string; // Keep for legacy/debug purposes
 
     /**
      * When false, the system's update() is skipped entirely. Defaults to true.
@@ -32,7 +36,7 @@ export interface System {
          * @param delta Time since the last frame in seconds (clamped).
          * @param time The engine-provided active timestamp in milliseconds (simTime or renderTime depending on system type).
          */
-    update(context: any, delta: number, simTime: number, renderTime: number): void;
+    update?(context: any, delta: number, simTime: number, renderTime: number): void;
 
     /**
      * Optional cleanup called when the system is removed or scene ends.

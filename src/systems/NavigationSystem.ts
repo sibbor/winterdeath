@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SystemID } from './SystemID';
 import { SectorContext } from '../game/session/SectorTypes';
 import { Obstacle } from '../core/world/CollisionResolution';
 
@@ -26,7 +27,7 @@ let queueTail = 0;
 
 // Update frequency management
 let lastUpdateSimTime = 0;
-const UPDATE_INTERVAL = 150; 
+const UPDATE_INTERVAL = 150;
 
 /**
  * Maps world coordinates to 1D grid index.
@@ -39,6 +40,8 @@ const getIndex = (worldX: number, worldZ: number): number => {
 };
 
 export const NavigationSystem = {
+    systemId: SystemID.NAVIGATION,
+    id: 'navigation',
 
     /**
      * Initializes the walkability grid. Scans obstacles and marks cells as impassable.
@@ -46,14 +49,14 @@ export const NavigationSystem = {
     init: (ctx: SectorContext) => {
         costMap.fill(0);
         const grid = ctx.collisionGrid;
-        
+
         for (let iz = -GRID_HALF; iz < GRID_HALF; iz++) {
             for (let ix = -GRID_HALF; ix < GRID_HALF; ix++) {
                 const idx = (iz + GRID_HALF) * GRID_SIZE + (ix + GRID_HALF);
-                
+
                 // Center-aligned cell query
                 const obstacles = grid.getNearbyObstacles({ x: ix + 0.5, y: 1, z: iz + 0.5 } as any, 1.5);
-                
+
                 for (let i = 0; i < obstacles.length; i++) {
                     if (isCellBlocked(ix + 0.5, iz + 0.5, obstacles[i])) {
                         costMap[idx] = 255;
@@ -68,18 +71,18 @@ export const NavigationSystem = {
      * Re-calculates the FlowField Wavefront centered on the player.
      * Logic is fully inlined to maximize 120 FPS performance stability.
      */
-    update: (playerPos: THREE.Vector3, simTime: number) => {
+    tick: (playerPos: THREE.Vector3, simTime: number) => {
         if (simTime < lastUpdateSimTime + UPDATE_INTERVAL) return;
         lastUpdateSimTime = simTime;
 
-        integrationMap.fill(65535); 
+        integrationMap.fill(65535);
 
         const playerIndex = getIndex(playerPos.x, playerPos.z);
         if (playerIndex === -1) return;
 
         queueHead = 0;
         queueTail = 0;
-        
+
         integrationMap[playerIndex] = 0;
         bfsQueue[queueTail++] = playerIndex;
 
@@ -135,7 +138,7 @@ export const NavigationSystem = {
 
             const x = i % GRID_SIZE;
             const z = Math.floor(i / GRID_SIZE);
-            
+
             let minVal = integrationMap[i];
             let targetX = 0;
             let targetZ = 0;
@@ -143,11 +146,11 @@ export const NavigationSystem = {
             for (let dz = -1; dz <= 1; dz++) {
                 for (let dx = -1; dx <= 1; dx++) {
                     if (dx === 0 && dz === 0) continue;
-                    
+
                     const nx = x + dx;
                     const nz = z + dz;
                     if (nx < 0 || nx >= GRID_SIZE || nz < 0 || nz >= GRID_SIZE) continue;
-                    
+
                     const nVal = integrationMap[nz * GRID_SIZE + nx];
                     if (nVal < minVal) {
                         minVal = nVal;
@@ -201,5 +204,5 @@ function isCellBlocked(wx: number, wz: number, obs: Obstacle): boolean {
         return Math.abs(dx) < hx && Math.abs(dz) < hz;
     }
 
-    return true; 
+    return true;
 }

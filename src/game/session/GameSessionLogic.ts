@@ -6,7 +6,7 @@ import { Enemy, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { SectorTrigger } from '../../systems/TriggerTypes';
 import { RuntimeState } from '../../core/RuntimeState';
-import { System } from '../../systems/System';
+import { System, SystemID } from '../../systems/System';
 import { PlayerDeathState, DamageID } from '../../entities/player/CombatTypes';
 import { KMH_TO_MS } from '../../content/constants';
 import { WEAPONS, ZOMBIE_TYPES, PLAYER_BASE_SPEED } from '../../content/constants';
@@ -25,7 +25,7 @@ export class GameSessionLogic {
     public debugMode: boolean = false;
     public cameraAngle: number = 0;
     public mapId: number = 0;
-    public perksFx: PerkFX | null = null;
+
 
     public engine: WinterEngine;
     public state!: RuntimeState;
@@ -399,12 +399,17 @@ export class GameSessionLogic {
             const result = originalApplyDamage(enemy, amount, type, isHighImpact);
 
             if (result && enemy.hp <= 0) {
-                const statsSys = this.getSystem('player_stats_system') as any;
+                const statsSys = this.getSystem<any>(SystemID.PLAYER_STATS);
                 if (statsSys) statsSys.onEnemyKilled(this, enemy, this.engine.simTime);
             }
 
             return result;
         };
+
+        // Register passive core utilities from the state
+        if (this.state.collisionGrid) {
+            this.engine.registerSystem(SystemID.SPATIAL_GRID, this.state.collisionGrid);
+        }
     }
 
     update(dt: number, mapId: number = 0) {
@@ -414,10 +419,6 @@ export class GameSessionLogic {
         // --- TRACK PERSISTENT GAME TIME (Zero-GC) ---
         this.state.statsBuffer[PlayerStatID.TOTAL_GAME_TIME] += dt;
         this.state.sessionStats.timePlayed += dt;
-
-        if (this.perksFx) {
-            this.perksFx.update(this, dt, this.state.simTime, this.state.renderTime);
-        }
     }
 
     /**
@@ -445,26 +446,26 @@ export class GameSessionLogic {
 
     addSystem(system: System) {
         if (system.enabled === undefined) system.enabled = true;
-        this.engine.registerSystem(system);
+        this.engine.registerSystem(system.systemId, system);
         if (system.init) system.init(this);
     }
 
     /** Toggle a system on/off by id. Use in debug panel or console. */
-    setSystemEnabled(id: string, enabled: boolean) {
+    setSystemEnabled(id: SystemID, enabled: boolean) {
         this.engine.setSystemEnabled(id, enabled);
     }
 
     /** Returns a snapshot of all registered systems for the debug panel. */
-    getSystems(): System[] {
+    getSystems(): { systemId: SystemID; enabled: boolean; persistent: boolean }[] {
         return this.engine.getSystems();
     }
 
     /** Find a system by its ID. */
-    getSystem(id: string): System | undefined {
-        return this.engine.getSystem(id) || undefined;
+    getSystem<T extends System>(id: SystemID): T | undefined {
+        return (this.engine.getSystem(id) as T) || undefined;
     }
 
-    removeSystem(id: string) {
+    removeSystem(id: SystemID) {
         this.engine.unregisterSystem(id);
     }
 

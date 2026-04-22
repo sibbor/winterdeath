@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SystemID } from './System';
 import { Enemy } from '../entities/enemies/EnemyManager';
 import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
@@ -8,7 +9,7 @@ import { haptic } from '../utils/HapticManager';
 import { WEAPONS } from '../content/weapons';
 import { DamageID } from '../entities/player/CombatTypes';
 import { StatusEffectType } from '../content/perks';
-import { Obstacle, PhysicsGroup } from '../core/world/CollisionResolution';
+import { PhysicsGroup } from '../core/world/CollisionResolution';
 import { SpatialGrid } from '../core/world/SpatialGrid';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { _buoyancyResult } from '../systems/WaterSystem';
@@ -16,7 +17,7 @@ import { NoiseType, NOISE_RADIUS, EnemyFlags, EnemyType } from '../entities/enem
 import { WeaponFX } from './WeaponFX';
 import { MaterialType } from '../content/environment';
 import { MASSIVE_DAMAGE_THRESHOLD } from '../content/constants';
-import { FXParticleType, FXDecalType } from '../types/FXTypes';
+import { FXParticleType } from '../types/FXTypes';
 
 // --- INTERFACES ---
 
@@ -125,6 +126,11 @@ const FIREZONE_POOL: FireZone[] = [];
 
 // --- SYSTEM ---
 export const ProjectileSystem = {
+    systemId: SystemID.PROJECTILE,
+    id: 'projectile_system',
+    enabled: true,
+    persistent: true,
+
     _getProjectile: (): Projectile => {
         const pLen = PROJECTILE_POOL.length;
         for (let i = 0; i < pLen; i++) {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { System } from '../../systems/System';
+import { System, SystemID } from '../../systems/System';
 import { CampWorld } from './CampWorld';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { UiSounds } from '../../utils/audio/AudioLib';
@@ -11,6 +11,7 @@ import { SoundID } from '../../utils/audio/AudioTypes';
  * Wraps CampWorld effects (Fire, Smoke, Stars, Wind)
  */
 export class CampEffectsSystem implements System {
+    readonly systemId = SystemID.CAMP_EFFECT_MANAGER;
     id = 'camp_effects';
     enabled = true;
 
@@ -26,6 +27,7 @@ export class CampEffectsSystem implements System {
  * Handles Family Member animations and highlights
  */
 export class FamilyAnimationSystem implements System {
+    readonly systemId = SystemID.FAMILY_ANIMATION;
     id = 'family_anim';
     enabled = true;
 
@@ -76,6 +78,7 @@ export class FamilyAnimationSystem implements System {
  * Handles automatic chatter and ambient wildlife sounds
  */
 export class CampChatterSystem implements System {
+    readonly systemId = SystemID.CAMP_CHATTER;
     id = 'camp_chatter';
     enabled = true;
 
@@ -96,7 +99,7 @@ export class CampChatterSystem implements System {
             for (let i = 0; i < numSpeakers; i++) {
                 const speaker = activeMembers[Math.floor(Math.random() * activeMembers.length)];
                 if (!speaker || !speaker.mesh) continue;
-                
+
                 const speakerId = speaker.mesh.userData.id;
                 const lines = DataResolver.getChatterLines(speakerId);
                 const text = lines[Math.floor(Math.random() * lines.length)];

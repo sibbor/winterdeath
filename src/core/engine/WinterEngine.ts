@@ -9,8 +9,9 @@ import { WeatherSystem } from '../../systems/WeatherSystem';
 import { FogSystem } from '../../systems/FogSystem';
 import { WaterSystem } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
+import { AssetPreloader } from '../../systems/AssetPreloader';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
-import { System } from '../../systems/System';
+import { System, SystemID } from '../../systems/System';
 import { SectorEnvironment, EnvironmentOverride, EnvironmentalZone, EnvironmentalWeather, WeatherType } from '../../core/engine/EngineTypes';
 
 // Module-level scratchpads for Zero-GC operations
@@ -103,20 +104,20 @@ export class WinterEngine {
     private sharedMatSet: Set<any> | null = null;
 
     // --- HYBRID SYSTEM REGISTRY (Zero-GC) ---
-    private _systemsMap: Map<string, System> = new Map();
-    private _systemArray: System[] = [];
+    private _systems: (System | any)[] = new Array(SystemID.COUNT).fill(null);
+    private _tickableSystems: System[] = []; // Sub-list of systems that implement update()
 
     // VINTERDÖD FIX: Fast lookup for environment systems that must run during cinematics
-    private _envSystemIds: Set<string> = new Set([
-        'wind',
-        'weather',
-        'fog',
-        'water',
-        'light_system',
-        'cinematic',
-        'camp_effects',
-        'family_anim',
-        'camp_chatter'
+    private _envSystemIds: Set<SystemID> = new Set([
+        SystemID.WIND,
+        SystemID.WEATHER,
+        SystemID.FOG,
+        SystemID.WATER,
+        SystemID.LIGHT,
+        SystemID.CINEMATIC,
+        SystemID.CAMP_EFFECT_MANAGER,
+        SystemID.FAMILY,
+        SystemID.CAMP_CHATTER
     ]);
 
     // --- CACHED SCENE REFERENCES ---
@@ -148,11 +149,19 @@ export class WinterEngine {
 
         (window as any).WinterEngineInstance = this;
 
-        this.registerSystem(this.light);
-        this.registerSystem(this.wind);
-        this.registerSystem(this.weather);
-        this.registerSystem(this.fog);
-        this.registerSystem(this.water);
+        this.registerSystem(SystemID.CAMERA, this.camera);
+        this.registerSystem(SystemID.INPUT, this.input);
+        this.registerSystem(SystemID.LIGHT, this.light);
+        this.registerSystem(SystemID.WIND, this.wind);
+        this.registerSystem(SystemID.WEATHER, this.weather);
+        this.registerSystem(SystemID.FOG, this.fog);
+        this.registerSystem(SystemID.WATER, this.water);
+        
+        // Register the singleton monitor as a passive system
+        this.registerSystem(SystemID.PERFORMANCE_MONITOR, PerformanceMonitor.getInstance());
+        
+        // Register the asset preloader as a passive system
+        this.registerSystem(SystemID.ASSET_PRELOADER, AssetPreloader);
 
         window.addEventListener('resize', this.handleResize);
     }
@@ -416,7 +425,7 @@ export class WinterEngine {
     }
 
     public syncSystemsToScene(targetScene?: THREE.Scene) {
-        const systems = this._systemArray;
+        const systems = this._tickableSystems;
         const len = systems.length;
         const scene = targetScene || this.scene;
 
@@ -574,33 +583,66 @@ export class WinterEngine {
         return { ...this.settings };
     }
 
-    public registerSystem(system: System) {
-        if (!this._systemsMap.has(system.id)) {
-            this._systemsMap.set(system.id, system);
-            this._systemArray.push(system);
+    public registerSystem(id: SystemID, sys: any) {
+        if (!sys) return;
+
+        // --- VINTERDÖD: STRICT MISMATCH VALIDATION ---
+        if (sys.systemId !== undefined && sys.systemId !== id) {
+            const errorMsg = `[WinterEngine] Kritiskt fel: System ID mismatch! Försöker registrera ${sys.id || 'okänt system'} (ID: ${sys.systemId}) som ID ${id}. Detta förhindrar cross-wiring buggar.`;
+            console.error(errorMsg);
+            // In development, we want this to be loud.
+            if (process.env.NODE_ENV === 'development') {
+                throw new Error(errorMsg);
+            }
+        }
+
+        if (!this._systems[id]) {
+            this._systems[id] = sys;
+
+            // ARCHITECTURAL CORRECTION: Dense Tickable list 
+            // We only add to the hot-loop array if the system actually has an update() method.
+            // This maintains O(1) lookup in the registry while preserving Zero-GC performance.
+            if (typeof sys.update === 'function') {
+                this._tickableSystems.push(sys);
+            }
         }
     }
 
-    public unregisterSystem(id: string) {
-        const sys = this._systemsMap.get(id);
+    public unregisterSystem(id: SystemID) {
+        const sys = this._systems[id];
         if (sys) {
-            this._systemsMap.delete(id);
-            const idx = this._systemArray.indexOf(sys);
+            this._systems[id] = null;
+            const idx = this._tickableSystems.indexOf(sys);
             if (idx !== -1) {
-                // Swap-and-Pop: Efficient removal without shifting (Zero-GC)
-                this._systemArray[idx] = this._systemArray[this._systemArray.length - 1];
-                this._systemArray.pop();
+                this._tickableSystems[idx] = this._tickableSystems[this._tickableSystems.length - 1];
+                this._tickableSystems.pop();
             }
             if (sys.clear) sys.clear();
         }
     }
 
-    public getSystem<T extends System>(id: string): T | null {
-        return (this._systemsMap.get(id) as T) || null;
+    public getSystem<T>(id: SystemID): T {
+        return this._systems[id] as T;
     }
 
-    public getSystems(): System[] {
-        return this._systemArray;
+    public getSystems() {
+        const result: { systemId: SystemID; enabled: boolean; persistent: boolean }[] = [];
+        for (let i = 0; i < SystemID.COUNT; i++) {
+            const sys = this._systems[i];
+            if (sys) {
+                result.push({ systemId: sys.systemId, enabled: sys.enabled, persistent: sys.persistent });
+            }
+        }
+        return result;
+    }
+
+    public clearSystems() {
+        for (let i = 0; i < SystemID.COUNT; i++) {
+            const sys = this._systems[i];
+            if (sys && !sys.persistent) {
+                this.unregisterSystem(i as SystemID);
+            }
+        }
     }
 
     /**
@@ -620,14 +662,14 @@ export class WinterEngine {
      */
     private updateSystems(context: any, delta: number, fixedOnly?: boolean): void {
         const monitor = PerformanceMonitor.getInstance();
-        const systems = this._systemArray;
+        const systems = this._tickableSystems;
         const len = systems.length;
 
         for (let i = 0; i < len; i++) {
             const sys = systems[i];
             if (sys.enabled === false) continue;
 
-            const id = sys.id;
+            const systemId = sys.systemId;
 
             // --- VINTERDÖD: FIXED-STEP & CLOCK GATING ---
             const isFixed = sys.isFixedStep || false;
@@ -637,17 +679,20 @@ export class WinterEngine {
 
             // Miljösystem (vind, vatten, etc.) körs alltid med renderTime.
             // Logiksystem (fiender, spelare) pausas om isSimulationPaused är true.
-            const isEnvSystem = this._envSystemIds.has(id);
+            const isEnvSystem = this._envSystemIds.has(systemId);
             if (!isEnvSystem && this.isSimulationPaused) continue;
 
-            monitor.begin(id);
-            sys.update(context, delta, this.simTime, this.renderTime);
-            monitor.end(id);
+            monitor.begin(sys.id);
+            // Architectural Correctness: Only call update if it exists
+            if (sys.update) {
+                sys.update(context, delta, this.simTime, this.renderTime);
+            }
+            monitor.end(sys.id);
         }
     }
 
-    public setSystemEnabled(id: string, enabled: boolean) {
-        const sys = this._systemsMap.get(id);
+    public setSystemEnabled(id: SystemID, enabled: boolean) {
+        const sys = this._systems[id];
         if (sys) {
             sys.enabled = enabled;
         }
@@ -938,27 +983,4 @@ export class WinterEngine {
         }
     }
 
-    /**
-     * Clears all non-persistent systems and calls their cleanup functions.
-     * Uses in-place array filtering (O(N), Zero-GC) to prevent array shifting.
-     */
-    public clearSystems() {
-        let keepCount = 0;
-
-        for (let i = 0; i < this._systemArray.length; i++) {
-            const sys = this._systemArray[i];
-
-            if (sys.persistent) {
-                // Keep persistent systems in place
-                this._systemArray[keepCount++] = sys;
-            } else {
-                // Cleanup removed system
-                if (sys.clear) sys.clear();
-                this._systemsMap.delete(sys.id);
-            }
-        }
-
-        // Truncate the array to the new length (Zero-GC removal)
-        this._systemArray.length = keepCount;
-    }
 }

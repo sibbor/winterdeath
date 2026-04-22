@@ -1,12 +1,12 @@
 import React from 'react';
 import * as THREE from 'three';
-import { System } from './System';
 import { CameraSystem } from './CameraSystem';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { VoiceSounds } from '../utils/audio/AudioLib';
 import { STORY_SCRIPTS } from '../content/dialogues';
 import { RuntimeState } from '../core/RuntimeState';
 import { FamilyMemberID } from '../content/constants';
+import { System, SystemID } from './System';
 
 // Zero-GC Vektorer för kameramatte
 const _v1 = new THREE.Vector3();
@@ -24,7 +24,10 @@ const _animState = {
 };
 
 export class CinematicSystem implements System {
+    readonly systemId = SystemID.CINEMATIC;
     id = 'cinematic';
+    enabled = true;
+    persistent = true;
 
     public cinematicRef: React.MutableRefObject<any>;
     private camera: CameraSystem;

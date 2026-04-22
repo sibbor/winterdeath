@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { System } from './System';
+import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
 import { FXParticleType } from '../types/FXTypes';
@@ -17,6 +17,7 @@ const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
 
 export class VehicleMovementSystem implements System {
+    readonly systemId = SystemID.VEHICLE_MOVEMENT;
     id = 'vehicle_movement';
     isFixedStep = true;
 
@@ -24,7 +25,7 @@ export class VehicleMovementSystem implements System {
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
-        VehicleManager.update(session, this.playerGroup, delta, simTime, renderTime);
+        VehicleManager.tick(session, this.playerGroup, delta, simTime, renderTime);
 
         const state = session.state;
         const input = session.engine.input.state;

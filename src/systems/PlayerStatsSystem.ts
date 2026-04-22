@@ -1,26 +1,27 @@
 import * as THREE from 'three';
-import { System } from './System';
+import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { UiSounds, VoiceSounds } from '../utils/audio/AudioLib';
+import { VoiceSounds } from '../utils/audio/AudioLib';
 import { audioEngine } from '../utils/audio/AudioEngine';
 import { FXSystem } from './FXSystem';
 import { PlayerDeathState, DamageID, EnemyAttackType } from '../entities/player/CombatTypes';
 import { PERKS, StatusEffectType, PerkCategory } from '../content/perks';
-import { MaterialType } from '../content/environment';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { EnemyType, EnemyFlags } from '../entities/enemies/EnemyTypes';
 import { KMH_TO_MS, FamilyMemberID } from '../content/constants';
 import { DataResolver } from '../utils/ui/DataResolver';
-import { FXParticleType, FXDecalType } from '../types/FXTypes';
+import { FXParticleType } from '../types/FXTypes';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
-const _v2 = new THREE.Vector3();
 
 export class PlayerStatsSystem implements System {
+    readonly systemId = SystemID.PLAYER_STATS;
     id = 'player_stats_system';
+    enabled = true;
+    persistent = true;
     isFixedStep = true;
 
     private cachedPassives: StatusEffectType[] = [];
@@ -337,7 +338,7 @@ export class PlayerStatsSystem implements System {
         }
 
         // Damage Telemetry
-        const damageTracker = session.getSystem('damage_tracker_system') as any;
+        const damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
         if (damageTracker) {
             let sourceKey = type; // Use the direct DamageID (SMI)
 

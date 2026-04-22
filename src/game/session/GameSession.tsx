@@ -24,6 +24,7 @@ import { PlayerStatID } from '../../entities/player/PlayerTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
+import { SystemID } from '../../systems/System';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -70,7 +71,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const showDamageText = useCallback((x: number, y: number, z: number, text: string, color?: string) => {
         const session = refs.gameSessionRef.current;
         if (session) {
-            const damageSystem = session.getSystem('damage_number_system') as any;
+            const damageSystem = session.getSystem<any>(SystemID.DAMAGE_NUMBER);
             if (damageSystem) damageSystem.spawn(x, y, z, text, color);
         }
     }, [refs]);
@@ -113,7 +114,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const session = refs.gameSessionRef.current;
         if (!session) return;
 
-        const tracker = session.getSystem('damage_tracker_system') as any;
+        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
         if (tracker) tracker.recordXp(session, amount);
 
         const statsBuffer = session.state.statsBuffer;
@@ -160,7 +161,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const session = refs.gameSessionRef.current;
         if (!session) return;
 
-        const tracker = session.getSystem('damage_tracker_system') as any;
+        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
         if (tracker) tracker.recordSp(session, amount);
 
         // --- DOD: Atomic Increment in statsBuffer ---
@@ -190,9 +191,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         const s = refs.gameSessionRef.current;
         if (s) {
-            s.setSystemEnabled('player_combat', true);
-            s.setSystemEnabled('player_movement', true);
-            s.setSystemEnabled('player_interaction', true);
+            s.setSystemEnabled(SystemID.PLAYER_COMBAT, true);
+            s.setSystemEnabled(SystemID.PLAYER_MOVEMENT, true);
+            s.setSystemEnabled(SystemID.PLAYER_INTERACTION, true);
         }
         if (!currentProps.isMobileDevice && refs.containerRef.current) {
             refs.engineRef.current?.input.requestPointerLock(refs.containerRef.current);
@@ -369,7 +370,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
 
                 if (target) {
-                    const cinematicSystem = refs.gameSessionRef.current?.getSystem('cinematic') as any;
+                    const cinematicSystem = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
                     if (cinematicSystem) {
                         const sectorId = payload.sectorId ?? (latestStateRef.current.props.currentSector ?? 0);
                         const dialogueId = payload.scriptId ?? 0;
@@ -591,7 +592,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         triggerCinematicNext: () => {
             const wasTyping = refs.bubbleRef.current?.finishTyping();
             if (!wasTyping) {
-                const sys = refs.gameSessionRef.current?.getSystem('cinematic') as any;
+                const sys = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
                 if (sys && sys.cinematicRef.current.active) {
                     sys.playLine(sys.cinematicRef.current.lineIndex + 1);
                 }
@@ -703,7 +704,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             if (newlyFound && refs.gameSessionRef.current) {
-                const statsSystem = refs.gameSessionRef.current.getSystem('player_stats_system') as PlayerStatsSystem;
+                const statsSystem = refs.gameSessionRef.current.getSystem<PlayerStatsSystem>(SystemID.PLAYER_STATS);
                 if (statsSystem) statsSystem.updatePassives(refs.gameSessionRef.current);
             }
         };
@@ -794,7 +795,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         rotateCamera: (dir: number) => refs.engineRef.current?.camera.adjustAngle(dir * (Math.PI / 4)),
         adjustPitch: (dir: number) => refs.engineRef.current?.camera.adjustPitch(dir * 2.0),
         getSystems: () => refs.gameSessionRef.current?.getSystems() ?? [],
-        setSystemEnabled: (id: string, enabled: boolean) => refs.gameSessionRef.current?.setSystemEnabled(id, enabled),
+        setSystemEnabled: (id: SystemID, enabled: boolean) => refs.gameSessionRef.current?.setSystemEnabled(id, enabled),
         spawnBoss: (type: string, pos?: THREE.Vector3) => refs.sectorContextRef.current?.spawnBoss(type, pos),
         spawnEnemies: (newEnemies: any[]) => {
             const enemies = refs.stateRef.current.enemies;
@@ -919,15 +920,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         onAction(action);
                     },
                     startCinematic: (mesh: any, sectorId?: number, dialogueId?: number, params?: any) => {
-                        const sys = refs.gameSessionRef.current?.getSystem('cinematic') as any;
+                        const sys = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
                         sys?.startCinematic(mesh, sectorId ?? 0, dialogueId ?? 0, params);
                     },
                     playCinematicLine: (index: number) => {
-                        const sys = refs.gameSessionRef.current?.getSystem('cinematic') as any;
+                        const sys = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
                         sys?.playLine(index);
                     },
                     endCinematic: () => {
-                        const cinematicSystem = refs.gameSessionRef.current?.getSystem('cinematic') as any;
+                        const cinematicSystem = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
                         if (!cinematicSystem) return;
 
                         const state = cinematicSystem.cinematicRef.current;

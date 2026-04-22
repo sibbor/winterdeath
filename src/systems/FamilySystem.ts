@@ -1,12 +1,11 @@
 import * as THREE from 'three';
 import type React from 'react';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { System } from './System';
+import { System, SystemID } from './System';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { _buoyancyResult } from './WaterSystem';
-import { DamageID } from '../entities/player/CombatTypes';
 import { FamilyMemberID } from '../content/constants';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -35,7 +34,10 @@ const _animState = {
 };
 
 export class FamilySystem implements System {
+    readonly systemId = SystemID.FAMILY;
     id = 'family_system';
+    enabled = true;
+    persistent = true;
     isFixedStep = true;
     private static readonly MAX_ENTITIES = 4;
 
@@ -198,10 +200,10 @@ export class FamilySystem implements System {
 
                     // If player is aiming backwards or towards the follower slot
                     const dotAim = (relAimX * (localX / sideDist)) + (relAimZ * (localZ / backDist));
-                    
+
                     if (dotAim > 0.5) { // If they are in the crosshair cone
                         // Push laterally away from the aim ray
-                        const repulsionForce = (dotAim - 0.5) * 2.0; 
+                        const repulsionForce = (dotAim - 0.5) * 2.0;
                         localX += sideSign * repulsionForce * 2.5;
                         localZ -= repulsionForce * 1.5; // Also push slightly further back
                     }

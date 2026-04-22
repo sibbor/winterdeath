@@ -1,8 +1,6 @@
 import * as THREE from 'three';
-import { System } from './System';
-import { GameSessionLogic } from '../game/session/GameSessionLogic';
+import { System, SystemID } from './System';
 import { Enemy, EnemyFlags } from '../entities/enemies/EnemyTypes';
-
 
 // --- SHARED GHOST GEOMETRY (one capsule for all entities) ---
 const _capsuleGeo = new THREE.CapsuleGeometry(0.35, 1.25, 4, 8);
@@ -95,7 +93,10 @@ function removeGhost(root: THREE.Object3D): void {
 // OcclusionSystem
 // ============================================================================
 export class OcclusionSystem implements System {
+    readonly systemId = SystemID.OCCLUSION;
     id = 'occlusion';
+    enabled = true;
+    persistent = true;
 
     private playerGroup: { current: THREE.Group | null };
     private activeFamilyMembers: { current: Array<{ mesh: THREE.Group }> };

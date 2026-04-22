@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CAMERA_HEIGHT } from '../content/constants';
+import { System, SystemID } from './System';
 
 /**
  * CameraSystem
@@ -7,7 +8,9 @@ import { CAMERA_HEIGHT } from '../content/constants';
  * Handles FPS-independent smoothing, additive shaking, and panning.
  * Optimized for Zero-GC during runtime.
  */
-export class CameraSystem {
+export class CameraSystem implements System {
+    readonly systemId = SystemID.CAMERA;
+    public id = 'camera';
     public threeCamera: THREE.PerspectiveCamera;
 
     // --- INTERNAL STATE ---

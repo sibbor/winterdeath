@@ -3,7 +3,7 @@ import { createWaterMaterial } from '../utils/assets/materials_water';
 import { WATER_SYSTEM } from '../content/constants';
 import { MATERIALS } from '../utils/assets/materials';
 import { NoiseType } from '../entities/enemies/EnemyTypes';
-import { System } from './System';
+import { System, SystemID } from './System';
 import { FXParticleType } from '../types/FXTypes';
 
 interface WaterBind {
@@ -117,8 +117,8 @@ export class WaterBody {
     }
 }
 
-
 export class WaterSystem implements System {
+    readonly systemId = SystemID.WATER;
     public id = 'water';
     public enabled = true;
     public persistent = true;

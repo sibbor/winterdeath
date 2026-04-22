@@ -1,7 +1,7 @@
 import type React from 'react';
 import * as THREE from 'three';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { System } from './System';
+import { System, SystemID } from './System';
 import { PlayerDeathState, DamageID } from '../entities/player/CombatTypes';
 import { PLAYER_DEATH_TIMER } from '../content/constants';
 import { MATERIALS } from '../utils/assets';
@@ -53,7 +53,10 @@ const _griefAnimState = {
 };
 
 export class DeathSystem implements System {
+    readonly systemId = SystemID.DEATH;
     id = 'death_system';
+    enabled = true;
+    persistent = true;
     isFixedStep = true;
 
     private playerGroupRef: React.MutableRefObject<THREE.Group>;

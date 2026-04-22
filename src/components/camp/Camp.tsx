@@ -15,6 +15,7 @@ import { CampEffectsState, CAMP_SCENE } from './CampWorld';
 import { WeatherType } from '../../core/engine/EngineTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { CampEffectsSystem, FamilyAnimationSystem, CampChatterSystem } from './CampSystems';
+import { SystemID } from '../../systems/System';
 
 // Zero-GC Scratchpads
 const _v1 = new THREE.Vector3();
@@ -200,9 +201,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             sceneActiveMembersRef.current = activeMembers;
 
             // Register Camp Systems to the Engine
-            engine.registerSystem(new CampEffectsSystem());
-            engine.registerSystem(new FamilyAnimationSystem());
-            engine.registerSystem(new CampChatterSystem());
+            engine.registerSystem(SystemID.CAMP_EFFECT_MANAGER, new CampEffectsSystem());
+            engine.registerSystem(SystemID.FAMILY_ANIMATION, new FamilyAnimationSystem());
+            engine.registerSystem(SystemID.CAMP_CHATTER, new CampChatterSystem());
         };
 
         setup();

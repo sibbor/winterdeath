@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { WindSystem } from './WindSystem';
 import { createFogMaterial } from '../utils/assets/materials_fog';
-import { System } from './System';
+import { System, SystemID } from './System';
 
 const MAX_FOG_PLANES = 25; // Superlågt antal för max prestanda
 const FOG_AREA_SIZE = 80.0; // Dimman kretsar i denna radie runt spelaren
 const FOG_SCALE = 22.0; // Stora mjuka moln
 
 export class FogSystem implements System {
+    readonly systemId = SystemID.FOG;
     public id = 'fog';
     public enabled = true;
     public persistent = true;

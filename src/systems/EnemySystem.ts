@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { System } from './System';
+import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { Enemy } from '../entities/enemies/EnemyTypes';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
@@ -19,6 +19,7 @@ interface Callbacks {
 }
 
 export class EnemySystem implements System {
+    readonly systemId = SystemID.ENEMY_SYSTEM;
     id = 'enemy_system';
     isFixedStep = true;
 

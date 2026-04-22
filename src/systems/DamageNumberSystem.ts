@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { System } from './System';
+import { System, SystemID } from './System';
 import { WeaponCategoryColors, WEAPONS } from '../content/weapons';
 import { DamageID } from '../entities/player/CombatTypes';
 
@@ -18,7 +18,10 @@ interface DamageText {
 const DEFAULT_COLOR = '#ffffff';
 
 export class DamageNumberSystem implements System {
+    readonly systemId = SystemID.DAMAGE_NUMBER;
     id = 'damage_number_system';
+    enabled = true;
+    persistent = true;
     private pool: DamageText[] = [];
     private scene: THREE.Scene;
 

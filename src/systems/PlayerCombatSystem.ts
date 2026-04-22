@@ -1,12 +1,15 @@
 import * as THREE from 'three';
-import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { WeaponHandler } from './WeaponHandler';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { PlayerStatusFlags } from '../entities/player/PlayerTypes';
+import { System, SystemID } from './System';
 
 export class PlayerCombatSystem implements System {
+    readonly systemId = SystemID.PLAYER_COMBAT;
     id = 'player_combat';
+    enabled = true;
+    persistent = true;
     isFixedStep = true;
 
     private _p1: boolean = false;

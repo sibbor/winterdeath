@@ -1,5 +1,5 @@
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { System } from './System';
+import { System, SystemID } from './System';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
 import { DamageID } from '../entities/player/CombatTypes';
 import { StatWeaponIndex, PlayerStatID } from '../entities/player/PlayerTypes';
@@ -12,7 +12,10 @@ for (let i = 0; i < MAX_BOSS_IDS; i++) {
 }
 
 export class DamageTrackerSystem implements System {
+    readonly systemId = SystemID.DAMAGE_TRACKER;
     id = 'damage_tracker_system';
+    enabled = true;
+    persistent = true;
 
     private currentKillstreak = 0;
 

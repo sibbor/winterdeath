@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { System } from './System';
+import type React from 'react';
+import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { UiSounds, GamePlaySounds } from '../utils/audio/AudioLib';
 import { WorldLootSystem } from './WorldLootSystem';
 import { getCollectibleById } from '../content/collectibles';
 import { FXSystem } from './FXSystem';
 import { InteractionType, InteractionShape } from './InteractionTypes';
-import { FXParticleType, FXDecalType } from '../types/FXTypes';
+import { FXParticleType } from '../types/FXTypes';
 import { TriggerType, TriggerStatus } from './TriggerTypes';
-import type React from 'react';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -47,7 +47,10 @@ interface ActiveChestAnimation {
 const MAX_ANIMATIONS = 10;
 
 export class PlayerInteractionSystem implements System {
+    readonly systemId = SystemID.PLAYER_INTERACTION;
     id = 'player_interaction';
+    enabled = true;
+    persistent = true;
     public onCollectibleDiscovered?: (collectibleId: string) => void;
     private lastDetectionTime: number = 0;
 

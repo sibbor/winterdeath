@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../utils/assets/materials';
-import { System } from './System';
+import { System, SystemID } from './System';
 
 interface WindBind {
   uTime: { value: number };
@@ -9,6 +9,7 @@ interface WindBind {
 }
 
 export class WindSystem implements System {
+  readonly systemId = SystemID.WIND;
   public id = 'wind';
   public enabled = true;
   public persistent = true;

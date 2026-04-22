@@ -58,7 +58,13 @@ const MIN_AIM_RADIUS = 50;
 const MIN_AIM_RADIUS_SQ = MIN_AIM_RADIUS * MIN_AIM_RADIUS;
 const INV_MAX_AIM_RADIUS = 1.0 / MAX_AIM_RADIUS;
 
+import { System, SystemID } from '../../systems/System';
+
 export class InputManager {
+    readonly systemId = SystemID.INPUT;
+    id = 'input';
+    enabled = true;
+    persistent = true;
     public state: InputState;
     private isEnabled: boolean = false;
     private virtualAimPos: THREE.Vector2 = new THREE.Vector2(0, -200);

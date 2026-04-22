@@ -26,6 +26,9 @@ import { InteractionType } from '../../systems/InteractionTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { NavigationSystem } from '../../systems/NavigationSystem';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
+import { SystemID } from '../../systems/System';
+import { WeaponFX } from '../../systems/WeaponFX';
+import { PerkFX } from '../../systems/PerkFX';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -104,7 +107,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
     _fxCallbacks.spawnParticle = callbacks.spawnParticle;
     _fxCallbacks.spawnDecal = callbacks.spawnDecal;
     _fxCallbacks.onPlayerHit = (damage: number, attacker: any, type: string, isDoT: boolean, effectType?: any, effectDuration?: number, effectDamage?: number, attackName?: string) => {
-        const statsSystem = session.getSystem('player_stats_system') as any;
+        const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
         if (statsSystem) {
             statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effectType, effectDuration, effectDamage, attackName);
         }
@@ -170,7 +173,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, refs.sectorContextRef.current, force),
         trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
             if (type === 'damage') {
-                const damageTracker = session.getSystem('damage_tracker_system') as any;
+                const damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                 if (damageTracker) {
                     damageTracker.recordOutgoingDamage(session, amt, 'Generic', isBoss);
                 }
@@ -217,7 +220,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
             // Track stats centrally
             if (actualDmg > 0) {
-                const damageTracker = session.getSystem('damage_tracker_system') as any;
+                const damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                 if (damageTracker) {
                     damageTracker.recordOutgoingDamage(session, actualDmg, type, isBoss);
                 }
@@ -318,11 +321,11 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         const now = performance.now();
 
         // Retrieve systems for the current tick
-        const statsSystem = session.getSystem('player_stats_system') as any;
-        const movementSystem = session.getSystem('player_movement') as any;
-        const combatSystem = session.getSystem('player_combat') as any;
-        const lootSystem = session.getSystem('world_loot') as any;
-        const familySystem = session.getSystem('family') as any;
+        const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
+        const movementSystem = session.getSystem<any>(SystemID.PLAYER_MOVEMENT);
+        const combatSystem = session.getSystem<any>(SystemID.PLAYER_COMBAT);
+        const lootSystem = session.getSystem<any>(SystemID.WORLD_LOOT);
+        const familySystem = session.getSystem<any>(SystemID.FAMILY);
         const water = engine.water;
 
         const sf = state.statusFlags;
@@ -531,7 +534,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             session.playerPos = playerGroup.position;
 
             // VINTERDÖD: Update the hardened navigation grid
-            NavigationSystem.update(playerGroup.position, simTime);
+            NavigationSystem.tick(playerGroup.position, simTime);
         }
 
         session.update(delta, propsRef.current.mapId || 0);
@@ -799,7 +802,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         monitor.begin('active_effects');
 
         // VINTERDÖD: FXSystem update must run at render rate for visual smoothness.
-        FXSystem.update(engine.scene, state.particles, state.bloodDecals, _fxCallbacks, delta, simTime, renderTime, state);
+        FXSystem.updateFX(engine.scene, state.particles, state.bloodDecals, _fxCallbacks, delta, simTime, renderTime, state);
+        WeaponFX.updateFX(delta, session);
+        PerkFX.updateFX(session, delta, simTime, renderTime);
 
         if (state.activeEffects.length > 0) {
             const isBacklogged = (FXSystem as any).ambientQueue && (FXSystem as any).ambientQueue.length > 1000;
@@ -854,7 +859,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         );
 
         // 20. VEGETATION INTERACTION (ZERO-GC TOP-8 GATHERING)
-        const windSystem = session.getSystem('wind') as any;
+        const windSystem = session.getSystem<any>(SystemID.WIND);
         if (windSystem && windSystem.enabled) {
             // Reset state
             for (let i = 0; i < 8; i++) {

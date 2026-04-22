@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { System } from './System';
-import { GameSessionLogic } from '../game/session/GameSessionLogic';
+import { System, SystemID } from './System';
 import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { PlayerStatID } from '../entities/player/PlayerTypes';
@@ -26,7 +25,10 @@ export interface ScrapItem {
 }
 
 export class WorldLootSystem implements System {
+    readonly systemId = SystemID.WORLD_LOOT;
     id = 'world_loot_system';
+    enabled = true;
+    persistent = true;
     isFixedStep = true;
 
     private static MAX_SCRAP = 300;

@@ -1,8 +1,15 @@
+import { SystemID } from './System';
+
 /**
  * Centralized, high-performance tracking system strictly adhering to Zero-GC principles.
  * Ensures consistent profiling output across both game logic and UI components.
  */
 export class PerformanceMonitor {
+    readonly systemId = SystemID.PERFORMANCE_MONITOR;
+    id = 'performance_monitor';
+    enabled = true;
+    persistent = true;
+
     private static instance: PerformanceMonitor | null = null;
 
     public static getInstance() {
@@ -131,12 +138,14 @@ export class PerformanceMonitor {
                     this.gcDroppedMB = diff / 1048576;
                     this._lastGcTime = now;
                 } else {
-                    this.gcDetected = false;
+            this.gcDetected = false;
                 }
             }
             this.lastHeapSize = currentHeap;
         }
     }
+
+
 
     public updateGameState(playerX: number, playerZ: number, camX: number, camY: number, camZ: number, enemies: number, objects: number) {
         this.gameState.playerCoords.x = playerX;
