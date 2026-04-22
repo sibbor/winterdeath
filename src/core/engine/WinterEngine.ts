@@ -141,10 +141,10 @@ export class WinterEngine {
         this.fog = new FogSystem(this.scene, this.wind, this.camera.threeCamera);
         this.water = new WaterSystem(this.scene);
 
-        // --- GATE SYSTEMS TO FIXED STEP ---
-        this.wind.isFixedStep = true;
-        this.weather.isFixedStep = true;
-        this.water.isFixedStep = true;
+        // --- GATE SYSTEMS TO VARIABLE STEP (Visual Smoothness) ---
+        this.wind.isFixedStep = false;
+        this.weather.isFixedStep = false;
+        this.water.isFixedStep = false;
         // Fog & Light stay variable for smooth visual interpolation/shadows
 
         (window as any).WinterEngineInstance = this;

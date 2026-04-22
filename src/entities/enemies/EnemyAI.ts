@@ -126,80 +126,114 @@ export const EnemyAI = {
                 weaponImpact = weapon.impactType;
             }
 
-            if (weaponImpact === EnemyDeathState.ELECTROCUTED || dmgType === DamageID.ARC_CANNON) {
-                e.deathState = EnemyDeathState.ELECTROCUTED;
-                e.deathVel.set(0, 0, 0);
+            // VINTERDÖD: Unified Death Dispatcher
+            let finalDeathState = EnemyDeathState.GENERIC;
+
+            switch (dmgType) {
+                case DamageID.ARC_CANNON:
+                    finalDeathState = EnemyDeathState.ELECTROCUTED;
+                    break;
+
+                case DamageID.MOLOTOV:
+                case DamageID.FLAMETHROWER:
+                case DamageID.BURN:
+                    finalDeathState = EnemyDeathState.BURNED;
+                    break;
+
+                case DamageID.GRENADE:
+                case DamageID.EXPLOSION:
+                    finalDeathState = EnemyDeathState.EXPLODED;
+                    break;
+
+                default:
+                    // Priority-based fallback for complex flags and weapon impact
+                    if (weaponImpact === EnemyDeathState.ELECTROCUTED) {
+                        finalDeathState = EnemyDeathState.ELECTROCUTED;
+                    } else if ((e.statusFlags & EnemyFlags.BURNING) !== 0) {
+                        finalDeathState = EnemyDeathState.BURNED;
+                    } else if (e.type === EnemyType.BOMBER || (e.statusFlags & EnemyFlags.BOSS) !== 0) {
+                        finalDeathState = EnemyDeathState.EXPLODED;
+                    } else if (weaponImpact === EnemyDeathState.GIBBED && (isHighImpact || (playerStatusFlags & (1 << 11)) !== 0)) {
+                        finalDeathState = EnemyDeathState.GIBBED;
+                    } else if (weapon) {
+                        finalDeathState = EnemyDeathState.SHOT;
+                    }
+                    break;
             }
-            else if ((e.statusFlags & EnemyFlags.BURNING) !== 0 || dmgType === DamageID.MOLOTOV || dmgType === DamageID.FLAMETHROWER || dmgType === DamageID.BURN) {
-                e.deathState = EnemyDeathState.BURNED;
-                callbacks.playSound(SoundID.ZOMBIE_DEATH_BURN);
-            }
-            else if (dmgType === DamageID.GRENADE || e.type === EnemyType.BOMBER || (e.statusFlags & EnemyFlags.BOSS) !== 0) {
-                e.deathState = EnemyDeathState.EXPLODED;
-                if (dmgType !== DamageID.GRENADE) {
-                    const pos = e.mesh.position;
-                    WeaponSounds.playExplosion(pos);
-                    haptic.explosion();
 
-                    // VINTERDÖD: Bomber Death Detonation (Chain Reaction)
-                    if (e.type === EnemyType.BOMBER && callbacks.queryEnemies && callbacks.applyDamage) {
-                        const radius = 10.0;
-                        const damage = 60.0;
-                        const nearby = callbacks.queryEnemies(pos, radius + 3.0);
-                        const nLen = nearby.length;
-                        const radSq = radius * radius;
+            e.deathState = finalDeathState;
 
-                        for (let i = 0; i < nLen; i++) {
-                            const other = nearby[i];
-                            if (other === e || other.hp <= 0) continue;
+            // --- Apply Visual & Physics side effects based on final state ---
+            switch (finalDeathState) {
+                case EnemyDeathState.ELECTROCUTED:
+                    e.deathVel.set(0, 0, 0);
+                    break;
 
-                            _v1.subVectors(other.mesh.position, pos);
-                            const dSq = _v1.lengthSq();
-                            const totalRad = radius + (other.originalScale * 0.5);
+                case EnemyDeathState.BURNED:
+                    callbacks.playSound(SoundID.ZOMBIE_DEATH_BURN);
+                    break;
 
-                            if (dSq < totalRad * totalRad) {
-                                callbacks.applyDamage(other, damage, DamageID.EXPLOSION, true);
+                case EnemyDeathState.EXPLODED:
+                    // Bomber/Boss Detonation Logic
+                    if (dmgType !== DamageID.GRENADE) {
+                        const pos = e.mesh.position;
+                        WeaponSounds.playExplosion(pos);
+                        haptic.explosion();
 
-                                // Apply knockback
-                                const force = 25.0 * (1.0 - Math.min(1.0, dSq / radSq));
-                                const mass = other.originalScale * other.widthScale;
-                                _v2.copy(_v1).normalize().multiplyScalar(force / mass).setY(2.0);
-                                other.knockbackVel.add(_v2);
+                        if (e.type === EnemyType.BOMBER && callbacks.queryEnemies && callbacks.applyDamage) {
+                            const radius = 10.0;
+                            const damage = 60.0;
+                            const nearby = callbacks.queryEnemies(pos, radius + 3.0);
+                            const nLen = nearby.length;
+                            const radSq = radius * radius;
+
+                            for (let i = 0; i < nLen; i++) {
+                                const other = nearby[i];
+                                if (other === e || other.hp <= 0) continue;
+
+                                _v1.subVectors(other.mesh.position, pos);
+                                const dSq = _v1.lengthSq();
+                                const totalRad = radius + (other.originalScale * 0.5);
+
+                                if (dSq < totalRad * totalRad) {
+                                    callbacks.applyDamage(other, damage, DamageID.EXPLOSION, true);
+                                    const force = 25.0 * (1.0 - Math.min(1.0, dSq / radSq));
+                                    const mass = other.originalScale * other.widthScale;
+                                    _v2.copy(_v1).normalize().multiplyScalar(force / mass).setY(2.0);
+                                    other.knockbackVel.add(_v2);
+                                }
                             }
                         }
+                        WinterEngine.getInstance()?.triggerHitStop(e.type === EnemyType.BOMBER ? 40 : 50);
                     }
+                    break;
 
-                    // VINTERDÖD: Hit-stop for Bomber/Boss detonations
-                    WinterEngine.getInstance()?.triggerHitStop(e.type === EnemyType.BOMBER ? 40 : 50);
-                }
-            }
-            else if (weaponImpact === EnemyDeathState.GIBBED && (isHighImpact || (playerStatusFlags & (1 << 11)) !== 0)) {
-                e.deathState = EnemyDeathState.GIBBED;
-                e.statusFlags |= EnemyFlags.GIBBED;
-                callbacks.playSound(SoundID.ZOMBIE_DEATH_SHOT);
-            }
-            else if (weapon) {
-                e.deathState = EnemyDeathState.SHOT;
-                callbacks.playSound(SoundID.ZOMBIE_DEATH_SHOT);
-                _v1.subVectors(e.mesh.position, playerPos).normalize();
-                _v2.copy(_v1).negate();
+                case EnemyDeathState.GIBBED:
+                    e.statusFlags |= EnemyFlags.GIBBED;
+                    callbacks.playSound(SoundID.ZOMBIE_DEATH_SHOT);
+                    break;
 
-                const forwardMomentum = e.velocity.dot(_v2);
-                e.fallForward = forwardMomentum > 1.5;
-                e.deathVel.copy(e.velocity).multiplyScalar(0.1);
+                case EnemyDeathState.SHOT:
+                    callbacks.playSound(SoundID.ZOMBIE_DEATH_SHOT);
+                    _v1.subVectors(e.mesh.position, playerPos).normalize();
+                    _v2.copy(_v1).negate();
 
-                const impactForce = weapon.damage * 0.15;
-                e.deathVel.addScaledVector(_v1, impactForce).setY(weapon.damage > 20 ? 3.5 : 2.0);
-            }
-            else {
-                e.deathState = EnemyDeathState.GENERIC;
-                callbacks.playSound(SoundID.ZOMBIE_DEATH_SHOT);
-                _v1.subVectors(e.mesh.position, playerPos).normalize();
-                _v2.copy(_v1).negate();
+                    const forwardMomentum = e.velocity.dot(_v2);
+                    e.fallForward = forwardMomentum > 1.5;
+                    e.deathVel.copy(e.velocity).multiplyScalar(0.1);
 
-                const forwardMomentum = e.velocity.dot(_v2);
-                e.fallForward = forwardMomentum > 1.5;
-                e.deathVel.copy(_v1).multiplyScalar(8.0).setY(3.0);
+                    const impactForce = weapon ? weapon.damage * 0.15 : 2.0;
+                    e.deathVel.addScaledVector(_v1, impactForce).setY((weapon && weapon.damage > 20) ? 3.5 : 2.0);
+                    break;
+
+                default:
+                    callbacks.playSound(SoundID.ZOMBIE_DEATH_SHOT);
+                    _v1.subVectors(e.mesh.position, playerPos).normalize();
+                    _v2.copy(_v1).negate();
+                    const fwdMomentum = e.velocity.dot(_v2);
+                    e.fallForward = fwdMomentum > 1.5;
+                    e.deathVel.copy(_v1).multiplyScalar(8.0).setY(3.0);
+                    break;
             }
 
             // VINTERDÖD: Heavy Kill Hit-stop for Tanks

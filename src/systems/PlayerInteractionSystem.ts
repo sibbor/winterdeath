@@ -172,30 +172,40 @@ export class PlayerInteractionSystem implements System {
             const childLen = children.length;
             for (let j = 0; j < childLen; j++) {
                 const child = children[j] as any;
+                const fxScale = 1.0 - anim.progress;
+                const clampedScale = Math.max(0.001, fxScale);
 
-                if (child.name === 'collectibleRing' || child.name === 'collectibleBeam' || child.name === 'collectibleInnerRing') {
-                    if (child.name === 'collectibleRing') child.position.set(0, 0.05 + fxTargetY, 0);
-                    else if (child.name === 'collectibleInnerRing') child.position.set(0, 1.0 + (fxTargetY * 0.8), 0);
-                    else if (child.name === 'collectibleBeam') child.position.set(0, 2.0 + fxTargetY, 0);
+                switch (child.name) {
+                    case 'collectibleRing':
+                        child.position.set(0, 0.05 + fxTargetY, 0);
+                        child.scale.setScalar(clampedScale);
+                        break;
 
-                    const fxScale = 1.0 - anim.progress;
-                    if (child.name === 'collectibleBeam') {
-                        child.scale.set(0.05 * Math.max(0.001, fxScale), 4.0, 0.05 * Math.max(0.001, fxScale));
-                    } else {
-                        child.scale.setScalar(Math.max(0.001, fxScale));
-                    }
-                } else if (!child.name.startsWith('collectible') && !child.isLight) {
-                    child.position.x = targetX;
-                    child.position.z = targetZ;
-                    child.position.y = (1.5 * easeOut) + Math.sin(anim.progress * Math.PI * 4) * 0.1;
-                    child.rotation.y += 5.0 * delta;
+                    case 'collectibleInnerRing':
+                        child.position.set(0, 1.0 + (fxTargetY * 0.8), 0);
+                        child.scale.setScalar(clampedScale);
+                        break;
 
-                    if (anim.progress > 0.9) {
-                        const shrink = (1.0 - anim.progress) * 10.0;
-                        child.scale.setScalar(Math.max(0.001, shrink));
-                    } else {
-                        child.scale.setScalar(1.0);
-                    }
+                    case 'collectibleBeam':
+                        child.position.set(0, 2.0 + fxTargetY, 0);
+                        child.scale.set(0.05 * clampedScale, 4.0, 0.05 * clampedScale);
+                        break;
+
+                    default:
+                        if (!child.name.startsWith('collectible') && !child.isLight) {
+                            child.position.x = targetX;
+                            child.position.z = targetZ;
+                            child.position.y = (1.5 * easeOut) + Math.sin(anim.progress * Math.PI * 4) * 0.1;
+                            child.rotation.y += 5.0 * delta;
+
+                            if (anim.progress > 0.9) {
+                                const shrink = (1.0 - anim.progress) * 10.0;
+                                child.scale.setScalar(Math.max(0.001, shrink));
+                            } else {
+                                child.scale.setScalar(1.0);
+                            }
+                        }
+                        break;
                 }
             }
 
@@ -429,27 +439,34 @@ export class PlayerInteractionSystem implements System {
     ) {
         if (type === InteractionType.NONE) return;
 
-        if (type === InteractionType.VEHICLE && _detectionResult.object) {
-            state.vehicle.active = true;
-            state.vehicle.mesh = _detectionResult.object;
-            state.vehicle.type = _detectionResult.object.userData.vehicleDef?.type || '';
-        }
-        else if (type === InteractionType.COLLECTIBLE) {
-            this.pickupCollectible(session);
-        }
-        else if (type === InteractionType.CHEST) {
-            this.openChest(session, chests, state);
-        }
-        else if (type === InteractionType.SECTOR_SPECIFIC) {
-            state.interaction.active = true;
-            state.interaction.targetId = _detectionResult.id || '';
-            state.interaction.type = InteractionType.SECTOR_SPECIFIC;
-            state.interaction.label = _detectionResult.label || '';
+        switch (type) {
+            case InteractionType.VEHICLE:
+                if (_detectionResult.object) {
+                    state.vehicle.active = true;
+                    state.vehicle.mesh = _detectionResult.object;
+                    state.vehicle.type = _detectionResult.object.userData.vehicleDef?.type || '';
+                }
+                break;
 
-            state.interactionRequest.active = true;
-            state.interactionRequest.type = InteractionType.SECTOR_SPECIFIC;
-            state.interactionRequest.id = _detectionResult.id || '';
-            state.interactionRequest.object = _detectionResult.object || null;
+            case InteractionType.COLLECTIBLE:
+                this.pickupCollectible(session);
+                break;
+
+            case InteractionType.CHEST:
+                this.openChest(session, chests, state);
+                break;
+
+            case InteractionType.SECTOR_SPECIFIC:
+                state.interaction.active = true;
+                state.interaction.targetId = _detectionResult.id || '';
+                state.interaction.type = InteractionType.SECTOR_SPECIFIC;
+                state.interaction.label = _detectionResult.label || '';
+
+                state.interactionRequest.active = true;
+                state.interactionRequest.type = InteractionType.SECTOR_SPECIFIC;
+                state.interactionRequest.id = _detectionResult.id || '';
+                state.interactionRequest.object = _detectionResult.object || null;
+                break;
         }
     }
 

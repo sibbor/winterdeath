@@ -514,6 +514,7 @@ export class PlayerMovementSystem implements System {
 
                         let noiseType = NoiseType.PLAYER_WALK;
                         let noiseRadius = NOISE_RADIUS[NoiseType.PLAYER_WALK];
+
                         if (isSwimming) {
                             noiseType = NoiseType.PLAYER_SWIM;
                             noiseRadius = NOISE_RADIUS[NoiseType.PLAYER_SWIM];

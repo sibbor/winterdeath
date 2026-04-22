@@ -118,26 +118,31 @@ export class DeathSystem implements System {
         const pgPos = playerGroup ? playerGroup.position : _zeroV;
 
         // --- 1. Phase Management ---
-        if (this.deathPhaseRef.current === 'NONE') {
-            this.deathPhaseRef.current = 'ANIMATION';
-            this.setDeathPhase('ANIMATION');
-            VoiceSounds.playDeathScream();
+        switch (this.deathPhaseRef.current) {
+            case 'NONE':
+                this.deathPhaseRef.current = 'ANIMATION';
+                this.setDeathPhase('ANIMATION');
+                VoiceSounds.playDeathScream();
 
-            // Fetch HUD data once for death state to avoid GC hits
-            // HUD data now respects the statsBuffer and statusFlags automatically.
-            const hudData = HudSystem.getHudData(state, pgPos, fmMesh, input, renderTime, props, this.distanceTraveledRef.current, camera) as any;
-            HudStore.update(hudData);
+                // Fetch HUD data once for death state to avoid GC hits
+                // HUD data now respects the statsBuffer and statusFlags automatically.
+                const hudData = HudSystem.getHudData(state, pgPos, fmMesh, input, renderTime, props, this.distanceTraveledRef.current, camera) as any;
+                HudStore.update(hudData);
+                break;
 
-        } else if (this.deathPhaseRef.current === 'ANIMATION') {
-            if (simTime - state.deathStartTime > PLAYER_DEATH_TIMER) {
-                this.deathPhaseRef.current = 'MESSAGE';
-                this.setDeathPhase('MESSAGE');
-            }
-        } else if (this.deathPhaseRef.current === 'MESSAGE') {
-            if (simTime - state.deathStartTime > 3000) {
-                this.deathPhaseRef.current = 'CONTINUE';
-                this.setDeathPhase('CONTINUE');
-            }
+            case 'ANIMATION':
+                if (simTime - state.deathStartTime > PLAYER_DEATH_TIMER) {
+                    this.deathPhaseRef.current = 'MESSAGE';
+                    this.setDeathPhase('MESSAGE');
+                }
+                break;
+
+            case 'MESSAGE':
+                if (simTime - state.deathStartTime > 3000) {
+                    this.deathPhaseRef.current = 'CONTINUE';
+                    this.setDeathPhase('CONTINUE');
+                }
+                break;
         }
 
         // --- 2. Physics & Falling ---
@@ -150,7 +155,6 @@ export class DeathSystem implements System {
             const isDrowning = state.playerDeathState === PlayerDeathState.DROWNED;
             const isElectrocuted = state.playerDeathState === PlayerDeathState.ELECTROCUTED;
             const isBiting = state.killerType === DamageID.BITE;
-
 
             if (pgPos.y <= 0.0) {
                 pgPos.y = 0.0;
@@ -197,62 +201,66 @@ export class DeathSystem implements System {
                 }
             }
 
-            // Enhanced DROWNED & BURNED Visuals
-            if (state.playerDeathState === PlayerDeathState.DROWNED) {
-                // Sinking logic
-                state.deathVel.y = -0.5; // Slow sink
-                state.deathVel.x *= 0.95;
-                state.deathVel.z *= 0.95;
+            // --- 2.5 Specialized Death Visuals (Zero-GC Refactor) ---
+            switch (state.playerDeathState) {
+                case PlayerDeathState.DROWNED:
+                    // Sinking logic
+                    state.deathVel.y = -0.5; // Slow sink
+                    state.deathVel.x *= 0.95;
+                    state.deathVel.z *= 0.95;
 
-                if (this.deathPhaseRef.current === 'ANIMATION') {
-                    if (renderTime % 500 < 50) {
-                        this.fxCallbacks.spawnParticle(pgPos.x, pgPos.y + 1.0, pgPos.z, FXParticleType.SPLASH, 2);
-                    }
-                }
-            } else if (state.playerDeathState === PlayerDeathState.BURNED) {
-                const age = renderTime - state.deathStartTime;
-                const duration = 1500;
-                const progress = Math.min(1.0, age / duration);
-
-                // Ash Pile Logic
-                if (!state.playerAshSpawned) {
-                    state.playerAshSpawned = true;
-                    const ashRenderer = EnemyManager.getAshRenderer();
-                    if (ashRenderer) {
-                        // [VINTERDÖD FIX] Use world position (pgPos) and group rotation for the ash pile
-                        ashRenderer.addAsh(pgPos, playerGroup.rotation, 1.0, 1.0, 0x333333, renderTime, 1500);
-                    }
-                }
-
-                if (renderTime % 100 < 16) {
-                    this.fxCallbacks.spawnParticle(pgPos.x, pgPos.y + 1.8, pgPos.z, FXParticleType.ENEMY_EFFECT_FLAME, 1);
-                }
-
-                // Shrink and Char
-                const shrink = 1.0 - progress;
-                playerMesh.scale.setScalar(shrink);
-
-                // VINTERDÖD FIX: Zero-GC iterative traversal for material updates
-                _traverseStack.length = 0;
-                _traverseStack.push(playerMesh);
-
-                while (_traverseStack.length > 0) {
-                    const child = _traverseStack.pop() as any;
-
-                    if (child.isMesh && child.material && child.material.color) {
-                        child.material.color.lerp(_blackColor, progress * 0.1);
-                    }
-
-                    if (child.children) {
-                        for (let i = 0; i < child.children.length; i++) {
-                            _traverseStack.push(child.children[i]);
+                    if (this.deathPhaseRef.current === 'ANIMATION') {
+                        if (renderTime % 500 < 50) {
+                            this.fxCallbacks.spawnParticle(pgPos.x, pgPos.y + 1.0, pgPos.z, FXParticleType.SPLASH, 2);
                         }
                     }
-                }
+                    break;
 
-                if (progress >= 1.0) {
-                    playerMesh.visible = false;
-                }
+                case PlayerDeathState.BURNED:
+                    const age = renderTime - state.deathStartTime;
+                    const duration = 1500;
+                    const progress = Math.min(1.0, age / duration);
+
+                    // Ash Pile Logic
+                    if (!state.playerAshSpawned) {
+                        state.playerAshSpawned = true;
+                        const ashRenderer = EnemyManager.getAshRenderer();
+                        if (ashRenderer) {
+                            // [VINTERDÖD FIX] Use world position (pgPos) and group rotation for the ash pile
+                            ashRenderer.addAsh(pgPos, playerGroup.rotation, 1.0, 1.0, 0x333333, renderTime, 1500);
+                        }
+                    }
+
+                    if (renderTime % 100 < 16) {
+                        this.fxCallbacks.spawnParticle(pgPos.x, pgPos.y + 1.8, pgPos.z, FXParticleType.ENEMY_EFFECT_FLAME, 1);
+                    }
+
+                    // Shrink and Char
+                    const shrink = 1.0 - progress;
+                    playerMesh.scale.setScalar(shrink);
+
+                    // VINTERDÖD FIX: Zero-GC iterative traversal for material updates
+                    _traverseStack.length = 0;
+                    _traverseStack.push(playerMesh);
+
+                    while (_traverseStack.length > 0) {
+                        const child = _traverseStack.pop() as any;
+
+                        if (child.isMesh && child.material && child.material.color) {
+                            child.material.color.lerp(_blackColor, progress * 0.1);
+                        }
+
+                        if (child.children) {
+                            for (let i = 0; i < child.children.length; i++) {
+                                _traverseStack.push(child.children[i]);
+                            }
+                        }
+                    }
+
+                    if (progress >= 1.0) {
+                        playerMesh.visible = false;
+                    }
+                    break;
             }
         }
 

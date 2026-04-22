@@ -67,18 +67,23 @@ export class WeatherSystem implements System {
         }
 
         let selectedMaterial: THREE.Material;
-        if (type === WeatherType.RAIN) {
-            selectedMaterial = MATERIALS.particle_rain;
-            this.swayMult = 5.0; // Heavy, low sway
-        } else if (type === WeatherType.ASH) {
-            selectedMaterial = MATERIALS.particle_ash;
-            this.swayMult = 15.0; // Light, drifting
-        } else if (type === WeatherType.EMBER) {
-            selectedMaterial = MATERIALS.particle_ember;
-            this.swayMult = 25.0; // Very light, erratic
-        } else {
-            selectedMaterial = MATERIALS.particle_snow;
-            this.swayMult = 40.0; // Soft sway
+        switch (type) {
+            case WeatherType.RAIN:
+                selectedMaterial = MATERIALS.particle_rain;
+                this.swayMult = 5.0; // Heavy, low sway
+                break;
+            case WeatherType.ASH:
+                selectedMaterial = MATERIALS.particle_ash;
+                this.swayMult = 15.0; // Light, drifting
+                break;
+            case WeatherType.EMBER:
+                selectedMaterial = MATERIALS.particle_ember;
+                this.swayMult = 25.0; // Very light, erratic
+                break;
+            default:
+                selectedMaterial = MATERIALS.particle_snow;
+                this.swayMult = 40.0; // Soft sway
+                break;
         }
 
         if (!this.instancedMesh) {
@@ -129,22 +134,28 @@ export class WeatherSystem implements System {
             pos[i3 + 1] = y;
             pos[i3 + 2] = z;
 
-            if (type === WeatherType.SNOW) {
-                vel[i3 + 0] = (Math.random() - 0.5) * 1.5;
-                vel[i3 + 1] = -(8 + Math.random() * 7);
-                vel[i3 + 2] = (Math.random() - 0.5) * 1.5;
-            } else if (type === WeatherType.ASH) {
-                vel[i3 + 0] = (Math.random() - 0.5) * 2;
-                vel[i3 + 1] = -(2 + Math.random() * 3);
-                vel[i3 + 2] = (Math.random() - 0.5) * 2;
-            } else if (type === WeatherType.EMBER) {
-                vel[i3 + 0] = (Math.random() - 0.5) * 3;
-                vel[i3 + 1] = (1 + Math.random() * 4); // Rises UP
-                vel[i3 + 2] = (Math.random() - 0.5) * 3;
-            } else { // rain
-                vel[i3 + 0] = 0;
-                vel[i3 + 1] = -(50 + Math.random() * 30);
-                vel[i3 + 2] = 0;
+            switch (type) {
+                case WeatherType.SNOW:
+                    vel[i3 + 0] = (Math.random() - 0.5) * 1.2;
+                    vel[i3 + 1] = -(2.5 + Math.random() * 3.5);
+                    vel[i3 + 2] = (Math.random() - 0.5) * 1.2;
+                    break;
+                case WeatherType.ASH:
+                    vel[i3 + 0] = (Math.random() - 0.5) * 1.5;
+                    vel[i3 + 1] = -(1.5 + Math.random() * 2.5);
+                    vel[i3 + 2] = (Math.random() - 0.5) * 1.5;
+                    break;
+                case WeatherType.EMBER:
+                    vel[i3 + 0] = (Math.random() - 0.5) * 3;
+                    vel[i3 + 1] = (1 + Math.random() * 4); // Rises UP
+                    vel[i3 + 2] = (Math.random() - 0.5) * 3;
+                    break;
+                case WeatherType.RAIN:
+                default:
+                    vel[i3 + 0] = 0;
+                    vel[i3 + 1] = -(50 + Math.random() * 30);
+                    vel[i3 + 2] = 0;
+                    break;
             }
 
             matrixArray[matIdx + 0] = sX;   // Scale X
@@ -248,20 +259,25 @@ export class WeatherSystem implements System {
                 }
 
                 // Generate a completely new velocity
-                if (isRain) {
-                    vel[i3 + 1] = -(50 + r2 * 30);
-                } else if (this.type === WeatherType.SNOW) {
-                    vel[i3 + 1] = -(8 + r2 * 7);
-                    vel[i3 + 0] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 1.5;
-                    vel[i3 + 2] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 1.5;
-                } else if (this.type === WeatherType.ASH) {
-                    vel[i3 + 1] = -(2 + r2 * 3);
-                    vel[i3 + 0] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 2;
-                    vel[i3 + 2] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 2;
-                } else if (this.type === WeatherType.EMBER) {
-                    vel[i3 + 1] = (1 + r2 * 4);
-                    vel[i3 + 0] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 3;
-                    vel[i3 + 2] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 3;
+                switch (this.type) {
+                    case WeatherType.RAIN:
+                        vel[i3 + 1] = -(50 + r2 * 30);
+                        break;
+                    case WeatherType.SNOW:
+                        vel[i3 + 1] = -(2.5 + r2 * 3.5);
+                        vel[i3 + 0] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 1.2;
+                        vel[i3 + 2] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 1.2;
+                        break;
+                    case WeatherType.ASH:
+                        vel[i3 + 1] = -(1.5 + r2 * 2.5);
+                        vel[i3 + 0] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 1.5;
+                        vel[i3 + 2] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 1.5;
+                        break;
+                    case WeatherType.EMBER:
+                        vel[i3 + 1] = (1 + r2 * 4);
+                        vel[i3 + 0] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 3;
+                        vel[i3 + 2] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 3;
+                        break;
                 }
             }
 

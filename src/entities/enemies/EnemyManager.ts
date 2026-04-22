@@ -210,39 +210,58 @@ export const EnemyManager = {
 
             const deathState = e.deathState;
 
-            if (deathState === EnemyDeathState.BURNED || deathState === EnemyDeathState.ELECTROCUTED || deathState === EnemyDeathState.DROWNED) {
-                e.mesh.visible = true;
-                e.mesh.matrixAutoUpdate = true;
-            }
-            else if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !(e.statusFlags & EnemyFlags.EXPLODED) && deathState !== EnemyDeathState.DEAD) {
-                let isVisible = true;
-                if (cameraPos && cameraDir) {
-                    _v2.subVectors(e.mesh.position, cameraPos);
-                    const dot = cameraDir.dot(_v2);
-                    const distSq = _v2.lengthSq();
-
-                    if (dot < -2.0 && distSq > 625) {
-                        isVisible = false;
-                    }
-                }
-
-                const isTelegraphing = e.indicatorRing && e.indicatorRing.visible;
-
-                if (isVisible && !isTelegraphing) {
-                    e.mesh.visible = false;
-                    e.mesh.matrixAutoUpdate = false;
-                    e.mesh.updateMatrix();
-                    _syncList.push(e);
-                } else {
-                    e.mesh.visible = isVisible;
+            switch (deathState) {
+                case EnemyDeathState.BURNED:
+                case EnemyDeathState.ELECTROCUTED:
+                case EnemyDeathState.DROWNED:
+                    e.mesh.visible = true;
                     e.mesh.matrixAutoUpdate = true;
-                }
+                    break;
+
+                case EnemyDeathState.DEAD:
+                    // Handled by pooling/removal logic
+                    break;
+
+                default:
+                    // Visibility culling for standard enemies
+                    if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !(e.statusFlags & EnemyFlags.EXPLODED)) {
+                        let isVisible = true;
+                        if (cameraPos && cameraDir) {
+                            _v2.subVectors(e.mesh.position, cameraPos);
+                            const dot = cameraDir.dot(_v2);
+                            const distSq = _v2.lengthSq();
+
+                            if (dot < -2.0 && distSq > 625) {
+                                isVisible = false;
+                            }
+                        }
+
+                        const isTelegraphing = e.indicatorRing && e.indicatorRing.visible;
+
+                        if (isVisible && !isTelegraphing) {
+                            e.mesh.visible = false;
+                            e.mesh.matrixAutoUpdate = false;
+                            e.mesh.updateMatrix();
+                            _syncList.push(e);
+                        } else {
+                            e.mesh.visible = isVisible;
+                            e.mesh.matrixAutoUpdate = true;
+                        }
+                    } else {
+                        // Bosses and exploded entities usually stay visible
+                        e.mesh.visible = true;
+                        e.mesh.matrixAutoUpdate = true;
+                    }
+                    break;
             }
 
-            if (deathState === EnemyDeathState.ALIVE) {
-                if ((e.statusFlags & EnemyFlags.BOSS) !== 0 && e.mesh && e.color !== undefined) {
-                    const timeSinceHit = simTime - e.hitTime;
-                    if (timeSinceHit < 100) {
+            if (deathState === EnemyDeathState.ALIVE && e.color !== undefined) {
+                const isBoss = (e.statusFlags & EnemyFlags.BOSS) !== 0;
+                const timeSinceHit = simTime - e.hitTime;
+                const isRecentHit = timeSinceHit < 100;
+
+                if (isBoss) {
+                    if (isRecentHit) {
                         if (!(e.statusFlags & EnemyFlags.FLASH_ACTIVE)) {
                             e.statusFlags |= EnemyFlags.FLASH_ACTIVE;
                             const isArc = e.lastDamageType === DamageID.ARC_CANNON;
@@ -273,9 +292,10 @@ export const EnemyManager = {
                             resetMaterialEmissive(e.mesh);
                         }
                     }
-                } else if ((e.statusFlags & EnemyFlags.BOSS) === 0 && e.color !== undefined) {
-                    const timeSinceHit = simTime - e.hitTime;
-                    if (timeSinceHit < 100) {
+
+                    // No boss
+                } else {
+                    if (isRecentHit) {
                         if (!(e.statusFlags & EnemyFlags.FLASH_ACTIVE)) {
                             e.statusFlags |= EnemyFlags.FLASH_ACTIVE;
                             e.originalColor = e.color;

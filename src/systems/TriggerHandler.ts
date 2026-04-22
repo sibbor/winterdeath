@@ -136,16 +136,31 @@ export const TriggerHandler = {
                         const duration = 2000 + translatedText.length * 50;
                         callbacks.spawnBubble(translatedText, duration);
 
-                        if (trig.type === TriggerType.SPEAK) {
-                            if (callbacks.playSound) callbacks.playSound(SoundID.VO_PLAYER_COUGH);
-                            callbacks.onTrigger(TriggerType.SPEAK, duration);
-                        } else if (trig.type === TriggerType.THOUGHT || (trig.type === TriggerType.POI && !trig.content)) {
-                            // Default POI discovery bubbles to THOUGHT type for a more gritty, internal feel
-                            if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
-                            callbacks.onTrigger(TriggerType.THOUGHT, duration);
-                        } else {
-                            if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
-                            callbacks.onTrigger(trig.type || TriggerType.INFO, duration);
+                        switch (trig.type) {
+                            case TriggerType.SPEAK:
+                                if (callbacks.playSound) callbacks.playSound(SoundID.VO_PLAYER_COUGH);
+                                callbacks.onTrigger(TriggerType.SPEAK, duration);
+                                break;
+
+                            case TriggerType.THOUGHT:
+                                if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
+                                callbacks.onTrigger(TriggerType.THOUGHT, duration);
+                                break;
+
+                            case TriggerType.POI:
+                                if (!trig.content) {
+                                    // Default POI discovery bubbles to THOUGHT type for a more gritty, internal feel
+                                    if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
+                                    callbacks.onTrigger(TriggerType.THOUGHT, duration);
+                                } else {
+                                    if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
+                                    callbacks.onTrigger(trig.type || TriggerType.INFO, duration);
+                                }
+                                break;
+                            default:
+                                if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
+                                callbacks.onTrigger(trig.type || TriggerType.INFO, duration);
+                                break;
                         }
                     }
                 }

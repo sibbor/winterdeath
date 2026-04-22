@@ -266,7 +266,15 @@ export const FXSystem = {
 
     _spawnDecalImmediate: (req: FXSpawnRequest, decalList: THREE.Mesh[]) => {
         const type = req.type as FXDecalType;
-        const geo = type === FXDecalType.SPLATTER ? GEOMETRY.splatterDecal : GEOMETRY.decal;
+        let geo: THREE.BufferGeometry;
+        switch (type) {
+            case FXDecalType.SPLATTER:
+                geo = GEOMETRY.splatterDecal;
+                break;
+            default:
+                geo = GEOMETRY.decal;
+                break;
+        }
 
         let d: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
 
@@ -332,48 +340,63 @@ export const FXSystem = {
 
         const s = req.scale || 1.0;
         let fs = 1.0;
-        if (t === FXParticleType.FLASH) {
-            fs = (1.5 + Math.random() * 1.0) * s;
-            p.scaleVec.set(fs, fs, fs);
-        }
-        else if (t === FXParticleType.ELECTRIC_FLASH && req.hasCustomVel) {
-            const dist = req.customVel.length();
-            const thickness = (0.15 + Math.random() * 0.1) * s;
-            p.scaleVec.set(thickness, thickness, dist);
-        }
-        else if (t === FXParticleType.LARGE_FIRE) {
-            fs = 3.0 * Math.random() * s;
-            p.scaleVec.set(fs, fs, fs);
-        }
-        else if (t === FXParticleType.LARGE_SMOKE) {
-            fs = 4.0 * Math.random() * s;
-            p.scaleVec.set(fs, fs, fs);
-        }
-        else if (t === FXParticleType.BLACK_SMOKE) {
-            fs = (2.0 + Math.random() * 2.0) * s;
-            p.scaleVec.set(fs, fs, fs);
-        }
-        else if (t === FXParticleType.FLAME || t === FXParticleType.FIRE || t === FXParticleType.SMOKE || t === FXParticleType.ENEMY_EFFECT_FLAME || t === FXParticleType.ENEMY_EFFECT_SPARK || t === FXParticleType.FLAMETHROWER_FIRE) {
-            fs = (1.0 + Math.random() * 0.8) * s;
-            p.scaleVec.set(fs, fs, fs);
-        }
-        else if (t === FXParticleType.SPARK) {
-            fs = (0.5 + Math.random() * 0.5) * s;
-            p.scaleVec.set(fs, fs, fs);
-        }
-        else if (t === FXParticleType.SPLASH || t === FXParticleType.BLOOD_SPLATTER) {
-            fs = (0.5 + Math.random() * 0.7) * s;
-            p.scaleVec.set(fs, fs, fs);
-        }
-        else if (t === FXParticleType.ELECTRIC_BEAM) {
-            p.scaleVec.set(0.2, 0.2, 5.0);
-        }
-        else if (t === FXParticleType.SCREECH_WAVE || t === FXParticleType.SHOCKWAVE || t === FXParticleType.FROST_NOVA) {
-            p.scaleVec.set(1, 1, 1);
-        }
-        else {
-            fs = (0.3 + Math.random() * 0.3) * s;
-            p.scaleVec.set(fs, fs, fs);
+        switch (t) {
+            case FXParticleType.FLASH:
+                fs = (1.5 + Math.random() * 1.0) * s;
+                p.scaleVec.set(fs, fs, fs);
+                break;
+            case FXParticleType.ELECTRIC_FLASH:
+                if (req.hasCustomVel) {
+                    const dist = req.customVel.length();
+                    const thickness = (0.15 + Math.random() * 0.1) * s;
+                    p.scaleVec.set(thickness, thickness, dist);
+                } else {
+                    fs = (0.3 + Math.random() * 0.3) * s;
+                    p.scaleVec.set(fs, fs, fs);
+                }
+                break;
+            case FXParticleType.LARGE_FIRE:
+                fs = 3.0 * Math.random() * s;
+                p.scaleVec.set(fs, fs, fs);
+                break;
+            case FXParticleType.LARGE_SMOKE:
+                fs = 4.0 * Math.random() * s;
+                p.scaleVec.set(fs, fs, fs);
+                break;
+            case FXParticleType.BLACK_SMOKE:
+                fs = (2.0 + Math.random() * 2.0) * s;
+                p.scaleVec.set(fs, fs, fs);
+                break;
+            case FXParticleType.FLAME:
+            case FXParticleType.FIRE:
+            case FXParticleType.SMOKE:
+            case FXParticleType.ENEMY_EFFECT_FLAME:
+            case FXParticleType.ENEMY_EFFECT_SPARK:
+            case FXParticleType.FLAMETHROWER_FIRE:
+                fs = (1.0 + Math.random() * 0.8) * s;
+                p.scaleVec.set(fs, fs, fs);
+                break;
+            case FXParticleType.SPARK:
+                fs = (0.5 + Math.random() * 0.5) * s;
+                p.scaleVec.set(fs, fs, fs);
+                break;
+            case FXParticleType.SPLASH:
+            case FXParticleType.BLOOD_SPLATTER:
+                fs = (0.5 + Math.random() * 0.7) * s;
+                p.scaleVec.set(fs, fs, fs);
+                break;
+            case FXParticleType.ELECTRIC_BEAM:
+                p.scaleVec.set(0.2, 0.2, 5.0);
+                break;
+            case FXParticleType.SCREECH_WAVE:
+            case FXParticleType.SHOCKWAVE:
+            case FXParticleType.FROST_NOVA:
+                p.scaleVec.set(1, 1, 1);
+                break;
+            default:
+                fs = (0.3 + Math.random() * 0.3) * s;
+                p.scaleVec.set(fs, fs, fs);
+                break;
         }
 
         if (t === FXParticleType.ELECTRIC_FLASH) {
@@ -531,23 +554,35 @@ export const FXSystem = {
                 } else {
                     p.vel.x *= safeAirFriction; p.vel.y *= safeAirFriction; p.vel.z *= safeAirFriction;
                     const pScale = p.scaleVec;
-                    if (t === FXParticleType.SHOCKWAVE || t === FXParticleType.FLASH || t === FXParticleType.SCREECH_WAVE) {
-                        const grow = (t === FXParticleType.SHOCKWAVE ? 180 : (t === FXParticleType.FLASH ? 90 : 60)) * safeDelta;
-                        pScale.x += grow; pScale.y += grow; pScale.z += grow;
-                    } else if (t === FXParticleType.ELECTRIC_FLASH) {
-                        pScale.x *= 1.0 - (2.5 * safeDelta); pScale.y *= 1.0 - (2.5 * safeDelta);
-                    } else if (t === FXParticleType.FLAMETHROWER_FIRE) {
-                        const grow = 30.0 * safeDelta;
-                        pScale.x += grow; pScale.y += grow; pScale.z += grow;
-                    } else if (t === FXParticleType.FIRE || t === FXParticleType.FLAME || t === FXParticleType.LARGE_FIRE) {
-                        pScale.x *= safeFireShrinkRate; pScale.y *= safeFireShrinkRate; pScale.z *= safeFireShrinkRate;
-                    } else if (t === FXParticleType.BLACK_SMOKE) {
-                        const grow = 6.0 * safeDelta;
-                        pScale.x += grow; pScale.y += grow; pScale.z += grow;
-                    } else if (t === FXParticleType.ELECTRIC_BEAM) {
-                        pScale.z += 20 * safeDelta; pScale.x *= 0.9; pScale.y *= 0.9;
-                    } else {
-                        pScale.x *= safeShrinkRate; pScale.y *= safeShrinkRate; pScale.z *= safeShrinkRate;
+                    switch (t) {
+                        case FXParticleType.SHOCKWAVE:
+                        case FXParticleType.FLASH:
+                        case FXParticleType.SCREECH_WAVE:
+                            const grow = (t === FXParticleType.SHOCKWAVE ? 180 : (t === FXParticleType.FLASH ? 90 : 60)) * safeDelta;
+                            pScale.x += grow; pScale.y += grow; pScale.z += grow;
+                            break;
+                        case FXParticleType.ELECTRIC_FLASH:
+                            pScale.x *= 1.0 - (2.5 * safeDelta); pScale.y *= 1.0 - (2.5 * safeDelta);
+                            break;
+                        case FXParticleType.FLAMETHROWER_FIRE:
+                            const flGrow = 30.0 * safeDelta;
+                            pScale.x += flGrow; pScale.y += flGrow; pScale.z += flGrow;
+                            break;
+                        case FXParticleType.FIRE:
+                        case FXParticleType.FLAME:
+                        case FXParticleType.LARGE_FIRE:
+                            pScale.x *= safeFireShrinkRate; pScale.y *= safeFireShrinkRate; pScale.z *= safeFireShrinkRate;
+                            break;
+                        case FXParticleType.BLACK_SMOKE:
+                            const smGrow = 6.0 * safeDelta;
+                            pScale.x += smGrow; pScale.y += smGrow; pScale.z += smGrow;
+                            break;
+                        case FXParticleType.ELECTRIC_BEAM:
+                            pScale.z += 20 * safeDelta; pScale.x *= 0.9; pScale.y *= 0.9;
+                            break;
+                        default:
+                            pScale.x *= safeShrinkRate; pScale.y *= safeShrinkRate; pScale.z *= safeShrinkRate;
+                            break;
                     }
                 }
             }
@@ -620,20 +655,33 @@ export const FXSystem = {
     _handleLanding: (p: ParticleState, index: number, list: ParticleState[], callbacks: any) => {
         p.pos.y = 0.05;
         const t = p.type;
-        if (t === FXParticleType.BLOOD_SPLATTER) {
-            p.landed = true;
-            if (Math.random() < 0.40) callbacks.spawnDecal(p.pos.x, p.pos.z, 0.4 + Math.random() * 0.4, MATERIALS.bloodDecal);
-            FXSystem._killParticle(index, list);
-        } else if (t === FXParticleType.GORE) {
-            p.landed = true;
-            if (Math.random() < 0.40) callbacks.spawnDecal(p.pos.x, p.pos.z, 0.8 + Math.random() * 0.5, MATERIALS.bloodDecal);
-            GamePlaySounds.playImpact(MaterialType.FLESH);
-            p.vel.set(0, 0, 0);
-        } else if (t === FXParticleType.DEBRIS) {
-            if (p.vel.y < -8) { p.vel.y *= -0.3; p.vel.x *= 0.5; p.vel.z *= 0.5; p.landed = false; }
-            else { p.vel.set(0, 0, 0); p.landed = true; }
-        } else {
-            p.landed = true; FXSystem._killParticle(index, list);
+        switch (t) {
+            case FXParticleType.BLOOD_SPLATTER:
+                p.landed = true;
+                if (Math.random() < 0.40) callbacks.spawnDecal(p.pos.x, p.pos.z, 0.4 + Math.random() * 0.4, MATERIALS.bloodDecal);
+                FXSystem._killParticle(index, list);
+                break;
+            case FXParticleType.GORE:
+                p.landed = true;
+                if (Math.random() < 0.40) callbacks.spawnDecal(p.pos.x, p.pos.z, 0.8 + Math.random() * 0.5, MATERIALS.bloodDecal);
+                GamePlaySounds.playImpact(MaterialType.FLESH);
+                p.vel.set(0, 0, 0);
+                break;
+            case FXParticleType.DEBRIS:
+                if (p.vel.y < -8) {
+                    p.vel.y *= -0.3;
+                    p.vel.x *= 0.5;
+                    p.vel.z *= 0.5;
+                    p.landed = false;
+                } else {
+                    p.vel.set(0, 0, 0);
+                    p.landed = true;
+                }
+                break;
+            default:
+                p.landed = true;
+                FXSystem._killParticle(index, list);
+                break;
         }
     },
 
@@ -642,26 +690,83 @@ export const FXSystem = {
             let geo: THREE.BufferGeometry = GEOMETRY.particle;
             let mat: THREE.Material = MATERIALS.bullet;
 
-            if (type === FXParticleType.FIRE || type === FXParticleType.FLAME || type === FXParticleType.LARGE_FIRE || type === FXParticleType.CAMPFIRE_FLAME || type === FXParticleType.ENEMY_EFFECT_FLAME || type === FXParticleType.FLAMETHROWER_FIRE) {
-                geo = GEOMETRY.flame;
-                mat = (type === FXParticleType.ENEMY_EFFECT_FLAME) ? MATERIALS.enemy_effect_flame : MATERIALS.fire;
-            } else if (type === FXParticleType.SPARK || type === FXParticleType.SMOKE || type === FXParticleType.CAMPFIRE_SPARK || type === FXParticleType.CAMPFIRE_SMOKE || type === FXParticleType.ENEMY_EFFECT_SPARK) {
-                mat = (type === FXParticleType.ENEMY_EFFECT_SPARK) ? MATERIALS.enemy_effect_spark : MATERIALS.bullet;
-            } else if (type === FXParticleType.DEBRIS) mat = MATERIALS.stone;
-            else if (type === FXParticleType.GLASS) { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
-            else if (type === FXParticleType.FLASH || type === FXParticleType.ELECTRIC_FLASH) {
-                geo = (type === FXParticleType.FLASH) ? GEOMETRY.sphere : GEOMETRY.shard; mat = MATERIALS.flashWhite;
-            } else if (type === FXParticleType.ENEMY_EFFECT_STUN) { geo = GEOMETRY.shard; mat = MATERIALS.enemy_effect_stun; }
-            else if (type === FXParticleType.LARGE_SMOKE) { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
-            else if (type === FXParticleType.SPLASH) { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
-            else if (type === FXParticleType.BLOOD_SPLATTER) { geo = GEOMETRY.bloodSplatter; mat = MATERIALS.bloodSplatter; }
-            else if (type === FXParticleType.IMPACT_SPLAT) { geo = GEOMETRY.impactSplat; mat = MATERIALS.impactSplat; }
-            else if (type === FXParticleType.BLAST_RADIUS) { geo = GEOMETRY.blastRadius; mat = MATERIALS.blastRadius; }
-            else if (type === FXParticleType.GROUND_IMPACT || type === FXParticleType.IMPACT) { geo = GEOMETRY.stone; mat = MATERIALS.stone; }
-            else if (type === FXParticleType.SCREECH_WAVE || type === FXParticleType.SHOCKWAVE || type === FXParticleType.FROST_NOVA) { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
-            else if (type === FXParticleType.ELECTRIC_BEAM) { geo = GEOMETRY.shard; mat = MATERIALS.flashWhite; }
-            else if (type === FXParticleType.MAGNETIC_SPARKS) { geo = GEOMETRY.particle; mat = MATERIALS.bullet; }
-            else if (type === FXParticleType.GORE) { geo = GEOMETRY.gore; mat = _whiteGoreMaterial as THREE.Material; }
+            switch (type) {
+                case FXParticleType.FIRE:
+                case FXParticleType.FLAME:
+                case FXParticleType.LARGE_FIRE:
+                case FXParticleType.CAMPFIRE_FLAME:
+                case FXParticleType.ENEMY_EFFECT_FLAME:
+                case FXParticleType.FLAMETHROWER_FIRE:
+                    geo = GEOMETRY.flame;
+                    mat = (type === FXParticleType.ENEMY_EFFECT_FLAME) ? MATERIALS.enemy_effect_flame : MATERIALS.fire;
+                    break;
+                case FXParticleType.SPARK:
+                case FXParticleType.SMOKE:
+                case FXParticleType.CAMPFIRE_SPARK:
+                case FXParticleType.CAMPFIRE_SMOKE:
+                case FXParticleType.ENEMY_EFFECT_SPARK:
+                    mat = (type === FXParticleType.ENEMY_EFFECT_SPARK) ? MATERIALS.enemy_effect_spark : MATERIALS.bullet;
+                    break;
+                case FXParticleType.DEBRIS:
+                    mat = MATERIALS.stone;
+                    break;
+                case FXParticleType.GLASS:
+                    geo = GEOMETRY.shard;
+                    mat = MATERIALS.glassShard;
+                    break;
+                case FXParticleType.FLASH:
+                case FXParticleType.ELECTRIC_FLASH:
+                    geo = (type === FXParticleType.FLASH) ? GEOMETRY.sphere : GEOMETRY.shard;
+                    mat = MATERIALS.flashWhite;
+                    break;
+                case FXParticleType.ENEMY_EFFECT_STUN:
+                    geo = GEOMETRY.shard;
+                    mat = MATERIALS.enemy_effect_stun;
+                    break;
+                case FXParticleType.LARGE_SMOKE:
+                    geo = GEOMETRY.flame;
+                    mat = MATERIALS.smoke;
+                    break;
+                case FXParticleType.SPLASH:
+                    geo = GEOMETRY.splash;
+                    mat = MATERIALS.splash;
+                    break;
+                case FXParticleType.BLOOD_SPLATTER:
+                    geo = GEOMETRY.bloodSplatter;
+                    mat = MATERIALS.bloodSplatter;
+                    break;
+                case FXParticleType.IMPACT_SPLAT:
+                    geo = GEOMETRY.impactSplat;
+                    mat = MATERIALS.impactSplat;
+                    break;
+                case FXParticleType.BLAST_RADIUS:
+                    geo = GEOMETRY.blastRadius;
+                    mat = MATERIALS.blastRadius;
+                    break;
+                case FXParticleType.GROUND_IMPACT:
+                case FXParticleType.IMPACT:
+                    geo = GEOMETRY.stone;
+                    mat = MATERIALS.stone;
+                    break;
+                case FXParticleType.SCREECH_WAVE:
+                case FXParticleType.SHOCKWAVE:
+                case FXParticleType.FROST_NOVA:
+                    geo = GEOMETRY.shockwave;
+                    mat = MATERIALS.shockwave;
+                    break;
+                case FXParticleType.ELECTRIC_BEAM:
+                    geo = GEOMETRY.shard;
+                    mat = MATERIALS.flashWhite;
+                    break;
+                case FXParticleType.MAGNETIC_SPARKS:
+                    geo = GEOMETRY.particle;
+                    mat = MATERIALS.bullet;
+                    break;
+                case FXParticleType.GORE:
+                    geo = GEOMETRY.gore;
+                    mat = _whiteGoreMaterial as THREE.Material;
+                    break;
+            }
 
             if (!mat) mat = MATERIALS.bullet;
             const imesh = new THREE.InstancedMesh(geo, mat, MAX_INSTANCES_PER_MESH);

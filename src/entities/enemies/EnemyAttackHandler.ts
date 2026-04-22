@@ -31,10 +31,13 @@ export const EnemyAttackHandler = {
             e.attackCooldowns[att.type] = att.cooldown;
         }
 
-        if (att.type === EnemyAttackType.HIT) {
-            EnemyAttackHandler.handleBasicHit(e, att, distSq, callbacks, delta, simTime, renderTime);
-        } else {
-            EnemyAttackHandler.handleSpecialAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
+        switch (att.type) {
+            case EnemyAttackType.HIT:
+                EnemyAttackHandler.handleBasicHit(e, att, distSq, callbacks, delta, simTime, renderTime);
+                break;
+            default:
+                EnemyAttackHandler.handleSpecialAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
+                break;
         }
     },
 
