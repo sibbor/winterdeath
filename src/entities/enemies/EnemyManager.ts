@@ -20,6 +20,8 @@ import { WaterSystem } from '../../systems/WaterSystem';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { System, SystemID } from '../../systems/System';
+import { GameSessionLogic } from '../../game/session/GameSessionLogic';
+import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 
 export type { Enemy };
 
@@ -146,7 +148,8 @@ export const EnemyManager = {
     enabled: true,
     persistent: true,
 
-    init: (scene: THREE.Scene) => {
+    init: (session: GameSessionLogic) => {
+        const scene = session.engine.scene;
         if (!zombieRenderer) zombieRenderer = new ZombieRenderer(scene);
         else zombieRenderer.reAttach(scene);
 
@@ -160,21 +163,25 @@ export const EnemyManager = {
     },
 
     update: (
-        playerPos: THREE.Vector3,
-        enemies: Enemy[],
-        collisionGrid: SpatialGrid,
-        isDead: boolean,
-        onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number) => void,
-        spawnParticle: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void,
-        spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => void,
-        applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => void,
-        spawnBubble: ((text: string, duration: number) => void) | null,
-        water: WaterSystem | null,
+        session: GameSessionLogic,
         delta: number,
         simTime: number,
-        renderTime: number,
-        playerStatusFlags: number = 0 // VINTERDÖD: Required for grapple breaks
+        renderTime: number
     ) => {
+        const state = session.state;
+        const playerPos = session.playerPos || session.engine.camera.lookAtTarget;
+        const enemies = state.enemies;
+        const collisionGrid = state.collisionGrid;
+        const isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
+        const water = session.engine.water;
+        const playerStatusFlags = state.statusFlags;
+        const callbacks = state.callbacks;
+
+        const onPlayerHit = callbacks?.onPlayerHit;
+        const spawnParticle = callbacks?.spawnParticle;
+        const spawnDecal = callbacks?.spawnDecal;
+        const applyDamage = state.applyDamage;
+        const spawnBubble = callbacks?.spawnBubble;
 
         collisionGrid.updateEnemyGrid(enemies);
         _syncList.length = 0;
@@ -186,12 +193,10 @@ export const EnemyManager = {
         _aiContext.spawnBubble = spawnBubble;
         _aiContext.queryEnemies = (pos: THREE.Vector3, rad: number) => collisionGrid.getNearbyEnemies(pos, rad);
 
-        const engine = WinterEngine.getInstance();
-        const state = engine?.onUpdateContext?.state;
         const globalTimeScale = state?.globalTimeScale ?? 1.0;
         const scaledDelta = delta * globalTimeScale;
 
-        const camera = engine.camera;
+        const camera = session.engine.camera;
         const cameraPos = camera.threeCamera.position;
         const cameraDir = _camDir.set(0, 0, -1).applyQuaternion(camera.threeCamera.quaternion);
 

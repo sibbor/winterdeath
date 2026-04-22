@@ -737,25 +737,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
         // Only run these if not cinematic or boss intro
         if (!isCinematic && !isBossIntro) {
-            // 15. EnemyManager
-            monitor.begin('enemies');
-            EnemyManager.update(
-                playerGroup.position,
-                state.enemies,
-                state.collisionGrid,
-                (state.statusFlags & PlayerStatusFlags.DEAD) !== 0,
-                _fxCallbacks.onPlayerHit,
-                _fxCallbacks.spawnParticle,
-                _fxCallbacks.spawnDecal,
-                _gameContext.applyDamage,
-                activeCallbacks.spawnBubble,
-                water,
-                delta,
-                simTime,
-                renderTime,
-                state.statusFlags
-            );
-            monitor.end('enemies');
+            // 15. EnemyManager is now handled by the engine's system registry (fixed-step)
 
             // 16. ProjectileSystem
             monitor.begin('ProjectileSystem');

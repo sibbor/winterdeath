@@ -72,7 +72,7 @@ export class EnemySystem implements System {
 
         // Initialize the EnemyManager to setup ZombieRenderer for instanced drawing.
         // This is mandatory for enemies to be visible.
-        EnemyManager.init(scene);
+        EnemyManager.init(session);
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
@@ -83,25 +83,7 @@ export class EnemySystem implements System {
 
         if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
 
-        if (!state.bossIntroActive) {
-            EnemyManager.update(
-                session.playerPos || this.playerGroup.position,
-                state.enemies,
-                state.collisionGrid,
-                (state.statusFlags & PlayerStatusFlags.DEAD) !== 0,
-                this.callbacks.onPlayerHit,
-                this.updateCallbacks.spawnParticle,
-                this.updateCallbacks.spawnDecal,
-                this.updateCallbacks.applyDamage,
-                this.updateCallbacks.spawnBubble,
-                session.engine.water,
-                delta,
-                simTime,
-                renderTime,
-                state.statusFlags
-            );
-
-        }
+        // EnemyManager.update is now handled automatically by the engine as a registered system.
 
         EnemyManager.cleanupDeadEnemies(
             scene,
