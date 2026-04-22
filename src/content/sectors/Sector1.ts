@@ -477,7 +477,7 @@ export const Sector1: SectorDef = {
                             seed: jordan.userData.seed || 0,
                             renderTime: renderTime,
                             simTime: simTime
-                        }, renderTime);
+                        }, renderTime, delta);
                     }
 
                     if (jordan.position.distanceTo(target) < 1.5) {

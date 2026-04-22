@@ -371,7 +371,7 @@ export class CinematicSystem implements System {
                 _animState.renderTime = now;
                 _animState.simTime = now; // Cinematic uses render clock for visuals
 
-                PlayerAnimator.update(body as THREE.Mesh, _animState, now);
+                PlayerAnimator.update(body as THREE.Mesh, _animState, now, delta);
             }
         }
 

@@ -136,7 +136,7 @@ export class FamilySystem implements System {
                     _animState.isIdleLong = false;
                     _animState.renderTime = renderTime;
                     _animState.simTime = simTime;
-                    PlayerAnimator.update(body, _animState, renderTime);
+                    PlayerAnimator.update(body, _animState, renderTime, delta);
                 }
 
                 familyMember.wasInVehicle = true;
@@ -328,7 +328,7 @@ export class FamilySystem implements System {
 
                 _animState.renderTime = renderTime;
                 _animState.simTime = simTime;
-                PlayerAnimator.update(body, _animState, renderTime);
+                PlayerAnimator.update(body, _animState, renderTime, delta);
             }
         }
     }

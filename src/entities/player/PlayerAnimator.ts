@@ -25,6 +25,10 @@ export interface AnimState {
     simTime: number;
     seed: number;
 
+    // --- VINTERDÖD: CACHED LEANING FOR SMOOTHER MOTION ---
+    leanX?: number;
+    leanZ?: number;
+
     // --- VINTERDÖD: CACHED ENTITY STATE (Phase 13) ---
     nodes?: PlayerNodes;
     baseScale?: number;
@@ -34,9 +38,10 @@ export interface AnimState {
 export const PlayerAnimator = {
 
     update: (
-        mesh: THREE.Mesh,
+        mesh: THREE.Mesh | THREE.Object3D,
         animState: AnimState,
-        renderTime: number
+        renderTime: number,
+        delta: number
     ) => {
         if (!mesh) return;
 
@@ -125,24 +130,39 @@ export const PlayerAnimator = {
             const cosWobble = Math.cos(moveTime);
             const rushFactor = animState.isRushing ? 2.0 : 1.0;
 
+            // --- VINTERDÖD: TARGET LEAN CALCULATION ---
+            let targetLeanX = animState.isRushing ? 0.4 : (animState.isWading ? 0.3 : 0.2); // Default framåt
+            let targetLeanZ = 0;
+
             if (animState.isBacking) {
-                rotationX = -0.15;
+                targetLeanX = -0.15; // Luta bakåt vid backpedal
+            } else if (animState.isStrafing) {
+                targetLeanX = 0.05; // Luta i stort sett rakt upp
+                // Luta axlarna in i rörelseriktningen (Strafe)
+                targetLeanZ = (animState.strafeDirection || 0) * 0.25;
+            }
+
+            // --- VINTERDÖD: SMOOTH LERPING (ZERO-GC) ---
+            // Detta skapar den "fjädrande", mjuka Game Feel-övergången
+            animState.leanX = THREE.MathUtils.lerp(animState.leanX || 0, targetLeanX, 10 * delta);
+            animState.leanZ = THREE.MathUtils.lerp(animState.leanZ || 0, targetLeanZ, 10 * delta);
+
+            rotationX = animState.leanX;
+            rotationZ = animState.leanZ + (cosWobble * 0.05); // Lägg animerings-wobble ovanpå baslutningen
+
+            // Vanka/Bounce beroende på riktning
+            if (animState.isBacking) {
                 scaleY = 1.0 + (absBob * 0.15 * rushFactor);
                 scaleXZ = 1.0 - (absBob * 0.05 * rushFactor);
-                rotationZ = cosWobble * 0.08;
-                positionY = absBob * 0.1;
+                positionY = absBob * 0.1; // Lägre bounce
             } else if (animState.isStrafing) {
-                rotationX = 0.05;
-                const strafeLean = (animState.strafeDirection || 0) * 0.2;
-                rotationZ = strafeLean + (cosWobble * 0.05);
                 scaleY = 1.0 + (absBob * 0.1 * rushFactor);
                 scaleXZ = 1.0 - (absBob * 0.05 * rushFactor);
-                positionY = absBob * 0.15;
+                positionY = absBob * 0.15; // Medel bounce
             } else {
-                rotationX = animState.isRushing ? 0.4 : (animState.isWading ? 0.3 : 0.2);
                 scaleY = 1.0 + (absBob * 0.1 * rushFactor);
                 scaleXZ = 1.0 - (absBob * 0.05 * rushFactor);
-                rotationZ = cosWobble * 0.05;
+                positionY = absBob * 0.2; // Aggressiv framåt-bounce
             }
 
             if (animState.isWading) positionY += absBob * 0.2;
@@ -150,19 +170,31 @@ export const PlayerAnimator = {
 
         // Stationary behaviors
         else {
+            // --- VINTERDÖD: Återgå mjukt till upprätt när man stannar ---
+            animState.leanX = THREE.MathUtils.lerp(animState.leanX || 0, 0, 10 * delta);
+            animState.leanZ = THREE.MathUtils.lerp(animState.leanZ || 0, 0, 10 * delta);
+
+            rotationX = animState.leanX;
+            rotationZ = animState.leanZ + (Math.sin(t * 0.001 + seed) * 0.03);
+
             scaleY = 1.0 + (sinBreathe * breatheAmp * 1.5);
             scaleXZ = 1.0 - (sinBreathe * (breatheAmp * 0.75));
-            rotationZ = Math.sin(t * 0.001 + seed) * 0.03;
 
+            // Speaking animation
             if (animState.isSpeaking) {
                 const talkWobble = Math.sin(t * 0.03) * 0.1;
                 scaleY += talkWobble + 0.1;
                 scaleXZ -= talkWobble * 0.5;
-            } else if (animState.isThinking) {
+            }
+            // Thinking animation
+            else if (animState.isThinking) {
                 const nod = Math.sin(t * 0.008);
                 rotationX = 0.3 + (nod * 0.1);
                 rotationZ += Math.sin(t * 0.003) * 0.1;
-            } else if (animState.isIdleLong) {
+            }
+
+            // Idle Long: Adds shiver/shake + breathing
+            else if (animState.isIdleLong) {
                 const shiverTrigger = Math.sin(t * 0.00015 + seed); // Scaled from 0.001
                 if (shiverTrigger > 0.8) rotationZ += Math.sin(t * 0.05) * 0.05;
                 if (sinShift > 0.95) {

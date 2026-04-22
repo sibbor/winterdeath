@@ -401,7 +401,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 _animStateScratch.isMoving = false;
                 _animStateScratch.isRushing = false;
                 _animStateScratch.isDodging = false;
-                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now);
+                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, delta);
             }
             refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
             return;
@@ -578,7 +578,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 _animStateScratch.baseY = state.baseY;
 
                 monitor.begin('player_animation');
-                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, renderTime);
+                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, renderTime, delta);
                 monitor.end('player_animation');
             }
         }

@@ -463,14 +463,17 @@ export class PlayerMovementSystem implements System {
                 _v1.copy(_v6);
                 if (camAngle !== 0) _v1.applyAxisAngle(_UP, camAngle);
 
-                _forward.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+                // VINTERDÖD FIX: Zero-GC, Branchless & Normalize-free dot product
+                _forward.set(0, 0, 1).applyQuaternion(playerGroup.quaternion);
                 const dot = _forward.dot(_v1);
 
                 state.isBacking = dot < -0.4;
                 state.isStrafing = Math.abs(dot) < 0.4;
 
                 if (state.isStrafing) {
-                    _right.crossVectors(_forward, _UP).normalize();
+                    // VINTERDÖD FIX: Bypass heavy crossVectors and Math.sqrt. 
+                    // An orthogonal vector to (x, 0, z) on the Y-plane is simply (-z, 0, x).
+                    _right.set(-_forward.z, 0, _forward.x);
                     state.strafeDirection = Math.sign(_right.dot(_v1));
                 } else {
                     state.strafeDirection = 0;

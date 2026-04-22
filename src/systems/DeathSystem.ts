@@ -280,7 +280,7 @@ export class DeathSystem implements System {
             _deathAnimState.deathStartTime = state.deathStartTime;
             _deathAnimState.renderTime = state.renderTime;
             _deathAnimState.simTime = state.simTime;
-            PlayerAnimator.update(playerMesh as any, _deathAnimState, renderTime);
+            PlayerAnimator.update(playerMesh as any, _deathAnimState, renderTime, delta);
         }
 
         // --- 4. Family Grief ---
@@ -336,7 +336,7 @@ export class DeathSystem implements System {
                 _griefAnimState.renderTime = state.renderTime;
                 _griefAnimState.simTime = state.simTime;
                 _griefAnimState.staminaRatio = state.statsBuffer[PlayerStatID.STAMINA] / Math.max(1, state.statsBuffer[PlayerStatID.MAX_STAMINA]);
-                PlayerAnimator.update(body, _griefAnimState, renderTime);
+                PlayerAnimator.update(body, _griefAnimState, renderTime, delta);
             }
         }
     }

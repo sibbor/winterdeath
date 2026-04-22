@@ -350,7 +350,7 @@ export const Sector3: SectorDef = {
                             staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false,
                             isSwimming: false, isWading: false, seed: fm.userData.seed || 0,
                             renderTime, simTime
-                        }, renderTime);
+                        }, renderTime, delta);
                     }
                 } else {
                     // Hide them once at the door (they've "entered")
@@ -416,7 +416,7 @@ export const Sector3: SectorDef = {
                             isMoving: true, isRushing: false, isDodging: false, dodgeStartTime: 0,
                             staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false,
                             isSwimming: false, isWading: false, seed: fm.userData.seed || 0, renderTime, simTime
-                        }, renderTime);
+                        }, renderTime, delta);
                     }
                 }
             }
@@ -476,7 +476,7 @@ export const Sector3: SectorDef = {
                         isMoving: dist > 0.3, isRushing: false, isDodging: false, dodgeStartTime: 0,
                         staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false,
                         isSwimming: false, isWading: false, seed: fm.userData.seed || 0, renderTime, simTime
-                    }, renderTime);
+                    }, renderTime, delta);
                 }
             }
 
@@ -504,7 +504,7 @@ export const Sector3: SectorDef = {
                         isMoving: false, isRushing: false, isDodging: false, dodgeStartTime: 0,
                         staminaRatio: 1.0, isSpeaking: true, isCelebrating: true, isThinking: false, isIdleLong: false,
                         isSwimming: false, isWading: false, seed: fm.userData.seed || 0, renderTime, simTime
-                    }, renderTime);
+                    }, renderTime, delta);
                 }
             }
 
@@ -531,7 +531,7 @@ export const Sector3: SectorDef = {
                         isMoving: false, isRushing: false, isDodging: false, dodgeStartTime: 0,
                         staminaRatio: 1.0, isSpeaking: false, isHugging: true, isThinking: false, isIdleLong: false,
                         isSwimming: false, isWading: false, seed: fm.userData.seed || 0, renderTime, simTime
-                    }, renderTime);
+                    }, renderTime, delta);
                 }
             }
 
