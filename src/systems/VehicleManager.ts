@@ -4,10 +4,11 @@ import { VehicleSounds } from '../utils/audio/AudioLib';
 import { audioEngine } from '../utils/audio/AudioEngine';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
-import { DamageID } from '../entities/player/CombatTypes';
 import { VehicleDef } from '../content/vehicles';
 import { FLASHLIGHT } from '../content/constants';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
+import { VehicleState, VehicleNodes, VehicleTypes, VehicleCategory } from '../entities/vehicles/VehicleTypes';
+import { GEOMETRY, MATERIALS } from '../utils/assets';
 
 const HIT_COOLDOWN_MS = 350;
 const SPEED_SQ_PUSH = 1.0;
@@ -38,20 +39,19 @@ export const VehicleManager = {
 
         if (state.vehicle.active && vehicle) {
             const def = vehicle.userData.vehicleDef;
+            const vState = state.vehicle; // O(1) Ref
 
             if (state.vehicle.engineState === 'OFF') {
-                const vel = vehicle.userData.velocity as THREE.Vector3;
-                const angVel = vehicle.userData.angularVelocity as THREE.Vector3;
-                VehicleManager.enterVehicle(playerGroup, vehicle, state, def, vel, angVel);
+                VehicleManager.enterVehicle(playerGroup, vehicle, state, def);
             }
 
             if (input.e && !state.eDepressed && state.vehicle.engineState !== 'OFF') {
                 VehicleManager.exitVehicle(playerGroup, vehicle, state, def);
             }
 
-            // 2. Collision Logic (OPTIMIZED)
+            // 2. Collision Logic (OPTIMIZED - Using direct state)
             if (state.vehicle.engineState !== 'OFF') {
-                const vel = vehicle.userData.velocity as THREE.Vector3;
+                const vel = vState.velocity;
                 VehicleManager.handleEnemyCollisions(vehicle, vel, def, session, delta, simTime, renderTime);
                 VehicleManager.handleObstacleCollisions(vehicle, vel, def, session);
 
@@ -60,30 +60,81 @@ export const VehicleManager = {
                 const noiseType = speedSq > 5 ? NoiseType.VEHICLE_DRIVE : NoiseType.VEHICLE_IDLE;
                 const noiseRadius = NOISE_RADIUS[noiseType];
 
-                if (simTime - vehicle.userData._lastNoiseTime > 500) {
+                if (simTime - vState._lastNoiseTime > 500) {
                     session.makeNoise(vehicle.position, noiseType, noiseRadius);
-                    vehicle.userData._lastNoiseTime = simTime;
+                    vState._lastNoiseTime = simTime;
                 }
             }
         }
+    },
+
+    discoverNodes: (vehicle: THREE.Object3D): VehicleNodes => {
+        const nodes = VehicleTypes.createNodes();
+        nodes.visualMesh = vehicle.children[0] || null;
+
+        vehicle.traverse((child: any) => {
+            if (child.userData.chassis) nodes.chassis = child;
+            if (child.name === 'headlights') nodes.headlights = child;
+            if (child.name.includes('brake_light')) {
+                if (!nodes.brakeLights) nodes.brakeLights = [];
+                nodes.brakeLights.push(child);
+            }
+            if (child.name === 'siren_blue') nodes.sirenBlue = child;
+            if (child.name === 'siren_red') nodes.sirenRed = child;
+            if (child.name.includes('wheel')) nodes.wheels.push(child);
+        });
+
+        // GC FIX: Pre-allocate brake glow decal once
+        const def = vehicle.userData.vehicleDef as VehicleDef;
+        const glowMesh = new THREE.Mesh(GEOMETRY.fakeBrakeGlow, MATERIALS.brakeGlow);
+        let rearZ = def ? -(def.size.z / 2) : -2;
+        if (nodes.brakeLights && nodes.brakeLights[0]) {
+            rearZ = nodes.brakeLights[0].position.z;
+        }
+        glowMesh.position.set(0, 0.1, rearZ - 0.2);
+        glowMesh.visible = false;
+        vehicle.add(glowMesh);
+        nodes.brakeGlow = glowMesh;
+
+        return nodes;
     },
 
     enterVehicle: (
         playerGroup: THREE.Group,
         vehicle: THREE.Object3D,
         state: any,
-        def: VehicleDef,
-        vel: THREE.Vector3,
-        angVel: THREE.Vector3
+        def: VehicleDef
     ) => {
-        state.vehicle.engineState = 'RUNNING';
+        // 1. Ensure DOD structures exist on the vehicle instance
+        if (!vehicle.userData.state) {
+            vehicle.userData.state = VehicleTypes.createState();
+        }
+        if (!vehicle.userData.nodes) {
+            vehicle.userData.nodes = VehicleManager.discoverNodes(vehicle);
+        }
+
+        const vState = vehicle.userData.state as VehicleState;
+        const vNodes = vehicle.userData.nodes as VehicleNodes;
+
+        // 2. Point Global RuntimeState to this vehicle's buffers
+        state.vehicle.mesh = vehicle;
+        state.vehicle.nodes = vNodes;
+
+        // Zero-GC Transfer: Copy properties from instance to runtime active buffer
         state.vehicle.type = def.type;
         state.vehicle.active = true;
-        const category = def.category === 'BOAT' ? 'BOAT' : 'CAR';
-        //VehicleSounds.playEnter(category);
-        //vehicle.userData.engineVoiceIdx = VehicleSounds.startEngine(category);
-        vel.set(0, 0, 0);
-        angVel.set(0, 0, 0);
+        state.vehicle.engineState = 'RUNNING';
+
+        // Link reference values
+        state.vehicle.velocity = vState.velocity;
+        state.vehicle.angularVelocity = vState.angularVelocity;
+        state.vehicle.speed = vState.speed;
+        state.vehicle.throttle = vState.throttle;
+        state.vehicle.suspY = vState.suspY;
+        state.vehicle.suspVelY = vState.suspVelY;
+
+        vState.velocity.set(0, 0, 0);
+        vState.angularVelocity.set(0, 0, 0);
 
         playerGroup.visible = false;
 
@@ -93,13 +144,12 @@ export const VehicleManager = {
 
         const headlight = playerGroup.getObjectByName(FLASHLIGHT.name) as THREE.SpotLight;
         if (headlight) {
-            const lights = vehicle.userData.lights;
             let frontZ = 0;
             let lightY = 0;
 
-            if (lights && lights.headlights && lights.headlights.meshes.length > 0) {
-                frontZ = lights.headlights.meshes[0].position.z;
-                lightY = lights.headlights.meshes[0].position.y;
+            if (vNodes.headlights) {
+                frontZ = vNodes.headlights.position.z;
+                lightY = vNodes.headlights.position.y;
             } else {
                 const box = new THREE.Box3().setFromObject(vehicle);
                 frontZ = box.max.z;
@@ -110,13 +160,7 @@ export const VehicleManager = {
             headlight.target.position.set(0, lightY, frontZ + 20);
             headlight.updateMatrix();
 
-            let mountTarget = vehicle;
-            if (vehicle.userData.chassis) {
-                mountTarget = vehicle.userData.chassis;
-            } else if (vehicle.children[0]?.userData?.chassis) {
-                mountTarget = vehicle.children[0].userData.chassis;
-            }
-
+            const mountTarget = vNodes.chassis || vehicle;
             mountTarget.add(headlight);
             if (headlight.target) mountTarget.add(headlight.target);
 
@@ -140,16 +184,19 @@ export const VehicleManager = {
         state.eDepressed = true;
         state.vehicle.active = false;
         state.vehicle.mesh = null;
+        state.vehicle.nodes = null;
         state.vehicle.type = '';
         state.vehicle.speed = 0;
         state.vehicle.engineState = 'OFF';
 
-        if (vehicle.userData.engineVoiceIdx !== undefined && vehicle.userData.engineVoiceIdx !== -1) {
-            audioEngine.stopVoice(vehicle.userData.engineVoiceIdx);
-            vehicle.userData.engineVoiceIdx = -1;
+        const vState = vehicle.userData.state as VehicleState;
+
+        if (vState.engineVoiceIdx !== -1) {
+            audioEngine.stopVoice(vState.engineVoiceIdx);
+            vState.engineVoiceIdx = -1;
         }
 
-        VehicleSounds.playExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
+        VehicleSounds.playExit(def.category === VehicleCategory.BOAT ? 'BOAT' : 'CAR');
 
         _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
             .applyQuaternion(vehicle.quaternion);
@@ -185,9 +232,9 @@ export const VehicleManager = {
             if (headlight.target) headlight.target.updateMatrixWorld(true);
         }
 
-        const lights = vehicle.userData.lights;
-        if (lights?.brake?.fakeGlow) {
-            lights.brake.fakeGlow.visible = false;
+        const vNodes = vehicle.userData.nodes as VehicleNodes;
+        if (vNodes?.brakeGlow) {
+            vNodes.brakeGlow.visible = false;
         }
 
         if (state.collisionGrid) {
@@ -205,6 +252,8 @@ export const VehicleManager = {
         simTime: number,
         renderTime: number
     ) => {
+        const vState = vehicle.userData.state as VehicleState;
+        if (!vState) return;
         const speedSq = vel.lengthSq();
         if (speedSq < SPEED_SQ_PUSH) return;
 
@@ -281,7 +330,7 @@ export const VehicleManager = {
 
         if (hitAnyone) {
             if (isHeavyHit) {
-                vehicle.userData.suspVelY += 2.0;
+                vState.suspVelY += 2.0;
                 VehicleSounds.playImpact('heavy');
             } else {
                 VehicleSounds.playImpact('light');
@@ -324,7 +373,8 @@ export const VehicleManager = {
                     vel.addScaledVector(_toEnemy, -impactDot * 1.2);
                 }
 
-                vehicle.userData.suspVelY += impactDot < 0 ? -impactDot * 0.5 : impactDot * 0.5;
+                const vState = vehicle.userData.state as VehicleState;
+                if (vState) vState.suspVelY += impactDot < 0 ? -impactDot * 0.5 : impactDot * 0.5;
                 vel.multiplyScalar(0.85);
 
                 const impactSpeed = Math.abs(impactDot);

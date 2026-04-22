@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { System } from '../../systems/System';
-import { GameSessionLogic } from '../../game/session/GameSessionLogic';
-import { Enemy } from './EnemyTypes';
-import { EnemyManager } from '../enemies/EnemyManager';
-import { FXSystem } from '../../systems/FXSystem';
-import { WorldLootSystem } from '../../systems/WorldLootSystem';
-import { DamageID } from '../player/CombatTypes';
-import { PlayerStatusFlags } from '../player/PlayerTypes';
-import { FXParticleType, FXDecalType } from '../../types/FXTypes';
+import { System } from './System';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
+import { Enemy } from '../entities/enemies/EnemyTypes';
+import { EnemyManager } from '../entities/enemies/EnemyManager';
+import { FXSystem } from './FXSystem';
+import { WorldLootSystem } from './WorldLootSystem';
+import { DamageID } from '../entities/player/CombatTypes';
+import { PlayerStatusFlags } from '../entities/player/PlayerTypes';
+import { FXParticleType, FXDecalType } from '../types/FXTypes';
 
 // --- TYPE DEFINITIONS ---
 interface Callbacks {
@@ -17,7 +17,6 @@ interface Callbacks {
     onDiscovery?: (type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
     spawnBubble: (text: string, duration?: number) => void;
 }
-
 
 export class EnemySystem implements System {
     id = 'enemy_system';

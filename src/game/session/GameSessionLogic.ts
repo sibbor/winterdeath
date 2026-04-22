@@ -332,6 +332,7 @@ export class GameSessionLogic {
             vehicle: {
                 active: false,
                 mesh: null,
+                nodes: null,
                 type: '',
                 speed: 0,
                 throttle: 0,
@@ -339,7 +340,11 @@ export class GameSessionLogic {
                 velocity: new THREE.Vector3(),
                 angularVelocity: new THREE.Vector3(),
                 suspY: 0,
-                suspVelY: 0
+                suspVelY: 0,
+                prevFwdSpeed: 0,
+                _lastNoiseTime: 0,
+                engineVoiceIdx: -1,
+                skidVoiceIdx: -1
             },
             flashlightOn: false,
             hasCurrentInteraction: false,

@@ -41,17 +41,12 @@ export interface PreallocatedInteractionRequest {
     targetId: string;
 }
 
-export interface PreallocatedVehicleState {
+import { VehicleState, VehicleNodes } from '../entities/vehicles/VehicleTypes';
+
+export interface PreallocatedVehicleState extends VehicleState {
     active: boolean;
     mesh: THREE.Object3D | null;
-    type: string;
-    speed: number;
-    throttle: number;
-    engineState: 'OFF' | 'STARTING' | 'RUNNING';
-    velocity: THREE.Vector3;
-    angularVelocity: THREE.Vector3;
-    suspY: number;
-    suspVelY: number;
+    nodes: VehicleNodes | null;
 }
 
 /*

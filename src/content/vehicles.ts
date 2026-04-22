@@ -3,15 +3,17 @@
 
 // --- TYPES ---
 
+import { VehicleDrivetrain, VehicleCategory } from '../entities/vehicles/VehicleTypes';
+
 export type VehicleType = 'tractor' | 'station_wagon' | 'sedan' | 'police' | 'ambulance' | 'bus' | 'timber_truck' | 'boat';
-export type Drivetrain = 'FWD' | 'RWD' | 'AWD';
-export type VehicleCategory = 'CAR' | 'TRUCK' | 'BOAT' | 'AGRICULTURAL';
+export type Drivetrain = VehicleDrivetrain;
+export type VehicleCategoryType = VehicleCategory; // Renamed to avoid collision with enum
 
 // --- INTERFACE ---
 
 export interface VehicleDef {
     type: VehicleType;
-    category: VehicleCategory;
+    category: VehicleCategoryType;
     displayName: string;               // Locale key
 
     // Physics
@@ -46,7 +48,7 @@ export interface VehicleDef {
 export const VEHICLES: Record<VehicleType, VehicleDef> = {
     station_wagon: {
         type: 'station_wagon',
-        category: 'CAR',
+        category: VehicleCategory.CAR,
         displayName: 'vehicles.station_wagon',
         maxSpeed: 125,
         acceleration: 7.0,
@@ -56,7 +58,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         mass: 1400,
         friction: 0.97,
         lateralFriction: 0.85,
-        drivetrain: 'FWD',
+        drivetrain: VehicleDrivetrain.FWD,
         suspensionStiffness: 6.0,
         suspensionDamping: 0.6,
         collisionDamageMultiplier: 1.0,
@@ -67,7 +69,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
 
     sedan: {
         type: 'sedan',
-        category: 'CAR',
+        category: VehicleCategory.CAR,
         displayName: 'vehicles.sedan',
         maxSpeed: 135,
         acceleration: 8.5,
@@ -77,7 +79,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         mass: 1300,
         friction: 0.97,
         lateralFriction: 0.80,
-        drivetrain: 'FWD',
+        drivetrain: VehicleDrivetrain.FWD,
         suspensionStiffness: 8.0,
         suspensionDamping: 0.7,
         collisionDamageMultiplier: 1.0,
@@ -88,7 +90,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
 
     police: {
         type: 'police',
-        category: 'CAR',
+        category: VehicleCategory.CAR,
         displayName: 'vehicles.police',
         maxSpeed: 150,
         acceleration: 10.0,
@@ -98,7 +100,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         mass: 1500,
         friction: 0.985,
         lateralFriction: 0.70,
-        drivetrain: 'RWD',
+        drivetrain: VehicleDrivetrain.RWD,
         suspensionStiffness: 10.0,
         suspensionDamping: 0.8,
         collisionDamageMultiplier: 1.2,
@@ -109,7 +111,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
 
     ambulance: {
         type: 'ambulance',
-        category: 'TRUCK',
+        category: VehicleCategory.TRUCK,
         displayName: 'vehicles.ambulance',
         maxSpeed: 110,
         acceleration: 9.0,
@@ -119,7 +121,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         mass: 2200,
         friction: 0.96,
         lateralFriction: 0.75,
-        drivetrain: 'RWD',
+        drivetrain: VehicleDrivetrain.RWD,
         suspensionStiffness: 5.0,
         suspensionDamping: 0.5,
         collisionDamageMultiplier: 1.5,
@@ -130,7 +132,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
 
     bus: {
         type: 'bus',
-        category: 'TRUCK',
+        category: VehicleCategory.TRUCK,
         displayName: 'vehicles.bus',
         maxSpeed: 85,
         acceleration: 4.0,
@@ -140,7 +142,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         mass: 8000,
         friction: 0.96,
         lateralFriction: 0.90,
-        drivetrain: 'RWD',
+        drivetrain: VehicleDrivetrain.RWD,
         suspensionStiffness: 4.0,
         suspensionDamping: 0.4,
         collisionDamageMultiplier: 2.5,
@@ -151,7 +153,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
 
     tractor: {
         type: 'tractor',
-        category: 'AGRICULTURAL',
+        category: VehicleCategory.AGRICULTURAL,
         displayName: 'vehicles.tractor',
         maxSpeed: 40,
         acceleration: 6.0,
@@ -161,7 +163,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         mass: 3500,
         friction: 0.96,
         lateralFriction: 0.85,
-        drivetrain: 'AWD',
+        drivetrain: VehicleDrivetrain.AWD,
         suspensionStiffness: 3.0,
         suspensionDamping: 0.3,
         collisionDamageMultiplier: 1.8,
@@ -172,7 +174,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
 
     timber_truck: {
         type: 'timber_truck',
-        category: 'TRUCK',
+        category: VehicleCategory.TRUCK,
         displayName: 'vehicles.timber_truck',
         maxSpeed: 55,
         acceleration: 3.5,
@@ -182,7 +184,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         mass: 12000,
         friction: 0.95,
         lateralFriction: 0.92,
-        drivetrain: 'AWD',
+        drivetrain: VehicleDrivetrain.AWD,
         suspensionStiffness: 3.0,
         suspensionDamping: 0.3,
         collisionDamageMultiplier: 3.0,
@@ -193,7 +195,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
 
     boat: {
         type: 'boat',
-        category: 'BOAT',
+        category: VehicleCategory.BOAT,
         displayName: 'vehicles.boat',
         maxSpeed: 15,
         acceleration: 5.0,
@@ -203,7 +205,7 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         mass: 250,
         friction: 0.98,
         lateralFriction: 0.45,
-        drivetrain: 'RWD',
+        drivetrain: VehicleDrivetrain.RWD,
         collisionDamageMultiplier: 0.3,
         size: { x: 3.75, y: 2.25, z: 9.75 },
         seatOffset: { x: 0, y: 0.75, z: -1.5 },

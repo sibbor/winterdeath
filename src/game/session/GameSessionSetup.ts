@@ -29,7 +29,7 @@ import { PlayerCombatSystem } from '../../systems/PlayerCombatSystem';
 import { PlayerStatsSystem } from '../../systems/PlayerStatsSystem';
 import { WorldLootSystem } from '../../systems/WorldLootSystem';
 import { PlayerInteractionSystem } from '../../systems/PlayerInteractionSystem';
-import { EnemySystem } from '../../entities/enemies/EnemySystem';
+import { EnemySystem } from '../../systems/EnemySystem';
 import { SectorSystem } from '../../systems/SectorSystem';
 import { FamilySystem } from '../../systems/FamilySystem';
 import { CinematicSystem } from '../../systems/CinematicSystem';
