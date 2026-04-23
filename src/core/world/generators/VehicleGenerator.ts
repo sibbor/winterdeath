@@ -450,6 +450,7 @@ export const VehicleGenerator = {
             const glow = new THREE.Mesh(SHARED_GEOMETRIES.sphere, MATERIALS.vehicleHeadlight);
             glow.scale.setScalar(0.15 * S);
             glow.position.set(xPos, yPos, zPos);
+            glow.name = 'headlights';
             chassis.add(glow);
             return glow;
         };
@@ -470,6 +471,7 @@ export const VehicleGenerator = {
             const glow = new THREE.Mesh(SHARED_GEOMETRIES.box, MATERIALS.vehicleBrakeLight);
             glow.scale.set(0.4 * S, 0.2 * S, 0.01);
             glow.position.set(xPos, yPos, zPos);
+            glow.name = xPos < 0 ? 'brake_light_left' : 'brake_light_right';
             chassis.add(glow);
             return glow;
         };
@@ -487,11 +489,13 @@ export const VehicleGenerator = {
         const blue = new THREE.Mesh(SHARED_GEOMETRIES.box, MATERIALS.vehicleSirenBlue);
         blue.scale.set(0.3 * S, 0.1 * S, 0.15 * S);
         blue.position.set(x + 0.2 * S, y + 0.15 * S, z);
+        blue.name = 'siren_blue';
         chassis.add(blue);
 
         const red = new THREE.Mesh(SHARED_GEOMETRIES.box, MATERIALS.vehicleSirenRed);
         red.scale.set(0.3 * S, 0.1 * S, 0.15 * S);
         red.position.set(x - 0.2 * S, y + 0.15 * S, z);
+        red.name = 'siren_red';
         chassis.add(red);
 
         if (enableBlinking) {

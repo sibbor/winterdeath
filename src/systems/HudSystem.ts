@@ -203,7 +203,7 @@ export const HudSystem = {
         _fastUpdateDetail.reloadProgress = reloadProgress;
         _fastUpdateDetail.bossHpP = bossHpP;
         _fastUpdateDetail.vehicleSpeed = state.vehicle.active ? state.vehicle.speed : 0;
-        _fastUpdateDetail.throttleState = state.vehicleThrottle || 0;
+        _fastUpdateDetail.throttleState = state.vehicle.active ? state.vehicle.throttle : 0;
         _fastUpdateDetail.kills = state.sessionStats.kills;
         _fastUpdateDetail.scrap = (props.stats?.statsBuffer?.[PlayerStatID.SCRAP] || 0) + state.statsBuffer[PlayerStatID.SCRAP];
         _fastUpdateDetail.spEarned = state.sessionStats.spGained;
@@ -378,7 +378,7 @@ export const HudSystem = {
 
         _current.isDriving = !!state.vehicle.active;
         _current.vehicleSpeed = state.vehicle.speed || 0;
-        _current.throttleState = state.vehicleThrottle || 0;
+        _current.throttleState = state.vehicle.throttle || 0;
         _current.spEarned = spGained;
 
         _current.isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;

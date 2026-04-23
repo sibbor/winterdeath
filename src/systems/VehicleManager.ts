@@ -151,12 +151,13 @@ export const VehicleManager = {
             let lightY = 0;
 
             if (vNodes.headlights) {
+                // If headlights mesh is found, use its local Z position
                 frontZ = vNodes.headlights.position.z;
                 lightY = vNodes.headlights.position.y;
             } else {
-                const box = new THREE.Box3().setFromObject(vehicle);
-                frontZ = box.max.z;
-                lightY = (box.max.y - box.min.y) * 0.4;
+                // Fallback: Use data-driven size from def to stay in local space
+                frontZ = def.size.z * 0.5;
+                lightY = def.size.y * 0.4;
             }
 
             headlight.position.set(0, lightY, frontZ + 0.2);
