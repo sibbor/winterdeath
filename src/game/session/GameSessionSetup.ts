@@ -160,7 +160,10 @@ export class GameSessionSetup {
             this.bindStateCallbacks(ctx, sectorCtx);
 
             PathGenerator.resetPathLayer();
+            const setupStart = performance.now();
+            console.info(`[SectorBuilder] ▶ START building sector ${props.currentSector} [LIVE]`);
             await SectorBuilder.build(sectorCtx, currentSector);
+            console.info(`[SectorBuilder] ✅ DONE building sector ${props.currentSector} [LIVE] in ${(performance.now() - setupStart).toFixed(1)}ms`);
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 

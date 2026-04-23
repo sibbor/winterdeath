@@ -14,6 +14,7 @@ import { VegetationGenerator } from '../core/world/generators/VegetationGenerato
 import { PoiGenerator } from '../core/world/generators/PoiGenerator';
 import { CampWorld, CAMP_SCENE } from '../components/camp/CampWorld';
 import { SectorSystem } from './SectorSystem';
+import { SectorBuilder } from '../core/world/SectorBuilder';
 import { registerSoundGenerators } from '../utils/audio/AudioLib';
 import { audioEngine } from '../utils/audio/AudioEngine';
 import { FXSystem } from './FXSystem';
@@ -243,7 +244,7 @@ export const AssetPreloader = {
                 console.log(`[AssetPreloader] CAMP: Compiling native shader for ${lampsInScene} natural light(s).`);
             }
 
-            // Sector
+            // Sector Basic Prep (Flashlight & Lights only)
             else if (isSector) {
                 // Players flashlight (PointLight!)
                 const dummyFlashlight = ModelFactory.createFlashlight();
@@ -251,65 +252,14 @@ export const AssetPreloader = {
                 _dummyScene.add(dummyFlashlight);
                 _dummyScene.add(dummyFlashlight.target);
 
-                // Boss
-                const bossData = BOSSES[sectorId ?? 0];
-                if (bossData) {
-                    _dummyScene.add(ModelFactory.createBoss('Boss', bossData));
-                }
-
-                // Zombies:
-                const zombieKeys = Object.keys(ZOMBIE_TYPES);
-                for (let i = 0; i < zombieKeys.length; i++) {
-                    const typeKey = zombieKeys[i];
-                    const zData = ZOMBIE_TYPES[typeKey];
-
-                    const z = ModelFactory.createZombie(`warmup_zombie_${typeKey}`, zData);
-                    z.position.set(0, -1000, 0);
-
-                    _traverseStack.length = 0;
-                    _traverseStack.push(z);
-                    while (_traverseStack.length > 0) {
-                        const child = _traverseStack.pop() as THREE.Object3D;
-                        if ((child as THREE.Mesh).isMesh) {
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-                        }
-                        for (let c = 0; c < child.children.length; c++) {
-                            _traverseStack.push(child.children[c]);
-                        }
-                    }
-                    _dummyScene.add(z);
-                }
-
-                // --- LIGHTING STABILIZATION ---
-                let removedLamps = 0;
-                const toRemove: THREE.Object3D[] = [];
-
-                _traverseStack.length = 0;
-                _traverseStack.push(_dummyScene);
-
-                while (_traverseStack.length > 0) {
-                    const obj = _traverseStack.pop() as THREE.Object3D;
-                    if ((obj as any).isPointLight || (obj as any).isSpotLight) {
-                        if (!obj.userData.isProxy && obj.name !== FLASHLIGHT.name) {
-                            toRemove.push(obj);
-                            removedLamps++;
-                        }
-                    }
-                    for (let i = 0; i < obj.children.length; i++) _traverseStack.push(obj.children[i]);
-                }
-
-                for (let i = 0; i < toRemove.length; i++) {
-                    toRemove[i].removeFromParent();
-                }
-
+                // Lighting Proxies are already added in the loop above
                 let lampsInScene = 0;
                 _dummyScene.traverse((obj) => {
                     if (obj instanceof THREE.PointLight) {
                         lampsInScene++;
                     }
                 });
-                console.log(`[AssetPreloader] SECTOR: Compiling strict shader for ${lampsInScene} proxied light(s). Removed ${removedLamps} loose lights.`);
+                console.log(`[AssetPreloader] SECTOR: Initialized ${lampsInScene} lighting proxies for warmup.`);
             }
             endInternal('scene_inject');
 
@@ -430,6 +380,44 @@ export const AssetPreloader = {
             }
 
             // 4. COMPILE SCENE SPECIFICS & WARMUP FRAME
+            if (isSector) {
+                // --- VINTERDÖD: FULL SECTOR POPULATION [WARMUP] ---
+                // We build the full world here so all meshes are present during the final compile call
+                beginInternal('sector_build');
+                const sectorDef = SectorSystem.getSector(sectorId ?? 0);
+                if (sectorDef) {
+                    const warmupCtx = SectorBuilder.createWarmupContext(_dummyScene, sectorId ?? 0, yieldToMain);
+                    await SectorBuilder.build(warmupCtx, sectorDef);
+                }
+
+                // Boss
+                const bossData = BOSSES[sectorId ?? 0];
+                if (bossData) {
+                    _dummyScene.add(ModelFactory.createBoss('Boss', bossData));
+                }
+
+                // Zombies:
+                const zombieKeys = Object.keys(ZOMBIE_TYPES);
+                for (let i = 0; i < zombieKeys.length; i++) {
+                    const typeKey = zombieKeys[i];
+                    const zData = ZOMBIE_TYPES[typeKey];
+                    const z = ModelFactory.createZombie(`warmup_zombie_${typeKey}`, zData);
+                    z.position.set(0, -1000, 0);
+                    _dummyScene.add(z);
+                }
+                
+                // Cleanup loose lights created by SectorBuilder before compilation
+                const toRemove: THREE.Object3D[] = [];
+                _dummyScene.traverse(obj => {
+                    if ((obj as any).isPointLight || (obj as any).isSpotLight) {
+                        if (!obj.userData.isProxy && obj.name !== 'flashlight') toRemove.push(obj);
+                    }
+                });
+                for (let i = 0; i < toRemove.length; i++) toRemove[i].removeFromParent();
+
+                endInternal('sector_build');
+            }
+
             await safeCompileAsync(_dummyScene, "Sector Specifics");
 
             const originalVp = new THREE.Vector4();
@@ -440,9 +428,18 @@ export const AssetPreloader = {
             engine.renderer.setViewport(originalVp);
 
             // Dummy Scene Zero-GC clean-up
+            // VINTERDÖD: Thoroughly clear the dummy scene to ensure strict isolation
             for (let i = _dummyScene.children.length - 1; i >= 0; i--) {
                 const child = _dummyScene.children[i];
                 _dummyScene.remove(child);
+
+                // If it's a sector warmup, we want to be more aggressive with GC hints
+                // by ensuring no hidden references remain in the object hierarchy.
+                if (isSector) {
+                    child.traverse((obj) => {
+                        (obj as any)._preloaderWarmed = true;
+                    });
+                }
             }
 
             warmedModules.add(moduleKey);

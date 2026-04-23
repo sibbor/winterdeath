@@ -176,17 +176,52 @@ export const SectorBuilder = {
         const NOOP = () => { };
         const NOOP_ARRAY = () => [] as any[];
         const STUB_GRID: any = {
+            setTerrainProvider: NOOP,
+            getGroundHeight: () => 0,
+            registerGroundMaterial: NOOP,
+            getGroundMaterial: () => 0,
+            fillGroundMaterial: NOOP,
+            registerVegetation: NOOP,
+            getVegetationAt: () => 0,
             addObstacle: NOOP, removeObstacle: NOOP,
             addInteractable: NOOP, removeInteractable: NOOP,
             addTrigger: NOOP, removeTrigger: NOOP,
             updateObstacle: NOOP, updateInteractable: NOOP, clear: NOOP, update: NOOP,
-            updateEnemyGrid: NOOP, clearEnemies: NOOP, fillGroundMaterial: NOOP,
+            updateEnemyGrid: NOOP, clearEnemies: NOOP,
             getNearbyEnemies: NOOP_ARRAY, getNearbyObstacles: NOOP_ARRAY,
             getNearbyInteractables: NOOP_ARRAY, getNearbyTriggers: NOOP_ARRAY,
+            getObstaclesInPath: NOOP_ARRAY,
+        };
+        const MOCK_ENGINE: any = {
+            scene,
+            water: {
+                clear: NOOP,
+                setLightPosition: NOOP,
+                registerGround: NOOP,
+                populateFlora: NOOP,
+                setPlayerRef: NOOP,
+                setCallbacks: NOOP
+            },
+            wind: { sync: NOOP, setOverride: NOOP, clearOverride: NOOP, setRandomWind: NOOP },
+            weather: { sync: NOOP },
+            fog: { sync: NOOP },
+            syncEnvironment: (env: any, targetScene?: THREE.Scene) => {
+                // Only allow adding lights to the target scene, skip global state updates
+                const s = targetScene || scene;
+                if (env.ambientIntensity !== undefined) {
+                    const amb = new THREE.AmbientLight(env.ambientColor || 0x404050, env.ambientIntensity);
+                    amb.name = LIGHT_SYSTEM.AMBIENT_LIGHT;
+                    s.add(amb);
+                }
+            },
+            renderer: {
+                setClearColor: NOOP
+            },
+            updateAtmosphere: NOOP
         };
         return {
             scene,
-            engine: null as any,
+            engine: MOCK_ENGINE,
             sectorId,
             isWarmup: true,
             collisionGrid: STUB_GRID,
@@ -210,7 +245,7 @@ export const SectorBuilder = {
     },
 
     build: async (ctx: SectorContext, def: any) => {
-        const engine = WinterEngine.getInstance();
+        const engine = ctx.engine || WinterEngine.getInstance();
 
         // Idempotency check: Clear state arrays to prevent duplication on re-renders
         if (ctx.obstacles) ctx.obstacles.length = 0;
