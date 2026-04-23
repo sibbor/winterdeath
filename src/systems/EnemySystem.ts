@@ -8,6 +8,7 @@ import { WorldLootSystem } from './WorldLootSystem';
 import { DamageID } from '../entities/player/CombatTypes';
 import { PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { FXParticleType, FXDecalType } from '../types/FXTypes';
+import { INITIAL_ENEMY_POOL } from '../content/constants';
 
 // --- TYPE DEFINITIONS ---
 interface Callbacks {
@@ -28,8 +29,8 @@ export class EnemySystem implements System {
     private cleanupCallbacks: any;
 
     constructor(
-        private playerGroup: THREE.Group,
-        private callbacks: Callbacks
+        private callbacks: Callbacks,
+        private initialPoolSize: number = INITIAL_ENEMY_POOL
     ) {
         // Initialize callbacks exactly once to prevent GC allocation and closure memory leaks
         this.updateCallbacks = {
@@ -72,7 +73,7 @@ export class EnemySystem implements System {
 
         // Initialize the EnemyManager to setup ZombieRenderer for instanced drawing.
         // This is mandatory for enemies to be visible.
-        EnemyManager.init(session);
+        EnemyManager.init(session, this.initialPoolSize);
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {

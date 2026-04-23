@@ -99,6 +99,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
 export const SCRAP_COST_BASE = 50;
 export const LEVEL_CAP = 20;
 export const MASSIVE_DAMAGE_THRESHOLD = 60;
+export const INITIAL_ENEMY_POOL = 100;
 
 export const INITIAL_STATS: PlayerStats = {
     statsBuffer: (function () {

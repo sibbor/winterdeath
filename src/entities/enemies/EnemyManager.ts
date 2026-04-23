@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../../utils/assets';
-import { KMH_TO_MS } from '../../content/constants';
+import { KMH_TO_MS, INITIAL_ENEMY_POOL } from '../../content/constants';
 import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_SCORE, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType, EnemyDeathDecal, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { DamageID } from '../../entities/player/CombatTypes';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
@@ -148,18 +148,32 @@ export const EnemyManager = {
     enabled: true,
     persistent: true,
 
-    init: (session: GameSessionLogic) => {
+    init: (session: GameSessionLogic, initialPoolSize: number = INITIAL_ENEMY_POOL) => {
         const scene = session.engine.scene;
         if (!zombieRenderer) zombieRenderer = new ZombieRenderer(scene);
         else zombieRenderer.reAttach(scene);
-
+ 
         if (!corpseRenderer) corpseRenderer = new CorpseRenderer(scene);
         else corpseRenderer.reAttach(scene);
-
+ 
         if (!ashRenderer) ashRenderer = new AshRenderer(scene);
         else ashRenderer.reAttach(scene);
-
+ 
         enemyPool.length = 0;
+
+        // VINTERDÖD: Pool Inflation (Zero-GC Pre-allocation)
+        // We pre-allocate the CPU memory for enemies during the loading screen
+        // to ensure that spawning during gameplay never triggers a 'new' allocation.
+        const dummyScene = new THREE.Scene();
+        const dummyPos = new THREE.Vector3();
+        for (let i = 0; i < initialPoolSize; i++) {
+            const enemy = EnemySpawner.spawn(dummyScene, dummyPos, EnemyType.WALKER);
+            if (enemy) {
+                enemy.mesh.visible = false;
+                enemy.mesh.removeFromParent(); // Detach from dummy scene
+                enemyPool.push(enemy);
+            }
+        }
     },
 
     update: (

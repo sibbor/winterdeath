@@ -14,7 +14,7 @@ import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
-import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, PLAYER_BASE_SPEED, FamilyMemberID } from '../../content/constants';
+import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, PLAYER_BASE_SPEED, FamilyMemberID, INITIAL_ENEMY_POOL } from '../../content/constants';
 import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
@@ -634,7 +634,7 @@ export class GameSessionSetup {
         session.addSystem(new PlayerCombatSystem(playerGroup));
         session.addSystem(new PlayerInteractionSystem(
             playerGroup, callbacks.concludeSector, sectorCtx.collectibles, refs.activeFamilyMembers, engine.scene,
-            (id) => callbacks.onDiscovery && callbacks.onDiscovery(DiscoveryType.COLLECTIBLE, id, 'ui.collectible_discovered', `collectibles.${id}.title`)
+            (id) => callbacks.onDiscovery && callbacks.onDiscovery(DiscoveryType.COLLECTIBLE, id, 'ui.discovered_collectible', `collectibles.${id}.title`)
         ));
 
         const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
@@ -642,7 +642,7 @@ export class GameSessionSetup {
 
         PerkFX.init(playerGroup);
 
-        session.addSystem(new EnemySystem(playerGroup, {
+        session.addSystem(new EnemySystem({
             spawnBubble: callbacks.spawnBubble,
             gainXp: callbacks.gainXp,
             t: callbacks.t,
@@ -675,7 +675,7 @@ export class GameSessionSetup {
             },
             onPlayerHit: (damage, attacker, type, isDoT, effect, dur, intense, attackName) =>
                 playerStatsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName),
-        } as any));
+        } as any, INITIAL_ENEMY_POOL));
 
         session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
             setNotification: (n: any) => { if (n && n.visible && n.text) callbacks.spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000); },
