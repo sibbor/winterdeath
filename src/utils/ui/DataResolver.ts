@@ -279,25 +279,10 @@ export const DataResolver = {
         switch (type) {
             case DiscoveryType.CLUE: return 'ui.clue_found';
             case DiscoveryType.POI: return 'ui.location_discovered';
-            case DiscoveryType.COLLECTIBLE: return 'ui.collectible_discovered';
+            case DiscoveryType.COLLECTIBLE: return 'ui.discovered_collectible';
             case DiscoveryType.ENEMY: return 'ui.new_threat';
             case DiscoveryType.BOSS: return 'ui.boss_encountered';
             case DiscoveryType.PERK: return 'ui.skill_point';
-            default: return 'ui.discovery';
-        }
-    },
-
-    /**
-     * Resolves the localized header key for Row 1 of the Discovery notification.
-     */
-    getDiscoveryHeader(type: DiscoveryType): string {
-        switch (type) {
-            case DiscoveryType.CLUE: return 'ui.discovered_clue';
-            case DiscoveryType.POI: return 'ui.discovered_poi';
-            case DiscoveryType.ENEMY:
-            case DiscoveryType.BOSS: return 'ui.discovered_enemy';
-            case DiscoveryType.PERK: return 'ui.discovered_perk';
-            case DiscoveryType.COLLECTIBLE: return 'ui.collectible_discovered';
             default: return 'ui.discovery';
         }
     },

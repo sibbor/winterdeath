@@ -25,39 +25,39 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
   useEffect(() => {
     // Synchronous listener: Only trigger react when discovery.timestamp genuinely increments
     return HudStore.subscribe(() => {
-        const state = HudStore.getState();
-        const d = state.discovery;
-        
-        if (d.active && d.timestamp > lastTimestamp.current) {
-            lastTimestamp.current = d.timestamp;
-            
-            // Resolve content once and push to state
-            setActiveDiscovery({ 
-                id: d.id, 
-                type: d.type, 
-                title: d.title,
-                details: d.details,
-                timestamp: d.timestamp,
-                isMobile: state.isMobileDevice,
-                sector: state.currentSector,
-                cluesFound: state.cluesFoundCount,
-                poisFound: state.poisFoundCount,
-                collectiblesFound: state.collectiblesFoundCount
-            });
-            setVisible(true);
-            UiSounds.playDiscovery();
-        }
+      const state = HudStore.getState();
+      const d = state.discovery;
+
+      if (d.active && d.timestamp > lastTimestamp.current) {
+        lastTimestamp.current = d.timestamp;
+
+        // Resolve content once and push to state
+        setActiveDiscovery({
+          id: d.id,
+          type: d.type,
+          title: d.title,
+          details: d.details,
+          timestamp: d.timestamp,
+          isMobile: state.isMobileDevice,
+          sector: state.currentSector,
+          cluesFound: state.cluesFoundCount,
+          poisFound: state.poisFoundCount,
+          collectiblesFound: state.collectiblesFoundCount
+        });
+        setVisible(true);
+        UiSounds.playDiscovery();
+      }
     });
   }, []);
 
   const handleInteraction = useCallback(() => {
     if (!visible || !activeDiscovery) return;
     UiSounds.playDiscovery();
-    
+
     const isPerkVal = activeDiscovery.type === DiscoveryType.PERK;
     if (isPerkVal) {
-      window.dispatchEvent(new CustomEvent('open-statistics', { 
-          detail: { tab: 'perks', itemId: activeDiscovery.id } 
+      window.dispatchEvent(new CustomEvent('open-statistics', {
+        detail: { tab: 'perks', itemId: activeDiscovery.id }
       }));
     } else {
       const tab = DataResolver.getAdventureLogTab(activeDiscovery.type);
@@ -105,7 +105,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         icon = '📍';
         break;
       case DiscoveryType.COLLECTIBLE:
-        title = t('ui.collectible_discovered');
+        title = t('ui.discovered_collectible');
         const totalCollectibles = Object.values(COLLECTIBLES).filter(c => c.sector === sector).length;
         subtitle = `${t(DataResolver.getCollectibleName(id))} (${collectiblesFound}/${totalCollectibles})`;
         icon = '📦';

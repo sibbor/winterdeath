@@ -13,7 +13,7 @@ interface ScreenCollectibleDiscoveredProps {
 
 const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = ({ collectibleId, onClose, isMobileDevice }) => {
     const def = getCollectibleById(collectibleId);
- 
+
     useEffect(() => {
         UiSounds.playLevelUp();
     }, []);
@@ -25,7 +25,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
 
     return (
         <ScreenModalLayout
-            title={t('ui.collectible_discovered')}
+            title={t('ui.discovered_collectible')}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
             onConfirm={onClose}
