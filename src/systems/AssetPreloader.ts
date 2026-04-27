@@ -28,17 +28,29 @@ const warmedModules = new Set<string>();
 const activePromises = new Map<string, Promise<void>>();
 let lastSectorIndex = -1;
 
+// VINTERDÖD: Global asynkron kö för att skydda Zero-GC scratchpads från Race Conditions
+let _globalWarmupQueue: Promise<void> = Promise.resolve();
+
 // --- PERSISTENT SHARED MODEL POOL ---
 const sharedPool: THREE.Object3D[] = [];
 let sharedPoolPopulated = false;
-
-// We no longer strictly care about sharedPoolCompiledTarget shifting if proxies are standardized
 let sharedPoolCompiled = false;
 
 // --- PERFORMANCE SCRATCHPADS & DUMMIES (Zero-GC) ---
 const _dummyMatrix = new THREE.Matrix4();
 const _traverseStack: THREE.Object3D[] = [];
-const _NOOP_ASYNC = async () => { };
+
+// Reusable arrays to prevent GC allocations during sector transitions
+const _compileTargets: THREE.Object3D[] = [];
+const _cullStatusObjs: THREE.Object3D[] = [];
+const _cullStatusBools: boolean[] = [];
+const _toRemoveObjs: THREE.Object3D[] = [];
+
+// Pre-allocate dummy water vectors globally
+const _dummyRipples: THREE.Vector4[] = [];
+const _dummyObjects: THREE.Vector4[] = [];
+for (let i = 0; i < WATER_SYSTEM.MAX_RIPPLES; i++) _dummyRipples.push(new THREE.Vector4(0, 0, -1000, 0));
+for (let i = 0; i < WATER_SYSTEM.MAX_FLOATING_OBJECTS; i++) _dummyObjects.push(new THREE.Vector4(0, 0, -1000, 0));
 
 // Static arrays to prevent GC allocations
 const BUMP_MAPS = ['snow_bump', 'asphalt_bump', 'stone_bump', 'dirt_bump', 'concrete_bump', 'brick_bump', 'bark_rough_bump'];
@@ -72,31 +84,35 @@ export const AssetPreloader = {
     warmupAsync: async (target: 'CORE' | 'CAMP' | 'SECTOR', yieldToMain?: () => Promise<void>, sectorId?: number) => {
         const moduleKey = target === 'SECTOR' ? `SECTOR_${sectorId ?? 0}` : target;
 
-        // Swap-and-go 1-Slot Cache for Sectors
-        if (target === 'SECTOR') {
-            const currentSectorId = sectorId ?? 0;
+        // VINTERDÖD: Kapsla in hela uppvärmningen i en task för att läggas i Promise-kön
+        const warmupTask = async () => {
+            // Swap-and-go 1-Slot Cache for Sectors
+            if (target === 'SECTOR') {
+                const currentSectorId = sectorId ?? 0;
 
-            // If we are loading a NEW sector, evict the OLD sector from memory
-            if (lastSectorIndex !== -1 && lastSectorIndex !== currentSectorId) {
-                const oldModuleKey = `SECTOR_${lastSectorIndex}`;
-                console.log(`[AssetPreloader] ♻️ Swapping cached sector: Evicting ${oldModuleKey} to make room for ${moduleKey}.`);
-                warmedModules.delete(oldModuleKey);
+                // If we are loading a NEW sector, evict the OLD sector from memory
+                if (lastSectorIndex !== -1 && lastSectorIndex !== currentSectorId) {
+                    const oldModuleKey = `SECTOR_${lastSectorIndex}`;
+                    console.log(`[AssetPreloader] ♻️ Swapping cached sector: Evicting ${oldModuleKey} to make room for ${moduleKey}.`);
+                    warmedModules.delete(oldModuleKey);
+                }
+
+                lastSectorIndex = currentSectorId;
             }
 
-            lastSectorIndex = currentSectorId;
-        }
+            if (warmedModules.has(moduleKey)) {
+                console.log("[AssetPreloader] Already warmed up: ", moduleKey);
+                return; // Already compiled
+            }
 
-        if (warmedModules.has(moduleKey)) {
-            console.log("[AssetPreloader] Already warmed up: ", moduleKey);
-            return; // Already compiled
-        }
+            if (activePromises.has(moduleKey)) {
+                console.log("[AssetPreloader] Already warming up: ", moduleKey);
+                // Eftersom vi nu köar uppgifter är det osannolikt att detta träffas, 
+                // men vi behåller det som skydd ifall UI:t dubbelklickar på något.
+                await activePromises.get(moduleKey);
+                return;
+            }
 
-        if (activePromises.has(moduleKey)) {
-            console.log("[AssetPreloader] Already warming up: ", moduleKey);
-            return activePromises.get(moduleKey);
-        }
-
-        const warmupLogic = async () => {
             const isCore = target === 'CORE';
             const isCamp = target === 'CAMP';
             const isSector = target === 'SECTOR';
@@ -280,30 +296,29 @@ export const AssetPreloader = {
                 }
 
                 console.log(`📱 [AssetPreloader] Time-slicing ${logName} to bypass iOS Watchdog...`);
-                const compileTargets: THREE.Object3D[] = [];
-                const visibilityMap = new Map<THREE.Object3D, boolean>();
+                _compileTargets.length = 0;
 
                 _traverseStack.length = 0;
                 _traverseStack.push(rootNode);
 
                 while (_traverseStack.length > 0) {
                     const obj = _traverseStack.pop() as THREE.Object3D;
-                    visibilityMap.set(obj, obj.visible);
+                    // VINTERDÖD FIX: Fast array approach instead of Map. We only push visible objects!
                     if (((obj as any).isMesh || (obj as any).isSkinnedMesh) && obj.visible) {
                         obj.visible = false;
-                        compileTargets.push(obj);
+                        _compileTargets.push(obj);
                     }
                     for (let i = 0; i < obj.children.length; i++) _traverseStack.push(obj.children[i]);
                 }
 
                 const CHUNK_SIZE = 15;
-                for (let i = 0; i < compileTargets.length; i += CHUNK_SIZE) {
-                    const chunkEnd = Math.min(i + CHUNK_SIZE, compileTargets.length);
-                    for (let c = i; c < chunkEnd; c++) compileTargets[c].visible = true;
+                for (let i = 0; i < _compileTargets.length; i += CHUNK_SIZE) {
+                    const chunkEnd = Math.min(i + CHUNK_SIZE, _compileTargets.length);
+                    for (let c = i; c < chunkEnd; c++) _compileTargets[c].visible = true;
 
                     engine.renderer.compile(_dummyScene, engine.camera.threeCamera);
 
-                    for (let c = i; c < chunkEnd; c++) compileTargets[c].visible = false;
+                    for (let c = i; c < chunkEnd; c++) _compileTargets[c].visible = false;
 
                     if (yieldToMain) {
                         await yieldToMain();
@@ -312,9 +327,9 @@ export const AssetPreloader = {
                     }
                 }
 
-                for (let i = 0; i < compileTargets.length; i++) {
-                    const obj = compileTargets[i];
-                    if (visibilityMap.has(obj)) obj.visible = visibilityMap.get(obj)!;
+                // VINTERDÖD FIX: Fast restore. We know all objects in _compileTargets started as visible=true.
+                for (let i = 0; i < _compileTargets.length; i++) {
+                    _compileTargets[i].visible = true;
                 }
             };
 
@@ -405,15 +420,15 @@ export const AssetPreloader = {
                     z.position.set(0, -1000, 0);
                     _dummyScene.add(z);
                 }
-                
+
                 // Cleanup loose lights created by SectorBuilder before compilation
-                const toRemove: THREE.Object3D[] = [];
+                _toRemoveObjs.length = 0;
                 _dummyScene.traverse(obj => {
                     if ((obj as any).isPointLight || (obj as any).isSpotLight) {
-                        if (!obj.userData.isProxy && obj.name !== 'flashlight') toRemove.push(obj);
+                        if (!obj.userData.isProxy && obj.name !== 'flashlight') _toRemoveObjs.push(obj);
                     }
                 });
-                for (let i = 0; i < toRemove.length; i++) toRemove[i].removeFromParent();
+                for (let i = 0; i < _toRemoveObjs.length; i++) _toRemoveObjs[i].removeFromParent();
 
                 endInternal('sector_build');
             }
@@ -424,11 +439,28 @@ export const AssetPreloader = {
             engine.renderer.getViewport(originalVp);
             engine.renderer.setViewport(0, 0, 1, 1);
 
+            // VINTERDÖD: Forced GPU Processing (Zero-GC Array implementation)
+            _cullStatusObjs.length = 0;
+            _cullStatusBools.length = 0;
+
+            _dummyScene.traverse(obj => {
+                if ((obj as any).isMesh || (obj as any).isSkinnedMesh) {
+                    _cullStatusObjs.push(obj);
+                    _cullStatusBools.push(obj.frustumCulled);
+                    obj.frustumCulled = false;
+                }
+            });
+
             engine.renderer.render(_dummyScene, engine.camera.threeCamera);
+
+            // Restore culling status (Zero-GC fast loop)
+            for (let i = 0; i < _cullStatusObjs.length; i++) {
+                _cullStatusObjs[i].frustumCulled = _cullStatusBools[i];
+            }
+
             engine.renderer.setViewport(originalVp);
 
             // Dummy Scene Zero-GC clean-up
-            // VINTERDÖD: Thoroughly clear the dummy scene to ensure strict isolation
             for (let i = _dummyScene.children.length - 1; i >= 0; i--) {
                 const child = _dummyScene.children[i];
                 _dummyScene.remove(child);
@@ -457,9 +489,24 @@ export const AssetPreloader = {
             );
         };
 
-        const promise = warmupLogic().finally(() => { activePromises.delete(moduleKey); });
-        activePromises.set(moduleKey, promise);
-        return promise;
+        // --- VINTERDÖD FIX: THE RACE CONDITION QUEUE ---
+        // Ställ den nya uppvärmningen i kö efter den pågående (om det finns en).
+        // Detta skyddar våra globala scratchpads från att bli överskrivna.
+        const previousTaskInQueue = _globalWarmupQueue;
+
+        const myPromise = previousTaskInQueue.then(() => {
+            const promise = warmupTask().finally(() => { activePromises.delete(moduleKey); });
+            activePromises.set(moduleKey, promise);
+            return promise;
+        });
+
+        // Uppdatera det globala låset till att peka på den nya uppgiften.
+        // Vi fångar eventuella fel (.catch) så att kön inte låser sig permanent om en sektor kraschar.
+        _globalWarmupQueue = myPromise.catch((err) => {
+            console.error(`[AssetPreloader] Warmup failed for ${moduleKey}:`, err);
+        });
+
+        return myPromise;
     },
 
     _populateSharedPool: async (engine: WinterEngine, yieldToMain?: () => Promise<void>) => {
@@ -520,13 +567,8 @@ export const AssetPreloader = {
             }
         }
 
-        const dummyRipples: THREE.Vector4[] = [];
-        for (let i = 0; i < WATER_SYSTEM.MAX_RIPPLES; i++) dummyRipples.push(new THREE.Vector4(0, 0, -1000, 0));
-
-        const dummyObjects: THREE.Vector4[] = [];
-        for (let i = 0; i < WATER_SYSTEM.MAX_FLOATING_OBJECTS; i++) dummyObjects.push(new THREE.Vector4(0, 0, -1000, 0));
-
-        const coreWaterMat = createWaterMaterial(10, 10, dummyRipples, dummyObjects, 'rect');
+        // Using globally pre-allocated vectors to prevent GC spikes
+        const coreWaterMat = createWaterMaterial(10, 10, _dummyRipples, _dummyObjects, 'rect');
         add(new THREE.Mesh(GEOMETRY.plane, coreWaterMat), false);
 
         // FX
@@ -607,7 +649,6 @@ export const AssetPreloader = {
         await VegetationGenerator.initNaturePrototypes(yieldToMain);
         for (let i = 0; i < TREE_TYPES.length; i++) add(VegetationGenerator.createTree(TREE_TYPES[i], 1.0, 0), true, true);
 
-
         const outlineGeo = new THREE.EdgesGeometry(GEOMETRY.box);
         const outlineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
         add(new THREE.LineSegments(outlineGeo, outlineMat), false);
@@ -634,5 +675,4 @@ export const AssetPreloader = {
         // By keeping it, we allow the sector to survive in memory when returning to Camp.
         // It will be evicted automatically in warmupAsync if a completely new sector is loaded.
     }
-
 };
