@@ -311,9 +311,9 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
                         </div>
 
                         <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-1 gap-8'}`}>
-                            <TacticalCard 
-                                isLocked={!isBossUnlocked} 
-                                color={boss ? `#${boss.color.toString(16).padStart(6, '0')}` : '#4b5563'} 
+                            <TacticalCard
+                                isLocked={!isBossUnlocked}
+                                color={boss ? `#${boss.color.toString(16).padStart(6, '0')}` : '#4b5563'}
                                 id={boss ? `log-item-${boss.name}` : undefined}
                                 className={!isBossUnlocked ? "h-48 flex items-center justify-center grayscale opacity-50" : ""}
                                 showHatching={isBossUnlocked}
@@ -574,7 +574,7 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevi
                     {isFound ? t(DataResolver.getCollectibleName(item.id)) : '???'}
                 </h4>
                 {isExpanded && (
-                    <p className="text-[10px] text-zinc-400 leading-relaxed italic animate-in fade-in slide-in-from-top-1 duration-300">
+                    <p className="whitespace-pre-wrap text-[12px] text-zinc-400 leading-relaxed italic animate-in fade-in slide-in-from-top-1 duration-300">
                         {isFound ? t(DataResolver.getCollectibleDescription(item.id)) : '???'}
                     </p>
                 )}

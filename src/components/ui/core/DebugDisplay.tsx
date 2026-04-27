@@ -3,6 +3,7 @@ import { PerformanceMonitor } from '../../../systems/PerformanceMonitor';
 import { WinterEngine } from '../../../core/engine/WinterEngine';
 import { HudStore } from '../../../store/HudStore';
 import { SystemID } from '../../../systems/SystemID';
+import { t } from '../../../utils/i18n';
 
 interface DebugDisplayProps {
     debugMode: boolean;
@@ -129,13 +130,13 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
             <div onClick={toggleMinimized} className="fixed top-0 bottom-0 right-0 w-56 bg-black/75 border-l border-white/10 shadow-2xl z-[9998] font-mono text-[11px] text-green-400 pointer-events-auto cursor-pointer hover:border-green-500/20 transition-all flex flex-col overflow-hidden">
                 <div className="p-3 shrink-0 space-y-2">
                     <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
-                        <span className="font-bold text-white uppercase tracking-wider">Debug Monitor</span>
-                        <span className="bg-green-500 text-black px-1 rounded font-bold"><span ref={fpsRef}>0</span> FPS</span>
+                        <span className="font-bold text-white uppercase tracking-wider">{t('ui.debug_monitor')}</span>
+                        <span className="bg-green-500 text-black px-1 rounded font-bold"><span ref={fpsRef}>0</span> {t('ui.fps')}</span>
                     </div>
 
                     <>
                         <div className="flex items-center justify-between">
-                            <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">Player</div>
+                            <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">{t('ui.player')}</div>
                             <span className="text-white tabular-nums">
                                 X: <span ref={playerXRef}>0</span>, Z: <span ref={playerZRef}>0</span>
                             </span>
@@ -149,7 +150,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                     </>
 
                     <div>
-                        <div className="text-white/40 uppercase text-[10px] mb-0.5">Renderer</div>
+                        <div className="text-white/40 uppercase text-[10px] mb-0.5">{t('ui.renderer')}</div>
                         <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
                             <div>Calls: <span ref={drawCallsRef} className="text-white">0</span></div>
                             <div>Tris: <span ref={trisRef} className="text-white">0</span></div>
@@ -167,7 +168,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
 
                     {parseFloat(String(gc.heapUsedMB)) > 0 && (
                         <div>
-                            <div className="text-white/40 uppercase text-[10px] mb-0.5">World / Memory</div>
+                            <div className="text-white/40 uppercase text-[10px] mb-0.5">{t('ui.world_memory')}</div>
                             <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
                                 <div>Enemies: <span ref={enemiesRef} className="text-white">0</span></div>
                                 <div>Obj: <span ref={objectsRef} className="text-white">0</span></div>
@@ -180,7 +181,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                     {systems && systems.length > 0 && (
                         <div>
                             <div onClick={(e) => { e.stopPropagation(); setSystemsExpanded(v => !v); }} className="flex items-center justify-between text-white/40 uppercase text-[10px] mb-0.5 cursor-pointer hover:text-white/70 select-none">
-                                <span>Systems</span>
+                                <span>{t('ui.systems')}</span>
                                 <span className="text-[8px]">{systemsExpanded ? '▾' : '▸'}</span>
                             </div>
                             {systemsExpanded && (
@@ -201,7 +202,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
 
                     <div className="border-t border-white/10 pt-1 space-y-0.5">
                         <div className="flex justify-between items-center mb-1">
-                            <div className="text-white/40 uppercase text-[10px]">Logging</div>
+                            <div className="text-white/40 uppercase text-[10px]">{t('ui.logging')}</div>
                             <div className="flex gap-1">
                                 <button
                                     onClick={(e) => {
@@ -212,13 +213,13 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                                     }}
                                     className={`px-2 py-0.5 rounded transition-colors font-bold tracking-wider ${monitor.logsHijackEnabled ? 'bg-blue-500 text-white' : 'bg-white/10 text-white/40 hover:bg-white/20'}`}
                                 >
-                                    HIJACK
+                                    {t('ui.hijack')}
                                 </button>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); setShowLogs(v => !v); forceUpdate(); }}
                                     className={`px-2 py-0.5 rounded transition-colors font-bold tracking-wider ${showLogs ? 'bg-green-500 text-black' : 'bg-white/10 text-white/40 hover:bg-white/20'}`}
                                 >
-                                    LOG
+                                    {t('ui.log')}
                                 </button>
                                 <button
                                     disabled={monitor.isRecordingActive}
@@ -232,21 +233,21 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                                         : 'bg-red-500/20 text-red-300 hover:bg-red-500/40 cursor-pointer'
                                         }`}
                                 >
-                                    {monitor.isRecordingActive ? 'REC' : 'REC'}
+                                    {t('ui.rec')}
                                 </button>
                             </div>
                         </div>
-                        <div onClick={(e) => { e.stopPropagation(); monitor.consoleLoggingEnabled = !monitor.consoleLoggingEnabled; forceUpdate(); }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
-                            <span className="text-white/60">Engine Perf</span>
-                            <span className={`font-bold ${monitor.consoleLoggingEnabled ? 'text-green-400' : 'text-red-400'}`}>{monitor.consoleLoggingEnabled ? 'ON' : 'OFF'}</span>
+                            <div onClick={(e) => { e.stopPropagation(); monitor.consoleLoggingEnabled = !monitor.consoleLoggingEnabled; forceUpdate(); }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
+                            <span className="text-white/60">{t('ui.engine_perf')}</span>
+                            <span className={`font-bold ${monitor.consoleLoggingEnabled ? 'text-green-400' : 'text-red-400'}`}>{monitor.consoleLoggingEnabled ? t('ui.on') : t('ui.off')}</span>
                         </div>
                         <div onClick={(e) => { e.stopPropagation(); monitor.aiLoggingEnabled = !monitor.aiLoggingEnabled; forceUpdate(); }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
-                            <span className="text-white/60">AI</span>
-                            <span className={`font-bold ${monitor.aiLoggingEnabled ? 'text-green-400' : 'text-red-400'}`}>{monitor.aiLoggingEnabled ? 'ON' : 'OFF'}</span>
+                            <span className="text-white/60">{t('ui.ai')}</span>
+                            <span className={`font-bold ${monitor.aiLoggingEnabled ? 'text-green-400' : 'text-red-400'}`}>{monitor.aiLoggingEnabled ? t('ui.on') : t('ui.off')}</span>
                         </div>
                         <div onClick={(e) => { e.stopPropagation(); monitor.shaderLoggingEnabled = !monitor.shaderLoggingEnabled; forceUpdate(); }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
-                            <span className="text-white/60">Shaders</span>
-                            <span className={`font-bold ${monitor.shaderLoggingEnabled ? 'text-green-400' : 'text-red-400'}`}>{monitor.shaderLoggingEnabled ? 'ON' : 'OFF'}</span>
+                            <span className="text-white/60">{t('ui.shaders')}</span>
+                            <span className={`font-bold ${monitor.shaderLoggingEnabled ? 'text-green-400' : 'text-red-400'}`}>{monitor.shaderLoggingEnabled ? t('ui.on') : t('ui.off')}</span>
                         </div>
                     </div>
                 </div>
@@ -254,7 +255,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                 {timings && (
                     <div className="flex flex-col flex-1 min-h-0 border-t border-white/10 p-3">
                         <div className="flex justify-between items-center mb-1 shrink-0">
-                            <div className="text-white/40 uppercase text-[10px]">CPU Timings</div>
+                            <div className="text-white/40 uppercase text-[10px]">{t('ui.cpu_timings')}</div>
                             <div className="text-green-400 text-[10px] font-bold">
                                 {timings.total}ms
                             </div>
@@ -275,10 +276,10 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
             {showLogs && (
                 <div className="fixed inset-0 z-[99999] bg-black/95 flex flex-col pointer-events-auto backdrop-blur-md pb-safe">
                     <div className="flex justify-between items-center bg-white/10 p-3 border-b border-white/20 shadow-lg shrink-0 pt-safe">
-                        <span className="text-white font-bold tracking-widest uppercase text-xs">System Logs</span>
+                        <span className="text-white font-bold tracking-widest uppercase text-xs">{t('ui.system_logs')}</span>
                         <div className="flex gap-2">
-                            <button onClick={() => monitor.clearLogs()} className="px-3 py-1 font-bold text-red-300 bg-red-500/20 hover:bg-red-500/40 rounded transition-colors">CLEAR</button>
-                            <button onClick={() => setShowLogs(false)} className="px-3 py-1 font-bold text-white bg-white/20 hover:bg-white/30 rounded transition-colors">CLOSE</button>
+                            <button onClick={() => monitor.clearLogs()} className="px-3 py-1 font-bold text-red-300 bg-red-500/20 hover:bg-red-500/40 rounded transition-colors">{t('ui.clear')}</button>
+                            <button onClick={() => setShowLogs(false)} className="px-3 py-1 font-bold text-white bg-white/20 hover:bg-white/30 rounded transition-colors">{t('ui.close')}</button>
                         </div>
                     </div>
 
@@ -291,7 +292,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                                 </div>
                             ))
                         ) : (
-                            <div className="text-white/20 italic text-center py-20 uppercase tracking-widest text-sm">No logs captured...</div>
+                            <div className="text-white/20 italic text-center py-20 uppercase tracking-widest text-sm">{t('ui.no_logs')}</div>
                         )}
                     </div>
                 </div>

@@ -118,8 +118,8 @@ const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, ava
                         {isSpeed ? currentVal.toFixed(2) : currentVal}
                     </span>
                     {isSpeed && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>{t('ui.speed_unit')}</span>}
-                    {skill.statId === PlayerStatID.MAX_HP && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>HP</span>}
-                    {skill.statId === PlayerStatID.MAX_STAMINA && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>STM</span>}
+                    {skill.statId === PlayerStatID.MAX_HP && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>{t('ui.hp')}</span>}
+                    {skill.statId === PlayerStatID.MAX_STAMINA && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>{t('ui.stamina_short')}</span>}
                 </div>
                 <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-mono text-white font-bold opacity-80`}>
                     ({displayBase} + <span className="text-purple-400">{displayUpgrade}</span>)

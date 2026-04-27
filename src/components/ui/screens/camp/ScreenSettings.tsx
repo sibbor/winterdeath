@@ -199,7 +199,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
             <TacticalCard color="#3b82f6" className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.shadow_quality')}</h3>
-                    <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">(Needs reload)</p>
+                    <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">{t('ui.needs_reload')}</p>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.shadow_sub')}</p>
                 </div>
                 <div className="flex gap-1 md:gap-2 flex-wrap">
@@ -231,7 +231,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
             <TacticalCard color="#3b82f6" className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.texture_quality')}</h3>
-                    <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">(Needs reload)</p>
+                    <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">{t('ui.needs_reload')}</p>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.texture_sub')}</p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
@@ -259,7 +259,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
             >
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.volumetric_fog')}</h3>
-                    <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">(Needs reload)</p>
+                    <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">{t('ui.needs_reload')}</p>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.volumetric_fog_sub')}</p>
                 </div>
                 <div className="flex gap-2">
@@ -279,7 +279,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
             >
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.antialias')}</h3>
-                    <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">(Needs reload)</p>
+                    <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">{t('ui.needs_reload')}</p>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.antialias_sub')}</p>
                 </div>
                 <div className="flex gap-2">
@@ -326,8 +326,8 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ showFps, onToggleSho
             className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
         >
             <div>
-                <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">Show FPS</h3>
-                <p className="text-gray-400 text-xs font-mono">Display current frames per second in the top-right corner.</p>
+                <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.show_fps')}</h3>
+                <p className="text-gray-400 text-xs font-mono">{t('ui.show_fps_desc')}</p>
             </div>
             <div className="flex gap-2">
                 <TacticalButton variant={showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>

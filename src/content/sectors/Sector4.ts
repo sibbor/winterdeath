@@ -84,8 +84,8 @@ export const Sector4: SectorDef = {
     setupProps: async (ctx: SectorContext) => {
         const { scene } = ctx;
 
-        // DUMMY COLLECTIBLE FOR TESTING
-        SectorBuilder.spawnCollectible(ctx, 0, 15, 'dummy_badge_test', 'badge');
+        // DUMMY COLLECTIBLE FOR TESTING - Set to respawnable so it's always there
+        SectorBuilder.spawnCollectible(ctx, 0, 15, 'dummy_badge_test', 'badge', true);
 
         // --- PLAZA (Center 0,0) ---
         // Circular concrete plaza

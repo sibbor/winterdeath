@@ -38,7 +38,7 @@ const TooltipOverlay: React.FC<{ data: { rect: DOMRect, items: MapItem[] } | nul
         >
             {data.items.map((item, idx) => (
                 <div key={idx} className="mb-2 last:mb-0">
-                    <div className="font-bold text-blue-300 uppercase border-b border-white/10 mb-1">{t(item.label || "Object")}</div>
+                    <div className="font-bold text-blue-300 uppercase border-b border-white/10 mb-1">{t(item.label || "ui.object")}</div>
                     <div className="text-[10px] text-gray-400">X: {Math.round(item.x)}, Z: {Math.round(item.z)}</div>
                 </div>
             ))}

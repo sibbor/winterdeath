@@ -163,7 +163,7 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
                     {isFinished && isVisible && (
                         <div className="absolute bottom-4 right-6 flex items-center opacity-30 animate-pulse">
                             <span className="text-white text-[9px] uppercase tracking-[0.3em] font-black mr-3">
-                                {isMobileDevice ? 'TAP' : 'CONTINUE'}
+                                {isMobileDevice ? t('ui.tap') : t('ui.continue')}
                             </span>
                             <div className="w-2 h-2 bg-white rotate-45" />
                         </div>

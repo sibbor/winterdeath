@@ -56,7 +56,7 @@ const InteractionPrompt = React.forwardRef<any, InteractionPromptProps>(({
         }
     }));
 
-    const inputKey = isMobileDevice ? "TAP" : "E";
+    const inputKey = isMobileDevice ? t('ui.tap') : "E";
 
     // Handle touch for engine-level edge detection
     const handleTouchStart = useCallback((e: React.TouchEvent) => {

@@ -426,47 +426,51 @@ export class GameSessionSetup {
                 const sets = state.discoverySets;
                 if (!sets) return;
 
+                const isRespawnable = payload?.respawnable || false;
                 const stats = state.sessionStats;
                 let alreadyFound = false;
 
                 if (type === DiscoveryType.CLUE) {
                     alreadyFound = sets.clues.has(id);
                     if (!alreadyFound) {
-                        sets.clues.add(id);
-                        if (!stats.cluesFound.some((c: any) => c.id === id)) {
+                        if (!isRespawnable) sets.clues.add(id);
+                        if (!isRespawnable && !stats.cluesFound.some((c: any) => c.id === id)) {
                             stats.cluesFound.push(payload || { id });
                         }
                     }
                 } else if (type === DiscoveryType.POI) {
                     alreadyFound = sets.pois.has(id);
                     if (!alreadyFound) {
-                        sets.pois.add(id);
-                        if (!stats.discoveredPOIs.includes(id)) {
+                        if (!isRespawnable) sets.pois.add(id);
+                        if (!isRespawnable && !stats.discoveredPOIs.includes(id)) {
                             stats.discoveredPOIs.push(id);
                         }
                     }
                 } else if (type === DiscoveryType.COLLECTIBLE) {
                     alreadyFound = sets.collectibles.has(id);
                     if (!alreadyFound) {
-                        sets.collectibles.add(id);
-                        if (!stats.collectiblesDiscovered.includes(id)) {
+                        if (!isRespawnable) sets.collectibles.add(id);
+                        if (!isRespawnable && !stats.collectiblesDiscovered.includes(id)) {
                             stats.collectiblesDiscovered.push(id);
-                        }
-                        // Add payload info if available for the UI
-                        if (payload) {
-                            // Enrich for the discovery screen
                         }
                     }
                 }
 
                 // First time discovery awards SP (Plan overhaul)
-                if (!alreadyFound) {
-                    // Update session stats (for end-of-sector report)
-                    const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                    if (tracker) tracker.recordSp(session, 1);
+                // Skip SP and persistence if it's a respawnable item, but still show the screen if it's the "first time" in this context
+                // Actually, if it's respawnable, we ALWAYS want to show the screen (alreadyFound = false for UI)
+                const shouldShowUI = !alreadyFound || isRespawnable;
 
-                    // Update live DOD buffer (for HUD)
-                    callbacks.gainSp(1);
+                if (shouldShowUI) {
+                    // Only award SP and save if NOT respawnable and NOT already found
+                    if (!alreadyFound && !isRespawnable) {
+                        // Update session stats (for end-of-sector report)
+                        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+                        if (tracker) tracker.recordSp(session, 1);
+
+                        // Update live DOD buffer (for HUD)
+                        callbacks.gainSp(1);
+                    }
 
                     if (callbacks.onDiscovery) {
                         // Pass specific payload if it's a collectible for the UI logic in App.tsx
@@ -634,7 +638,7 @@ export class GameSessionSetup {
         session.addSystem(new PlayerCombatSystem(playerGroup));
         session.addSystem(new PlayerInteractionSystem(
             playerGroup, callbacks.concludeSector, sectorCtx.collectibles, refs.activeFamilyMembers, engine.scene,
-            (id) => callbacks.onDiscovery && callbacks.onDiscovery(DiscoveryType.COLLECTIBLE, id, 'ui.discovered_collectible', `collectibles.${id}.title`)
+            (id, respawnable) => callbacks.onDiscovery && callbacks.onDiscovery(DiscoveryType.COLLECTIBLE, id, 'ui.discovered_collectible', `collectibles.${id}.title`, { respawnable })
         ));
 
         const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);

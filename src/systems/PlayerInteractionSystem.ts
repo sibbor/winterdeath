@@ -51,7 +51,7 @@ export class PlayerInteractionSystem implements System {
     id = 'player_interaction';
     enabled = true;
     persistent = true;
-    public onCollectibleDiscovered?: (collectibleId: string) => void;
+    public onCollectibleDiscovered?: (collectibleId: string, isRespawnable?: boolean) => void;
     private lastDetectionTime: number = 0;
 
     // Zero-GC Arrays & Pools
@@ -69,7 +69,7 @@ export class PlayerInteractionSystem implements System {
         private collectibles: THREE.Group[],
         private activeFamilyMembers?: React.MutableRefObject<any[]>,
         private scene?: THREE.Scene,
-        onCollectibleDiscovered?: (collectibleId: string) => void
+        onCollectibleDiscovered?: (collectibleId: string, isRespawnable?: boolean) => void
     ) {
         this.onCollectibleDiscovered = onCollectibleDiscovered;
 
@@ -248,7 +248,7 @@ export class PlayerInteractionSystem implements System {
                 }
 
                 if (this.onCollectibleDiscovered) {
-                    this.onCollectibleDiscovered(anim.collectibleId);
+                    this.onCollectibleDiscovered(anim.collectibleId, anim.obj.userData.respawnable);
                 }
 
                 // Free the pool object

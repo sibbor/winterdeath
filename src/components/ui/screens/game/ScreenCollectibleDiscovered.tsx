@@ -51,7 +51,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
                 </div>
 
                 <div className="max-w-md px-4 mt-4">
-                    <p className="text-zinc-400 text sm:text-base leading-relaxed font-medium italic">
+                    <p className="whitespace-pre-wrap text-zinc-400 text sm:text-base leading-relaxed font-medium italic">
                         "{collectibleDescription}"
                     </p>
                 </div>

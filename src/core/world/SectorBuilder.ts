@@ -405,18 +405,20 @@ export const SectorBuilder = {
         });
     },
 
-    spawnCollectible: (ctx: SectorContext, x: number, z: number, id: string, type: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy') => {
+    spawnCollectible: (ctx: SectorContext, x: number, z: number, id: string, type: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy', respawnable: boolean = false) => {
         if (Math.abs(x) < 0.001 && Math.abs(z) < 0.001) return;
 
-        // Persistence Check
-        const foundList = (ctx as any).collectiblesDiscovered || [];
-        for (let i = 0; i < foundList.length; i++) {
-            if (foundList[i] === id) return;
+        // Persistence Check (Skip for respawnable items)
+        if (!respawnable) {
+            const foundList = (ctx as any).collectiblesDiscovered || [];
+            for (let i = 0; i < foundList.length; i++) {
+                if (foundList[i] === id) return;
+            }
         }
 
         const group = new THREE.Group();
         group.position.set(x, 0.5, z);
-        group.userData = { id, type: InteractionType.COLLECTIBLE, collectibleId: id, isCollectible: true };
+        group.userData = { id, type: InteractionType.COLLECTIBLE, collectibleId: id, isCollectible: true, respawnable };
         group.name = `collectible_${id}`;
 
         const mesh = ModelFactory.createCollectible(type);

@@ -160,9 +160,11 @@ const VitalsPanel = React.memo(({ isMobileDevice, isBossIntro, hpBarRef, hpTextR
             <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-2' : 'h-4'} w-full border border-purple-500/30 bg-slate-950`}>
                 <div className="h-full bg-purple-900/20 relative">
                     <div ref={stBarRef} className="w-full h-full bg-[#a855f7] origin-left will-change-transform hud-bar-glow" style={{ transform: 'scaleX(0)' }} />
+                    {/*
                     <div className="absolute inset-0 flex items-center justify-start px-2 opacity-40 pointer-events-none">
-                        <span ref={stTextRef} className="text-[8px] text-white font-mono font-bold uppercase">STAMINA</span>
+                        <span ref={stTextRef} className="text-[8px] text-white font-mono font-bold uppercase">{t('ui.stamina')}</span>
                     </div>
+                    */}
                 </div>
             </div>
 
@@ -563,7 +565,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 staminaBarRef.current.style.transform = `scaleX(${stRatio})`;
             }
             if (staminaTextRef.current) {
-                const text = data.stamina < 30 ? 'LOW' : 'STAMINA';
+                const text = data.stamina < 30 ? t('ui.low') : t('ui.stamina');
                 if (staminaTextRef.current.innerText !== text) {
                     staminaTextRef.current.innerText = text;
                 }
@@ -826,7 +828,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
                 {/* XP GAIN DISPLAY (DOM placeholder) */}
                 <div ref={xpGainContainerRef} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[200px] opacity-0 pointer-events-none">
-                    <span ref={xpGainTextRef} className="text-cyan-400 font-bold text-2xl drop-shadow-lg font-mono">+0 XP</span>
+                    <span ref={xpGainTextRef} className="text-cyan-400 font-bold text-2xl drop-shadow-lg font-mono">+0 {t('ui.xp')}</span>
                 </div>
 
                 {tooltipContent && (

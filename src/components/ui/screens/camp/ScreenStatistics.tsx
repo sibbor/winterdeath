@@ -317,7 +317,7 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
                 <div className="bg-blue-900/10 border-2 border-blue-500/20 p-4 flex flex-col relative group overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <span className="text-blue-500/60 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.global_explorer')}</span>
-                    <span className="text-3xl font-light text-white font-mono relative z-10">{totalDistanceKm} <span className="text-xs">KM</span></span>
+                    <span className="text-3xl font-light text-white font-mono relative z-10">{totalDistanceKm} <span className="text-xs">{t('ui.km')}</span></span>
 
                     <div className="mt-auto pt-2 relative z-10">
                         <div className="w-full bg-blue-950/40 h-1 rounded-full overflow-hidden">
@@ -330,7 +330,7 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
                 <div className="bg-blue-950/10 border-2 border-blue-500/20 p-4 flex flex-col relative group overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <span className="text-blue-500/60 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.survival_legacy')}</span>
-                    <span className="text-3xl font-light text-white font-mono relative z-10">{totalTimeH} <span className="text-xs">HRS</span></span>
+                    <span className="text-3xl font-light text-white font-mono relative z-10">{totalTimeH} <span className="text-xs">{t('ui.hrs')}</span></span>
                     <span className="mt-auto text-[9px] font-black text-blue-500/30 uppercase tracking-widest relative z-10">{t('ui.on_field_time')}</span>
                 </div>
 
@@ -408,7 +408,7 @@ const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: n
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.total_game_time')}</span>
-                        <span className="text-white font-mono text-lg">{(sb[PlayerStatID.TOTAL_GAME_TIME] / 3600).toFixed(1)} {t('report.time.unit_h')}</span>
+                        <span className="text-white font-mono text-lg">{(sb[PlayerStatID.TOTAL_GAME_TIME] / 3600).toFixed(1)} {t('ui.h')}</span>
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.times_dodged')}</span>
