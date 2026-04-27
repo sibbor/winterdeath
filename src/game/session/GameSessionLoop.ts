@@ -49,6 +49,18 @@ interface LoopContext {
         onDeathStateChange?: (val: boolean) => void;
         gainSp: (amount: number) => void;
         gainScrap: (amount: number) => void;
+        // --- VINTERDÖD: NEW CALLBACKS ---
+        spawnZombie: (type: any, pos?: THREE.Vector3) => void;
+        spawnHorde: (count: number, type: any, pos?: THREE.Vector3) => void;
+        setNotification: (n: any) => void;
+        setInteraction: (interaction: any) => void;
+        setOverlay: (type: string | null) => void;
+        playSound: (id: any) => void;
+        playTone: (freq: number, type: any, duration: number, vol?: number) => void;
+        cameraShake: (amount: number, type?: any) => void;
+        startCinematic: (target: any, sectorId: number, dialogueId?: number, params?: any) => void;
+        setCameraOverride: (params: any) => void;
+        makeNoise: (pos: THREE.Vector3, type: any, radius?: number) => void;
     };
 }
 
@@ -96,6 +108,31 @@ function getCachedNumberString(num: number): string {
     return _numberStringCache[rounded];
 }
 
+// --- VINTERDÖD: PRE-ALLOCATED SECTOR UPDATE CONTEXT (ZERO-GC) ---
+const _sectorUpdateContext: any = {
+    delta: 0,
+    simTime: 0,
+    renderTime: 0,
+    playerPos: null,
+    gameState: null,
+    sectorState: null,
+    scene: null,
+    onAction: null,
+    spawnZombie: null,
+    spawnHorde: null,
+    setNotification: null,
+    setInteraction: null,
+    setOverlay: null,
+    playSound: null,
+    playTone: null,
+    cameraShake: null,
+    t: null,
+    spawnParticle: null,
+    startCinematic: null,
+    setCameraOverride: null,
+    makeNoise: null
+};
+
 export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, renderTime: number) => void {
     const { engine, session, state, refs, propsRef, callbacks } = ctx;
 
@@ -112,6 +149,24 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effectType, effectDuration, effectDamage, attackName);
         }
     };
+
+    // --- VINTERDÖD: BIND STABLE CALLBACKS TO SECTOR CONTEXT ---
+    _sectorUpdateContext.onAction = callbacks.onAction;
+    _sectorUpdateContext.spawnZombie = callbacks.spawnZombie;
+    _sectorUpdateContext.spawnHorde = callbacks.spawnHorde;
+    _sectorUpdateContext.setNotification = callbacks.setNotification;
+    _sectorUpdateContext.setInteraction = callbacks.setInteraction;
+    _sectorUpdateContext.setOverlay = callbacks.setOverlay;
+    _sectorUpdateContext.playSound = callbacks.playSound;
+    _sectorUpdateContext.playTone = callbacks.playTone;
+    _sectorUpdateContext.cameraShake = callbacks.cameraShake;
+    _sectorUpdateContext.t = callbacks.t;
+    _sectorUpdateContext.spawnParticle = callbacks.spawnParticle;
+    _sectorUpdateContext.startCinematic = callbacks.startCinematic;
+    _sectorUpdateContext.setCameraOverride = callbacks.setCameraOverride;
+    _sectorUpdateContext.makeNoise = callbacks.makeNoise;
+    _sectorUpdateContext.scene = engine.scene;
+    _sectorUpdateContext.gameState = state;
 
     // [VINTERDÖD FIX] Zero-GC Traversal avoiding Three.js .traverse() closures
     _triggerOptionsScratch.removeVisual = (id: string) => {
@@ -464,6 +519,18 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         }
 
         // 5. Sector Flow (Boss Defeated, End Sector)
+        // --- VINTERDÖD FIX: EXECUTE SECTOR LOGIC BEFORE BOSS CHECK ---
+        const sectorContext = refs.sectorContextRef.current;
+        if (sectorContext && sectorContext.sector && sectorContext.sector.onUpdate) {
+            _sectorUpdateContext.delta = delta;
+            _sectorUpdateContext.simTime = simTime;
+            _sectorUpdateContext.renderTime = renderTime;
+            _sectorUpdateContext.playerPos = playerGroup.position;
+            _sectorUpdateContext.sectorState = state.sectorState;
+            
+            sectorContext.sector.onUpdate(_sectorUpdateContext);
+        }
+
         if (state.bossDefeatedTime > 0) {
             if (simTime - state.bossDefeatedTime < 10000) {
                 state.invulnerableUntil = simTime + 10000;

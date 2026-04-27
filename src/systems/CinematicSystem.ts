@@ -131,13 +131,7 @@ export class CinematicSystem implements System {
         const cinematic = this.cinematicRef.current;
         const currentNow = this.state.renderTime;
 
-        // 1. SKYDD: Stoppar loopen om vi når slutet
-        if (index >= cinematic.script.length) {
-            this.endCinematic();
-            return;
-        }
-
-        // 2. RPG SKIP: Spola texten om spelaren trycker förbi
+        // 1. RPG SKIP: Spola texten om spelaren trycker förbi
         if (index === cinematic.lineIndex + 1) {
             const timeInLine = currentNow - cinematic.lineStartTime;
             if (timeInLine < cinematic.typingDuration) {
@@ -149,13 +143,20 @@ export class CinematicSystem implements System {
         // Anti-spam skydd
         if (cinematic.lineIndex === index && (currentNow - cinematic.lineStartTime) < 50) return;
 
-        // 3. TRIGGERS: Kör eventuella händelser på den FÖRRA raden
+        // 2. TRIGGERS: Kör eventuella händelser på den FÖRRA raden (som vi nu lämnar)
+        // VINTERDÖD FIX: Detta måste ske innan vi kollar script.length så att sista raden triggar!
         if (cinematic.lineIndex >= 0 && cinematic.lineIndex < cinematic.script.length) {
             const prevLine = cinematic.script[cinematic.lineIndex];
             if (prevLine.trigger && !cinematic.fadingOut) {
                 cinematic.fadingOut = true;
-                this.callbacks.onAction(prevLine.trigger);
+                if (this.callbacks.onAction) this.callbacks.onAction(prevLine.trigger);
             }
+        }
+
+        // 3. SKYDD: Stoppar loopen om vi når slutet
+        if (index >= cinematic.script.length) {
+            this.endCinematic();
+            return;
         }
 
         // 4. Ladda in nästa rad

@@ -105,41 +105,41 @@ export interface SectorDef {
     setupZombies?: (ctx: SectorContext) => void;
 
     generate?: (ctx: SectorContext) => Promise<void>;
-    onUpdate: (
-        delta: number,
-        simTime: number,
-        renderTime: number,
-        playerPos: THREE.Vector3,
-        gameState: any,
-        sectorState: SectorState,
-        events: {
-            onAction: (action: any) => void;
-            spawnZombie: (type?: EnemyType, pos?: THREE.Vector3) => void;
-            spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
-            setNotification: (n: any) => void;
-            setInteraction: (interaction: { id: string, text: string, action: () => void, position?: THREE.Vector3 } | null) => void;
-            setOverlay: (type: string | null) => void; // VINTERDÖD FIX: Added missing UI overlay command
-            playSound: (id: SoundID) => void;
-            playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => void;
-            cameraShake: (amount: number) => void;
-            t: (key: string) => string;
-            scene?: THREE.Scene;
-            spawnParticle: (x: number, y: number, z: number, type: string, count: number, scale?: number, life?: number) => void;
-            startCinematic?: (target: THREE.Object3D, sectorId: number, dialogueId?: number, params?: any) => void;
-            // Environment Controls
-            setWind?: (direction: number, strength: number) => void;
-            setWindRandomized?: (active: boolean) => void;
-            resetWind?: () => void;
-            setWeather?: (type: WeatherType, count?: number) => void;
-            setLight?: (params: { skyLightColor?: THREE.Color; skyLightIntensity?: number; ambientIntensity?: number; skyLightPosition?: { x: number, y: number, z: number }; skyLightVisible?: boolean }) => void;
-            setBackgroundColor?: (color: number) => void;
-            setGroundColor?: (color: number) => void;
-            setFOV?: (fov: number) => void;
-            setFog?: (density: number, height?: number, color?: THREE.Color) => void;
-            setWater?: (level?: number, waveHeight?: number) => void;
-            setCameraOverride?: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
-            makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
-        }
-    ) => void;
+    onUpdate: (ctx: SectorUpdateContext) => void;
     onInteract?: (id: string, object: THREE.Object3D, state: any, events: any) => void;
+}
+
+export interface SectorUpdateContext {
+    delta: number;
+    simTime: number;
+    renderTime: number;
+    playerPos: THREE.Vector3;
+    gameState: any; // RuntimeState
+    sectorState: SectorState;
+
+    // --- CALLBACKS & HELPERS ---
+    onAction: (action: any) => void;
+    spawnZombie: (type?: EnemyType, pos?: THREE.Vector3) => void;
+    spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
+    setNotification: (n: { text: string, duration?: number }) => void;
+    setInteraction: (interaction: { id: string, type: any, label: string, position?: THREE.Vector3 } | null) => void;
+    setOverlay: (type: string | null) => void;
+    playSound: (id: SoundID) => void;
+    playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => void;
+    cameraShake: (amount: number, type?: 'general' | 'hurt') => void;
+    t: (key: string) => string;
+    scene: THREE.Scene;
+    spawnParticle: (x: number, y: number, z: number, type: string, count: number, scale?: number, life?: number) => void;
+    startCinematic: (target: THREE.Object3D, sectorId: number, dialogueId?: number, params?: any) => void;
+    setCameraOverride: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
+    makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
+
+    // --- ENVIRONMENT CONTROLS ---
+    setWeather?: (type: WeatherType, count?: number) => void;
+    setLight?: (params: { skyLightColor?: THREE.Color; skyLightIntensity?: number; ambientIntensity?: number; skyLightPosition?: { x: number, y: number, z: number }; skyLightVisible?: boolean }) => void;
+    setBackgroundColor?: (color: number) => void;
+    setGroundColor?: (color: number) => void;
+    setFOV?: (fov: number) => void;
+    setFog?: (density: number, height?: number, color?: THREE.Color) => void;
+    setWater?: (level?: number, waveHeight?: number) => void;
 }

@@ -1040,7 +1040,41 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 onDiscovery: handleDiscovery,
                 onDeathStateChange: props.onDeathStateChange,
                 gainSp,
-                gainScrap
+                gainScrap,
+                // --- VINTERDÖD FIX: NEW STABLE CALLBACKS FOR SECTOR LOGIC ---
+                spawnZombie: (type: any, pos: any) => refs.sectorContextRef.current?.spawnZombie(type, pos),
+                spawnHorde: (count: number, type: any, pos: any) => refs.sectorContextRef.current?.spawnHorde(count, type, pos),
+                setNotification: (n: any) => {
+                    window.dispatchEvent(new CustomEvent('spawn-bubble', { detail: { text: n.text, duration: n.duration || 3000 } }));
+                },
+                setInteraction: (interaction: any) => {
+                    const s = refs.stateRef.current;
+                    if (interaction) {
+                        s.interaction.active = true;
+                        s.interaction.id = interaction.id;
+                        s.interaction.type = interaction.type;
+                        s.interaction.label = interaction.label;
+                        if (interaction.position) s.interactionTargetPos.copy(interaction.position);
+                    } else {
+                        s.interaction.active = false;
+                    }
+                },
+                setOverlay: (type: string | null) => props.onInteractionStateChange?.(type),
+                playSound: (id: any) => audioEngine.playSound(id),
+                playTone: (freq: number, type: any, duration: number, vol?: number) => (audioEngine as any).playTone?.(freq, type, duration, vol),
+                cameraShake: (amount: number, type?: any) => engine.camera.shake(amount, type || 'general'),
+                startCinematic: (target: any, sectorId: number, dialogueId?: number, params?: any) => {
+                    if (refs.cinematicRef.current.active) return;
+                    refs.cinematicRef.current.active = true;
+                    refs.cinematicRef.current.target = target;
+                    refs.cinematicRef.current.sectorId = sectorId;
+                    refs.cinematicRef.current.dialogueId = dialogueId || 0;
+                    refs.cinematicRef.current.params = params;
+                },
+                setCameraOverride: (params: any) => {
+                    refs.cameraOverrideRef.current = params;
+                },
+                makeNoise: (pos: any, type: any, radius?: number) => session.makeNoise(pos, type, radius || 10)
             }
         });
 

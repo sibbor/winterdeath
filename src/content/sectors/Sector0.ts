@@ -938,12 +938,12 @@ export const Sector0: SectorDef = {
         }
     },
 
-    onUpdate: (dt, simTime, renderTime, playerPos, gameState, sectorState, events) => {
-        const state = gameState;
+    onUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
+        // --- SECTOR 0: LOKE MISSION LOGIC ---
         if (!sectorState.spawns) sectorState.spawns = {};
 
         // --- 1. AMBIENT ZOMBIE SPAWNS ---
-        if (!sectorState.spawns.initial && simTime - state.startTime > 0) {
+        if (!sectorState.spawns.initial && simTime - gameState.startTime > 0) {
             sectorState.spawns.initial = true;
             for (let i = 0; i < 3; i++) {
                 if (events.spawnZombie) events.spawnZombie(EnemyType.WALKER, new THREE.Vector3(14, 0, 1));
@@ -1230,7 +1230,7 @@ export const Sector0: SectorDef = {
             const elapsed = simTime - sectorState.busEventTimer;
 
             // PHYSICS UPDATE
-            explodeBus(dt, renderTime, gameState, sectorState, events);
+            explodeBus(delta, renderTime, gameState, sectorState, events);
 
             if (elapsed > 10000 || (!sectorState.busRubble?.userData.active)) {
                 sectorState.busEventState = 9;

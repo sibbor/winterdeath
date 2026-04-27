@@ -338,7 +338,7 @@ export const Sector1: SectorDef = {
         }
     },
 
-    onUpdate: (delta, simTime, renderTime, playerPos, gameState, sectorState, events) => {
+    onUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
         // --- REVERB ---
         const insideCave = playerPos.z < -80;
         if (audioEngine.ctx) {

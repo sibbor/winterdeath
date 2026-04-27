@@ -436,7 +436,8 @@ export const Sector2: SectorDef = {
         }
     },
 
-    onUpdate: (delta, simTime, renderTime, playerPos, gameState, sectorState, events) => {
+    onUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
+        // --- SECTOR 2: ESMERALDA MISSION LOGIC ---
         // Rotating mast warning light (every frame, Zero-GC)
         if (sectorState.mastLightHub) {
             sectorState.mastLightHub.rotation.y += delta * 2.0;

@@ -256,6 +256,27 @@ export class AudioEngine {
         if (buffer) this.ambientBus.play(id, buffer, 0.25, fadeTime);
     }
 
+    /** Procedural beeps/tones for UI or events */
+    public playTone(freq: number, type: OscillatorType = 'sine', duration: number = 0.1, volume: number = 0.2) {
+        this.resume();
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        
+        g.gain.setValueAtTime(0, this.ctx.currentTime);
+        g.gain.linearRampToValueAtTime(volume, this.ctx.currentTime + 0.01);
+        g.gain.setValueAtTime(volume, this.ctx.currentTime + duration - 0.05);
+        g.gain.linearRampToValueAtTime(0, this.ctx.currentTime + duration);
+        
+        osc.connect(g);
+        g.connect(this.masterGain);
+        
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
     public stopAmbience(fadeTime: number = 1.0) {
         this.ambientBus.stop(fadeTime);
     }

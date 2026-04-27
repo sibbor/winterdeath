@@ -235,8 +235,8 @@ export const Sector3: SectorDef = {
         spawnSectorHordes(ctx);
     },
 
-    onUpdate: (delta, simTime, renderTime, playerPos, gameState, sectorState, events) => {
-        // ── Routine scrapyard ambushes ──
+    onUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
+        // --- SECTOR 3: NATHALIE MISSION LOGIC ---
         if (Math.random() < 0.015 && gameState.enemies.length < 12 && !sectorState.epilogueBossDefeated) {
             const angle = Math.random() * Math.PI * 2;
             const dist = 25 + Math.random() * 20;
