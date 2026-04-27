@@ -3,6 +3,7 @@ import { t } from '../../../../utils/i18n';
 import { SectorStats } from '../../../../types/StateTypes';
 import ScreenModalLayout, { TacticalCard, TacticalTab } from '../../layout/ScreenModalLayout';
 import { DamageID } from '../../../../entities/player/CombatTypes';
+import { StatWeaponIndex, StatEnemyIndex } from '../../../../entities/player/PlayerTypes';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
 
@@ -58,9 +59,9 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
         ? ((stats.shotsHit || 0) / stats.shotsFired * 100).toFixed(1)
         : "0.0";
 
-    const totalKills = (Object.values(stats.killsByType || {}) as number[]).reduce((a, b) => a + b, 0);
+    const totalKills = stats.kills;
 
-    const bossKills = (stats.killsByType?.['Boss'] as number) || 0;
+    const bossKills = stats.enemyKills[StatEnemyIndex.BOSS] || 0;
     const bossKilled = bossKills > 0;
     const familyStatusKey = (stats.familyFound || bossKilled) ? 'ui.family_member_rescued' : 'ui.family_member_missing';
     const bossStatusKey = bossKilled ? 'ui.boss_dead' : 'ui.boss_alive';
@@ -86,15 +87,8 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
         }
     }
 
-    const incomingData = Object.values(stats.incomingDamageBreakdown || {}) as any[];
-    const totalIncoming = React.useMemo(() => incomingData.reduce((acc: number, enemyMap: any) => {
-        const enemyVals = Object.values(enemyMap || {}) as number[];
-        const sum = enemyVals.reduce((s: number, v: number) => s + (v || 0), 0);
-        return acc + sum;
-    }, 0), [incomingData]);
-
-    const outgoingData = Object.values(stats.outgoingDamageBreakdown || {}) as number[];
-    const totalOutgoing = React.useMemo(() => outgoingData.reduce((acc: number, val: number) => acc + (val || 0), 0), [outgoingData]);
+    const totalIncoming = stats.damageTaken;
+    const totalOutgoing = stats.damageDealt;
 
     const handleTabChange = React.useCallback((index: 0 | 1) => {
         setActiveTab(index);
@@ -201,32 +195,33 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                             <span className="text-xl font-mono text-red-400 font-bold">{Math.round(totalIncoming)}</span>
                         </div>
                         <div className="space-y-4 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
-                            {Object.entries(stats.incomingDamageBreakdown || {}).map(([enemyId, damageMap]) => {
-                                const enemyMapTyped = damageMap as Record<string, number>;
-                                const enemyDmg = Object.values(enemyMapTyped || {}).reduce((s: number, v: number) => s + (v || 0), 0);
-                                if (enemyDmg <= 0) return null;
+                            {Array.from({ length: 64 }).map((_, sourceId) => {
+                                // 1. Calculate total for this source to see if we should render it
+                                let sourceTotal = 0;
+                                const offset = sourceId * 32;
+                                for (let i = 0; i < 32; i++) sourceTotal += stats.incomingDamageBuffer[offset + i];
+                                if (sourceTotal <= 0) return null;
 
                                 let attackerName = t('report.labels.unknown');
-                                const id = parseInt(enemyId);
-
-                                if (id === DamageID.BOSS) {
+                                if (sourceId === DamageID.BOSS) {
                                     attackerName = t('report.labels.boss');
-                                } else if (id < 20) { 
-                                    attackerName = t(DataResolver.getEnemyName(id as number));
+                                } else if (sourceId < 16) {
+                                    attackerName = t(DataResolver.getEnemyName(sourceId as number));
                                 } else {
-                                    attackerName = t(DataResolver.getDamageName(id));
+                                    attackerName = t(DataResolver.getDamageName(sourceId));
                                 }
 
                                 return (
-                                    <div key={enemyId} className="bg-red-950/10 border border-red-500/20 p-3 rounded shadow-inner">
+                                    <div key={sourceId} className="bg-red-950/10 border border-red-500/20 p-3 rounded shadow-inner">
                                         <div className="flex justify-between items-center mb-2 border-b border-red-500/10 pb-1">
                                             <span className="text-red-400 text-xs font-black uppercase tracking-widest">{attackerName}</span>
-                                            <span className="text-red-500 font-mono font-bold text-xs">{Math.round(enemyDmg)}</span>
+                                            <span className="text-red-500 font-mono font-bold text-xs">{Math.round(sourceTotal)}</span>
                                         </div>
                                         <div className="space-y-1 pl-2 border-l-2 border-red-500/10">
-                                            {Object.entries(enemyMapTyped).map(([attackId, dmg]) => {
+                                            {Array.from({ length: 32 }).map((_, attackId) => {
+                                                const dmg = stats.incomingDamageBuffer[offset + attackId];
                                                 if (dmg <= 0) return null;
-                                                const atkName = t(DataResolver.getAttackName(parseInt(attackId)));
+                                                const atkName = t(DataResolver.getAttackName(attackId));
                                                 return <LineItem key={attackId} title={atkName.toUpperCase()} val={dmg} />;
                                             })}
                                         </div>
@@ -242,14 +237,14 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                             <span className="text-xl font-mono text-green-400 font-bold">{Math.round(totalOutgoing)}</span>
                         </div>
                         <div className="space-y-1 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
-                            {Object.entries(stats.outgoingDamageBreakdown || {}).sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).map(([weaponId, damage]) => {
-                                const dmgVal = (damage as number) || 0;
+                            {Array.from({ length: StatWeaponIndex.COUNT }).map((_, idx) => {
+                                const dmgVal = stats.weaponDamageDealt[idx] || 0;
                                 if (dmgVal <= 0) return null;
 
-                                const instrumentId = parseInt(weaponId);
+                                const instrumentId = idx + 1;
                                 const name = t(DataResolver.getDamageName(instrumentId));
 
-                                return <LineItem key={weaponId} title={name.toUpperCase()} val={dmgVal} />;
+                                return <LineItem key={idx} title={name.toUpperCase()} val={dmgVal} />;
                             })}
                         </div>
                     </TacticalCard>

@@ -73,18 +73,18 @@ const findComfortWeapon = (timeBuffer: Float64Array) => {
     return { id: comfortIdx, time: maxTime };
 };
 
-const findNemesis = (deathsRecord: Record<number, number>) => {
+const findNemesis = (deathsBuffer: Float64Array) => {
     let maxDeaths = -1;
     let nemesisIdx = -1;
-    const keys = Object.keys(deathsRecord);
-    for (let i = 0; i < keys.length; i++) {
-        const id = parseInt(keys[i]);
-        if (deathsRecord[id] > maxDeaths) {
-            maxDeaths = deathsRecord[id];
-            nemesisIdx = id;
+    // VINTERDÖD HARDENING: Standard for-loop over TypedArray length
+    for (let i = 0; i < deathsBuffer.length; i++) {
+        const count = deathsBuffer[i];
+        if (count > maxDeaths) {
+            maxDeaths = count;
+            nemesisIdx = i;
         }
     }
-    return { id: nemesisIdx, count: maxDeaths };
+    return { id: nemesisIdx, count: Math.max(0, maxDeaths) };
 };
 
 const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onOpenDiscovery, isMobileDevice, debugMode, initialTab, initialItemId }) => {
@@ -404,7 +404,7 @@ const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: n
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.chests_opened')}</span>
-                        <span className="text-white font-mono text-lg">{stats.chestsOpened + stats.bigChestsOpened}</span>
+                        <span className="text-white font-mono text-lg">{Math.floor(sb[PlayerStatID.TOTAL_CHESTS_OPENED] + sb[PlayerStatID.TOTAL_BIG_CHESTS_OPENED])}</span>
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.total_game_time')}</span>
@@ -433,10 +433,10 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
 
     const { efficiency, kdRatio, lethality, longestKillstreak, crisisSaves, nemesis, peakAggression, time } = useMemo(() => {
         const kills = Math.floor(sb[PlayerStatID.TOTAL_KILLS] || 0);
-        const deaths = Math.max(1, stats.deaths);
+        const deaths = Math.max(1, sb[PlayerStatID.TOTAL_DEATHS] || 0);
         const time = sb[PlayerStatID.TOTAL_GAME_TIME] || 1;
-        const shots = stats.totalBulletsFired || 1;
-        const hits = stats.totalBulletsHit || 0;
+        const shots = Math.max(1, sb[PlayerStatID.TOTAL_SHOTS_FIRED] || 0);
+        const hits = sb[PlayerStatID.TOTAL_SHOTS_HIT] || 0;
 
         const accuracy = (hits / shots) * 100;
         const efficiency = (kills / (time / 60));
@@ -456,16 +456,16 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
             peakAggression: peakAggression.toLocaleString(),
             time
         };
-    }, [sb, stats.deaths, stats.totalBulletsFired, stats.totalBulletsHit, stats.deathsByEnemyType]);
+    }, [sb, stats.deathsByEnemyType]);
 
     const killLogData = useMemo(() => {
         const result = [];
         for (let i = 0; i < StatEnemyIndex.COUNT; i++) {
-            const count = Math.max(stats.enemyKills[i] || 0, stats.killsByType ? (stats.killsByType[i] || 0) : 0);
+            const count = stats.enemyKills[i] || 0;
             if (count > 0) result.push({ type: i, count, label: t(DataResolver.getZombieName(i)) });
         }
         return result;
-    }, [stats.enemyKills, stats.killsByType]);
+    }, [stats.enemyKills]);
 
     return (
         <div className={`flex flex-col h-full gap-8 pb-12 ${isMobileDevice ? 'overflow-y-auto' : ''} custom-scrollbar`}>

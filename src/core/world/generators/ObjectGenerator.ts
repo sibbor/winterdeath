@@ -293,7 +293,9 @@ export const ObjectGenerator = {
 
             if (litCount > 0 || darkCount > 0) {
                 const litWindows = litCount > 0 ? new THREE.InstancedMesh(SHARED_GEO.plane, MATERIALS.windowLit, litCount) : null;
+                if (litWindows) litWindows.frustumCulled = false;
                 const darkWindows = darkCount > 0 ? new THREE.InstancedMesh(SHARED_GEO.plane, MATERIALS.windowDark, darkCount) : null;
+                if (darkWindows) darkWindows.frustumCulled = false;
 
                 let idx = 0, litIdx = 0, darkIdx = 0;
 
@@ -663,6 +665,7 @@ export const ObjectGenerator = {
 
             if (totalWinCount > 0) {
                 const instancedWindows = new THREE.InstancedMesh(SHARED_GEO.plane, MATERIALS.glass, totalWinCount);
+                instancedWindows.frustumCulled = false;
                 let idx = 0;
 
                 for (let s = 0; s < sides; s++) {
@@ -720,6 +723,7 @@ export const ObjectGenerator = {
 
             if (totalUpWinCount > 0) {
                 const instancedUpWindows = new THREE.InstancedMesh(SHARED_GEO.plane, MATERIALS.upWindow, totalUpWinCount);
+                instancedUpWindows.frustumCulled = false;
                 let idx = 0;
 
                 for (let s = 0; s < sides; s++) {
@@ -795,6 +799,7 @@ export const ObjectGenerator = {
     // Note: Grass should be fully handled by VegetationGenerator, but keeping this optimized just in case.
     createGrassField: (ctx: SectorContext, x: number, z: number, width: number, depth: number, count: number) => {
         const mesh = new THREE.InstancedMesh(SHARED_GEO.cone, MATERIALS.grass, count);
+        mesh.frustumCulled = false;
         mesh.castShadow = false;
         mesh.receiveShadow = true;
         GeneratorUtils.freezeStatic(mesh);

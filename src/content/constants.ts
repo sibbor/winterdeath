@@ -154,21 +154,16 @@ export const INITIAL_STATS: PlayerStats = {
     perkDebuffsCleansed: new Float64Array(StatPerkIndex.COUNT),
 
     enemyKills: new Float64Array(StatEnemyIndex.COUNT),
+    deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
+    incomingDamageBuffer: new Float64Array(StatEnemyIndex.COUNT * 32 + 64),
 
     statusFlags: 0,
     activePassives: [],
     activeBuffs: [],
     activeDebuffs: [],
 
-    killsByType: {},
-    deaths: 0,
     sectorsCompleted: 0,
     totalSkillPointsEarned: 0,
-    totalBulletsFired: 0,
-    totalBulletsHit: 0,
-    totalThrowablesThrown: 0,
-    chestsOpened: 0,
-    bigChestsOpened: 0,
 
     collectiblesDiscovered: [],
     viewedCollectibles: [],
@@ -182,9 +177,6 @@ export const INITIAL_STATS: PlayerStats = {
     rescuedFamilyIds: [],
     familyFoundCount: 0,
     mostUsedWeapon: '',
-    deathsByEnemyType: {},
-    incomingDamageBreakdown: {},
-    outgoingDamageBreakdown: {},
 
     // --- VINTERDÖD: CACHED ENTITY STATE (Phase 13) ---
     velocity: new THREE.Vector3(),

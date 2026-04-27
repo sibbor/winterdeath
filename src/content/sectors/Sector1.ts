@@ -74,7 +74,7 @@ async function addProps(ctx: SectorContext) {
         new THREE.Vector3(20, 0, 190),
         new THREE.Vector3(-10, 0, 190)
     ];
-    VegetationGenerator.fillAreaWithGrass(ctx, sparseGrass, 0.8);
+    VegetationGenerator.fillArea(ctx, VEGETATION_TYPE.GRASS, sparseGrass, 0.8);
     */
 
 
@@ -320,7 +320,7 @@ export const Sector1: SectorDef = {
                 id: 'cave_door',
                 type: InteractionType.SECTOR_SPECIFIC,
                 label: 'ui.interact_knock_on_port',
-                radius: 12.0
+                collider: { type: 'sphere', radius: 12.0 }
             });
         }
     },

@@ -359,7 +359,7 @@ export const Sector4: SectorDef = {
             id: EXPLODING_BUS_ID,
             label: 'ui.interact_blow_up_bus',
             type: InteractionType.SECTOR_SPECIFIC,
-            radius: 15.0
+            collider: { type: 'sphere', radius: 15.0 }
         });
         bus.userData.isInteractable = true;
 

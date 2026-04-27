@@ -532,7 +532,7 @@ export class PlayerInteractionSystem implements System {
             }
             if (!inRegistry) chests.push(c);
 
-            WorldLootSystem.spawnScrapExplosion(session.engine.scene, state.scrapItems, c.mesh.position.x, c.mesh.position.z, c.scrap);
+            WorldLootSystem.spawnScrapExplosion(session.engine.scene, c.mesh.position.x, c.mesh.position.z, c.scrap);
 
             const glowRing = c.mesh.getObjectByName('chestGlow');
             if (glowRing) {

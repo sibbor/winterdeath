@@ -7,7 +7,6 @@ export type { PlayerStats };
 
 export interface SectorStats {
   kills: number;
-  killsByType: Record<string, number>;
   damageDealt: number;
   damageTaken: number;
   timePlayed: number;
@@ -19,11 +18,11 @@ export interface SectorStats {
   shotsHit: number;
   throwablesThrown: number;
   distanceTraveled: number;
-  chestsOpened: number;
-  bigChestsOpened: number;
   score: number;
   bossDamageDealt: number;
   bossDamageTaken: number;
+  chestsOpened: number;
+  bigChestsOpened: number;
 
   maxKillstreak: number;
   engagementDistSqKills: number;
@@ -44,6 +43,8 @@ export interface SectorStats {
 
   // --- ENEMY STATS BUFFERS ---
   enemyKills: Float64Array;
+  enemyDeaths: Float64Array;
+  incomingDamageBuffer: Float64Array;
 
   // VINTERDÖD FIX: cluesFound is an array of objects {id, content}, not strings
   cluesFound: any[];
@@ -59,8 +60,6 @@ export interface SectorStats {
   familyFound: boolean;
   familyExtracted: boolean;
   isExtraction: boolean;
-  incomingDamageBreakdown: Record<number, Record<number, number>>;
-  outgoingDamageBreakdown: Record<number, number>;
   discoveredPerks: number[];
 
   // VINTERDÖD FIX: Standardized wave naming

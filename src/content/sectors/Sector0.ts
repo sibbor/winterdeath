@@ -631,7 +631,7 @@ export const Sector0: SectorDef = {
             id: 'tunnel_bus_explode',
             label: 'ui.interact_blow_up_bus',
             type: InteractionType.SECTOR_SPECIFIC,
-            radius: 15.0
+            collider: { type: 'sphere', radius: 15.0 }
         });
         // Non-interactble from start
         bus.userData.isInteractable = false;

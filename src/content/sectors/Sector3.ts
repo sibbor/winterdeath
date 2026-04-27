@@ -553,7 +553,7 @@ export const Sector3: SectorDef = {
                                 id: 's3_escape_car',
                                 type: InteractionType.VEHICLE,
                                 label: 'ui.interact_enter_car',
-                                radius: 4.0
+                                collider: { type: 'sphere', radius: 4.0 }
                             }
                         );
                     }

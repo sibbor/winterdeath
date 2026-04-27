@@ -146,6 +146,14 @@ export const DataResolver = {
     },
 
     /**
+     * Resolves the localized name key for a Sector.
+     */
+    getSectorName(id: number): string {
+        const theme = SECTOR_THEMES[id];
+        return theme ? theme.name : `sectors.sector_${id}_name`;
+    },
+
+    /**
      * Resolves the localized description key for a specific Weapon.
      */
     getWeaponDescription(type: WeaponType): string {
@@ -242,6 +250,15 @@ export const DataResolver = {
         const item = COLLECTIBLES[id];
         if (!item) return `collectibles.${id}.title`;
         return `collectibles.${item.sector}.${item.index}.title`;
+    },
+
+    /**
+     * Resolves the localized description for a Collectible.
+     */
+    getCollectibleDescription(id: string): string {
+        const item = COLLECTIBLES[id];
+        if (!item) return `collectibles.${id}.description`;
+        return `collectibles.${item.sector}.${item.index}.description`;
     },
 
     /**
@@ -386,31 +403,7 @@ export const DataResolver = {
         return perk ? perk.description : 'ui.description_missing';
     },
 
-    // --- LEGACY MAPPING WRAPPERS (To be removed after full migration) ---
 
-    getSectorName(id: number): string {
-        return `sectors.sector_${id}_name`;
-    },
-
-    /**
-     * Resolves the localized description for a Collectible.
-     */
-    getCollectibleDescription(id: string): string {
-        const item = COLLECTIBLES[id];
-        if (!item) return `collectibles.${id}.description`;
-        return `collectibles.${item.sector}.${item.index}.description`;
-    },
-
-    getSectorIntro(id: number): string | null {
-        // This usually comes from the sector definition object, 
-        // but we can provide a facade for intro text keys if needed.
-        return null; // For now, the caller handles the definition object
-    },
-
-    getSectorMusic(id: number): string | SoundID {
-        const sector = SECTORS[id];
-        return sector?.ambientLoop || SoundID.AMBIENT_WIND;
-    },
 
     /**
      * CONTENT ACCESSORS (Decoupling UI from raw imports)

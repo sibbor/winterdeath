@@ -14,8 +14,7 @@ export const aggregateStats = (
     died: boolean,
     aborted: boolean,
     newUniqueAchievements: number = 0
-): PlayerStats => {
-    // VINTERDÖD FIX: Clone BOTH the object and the statsBuffer to ensure React immutability
+): PlayerStats => {    // VINTERDÖD FIX: Clone BOTH the object and the statsBuffer to ensure React immutability
     const s = {
         ...prevStats,
         statsBuffer: new Float32Array(prevStats.statsBuffer),
@@ -35,7 +34,9 @@ export const aggregateStats = (
         perkDebuffsCleansed: new Float64Array(prevStats.perkDebuffsCleansed),
 
         // --- ENEMY STATS BUFFERS (Step 2 Clone) ---
-        enemyKills: new Float64Array(prevStats.enemyKills)
+        enemyKills: new Float64Array(prevStats.enemyKills),
+        deathsByEnemyType: new Float64Array(prevStats.deathsByEnemyType),
+        incomingDamageBuffer: new Float64Array(prevStats.incomingDamageBuffer)
     };
 
     const sb = s.statsBuffer;
@@ -46,10 +47,6 @@ export const aggregateStats = (
     s.discoveredPOIs = s.discoveredPOIs ? s.discoveredPOIs.slice() : [];
     s.seenBosses = s.seenBosses ? s.seenBosses.slice() : [];
     s.seenEnemies = s.seenEnemies ? s.seenEnemies.slice() : [];
-    s.killsByType = { ...(s.killsByType || {}) };
-    s.deathsByEnemyType = { ...(s.deathsByEnemyType || {}) };
-    s.incomingDamageBreakdown = { ...(s.incomingDamageBreakdown || {}) };
-    s.outgoingDamageBreakdown = { ...(s.outgoingDamageBreakdown || {}) };
 
     // 1. Sector Completion Progress
     if (!died && !aborted) {
@@ -73,18 +70,6 @@ export const aggregateStats = (
         sb[PlayerStatID.LONGEST_KILLSTREAK] = sectorStats.maxKillstreak;
     }
 
-    if (sectorStats.killsByType) {
-        for (const type in sectorStats.killsByType) {
-            s.killsByType[type] = (s.killsByType[type] || 0) + sectorStats.killsByType[type];
-        }
-    }
-
-    if (died) {
-        s.deaths = (s.deaths || 0) + 1;
-        const killer = sectorStats.killerType || 'Unknown';
-        s.deathsByEnemyType[killer as any] = (s.deathsByEnemyType[killer as any] || 0) + 1;
-    }
-
     // --- WEAPON PERFORMANCE AGGREGATION (Zero-GC Loop) ---
     for (let i = 0; i < StatWeaponIndex.COUNT; i++) {
         s.weaponKills[i] += sectorStats.weaponKills[i];
@@ -98,6 +83,7 @@ export const aggregateStats = (
     // --- ENEMY PERFORMANCE AGGREGATION (Zero-GC Loop) ---
     for (let i = 0; i < StatEnemyIndex.COUNT; i++) {
         s.enemyKills[i] += sectorStats.enemyKills[i];
+        s.deathsByEnemyType[i] += sectorStats.enemyDeaths[i];
     }
 
     // --- PERK PERFORMANCE AGGREGATION (Zero-GC Loop) ---
@@ -108,19 +94,13 @@ export const aggregateStats = (
         s.perkDebuffsCleansed[i] += sectorStats.perkDebuffsCleansed[i];
     }
 
-    if (sectorStats.incomingDamageBreakdown) {
-        for (const source in sectorStats.incomingDamageBreakdown) {
-            if (!s.incomingDamageBreakdown[source as any]) (s.incomingDamageBreakdown as any)[source] = {};
-            const attacks = (sectorStats.incomingDamageBreakdown as any)[source];
-            for (const attack in attacks) {
-                (s.incomingDamageBreakdown as any)[source][attack] = ((s.incomingDamageBreakdown as any)[source][attack] || 0) + attacks[attack];
-            }
-        }
+    // --- INCOMING DAMAGE AGGREGATION (Zero-GC) ---
+    const inLen = s.incomingDamageBuffer.length;
+    for (let i = 0; i < inLen; i++) {
+        s.incomingDamageBuffer[i] += sectorStats.incomingDamageBuffer[i];
     }
 
     // 4. Scavenging Objectives
-    s.chestsOpened = (s.chestsOpened || 0) + (sectorStats.chestsOpened || 0);
-    s.bigChestsOpened = (s.bigChestsOpened || 0) + (sectorStats.bigChestsOpened || 0);
     sb[PlayerStatID.TOTAL_CHESTS_OPENED] += (sectorStats.chestsOpened || 0);
     sb[PlayerStatID.TOTAL_BIG_CHESTS_OPENED] += (sectorStats.bigChestsOpened || 0);
 

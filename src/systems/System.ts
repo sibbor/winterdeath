@@ -4,6 +4,9 @@ export { SystemID };
 /**
  * Base interface for all game systems.
  * Systems are updated every frame within the main engine loop.
+ * 
+ * VINTERDÖD: Removed legacy 'id: string' in favor of numeric 'systemId' enum
+ * for O(1) dense array lookups in the WinterEngine.
  */
 export interface System {
     readonly systemId: SystemID;
@@ -31,11 +34,11 @@ export interface System {
     init?(context: any): void;
 
     /**
-         * Main update loop called every frame by the WinterEngine.
-         * @param context Reference to the current world state.
-         * @param delta Time since the last frame in seconds (clamped).
-         * @param time The engine-provided active timestamp in milliseconds (simTime or renderTime depending on system type).
-         */
+     * Main update loop called every frame by the WinterEngine.
+     * @param context Reference to the current world state.
+     * @param delta Time since the last frame in seconds (clamped).
+     * @param time The engine-provided active timestamp in milliseconds (simTime or renderTime depending on system type).
+     */
     update?(context: any, delta: number, simTime: number, renderTime: number): void;
 
     /**

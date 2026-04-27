@@ -23,7 +23,6 @@ export interface UIState {
     interactionScreenPos: { x: number, y: number } | null;
     forceHideHUD: boolean;
     stationOverlay: string | null;
-    zombieWaveActive?: boolean; // Just in case any legacy component expects it to exist in the UIState
 }
 
 export const useGameSessionState = (props: GameCanvasProps) => {
@@ -121,8 +120,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
         collectibleId: null,
         interactionScreenPos: null,
         forceHideHUD: false,
-        stationOverlay: null,
-        zombieWaveActive: false
+        stationOverlay: null
     });
 
     // Zero-GC partial state update (prevents re-renders if nothing actually changed)

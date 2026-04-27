@@ -282,4 +282,5 @@ export const GEOMETRY = {
         geo.translate(0, 200, 0);
         return geo;
     })(),
+    debugRing: new THREE.RingGeometry(0.9, 1.0, 32),
 };

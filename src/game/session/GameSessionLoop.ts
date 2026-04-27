@@ -17,7 +17,7 @@ import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { WEAPONS, WeaponBehavior } from '../../content/weapons';
 import { Enemy, EnemyFlags, EnemyDeathState, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
-import { DamageType, DamageID } from '../../entities/player/CombatTypes';
+import { DamageID } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
@@ -175,12 +175,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             if (type === 'damage') {
                 const damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                 if (damageTracker) {
-                    damageTracker.recordOutgoingDamage(session, amt, 'Generic', isBoss);
+                    damageTracker.recordOutgoingDamage(session, amt, DamageID.OTHER, isBoss);
                 }
             }
             if (type === 'hit') state.sessionStats.shotsHit += amt;
         },
-        onPlayerHit: (dmg: number, attacker: any, type: DamageType, isDoT: boolean = false, effect?: any, dur?: number, intense?: number, attackName?: string) => {
+        onPlayerHit: (dmg: number, attacker: any, type: DamageID, isDoT: boolean = false, effect?: any, dur?: number, intense?: number, attackName?: string) => {
             if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type, isDoT, effect, dur, intense, attackName);
         },
         applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact: boolean = false) => {

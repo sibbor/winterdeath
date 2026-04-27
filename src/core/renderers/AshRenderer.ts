@@ -41,6 +41,7 @@ export class AshRenderer {
         this.maxInstances = maxInstances;
 
         this.mesh = new THREE.InstancedMesh(GEOMETRY.ashPile, MATERIALS.ash, this.maxInstances);
+        this.mesh.frustumCulled = false;
         this.mesh.castShadow = true;
         this.mesh.receiveShadow = true;
         this.mesh.count = 0;

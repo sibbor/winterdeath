@@ -346,12 +346,8 @@ export class PlayerStatsSystem implements System {
                 const isBossAttacker = (attacker.statusFlags & EnemyFlags.BOSS) !== 0;
                 if (isBossAttacker && attacker.bossId !== undefined) {
                     sourceKey = DamageID.BOSS;
-                    // For bosses, attackIndex is their identity in telemetry grouping
-                    // but we also want the killerAttackName to be correct.
-                    // Wait, if I use attackIndex = attacker.bossId here, I overwrite BITE/HIT.
-                    // Let's use a separate local for telemetry recording.
                 } else {
-                    sourceKey = DamageID.PHYSICAL;
+                    sourceKey = attacker.type; // WALKER, RUNNER, etc. (0-15 range)
                 }
             }
 
@@ -406,6 +402,13 @@ export class PlayerStatsSystem implements System {
 
     private executePlayerDeath(session: GameSessionLogic, attacker: any, type: DamageID, attackName: string, attackIndex: number, now: number) {
         const state = session.state;
+
+        // Telemetry
+        const damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+        if (damageTracker) {
+            damageTracker.recordPlayerDeath(session, type, attacker?.type);
+        }
+
         state.statusFlags |= PlayerStatusFlags.DEAD;
         state.deathStartTime = now;
         state.killerType = type;

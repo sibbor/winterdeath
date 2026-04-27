@@ -46,9 +46,6 @@ export interface InteractableParams {
     label?: string;
     type?: InteractionType;
     collider?: InteractionCollider;
-
-    // Legacy support (Converted to collider automatically)
-    radius?: number;
 }
 
 export const SectorBuilder = {
@@ -123,11 +120,6 @@ export const SectorBuilder = {
                 if (!object.userData.interactable.collider) object.userData.interactable.collider = {};
                 object.userData.interactable.collider.margin = params.collider.margin;
             }
-        }
-        // Legacy fallback
-        else if (params?.radius) {
-            object.userData.interactionShape = 'sphere';
-            object.userData.interactionRadius = params.radius;
         }
 
         if (!ctx.interactables) {
@@ -281,7 +273,6 @@ export const SectorBuilder = {
         // VINTERDÖD: Skip expensive entity and system initialization during asset warmup
         if (!ctx.isWarmup) {
             if (def.setupZombies) await def.setupZombies(ctx);
-            if (def.generate) await def.generate(ctx); // Legacy fallback
 
             // VINTERDÖD: Final world discovery - find all Ground_* meshes for the footprint system
             FootprintSystem.init(ctx.scene);

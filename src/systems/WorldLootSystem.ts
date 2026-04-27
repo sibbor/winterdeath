@@ -195,8 +195,10 @@ export class WorldLootSystem implements System {
                 item.needsUpdate = true;
             }
 
-            // 3. Collection
-            if (distSq < collectionRangeSq) {
+            // 3. Collection (VINTERDÖD FIX: 100ms delay to prevent instant collection on spawn)
+            const canCollect = (simTime - item.spawnTime) > 100;
+
+            if (canCollect && distSq < collectionRangeSq) {
                 collectedAmount += item.value;
                 this.deactivateItem(item, i);
                 gpuNeedsUpdate = true;
@@ -248,7 +250,7 @@ export class WorldLootSystem implements System {
         }
     }
 
-    public static spawnScrapExplosion(scene: THREE.Scene, _legacy: any[], x: number, z: number, amount: number) {
+    public static spawnScrapExplosion(scene: THREE.Scene, x: number, z: number, amount: number) {
         if (!WorldLootSystem.instance) return;
         const sys = WorldLootSystem.instance;
         const count = Math.min(Math.ceil(amount / 5), 15);

@@ -224,7 +224,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         // 3. Execution Switch
         switch (actionType) {
             case 'HEAL':
-                state.hp = Math.min(state.maxHp, state.hp + (payload.amount || 20));
+                const hp = state.statsBuffer[PlayerStatID.HP];
+                const maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
+                state.statsBuffer[PlayerStatID.HP] = Math.min(maxHp, hp + (payload.amount || 20));
                 UiSounds.playConfirm();
                 break;
 
@@ -241,7 +243,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             case 'GIVE_REWARD':
                 if (payload.scrap) {
-                    state.collectedScrap += payload.scrap;
+                    state.statsBuffer[PlayerStatID.SCRAP] += payload.scrap;
+                    state.statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += payload.scrap;
                     state.sessionStats.scrapLooted += payload.scrap;
                 }
                 if (payload.xp) gainXp(payload.xp);
@@ -570,7 +573,28 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 UiSounds.playConfirm();
                 setTimeout(() => {
                     currentProps.onSectorEnded({
-                        timeElapsed: 0, shotsFired: 0, shotsHit: 0, throwablesThrown: 0, killsByType: {}, scrapLooted: 0, xpGained: 0, bonusXp: 0, familyFound: false, familyExtracted: false, damageDealt: 0, damageTaken: 0, bossDamageDealt: 0, bossDamageTaken: 0, chestsOpened: 0, bigChestsOpened: 0, distanceTraveled: refs.distanceTraveledRef.current, cluesFound: [], collectiblesDiscovered: [], isExtraction: false, spEarned: 0, seenEnemies: [], discoveredPOIs: [], aborted: true, seenBosses: [], incomingDamageBreakdown: {}, outgoingDamageBreakdown: {}
+                        timeElapsed: 0,
+                        shotsFired: 0,
+                        shotsHit: 0,
+                        throwablesThrown: 0,
+                        scrapLooted: 0,
+                        xpGained: 0,
+                        bonusXp: 0,
+                        familyFound: false,
+                        familyExtracted: false,
+                        damageDealt: 0,
+                        damageTaken: 0,
+                        bossDamageDealt: 0,
+                        bossDamageTaken: 0,
+                        distanceTraveled: refs.distanceTraveledRef.current,
+                        cluesFound: [],
+                        collectiblesDiscovered: [],
+                        isExtraction: false,
+                        spEarned: 0,
+                        seenEnemies: [],
+                        discoveredPOIs: [],
+                        aborted: true,
+                        seenBosses: []
                     });
                 }, 1000);
             } else {
@@ -623,10 +647,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         saveSkills: (newStats: any, newSectorState: any) => {
             const currentProps = latestStateRef.current.props;
             if (currentProps.onSaveStats) currentProps.onSaveStats(newStats);
-            refs.stateRef.current.hp = newStats.maxHp;
-            refs.stateRef.current.maxHp = newStats.maxHp;
-            refs.stateRef.current.stamina = newStats.maxStamina;
-            refs.stateRef.current.maxStamina = newStats.maxStamina;
+            const sb = refs.stateRef.current.statsBuffer;
+            sb[PlayerStatID.HP] = newStats.maxHp;
+            sb[PlayerStatID.MAX_HP] = newStats.maxHp;
+            sb[PlayerStatID.STAMINA] = newStats.maxStamina;
+            sb[PlayerStatID.MAX_STAMINA] = newStats.maxStamina;
             refs.stateRef.current.sectorState = { ...refs.stateRef.current.sectorState, ...newSectorState };
             closeModal();
         },

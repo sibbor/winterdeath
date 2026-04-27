@@ -419,6 +419,7 @@ const _placeGroundCover = (
     if (count <= 0) return;
 
     const mesh = new THREE.InstancedMesh(geo, mat, count);
+    mesh.frustumCulled = false;
     mesh.receiveShadow = true;
 
     const rand = () => Math.random();
@@ -460,6 +461,9 @@ const _placeSunflowers = (ctx: SectorContext, region: Region, density: number) =
     const sStem = new THREE.InstancedMesh(SHARED_GEO.sunflowerStem, MATERIALS.sunflowerStem, count);
     const sHead = new THREE.InstancedMesh(SHARED_GEO.sunflowerHead, MATERIALS.sunflowerHead, count);
     const sCent = new THREE.InstancedMesh(SHARED_GEO.sunflowerCenter, MATERIALS.sunflowerCenter, count);
+    sStem.frustumCulled = false;
+    sHead.frustumCulled = false;
+    sCent.frustumCulled = false;
     for (const m of [sStem, sHead, sCent]) {
         m.userData.windAffected = true;
         GeneratorUtils.freezeStatic(m);
@@ -646,7 +650,10 @@ export const VegetationGenerator = {
         if (matrices.length === 0) return;
 
         const proto = prototypes[typeKey];
-        if (!proto) return;
+        if (!proto) {
+            console.warn(`[VegetationGenerator] Missing tree prototype for key: ${typeKey}. Forest will not render.`);
+            return;
+        }
 
         const baseType = typeKey.split('_')[0];
         let trunkMat = materialOverride || MATERIALS.treeTrunk;
@@ -659,6 +666,7 @@ export const VegetationGenerator = {
         }
 
         const trunkMesh = new THREE.InstancedMesh(proto.trunkGeo, trunkMat, matrices.length);
+        trunkMesh.frustumCulled = false;
         trunkMesh.castShadow = !materialOverride;
         trunkMesh.receiveShadow = !materialOverride;
         trunkMesh.userData.windAffected = true;
@@ -668,6 +676,7 @@ export const VegetationGenerator = {
         let leavesMesh: THREE.InstancedMesh | undefined;
         if (proto.leavesGeo) {
             leavesMesh = new THREE.InstancedMesh(proto.leavesGeo, leavesMat, matrices.length);
+            leavesMesh.frustumCulled = false;
             leavesMesh.castShadow = !materialOverride;
             leavesMesh.receiveShadow = !materialOverride;
             leavesMesh.userData.windAffected = true;
@@ -858,170 +867,8 @@ export const VegetationGenerator = {
         }
     },
 
-    // ---------------------------------------------------------------------------
-    // Deprecated fill helpers below — kept only for any external references.
-    // Prefer VegetationGenerator.fillArea() for all new code.
-    // ---------------------------------------------------------------------------
 
-    fillWheatField: (ctx: SectorContext, polygon: THREE.Vector3[], density: number = 0.5) => {
-        if (!polygon || polygon.length < 3) return;
 
-        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        for (let i = 0; i < polygon.length; i++) {
-            const p = polygon[i];
-            if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-            if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
-        }
-
-        const w = maxX - minX, d = maxZ - minZ;
-        const count = Math.floor(w * d * 0.5 * density);
-        const mesh = new THREE.InstancedMesh(SHARED_GEO.grass, MATERIALS.grass, count);
-        GeneratorUtils.freezeStatic(mesh);
-
-        let valid = 0;
-        const rand = () => Math.random();
-
-        for (let i = 0; i < count; i++) {
-            const x = minX + rand() * w;
-            const z = minZ + rand() * d;
-
-            if (GeneratorUtils.isPointInPolygon(x, z, polygon)) {
-                _pos.set(x, 0, z);
-                _euler.set(0, rand() * Math.PI, 0);
-                _quat.setFromEuler(_euler);
-                _scale.set(1, 1.5 + rand(), 1);
-
-                _mat.compose(_pos, _quat, _scale);
-                mesh.setMatrixAt(valid++, _mat);
-            }
-        }
-        mesh.count = valid;
-        mesh.receiveShadow = true;
-        mesh.instanceMatrix.needsUpdate = true;
-        ctx.scene.add(mesh);
-    },
-
-    fillAreaWithFlowers: (ctx: SectorContext,
-        region: { x: number, z: number, w: number, d: number } | THREE.Vector3[],
-        countOrDensity: number,
-        type: 'flower' | 'sunflower' = 'flower') => {
-
-        let area: { x: number, z: number, w: number, d: number };
-        let count = 0;
-        const rand = () => Math.random();
-
-        if (Array.isArray(region)) {
-            let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-            for (let i = 0; i < region.length; i++) {
-                const p = region[i];
-                if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-                if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
-            }
-            area = { x: minX, z: minZ, w: maxX - minX, d: maxZ - minZ };
-            count = Math.floor(area.w * area.d * countOrDensity);
-        } else {
-            area = region;
-            count = countOrDensity;
-        }
-
-        const isSunflower = type === 'sunflower';
-        const geo = isSunflower ? undefined : SHARED_GEO.grass;
-        const mat = isSunflower ? undefined : MATERIALS.flower;
-
-        const mainMesh = isSunflower ? undefined : new THREE.InstancedMesh(geo!, mat!, count);
-        const sStem = isSunflower ? new THREE.InstancedMesh(SHARED_GEO.sunflowerStem, MATERIALS.sunflowerStem, count) : undefined;
-        const sHead = isSunflower ? new THREE.InstancedMesh(SHARED_GEO.sunflowerHead, MATERIALS.sunflowerHead, count) : undefined;
-        const sCent = isSunflower ? new THREE.InstancedMesh(SHARED_GEO.sunflowerCenter, MATERIALS.sunflowerCenter, count) : undefined;
-
-        if (isSunflower) {
-            sStem!.userData.windAffected = true; GeneratorUtils.freezeStatic(sStem!);
-            sHead!.userData.windAffected = true; GeneratorUtils.freezeStatic(sHead!);
-            sCent!.userData.windAffected = true; GeneratorUtils.freezeStatic(sCent!);
-        } else {
-            GeneratorUtils.freezeStatic(mainMesh!);
-        }
-
-        let valid = 0;
-        for (let i = 0; i < count; i++) {
-            const x = area.x + rand() * area.w;
-            const z = area.z + rand() * area.d;
-
-            if (Array.isArray(region) && !GeneratorUtils.isPointInPolygon(x, z, region)) continue;
-
-            _pos.set(x, 0, z);
-            _euler.set(0, rand() * PI2, 0);
-            _quat.setFromEuler(_euler);
-            _scale.setScalar(0.8 + rand() * 0.5);
-
-            _mat.compose(_pos, _quat, _scale);
-
-            if (isSunflower) {
-                sStem!.setMatrixAt(valid, _mat);
-                sHead!.setMatrixAt(valid, _mat);
-                sCent!.setMatrixAt(valid, _mat);
-            } else {
-                mainMesh!.setMatrixAt(valid, _mat);
-            }
-            valid++;
-        }
-
-        if (isSunflower) {
-            sStem!.count = valid; sHead!.count = valid; sCent!.count = valid;
-            sStem!.instanceMatrix.needsUpdate = true;
-            sHead!.instanceMatrix.needsUpdate = true;
-            sCent!.instanceMatrix.needsUpdate = true;
-            ctx.scene.add(sStem!, sHead!, sCent!);
-        } else {
-            mainMesh!.count = valid;
-            mainMesh!.receiveShadow = true;
-            mainMesh!.instanceMatrix.needsUpdate = true;
-            ctx.scene.add(mainMesh!);
-        }
-    },
-
-    fillAreaWithGrass: (ctx: SectorContext, region: { x: number, z: number, w: number, d: number } | THREE.Vector3[], density: number = 2.0) => {
-        let area: { x: number, z: number, w: number, d: number };
-        let count = 0;
-        const rand = () => Math.random();
-
-        if (Array.isArray(region)) {
-            let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-            for (let i = 0; i < region.length; i++) {
-                const p = region[i];
-                if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-                if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
-            }
-            area = { x: minX, z: minZ, w: maxX - minX, d: maxZ - minZ };
-            count = Math.floor((maxX - minX) * (maxZ - minZ) * density);
-        } else {
-            area = region;
-            count = Math.floor(area.w * area.d * density);
-        }
-
-        const mesh = new THREE.InstancedMesh(SHARED_GEO.grass, MATERIALS.grass, count);
-        GeneratorUtils.freezeStatic(mesh);
-
-        let valid = 0;
-        for (let i = 0; i < count; i++) {
-            const x = area.x + rand() * area.w;
-            const z = area.z + rand() * area.d;
-
-            if (Array.isArray(region) && !GeneratorUtils.isPointInPolygon(x, z, region)) continue;
-
-            _pos.set(x, 0, z);
-            _euler.set(0, rand() * PI2, 0);
-            _quat.setFromEuler(_euler);
-            _scale.setScalar(0.8 + rand() * 0.5);
-
-            _mat.compose(_pos, _quat, _scale);
-            mesh.setMatrixAt(valid++, _mat);
-        }
-
-        mesh.count = valid;
-        mesh.receiveShadow = true;
-        mesh.instanceMatrix.needsUpdate = true;
-        ctx.scene.add(mesh);
-    },
 
     createDeadTree: (variant: 'standing' | 'fallen' = 'standing', scale: number = 1.0): THREE.Group => {
         const tree = VegetationGenerator.createTree(VEGETATION_TYPE.DEAD_TREE, scale, Math.floor(Math.random() * 3));
@@ -1062,7 +909,7 @@ export const VegetationGenerator = {
             const mat = _mat.clone();
 
             const variant = Math.floor(rand() * 3);
-            const key = `DEAD_${variant}`;
+            const key = `DEAD_TREE_${variant}`;
 
             if (!matrixBuckets[key]) matrixBuckets[key] = [];
             matrixBuckets[key].push(mat);

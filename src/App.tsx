@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState, SectorStats } from './types/StateTypes';
 import { GameScreen } from './types/SessionTypes';
-import { PlayerStats, PlayerStatID } from './entities/player/PlayerTypes';
+import { PlayerStats, PlayerStatID, StatEnemyIndex } from './entities/player/PlayerTypes';
 import { WeatherType } from './core/engine/EngineTypes';
 import { SectorTrigger } from './systems/TriggerTypes';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';
@@ -525,10 +525,8 @@ const App: React.FC = () => {
         setSectorStats(stats); // DONT aggregate yet!
 
         setGameState(prev => {
-            const bossKilled = stats.killsByType && (
-                (stats.killsByType['Boss'] || 0) > 0 ||
-                (stats.killsByType[DataResolver.getBossName(prev.currentSector)] || 0) > 0
-            ); return {
+            const bossKilled = stats.enemyKills && stats.enemyKills[StatEnemyIndex.BOSS] > 0;
+            return {
                 ...prev,
                 screen: bossKilled ? GameScreen.BOSS_KILLED : GameScreen.RECAP,
                 midRunCheckpoint: null

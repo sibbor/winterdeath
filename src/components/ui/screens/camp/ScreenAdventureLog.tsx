@@ -202,7 +202,12 @@ const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDeb
             {zombies.map((data) => {
                 const typeSmi = data.type;
                 const key = data.id;
-                const kills = Math.max(stats.enemyKills[typeSmi] || 0, stats.killsByType?.[typeSmi] || 0);
+                
+                // VINTERDÖD HARDENING: Strict bounds check for Float64Array access
+                const isValidIndex = typeSmi >= 0 && typeSmi < StatEnemyIndex.COUNT;
+                const kills = isValidIndex ? (stats.enemyKills[typeSmi] || 0) : 0;
+                const deaths = isValidIndex ? (stats.deathsByEnemyType[typeSmi] || 0) : 0;
+                
                 const isSeen = isDebug || (stats.seenEnemies || EMPTY_ARRAY).includes(typeSmi) || kills > 0;
                 const itemColor = `#${data.color.toString(16).padStart(6, '0')}`;
 
@@ -220,7 +225,7 @@ const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDeb
                                     </div>
                                     <div className="flex flex-col items-end pl-4 border-l border-gray-800">
                                         <span className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest leading-tight text-right">{t('ui.killed_by_short')}</span>
-                                        <span className="text-xl font-semibold text-red-500">{stats.deathsByEnemyType?.[typeSmi] || 0}</span>
+                                        <span className="text-xl font-semibold text-red-500">{deaths}</span>
                                     </div>
                                 </div>
                             )}
@@ -326,7 +331,7 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
                                             </h3>
                                             <div className="flex flex-col items-end">
                                                 <span className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest leading-tight text-right">{t('ui.killed_by_short')}</span>
-                                                <span className="text-xl font-semibold text-red-500">{stats.deathsByEnemyType?.[EnemyType.BOSS] || 0}</span>
+                                                <span className="text-xl font-semibold text-red-500">{stats.deathsByEnemyType[StatEnemyIndex.BOSS] || 0}</span>
                                             </div>
                                         </div>
 

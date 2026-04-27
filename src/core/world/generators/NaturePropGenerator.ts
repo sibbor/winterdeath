@@ -74,6 +74,7 @@ export const NaturePropGenerator = {
         const mat = material == null ? MATERIALS.steel : material;
 
         const mesh = new THREE.InstancedMesh(SHARED_GEO.box, mat, count);
+        mesh.frustumCulled = false;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.userData.materialId = mat;
@@ -148,6 +149,7 @@ export const NaturePropGenerator = {
         const mat = isRock ? MATERIALS.stone : MATERIALS.deadWood;
 
         const instMesh = new THREE.InstancedMesh(geo, mat, numItems);
+        instMesh.frustumCulled = false;
         let valid = 0;
 
         for (let i = 0; i < numItems; i++) {

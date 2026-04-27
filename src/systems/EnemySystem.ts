@@ -59,7 +59,7 @@ export class EnemySystem implements System {
             spawnDecal: this.updateCallbacks.spawnDecal,
             spawnScrap: (x: number, z: number, amt: number) => {
                 if (!this.currentSession) return;
-                WorldLootSystem.spawnScrapExplosion(this.currentSession.engine.scene, this.currentSession.state.scrapItems, x, z, amt);
+                WorldLootSystem.spawnScrapExplosion(this.currentSession.engine.scene, x, z, amt);
             },
             gainXp: (amount: number) => this.callbacks.gainXp(amount),
             onBossKilled: (id: number) => this.callbacks.onBossKilled(id),

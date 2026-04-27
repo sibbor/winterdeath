@@ -33,44 +33,8 @@ export class GameSessionLogic {
     public detectionSystem!: EnemyDetectionSystem;
 
     static createDefaultSessionStats(props: GameCanvasProps): SectorStats {
-        // --- V8 HIDDEN CLASS OPTIMIZATION: Pre-allocate all combat keys ---
-        const killsByType: Record<string, number> = {};
-        const incomingDamageBreakdown: Record<number, Record<number, number>> = {};
-
-        // VINTERDÖD: Pre-allocate standard breakdown structures to prevent runtime GC
-        const weapons = [
-            DamageID.SMG, DamageID.SHOTGUN, DamageID.RIFLE, DamageID.PISTOL,
-            DamageID.REVOLVER, DamageID.GRENADE, DamageID.MOLOTOV, DamageID.FLASHBANG,
-            DamageID.MINIGUN, DamageID.FLAMETHROWER, DamageID.ARC_CANNON, DamageID.RADIO,
-            DamageID.RUSH, DamageID.VEHICLE, DamageID.DODGE
-        ];
-
-        for (let i = 0; i < weapons.length; i++) {
-            const wId = weapons[i];
-            incomingDamageBreakdown[wId] = {};
-            // Pre-allocate attack slots for weapons (e.g. 0-5)
-            for (let aIdx = 0; aIdx < 6; aIdx++) incomingDamageBreakdown[wId][aIdx] = 0;
-        }
-
-        // Pre-allocate Enemies
-        for (const key in ZOMBIE_TYPES) {
-            killsByType[key] = 0;
-            const enemyId = Number(key);
-            if (enemyId) incomingDamageBreakdown[enemyId] = {
-                0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 // Enum mapping for EnemyAttackType
-            };
-        }
-        killsByType['Boss'] = 0;
-
-        // Environment & DoTs
-        const envIds = [DamageID.PHYSICAL, DamageID.BURN, DamageID.BLEED, DamageID.DROWNING, DamageID.FALL, DamageID.EXPLOSION, DamageID.ELECTRIC];
-        for (let i = 0; i < envIds.length; i++) {
-            incomingDamageBreakdown[envIds[i]] = { 0: 0 };
-        }
-
         return {
             kills: 0,
-            killsByType,
             damageDealt: 0,
             damageTaken: 0,
             timePlayed: 0,
@@ -82,9 +46,9 @@ export class GameSessionLogic {
             shotsHit: 0,
             throwablesThrown: 0,
             distanceTraveled: 0,
+            score: 0,
             chestsOpened: 0,
             bigChestsOpened: 0,
-            score: 0,
             cluesFound: [],
 
             maxKillstreak: 0,
@@ -105,6 +69,8 @@ export class GameSessionLogic {
             perkDebuffsCleansed: new Float64Array(StatPerkIndex.COUNT),
 
             enemyKills: new Float64Array(StatEnemyIndex.COUNT),
+            enemyDeaths: new Float64Array(StatEnemyIndex.COUNT),
+            incomingDamageBuffer: new Float64Array(64 * 32),
 
             discoveredPOIs: [],
             seenEnemies: [],
@@ -116,8 +82,6 @@ export class GameSessionLogic {
             familyFound: !!props.familyAlreadyRescued,
             familyExtracted: false,
             isExtraction: false,
-            incomingDamageBreakdown,
-            outgoingDamageBreakdown: {}, // Deprecated: Weapon damage is now in weaponDamageDealt buffer
             bossDamageDealt: 0,
             bossDamageTaken: 0,
             discoveredPerks: []
@@ -181,6 +145,8 @@ export class GameSessionLogic {
 
             // --- ENEMY STATS BUFFER RESET ---
             enemyKills: new Float64Array(StatEnemyIndex.COUNT),
+            deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
+            incomingDamageBuffer: new Float64Array(64 * 32),
 
             // --- PERK STATS BUFFER RESET ---
             perkTimesGained: new Float64Array(StatPerkIndex.COUNT),

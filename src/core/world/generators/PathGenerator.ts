@@ -151,6 +151,7 @@ export const PathGenerator = {
         const sleeperPoints = curve.getSpacedPoints(sleeperCount);
 
         const sleeperIM = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.brownBrick, sleeperCount + 1);
+        sleeperIM.frustumCulled = false;
         GeneratorUtils.freezeStatic(sleeperIM);
 
         for (let i = 0; i < sleeperPoints.length; i++) {
@@ -294,6 +295,7 @@ export const PathGenerator = {
         if (options.color !== undefined) (mat as any).color.setHex(options.color);
 
         const im = new THREE.InstancedMesh(SHARED_GEO.plane, mat, count);
+        im.frustumCulled = false;
         im.renderOrder = 5;
 
         // VINTERDÖD: Freeze InstancedMesh
@@ -349,6 +351,7 @@ export const PathGenerator = {
         for (let k = 0; k < parts.length; k++) {
             const p = parts[k];
             const im = new THREE.InstancedMesh(p.mesh.geometry, p.mesh.material, steps);
+            im.frustumCulled = false;
             GeneratorUtils.freezeStatic(im);
 
             if (color !== 'wood' && color !== 'mesh') {
@@ -393,6 +396,7 @@ export const PathGenerator = {
         for (let k = 0; k < parts.length; k++) {
             const p = parts[k];
             const im = new THREE.InstancedMesh(p.mesh.geometry, p.mesh.material, steps);
+            im.frustumCulled = false;
             GeneratorUtils.freezeStatic(im);
             instanceData.push({ im, part: p });
             ctx.scene.add(im);
@@ -426,6 +430,7 @@ export const PathGenerator = {
         const steps = Math.ceil(curve.getLength() / dist);
 
         const im = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.stone, steps);
+        im.frustumCulled = false;
         GeneratorUtils.freezeStatic(im);
 
         let i = 0;
@@ -456,7 +461,9 @@ export const PathGenerator = {
         const group = new THREE.Group();
 
         const postIM = new THREE.InstancedMesh(SHARED_GEO.cylinder, MATERIALS.blackMetal, pts.length);
+        postIM.frustumCulled = false;
         const railIM = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.blackMetal, pts.length - 1);
+        railIM.frustumCulled = false;
 
         for (let i = 0; i < pts.length; i++) {
             _matrix.makeTranslation(pts[i].x, pts[i].y + 0.5, pts[i].z);

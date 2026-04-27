@@ -48,19 +48,23 @@ export enum PlayerStatID {
     TOTAL_BUFF_TIME = 26,
     TOTAL_DEBUFFS_RESISTED = 27,
     TOTAL_CRISIS_SAVES = 28,
+    TOTAL_DEATHS = 29,
+    TOTAL_SHOTS_FIRED = 30,
+    TOTAL_SHOTS_HIT = 31,
+    TOTAL_THROWABLES_THROWN = 32,
 
-    // --- MULTIPLIERS (29+) ---
-    MULTIPLIER_SPEED = 29,
-    MULTIPLIER_RELOAD = 30,
-    MULTIPLIER_FIRERATE = 31,
-    MULTIPLIER_DMG_RESIST = 32,
-    MULTIPLIER_RANGE = 33,
+    // --- MULTIPLIERS (33+) ---
+    MULTIPLIER_SPEED = 33,
+    MULTIPLIER_RELOAD = 34,
+    MULTIPLIER_FIRERATE = 35,
+    MULTIPLIER_DMG_RESIST = 36,
+    MULTIPLIER_RANGE = 37,
 
     // Pre-calculated stats (Zero-GC / O(1))
-    FINAL_SPEED = 34,
+    FINAL_SPEED = 38,
 
     // Buffer Size
-    COUNT = 35
+    COUNT = 40
 }
 
 /**
@@ -177,6 +181,12 @@ export interface PlayerStats {
     // --- ENEMY STATS BUFFERS ---
     // Indexed by StatEnemyIndex
     enemyKills: Float64Array;
+    deathsByEnemyType: Float64Array;
+
+    // --- INCOMING DAMAGE BUFFER (Zero-GC / Flattened) ---
+    // Index = (SourceID * 32) + AttackID
+    // SourceID 0-15: EnemyType, 16-63: DamageID
+    incomingDamageBuffer: Float64Array;
 
     // --- SMI STATE ---
     statusFlags: number;            // Bitmask (PlayerStatusFlags)
@@ -184,16 +194,9 @@ export interface PlayerStats {
     activeBuffs: StatusEffectType[];
     activeDebuffs: StatusEffectType[];
 
-    // --- LEGACY/LOW-FREQUENCY PROPERTIES (Non-critical) ---
-    killsByType: Record<number, number>;
-    deaths: number;
+    // --- SECTOR PROGRESSION ---
     sectorsCompleted: number;
     totalSkillPointsEarned: number;
-    chestsOpened: number;
-    bigChestsOpened: number;
-    totalBulletsFired: number;
-    totalBulletsHit: number;
-    totalThrowablesThrown: number;
 
     // --- COLLECTION DATA ---
     collectiblesDiscovered: string[];
@@ -210,9 +213,6 @@ export interface PlayerStats {
 
     familyFoundCount: number;
     mostUsedWeapon: string;
-    deathsByEnemyType: Record<number, number>;
-    incomingDamageBreakdown: Record<number, Record<number, number>>;
-    outgoingDamageBreakdown: Record<number, number>;
 }
 
 /**
@@ -285,6 +285,8 @@ export const PlayerStatsUtils = {
             perkDebuffsCleansed: new Float64Array(StatPerkIndex.COUNT),
 
             enemyKills: new Float64Array(StatEnemyIndex.COUNT),
+            deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
+            incomingDamageBuffer: new Float64Array(64 * 32),
 
             activePassives: [] as StatusEffectType[],
             activeBuffs: [] as StatusEffectType[],

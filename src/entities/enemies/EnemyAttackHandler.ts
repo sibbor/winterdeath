@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Enemy, ENEMY_ATTACK_RANGE, EnemyType, AIState, EnemyFlags } from '../../entities/enemies/EnemyTypes';
-import { AttackDefinition, EnemyAttackType, DamageType, DamageID } from '../../entities/player/CombatTypes';
+import { AttackDefinition, EnemyAttackType, DamageID } from '../../entities/player/CombatTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
@@ -191,7 +191,7 @@ export const EnemyAttackHandler = {
                     }
                     if (currentDistSq < rangeSq) {
                         callbacks.spawnParticle(playerPos.x, playerPos.y + 1.0, playerPos.z, 'electric_flash', 1);
-                        callbacks.onPlayerHit(att.damage * delta, e, DamageType.ELECTRIC, true, att.effect, att.effectDuration, att.effectDamage, att.type);
+                        callbacks.onPlayerHit(att.damage * delta, e, DamageID.ELECTRIC, true, att.effect, att.effectDuration, att.effectDamage, att.type);
                     }
                 }
                 break;
@@ -199,7 +199,7 @@ export const EnemyAttackHandler = {
             case EnemyAttackType.MAGNETIC_CHAIN:
                 if (currentDistSq < rangeSq) {
                     if (callbacks.spawnParticle) callbacks.spawnParticle(pos.x, pos.y + 1.5, pos.z, 'magnetic_sparks', 2);
-                    callbacks.onPlayerHit(att.damage * delta, e, DamageType.PHYSICAL, true, att.effect, att.effectDuration, att.effectDamage, att.type);
+                    callbacks.onPlayerHit(att.damage * delta, e, DamageID.PHYSICAL, true, att.effect, att.effectDuration, att.effectDamage, att.type);
 
                     if (callbacks.applyExternalForce) {
                         const invDist = (dist > 0.0001) ? -1.0 / dist : 0.0;

@@ -36,7 +36,7 @@ export enum PlayerDeathState {
 
 /**
  * VINTERDÖD: Unified DamageID (Step 3: Phase 7)
- * Consolidates WeaponType and DamageType into a single SMI enum.
+ * Consolidates WeaponType and the previous DamageType into a single SMI enum.
  * This eliminates polymorphism (was WeaponType | DamageType) and optimizes
  * the hot-path in ProjectileSystem and EnemyAI.
  */
@@ -99,10 +99,7 @@ export const ENVIRONMENTAL_DAMAGE_NAMES: Partial<Record<DamageID, string>> = {
     [DamageID.DODGE]: 'ui.dodge',
 };
 
-// Deprecated alias for legacy code during transition
-export type DamageType = DamageID;
-export const DamageType = DamageID;
-
+// Attack Definition
 export interface AttackDefinition {
     type: EnemyAttackType;
     damage: number;
