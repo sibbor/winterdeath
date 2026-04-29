@@ -113,6 +113,10 @@ const createHudBuffer = () => ({
     mapItems: [] as any[],
     fps: 0,
 
+    enemyKills: new Float64Array(8), // StatEnemyIndex.COUNT
+    seenEnemies: [] as number[],
+    seenBosses: [] as number[],
+
     // --- ZERO-GC FIX: Pre-allocate missing properties to lock V8 Hidden Class ---
     debugMode: false,
     systems: [] as any[],
@@ -364,6 +368,17 @@ export const HudSystem = {
         _current.distanceTraveled = Math.floor(distanceTraveled);
         _current.kills = state.sessionStats.kills;
         _current.discovery = state.discovery;
+
+        // Sync persistent telemetry
+        if (state.stats) {
+            _current.enemyKills.set(state.enemyKills);
+            
+            // Note: We use reference copy for arrays since they are mostly static 
+            // but we might need to clone if discovery happens at high frequency.
+            // For now, stable arrays in stats are fine.
+            _current.seenEnemies = state.stats.seenEnemies;
+            _current.seenBosses = state.stats.seenBosses;
+        }
 
         if (state.sectorState) {
             _current.sectorStats.unlimitedAmmo = !!state.sectorState.unlimitedAmmo;

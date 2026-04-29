@@ -56,7 +56,7 @@ export class DeathSystem implements System {
     readonly systemId = SystemID.DEATH;
     id = 'death_system';
     enabled = true;
-    persistent = true;
+    persistent = false;
     isFixedStep = true;
 
     private playerGroupRef: React.MutableRefObject<THREE.Group>;

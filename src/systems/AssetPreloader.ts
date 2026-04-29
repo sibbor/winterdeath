@@ -223,7 +223,8 @@ export const AssetPreloader = {
             if (isCamp) {
                 envConfig = CAMP_SCENE;
             } else if (isSector) {
-                envConfig = SectorSystem.getSector(sectorId ?? 0).environment;
+                const sector = await SectorSystem.loadSector(sectorId ?? 0);
+                envConfig = sector.environment;
             }
 
             if (envConfig) {

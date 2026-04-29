@@ -231,12 +231,12 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
 
             if (isAboveGround || hasVelY || hasVelX || hasVelZ) {
                 stillMoving = true;
-                const safeDt = Math.min(dt, 0.05);
+                const safeDelta = Math.min(dt, 0.05);
 
-                data.velocities[ix + 1] -= rubbleWeight * safeDt;
-                data.positions[ix] += data.velocities[ix] * safeDt;
-                data.positions[ix + 1] += data.velocities[ix + 1] * safeDt;
-                data.positions[ix + 2] += data.velocities[ix + 2] * safeDt;
+                data.velocities[ix + 1] -= rubbleWeight * safeDelta;
+                data.positions[ix] += data.velocities[ix] * safeDelta;
+                data.positions[ix + 1] += data.velocities[ix + 1] * safeDelta;
+                data.positions[ix + 2] += data.velocities[ix + 2] * safeDelta;
 
                 if (data.positions[ix + 1] <= minHeight) {
                     data.positions[ix + 1] = minHeight;
@@ -263,9 +263,9 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
                 }
 
                 if (data.rotations && data.spin) {
-                    data.rotations[ix] += data.spin[ix] * safeDt;
-                    data.rotations[ix + 1] += data.spin[ix + 1] * safeDt;
-                    data.rotations[ix + 2] += data.spin[ix + 2] * safeDt;
+                    data.rotations[ix] += data.spin[ix] * safeDelta;
+                    data.rotations[ix + 1] += data.spin[ix + 1] * safeDelta;
+                    data.rotations[ix + 2] += data.spin[ix + 2] * safeDelta;
                 }
 
                 _position.set(data.positions[ix], data.positions[ix + 1], data.positions[ix + 2]);
@@ -938,7 +938,7 @@ export const Sector0: SectorDef = {
         }
     },
 
-    onUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
         // --- SECTOR 0: LOKE MISSION LOGIC ---
         if (!sectorState.spawns) sectorState.spawns = {};
 

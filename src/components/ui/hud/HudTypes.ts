@@ -158,6 +158,11 @@ export interface HudState {
   fps: number;
   sectorStats: SectorStatsData;
 
+  // Real-time telemetry (Synced from persistent stats + session)
+  enemyKills: Float64Array;
+  seenEnemies: number[];
+  seenBosses: number[];
+
   // Status & Buffs
   statusEffects: StatusEffectData[];
   isDisoriented: boolean;

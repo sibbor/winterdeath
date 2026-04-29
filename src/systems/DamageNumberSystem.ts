@@ -21,7 +21,7 @@ export class DamageNumberSystem implements System {
     readonly systemId = SystemID.DAMAGE_NUMBER;
     id = 'damage_number_system';
     enabled = true;
-    persistent = true;
+    persistent = false;
     private pool: DamageText[] = [];
     private scene: THREE.Scene;
 

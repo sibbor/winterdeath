@@ -40,6 +40,7 @@ import { AssetPreloader } from './systems/AssetPreloader';
 import { WinterEngine, GameSettings } from './core/engine/WinterEngine';
 import { HudStore } from './store/HudStore';
 import { SectorSystem } from './systems/SectorSystem';
+import { DiscoveryType } from './components/ui/hud/HudTypes';
 
 export type OverlayType =
     | 'PAUSE' | 'SETTINGS' | 'MAP' | 'TELEPORT' | 'COLLECTIBLE' | 'DIALOGUE'
@@ -110,10 +111,10 @@ const App: React.FC = () => {
         const handleOpenAdventureLogEvent = (e: any) => {
             const tab = e.detail?.tab;
             const itemId = e.detail?.itemId;
-            setInitialAdventureLogTab(tab || null);
+            setInitialAdventureLogTab(tab ?? null);
             setInitialAdventureLogItem(itemId || null);
             setActiveOverlay('ADVENTURE_LOG');
-        UiSounds.playConfirm();
+            UiSounds.playConfirm();
         };
 
         window.addEventListener('resize', checkMobile);
@@ -400,8 +401,8 @@ const App: React.FC = () => {
     }, []);
 
     const handleOpenSettingsAction = useCallback(() => setActiveOverlay('SETTINGS'), []);
-    const handleOpenAdventureLogAction = useCallback((tab?: string, itemId?: string) => {
-        setInitialAdventureLogTab(tab || 'clues');
+    const handleOpenAdventureLogAction = useCallback((tab?: DiscoveryType, itemId?: string) => {
+        setInitialAdventureLogTab(tab ?? DiscoveryType.CLUE);
         setInitialAdventureLogItem(itemId || null);
         setActiveOverlay('ADVENTURE_LOG');
         UiSounds.playConfirm();

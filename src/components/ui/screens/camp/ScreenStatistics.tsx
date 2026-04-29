@@ -253,18 +253,18 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
         const SESS = Math.max(1, sb[PlayerStatID.TOTAL_SESSIONS_STARTED]);
         const totalDist = sb[PlayerStatID.TOTAL_DISTANCE_TRAVELED] || 0;
         const totalTime = sb[PlayerStatID.TOTAL_GAME_TIME] || 0;
-        const discPoints = (stats.discoveredPOIs?.length || 0) + (stats.discoveredCollectibles?.length || 0) + (stats.cluesFound?.length || 0);
+        const discPoints = (stats.discoveredPOIs?.length || 0) + (stats.collectiblesDiscovered?.length || 0) + (stats.cluesFound?.length || 0);
 
         return {
             scrapTotal: ST,
-            avgDistance: (totalDist / SESS).toFixed(2),
+            avgDistance: (totalDist / SESS / 1000).toFixed(2),
             avgTime: (totalTime / SESS / 60).toFixed(1),
-            totalDistanceKm: totalDist.toFixed(2),
+            totalDistanceKm: (totalDist / 1000).toFixed(2),
             totalTimeH: (totalTime / 3600).toFixed(1),
             discoveryPoints: discPoints,
-            marathonProgress: Math.min(100, (totalDist / 42.195) * 100).toFixed(1)
+            marathonProgress: (totalDist > 0) ? Math.min(100, ((totalDist / 1000) / 42.195) * 100).toFixed(1) : "0.0"
         };
-    }, [sb, stats.discoveredPOIs, stats.discoveredCollectibles, stats.cluesFound]);
+    }, [sb, stats.discoveredPOIs, stats.collectiblesDiscovered, stats.cluesFound]);
 
     const getRank = (lvl: number) => t(DataResolver.getRankName(lvl));
     const FAMILY_MEMBERS = DataResolver.getFamilyMembers();
@@ -323,7 +323,9 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
                         <div className="w-full bg-blue-950/40 h-1 rounded-full overflow-hidden">
                             <div className="h-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,1)]" style={{ width: `${marathonProgress}%` }}></div>
                         </div>
-                        <span className="text-[8px] font-bold text-blue-400/50 uppercase mt-1 block">{t('ui.marathon_progress')}: {marathonProgress}%</span>
+                        <span className="text-[8px] font-bold text-blue-400/50 uppercase mt-1 block">
+                            {t('ui.marathon_progress')}: {totalDistanceKm} / 42.2 {t('ui.km')} ({marathonProgress}%)
+                        </span>
                     </div>
                 </div>
 
@@ -444,7 +446,8 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
         const peakAggression = Math.floor(sb[PlayerStatID.LONGEST_KILLSTREAK] || 0);
 
         const nemesisData = findNemesis(stats.deathsByEnemyType);
-        const nemesisName = nemesisData.id !== -1 ? DataResolver.getEnemyName(nemesisData.id, -1, true) : t('ui.none');
+        // Use getEnemyName which handles both bosses and zombies
+        const nemesisName = nemesisData.id !== -1 ? t(DataResolver.getEnemyName(nemesisData.id)) : t('ui.none');
 
         return {
             efficiency: efficiency.toFixed(1),
@@ -456,16 +459,24 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
             peakAggression: peakAggression.toLocaleString(),
             time
         };
-    }, [sb, stats.deathsByEnemyType]);
+    }, [sb, stats.deathsByEnemyType?.length]);
 
     const killLogData = useMemo(() => {
         const result = [];
         for (let i = 0; i < StatEnemyIndex.COUNT; i++) {
-            const count = stats.enemyKills[i] || 0;
-            if (count > 0) result.push({ type: i, count, label: t(DataResolver.getZombieName(i)) });
+            const count = stats.enemyKills ? stats.enemyKills[i] : 0;
+            if (count > 0) {
+                let label = '';
+                if (i === StatEnemyIndex.BOSS) {
+                    label = t('ui.bosses');
+                } else {
+                    label = t(DataResolver.getEnemyName(i));
+                }
+                result.push({ type: i, count, label });
+            }
         }
         return result;
-    }, [stats.enemyKills]);
+    }, [stats.enemyKills?.length]);
 
     return (
         <div className={`flex flex-col h-full gap-8 pb-12 ${isMobileDevice ? 'overflow-y-auto' : ''} custom-scrollbar`}>
@@ -543,8 +554,8 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
         const sig = findSignatureWeapon(stats.weaponKills);
         const com = findComfortWeapon(stats.weaponTimeActive);
 
-        const sigData = sig.id !== -1 ? WEAPONS[sig.id] : null;
-        const comData = com.id !== -1 ? WEAPONS[com.id] : null;
+        const sigData = sig.id !== -1 ? WEAPONS[sig.id + 1] : null;
+        const comData = com.id !== -1 ? WEAPONS[com.id + 1] : null;
 
         return {
             weaponItems: items,

@@ -9,7 +9,7 @@ export class PlayerCombatSystem implements System {
     readonly systemId = SystemID.PLAYER_COMBAT;
     id = 'player_combat';
     enabled = true;
-    persistent = true;
+    persistent = false;
     isFixedStep = true;
 
     private _p1: boolean = false;

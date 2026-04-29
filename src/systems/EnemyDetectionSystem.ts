@@ -14,7 +14,7 @@ export class EnemyDetectionSystem implements System {
     readonly systemId = SystemID.ENEMY_DETECTION;
     id = 'enemy_detection_system';
     enabled = true;
-    persistent = true;
+    persistent = false;
     isFixedStep = true;
     private noiseEvents: NoiseEvent[] = [];
     private raycaster = new THREE.Raycaster();
@@ -172,23 +172,34 @@ export class EnemyDetectionSystem implements System {
                     if (!isAggressive) e.state = AIState.CHASE;
 
                     // --- VINTERDÖD: Discovery Logic ---
-                    const stats = state.sessionStats;
+                    const stats = state.stats; // Use persistent stats for discovery
                     const discovery = state.discoverySets;
 
-                    if ((e.statusFlags & EnemyFlags.BOSS) !== 0) {
-                        const bossId = EnemyType.BOSS;
-                        if (!discovery.seenBosses?.has(bossId)) {
-                            discovery.seenBosses?.add(bossId);
-                            if (stats.seenBosses.indexOf(bossId) === -1) stats.seenBosses.push(bossId);
+                    if (stats && discovery && (e.statusFlags & EnemyFlags.BOSS) !== 0) {
+                        const sectorIndex = state.sessionStats?.currentSector || 0;
+                        const bossDiscoveryId = sectorIndex;
+                        if (!discovery.seenBosses?.has(bossDiscoveryId)) {
+                            discovery.seenBosses?.add(bossDiscoveryId);
+                            if (stats.seenBosses && stats.seenBosses.indexOf(bossDiscoveryId) === -1) {
+                                stats.seenBosses.push(bossDiscoveryId);
+                            }
+                            if (state.sessionStats?.seenBosses && state.sessionStats.seenBosses.indexOf(bossDiscoveryId) === -1) {
+                                state.sessionStats.seenBosses.push(bossDiscoveryId);
+                            }
                             if (state.callbacks?.onBossDiscovered) {
-                                state.callbacks.onBossDiscovered(bossId);
+                                state.callbacks.onBossDiscovered(bossDiscoveryId);
                             }
                         }
-                    } else {
+                    } else if (stats && discovery) {
                         const enemyType = e.type;
                         if (discovery?.seenEnemies && !discovery.seenEnemies.has(enemyType)) {
                             discovery.seenEnemies.add(enemyType);
-                            if (stats.seenEnemies.indexOf(enemyType) === -1) stats.seenEnemies.push(enemyType);
+                            if (stats.seenEnemies && stats.seenEnemies.indexOf(enemyType) === -1) {
+                                stats.seenEnemies.push(enemyType);
+                            }
+                            if (state.sessionStats?.seenEnemies && state.sessionStats.seenEnemies.indexOf(enemyType) === -1) {
+                                state.sessionStats.seenEnemies.push(enemyType);
+                            }
                             if (state.callbacks?.onEnemyDiscovered) {
                                 state.callbacks.onEnemyDiscovered(enemyType);
                             }

@@ -87,7 +87,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const stats = state.sessionStats;
         stats.isExtraction = isExtraction;
         stats.aborted = aborted;
-        stats.timeElapsed = engine.simTime;
+        stats.timeElapsed = engine.simTime / 1000;
         stats.timePlayed = stats.timeElapsed;
         stats.accuracy = (stats.shotsFired > 0 ? (stats.shotsHit / stats.shotsFired) : 1) * 100;
         stats.distanceTraveled = refs.distanceTraveledRef.current;
@@ -177,6 +177,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const statsBuffer = session.state.statsBuffer;
         statsBuffer[PlayerStatID.SCRAP] += amount;
         statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += amount;
+
+        // VINTERDÖD: Ensure sessionStats is also updated for aggregation
+        if (session.state.sessionStats) {
+            session.state.sessionStats.scrapLooted += amount;
+        }
     }, [refs]);
 
     const closeModal = useCallback(() => {
@@ -455,7 +460,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     }, [concludeSector, gainXp, props.currentSectorData, props.familyAlreadyRescued, refs, spawnBubble]);
 
     // --- ZERO-GC DISCOVERY HANDLER ---
-    const handleDiscovery = useCallback((type: string | number, id: any, titleKey: string, detailsKey: string, payload?: any) => {
+    const handleDiscovery = useCallback((type: DiscoveryType, id: any, titleKey: string, detailsKey: string, payload?: any) => {
         const state = refs.stateRef.current;
         const currentProps = latestStateRef.current.props;
         if (!state || !state.sessionStats || !state.discoverySets) return;
@@ -467,16 +472,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         titleKey = titleKey || payload?.titleKey || '';
         detailsKey = detailsKey || payload?.detailsKey || '';
 
-        // [VINTERDÖD FIX] Normalize type bridge to handle both numeric enums and string keys
-        const normalizedType = typeof type === 'number' ?
-            (type === DiscoveryType.ENEMY ? 'enemy' :
-                type === DiscoveryType.BOSS ? 'boss' :
-                    type === DiscoveryType.COLLECTIBLE ? 'collectible' :
-                        type === DiscoveryType.POI ? 'poi' :
-                            type === DiscoveryType.CLUE ? 'clue' : 'clue') : type;
-
-        switch (normalizedType) {
-            case 'enemy':
+        switch (type) {
+            case DiscoveryType.ENEMY:
                 const enemyId = Number(id);
                 if (!sets.seenEnemies.has(enemyId)) {
                     sets.seenEnemies.add(enemyId);
@@ -487,7 +484,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     if (currentProps.onEnemyDiscovered) currentProps.onEnemyDiscovered(enemyId);
                 }
                 break;
-            case 'boss':
+            case DiscoveryType.BOSS:
                 const bossId = Number(id);
                 if (!sets.seenBosses.has(bossId)) {
                     sets.seenBosses.add(bossId);
@@ -498,7 +495,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     if (currentProps.onBossDiscovered) currentProps.onBossDiscovered(bossId);
                 }
                 break;
-            case 'collectible':
+            case DiscoveryType.COLLECTIBLE:
                 titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.COLLECTIBLE);
                 detailsKey = detailsKey || payload?.detailsKey || DataResolver.getCollectibleName(id);
 
@@ -514,9 +511,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 // but rely on App.tsx to deduplicate the permanent reward logic.
                 if (currentProps.onCollectibleDiscovered) currentProps.onCollectibleDiscovered(id);
                 break;
-            case 'poi':
+            case DiscoveryType.POI:
                 titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.POI);
-                detailsKey = payload.detailsKey || DataResolver.getPoiName(id);
+                detailsKey = payload?.detailsKey || DataResolver.getPoiName(id);
                 if (!sets.pois.has(id)) {
                     sets.pois.add(id);
                     if (!stats.discoveredPOIs.includes(id)) {
@@ -526,7 +523,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     if (currentProps.onPOIdiscovered) currentProps.onPOIdiscovered(payload || id);
                 }
                 break;
-            case 'clue':
+            case DiscoveryType.CLUE:
+            default:
                 titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.CLUE);
                 detailsKey = detailsKey || 'ui.clue_found';
                 if (!sets.clues.has(id)) {
@@ -546,17 +544,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (isNew && currentProps.settings?.showDiscoveryPopups !== false) {
             audioEngine.playSound(SoundID.PASSIVE_GAINED);
 
-            // [VINTERDÖD FIX] Correctly map normalized types back to DiscoveryType for the UI Queue
-            let finalType = DiscoveryType.CLUE;
-            if (normalizedType === 'enemy') finalType = DiscoveryType.ENEMY;
-            else if (normalizedType === 'boss') finalType = DiscoveryType.BOSS;
-            else if (normalizedType === 'collectible') finalType = DiscoveryType.COLLECTIBLE;
-            else if (normalizedType === 'poi') finalType = DiscoveryType.POI;
-
             // Push to queue instead of overwriting directly
             (refs as any).discoveryQueueRef.current.push({
                 id,
-                type: finalType,
+                type: type,
                 title: titleKey,
                 details: detailsKey,
                 timestamp: performance.now()
@@ -1064,12 +1055,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 playTone: (freq: number, type: any, duration: number, vol?: number) => (audioEngine as any).playTone?.(freq, type, duration, vol),
                 cameraShake: (amount: number, type?: any) => engine.camera.shake(amount, type || 'general'),
                 startCinematic: (target: any, sectorId: number, dialogueId?: number, params?: any) => {
-                    if (refs.cinematicRef.current.active) return;
-                    refs.cinematicRef.current.active = true;
-                    refs.cinematicRef.current.target = target;
-                    refs.cinematicRef.current.sectorId = sectorId;
-                    refs.cinematicRef.current.dialogueId = dialogueId || 0;
-                    refs.cinematicRef.current.params = params;
+                    const sys = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
+                    if (sys) sys.startCinematic(target, sectorId, dialogueId ?? 0, params);
                 },
                 setCameraOverride: (params: any) => {
                     refs.cameraOverrideRef.current = params;
@@ -1096,14 +1083,21 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
             }
         };
-    }, [props.currentSector]);
+    }, [props.currentSector, props.isWarmup]);
+
 
     // Environmental Sync 
     useEffect(() => {
         if (!props.isWarmup && refs.engineRef.current) {
             const engine = refs.engineRef.current;
             const sector = SectorSystem.getSector(props.currentSector);
-            const env = sector?.environment;
+            
+            if (!sector) {
+                console.warn(`[GameSession] Environmental sync deferred: Sector ${props.currentSector} not yet in cache.`);
+                return;
+            }
+
+            const env = sector.environment;
             const overrides = props.environmentOverrides?.[props.currentSector];
 
             if (env) {

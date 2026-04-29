@@ -105,7 +105,7 @@ export interface SectorDef {
     setupZombies?: (ctx: SectorContext) => void;
 
     generate?: (ctx: SectorContext) => Promise<void>;
-    onUpdate: (ctx: SectorUpdateContext) => void;
+    onSectorUpdate: (ctx: SectorUpdateContext) => void;
     onInteract?: (id: string, object: THREE.Object3D, state: any, events: any) => void;
 }
 

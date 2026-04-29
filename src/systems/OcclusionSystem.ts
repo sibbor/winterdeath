@@ -96,7 +96,7 @@ export class OcclusionSystem implements System {
     readonly systemId = SystemID.OCCLUSION;
     id = 'occlusion';
     enabled = true;
-    persistent = true;
+    persistent = false;
 
     private playerGroup: { current: THREE.Group | null };
     private activeFamilyMembers: { current: Array<{ mesh: THREE.Group }> };

@@ -294,10 +294,10 @@ export const DataResolver = {
      */
     getDiscoveryTitle(type: DiscoveryType): string {
         switch (type) {
-            case DiscoveryType.CLUE: return 'ui.clue_found';
-            case DiscoveryType.POI: return 'ui.location_discovered';
+            case DiscoveryType.CLUE: return 'ui.discovered_clue';
+            case DiscoveryType.POI: return 'ui.discovered_poi';
             case DiscoveryType.COLLECTIBLE: return 'ui.discovered_collectible';
-            case DiscoveryType.ENEMY: return 'ui.new_threat';
+            case DiscoveryType.ENEMY: return 'ui.discovered_enemy';
             case DiscoveryType.BOSS: return 'ui.boss_encountered';
             case DiscoveryType.PERK: return 'ui.skill_point';
             default: return 'ui.discovery';
@@ -305,17 +305,12 @@ export const DataResolver = {
     },
 
     /**
-     * Resolves which Adventure Log tab to open for a specific DiscoveryType.
+     * Resolves which DiscoveryType category (Tab) to open for a specific DiscoveryType.
+     * ZERO-GC: Returns the numeric enum directly.
      */
-    getAdventureLogTab(type: DiscoveryType): string {
-        switch (type) {
-            case DiscoveryType.CLUE: return 'clues';
-            case DiscoveryType.POI: return 'poi';
-            case DiscoveryType.COLLECTIBLE: return 'collectibles';
-            case DiscoveryType.ENEMY: return 'zombies';
-            case DiscoveryType.BOSS: return 'bosses';
-            default: return 'clues';
-        }
+    getAdventureLogTab(type: DiscoveryType): DiscoveryType {
+        // Most types map to themselves as tabs, except BOSS which might share or have its own
+        return type;
     },
 
     // --- DISCOVERY & NARRATIVE (Phase 3) ---

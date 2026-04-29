@@ -15,7 +15,7 @@ export class DamageTrackerSystem implements System {
     readonly systemId = SystemID.DAMAGE_TRACKER;
     id = 'damage_tracker_system';
     enabled = true;
-    persistent = true;
+    persistent = false;
 
     private currentKillstreak = 0;
 
@@ -24,6 +24,7 @@ export class DamageTrackerSystem implements System {
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
+        if (!session || !session.engine || !session.state) return;
         // --- TRACK WEAPON USAGE (TIME ACTIVE) ---
         const state = session.state;
         const activeWeapon = state.activeWeapon;
@@ -207,12 +208,15 @@ export class DamageTrackerSystem implements System {
     /**
      * Records a player death.
      */
-    recordPlayerDeath(session: GameSessionLogic, source: DamageID, enemyType?: number) {
+    recordPlayerDeath(session: GameSessionLogic, sourceId: number, attackId: number) {
         const stats = session.state.sessionStats;
         const playerStats = session.state.statsBuffer;
         const globalStats = session.state;
 
         playerStats[PlayerStatID.TOTAL_DEATHS]++;
+
+        // VINTERDÖD FIX: sourceId < 16 usually indicates an enemy type (EnemyType enum)
+        const enemyType = sourceId < 16 ? sourceId : undefined;
 
         if (enemyType !== undefined && enemyType >= 0 && enemyType < StatEnemyIndex.COUNT) {
             stats.enemyDeaths[enemyType]++;
@@ -259,6 +263,62 @@ export class DamageTrackerSystem implements System {
         if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
             stats.weaponShotsFired[idx]++; // For throwables, fired = hit attempt
         }
+    }
+
+    /**
+     * Records a dodge performed by the player.
+     */
+    recordDodge(session: GameSessionLogic) {
+        session.state.sessionStats.dodges++;
+        session.state.statsBuffer[PlayerStatID.TOTAL_DODGES]++;
+    }
+
+    /**
+     * Records a rush initiation by the player.
+     */
+    recordRush(session: GameSessionLogic) {
+        session.state.sessionStats.rushes++;
+        session.state.statsBuffer[PlayerStatID.TOTAL_RUSHES]++;
+    }
+
+    /**
+     * Records rush distance traveled.
+     */
+    recordRushDistance(session: GameSessionLogic, distance: number) {
+        session.state.sessionStats.rushDistance += distance;
+        session.state.statsBuffer[PlayerStatID.TOTAL_RUSH_DISTANCE] += distance;
+    }
+
+    /**
+     * Records total distance traveled.
+     */
+    recordDistance(session: GameSessionLogic, distance: number) {
+        session.state.sessionStats.distanceTraveled += distance;
+        session.state.statsBuffer[PlayerStatID.TOTAL_DISTANCE_TRAVELED] += distance;
+    }
+
+    /**
+     * Records a crisis save (adrenaline patch trigger).
+     */
+    recordCrisisSave(session: GameSessionLogic) {
+        session.state.sessionStats.crisisSaves++;
+        session.state.statsBuffer[PlayerStatID.TOTAL_CRISIS_SAVES]++;
+    }
+
+    /**
+     * Records buff time.
+     */
+    recordBuffTime(session: GameSessionLogic, delta: number) {
+        session.state.sessionStats.buffTime += delta;
+        session.state.statsBuffer[PlayerStatID.TOTAL_BUFF_TIME] += delta;
+    }
+
+    /**
+     * Records debuffs resisted/cleansed.
+     */
+    recordDebuffsResisted(session: GameSessionLogic, count: number) {
+        session.state.sessionStats.debuffsResisted += count;
+        session.state.statsBuffer[PlayerStatID.TOTAL_DEBUFFS_RESISTED] += count;
     }
 
     clear() {

@@ -395,9 +395,13 @@ export const TacticalCard: React.FC<{
     color?: string, 
     id?: string, 
     className?: string,
-    showHatching?: boolean
-}> = React.memo(({ children, isLocked, color = '#3b82f6', id, className = '', showHatching = false }) => (
-    <div id={id} className={`p-6 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 backdrop-blur-md shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800' : ''} ${className}`}
+    showHatching?: boolean,
+    onClick?: () => void
+}> = React.memo(({ children, isLocked, color = '#3b82f6', id, className = '', showHatching = false, onClick }) => (
+    <div 
+        id={id} 
+        onClick={onClick}
+        className={`p-6 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 backdrop-blur-md shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800' : ''} ${onClick ? 'cursor-pointer' : ''} ${className}`}
         style={{ borderColor: isLocked ? '#1f2937' : `${color}66` }}
     >
         {showHatching && (

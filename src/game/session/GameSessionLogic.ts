@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { SectorStats } from '../../types/StateTypes';
-import { Enemy, NoiseType } from '../../entities/enemies/EnemyTypes';
+import { Enemy, NoiseType, EnemyDeathState, EnemyFlags } from '../../entities/enemies/EnemyTypes';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { SectorTrigger } from '../../systems/TriggerTypes';
 import { RuntimeState } from '../../core/RuntimeState';
@@ -54,6 +54,16 @@ export class GameSessionLogic {
             maxKillstreak: 0,
             engagementDistSqKills: 0,
 
+            spGained: 0,
+            xpGained: 0,
+            dodges: 0,
+            rushes: 0,
+            rushDistance: 0,
+            buffTime: 0,
+            debuffsResisted: 0,
+            crisisSaves: 0,
+            deaths: 0,
+
             // --- ZERO-GC WEAPON BUFFERS (Phase 12) ---
             weaponKills: new Float64Array(StatWeaponIndex.COUNT),
             weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
@@ -75,8 +85,6 @@ export class GameSessionLogic {
             discoveredPOIs: [],
             seenEnemies: [],
             seenBosses: [],
-            xpGained: 0,
-            spGained: 0,
             collectiblesDiscovered: [],
             aborted: false,
             familyFound: !!props.familyAlreadyRescued,
@@ -355,18 +363,19 @@ export class GameSessionLogic {
         this.state = state;
 
         const originalApplyDamage = this.state.applyDamage || (() => false);
-        this.state.applyDamage = (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => {
+        this.state.applyDamage = (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean, attributionOverride?: DamageID) => {
+            if (!enemy || enemy.hp <= 0 || enemy.deathState !== EnemyDeathState.ALIVE) return false;
 
-            // --- VINTERDÖD FIX: Dual-Clock Visual Jitter ---
+            // Dual-Clock Visual Jitter
             // Set the visual hit timestamp so EnemyAnimator knows to shake the mesh 
             // even if the simulation clock (now) is paused or slowed.
-            if (enemy) enemy.hitRenderTime = this.state.renderTime;
+            enemy.hitRenderTime = this.state.renderTime;
 
-            const result = originalApplyDamage(enemy, amount, type, isHighImpact);
+            const result = originalApplyDamage(enemy, amount, type, isHighImpact, attributionOverride);
 
             if (result && enemy.hp <= 0) {
                 const statsSys = this.getSystem<any>(SystemID.PLAYER_STATS);
-                if (statsSys) statsSys.onEnemyKilled(this, enemy, this.engine.simTime);
+                if (statsSys) statsSys.onEnemyKilled(this, enemy, this.engine.simTime, attributionOverride || type);
             }
 
             return result;

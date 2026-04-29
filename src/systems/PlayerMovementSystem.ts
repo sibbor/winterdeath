@@ -39,7 +39,7 @@ export class PlayerMovementSystem implements System {
     readonly systemId = SystemID.PLAYER_MOVEMENT;
     id = 'player_movement';
     enabled = true;
-    persistent = true;
+    persistent = false;
     isFixedStep = true;
 
     // Zero-GC context bridge for EnemyManager physics 
@@ -69,8 +69,11 @@ export class PlayerMovementSystem implements System {
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
+        if (!session || !session.engine || !session.state) return;
+        
         const state = session.state;
         const stats = state.statsBuffer;
+        if (!stats) return;
 
         if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
         if ((state.statusFlags & PlayerStatusFlags.STUNNED) !== 0) return;
@@ -215,8 +218,9 @@ export class PlayerMovementSystem implements System {
                         state.dodgeStartTime = simTime; // VINTERDÖD FIX: Logic MUST use simTime for parity
                         state.dodgeDir.set(0, 0, 0); // Reset to recalc next frame
 
-                        // --- TRACK NEW METRIC ---
-                        stats[PlayerStatID.TOTAL_DODGES]++;
+                        // --- TRACK NEW METRIC (UNIFIED) ---
+                        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+                        if (tracker) tracker.recordDodge(session);
                     }
                 }
             }
@@ -248,8 +252,9 @@ export class PlayerMovementSystem implements System {
                         state.statusFlags |= PlayerStatusFlags.RUSHING; // Set immediately
                         this.checkReflexShield(session, simTime);
 
-                        // --- TRACK NEW METRIC ---
-                        stats[PlayerStatID.TOTAL_RUSHES]++;
+                        // --- TRACK NEW METRIC (UNIFIED) ---
+                        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+                        if (tracker) tracker.recordRush(session);
                     }
                 }
             }
@@ -574,18 +579,16 @@ export class PlayerMovementSystem implements System {
             );
         }
 
+        const distMoved = _v2.length();
         for (let s = 0; s < steps; s++) {
             _v3.copy(playerGroup.position).add(_v2);
 
-            // --- TRACK SIMULATED DISTANCE ---
-            const dx = _v3.x - playerGroup.position.x;
-            const dz = _v3.z - playerGroup.position.z;
-            const distMoved = Math.sqrt(dx * dx + dz * dz);
-            _auditSimDist += distMoved;
-            _auditSteps++;
-
-            if (state.isRushing) {
-                session.state.statsBuffer[PlayerStatID.TOTAL_RUSH_DISTANCE] += distMoved;
+            const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+            if (tracker) {
+                tracker.recordDistance(session, distMoved);
+                if (state.isRushing) {
+                    tracker.recordRushDistance(session, distMoved);
+                }
             }
 
             const nearbyObs = state.collisionGrid.getNearbyObstacles(_v3, 2.5);

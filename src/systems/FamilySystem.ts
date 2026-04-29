@@ -37,7 +37,7 @@ export class FamilySystem implements System {
     readonly systemId = SystemID.FAMILY;
     id = 'family_system';
     enabled = true;
-    persistent = true;
+    persistent = false;
     isFixedStep = true;
     private static readonly MAX_ENTITIES = 4;
 

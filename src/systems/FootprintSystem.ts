@@ -27,7 +27,7 @@ class FootprintSystemClass implements System {
     public id = 'footprint_system';
     public isFixedStep = true;
     public enabled = true;
-    public persistent = true;
+    public persistent = false;
     private scene: THREE.Scene | null = null;
 
     // Instanced rendering replaces 50 individual meshes with 1 draw call

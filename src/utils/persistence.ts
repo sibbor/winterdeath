@@ -2,7 +2,7 @@ import { GameState } from '../types/StateTypes';
 import { GameScreen } from '../types/SessionTypes';
 import { WeaponType } from '../content/weapons';
 import { INITIAL_STATS, DEFAULT_SETTINGS, OVERRIDE_DEFAULT_SECTOR } from '../content/constants';
-import { PlayerStatsUtils } from '../entities/player/PlayerTypes';
+import { PlayerStatsUtils, PlayerStatID } from '../entities/player/PlayerTypes';
 import { WeatherType } from '../core/engine/EngineTypes';
 
 export const DEFAULT_STATE: GameState = {
@@ -111,13 +111,44 @@ export const loadGameState = (): GameState => {
                     perkDebuffsCleansed: new Float64Array(loaded.stats?.perkDebuffsCleansed || 32),
                     enemyKills: new Float64Array(loaded.stats?.enemyKills || 8)
                 },
-                loadout: { ...DEFAULT_STATE.loadout, ...(loaded.loadout || {}) },
+                loadout: (function() {
+                    const saved = loaded.loadout;
+                    if (!saved) return { ...DEFAULT_STATE.loadout };
+                    
+                    // VINTERDÖD FIX: If even one weapon is changed, we want to store all four slots.
+                    // We ensure this by merging the saved state over the default state.
+                    return {
+                        primary: saved.primary || DEFAULT_STATE.loadout.primary,
+                        secondary: saved.secondary || DEFAULT_STATE.loadout.secondary,
+                        throwable: saved.throwable || DEFAULT_STATE.loadout.throwable,
+                        special: saved.special || DEFAULT_STATE.loadout.special,
+                    };
+                })(),
                 weaponLevels: { ...DEFAULT_STATE.weaponLevels, ...(loaded.weaponLevels || {}) },
                 screen: loaded.stats?.prologueSeen ? GameScreen.CAMP : GameScreen.PROLOGUE,
                 settings: { ...DEFAULT_STATE.settings, ...(loaded.settings || {}) },
                 environmentOverrides: loaded.environmentOverrides || {},
                 sectorState: loaded.sectorState || DEFAULT_STATE.sectorState,
             };
+
+            // --- VINTERDÖD FIX: Sanitize Legacy/Corrupted Data ---
+            const sb = state.stats.statsBuffer;
+            // 1. Clamp Game Time (If played for 10 mins, it shouldn't be 100 hours)
+            // 100 hours = 360,000s. We clamp to a reasonable max if the session count is low.
+            const sessionCount = sb[PlayerStatID.TOTAL_SESSIONS_STARTED];
+            const timeLimit = (sessionCount + 1) * 3600 * 2; // 2 hours per session is a very safe upper bound
+            if (sb[PlayerStatID.TOTAL_GAME_TIME] > timeLimit && sessionCount < 10) {
+                console.warn(`[Persistence] Clamping inflated game time from ${sb[PlayerStatID.TOTAL_GAME_TIME]}s to ${timeLimit}s`);
+                sb[PlayerStatID.TOTAL_GAME_TIME] = timeLimit;
+            }
+
+            // 2. Fix Enemy Kill Buffer Size (Ensure we have space for TANK/BOMBER/BOSS)
+            if (state.stats.enemyKills.length < 8) {
+                const oldKills = state.stats.enemyKills;
+                state.stats.enemyKills = new Float64Array(8);
+                for (let i = 0; i < oldKills.length; i++) state.stats.enemyKills[i] = oldKills[i];
+            }
+
         } catch (e) {
             console.error('Save file corrupted, resetting.');
             state = { ...DEFAULT_STATE };

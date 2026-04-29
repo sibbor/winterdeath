@@ -387,7 +387,10 @@ const _placeTrees = (ctx: SectorContext, region: Region, spacing: number, types:
         const mat = _mat.clone();
 
         const selectedType = types.length === 1 ? types[0] : types[Math.floor(rand() * types.length)];
-        const key = `${selectedType}_${i % 3}`;
+        const variant = i % 3;
+        const key = `${selectedType}_${variant}`;
+        const proto = prototypes[key] || prototypes[`${selectedType}_0`] || prototypes[`${VEGETATION_TYPE.PINE}_0`];
+
         if (!matrixBuckets[key]) matrixBuckets[key] = [];
         matrixBuckets[key].push(mat);
 

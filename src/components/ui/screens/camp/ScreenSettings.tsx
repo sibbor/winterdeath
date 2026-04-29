@@ -263,10 +263,18 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                     <p className="text-gray-400 text-xs font-mono">{t('ui.volumetric_fog_sub')}</p>
                 </div>
                 <div className="flex gap-2">
-                    <TacticalButton variant={tempGraphics.volumetricFog ? 'primary' : 'secondary'} className="px-6 py-1">
+                    <TacticalButton 
+                        onClick={() => { if (!tempGraphics.volumetricFog) toggleVolumetricFog(); }}
+                        variant={tempGraphics.volumetricFog ? 'primary' : 'secondary'} 
+                        className="px-6 py-1"
+                    >
                         {t('ui.on')}
                     </TacticalButton>
-                    <TacticalButton variant={!tempGraphics.volumetricFog ? 'primary' : 'secondary'} className="px-6 py-1">
+                    <TacticalButton 
+                        onClick={() => { if (tempGraphics.volumetricFog) toggleVolumetricFog(); }}
+                        variant={!tempGraphics.volumetricFog ? 'primary' : 'secondary'} 
+                        className="px-6 py-1"
+                    >
                         {t('ui.off')}
                     </TacticalButton>
                 </div>
@@ -283,10 +291,18 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                     <p className="text-gray-400 text-xs font-mono">{t('ui.antialias_sub')}</p>
                 </div>
                 <div className="flex gap-2">
-                    <TacticalButton variant={tempGraphics.antialias ? 'primary' : 'secondary'} className="px-6 py-1">
+                    <TacticalButton 
+                        onClick={() => { if (!tempGraphics.antialias) toggleAntialias(); }}
+                        variant={tempGraphics.antialias ? 'primary' : 'secondary'} 
+                        className="px-6 py-1"
+                    >
                         {t('ui.on')}
                     </TacticalButton>
-                    <TacticalButton variant={!tempGraphics.antialias ? 'primary' : 'secondary'} className="px-6 py-1">
+                    <TacticalButton 
+                        onClick={() => { if (tempGraphics.antialias) toggleAntialias(); }}
+                        variant={!tempGraphics.antialias ? 'primary' : 'secondary'} 
+                        className="px-6 py-1"
+                    >
                         {t('ui.off')}
                     </TacticalButton>
                 </div>
@@ -315,8 +331,8 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ showFps, onToggleSho
                 <p className="text-gray-400 text-xs font-mono">{t('ui.language_sub')}</p>
             </div>
             <div className="flex gap-2">
-                <TacticalButton variant={getLocale() === 'en' ? 'primary' : 'secondary'} onClick={() => { setLocale('en'); setTick(t => t + 1); }} className="px-6 py-1">EN</TacticalButton>
-                <TacticalButton variant={getLocale() === 'sv' ? 'primary' : 'secondary'} onClick={() => { setLocale('sv'); setTick(t => t + 1); }} className="px-6 py-1">SV</TacticalButton>
+                <TacticalButton variant={getLocale() === 'en' ? 'primary' : 'secondary'} onClick={() => { setLocale('en'); setTick(t => t + 1); UiSounds.playClick(); }} className="px-6 py-1">EN</TacticalButton>
+                <TacticalButton variant={getLocale() === 'sv' ? 'primary' : 'secondary'} onClick={() => { setLocale('sv'); setTick(t => t + 1); UiSounds.playClick(); }} className="px-6 py-1">SV</TacticalButton>
             </div>
         </TacticalCard>
 
@@ -330,8 +346,8 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ showFps, onToggleSho
                 <p className="text-gray-400 text-xs font-mono">{t('ui.show_fps_desc')}</p>
             </div>
             <div className="flex gap-2">
-                <TacticalButton variant={showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
-                <TacticalButton variant={!showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
+                <TacticalButton onClick={() => { if (!showFps && onToggleShowFps) onToggleShowFps(); }} variant={showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
+                <TacticalButton onClick={() => { if (showFps && onToggleShowFps) onToggleShowFps(); }} variant={!showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
             </div>
         </TacticalCard>
 
@@ -345,8 +361,8 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ showFps, onToggleSho
                 <p className="text-gray-400 text-xs font-mono">{t('ui.discovery_popups_sub')}</p>
             </div>
             <div className="flex gap-2">
-                <TacticalButton variant={tempGraphics.showDiscoveryPopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
-                <TacticalButton variant={!tempGraphics.showDiscoveryPopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
+                <TacticalButton onClick={() => { setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: true })); UiSounds.playClick(); }} variant={tempGraphics.showDiscoveryPopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
+                <TacticalButton onClick={() => { setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: false })); UiSounds.playClick(); }} variant={!tempGraphics.showDiscoveryPopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
             </div>
         </TacticalCard>
     </div>

@@ -427,8 +427,8 @@ export const Sector4: SectorDef = {
         }
     },
 
-    onUpdate: (dt, simTime, renderTime, playerPos, gameState, sectorState, events) => {
-        // --- FLOATING BALL ---
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
+        // --- SECTOR 4 LOGIC ---
         // Extract the ball from state
         const ball = sectorState.interactiveBall;
         const obs = sectorState.interactiveBallObs;
@@ -439,12 +439,12 @@ export const Sector4: SectorDef = {
             // Only run physics if the ball actually has speed (optimized)
             if (vel.lengthSq() > 0.001) {
                 // 1. Apply speed in X and Z (Y is controlled by the WaterSystem)
-                ball.position.x += vel.x * dt;
-                ball.position.z += vel.z * dt;
+                ball.position.x += vel.x * delta;
+                ball.position.z += vel.z * delta;
 
                 // 2. Roll the ball visually!
-                ball.rotation.x += vel.z * dt * 0.5;
-                ball.rotation.z -= vel.x * dt * 0.5;
+                ball.rotation.x += vel.z * delta * 0.5;
+                ball.rotation.z -= vel.x * delta * 0.5;
 
                 // 3. Friction (gradually slows down the ball)
                 vel.multiplyScalar(ball.userData.friction || 0.96);
@@ -613,12 +613,12 @@ export const Sector4: SectorDef = {
 
                 if (isAboveGround || hasVelY || hasVelX || hasVelZ) {
                     stillMoving = true;
-                    const safeDt = Math.min(dt, 0.05);
+                    const safeDelta = Math.min(delta, 0.05);
 
-                    data.velocities[ix + 1] -= rubbleWeight * safeDt;
-                    data.positions[ix] += data.velocities[ix] * safeDt;
-                    data.positions[ix + 1] += data.velocities[ix + 1] * safeDt;
-                    data.positions[ix + 2] += data.velocities[ix + 2] * safeDt;
+                    data.velocities[ix + 1] -= rubbleWeight * safeDelta;
+                    data.positions[ix] += data.velocities[ix] * safeDelta;
+                    data.positions[ix + 1] += data.velocities[ix + 1] * safeDelta;
+                    data.positions[ix + 2] += data.velocities[ix + 2] * safeDelta;
 
                     if (data.positions[ix + 1] <= minHeight) {
                         data.positions[ix + 1] = minHeight;
@@ -645,9 +645,9 @@ export const Sector4: SectorDef = {
                     }
 
                     if (data.rotations && data.spin) {
-                        data.rotations[ix] += data.spin[ix] * safeDt;
-                        data.rotations[ix + 1] += data.spin[ix + 1] * safeDt;
-                        data.rotations[ix + 2] += data.spin[ix + 2] * safeDt;
+                        data.rotations[ix] += data.spin[ix] * safeDelta;
+                        data.rotations[ix + 1] += data.spin[ix + 1] * safeDelta;
+                        data.rotations[ix + 2] += data.spin[ix + 2] * safeDelta;
                     }
 
                     _position.set(data.positions[ix], data.positions[ix + 1], data.positions[ix + 2]);

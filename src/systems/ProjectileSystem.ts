@@ -28,6 +28,7 @@ export interface FireZone {
     life: number;
     _lastDamageTime?: number;
     audioPoolIdx: number;
+    sourceWeapon: DamageID;
 }
 
 export interface GameContext {
@@ -354,6 +355,7 @@ export const ProjectileSystem = {
                     e.statusFlags |= EnemyFlags.BURNING;
                     e.burnTickTimer = 0.5;
                     e.burnDuration = 5.0;
+                    e.burnSource = DamageID.FLAMETHROWER;
 
                     const chance = (delta * 1000) / (data.fireRate || 35);
                     if (Math.random() < chance) {
@@ -550,6 +552,7 @@ export const ProjectileSystem = {
                             e.statusFlags |= EnemyFlags.BURNING;
                             e.burnDuration = 5.0;
                             e.burnTickTimer = 0.5;
+                            e.burnSource = fz.sourceWeapon;
                         }
                     }
 
@@ -842,9 +845,15 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
                             radius: mRad,
                             radiusSq: mRad * mRad,
                             life: 6.0,
-                            audioPoolIdx: -1
+                            audioPoolIdx: -1,
+                            sourceWeapon: p.weapon
                         };
                         FIREZONE_POOL.push(fz);
+                    } else {
+                        fz.radius = mRad;
+                        fz.radiusSq = mRad * mRad;
+                        fz.life = 6.0;
+                        fz.sourceWeapon = p.weapon;
                     }
 
                     fz.radius = mRad;
@@ -874,6 +883,7 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
                             e.statusFlags |= EnemyFlags.BURNING;
                             e.burnDuration = 5.0;
                             e.burnTickTimer = 0.5;
+                            e.burnSource = p.weapon;
                         }
                     }
                 }

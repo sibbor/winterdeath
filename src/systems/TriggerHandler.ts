@@ -11,6 +11,12 @@ export const TriggerHandler = {
     id: 'trigger_handler',
     enabled: true,
     persistent: true,
+    
+    update: (session: any, dt: number, simTime: number, renderTime: number) => {
+        if (!session.playerPos || !session.state) return;
+        TriggerHandler.checkTriggers(session.playerPos, session.state, session.state.callbacks, simTime);
+    },
+
     /**
      * Checks all sector triggers against player position.
      * Optimized for 60fps execution with minimal memory pressure.
@@ -25,7 +31,7 @@ export const TriggerHandler = {
             onAction: (action: TriggerAction) => void;
             t: (key: string) => string;
             resolveDynamicPos?: (familyId?: number, ownerId?: string) => THREE.Vector3 | null;
-            onDiscovery?: (type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
+            onDiscovery?: (type: DiscoveryType, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
             playSound?: (id: SoundID) => void;
         },
         simTime: number
@@ -105,24 +111,7 @@ export const TriggerHandler = {
                     (trig as any).triggered = true;
                     trig.lastTriggerTime = simTime;
 
-                    // --- ADVENTURE LOG DISCOVERY ---
-                    if (trig.id && callbacks.onDiscovery) {
-                        let dType: DiscoveryType;
-                        switch (trig.type) {
-                            case TriggerType.POI:         dType = DiscoveryType.POI;         break;
-                            case TriggerType.COLLECTIBLE: dType = DiscoveryType.COLLECTIBLE; break;
-                            case TriggerType.BOSS:        dType = DiscoveryType.BOSS;        break;
-                            case TriggerType.ENEMY:       dType = DiscoveryType.ENEMY;       break;
-                            default:                      dType = DiscoveryType.CLUE;        break;
-                        }
-                        callbacks.onDiscovery(
-                            DataResolver.getAdventureLogTab(dType),
-                            trig.id,
-                            DataResolver.getDiscoveryTitle(dType),
-                            trig.content || '',
-                            trig
-                        );
-                    }
+
 
                     // --- FIRE ACTIONS ---
                     if (trig.actions && trig.actions.length > 0) {
@@ -163,7 +152,50 @@ export const TriggerHandler = {
                                     if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
                                     callbacks.onTrigger(trig.type || TriggerType.INFO, duration);
                                 }
+
+                                // VINTERDÖD: Discovery and SP reward only on the very first visit
+                                if (callbacks.onDiscovery && (!state.discoverySets || !state.discoverySets.pois.has(trig.id))) {
+                                    callbacks.onDiscovery(
+                                        DiscoveryType.POI,
+                                        trig.id,
+                                        DataResolver.getPoiName(trig.id),
+                                        DataResolver.getPoiDescription(trig.id),
+                                        trig.data
+                                    );
+                                }
                                 break;
+
+                            case TriggerType.CLUE:
+                                if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
+                                callbacks.onTrigger(TriggerType.CLUE, duration);
+
+                                // VINTERDÖD: Discovery and SP reward only on the very first visit
+                                if (callbacks.onDiscovery && (!state.discoverySets || !state.discoverySets.clues.has(trig.id))) {
+                                    callbacks.onDiscovery(
+                                        DiscoveryType.CLUE,
+                                        trig.id,
+                                        DataResolver.getClueReaction(trig.id), 
+                                        DataResolver.getClueDescription(trig.id),
+                                        trig.data
+                                    );
+                                }
+                                break;
+
+                            case TriggerType.COLLECTIBLE:
+                                if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
+                                callbacks.onTrigger(TriggerType.COLLECTIBLE, duration);
+
+                                if (callbacks.onDiscovery && (!state.discoverySets || !state.discoverySets.collectibles.has(trig.id))) {
+                                    callbacks.onDiscovery(
+                                        DiscoveryType.COLLECTIBLE,
+                                        trig.id,
+                                        DataResolver.getCollectibleName(trig.id),
+                                        DataResolver.getCollectibleDescription(trig.id),
+                                        trig.data
+                                    );
+                                }
+                                break;
+
                             default:
                                 if (callbacks.playSound) callbacks.playSound(SoundID.UI_HOVER);
                                 callbacks.onTrigger(trig.type || TriggerType.INFO, duration);

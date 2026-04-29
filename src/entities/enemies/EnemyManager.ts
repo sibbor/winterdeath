@@ -176,6 +176,13 @@ export const EnemyManager = {
         }
     },
 
+    reAttach: (scene: THREE.Scene) => {
+        if (zombieRenderer) zombieRenderer.reAttach(scene);
+        if (corpseRenderer) corpseRenderer.reAttach(scene);
+        if (ashRenderer) ashRenderer.reAttach(scene);
+    },
+
+
     update: (
         session: GameSessionLogic,
         delta: number,

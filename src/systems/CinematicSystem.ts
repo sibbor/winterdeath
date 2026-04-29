@@ -27,7 +27,7 @@ export class CinematicSystem implements System {
     readonly systemId = SystemID.CINEMATIC;
     id = 'cinematic';
     enabled = true;
-    persistent = true;
+    persistent = false;
 
     public cinematicRef: React.MutableRefObject<any>;
     private camera: CameraSystem;

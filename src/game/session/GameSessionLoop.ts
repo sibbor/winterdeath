@@ -29,7 +29,7 @@ import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { SystemID } from '../../systems/System';
 import { WeaponFX } from '../../systems/WeaponFX';
 import { PerkFX } from '../../systems/PerkFX';
-
+import { SectorSystem } from '../../systems/SectorSystem';
 interface LoopContext {
     engine: WinterEngine;
     session: GameSessionLogic;
@@ -238,10 +238,11 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         onPlayerHit: (dmg: number, attacker: any, type: DamageID, isDoT: boolean = false, effect?: any, dur?: number, intense?: number, attackName?: string) => {
             if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type, isDoT, effect, dur, intense, attackName);
         },
-        applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact: boolean = false) => {
+        applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact: boolean = false, attributionOverride?: DamageID) => {
             if (enemy.deathState !== EnemyDeathState.ALIVE || amount <= 0) return false;
 
             const isBoss = (enemy.statusFlags & EnemyFlags.BOSS) !== 0;
+            const weaponId = attributionOverride || type;
 
             // --- O(1) ZERO-GC ENEMY DISCOVERY ---
             const sets = state.discoverySets;
@@ -252,8 +253,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 sets.seenEnemies.add(enemy.type);
 
                 if (state.sessionStats) state.sessionStats.seenEnemies.push(enemy.type);
-
-                // FIX: Använd bitmasken istället för enemy.isBoss
 
                 // Trigga UI bara om det inte är en boss
                 if (!isBoss && callbacks.onDiscovery) {
@@ -266,18 +265,29 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 }
             }
 
+            const wasAlive = enemy.hp > 0;
             // Damage
             const actualDmg = Math.max(0, Math.min(enemy.hp, amount));
             enemy.hp -= actualDmg;
-            enemy.lastDamageType = type;
-            enemy.hitTime = _gameContext.simTime; // this is already simTime
+            enemy.lastDamageType = weaponId;
+            enemy.hitTime = _gameContext.simTime;
             enemy.lastHitWasHighImpact = isHighImpact;
 
             // Track stats centrally
             if (actualDmg > 0) {
                 const damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                 if (damageTracker) {
-                    damageTracker.recordOutgoingDamage(session, actualDmg, type, isBoss);
+                    damageTracker.recordOutgoingDamage(session, actualDmg, weaponId, isBoss);
+                }
+            }
+
+            const isDeadNow = enemy.hp <= 0;
+            if (wasAlive && isDeadNow) {
+                const damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+                if (damageTracker) {
+                    const playerGroup = refs.playerGroupRef.current;
+                    const dSq = playerGroup ? enemy.mesh.position.distanceToSquared(playerGroup.position) : 0;
+                    damageTracker.recordKill(session, enemy.type, isBoss, undefined, weaponId, dSq);
                 }
             }
 
@@ -306,7 +316,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 }
             }
 
-            return enemy.hp <= 0;
+            return isDeadNow;
         },
     };
 
@@ -519,17 +529,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         }
 
         // 5. Sector Flow (Boss Defeated, End Sector)
-        // --- VINTERDÖD FIX: EXECUTE SECTOR LOGIC BEFORE BOSS CHECK ---
         const sectorContext = refs.sectorContextRef.current;
-        if (sectorContext && sectorContext.sector && sectorContext.sector.onUpdate) {
-            _sectorUpdateContext.delta = delta;
-            _sectorUpdateContext.simTime = simTime;
-            _sectorUpdateContext.renderTime = renderTime;
-            _sectorUpdateContext.playerPos = playerGroup.position;
-            _sectorUpdateContext.sectorState = state.sectorState;
-            
-            sectorContext.sector.onUpdate(_sectorUpdateContext);
-        }
 
         if (state.bossDefeatedTime > 0) {
             if (simTime - state.bossDefeatedTime < 10000) {
@@ -606,6 +606,42 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
         session.update(delta, propsRef.current.mapId || 0);
         monitor.end('session_update');
+
+        // VINTERDÖD: Sector Specific Logic Updates
+        monitor.begin('sector_update');
+        _sectorUpdateContext.delta = delta;
+        _sectorUpdateContext.simTime = simTime;
+        _sectorUpdateContext.renderTime = renderTime;
+        if (playerGroup) _sectorUpdateContext.playerPos = playerGroup.position;
+        _sectorUpdateContext.gameState = state;
+        _sectorUpdateContext.sectorState = state.sectorState;
+        _sectorUpdateContext.scene = engine.scene;
+        _sectorUpdateContext.onAction = callbacks.onAction;
+        _sectorUpdateContext.spawnZombie = callbacks.spawnZombie;
+        _sectorUpdateContext.spawnHorde = (count: number, type: any, pos?: THREE.Vector3) => {
+            const enemySys = session.getSystem<any>(SystemID.ENEMY_SYSTEM);
+            if (enemySys) enemySys.spawnHorde(session, count, type, pos);
+        };
+        _sectorUpdateContext.setNotification = callbacks.setNotification;
+        _sectorUpdateContext.setInteraction = callbacks.setInteraction;
+        _sectorUpdateContext.setOverlay = callbacks.setOverlay;
+        _sectorUpdateContext.playSound = (id: any) => audioEngine.playSound(id);
+        _sectorUpdateContext.playTone = callbacks.playTone;
+        _sectorUpdateContext.cameraShake = callbacks.cameraShake;
+        _sectorUpdateContext.t = callbacks.t;
+        _sectorUpdateContext.spawnParticle = callbacks.spawnParticle;
+        _sectorUpdateContext.startCinematic = (target: any, sectorId: number, dialogueId?: number, params?: any) => {
+            const cinematicSys = session.getSystem<any>(SystemID.CINEMATIC);
+            if (cinematicSys) cinematicSys.startCinematic(session, target, dialogueId || 0, params);
+        };
+        _sectorUpdateContext.setCameraOverride = callbacks.setCameraOverride;
+        _sectorUpdateContext.makeNoise = (pos: THREE.Vector3, type: any, radius?: number) => session.makeNoise(pos, type, radius);
+
+        const currentSector = propsRef.current.currentSectorData || SectorSystem.getSector(propsRef.current.mapId || 0);
+        if (currentSector && currentSector.onSectorUpdate) {
+            currentSector.onSectorUpdate(_sectorUpdateContext);
+        }
+        monitor.end('sector_update');
 
         // 8. Standard Gameplay State Updates
         if (!isCinematic && !isBossIntro) {

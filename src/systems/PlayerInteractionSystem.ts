@@ -9,6 +9,7 @@ import { FXSystem } from './FXSystem';
 import { InteractionType, InteractionShape } from './InteractionTypes';
 import { FXParticleType } from '../types/FXTypes';
 import { TriggerType, TriggerStatus } from './TriggerTypes';
+import { PlayerStatID } from '../entities/player/PlayerTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -50,7 +51,7 @@ export class PlayerInteractionSystem implements System {
     readonly systemId = SystemID.PLAYER_INTERACTION;
     id = 'player_interaction';
     enabled = true;
-    persistent = true;
+    persistent = false;
     public onCollectibleDiscovered?: (collectibleId: string, isRespawnable?: boolean) => void;
     private lastDetectionTime: number = 0;
 
@@ -557,8 +558,15 @@ export class PlayerInteractionSystem implements System {
                 }
             }
 
-            if (c.type === 'big') state.bigChestsOpened++;
-            else state.chestsOpened++;
+            if (c.type === 'big') {
+                state.bigChestsOpened++;
+                if (state.sessionStats) state.sessionStats.bigChestsOpened++;
+                state.statsBuffer[PlayerStatID.TOTAL_BIG_CHESTS_OPENED]++;
+            } else {
+                state.chestsOpened++;
+                if (state.sessionStats) state.sessionStats.chestsOpened++;
+                state.statsBuffer[PlayerStatID.TOTAL_CHESTS_OPENED]++;
+            }
         }
     }
 }

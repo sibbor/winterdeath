@@ -28,7 +28,7 @@ export class WorldLootSystem implements System {
     readonly systemId = SystemID.WORLD_LOOT;
     id = 'world_loot_system';
     enabled = true;
-    persistent = true;
+    persistent = false;
     isFixedStep = true;
 
     private static MAX_SCRAP = 300;
@@ -126,10 +126,10 @@ export class WorldLootSystem implements System {
         let collectedAmount = 0;
         let gpuNeedsUpdate = false;
 
-        const collectionRangeSq = 4.0;
-        const magnetRangeSq = 49.0;
-        const magnetSpeed = 30.0;
-        const magnetismDelay = 600;
+        const collectionRangeSq = 0.8;
+        const magnetRangeSq = 100.0; // Increased range (10m)
+        const magnetSpeed = 25.0;
+        const magnetismDelay = 500;
 
         const px = playerPos.x;
         const py = playerPos.y;
@@ -158,18 +158,21 @@ export class WorldLootSystem implements System {
             // 2. Magnetize (physics)
             if (item.magnetized) {
                 const dist = Math.max(0.1, Math.sqrt(distSq));
-                const pullStrength = 1.0 + (20.0 / (dist + 1.0));
+                
+                // VINTERDÖD: Magnetic Suck-up (Smoother acceleration)
+                const pullPercent = Math.max(0.01, Math.min(1.0, 1.0 - (dist / 10.0)));
+                const speed = (magnetSpeed + (pullPercent * 40.0)) * delta;
+                
+                // Smooth LERP towards player center (slightly above ground)
+                const targetY = py + 0.8;
+                const factor = Math.min(0.9, speed); // Prevent snapping
+                item.position.x = THREE.MathUtils.lerp(item.position.x, px, factor);
+                item.position.y = THREE.MathUtils.lerp(item.position.y, targetY, factor);
+                item.position.z = THREE.MathUtils.lerp(item.position.z, pz, factor);
 
-                const speed = magnetSpeed * pullStrength * delta;
-                const invDist = 1.0 / dist;
+                item.rotation.y += 15.0 * delta;
 
-                item.position.x += dx * invDist * speed;
-                item.position.y += dy * invDist * speed;
-                item.position.z += dz * invDist * speed;
-
-                item.rotation.y += 10.0 * delta;
-
-                const ns = Math.max(0.4, item.scale.x - 1.5 * delta);
+                const ns = Math.max(0.2, item.scale.x - 2.5 * delta);
                 item.scale.set(ns, ns, ns);
                 item.needsUpdate = true;
 

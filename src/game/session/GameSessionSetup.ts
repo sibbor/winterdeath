@@ -219,6 +219,7 @@ export class GameSessionSetup {
     private static prepareScene(engine: WinterEngine, isWarmup: boolean | undefined, refs: any, env: any) {
         // Aggressively clear the scene. KEEP persistent systems alive (false).
         engine.clearActiveScene(false);
+        engine.syncSystemsToScene(engine.scene);
 
         const engineSystems = engine.getSystems();
         for (let i = engineSystems.length - 1; i >= 0; i--) {
@@ -391,6 +392,7 @@ export class GameSessionSetup {
         const { engine, session, state, callbacks, refs, props } = ctx;
 
         state.callbacks = {
+            t: callbacks.t,
             spawnParticle: callbacks.spawnParticle,
             spawnDecal: callbacks.spawnDecal,
             showDamageText: callbacks.showDamageText,
@@ -405,6 +407,23 @@ export class GameSessionSetup {
                 }
                 if (action.type === 'SOUND' && action.id) audioEngine.playSound(action.id);
                 callbacks.handleTriggerAction(action, engine.scene);
+            },
+            playSound: (id: SoundID) => audioEngine.playSound(id),
+            resolveDynamicPos: (familyId?: number, ownerId?: string) => {
+                if (familyId !== undefined) {
+                    const members = refs.activeFamilyMembers.current;
+                    for (let i = 0; i < members.length; i++) {
+                        if (members[i].id === familyId) {
+                            if (members[i].following) return null; // Don't trigger if following
+                            return members[i].mesh.position;
+                        }
+                    }
+                }
+                if (ownerId && engine.scene) {
+                    const obj = engine.scene.getObjectByName(ownerId);
+                    if (obj) return obj.position;
+                }
+                return null;
             },
             explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, sectorCtx, force),
             gainXp: (amount: number) => {
@@ -551,7 +570,8 @@ export class GameSessionSetup {
     }
 
     private static setupFamily(currentSector: any, props: GameCanvasProps, refs: any, scene: THREE.Scene) {
-        refs.activeFamilyMembers.current.length = 0;
+        // DO NOT wipe refs.activeFamilyMembers.current here! It was cleared at line 154
+        // and may contain sector-specific family members added by SectorBuilder.
         const playerSpawn = currentSector.playerSpawn;
         const fSpawn = currentSector.familySpawn;
         const rescuedIndices = [...(props.rescuedFamilyIndices || [])];
@@ -590,21 +610,32 @@ export class GameSessionSetup {
         if (!props.familyAlreadyRescued) {
             const theme = SECTOR_THEMES[props.currentSector];
             const fmId = theme ? theme.familyMemberId : 0;
-            if (!hasRescuedCurrent) {
+            if (!hasRescuedCurrent && fmId !== undefined) {
                 const fmData = FAMILY_MEMBERS[fmId];
                 if (fmData) {
-                    const mesh = ModelFactory.createFamilyMember(fmData);
-                    mesh.position.set(fSpawn.x, 0, fSpawn.z);
-                    if (fSpawn.y) mesh.position.y = fSpawn.y;
-                    this.addFamilyMarker(mesh, fmData, scene);
+                    // Check if SectorBuilder already added them
+                    let existingFM = refs.activeFamilyMembers.current.find((fm: any) => fm.id === fmId);
+                    if (existingFM) {
+                        refs.familyMemberRef.current = existingFM;
+                    } else {
+                        const mesh = ModelFactory.createFamilyMember(fmData);
+                        if (fSpawn) {
+                            mesh.position.set(fSpawn.x, 0, fSpawn.z);
+                            if (fSpawn.y) mesh.position.y = fSpawn.y;
+                        } else {
+                            mesh.position.set(0, -1000, 0); // Hide if no spawn defined
+                            mesh.visible = false;
+                        }
+                        this.addFamilyMarker(mesh, fmData, scene);
 
-                    let ring = null;
-                    for (let c = 0; c < mesh.children.length; c++) {
-                        if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
+                        let ring = null;
+                        for (let c = 0; c < mesh.children.length; c++) {
+                            if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
+                        }
+                        const currentFM = { mesh, found: false, following: false, rescued: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring, spawnPos: mesh.position.clone() };
+                        refs.activeFamilyMembers.current.push(currentFM);
+                        refs.familyMemberRef.current = currentFM;
                     }
-                    const currentFM = { mesh, found: false, following: false, rescued: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring, spawnPos: new THREE.Vector3(fSpawn.x, fSpawn.y || 0, fSpawn.z) };
-                    refs.activeFamilyMembers.current.push(currentFM);
-                    refs.familyMemberRef.current = currentFM;
                 }
             }
         }

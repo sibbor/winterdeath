@@ -110,7 +110,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                 onClick={toggleMinimized}
                 className="fixed top-0 right-0 z-[9998] bg-black/40 text-white/50 px-2 py-0.5 font-mono text-[12px] select-none backdrop-blur-[2px] border border-white/5 rounded-sm cursor-pointer pointer-events-auto">
                 <div className="font-mono font-bold text-white text-[12px]">
-                    <span ref={fpsRef}>0</span> FPS
+                    <span ref={fpsRef}>0</span> {t('ui.fps')}
                 </div>
             </div>
         );
@@ -142,7 +142,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                             </span>
                         </div>
                         <div className="flex items-center justify-between">
-                            <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">Camera</div>
+                            <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">{t('ui.camera')}</div>
                             <span className="text-white tabular-nums text-[10px]">
                                 <span ref={camXRef}>0</span>, <span ref={camYRef}>0</span>, <span ref={camZRef}>0</span>
                             </span>
@@ -152,12 +152,12 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                     <div>
                         <div className="text-white/40 uppercase text-[10px] mb-0.5">{t('ui.renderer')}</div>
                         <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                            <div>Calls: <span ref={drawCallsRef} className="text-white">0</span></div>
-                            <div>Tris: <span ref={trisRef} className="text-white">0</span></div>
-                            <div>Shaders: <span ref={shadersRef} className="text-white">0</span></div>
-                            <div>Recomp: <span ref={recompRef} className="text-white">0</span></div>
-                            <div>Tex: <span ref={texRef} className="text-white">0</span></div>
-                            <div>Geo: <span ref={geoRef} className="text-white">0</span></div>
+                            <div>{t('ui.draw_calls')}: <span ref={drawCallsRef} className="text-white">0</span></div>
+                            <div>{t('ui.triangles')}: <span ref={trisRef} className="text-white">0</span></div>
+                            <div>{t('ui.shaders')}: <span ref={shadersRef} className="text-white">0</span></div>
+                            <div>{t('ui.recompiles')}: <span ref={recompRef} className="text-white">0</span></div>
+                            <div>{t('ui.textures')}: <span ref={texRef} className="text-white">0</span></div>
+                            <div>{t('ui.geometries')}: <span ref={geoRef} className="text-white">0</span></div>
                         </div>
                     </div>
 
@@ -170,9 +170,9 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                         <div>
                             <div className="text-white/40 uppercase text-[10px] mb-0.5">{t('ui.world_memory')}</div>
                             <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                                <div>Enemies: <span ref={enemiesRef} className="text-white">0</span></div>
-                                <div>Obj: <span ref={objectsRef} className="text-white">0</span></div>
-                                <div>Heap: <span ref={heapRef} className="text-white">0</span>MB</div>
+                                <div>{t('ui.enemies')}: <span ref={enemiesRef} className="text-white">0</span></div>
+                                <div>{t('ui.objects')}: <span ref={objectsRef} className="text-white">0</span></div>
+                                <div>{t('ui.heap')}: <span ref={heapRef} className="text-white">0</span>MB</div>
                                 <div ref={heapLimitRef} className="text-white/40">/ 0MB</div>
                             </div>
                         </div>

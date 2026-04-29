@@ -10,7 +10,7 @@ import { POIS } from '../../../content/pois';
 import { COLLECTIBLES } from '../../../content/collectibles';
 
 interface DiscoveryPopupProps {
-  onOpenAdventureLog: (tab?: string, itemId?: string) => void;
+  onOpenAdventureLog: (tab?: DiscoveryType, itemId?: string) => void;
 }
 
 /**
@@ -120,7 +120,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         title = t('ui.discovered_perk');
         const perk = PERKS[Number(id)];
         icon = perk?.icon || '✨';
-        const catKey = perk?.category === PerkCategory.PASSIVE ? 'ui.passive' : (perk?.category === PerkCategory.BUFF ? 'ui.buff' : 'ui.debuff');
+        const catKey = perk?.category === PerkCategory.PASSIVE ? 'categories.passive' : (perk?.category === PerkCategory.BUFF ? 'categories.buff' : 'categories.debuff');
         subtitle = `${t(catKey)}: ${t(perk?.displayName || '')}`;
         break;
       default:

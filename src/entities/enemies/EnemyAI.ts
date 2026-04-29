@@ -910,7 +910,7 @@ function handleStatusEffects(e: Enemy, delta: number, simTime: number, callbacks
             const dmg = 5;
             e.hp -= dmg;
             callbacks.onEffectTick(e, EnemyEffectType.FLAME);
-            callbacks.applyDamage(e, dmg, DamageID.BURN);
+            callbacks.applyDamage(e, dmg, DamageID.BURN, false, e.burnSource);
             e.lastBurnTick = simTime;
         }
     }

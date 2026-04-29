@@ -61,6 +61,11 @@ export const EnemySpawner = {
         if (e.indicatorRing) {
             e.indicatorRing.visible = false;
         }
+
+        e.burnSource = DamageID.NONE;
+        e.burnDuration = 0;
+        e.burnTickTimer = 0;
+        e.lastBurnTick = 0;
     },
 
     /** Spawn a new enemy from the pool. */
@@ -144,6 +149,7 @@ export const EnemySpawner = {
             burnTickTimer: 0,
             lastBurnTick: 0,
             burnDuration: 0,
+            burnSource: DamageID.NONE,
             blindDuration: 0,
             slowDuration: 0,
             stunDuration: 0,
@@ -262,6 +268,7 @@ export const EnemySpawner = {
             burnTickTimer: 0,
             lastBurnTick: 0,
             burnDuration: 0,
+            burnSource: DamageID.NONE,
             blindDuration: 0,
             slowDuration: 0,
             stunDuration: 0,

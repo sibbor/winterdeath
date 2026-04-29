@@ -63,12 +63,26 @@ export const aggregateStats = (
     sb[PlayerStatID.TOTAL_DAMAGE_DEALT] += (sectorStats.damageDealt || 0);
     sb[PlayerStatID.TOTAL_DAMAGE_TAKEN] += (sectorStats.damageTaken || 0);
     sb[PlayerStatID.TOTAL_DISTANCE_TRAVELED] += (sectorStats.distanceTraveled || 0);
+    sb[PlayerStatID.TOTAL_SHOTS_FIRED] += (sectorStats.shotsFired || 0);
+    sb[PlayerStatID.TOTAL_SHOTS_HIT] += (sectorStats.shotsHit || 0);
+    sb[PlayerStatID.TOTAL_THROWABLES_THROWN] += (sectorStats.throwablesThrown || 0);
+    sb[PlayerStatID.TOTAL_GAME_TIME] += (sectorStats.timePlayed || 0);
+    sb[PlayerStatID.TOTAL_SESSIONS_STARTED] += 1;
 
     // Analytics (Phase 12)
     sb[PlayerStatID.TOTAL_ENGAGEMENT_DISTANCE_SQ] += (sectorStats.engagementDistSqKills || 0);
     if (sectorStats.maxKillstreak > sb[PlayerStatID.LONGEST_KILLSTREAK]) {
         sb[PlayerStatID.LONGEST_KILLSTREAK] = sectorStats.maxKillstreak;
     }
+
+    // New Analytics (Sector-to-Persistent)
+    sb[PlayerStatID.TOTAL_DODGES] += (sectorStats.dodges || 0);
+    sb[PlayerStatID.TOTAL_RUSHES] += (sectorStats.rushes || 0);
+    sb[PlayerStatID.TOTAL_RUSH_DISTANCE] += (sectorStats.rushDistance || 0);
+    sb[PlayerStatID.TOTAL_BUFF_TIME] += (sectorStats.buffTime || 0);
+    sb[PlayerStatID.TOTAL_DEBUFFS_RESISTED] += (sectorStats.debuffsResisted || 0);
+    sb[PlayerStatID.TOTAL_CRISIS_SAVES] += (sectorStats.crisisSaves || 0);
+    sb[PlayerStatID.TOTAL_DEATHS] += (sectorStats.deaths || 0);
 
     // --- WEAPON PERFORMANCE AGGREGATION (Zero-GC Loop) ---
     for (let i = 0; i < StatWeaponIndex.COUNT; i++) {
@@ -175,6 +189,9 @@ export const aggregateStats = (
             gainedXp = 0;
         }
     }
+
+    // Sync total skill points earned for UI displays
+    s.totalSkillPointsEarned = sb[PlayerStatID.SKILL_POINTS];
 
     return s;
 };

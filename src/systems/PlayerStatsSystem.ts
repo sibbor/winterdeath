@@ -21,7 +21,7 @@ export class PlayerStatsSystem implements System {
     readonly systemId = SystemID.PLAYER_STATS;
     id = 'player_stats_system';
     enabled = true;
-    persistent = true;
+    persistent = false;
     isFixedStep = true;
 
     private cachedPassives: StatusEffectType[] = [];
@@ -38,6 +38,8 @@ export class PlayerStatsSystem implements System {
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
+        if (!session || !session.engine || !session.state) return;
+        // --- TRACK WEAPON USAGE (TIME ACTIVE) ---
         const state = session.state;
         if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
         if ((state.statusFlags & PlayerStatusFlags.STUNNED) !== 0) return;
@@ -120,7 +122,8 @@ export class PlayerStatsSystem implements System {
                 }
 
                 // Increment Crisis Management tracking
-                state.statsBuffer[PlayerStatID.TOTAL_CRISIS_SAVES]++;
+                const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+                if (tracker) tracker.recordCrisisSave(session);
             }
         }
     }
@@ -235,7 +238,8 @@ export class PlayerStatsSystem implements System {
 
         // --- TRACK BUFF UPTIME (Zero-GC Accumulation) ---
         if (state.activeBuffs.length > 0) {
-            stats[PlayerStatID.TOTAL_BUFF_TIME] += delta;
+            const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+            if (tracker) tracker.recordBuffTime(session, delta);
         }
 
         // Add modifiers from current passives too
@@ -498,7 +502,8 @@ export class PlayerStatsSystem implements System {
         if (cleansedCount > 0) {
             state.perkDebuffsCleansed[perkID] += cleansedCount;
             // Track total resistance
-            state.statsBuffer[PlayerStatID.TOTAL_DEBUFFS_RESISTED] += cleansedCount;
+            const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+            if (tracker) tracker.recordDebuffsResisted(session, cleansedCount);
         }
 
         state.effectDurations[perkID] = perk.duration || 1000;

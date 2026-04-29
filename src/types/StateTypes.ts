@@ -27,6 +27,15 @@ export interface SectorStats {
   maxKillstreak: number;
   engagementDistSqKills: number;
 
+  // --- NEW ANALYTICS ---
+  dodges: number;
+  rushes: number;
+  rushDistance: number;
+  buffTime: number;
+  debuffsResisted: number;
+  crisisSaves: number;
+  deaths: number;
+
   // --- WEAPON PERFORMANCE BUFFERS (Zero-GC / Phase 12) ---
   weaponKills: Float64Array;
   weaponDamageDealt: Float64Array;

@@ -5,28 +5,35 @@ import { SectorDef } from '../game/session/SectorTypes';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { EnemyType, NoiseType } from '../entities/enemies/EnemyTypes';
 import { LIGHT_SYSTEM } from '../content/constants';
-import { Sector0 } from '../content/sectors/Sector0';
-import { Sector1 } from '../content/sectors/Sector1';
-import { Sector2 } from '../content/sectors/Sector2';
-import { Sector3 } from '../content/sectors/Sector3';
-import { Sector4 } from '../content/sectors/Sector4';
+/**
+ * VINTERDÖD: Dynamic Sector Registry
+ * Prevents all sectors from being initialized at startup.
+ */
+const SECTOR_LOADERS: Record<number, () => Promise<any>> = {
+    0: () => import('../content/sectors/Sector0'),
+    1: () => import('../content/sectors/Sector1'),
+    2: () => import('../content/sectors/Sector2'),
+    3: () => import('../content/sectors/Sector3'),
+    4: () => import('../content/sectors/Sector4'),
+};
+
+const SECTOR_CACHE: Record<number, SectorDef> = {};
 import { InteractionType } from './InteractionTypes';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { FXParticleType, FXDecalType } from '../types/FXTypes';
 
-export const SECTORS: Record<number, SectorDef> = {
-    0: Sector0,
-    1: Sector1,
-    2: Sector2,
-    3: Sector3,
-    4: Sector4
-};
+// VINTERDÖD: Fallback for components that still expect a synchronous SECTORS object.
+// These will return undefined if not pre-loaded via SectorSystem.loadSector().
+export const SECTORS: Record<number, SectorDef> = new Proxy({}, {
+    get: (_, property) => SECTOR_CACHE[Number(property)]
+}) as any;
 
 export class SectorSystem implements System {
     readonly systemId = SystemID.SECTOR;
     id = 'sector_system';
     enabled = true;
-    persistent = true;
+    persistent = false;
+
     private currentSector: SectorDef;
     private lastChimeTime = 0;
     private waterInitialized = false;
@@ -57,8 +64,28 @@ export class SectorSystem implements System {
         this.currentSector = SectorSystem.getSector(mapId);
     }
 
+    /**
+     * VINTERDÖD: Asynchronously loads a sector definition into the cache.
+     * Must be called before creating the SectorSystem or accessing SECTORS[id].
+     */
+    static async loadSector(mapId: number): Promise<SectorDef> {
+        if (SECTOR_CACHE[mapId]) return SECTOR_CACHE[mapId];
+
+        const loader = SECTOR_LOADERS[mapId];
+        if (!loader) throw new Error(`[SectorSystem] Unknown sector ID: ${mapId}`);
+
+        const module = await loader();
+        // Sectors are exported as 'Sector0', 'Sector1', etc.
+        const sector = module[`Sector${mapId}`] || module.default || module.Sector;
+        
+        if (!sector) throw new Error(`[SectorSystem] Failed to find SectorDef in module for sector ${mapId}`);
+        
+        SECTOR_CACHE[mapId] = sector;
+        return sector;
+    }
+
     static getSector(mapId: number) {
-        return SECTORS[mapId];
+        return SECTOR_CACHE[mapId];
     }
 
     update(session: GameSessionLogic, dt: number, simTime: number, renderTime: number) {
@@ -203,6 +230,5 @@ export class SectorSystem implements System {
 
         // 4. Centralized Atmosphere Update
         session.engine.updateAtmosphere(pPos, this.currentSector.environment, this.currentSector.atmosphereZones, state, dt);
-        this.currentSector.onUpdate(dt, simTime, renderTime, pPos, state, state.sectorState, events);
     }
 }

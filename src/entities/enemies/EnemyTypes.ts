@@ -193,6 +193,7 @@ export interface Enemy {
     burnTickTimer: number;
     lastBurnTick: number;
     burnDuration: number;
+    burnSource: number; // TRACK SOURCE FOR TELEMETRY (Molotov vs Flamethrower)
     blindDuration: number;
     slowDuration: number;
     stunDuration: number;
