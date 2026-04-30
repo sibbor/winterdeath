@@ -23,7 +23,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
     const camXRef = useRef<HTMLSpanElement>(null);
     const camYRef = useRef<HTMLSpanElement>(null);
     const camZRef = useRef<HTMLSpanElement>(null);
-    
+
     // Renderer Stats Refs
     const drawCallsRef = useRef<HTMLSpanElement>(null);
     const trisRef = useRef<HTMLSpanElement>(null);
@@ -31,7 +31,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
     const recompRef = useRef<HTMLSpanElement>(null);
     const texRef = useRef<HTMLSpanElement>(null);
     const geoRef = useRef<HTMLSpanElement>(null);
-    
+
     // World/Mem Refs
     const enemiesRef = useRef<HTMLSpanElement>(null);
     const objectsRef = useRef<HTMLSpanElement>(null);
@@ -41,49 +41,50 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
 
     useEffect(() => {
         if (!debugMode) return;
-        
+
         const monitor = PerformanceMonitor.getInstance();
         let lastUpdate = 0;
 
         return HudStore.subscribe(() => {
             const now = performance.now();
-            
-            // 1. High-frequency updates (every frame for smoothness where possible, or just link to loop)
-            if (fpsRef.current) fpsRef.current.innerText = Math.round(monitor.getFps()).toString();
-            
-            // 2. Throttled updates (4 times per second to prevent visual noise)
+
+            // ZERO-GC: Throttle ALL DOM updates to ~4 times per second (250ms).
+            // Updating textContent 60fps causes massive string allocation GC spikes.
             if (now - lastUpdate < 250) return;
             lastUpdate = now;
+
+            // ZERO-GC: Use textContent instead of innerText to prevent layout reflows
+            if (fpsRef.current) fpsRef.current.textContent = Math.round(monitor.getFps()).toString();
 
             const world = monitor.getFormattedGameState();
             const render = monitor.getFormattedRendererStats();
             const gc = monitor.getFormattedGcInfo();
 
-            if (playerXRef.current) playerXRef.current.innerText = world.playerX.toString();
-            if (playerZRef.current) playerZRef.current.innerText = world.playerZ.toString();
-            if (camXRef.current) camXRef.current.innerText = world.camX.toString();
-            if (camYRef.current) camYRef.current.innerText = world.camY.toString();
-            if (camZRef.current) camZRef.current.innerText = world.camZ.toString();
+            if (playerXRef.current) playerXRef.current.textContent = world.playerX.toString();
+            if (playerZRef.current) playerZRef.current.textContent = world.playerZ.toString();
+            if (camXRef.current) camXRef.current.textContent = world.camX.toString();
+            if (camYRef.current) camYRef.current.textContent = world.camY.toString();
+            if (camZRef.current) camZRef.current.textContent = world.camZ.toString();
 
-            if (drawCallsRef.current) drawCallsRef.current.innerText = render.drawCalls.toString();
-            if (trisRef.current) trisRef.current.innerText = render.triangles.toString();
-            if (shadersRef.current) shadersRef.current.innerText = render.shaderPrograms.toString();
+            if (drawCallsRef.current) drawCallsRef.current.textContent = render.drawCalls.toString();
+            if (trisRef.current) trisRef.current.textContent = render.triangles.toString();
+            if (shadersRef.current) shadersRef.current.textContent = render.shaderPrograms.toString();
             if (recompRef.current) {
-                recompRef.current.innerText = render.shaderRecompiles.toString();
+                recompRef.current.textContent = render.shaderRecompiles.toString();
                 recompRef.current.className = render.shaderRecompiles > 0 ? 'text-yellow-400 font-bold' : 'text-white';
             }
-            if (texRef.current) texRef.current.innerText = render.textures.toString();
-            if (geoRef.current) geoRef.current.innerText = render.geometries.toString();
+            if (texRef.current) texRef.current.textContent = render.textures.toString();
+            if (geoRef.current) geoRef.current.textContent = render.geometries.toString();
 
-            if (enemiesRef.current) enemiesRef.current.innerText = world.enemies.toString();
-            if (objectsRef.current) objectsRef.current.innerText = world.objects.toString();
-            
-            if (heapRef.current) heapRef.current.innerText = gc.heapUsedMB.toString();
-            if (heapLimitRef.current) heapLimitRef.current.innerText = `/ ${gc.heapLimitMB}MB`;
+            if (enemiesRef.current) enemiesRef.current.textContent = world.enemies.toString();
+            if (objectsRef.current) objectsRef.current.textContent = world.objects.toString();
+
+            if (heapRef.current) heapRef.current.textContent = gc.heapUsedMB.toString();
+            if (heapLimitRef.current) heapLimitRef.current.textContent = `/ ${gc.heapLimitMB}MB`;
 
             if (gcAlertRef.current) {
                 const recentGC = gc.timeSinceDetection < 2000;
-                gcAlertRef.current.innerText = recentGC ? `⚠️ ~${gc.droppedMB}MB freed` : '—';
+                gcAlertRef.current.textContent = recentGC ? `⚠️ ~${gc.droppedMB}MB freed` : '—';
                 gcAlertRef.current.className = recentGC ? 'text-yellow-400 font-bold' : 'text-white/20';
             }
         });
@@ -99,7 +100,6 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
     if (!debugMode) return null;
 
     // --- ZERO-GC READS ---
-    // Läser referenser till pre-allokerade objekt i din monitor, skapar noll garbage.
     const monitor = PerformanceMonitor.getInstance();
     const engine = WinterEngine.getInstance();
     const fps = Math.round(monitor.getFps());
@@ -116,7 +116,6 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
         );
     }
 
-    // Hämtar data direkt i render-fasen
     const world = monitor.getFormattedGameState();
     const render = monitor.getFormattedRendererStats();
     const gc = monitor.getFormattedGcInfo();
@@ -124,9 +123,50 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
     const systems = engine ? engine.getSystems() : [];
     const logs = showLogs ? monitor.getLogs() : [];
 
+    // ZERO-GC: Avoid .map() by using standard for-loops for JSX generation
+    const systemElements = [];
+    if (systemsExpanded && systems.length > 0) {
+        for (let i = 0; i < systems.length; i++) {
+            const sys = systems[i];
+            const timing = timings.breakdown[sys.systemId];
+            systemElements.push(
+                <div key={sys.systemId} onClick={(e) => { e.stopPropagation(); engine?.setSystemEnabled(sys.systemId as SystemID, !sys.enabled); forceUpdate(); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'}`}>
+                    <span className="truncate mr-2">{SystemID[sys.systemId] || `SYS_${sys.systemId}`}</span>
+                    <span className="text-white/40">{timing !== undefined ? `${timing}ms` : '–'}</span>
+                </div>
+            );
+        }
+    }
+
+    const logElements = [];
+    if (showLogs && logs.length > 0) {
+        for (let i = 0; i < logs.length; i++) {
+            const l = logs[i] as any;
+            logElements.push(
+                <div key={i} className="border-b border-white/5 pb-1 last:border-0" style={{ color: l.color }}>
+                    <span className="opacity-50 mr-2 text-[9px]">[{new Date(l.time).toISOString().split('T')[1].split('Z')[0]}]</span>
+                    {l.msg}
+                </div>
+            );
+        }
+    }
+
+    const timingElements = [];
+    if (timings) {
+        for (const key in timings.breakdown) {
+            // ZERO-GC: Avoid Object.entries() which creates arrays. Use direct for...in for iteration.
+            const val = (timings.breakdown as any)[key];
+            timingElements.push(
+                <div key={key} className="flex justify-between border-b border-white/5 py-0.5">
+                    <span className="text-white/60 truncate mr-2">{key.replace('render_', '')}</span>
+                    <span>{val}ms</span>
+                </div>
+            );
+        }
+    }
+
     return (
         <>
-            {/* HUVUDPANELEN */}
             <div onClick={toggleMinimized} className="fixed top-0 bottom-0 right-0 w-56 bg-black/75 border-l border-white/10 shadow-2xl z-[9998] font-mono text-[11px] text-green-400 pointer-events-auto cursor-pointer hover:border-green-500/20 transition-all flex flex-col overflow-hidden">
                 <div className="p-3 shrink-0 space-y-2">
                     <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
@@ -186,15 +226,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                             </div>
                             {systemsExpanded && (
                                 <div className="space-y-0.5">
-                                    {systems.map(sys => {
-                                        const timing = timings.breakdown[sys.systemId];
-                                        return (
-                                            <div key={sys.systemId} onClick={(e) => { e.stopPropagation(); engine?.setSystemEnabled(sys.systemId as SystemID, !sys.enabled); forceUpdate(); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'}`}>
-                                                <span className="truncate mr-2">{SystemID[sys.systemId] || `SYS_${sys.systemId}`}</span>
-                                                <span className="text-white/40">{timing !== undefined ? `${timing}ms` : '–'}</span>
-                                            </div>
-                                        );
-                                    })}
+                                    {systemElements}
                                 </div>
                             )}
                         </div>
@@ -237,7 +269,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                                 </button>
                             </div>
                         </div>
-                            <div onClick={(e) => { e.stopPropagation(); monitor.consoleLoggingEnabled = !monitor.consoleLoggingEnabled; forceUpdate(); }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
+                        <div onClick={(e) => { e.stopPropagation(); monitor.consoleLoggingEnabled = !monitor.consoleLoggingEnabled; forceUpdate(); }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
                             <span className="text-white/60">{t('ui.engine_perf')}</span>
                             <span className={`font-bold ${monitor.consoleLoggingEnabled ? 'text-green-400' : 'text-red-400'}`}>{monitor.consoleLoggingEnabled ? t('ui.on') : t('ui.off')}</span>
                         </div>
@@ -261,12 +293,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                             </div>
                         </div>
                         <div className="overflow-y-auto flex-1 space-y-0.5 pr-1">
-                            {Object.entries(timings.breakdown).map(([key, val]) => (
-                                <div key={key} className="flex justify-between border-b border-white/5 py-0.5">
-                                    <span className="text-white/60 truncate mr-2">{key.replace('render_', '')}</span>
-                                    <span>{val}ms</span>
-                                </div>
-                            ))}
+                            {timingElements}
                         </div>
                     </div>
                 )}
@@ -285,12 +312,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
 
                     <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] space-y-2 break-words">
                         {logs.length > 0 ? (
-                            logs.map((l: any, i: number) => (
-                                <div key={i} className="border-b border-white/5 pb-1 last:border-0" style={{ color: l.color }}>
-                                    <span className="opacity-50 mr-2 text-[9px]">[{new Date(l.time).toISOString().split('T')[1].split('Z')[0]}]</span>
-                                    {l.msg}
-                                </div>
-                            ))
+                            logElements
                         ) : (
                             <div className="text-white/20 italic text-center py-20 uppercase tracking-widest text-sm">{t('ui.no_logs')}</div>
                         )}

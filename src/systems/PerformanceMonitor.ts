@@ -2,7 +2,7 @@ import { SystemID } from './System';
 
 /**
  * Centralized, high-performance tracking system strictly adhering to Zero-GC principles.
- * Ensures consistent profiling output across both game logic and UI components.
+ * Ensures consistent profiling output. Acts strictly as a data layer.
  */
 export class PerformanceMonitor {
     readonly systemId = SystemID.PERFORMANCE_MONITOR;
@@ -24,6 +24,7 @@ export class PerformanceMonitor {
     private _keys: string[] = [];
     private _systemCount: number = 0;
 
+    // ZERO-GC: Typed arrays ensure contiguous memory allocation for CPU cache friendliness
     private timings: Float32Array;
     private startTimes: Float32Array;
 
@@ -34,12 +35,13 @@ export class PerformanceMonitor {
     private _shaderLoggingEnabled: boolean = true;
     private _logHijackEnabled: boolean = false;
 
-    // ZERO-GC: Pre-allokerad ring-buffer för loggar (100 platser som återanvänds)
+    // ZERO-GC: Pre-allocated ring-buffer for logs (100 slots reused, no Array.push)
     private _logs: { msg: string, color: string, time: number }[] = new Array(100).fill(null).map(() => ({ msg: '', color: '', time: 0 }));
     private _logIndex: number = 0;
     private _originalConsole: any = null;
 
     // --- PRE-ALLOCATED CACHES FOR GETTERS (100% ZERO-GC UI POLLING) ---
+    // These objects are mutated and returned, avoiding new object allocations per frame.
     private _timingsObject: Record<string, number> = {};
     private _gameStateCache = { playerX: 0, playerZ: 0, camX: 0, camY: 0, camZ: 0, enemies: 0, objects: 0 };
     private _rendererStatsCache = { drawCalls: 0, triangles: 0, shaderPrograms: 0, shaderRecompiles: 0, textures: 0, geometries: 0 };
@@ -104,12 +106,13 @@ export class PerformanceMonitor {
     public startFrame() {
         this._lastFrameTotal = 0;
 
+        // ZERO-GC: Reset arrays using standard loop
         for (let i = 0; i < this._systemCount; i++) {
             this.timings[i] = 0;
             this.startTimes[i] = 0;
         }
 
-        // --- INSPELNINGSLOGIK (Frame Count) ---
+        // --- RECORDING LOGIC ---
         if (this._isRecording) {
             this._recordingFramesLeft--;
             if (this._recordingFramesLeft <= 0) {
@@ -138,14 +141,12 @@ export class PerformanceMonitor {
                     this.gcDroppedMB = diff / 1048576;
                     this._lastGcTime = now;
                 } else {
-            this.gcDetected = false;
+                    this.gcDetected = false;
                 }
             }
             this.lastHeapSize = currentHeap;
         }
     }
-
-
 
     public updateGameState(playerX: number, playerZ: number, camX: number, camY: number, camZ: number, enemies: number, objects: number) {
         this.gameState.playerCoords.x = playerX;
@@ -420,7 +421,7 @@ export class PerformanceMonitor {
                 if (a instanceof Error) {
                     str += a.message + ' ';
                 } else if (a !== null && typeof a === 'object') {
-                    // VINTERDÖD FIX: Avoid JSON.stringify in hot paths
+                    // ZERO-GC: Avoid JSON.stringify in hot paths
                     if (a.constructor && a.constructor.name) {
                         str += `[${a.constructor.name}] `;
                     } else {
@@ -467,7 +468,7 @@ export class PerformanceMonitor {
     }
 
     public getLogs() {
-        // Omordnar loggen så att de äldsta kommer först och nyaste sist utan att skapa skräp
+        // ZERO-GC: Keeps the existing zero-gc index sorting
         const sorted = [];
         for (let i = 0; i < 100; i++) {
             const idx = (this._logIndex + i) % 100;
