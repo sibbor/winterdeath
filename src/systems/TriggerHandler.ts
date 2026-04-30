@@ -37,6 +37,7 @@ export const TriggerHandler = {
         simTime: number
     ) => {
         // OPTIMIZATION: Only fetch triggers within 40 units to save CPU cycles
+        if (!state.collisionGrid) return;
         const triggers = state.collisionGrid.getNearbyTriggers(playerPos, 40.0);
         if (!triggers || triggers.length === 0) return;
 

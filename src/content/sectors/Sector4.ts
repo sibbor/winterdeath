@@ -14,6 +14,11 @@ import { NoiseType } from '../../entities/enemies/EnemyBase';
 import { VEGETATION_TYPE } from '../../content/environment';
 import { WeatherType } from '../../core/engine/EngineTypes';
 import { CAMERA_HEIGHT } from '../constants';
+import { StatusEffectType } from '../../content/perks';
+import { DamageID } from '../../entities/player/CombatTypes';
+import { FXParticleType } from '../../types/FXTypes';
+import { EnemyFlags } from '../../entities/enemies/EnemyTypes';
+import { SystemID } from '../../systems/System';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -34,6 +39,61 @@ const _scale = new THREE.Vector3();
 
 const EXPLODING_BUS_ID = 'playground_bus_explode';
 const EXPLODING_BUS_POS = { x: 40, y: 1.5, z: -40 };
+
+// --- PERK ZONE SCRATCHPADS (Zero-GC) ---
+const _v1_pz = new THREE.Vector3();
+const _v2_pz = new THREE.Vector3();
+
+// --- PERK ZONE CONFIGURATION ---
+const PERK_ZONES = [
+    { id: 'pz_gib', x: -120, z: 0, radius: 15, effect: StatusEffectType.GIB_MASTER, type: 'buff', color: 0xaa55ff, particle: FXParticleType.GORE },
+    { id: 'pz_fire', x: -120, z: 40, radius: 15, effect: StatusEffectType.BURNING, type: 'debuff', color: 0xff3300, particle: FXParticleType.FIRE },
+    { id: 'pz_water', x: -85, z: 20, radius: 15, effect: StatusEffectType.DROWNING, type: 'debuff', color: 0x0066ff, particle: FXParticleType.SPLASH },
+    { id: 'pz_elec', x: -85, z: -20, radius: 15, effect: StatusEffectType.ELECTRIFIED, type: 'debuff', color: 0x00ffff, particle: FXParticleType.SPARK },
+    { id: 'pz_bleed', x: -120, z: -40, radius: 15, effect: StatusEffectType.BLEEDING, type: 'debuff', color: 0xcc0000, particle: FXParticleType.BLOOD_SPLATTER },
+    { id: 'pz_frost', x: -155, z: -20, radius: 15, effect: StatusEffectType.FREEZING, type: 'debuff', color: 0xffffff, particle: FXParticleType.FROST_NOVA },
+    { id: 'pz_quick', x: -155, z: 20, radius: 15, effect: StatusEffectType.QUICK_FINGER, type: 'buff', color: 0xffcc00, particle: FXParticleType.FLASH }
+];
+
+function createPerkZone(ctx: SectorContext) {
+    const { scene } = ctx;
+
+    for (let i = 0; i < PERK_ZONES.length; i++) {
+        const zone = PERK_ZONES[i];
+
+        // Ground Circle
+        const floorGeo = new THREE.CylinderGeometry(zone.radius, zone.radius, 0.1, 32);
+        const floorMat = MATERIALS.concrete.clone();
+        floorMat.color.set(zone.color);
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.position.set(zone.x, 0.05, zone.z);
+        floor.receiveShadow = true;
+        floor.matrixAutoUpdate = false;
+        floor.updateMatrix();
+        scene.add(floor);
+
+        // Border Ring
+        const borderGeo = new THREE.TorusGeometry(zone.radius, 0.3, 8, 48);
+        const borderMat = new THREE.MeshBasicMaterial({
+            color: zone.type === 'buff' ? 0x22c55e : 0xff3333,
+            transparent: true,
+            opacity: 0.8
+        });
+        const border = new THREE.Mesh(borderGeo, borderMat);
+        border.position.set(zone.x, 0.1, zone.z);
+        border.rotation.x = Math.PI / 2;
+        border.matrixAutoUpdate = false;
+        border.updateMatrix();
+        scene.add(border);
+
+        // Label Sprite
+        const labelText = zone.id.replace('pz_', '').toUpperCase().replace('_', ' ');
+        const sprite = ObjectGenerator.createTextSprite(labelText);
+        sprite.position.set(zone.x, 5, zone.z);
+        sprite.scale.set(zone.radius * 0.8, zone.radius * 0.2, 1);
+        scene.add(sprite);
+    }
+}
 
 export const SECTOR6_ZONES: AtmosphereZone[] = [
     { label: "FOREST OF SHADOWS", x: 0, z: -360, weather: WeatherType.RAIN, bgColor: 0xff0000, fogDensity: 0.005, ambient: 0.2 },
@@ -84,8 +144,21 @@ export const Sector4: SectorDef = {
     setupProps: async (ctx: SectorContext) => {
         const { scene } = ctx;
 
+        let startTime = performance.now();
+        const yieldIfBudgetExceeded = async () => {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+        };
+
         // DUMMY COLLECTIBLE FOR TESTING - Set to respawnable so it's always there
-        SectorBuilder.spawnCollectible(ctx, 0, 15, 'dummy_badge_test', 'badge', true);
+        await SectorBuilder.spawnCollectible(ctx, 0, 15, 'dummy_badge_test', 'badge', true);
+        await yieldIfBudgetExceeded();
+
+        // --- PERK ZONE ---
+        createPerkZone(ctx);
+        await yieldIfBudgetExceeded();
 
         // --- PLAZA (Center 0,0) ---
         // Circular concrete plaza
@@ -107,32 +180,36 @@ export const Sector4: SectorDef = {
         const s_scale = 1.5;   // Magnificent Scale
 
         // 1. Armory (West)
-        SectorBuilder.spawnTerminal(ctx, -stationDist, 0, 'TERMINAL_ARMORY', s_scale);
+        await SectorBuilder.spawnTerminal(ctx, -stationDist, 0, 'TERMINAL_ARMORY', s_scale);
         const armoryLabel = ObjectGenerator.createTextSprite(t('stations.armory'));
         armoryLabel.position.set(-stationDist, 4.5, 0);
         armoryLabel.scale.set(10, 1.5, 1);
         scene.add(armoryLabel);
+        await yieldIfBudgetExceeded();
 
         // 2. Enemy Spawner (North)
-        SectorBuilder.spawnTerminal(ctx, 0, -stationDist, 'TERMINAL_SPAWNER', s_scale);
+        await SectorBuilder.spawnTerminal(ctx, 0, -stationDist, 'TERMINAL_SPAWNER', s_scale);
         const spawnerLabel = ObjectGenerator.createTextSprite(t('ui.enemy_spawner'));
         spawnerLabel.position.set(0, 4.5, -stationDist);
         spawnerLabel.scale.set(10, 1.5, 1);
         scene.add(spawnerLabel);
+        await yieldIfBudgetExceeded();
 
         // 3. Environment Control (East)
-        SectorBuilder.spawnTerminal(ctx, stationDist, 0, 'TERMINAL_ENV', s_scale);
+        await SectorBuilder.spawnTerminal(ctx, stationDist, 0, 'TERMINAL_ENV', s_scale);
         const envLabel = ObjectGenerator.createTextSprite(t('ui.environment_control'));
         envLabel.position.set(stationDist, 4.5, 0);
         envLabel.scale.set(10, 1.5, 1);
         scene.add(envLabel);
+        await yieldIfBudgetExceeded();
 
         // 4. Skill Station (South)
-        SectorBuilder.spawnTerminal(ctx, 0, stationDist, 'TERMINAL_SKILLS', s_scale);
+        await SectorBuilder.spawnTerminal(ctx, 0, stationDist, 'TERMINAL_SKILLS', s_scale);
         const skillLabel = ObjectGenerator.createTextSprite(t('stations.skills'));
         skillLabel.position.set(0, 4.5, stationDist);
         skillLabel.scale.set(10, 1.5, 1);
         scene.add(skillLabel);
+        await yieldIfBudgetExceeded();
 
         // Helper for POI Markers
         const addPoiLabel = (label: string, pos: { x: number, z: number }) => {
@@ -143,11 +220,12 @@ export const Sector4: SectorDef = {
         };
 
         // Vehicles at the spawn point
-        SectorBuilder.spawnDriveableVehicle(ctx, -20, 10, Math.PI / 1, 'sedan', undefined, false);
-        SectorBuilder.spawnDriveableVehicle(ctx, 0, 30, Math.PI / 2, 'timber_truck', undefined, false);
-        SectorBuilder.spawnDriveableVehicle(ctx, -20, 20, Math.PI / 3, 'bus', undefined, false);
-        SectorBuilder.spawnDriveableVehicle(ctx, 20, 10, Math.PI / 4, 'police', undefined, false);
-        SectorBuilder.spawnDriveableVehicle(ctx, 20, 20, Math.PI / 5, 'ambulance', undefined, false);
+        await SectorBuilder.spawnDriveableVehicle(ctx, -20, 10, Math.PI / 1, 'sedan', undefined, false);
+        await SectorBuilder.spawnDriveableVehicle(ctx, 0, 30, Math.PI / 2, 'timber_truck', undefined, false);
+        await SectorBuilder.spawnDriveableVehicle(ctx, -20, 20, Math.PI / 3, 'bus', undefined, false);
+        await SectorBuilder.spawnDriveableVehicle(ctx, 20, 10, Math.PI / 4, 'police', undefined, false);
+        await SectorBuilder.spawnDriveableVehicle(ctx, 20, 20, Math.PI / 5, 'ambulance', undefined, false);
+        await yieldIfBudgetExceeded();
 
 
         // --- BIOME GENERATION ---
@@ -168,7 +246,8 @@ export const Sector4: SectorDef = {
             const points = curve.getPoints(60);
 
             // Generate Path
-            PathGenerator.createPath(ctx, points, 4, MATERIALS.dirt);
+            await PathGenerator.createDirtPath(ctx, points, 4);
+            await yieldIfBudgetExceeded();
 
             // Add POI Label
             addPoiLabel(zone.label, { x, z });
@@ -182,7 +261,8 @@ export const Sector4: SectorDef = {
             new THREE.Vector3(p0.x + 90, 0, p0.z + 90),
             new THREE.Vector3(p0.x - 90, 0, p0.z + 90),
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.PINE, forestPoly, 8);
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.PINE, forestPoly, 8);
+        await yieldIfBudgetExceeded();
         for (let j = 0; j < 30; j++) {
             const rX = p0.x + (Math.random() - 0.5) * 160;
             const rZ = p0.z + (Math.random() - 0.5) * 160;
@@ -190,7 +270,8 @@ export const Sector4: SectorDef = {
             const rock = NaturePropGenerator.createRock(4 + Math.random() * 4, 2 + Math.random() * 2);
             rock.position.set(rX, 0, rZ);
             scene.add(rock);
-            SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 4, collider: { type: 'sphere', radius: 3 } });
+            await SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 4, collider: { type: 'sphere', radius: 3 } });
+            await yieldIfBudgetExceeded();
         }
 
         // 2. FARM
@@ -201,10 +282,12 @@ export const Sector4: SectorDef = {
             new THREE.Vector3(p1.x + 90, 0, p1.z + 90),
             new THREE.Vector3(p1.x - 90, 0, p1.z + 90),
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.WHEAT, farmRect, 0.4);
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.WHEAT, farmRect, 0.4);
+        await yieldIfBudgetExceeded();
 
         // --- Tractor (Driveable) ---
-        SectorBuilder.spawnDriveableVehicle(ctx, p1.x, p1.z, Math.random() * Math.PI, 'tractor');
+        await SectorBuilder.spawnDriveableVehicle(ctx, p1.x, p1.z, Math.random() * Math.PI, 'tractor');
+        await yieldIfBudgetExceeded();
 
         // 3. VILLAGE
         const p2 = SECTOR6_ZONES[2];
@@ -224,18 +307,21 @@ export const Sector4: SectorDef = {
                 });
 
                 scene.add(house);
-                SectorBuilder.addObstacle(ctx, { mesh: house, position: house.position, collider: { type: 'box', size: new THREE.Vector3(10, 8, 10) } });
+                await SectorBuilder.addObstacle(ctx, { mesh: house, position: house.position, collider: { type: 'box', size: new THREE.Vector3(10, 8, 10) } });
+                await yieldIfBudgetExceeded();
             }
         }
 
         // --- Car (Driveable) ---
-        SectorBuilder.spawnDriveableVehicle(ctx, p2.x, p2.z, Math.PI / 2, 'station_wagon');
+        await SectorBuilder.spawnDriveableVehicle(ctx, p2.x, p2.z, Math.PI / 2, 'station_wagon');
+        await yieldIfBudgetExceeded();
 
         // 4. WATER
         const p3 = SECTOR6_ZONES[3];
 
         // 4.1. Create the water body (The Lake) + Recessed Bed
-        const lake = SectorBuilder.addLake(ctx, p3.x, p3.z, 75, 5.0);
+        const lake = await SectorBuilder.addLake(ctx, p3.x, p3.z, 75, 5.0);
+        await yieldIfBudgetExceeded();
 
         // 4.2. Large stone
         const bigStone = NaturePropGenerator.createRock(35, 15, 10);
@@ -243,18 +329,20 @@ export const Sector4: SectorDef = {
         bigStone.scale.set(1.5, 1.2, 1.5);
         scene.add(bigStone);
 
-        SectorBuilder.addObstacle(ctx, {
+        await SectorBuilder.addObstacle(ctx, {
             mesh: bigStone,
             position: bigStone.position,
             radius: 10,
             collider: { type: 'sphere', radius: 10 }
         });
+        await yieldIfBudgetExceeded();
 
         // Register as splash source for the new 'splash' particles
         if (lake) lake.registerSplashSource(bigStone);
 
         // 4.3. Boat
-        const boatGroup = SectorBuilder.spawnFloatableVehicle(ctx, p3.x, p3.z, Math.random() * Math.PI);
+        const boatGroup = await SectorBuilder.spawnFloatableVehicle(ctx, p3.x, p3.z, Math.random() * Math.PI);
+        await yieldIfBudgetExceeded();
         if (lake && boatGroup) {
             lake.registerFloatingProp(boatGroup);
             lake.registerSplashSource(boatGroup);
@@ -290,7 +378,8 @@ export const Sector4: SectorDef = {
             collider: { type: 'sphere', radius: 1.5 },
             type: 'Ball'
         };
-        SectorBuilder.addObstacle(ctx, ballObstacle);
+        await SectorBuilder.addObstacle(ctx, ballObstacle);
+        await yieldIfBudgetExceeded();
 
         // Save references in state so we can update physics in onUpdate
         ctx.state.interactiveBall = ball;
@@ -307,7 +396,8 @@ export const Sector4: SectorDef = {
             pillar.position.set(px, 8, pz);
             pillar.castShadow = true;
             scene.add(pillar);
-            SectorBuilder.addObstacle(ctx, { mesh: pillar, position: pillar.position, collider: { type: 'box', size: new THREE.Vector3(4, 30, 4) } });
+            await SectorBuilder.addObstacle(ctx, { mesh: pillar, position: pillar.position, collider: { type: 'box', size: new THREE.Vector3(4, 30, 4) } });
+            await yieldIfBudgetExceeded();
         }
         // Add a small pond in the center of the ruins
         const pondCenter = { x: p4.x, y: -0.25, z: p4.z };
@@ -329,7 +419,8 @@ export const Sector4: SectorDef = {
                 pondCenter.z + Math.sin(angle) * (pondRadius + 5)
             );
             scene.add(rock);
-            SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 5, collider: { type: 'sphere', radius: 5 } });
+            await SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 5, collider: { type: 'sphere', radius: 5 } });
+            await yieldIfBudgetExceeded();
         }
 
         // --- EXPLODING BUS EXPERIMENT ---
@@ -352,15 +443,18 @@ export const Sector4: SectorDef = {
         scene.add(colMesh);
 
         const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: 'box' as const, size: busSize } };
-        SectorBuilder.addObstacle(ctx, obstacle_bus);
-        SectorBuilder.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });
+        await SectorBuilder.addObstacle(ctx, obstacle_bus);
+        await yieldIfBudgetExceeded();
+        await SectorBuilder.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });
+        await yieldIfBudgetExceeded();
 
-        SectorBuilder.addInteractable(ctx, bus, {
+        await SectorBuilder.addInteractable(ctx, bus, {
             id: EXPLODING_BUS_ID,
             label: 'ui.interact_blow_up_bus',
             type: InteractionType.SECTOR_SPECIFIC,
             collider: { type: 'sphere', radius: 15.0 }
         });
+        await yieldIfBudgetExceeded();
         bus.userData.isInteractable = true;
 
         // Store references
@@ -368,7 +462,8 @@ export const Sector4: SectorDef = {
         (ctx as any).busColMesh = colMesh;
 
         // Rubble
-        const rubble = SectorBuilder.spawnRubble(ctx, EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.z, 20, MATERIALS.busBlue, Math.PI);
+        const rubble = await SectorBuilder.spawnRubble(ctx, EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.z, 20, MATERIALS.busBlue, Math.PI);
+        await yieldIfBudgetExceeded();
         rubble.position.set(0, 0, 0);
         rubble.visible = true;
         rubble.frustumCulled = false;
@@ -428,6 +523,73 @@ export const Sector4: SectorDef = {
     },
 
     onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
+        // --- PERK ZONE LOGIC (Zero-GC) ---
+        for (let i = 0; i < PERK_ZONES.length; i++) {
+            const zone = PERK_ZONES[i];
+            _v1_pz.set(zone.x, 0, zone.z);
+
+            const dx = playerPos.x - zone.x;
+            const dz = playerPos.z - zone.z;
+            const distSq = dx * dx + dz * dz;
+
+            if (distSq < zone.radius * zone.radius) {
+                // Apply continuous effect to player
+                events.onPlayerHit(
+                    zone.type === 'debuff' ? 1.0 * delta : 0, // Scale damage by delta for continuous tick
+                    null,
+                    zone.type === 'debuff' ? (zone.effect === StatusEffectType.DROWNING ? DamageID.DROWNING : DamageID.BURN) : DamageID.NONE,
+                    true, // isDoT
+                    zone.effect,
+                    1500 // duration (refreshed every frame)
+                );
+
+                // Visual feedback (Throttle particle spawning to ~4Hz)
+                if ((simTime % 250) < delta * 1000) {
+                    events.spawnParticle(
+                        zone.x + (Math.random() - 0.5) * zone.radius * 1.5,
+                        1.0,
+                        zone.z + (Math.random() - 0.5) * zone.radius * 1.5,
+                        zone.particle,
+                        1
+                    );
+                }
+            }
+
+            // Apply debuffs to enemies
+            if (zone.type === 'debuff') {
+                const enemies = gameState.enemies;
+                const eLen = enemies.length;
+                for (let j = 0; j < eLen; j++) {
+                    const e = enemies[j];
+                    if (!e || e.hp <= 0) continue;
+
+                    const edx = e.mesh.position.x - zone.x;
+                    const edz = e.mesh.position.z - zone.z;
+                    const eDistSq = edx * edx + edz * edz;
+
+                    if (eDistSq < zone.radius * zone.radius) {
+                        // Apply effect to enemy based on zone type
+                        if (zone.effect === StatusEffectType.BURNING) {
+                            e.statusFlags |= EnemyFlags.BURNING;
+                            e.burnDuration = 1.0;
+                        } else if (zone.effect === StatusEffectType.DROWNING) {
+                            // Force drowning state
+                            e.statusFlags |= EnemyFlags.DROWNING;
+                            e.hp -= 20 * delta; // Faster drowning damage in test zone
+                        } else if (zone.effect === StatusEffectType.FREEZING || zone.effect === StatusEffectType.ELECTRIFIED) {
+                            e.statusFlags |= EnemyFlags.STUNNED;
+                            e.stunDuration = Math.max(e.stunDuration, 0.5);
+                        } else if (zone.effect === StatusEffectType.BLEEDING) {
+                            e.hp -= 15 * delta;
+                            if ((simTime % 500) < delta * 1000) {
+                                events.spawnParticle(e.mesh.position.x, 1.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 2);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // --- SECTOR 4 LOGIC ---
         // Extract the ball from state
         const ball = sectorState.interactiveBall;
@@ -486,9 +648,9 @@ export const Sector4: SectorDef = {
             _busOriginalPos.set(EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.y, EXPLODING_BUS_POS.z);
 
             if (events.spawnParticle) {
-                // [VINTERDÖD FIX] Use new scale parameter for massive cinematic explosion
-                events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, 'shockwave', 1, 2.5);
-                events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_smoke', 8, 2.0);
+                // Use new scale parameter for massive cinematic explosion
+                events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, FXParticleType.SHOCKWAVE, 1, undefined, undefined, undefined, 2.5);
+                events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, FXParticleType.LARGE_SMOKE, 8, undefined, undefined, undefined, 2.0);
             }
 
             if (events.makeNoise) {

@@ -165,6 +165,8 @@ export interface RuntimeState extends PlayerStats {
 
     killerAttackName: string;
     killedByEnemy: boolean;
+    lethalSourceId: number;
+    lethalStatusEffect: number;
     playerBloodSpawned: boolean;
     playerAshSpawned: boolean;
     lastDrownTick: number;
@@ -238,6 +240,9 @@ export interface RuntimeState extends PlayerStats {
     lastSimDelta: number;    // Clamped/frozen delta used for this frame's simulation
     lastRenderDelta: number;   // Raw/unclamped delta used for this frame's visuals
 
+    // --- UI & VISIBILITY ---
+    hudVisible: boolean;
+
     // --- UTILITIES & STATE ---
     previousPerkMask: number;
     inputState: any;
@@ -248,4 +253,8 @@ export interface RuntimeState extends PlayerStats {
     killStreakBuffer: Float32Array;
     lastAdrenalineTime: number;
     lastGibMasterTime: number;
+
+    // --- TELEMETRY & ATTRIBUTION (Zero-GC) ---
+    // Maps StatusEffectType -> SourceID (EnemyType/HazardID)
+    effectSources: Uint8Array;
 }

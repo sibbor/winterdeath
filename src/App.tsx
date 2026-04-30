@@ -34,7 +34,6 @@ import DebugDisplay from './components/ui/core/DebugDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
 import { UiSounds } from './utils/audio/AudioLib';
-import { DataResolver } from './utils/ui/DataResolver';
 import { checkIsMobileDevice } from './utils/device';
 import { AssetPreloader } from './systems/AssetPreloader';
 import { WinterEngine, GameSettings } from './core/engine/WinterEngine';
@@ -260,7 +259,7 @@ const App: React.FC = () => {
         setActiveOverlay('COLLECTIBLE');
         setGameState(prev => {
             if (prev.stats.collectiblesDiscovered.includes(id)) return prev;
-            
+
             const newStatsBuffer = new Float32Array(prev.stats.statsBuffer);
             newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
 
@@ -587,11 +586,11 @@ const App: React.FC = () => {
                 const isFinished = isCleared && prev.currentSector === 3;
 
                 const finalStats = isFinished ? { ...prev.stats, gameIsFinished: true } : prev.stats;
-                return { 
-                    ...prev, 
-                    stats: finalStats, 
-                    screen: GameScreen.CAMP, 
-                    currentSector: nextSector, 
+                return {
+                    ...prev,
+                    stats: finalStats,
+                    screen: GameScreen.CAMP,
+                    currentSector: nextSector,
                     weather: WeatherType.SNOW,
                     sectorState: nextSector === 4 ? prev.sectorState : undefined // Clear if leaving playground
                 };
@@ -625,10 +624,10 @@ const App: React.FC = () => {
             setActiveCollectible(null);
             setActiveOverlay(null);
 
-            setGameState(prev => ({ 
-                ...prev, 
-                screen: GameScreen.SECTOR, 
-                currentSector: nextSector, 
+            setGameState(prev => ({
+                ...prev,
+                screen: GameScreen.SECTOR,
+                currentSector: nextSector,
                 sessionToken: (prev.sessionToken || 0) + 1,
                 sectorState: nextSector === 4 ? prev.sectorState : undefined // Only persist for playground
             }));
@@ -652,9 +651,9 @@ const App: React.FC = () => {
             setActiveCollectible(null);
             setActiveOverlay(null);
 
-            setGameState(prev => ({ 
-                ...prev, 
-                screen: GameScreen.SECTOR, 
+            setGameState(prev => ({
+                ...prev,
+                screen: GameScreen.SECTOR,
                 sessionToken: (prev.sessionToken || 0) + 1,
                 sectorState: prev.currentSector === 4 ? prev.sectorState : undefined // Clear if not playground
             }));
@@ -808,7 +807,6 @@ const App: React.FC = () => {
                         {shouldKeepSessionAlive && (
                             <>
                                 <GameSession
-                                    key={`gs-${gameState.currentSector}`}
                                     ref={gameCanvasRef}
                                     isWarmup={isLoadingSector}
                                     stats={gameState.stats}

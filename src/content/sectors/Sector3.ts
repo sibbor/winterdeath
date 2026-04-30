@@ -122,8 +122,17 @@ export const Sector3: SectorDef = {
         const { scene } = ctx;
         (ctx as any).sectorState.ctx = ctx;
 
+        let startTime = performance.now();
+        const yieldIfBudgetExceeded = async () => {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+        };
+
         // Reward Chest at boss spawn
-        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        await yieldIfBudgetExceeded();
 
         // Stacks of Cars (Maze) — Sektor 4 Bilskroten
         for (let i = 0; i < 60; i++) {
@@ -133,6 +142,7 @@ export const Sector3: SectorDef = {
             const carStackHeight = 1 + Math.floor(Math.random() * 3);
             const rotY = Math.random() * Math.PI * 2;
             await SectorBuilder.spawnVehicleStack(ctx, x, z, rotY, carStackHeight);
+            await yieldIfBudgetExceeded();
         }
 
         // Perimeter Trees
@@ -142,14 +152,16 @@ export const Sector3: SectorDef = {
             const x = Math.cos(angle) * r;
             const z = -80 + Math.sin(angle) * r;
             await SectorBuilder.spawnTree(ctx, 'spruce', x, z, 1.0 + Math.random() * 0.5);
+            await yieldIfBudgetExceeded();
         }
 
         // The Dealership Building (Nathalie hiding here)
-        SectorBuilder.spawnPoi(ctx, POI_TYPE.DEALERSHIP, -40, -150, 0);
+        await SectorBuilder.spawnPoi(ctx, POI_TYPE.DEALERSHIP, -40, -150, 0);
+        await yieldIfBudgetExceeded();
 
         // Escape car parked next to the building — starts NOT interactable.
         // It becomes interactable during the epilogue car zoom.
-        const escapeCar = SectorBuilder.spawnDriveableVehicle(
+        const escapeCar = await SectorBuilder.spawnDriveableVehicle(
             ctx,
             LOCATIONS.ESCAPE_CAR.x,
             LOCATIONS.ESCAPE_CAR.z,
@@ -162,6 +174,7 @@ export const Sector3: SectorDef = {
             escapeCar.name = 's3_escape_car';
             escapeCar.userData.isInteractable = false; // locked until epilogue
         }
+        await yieldIfBudgetExceeded();
 
         // ── Industrial Decay ──
         const industrialWeeds = [
@@ -170,7 +183,8 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(20, 0, 20),
             new THREE.Vector3(-20, 0, 20)
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.GRASS, industrialWeeds, 0.4);
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.GRASS, industrialWeeds, 0.4);
+        await yieldIfBudgetExceeded();
 
         for (let i = 0; i < 15; i++) {
             const deadTree = VegetationGenerator.createDeadTree('standing', 0.6 + Math.random() * 0.4);
@@ -178,10 +192,11 @@ export const Sector3: SectorDef = {
             const dist = 30 + Math.random() * 40;
             deadTree.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
             ctx.scene.add(deadTree);
+            await yieldIfBudgetExceeded();
         }
 
         // Nathalie - At the dealership, not following yet
-        SectorBuilder.spawnFamily(ctx, FamilyMemberID.NATHALIE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, found: false });
+        await SectorBuilder.spawnFamily(ctx, FamilyMemberID.NATHALIE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, found: false });
     },
 
     setupContent: async (ctx: SectorContext) => {

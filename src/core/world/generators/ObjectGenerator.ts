@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MATERIALS, GEOMETRY, ModelFactory } from '../../../utils/assets';
+import { EffectManager, EffectType, SubEffectType } from '../../../systems/EffectManager';
+import { FXParticleType } from '../../../types/FXTypes';
 import { SectorContext } from '../../../game/session/SectorTypes';
-import { SectorBuilder } from '../SectorBuilder';
 import { ZOMBIE_TYPES } from '../../../content/enemies/zombies';
 import { EnemyType } from '../../../entities/enemies/EnemyTypes';
-import { EffectManager } from '../../../systems/EffectManager';
 import { MaterialType } from '../../../content/environment';
 import { GeneratorUtils } from './GeneratorUtils';
 
@@ -116,24 +116,24 @@ export const ObjectGenerator = {
         group.add(trainBody);
 
         group.userData.colliders = [{ type: 'box', size: new THREE.Vector3(18, 12, 6) }];
-        
+
         return GeneratorUtils.freezeStatic(group);
     },
 
     createStandardTunnel: (width: number = 6, height: number = 5, length: number = 10, wallThick: number = 0.5, roofThick: number = 0.5) => {
         const group = new THREE.Group();
 
-        const sideL = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), MATERIALS.concrete);
+        const sideL = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MATERIALS.concrete);
         sideL.scale.set(wallThick, height, length);
         sideL.position.set(-width / 2 - wallThick / 2, height / 2, 0);
         group.add(sideL);
 
-        const sideR = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), MATERIALS.concrete);
+        const sideR = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MATERIALS.concrete);
         sideR.scale.set(wallThick, height, length);
         sideR.position.set(width / 2 + wallThick / 2, height / 2, 0);
         group.add(sideR);
 
-        const roof = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), MATERIALS.concrete);
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MATERIALS.concrete);
         roof.scale.set(width + wallThick * 2, roofThick, length);
         roof.position.set(0, height + roofThick / 2, 0);
         group.add(roof);
@@ -374,10 +374,10 @@ export const ObjectGenerator = {
 
         group.userData.isFire = true;
         group.userData.effects = [
-            { type: 'light', color: 0xff7722, intensity: 30 * scale, distance: 40 * scale, offset: _FIRE_LIGHT_OFFSET, flicker: true },
-            { type: 'emitter', particle: 'flame', interval: 60, count: 1, offset: _FIRE_FLAME_OFFSET, spread: 0.5, color: 0xffaa00 },
-            { type: 'emitter', particle: 'spark', interval: 100, count: 1, offset: _FIRE_SPARK_OFFSET, spread: 0.8, color: 0xffdd00 },
-            { type: 'emitter', particle: 'smoke', interval: 200, count: 1, offset: _FIRE_SMOKE_OFFSET, spread: 0.4 }
+            { type: SubEffectType.LIGHT, color: 0xff7722, intensity: 30 * scale, distance: 40 * scale, offset: _FIRE_LIGHT_OFFSET, flicker: true },
+            { type: SubEffectType.EMITTER, particle: FXParticleType.FLAME, interval: 60, count: 1, offset: _FIRE_FLAME_OFFSET, spread: 0.5, color: 0xffaa00 },
+            { type: SubEffectType.EMITTER, particle: FXParticleType.SPARK, interval: 100, count: 1, offset: _FIRE_SPARK_OFFSET, spread: 0.8, color: 0xffdd00 },
+            { type: SubEffectType.EMITTER, particle: FXParticleType.SMOKE, interval: 200, count: 1, offset: _FIRE_SMOKE_OFFSET, spread: 0.4 }
         ];
 
         ctx.scene.add(GeneratorUtils.freezeStatic(group));
@@ -510,7 +510,7 @@ export const ObjectGenerator = {
         label.scale.set(text.length * 0.6, 0.8, 1);
         group.add(label);
 
-        EffectManager.attachEffect(group, 'neon_sign', { color, intensity: 15, distance: 20 });
+        EffectManager.attachEffect(group, EffectType.NEON_SIGN, { color, intensity: 15, distance: 20 });
         group.scale.setScalar(scale);
         group.userData.material = MaterialType.METAL;
         return GeneratorUtils.freezeStatic(group);
@@ -586,7 +586,7 @@ export const ObjectGenerator = {
             group.add(step);
         }
 
-        EffectManager.attachEffect(group, 'flicker_light', { color: 0x88ccff, intensity: 10, distance: 15 });
+        EffectManager.attachEffect(group, EffectType.FLICKER_LIGHT, { color: 0x88ccff, intensity: 10, distance: 15 });
         group.userData.material = MaterialType.GLASS;
         return GeneratorUtils.freezeStatic(group);
     },

@@ -174,7 +174,7 @@ export const INITIAL_STATS: PlayerStats = {
     discoveredPerks: [],
 
     prologueSeen: false,
-    rescuedFamilyIds: [],
+    rescuedFamilyIndices: [],
     familyFoundCount: 0,
     mostUsedWeapon: '',
 

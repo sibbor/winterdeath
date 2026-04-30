@@ -99,6 +99,8 @@ const createHudBuffer = () => ({
     killerName: '',
     killerAttackName: '',
     killedByEnemy: false,
+    lethalSourceId: -1,
+    lethalStatusEffect: -1,
     currentSector: 0,
     cluesFoundCount: 0,
     poisFoundCount: 0,
@@ -134,6 +136,10 @@ const createHudBuffer = () => ({
 const _bufferA = createHudBuffer();
 const _bufferB = createHudBuffer();
 let _useBufferA = true;
+
+// PERFORMANCE: Versioning for smart-cloning in HudStore
+let _effVersion = 0;
+let _mapVersion = 0;
 
 const truncate1 = (val: number) => Math.round(val * 10) / 10;
 const truncate2 = (val: number) => Math.round(val * 100) / 100;
@@ -305,6 +311,9 @@ export const HudSystem = {
         const spGained = state.sessionStats.spGained;
 
         // Status Effects (Zero-GC Pool Extraction)
+        const prevCount = _current.statusEffects.length;
+        let changed = false;
+
         _current.statusEffects.length = 0;
         const effectDurations = state.effectDurations;
         const effectIntensities = state.effectIntensities;
@@ -316,7 +325,10 @@ export const HudSystem = {
             if (duration > 0) {
                 const poolItem = _current._statusPool[effectIndex];
                 if (poolItem) {
-                    poolItem.type = i as StatusEffectType;
+                    const type = i as StatusEffectType;
+                    if (poolItem.type !== type) changed = true;
+
+                    poolItem.type = type;
                     poolItem.duration = duration;
                     const maxDur = state.effectMaxDurations[i] || 1;
                     poolItem.maxDuration = maxDur;
@@ -327,6 +339,11 @@ export const HudSystem = {
                 }
             }
         }
+        
+        if (changed || _current.statusEffects.length !== prevCount) {
+            _effVersion++;
+        }
+        (_current as any)._effVersion = _effVersion;
 
         _current.playerPos.x = playerPos.x;
         _current.playerPos.z = playerPos.z;
@@ -400,6 +417,8 @@ export const HudSystem = {
         _current.killerName = state.killerName;
         _current.killerAttackName = state.killerAttackName;
         _current.killedByEnemy = state.killedByEnemy;
+        _current.lethalSourceId = state.lethalSourceId ?? -1;
+        _current.lethalStatusEffect = state.lethalStatusEffect ?? -1;
         _current.mapItems = state.mapItems || [];
         _current.fps = PerformanceMonitor.getInstance().getFps();
         _current.hudVisible = state.hudVisible ?? _current.hudVisible;

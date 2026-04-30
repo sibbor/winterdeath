@@ -24,6 +24,7 @@ import { SoundID } from '../../utils/audio/AudioTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
 import { NavigationSystem } from '../../systems/NavigationSystem';
 import { applyCollisionResolution } from '../../core/world/CollisionResolution';
+import { FXParticleType } from '../../types/FXTypes';
 
 const _waterCheckResult = { flatDepth: 0 };
 
@@ -60,12 +61,12 @@ export const EnemyAI = {
         collisionGrid: SpatialGrid,
         isDead: boolean,
         callbacks: {
-            onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, attackName?: string) => void;
-            applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => void;
+            onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void;
+            applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => boolean;
             onEffectTick: (e: Enemy, type: EnemyEffectType) => void;
             playSound: (id: SoundID) => void;
             spawnBubble: (text: string, duration: number) => void;
-            spawnParticle: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void;
+            spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D | null, vel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
             queryEnemies?: (pos: THREE.Vector3, radius: number) => Enemy[];
         },
         water: WaterSystem | null,
@@ -74,13 +75,8 @@ export const EnemyAI = {
         renderTime: number
     ) => {
         const distSq = e.mesh.position.distanceToSquared(playerPos);
-        const radius = e.originalScale * 0.5;
 
         if (e.deathState === EnemyDeathState.DEAD || !e.mesh) return;
-
-        // --- 0. DISTANCE CULLING (AI SLEEP) ---
-        const dx = playerPos.x - e.mesh.position.x;
-        const dz = playerPos.z - e.mesh.position.z;
 
         // --- AI LoD (Level of Detail) TIERS (+50% Distance) ---
         const isTier1 = distSq < 1406;
@@ -269,8 +265,8 @@ export const EnemyAI = {
             // --- Apply pure velocity (EnemyManager already divided by mass!) ---
             e.mesh.position.addScaledVector(e.knockbackVel, delta);
 
-            // --- Snappy, heavy gravity ---
-            e.knockbackVel.y -= 50 * delta;
+            // --- Snappy, heavy gravity (VINTERDÖD: Increased to 65 for grit) ---
+            e.knockbackVel.y -= 65 * delta;
 
             // --- Friction (Horizontal only) ---
             const mass = e.originalScale * e.widthScale;
@@ -314,7 +310,9 @@ export const EnemyAI = {
                     const fallDamage = Math.min(e.maxHp * 0.95, fallRatio * fallRatio * 15);
 
                     e.hp -= fallDamage;
-                    callbacks.applyDamage(e, fallDamage, DamageID.FALL, true);
+                    // VINTERDÖD: Attribute damage to the source of the knockback (Rush/Dodge)
+                    const sourceId = e.lastKnockback || DamageID.FALL;
+                    callbacks.applyDamage(e, fallDamage, sourceId, true);
 
                     // High Fall Landing Stun (Stay Down)
                     if (fallHeight > 2.5) {
@@ -323,7 +321,7 @@ export const EnemyAI = {
                     }
 
                     if (callbacks.spawnParticle) {
-                        callbacks.spawnParticle(e.mesh.position.x, 0.5, e.mesh.position.z, 'blood_splatter', Math.floor(fallHeight * 4));
+                        callbacks.spawnParticle(e.mesh.position.x, 0.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, Math.floor(fallHeight * 4));
                     }
 
                     if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
@@ -397,7 +395,7 @@ export const EnemyAI = {
             if (e.drownDmgTimer >= 0.15) {
                 e.drownDmgTimer = 0;
                 if (water) water.spawnRipple(e.mesh.position.x, e.mesh.position.z, 0.9, 1.2);
-                callbacks.spawnParticle(e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z, 'splash', 4);
+                callbacks.spawnParticle(e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z, FXParticleType.SPLASH, 4);
 
                 const tickDmg = e.maxHp * 0.05;
                 e.hp -= tickDmg;
@@ -812,11 +810,11 @@ export const EnemyAI = {
                 // 4. Periodic Damage & Visuals
                 if (simTime > (e.lastGrappleDmg || 0) + 600) {
                     e.lastGrappleDmg = simTime;
-                    callbacks.onPlayerHit(4, e, DamageID.BITE, true, undefined, undefined, undefined, 'GRAPPLE_BITE');
+                    callbacks.onPlayerHit(4, e, DamageID.BITE, true, undefined, undefined, undefined, EnemyAttackType.GRAPPLE_BITE);
 
                     if (callbacks.spawnParticle) {
                         // VINTERDÖD: Improved blood feedback for grapple
-                        callbacks.spawnParticle(playerPos.x, 1.5, playerPos.z, 'blood_splatter', 6);
+                        callbacks.spawnParticle(playerPos.x, 1.5, playerPos.z, FXParticleType.BLOOD_SPLATTER, 6);
                     }
                 }
                 break;

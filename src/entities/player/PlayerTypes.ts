@@ -209,7 +209,7 @@ export interface PlayerStats {
 
     // --- STORY & PROGRESSION ---
     prologueSeen?: boolean;
-    rescuedFamilyIds: number[];
+    rescuedFamilyIndices: number[];
 
     familyFoundCount: number;
     mostUsedWeapon: string;
@@ -291,7 +291,8 @@ export const PlayerStatsUtils = {
             activePassives: [] as StatusEffectType[],
             activeBuffs: [] as StatusEffectType[],
             activeDebuffs: [] as StatusEffectType[],
-            discoveredPerks: [] as StatusEffectType[]
+            discoveredPerks: [] as StatusEffectType[],
+            rescuedFamilyIndices: [] as number[]
         };
     },
 

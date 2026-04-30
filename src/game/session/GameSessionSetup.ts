@@ -17,6 +17,7 @@ import { AssetLoader } from '../../utils/assets/AssetLoader';
 import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, PLAYER_BASE_SPEED, FamilyMemberID, INITIAL_ENEMY_POOL } from '../../content/constants';
 import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
+import { SubEffectType } from '../../systems/EffectManager';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 import { PlayerDeathState, DamageID } from '../../entities/player/CombatTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
@@ -86,6 +87,8 @@ export interface SetupContext {
         onTrigger: (type: TriggerType, duration: number) => void;
         onBossKilled: (id: number) => void;
         onAction: (action: any) => void;
+        spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
+        playSound: (id: SoundID) => void;
         collectedCluesRef: any;
 
         onDiscovery?: (type: DiscoveryType, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
@@ -109,6 +112,8 @@ export class GameSessionSetup {
 
         refs.isBuildingSectorRef.current = true;
         refs.deathPhaseRef.current = 'NONE';
+        state.statusFlags = PlayerStatusFlags.NONE;
+        state.hudVisible = true;
 
         // VINTERDÖD FIX: Robust telemetry recovery
         if (!state.sessionStats) {
@@ -138,7 +143,12 @@ export class GameSessionSetup {
             this.prepareScene(engine, props.isWarmup, refs, currentSector.environment);
 
             const yielder = async () => {
-                if (!isMounted.current || setupIdRef.current !== currentSetupId) throw new Error("ABORT_SETUP");
+                if (!isMounted.current || setupIdRef.current !== currentSetupId) {
+                    const err = new Error("ABORT_SETUP");
+                    (err as any).isAbort = true;
+                    throw err;
+                }
+                // VINTERDÖD: Mandatory yield to allow the UI to breathe and catch aborts
                 await new Promise<void>(resolve => setTimeout(resolve, 0));
             };
 
@@ -162,19 +172,28 @@ export class GameSessionSetup {
             PathGenerator.resetPathLayer();
             const setupStart = performance.now();
             console.info(`[SectorBuilder] ▶ START building sector ${props.currentSector} [LIVE]`);
+            
+            performance.mark('build-start');
             await SectorBuilder.build(sectorCtx, currentSector);
+            performance.mark('build-end');
+            performance.measure('Sector Build', 'build-start', 'build-end');
+            
             console.info(`[SectorBuilder] ✅ DONE building sector ${props.currentSector} [LIVE] in ${(performance.now() - setupStart).toFixed(1)}ms`);
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
+            await yielder();
 
             // 5. Finalize limits and parse effects
             this.finalizeStateLimits(state, mapItems, flickeringLights, scene, sectorCtx);
+            await yielder();
 
             // 6. Setup Family Members
             this.setupFamily(currentSector, props, refs, scene);
+            await yielder();
 
             // 7. Initialize Systems
             this.setupSystems(ctx, playerGroup, sectorCtx);
+            await yielder();
 
             // --- VINTERDÖD FIX: BYPASS INTRO TRIGGERS ---
             // If the sector is already cleared, mark the intro triggers as completed
@@ -191,6 +210,12 @@ export class GameSessionSetup {
             }
 
             FXSystem.preload(scene);
+            await yielder();
+
+            // VINTERDÖD: If we are building LIVE (not warmup), activate systems immediately.
+            if (!props.isWarmup) {
+                await this.activateSector(sectorCtx, currentSector);
+            }
 
             // Handshake: Tell App.tsx to release the loading screen
             if (isMounted.current && setupIdRef.current === currentSetupId) {
@@ -199,7 +224,7 @@ export class GameSessionSetup {
             }
 
         } catch (e: any) {
-            if (e.message === "ABORT_SETUP") {
+            if (e.isAbort || e.message === "ABORT_SETUP") {
                 console.log("[GameSessionSetup] Ghost setup safely killed mid-generation.");
             } else {
                 console.error("[GameSessionSetup] Critical Error:", e);
@@ -212,6 +237,32 @@ export class GameSessionSetup {
                 if (callbacks.onSectorLoaded) callbacks.onSectorLoaded();
             }
         }
+    }
+
+    /**
+     * VINTERDÖD: Activates the live portions of a sector (Zombies, Triggers, etc.)
+     * This is called either at the end of runSectorSetup (if not warmup) 
+     * or manually when isWarmup toggles to false.
+     */
+    static async activateSector(ctx: SectorContext, def: any) {
+        if (!ctx || !def) return;
+        
+        const setupStart = performance.now();
+        console.info(`[SectorBuilder] ▶ ACTIVATING live content for sector ${ctx.sectorId}`);
+
+        if (def.setupZombies) {
+            await def.setupZombies(ctx);
+        }
+
+        // VINTERDÖD: Final world discovery - find all Ground_* meshes for the footprint system
+        const { FootprintSystem } = await import('../../systems/FootprintSystem');
+        FootprintSystem.init(ctx.scene);
+
+        // VINTERDÖD: Final block - initialize the Navigation FlowField grid
+        const { NavigationSystem } = await import('../../systems/NavigationSystem');
+        NavigationSystem.init(ctx);
+
+        console.info(`[SectorBuilder] ✅ ACTIVATION complete in ${(performance.now() - setupStart).toFixed(1)}ms`);
     }
 
     // --- HELPER METHODS FOR CLEANER SETUP ---
@@ -434,7 +485,7 @@ export class GameSessionSetup {
                 const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                 if (tracker) tracker.recordSp(session, amount);
             },
-            onPlayerHit: (damage: number, attacker: any, type: string, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
+            onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
                 const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
                 if (statsSystem) {
                     statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName);
@@ -550,7 +601,7 @@ export class GameSessionSetup {
                 const effects = child.userData.effects as any[];
                 for (let j = 0; j < effects.length; j++) {
                     const eff = effects[j];
-                    if (eff.type === 'light') {
+                    if (eff.type === SubEffectType.LIGHT) {
                         const light = new THREE.PointLight(eff.color, eff.intensity, eff.distance);
                         light.userData.baseIntensity = eff.intensity;
                         light.userData.isCulled = false;
@@ -574,7 +625,10 @@ export class GameSessionSetup {
         // and may contain sector-specific family members added by SectorBuilder.
         const playerSpawn = currentSector.playerSpawn;
         const fSpawn = currentSector.familySpawn;
-        const rescuedIndices = [...(props.rescuedFamilyIndices || [])];
+        
+        // VINTERDÖD FIX: Only spawn family members from PREVIOUS sectors that have been rescued.
+        // This prevents the current sector's member (e.g. Loke) from spawning at the player start.
+        const rescuedIndices = (props.rescuedFamilyIndices || []).filter((idx: number) => idx < props.currentSector);
 
         // Developer override
         if (props.debugMode && props.currentSector >= 1 && rescuedIndices.length === 0) {
@@ -833,7 +887,8 @@ export class GameSessionSetup {
 
         // --- 1. RESET PLAYER STATE (DOD / Zero-GC) ---
         // --- STATUS & EFFECT RESET (Zero-GC Clean Slate) ---
-        state.statusFlags = 0; // Reset all flags (Dead, Airborne, etc.)
+        state.statusFlags = PlayerStatusFlags.NONE; // Reset all flags (Dead, Airborne, etc.)
+        state.hudVisible = true;
         refs.deathPhaseRef.current = 'NONE';
         state.playerDeathState = PlayerDeathState.ALIVE;
         state.statsBuffer[PlayerStatID.HP] = state.statsBuffer[PlayerStatID.MAX_HP];

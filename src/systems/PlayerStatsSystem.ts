@@ -307,7 +307,7 @@ export class PlayerStatsSystem implements System {
         effectType?: StatusEffectType,
         effectDuration?: number,
         effectIntensity?: number,
-        specificAttackType?: string
+        specificAttackType?: EnemyAttackType
     ) {
         const state = session.state;
         const now = state.simTime;
@@ -379,6 +379,15 @@ export class PlayerStatsSystem implements System {
                 state.effectDurations[effectType] = duration;
                 state.effectMaxDurations[effectType] = duration; // Sync Max Duration for UI
                 state.effectIntensities[effectType] = effectIntensity !== undefined ? effectIntensity : 1;
+
+                // --- SOURCE ATTRIBUTION (Zero-GC) ---
+                let sourceKey = type;
+                if (attacker) {
+                    const isBossAttacker = (attacker.statusFlags & EnemyFlags.BOSS) !== 0;
+                    if (isBossAttacker && attacker.bossId !== undefined) sourceKey = DamageID.BOSS;
+                    else sourceKey = attacker.type;
+                }
+                state.effectSources[effectType] = sourceKey;
             }
         }
 
@@ -396,15 +405,16 @@ export class PlayerStatsSystem implements System {
         }
 
         if (state.statsBuffer[PlayerStatID.HP] <= 0) {
-            let finalAttackName = specificAttackType || 'HIT';
+            let finalAttackType = specificAttackType !== undefined ? specificAttackType : EnemyAttackType.HIT;
             if (isDoT && effectType !== undefined) {
-                finalAttackName = (StatusEffectType as any)[effectType] || 'DOT';
+                // If it's a DoT, we can use a special logic or just pass ENVIRONMENTAL/HIT
+                finalAttackType = EnemyAttackType.ENVIRONMENTAL;
             }
-            this.executePlayerDeath(session, attacker, type, finalAttackName, attackIndex, now);
+            this.executePlayerDeath(session, attacker, type, finalAttackType, attackIndex, now, isDoT ? effectType : undefined);
         }
     }
 
-    private executePlayerDeath(session: GameSessionLogic, attacker: any, type: DamageID, attackName: string, attackIndex: number, now: number) {
+    private executePlayerDeath(session: GameSessionLogic, attacker: any, type: DamageID, attackType: EnemyAttackType, attackIndex: number, now: number, lethalEffect?: StatusEffectType) {
         const state = session.state;
 
         // Telemetry
@@ -423,17 +433,35 @@ export class PlayerStatsSystem implements System {
         else if (type === DamageID.DROWNING) state.playerDeathState = PlayerDeathState.DROWNED;
         else if (type === DamageID.ELECTRIC) state.playerDeathState = PlayerDeathState.ELECTROCUTED;
 
+        state.lethalStatusEffect = lethalEffect !== undefined ? lethalEffect : -1;
+
         if (attacker && (attacker.statusFlags & EnemyFlags.BOSS) !== 0 && attacker.bossId !== undefined) {
             state.killerName = DataResolver.getEnemyName(EnemyType.BOSS, attacker.bossId);
             state.killedByEnemy = true;
-            state.killerAttackName = attackName; // Boss attacks might be custom strings
+            state.killerAttackName = DataResolver.getAttackName(attackType); 
+            state.lethalSourceId = attacker.bossId;
         } else if (attacker) {
             state.killerName = DataResolver.getEnemyName(attacker.type);
             state.killedByEnemy = true;
             state.killerAttackName = DataResolver.getAttackName(attackIndex);
+            state.lethalSourceId = attacker.type;
         } else {
-            state.killerName = DataResolver.getDamageName(type);
-            state.killedByEnemy = false;
+            // Check if there's a lethal DoT source
+            if (lethalEffect !== undefined && state.effectSources[lethalEffect] !== 0) {
+                const source = state.effectSources[lethalEffect];
+                if (source < 16) {
+                    state.killerName = DataResolver.getEnemyName(source);
+                    state.killedByEnemy = true;
+                } else {
+                    state.killerName = DataResolver.getDamageName(source);
+                    state.killedByEnemy = false;
+                }
+                state.lethalSourceId = source;
+            } else {
+                state.killerName = DataResolver.getDamageName(type);
+                state.killedByEnemy = false;
+                state.lethalSourceId = type;
+            }
             state.killerAttackName = 'HIDDEN';
         }
 

@@ -9,6 +9,8 @@ import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorEnvironment, EnvironmentalZone as AtmosphereZone } from '../../core/engine/EngineTypes';
 import { TriggerAction } from '../../systems/TriggerTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
+import { FXParticleType, FXDecalType } from '../../types/FXTypes';
+import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
 
 export type { AtmosphereZone };
 
@@ -99,10 +101,10 @@ export interface SectorDef {
     atmosphereZones?: AtmosphereZone[];
 
     // Logic
-    setupEnvironment?: (ctx: SectorContext) => void;
-    setupProps?: (ctx: SectorContext) => void;
-    setupContent?: (ctx: SectorContext) => void;
-    setupZombies?: (ctx: SectorContext) => void;
+    setupEnvironment?: (ctx: SectorContext) => Promise<void> | void;
+    setupProps?: (ctx: SectorContext) => Promise<void> | void;
+    setupContent?: (ctx: SectorContext) => Promise<void> | void;
+    setupZombies?: (ctx: SectorContext) => Promise<void> | void;
 
     generate?: (ctx: SectorContext) => Promise<void>;
     onSectorUpdate: (ctx: SectorUpdateContext) => void;
@@ -129,7 +131,9 @@ export interface SectorUpdateContext {
     cameraShake: (amount: number, type?: 'general' | 'hurt') => void;
     t: (key: string) => string;
     scene: THREE.Scene;
-    spawnParticle: (x: number, y: number, z: number, type: string, count: number, scale?: number, life?: number) => void;
+    spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D | null, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
+    spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
+    onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, sourceAttack?: EnemyAttackType) => void;
     startCinematic: (target: THREE.Object3D, sectorId: number, dialogueId?: number, params?: any) => void;
     setCameraOverride: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
     makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;

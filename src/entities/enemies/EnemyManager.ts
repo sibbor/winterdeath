@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { MATERIALS } from '../../utils/assets';
 import { KMH_TO_MS, INITIAL_ENEMY_POOL } from '../../content/constants';
 import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_SCORE, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType, EnemyDeathDecal, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
-import { DamageID } from '../../entities/player/CombatTypes';
+import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
 import { EnemySpawner } from './EnemySpawner';
@@ -10,16 +10,13 @@ import { EnemyAI } from './EnemyAI';
 import { MaterialType } from '../../content/environment';
 import { GamePlaySounds, EnemySounds } from '../../utils/audio/AudioLib';
 import { audioEngine } from '../../utils/audio/AudioEngine';
-import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { ZombieRenderer } from '../../core/renderers/ZombieRenderer';
 import { CorpseRenderer } from '../../core/renderers/CorpseRenderer';
 import { AshRenderer } from '../../core/renderers/AshRenderer';
-import { FXParticleType } from '../../types/FXTypes';
+import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { FXSystem } from '../../systems/FXSystem';
-import { WaterSystem } from '../../systems/WaterSystem';
-import { WinterEngine } from '../../core/engine/WinterEngine';
 import { SoundID } from '../../utils/audio/AudioTypes';
-import { System, SystemID } from '../../systems/System';
+import { SystemID } from '../../systems/System';
 import { GameSessionLogic } from '../../game/session/GameSessionLogic';
 import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 
@@ -115,15 +112,15 @@ function setBaseColor(root: any, colorObj: THREE.Color) {
 
 // --- REUSABLE UPDATE CALLBACKS (100% Zero-GC) --- 
 export interface AIContext {
-    spawnParticle: ((x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void) | null;
-    spawnDecal: ((x: number, z: number, s: number, mat: THREE.Material, type?: string) => void) | null;
-    applyDamage: ((enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => void) | null;
+    spawnParticle: ((x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void) | null;
+    spawnDecal: ((x: number, z: number, s: number, mat: THREE.Material, type?: FXDecalType) => void) | null;
+    applyDamage: ((enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => boolean) | null;
     onEffectTick: ((e: Enemy, type: EnemyEffectType) => void) | null;
     playSound: (id: SoundID) => void;
     spawnBubble: ((text: string, duration: number) => void) | null;
     queryEnemies: ((pos: THREE.Vector3, radius: number) => Enemy[]) | null;
-    onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => void;
-    _realOnPlayerHit: ((damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => void) | null;
+    onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void;
+    _realOnPlayerHit: ((damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void) | null;
 }
 
 const _aiContext: AIContext = {
@@ -134,9 +131,9 @@ const _aiContext: AIContext = {
     playSound: (id: SoundID) => audioEngine.playSound(id),
     spawnBubble: null,
     queryEnemies: null,
-    onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
+    onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => {
         if (_aiContext._realOnPlayerHit) {
-            _aiContext._realOnPlayerHit(damage, attacker, type, isDoT, effect, dur, intense, attackName);
+            _aiContext._realOnPlayerHit(damage, attacker, type, isDoT, effect, duration, intensity, sourceAttack);
         }
     },
     _realOnPlayerHit: null
@@ -152,13 +149,13 @@ export const EnemyManager = {
         const scene = session.engine.scene;
         if (!zombieRenderer) zombieRenderer = new ZombieRenderer(scene);
         else zombieRenderer.reAttach(scene);
- 
+
         if (!corpseRenderer) corpseRenderer = new CorpseRenderer(scene);
         else corpseRenderer.reAttach(scene);
- 
+
         if (!ashRenderer) ashRenderer = new AshRenderer(scene);
         else ashRenderer.reAttach(scene);
- 
+
         enemyPool.length = 0;
 
         // VINTERDÖD: Pool Inflation (Zero-GC Pre-allocation)
@@ -182,27 +179,30 @@ export const EnemyManager = {
         if (ashRenderer) ashRenderer.reAttach(scene);
     },
 
-
     update: (
         session: GameSessionLogic,
         delta: number,
         simTime: number,
         renderTime: number
     ) => {
-        const state = session.state;
-        const playerPos = session.playerPos || session.engine.camera.lookAtTarget;
-        const enemies = state.enemies;
-        const collisionGrid = state.collisionGrid;
-        const isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
-        const water = session.engine.water;
-        const playerStatusFlags = state.statusFlags;
-        const callbacks = state.callbacks;
+        if (!session || !session.engine || !session.state) return;
 
+        const state = session.state;
+        const collisionGrid = state.collisionGrid;
+
+        if (!collisionGrid) return;
+
+        const playerPos = session.playerPos || session.engine.camera?.lookAtTarget;
+        const enemies = state.enemies;
+        const isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
+        const playerStatusFlags = state.statusFlags;
+        const water = session.engine.water;
+        const callbacks = state.callbacks;
         const onPlayerHit = callbacks?.onPlayerHit;
         const spawnParticle = callbacks?.spawnParticle;
         const spawnDecal = callbacks?.spawnDecal;
-        const applyDamage = state.applyDamage;
         const spawnBubble = callbacks?.spawnBubble;
+        const applyDamage = state.applyDamage;
 
         collisionGrid.updateEnemyGrid(enemies);
         _syncList.length = 0;
@@ -222,6 +222,7 @@ export const EnemyManager = {
         const cameraDir = _camDir.set(0, 0, -1).applyQuaternion(camera.threeCamera.quaternion);
 
         const len = enemies.length;
+
         for (let i = 0; i < len; i++) {
             const e = enemies[i];
 
@@ -395,7 +396,7 @@ export const EnemyManager = {
         if (e.attackCooldowns) e.attackCooldowns.fill(0);
 
         // Initialize collision radii
-        e.hitRadius = e.originalScale * 0.5;
+        e.hitRadius = e.originalScale * 0.5 * Math.max(0.7, e.widthScale);
         e.combatRadius = e.originalScale * 1.5;
         e.attackOffset = 0.5 + e.hitRadius;
 
@@ -536,7 +537,7 @@ export const EnemyManager = {
 
         // Null-safety check for callbacks since _aiContext can be cleared/nullified
         if (callbacks.spawnDecal) {
-            callbacks.spawnDecal(pos.x, pos.z, decalScale, MATERIALS.bloodDecal, 'splatter');
+            callbacks.spawnDecal(pos.x, pos.z, decalScale, MATERIALS.bloodDecal, FXDecalType.SPLATTER);
         }
 
         const bloodCount = (enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 12 : 5;
@@ -544,7 +545,7 @@ export const EnemyManager = {
         const enemyTopY = pos.y + enemy.originalScale * 1.8;
 
         if (callbacks.spawnParticle) {
-            callbacks.spawnParticle(pos.x, 1.5, pos.z, 'blood_splatter', 6);
+            callbacks.spawnParticle(pos.x, 1.5, pos.z, FXParticleType.BLOOD_SPLATTER, 6);
         }
 
         _v1.set(0, 0, 0);
@@ -562,7 +563,7 @@ export const EnemyManager = {
         if (callbacks.spawnParticle) {
             for (let i = 0; i < goreCount; i++) {
                 _v2.set(_v1.x + (Math.random() - 0.5) * 12, _v1.y + Math.random() * 6, _v1.z + (Math.random() - 0.5) * 10);
-                callbacks.spawnParticle(pos.x, pos.y + 1, pos.z, 'gore', 1, undefined, _v2, enemy.color, goreScale);
+                callbacks.spawnParticle(pos.x, pos.y + 1, pos.z, FXParticleType.GORE, 1, undefined, _v2, enemy.color, goreScale);
             }
         }
     },
@@ -644,13 +645,15 @@ export const EnemyManager = {
                     const jitter = (1.0 - fallProgress * 0.5) * 0.2;
                     e.mesh.rotation.y += (Math.random() - 0.5) * jitter;
 
-                    if (Math.random() > 0.85 && callbacks.spawnParticle) {
+                    if (Math.random() > 0.85) {
                         _v1.set(
                             e.targetPos.x + (Math.random() - 0.5),
                             e.mesh.position.y + 0.5,
                             e.targetPos.z + (Math.random() - 0.5)
                         );
-                        callbacks.spawnParticle(_v1.x, _v1.y, _v1.z, 'spark', 1);
+                        if (callbacks.spawnParticle) {
+                            callbacks.spawnParticle(_v1.x, _v1.y, _v1.z, FXParticleType.SPARK, 1);
+                        }
                     }
                 } else {
                     _color.setHex(e.color || 0xffffff).multiplyScalar(0.3);
@@ -695,9 +698,12 @@ export const EnemyManager = {
         forceMag: number,
         liftRatio: number,
         stunDuration: number,
-        spinIntensity: number
+        spinIntensity: number,
+        sourceId: number = 0 // DamageID.NONE
     ) => {
         if (enemy.deathState !== EnemyDeathState.ALIVE) return;
+
+        enemy.lastKnockback = sourceId;
 
         // --- 1. DIRECTIONAL MATH (Zero-GC) ---
         _v1.subVectors(enemy.mesh.position, impactSourcePos);
@@ -769,12 +775,10 @@ export const EnemyManager = {
                 // APPROXIMATION: falloff = 1.0 - (distSq / radiusSq)
                 const falloff = 1.0 - (distSq / radiusSq);
 
-                // --- DAMAGE ---
-                const damage = Math.ceil(maxDamage * falloff);
+                // --- DAMAGE (VINTERDÖD: Rush/Dodge now deal 0 immediate damage, deferred to Fall Damage) ---
+                const damage = (damageType === DamageID.RUSH || damageType === DamageID.DODGE) ? 0 : Math.ceil(maxDamage * falloff);
                 if (damage > 0) {
                     const applyDamage = (ctx as any).applyDamage;
-                    // We pass maxForce >= 20 as a generic threshold for system-wide "high impact" hits
-                    // so the combat system still knows if it should e.g. gib a dying enemy.
                     if (applyDamage) applyDamage(e, damage, damageType, maxForce >= 20);
                     else e.hp -= damage;
                 }
@@ -799,7 +803,8 @@ export const EnemyManager = {
                     force,
                     liftRatio,
                     Math.max(0.8, stunDur),
-                    force * spinScale
+                    force * spinScale,
+                    damageType
                 );
 
                 // --- VISUALS ---
@@ -1006,15 +1011,15 @@ _aiContext.onEffectTick = (enemy: Enemy, type: EnemyEffectType) => {
 
     switch (type) {
         case EnemyEffectType.STUN:
-            _aiContext.spawnParticle(pos.x, pos.y + 1.8, pos.z, 'enemy_effect_stun', 1, undefined, undefined, 0xffff00, 0.3);
+            _aiContext.spawnParticle(pos.x, pos.y + 1.8, pos.z, FXParticleType.ENEMY_EFFECT_STUN, 1, undefined, undefined, 0xffff00, 0.3);
             break;
         case EnemyEffectType.FLAME:
             _v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.0, pos.z + (Math.random() - 0.5) * 0.5);
-            _aiContext.spawnParticle(_v1.x, _v1.y, _v1.z, 'enemy_effect_flame', 1);
+            _aiContext.spawnParticle(_v1.x, _v1.y, _v1.z, FXParticleType.ENEMY_EFFECT_FLAME, 1);
             break;
         case EnemyEffectType.SPARK:
             _v1.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 0.8 + Math.random() * 0.4, pos.z + (Math.random() - 0.5) * 0.4);
-            _aiContext.spawnParticle(_v1.x, _v1.y, _v1.z, 'enemy_effect_spark', 1);
+            _aiContext.spawnParticle(_v1.x, _v1.y, _v1.z, FXParticleType.ENEMY_EFFECT_SPARK, 1);
             break;
     }
 };

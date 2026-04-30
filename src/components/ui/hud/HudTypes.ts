@@ -174,6 +174,8 @@ export interface HudState {
   killerName: string;
   killerAttackName: string;
   killedByEnemy: boolean;
+  lethalSourceId: number;      // Specific ID (EnemyType or Boss ID)
+  lethalStatusEffect: number;  // StatusEffectType that caused the final tick (if any)
 
   // Exploration & Environment
   mapItems: MapItem[];

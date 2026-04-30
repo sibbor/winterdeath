@@ -6,6 +6,7 @@ import { SectorBuilder } from '../SectorBuilder';
 import { VEGETATION_TYPE } from '../../../content/environment';
 import { MaterialType } from '../../../content/environment';
 import { GeneratorUtils } from './GeneratorUtils';
+import { PhysicsGroup } from '../CollisionResolution';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -14,6 +15,10 @@ const _quat = new THREE.Quaternion();
 const _scale = new THREE.Vector3();
 const _euler = new THREE.Euler();
 const _mat = new THREE.Matrix4();
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _axisX = new THREE.Vector3(1, 0, 0);
 const PI2 = Math.PI * 2;
 
 // --- TYPES ---
@@ -44,7 +49,6 @@ const _createCrossGeo = () => {
     return merged ? merged : new THREE.BufferGeometry();
 };
 
-// Narrow, short cross-billboard for grass tufts (distinct from wide wheat stalks)
 const _createGrassTuftGeo = () => {
     const plane = new THREE.PlaneGeometry(0.3, 0.7);
     plane.translate(0, 0.35, 0);
@@ -57,7 +61,7 @@ const _createGrassTuftGeo = () => {
 };
 
 const SHARED_GEO = {
-    box: new THREE.BoxGeometry(1, 1, 1),
+    box: new THREE.BoxGeometry(1, 1, 1), // VINTERDOD FIX: Restored center pivot to fix floating hedges and ugly bushes
     cylinder: new THREE.CylinderGeometry(1, 1, 2, 8),
     plane: new THREE.PlaneGeometry(1, 1),
     grass: _createCrossGeo(),
@@ -71,13 +75,12 @@ const SHARED_GEO = {
     seaweed: new THREE.PlaneGeometry(0.3, 3.0, 2, 4).translate(0, 1.5, 0)
 };
 
-
 // --- HELPERS ---
 const safeMerge = (geos: THREE.BufferGeometry[]): THREE.BufferGeometry => {
     if (geos.length === 0) return new THREE.BufferGeometry();
     const merged = BufferGeometryUtils.mergeGeometries(geos);
 
-    // VINTERDÖD OPTIMIZATION: Destroy the individual parts to free up RAM!
+    // VINTERDOD OPTIMIZATION: Destroy the individual parts to free up RAM
     for (let i = 0; i < geos.length; i++) {
         geos[i].dispose();
     }
@@ -93,8 +96,6 @@ const bakeGeo = (geo: THREE.BufferGeometry, pos: THREE.Vector3, rot: THREE.Euler
     return geo;
 };
 
-
-
 // --- PROTOTYPE GENERATORS ---
 const generatePinePrototype = (seed: number, hasSnow: boolean = false): TreePrototype => {
     const trunkGeos: THREE.BufferGeometry[] = [];
@@ -109,10 +110,14 @@ const generatePinePrototype = (seed: number, hasSnow: boolean = false): TreeProt
 
     const trunkH = 4.5 + rng() * 2.0;
     const trunkGeo = new THREE.CylinderGeometry(0.2, 0.45, trunkH, 7);
-    trunkGeo.translate(0, trunkH / 2, 0);
+    trunkGeo.translate(0, trunkH / 2, 0); // Sets pivot to base
+
     const leanX = (rng() - 0.5) * 0.2;
     const leanZ = (rng() - 0.5) * 0.2;
-    bakeGeo(trunkGeo, new THREE.Vector3(0, 0, 0), new THREE.Euler(leanX, 0, leanZ), new THREE.Vector3(1, 1, 1));
+    _v1.set(0, 0, 0);
+    _euler.set(leanX, 0, leanZ);
+    _scale.set(1, 1, 1);
+    bakeGeo(trunkGeo, _v1, _euler, _scale);
     trunkGeos.push(trunkGeo);
 
     const layers = 4 + Math.floor(rng() * 3);
@@ -126,15 +131,16 @@ const generatePinePrototype = (seed: number, hasSnow: boolean = false): TreeProt
         const cone = new THREE.ConeGeometry(r, h, 7);
         cone.translate(0, h / 2, 0);
 
-        const layerRot = new THREE.Euler((rng() - 0.5) * 0.3 + leanX, 0, (rng() - 0.5) * 0.3 + leanZ);
-        const layerPos = new THREE.Vector3(0, y, 0);
+        _euler.set((rng() - 0.5) * 0.3 + leanX, 0, (rng() - 0.5) * 0.3 + leanZ);
+        _pos.set(0, y, 0);
+        _scale.set(1, 1, 1);
 
-        leafGeos.push(bakeGeo(cone, layerPos, layerRot, new THREE.Vector3(1, 1, 1))); // No clone needed, bake mutates
+        leafGeos.push(bakeGeo(cone, _pos, _euler, _scale));
 
         if (hasSnow) {
             const snow = new THREE.ConeGeometry(r * 0.9, h * 0.4, 7);
             snow.translate(0, h * 0.3, 0);
-            snowGeos.push(bakeGeo(snow, layerPos, layerRot, new THREE.Vector3(1, 1, 1)));
+            snowGeos.push(bakeGeo(snow, _pos, _euler, _scale));
         }
 
         y += h * 0.5;
@@ -144,7 +150,10 @@ const generatePinePrototype = (seed: number, hasSnow: boolean = false): TreeProt
     const topH = 2.0;
     const top = new THREE.ConeGeometry(r, topH, 6);
     top.translate(0, topH / 2, 0);
-    leafGeos.push(bakeGeo(top, new THREE.Vector3(0, y, 0), new THREE.Euler(leanX, 0, leanZ), new THREE.Vector3(1, 1, 1)));
+    _v1.set(0, y, 0);
+    _euler.set(leanX, 0, leanZ);
+    _scale.set(1, 1, 1);
+    leafGeos.push(bakeGeo(top, _v1, _euler, _scale));
 
     return {
         trunkGeo: safeMerge(trunkGeos),
@@ -169,9 +178,13 @@ const generateSprucePrototype = (seed: number, hasSnow: boolean = false): TreePr
     const trunkH = 4.0 + rng() * 2.0;
     const trunkGeo = new THREE.CylinderGeometry(0.3, 0.7, trunkH, 7);
     trunkGeo.translate(0, trunkH / 2, 0);
+
     const leanX = (rng() - 0.5) * 0.1;
     const leanZ = (rng() - 0.5) * 0.1;
-    bakeGeo(trunkGeo, new THREE.Vector3(0, 0, 0), new THREE.Euler(leanX, 0, leanZ), new THREE.Vector3(1, 1, 1));
+    _v1.set(0, 0, 0);
+    _euler.set(leanX, 0, leanZ);
+    _scale.set(1, 1, 1);
+    bakeGeo(trunkGeo, _v1, _euler, _scale);
     trunkGeos.push(trunkGeo);
 
     const layers = 10 + Math.floor(rng() * 5);
@@ -185,15 +198,16 @@ const generateSprucePrototype = (seed: number, hasSnow: boolean = false): TreePr
         const cone = new THREE.ConeGeometry(r, h, 8);
         cone.translate(0, h / 2, 0);
 
-        const layerRot = new THREE.Euler((rng() - 0.5) * 0.1 + leanX, 0, (rng() - 0.5) * 0.1 + leanZ);
-        const layerPos = new THREE.Vector3(0, y, 0);
+        _euler.set((rng() - 0.5) * 0.1 + leanX, 0, (rng() - 0.5) * 0.1 + leanZ);
+        _pos.set(0, y, 0);
+        _scale.set(1, 1, 1);
 
-        leafGeos.push(bakeGeo(cone, layerPos, layerRot, new THREE.Vector3(1, 1, 1)));
+        leafGeos.push(bakeGeo(cone, _pos, _euler, _scale));
 
         if (hasSnow) {
             const snow = new THREE.ConeGeometry(r * 0.95, h * 0.4, 8);
             snow.translate(0, h * 0.35, 0);
-            snowGeos.push(bakeGeo(snow, layerPos, layerRot, new THREE.Vector3(1, 1, 1)));
+            snowGeos.push(bakeGeo(snow, _pos, _euler, _scale));
         }
 
         y += h * 0.55;
@@ -203,7 +217,10 @@ const generateSprucePrototype = (seed: number, hasSnow: boolean = false): TreePr
     const topH = 1.5;
     const top = new THREE.ConeGeometry(r, topH, 6);
     top.translate(0, topH / 2, 0);
-    leafGeos.push(bakeGeo(top, new THREE.Vector3(0, y, 0), new THREE.Euler(leanX, 0, leanZ), new THREE.Vector3(1, 1, 1)));
+    _v1.set(0, y, 0);
+    _euler.set(leanX, 0, leanZ);
+    _scale.set(1, 1, 1);
+    leafGeos.push(bakeGeo(top, _v1, _euler, _scale));
 
     return {
         trunkGeo: safeMerge(trunkGeos),
@@ -227,7 +244,11 @@ const generateOakPrototype = (seed: number): TreePrototype => {
     const trunkH = 2.5 + rng() * 0.8;
     const trunkGeo = new THREE.CylinderGeometry(0.5, 0.8, trunkH, 7);
     trunkGeo.translate(0, trunkH / 2, 0);
-    bakeGeo(trunkGeo, new THREE.Vector3(0, 0, 0), new THREE.Euler((rng() - 0.5) * 0.3, 0, (rng() - 0.5) * 0.3), new THREE.Vector3(1, 1, 1));
+
+    _v1.set(0, 0, 0);
+    _euler.set((rng() - 0.5) * 0.3, 0, (rng() - 0.5) * 0.3);
+    _scale.set(1, 1, 1);
+    bakeGeo(trunkGeo, _v1, _euler, _scale);
     trunkGeos.push(trunkGeo);
 
     const clusters = 12 + Math.floor(rng() * 6);
@@ -241,7 +262,10 @@ const generateOakPrototype = (seed: number): TreePrototype => {
 
         sphere.translate(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
 
-        bakeGeo(sphere, new THREE.Vector3(0, 0, 0), new THREE.Euler(rng(), rng(), rng()), new THREE.Vector3(1, 0.7, 1));
+        _v1.set(0, 0, 0);
+        _euler.set(rng(), rng(), rng());
+        _scale.set(1, 0.7, 1);
+        bakeGeo(sphere, _v1, _euler, _scale);
         leafGeos.push(sphere);
     }
 
@@ -264,19 +288,26 @@ const generateDeadTreePrototype = (seed: number): TreePrototype => {
     const trunkH = 3.5 + rng() * 2.5;
     const trunk = new THREE.CylinderGeometry(0.15, 0.35, trunkH, 4);
     trunk.translate(0, trunkH / 2, 0);
+
     const leanX = (rng() - 0.5) * 0.3;
     const leanZ = (rng() - 0.5) * 0.3;
-    bakeGeo(trunk, new THREE.Vector3(0, 0, 0), new THREE.Euler(leanX, 0, leanZ), new THREE.Vector3(1, 1, 1));
+    _v1.set(0, 0, 0);
+    _euler.set(leanX, 0, leanZ);
+    _scale.set(1, 1, 1);
+    bakeGeo(trunk, _v1, _euler, _scale);
     trunkGeos.push(trunk);
 
     if (rng() > 0.5) {
         const topH = 0.5 + rng() * 0.5;
         const top = new THREE.ConeGeometry(0.15, topH, 3);
         top.translate(0, topH / 2, 0);
+
         const tx = trunkH * Math.sin(leanZ);
         const tz = trunkH * Math.sin(leanX);
-        const snappedRot = new THREE.Euler((rng() - 0.5) * 1.5, rng() * 3, (rng() - 0.5) * 1.5);
-        bakeGeo(top, new THREE.Vector3(tx, trunkH, tz), snappedRot, new THREE.Vector3(1, 1, 1));
+        _pos.set(tx, trunkH, tz);
+        _euler.set((rng() - 0.5) * 1.5, rng() * 3, (rng() - 0.5) * 1.5);
+        _scale.set(1, 1, 1);
+        bakeGeo(top, _pos, _euler, _scale);
         trunkGeos.push(top);
     }
 
@@ -293,7 +324,10 @@ const generateDeadTreePrototype = (seed: number): TreePrototype => {
         const bx = y * Math.sin(leanZ);
         const bz = y * Math.sin(leanX);
 
-        bakeGeo(branch, new THREE.Vector3(bx, y, bz), new THREE.Euler(rng() * 0.5, rotY, rotZ), new THREE.Vector3(1, 1, 1));
+        _pos.set(bx, y, bz);
+        _euler.set(rng() * 0.5, rotY, rotZ);
+        _scale.set(1, 1, 1);
+        bakeGeo(branch, _pos, _euler, _scale);
         trunkGeos.push(branch);
     }
 
@@ -318,9 +352,13 @@ const generateBirchPrototype = (seed: number): TreePrototype => {
 
     const trunk = new THREE.CylinderGeometry(trunkRadius * 0.6, trunkRadius, height, 5);
     trunk.translate(0, height / 2, 0);
+
     const leanX = (rng() - 0.5) * 0.2;
     const leanZ = (rng() - 0.5) * 0.2;
-    bakeGeo(trunk, new THREE.Vector3(0, 0, 0), new THREE.Euler(leanX, 0, leanZ), new THREE.Vector3(1, 1, 1));
+    _v1.set(0, 0, 0);
+    _euler.set(leanX, 0, leanZ);
+    _scale.set(1, 1, 1);
+    bakeGeo(trunk, _v1, _euler, _scale);
     trunkGeos.push(trunk);
 
     const clusters = 8 + Math.floor(rng() * 4);
@@ -335,7 +373,10 @@ const generateBirchPrototype = (seed: number): TreePrototype => {
         const lx = y * Math.sin(leanZ);
         const lz = y * Math.sin(leanX);
 
-        bakeGeo(sphere, new THREE.Vector3(lx + Math.cos(a) * r, y, lz + Math.sin(a) * r), new THREE.Euler(rng(), rng(), rng()), new THREE.Vector3(1, 0.8, 1));
+        _pos.set(lx + Math.cos(a) * r, y, lz + Math.sin(a) * r);
+        _euler.set(rng(), rng(), rng());
+        _scale.set(1, 0.8, 1);
+        bakeGeo(sphere, _pos, _euler, _scale);
         leafGeos.push(sphere);
     }
 
@@ -347,7 +388,7 @@ const generateBirchPrototype = (seed: number): TreePrototype => {
     };
 };
 
-// --- PRIVATE FILL HELPERS (Zero-GC module helpers, not exported) ---
+// --- PRIVATE FILL HELPERS ---
 
 type Region = THREE.Vector3[] | { x: number, z: number, w: number, d: number };
 
@@ -364,14 +405,21 @@ const _getBounds = (region: Region) => {
     return region;
 };
 
-const _placeTrees = (ctx: SectorContext, region: Region, spacing: number, types: VEGETATION_TYPE[]) => {
+const _placeTrees = async (ctx: SectorContext, region: Region, spacing: number, types: VEGETATION_TYPE[]) => {
     const bounds = _getBounds(region);
     const count = Math.floor((bounds.w * bounds.d) / (spacing * spacing));
     const matrixBuckets: Record<string, THREE.Matrix4[]> = {};
     const rand = () => Math.random();
     const isPolygon = Array.isArray(region);
 
+    let startTime = performance.now();
+
     for (let i = 0; i < count; i++) {
+        if (performance.now() - startTime > 12) {
+            if (ctx.yield) await ctx.yield();
+            startTime = performance.now();
+        }
+
         const x = bounds.x + rand() * bounds.w;
         const z = bounds.z + rand() * bounds.d;
 
@@ -384,19 +432,21 @@ const _placeTrees = (ctx: SectorContext, region: Region, spacing: number, types:
         _quat.setFromEuler(_euler);
         _scale.setScalar(scale);
         _mat.compose(_pos, _quat, _scale);
-        const mat = _mat.clone();
+
+        const mat = _mat.clone(); // Required for delayed instancing bucket sorting
 
         const selectedType = types.length === 1 ? types[0] : types[Math.floor(rand() * types.length)];
         const variant = i % 3;
         const key = `${selectedType}_${variant}`;
-        const proto = prototypes[key] || prototypes[`${selectedType}_0`] || prototypes[`${VEGETATION_TYPE.PINE}_0`];
 
         if (!matrixBuckets[key]) matrixBuckets[key] = [];
         matrixBuckets[key].push(mat);
 
+        _v1.set(x, 0, z);
+        _quat.set(0, 0, 0, 1);
         SectorBuilder.addObstacle(ctx, {
-            position: new THREE.Vector3(x, 0, z),
-            quaternion: new THREE.Quaternion(),
+            position: _v1.clone(),
+            quaternion: _quat.clone(),
             collider: { type: 'cylinder', radius: 0.5 * scale, height: 4 },
             id: `tree_fill_${i}`,
             materialId: MaterialType.WOOD
@@ -408,14 +458,13 @@ const _placeTrees = (ctx: SectorContext, region: Region, spacing: number, types:
     }
 };
 
-/** Generic instanced ground-cover (wheat, grass, flower, bush) */
-const _placeGroundCover = (
+const _placeGroundCover = async (
     ctx: SectorContext,
     region: Region,
     density: number,
     geo: THREE.BufferGeometry,
     mat: THREE.Material,
-    tallScale: boolean     // wheat grows tall (y varies 1.5–2.5), grass/flower stays uniform
+    tallScale: boolean
 ) => {
     const bounds = _getBounds(region);
     const count = Math.floor(bounds.w * bounds.d * density);
@@ -429,7 +478,14 @@ const _placeGroundCover = (
     const isPolygon = Array.isArray(region);
     let valid = 0;
 
+    let startTime = performance.now();
+
     for (let i = 0; i < count; i++) {
+        if (performance.now() - startTime > 12) {
+            if (ctx.yield) await ctx.yield();
+            startTime = performance.now();
+        }
+
         const x = bounds.x + rand() * bounds.w;
         const z = bounds.z + rand() * bounds.d;
         if (isPolygon && !GeneratorUtils.isPointInPolygon(x, z, region as THREE.Vector3[])) continue;
@@ -445,7 +501,6 @@ const _placeGroundCover = (
         _mat.compose(_pos, _quat, _scale);
         mesh.setMatrixAt(valid++, _mat);
 
-        // VINTERDÖD: Register foliage presence with larger radius for consistent audio coverage
         ctx.collisionGrid.registerVegetation(x, z, 1.2, MaterialType.PLANT);
     }
 
@@ -455,8 +510,7 @@ const _placeGroundCover = (
     ctx.scene.add(mesh);
 };
 
-/** Three-part sunflower (stem + head + center) InstancedMesh */
-const _placeSunflowers = (ctx: SectorContext, region: Region, density: number) => {
+const _placeSunflowers = async (ctx: SectorContext, region: Region, density: number) => {
     const bounds = _getBounds(region);
     const count = Math.floor(bounds.w * bounds.d * density);
     if (count <= 0) return;
@@ -476,7 +530,14 @@ const _placeSunflowers = (ctx: SectorContext, region: Region, density: number) =
     const isPolygon = Array.isArray(region);
     let valid = 0;
 
+    let startTime = performance.now();
+
     for (let i = 0; i < count; i++) {
+        if (performance.now() - startTime > 12) {
+            if (ctx.yield) await ctx.yield();
+            startTime = performance.now();
+        }
+
         const x = bounds.x + rand() * bounds.w;
         const z = bounds.z + rand() * bounds.d;
         if (isPolygon && !GeneratorUtils.isPointInPolygon(x, z, region as THREE.Vector3[])) continue;
@@ -492,7 +553,6 @@ const _placeSunflowers = (ctx: SectorContext, region: Region, density: number) =
         sCent.setMatrixAt(valid, _mat);
         valid++;
 
-        // VINTERDÖD: Register sunflower presence with larger radius
         ctx.collisionGrid.registerVegetation(x, z, 1.5, MaterialType.PLANT);
     }
 
@@ -526,9 +586,7 @@ export const VegetationGenerator = {
         group.userData.mass = 0.5;
         group.userData.floatOffset = 0.06;
 
-        // Optimized single-shot freeze on root
         GeneratorUtils.freezeStatic(group);
-
         return group;
     },
 
@@ -550,11 +608,10 @@ export const VegetationGenerator = {
         }
 
         group.userData.material = MaterialType.WOOD;
-        group.userData.size = new THREE.Vector3(width * 0.8, height * 1.5, width * 0.8);
+        _v1.set(width * 0.8, height * 1.5, width * 0.8);
+        group.userData.size = _v1.clone();
 
-        // Optimized single-shot freeze on root
         GeneratorUtils.freezeStatic(group);
-
         return group;
     },
 
@@ -577,9 +634,10 @@ export const VegetationGenerator = {
     createHedge: (length: number = 2.0, height: number = 1.2, thickness: number = 0.8) => {
         const geometries = [];
 
+        // VINTERDÖD: SHARED_GEO.box is perfectly centered again.
         const mainGeo = SHARED_GEO.box.clone();
         _matrix.makeScale(thickness, height, length);
-        _matrix.setPosition(0, height / 2, 0);
+        _matrix.setPosition(0, height / 2, 0); // Sets hedge perfectly on the ground
         mainGeo.applyMatrix4(_matrix);
         geometries.push(mainGeo);
 
@@ -600,12 +658,102 @@ export const VegetationGenerator = {
         const mesh = new THREE.Mesh(merged || new THREE.BufferGeometry(), MATERIALS.hedge);
         mesh.castShadow = true;
 
-        // Freeze matrix
         GeneratorUtils.freezeStatic(mesh);
 
         for (let i = 0; i < geometries.length; i++) geometries[i].dispose();
 
         return mesh;
+    },
+
+    createHedgePath: async (ctx: SectorContext, points: THREE.Vector3[], height: number = 4, thickness: number = 1.5) => {
+        if (points.length < 2) return;
+
+        let startTime = performance.now();
+
+        for (let i = 0; i < points.length - 1; i++) {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const dist = p1.distanceTo(p2);
+
+            _v1.lerpVectors(p1, p2, 0.5);
+            _v2.subVectors(p2, p1).normalize();
+            _quat.setFromUnitVectors(_axisX, _v2);
+
+            const hedge = new THREE.Mesh(SHARED_GEO.box, MATERIALS.hedge);
+            hedge.position.copy(_v1);
+            hedge.quaternion.copy(_quat);
+            hedge.scale.set(dist, height, thickness);
+            hedge.position.y += height / 2; // Offset for centered box
+            hedge.castShadow = true;
+            GeneratorUtils.freezeStatic(hedge);
+            ctx.scene.add(hedge);
+
+            _pos.copy(_v1).setY(height / 2);
+            _scale.set(dist, height, thickness);
+
+            SectorBuilder.addObstacle(ctx, {
+                position: _pos.clone(),
+                quaternion: _quat.clone(),
+                collider: { type: 'box', size: _scale.clone() },
+                physicsGroup: PhysicsGroup.WALL,
+                materialId: MaterialType.WOOD
+            });
+        }
+    },
+
+    createStoneWall: (length: number = 2.0, height: number = 1.2, thickness: number = 0.8) => {
+        const wall = new THREE.Mesh(SHARED_GEO.box, MATERIALS.stone);
+        wall.scale.set(length, height, thickness);
+        wall.position.y += height / 2;
+        wall.castShadow = true;
+        GeneratorUtils.freezeStatic(wall);
+        return wall;
+    },
+
+    createStoneWallPath: async (ctx: SectorContext, points: THREE.Vector3[], height: number = 1.5, thickness: number = 0.8) => {
+        if (points.length < 2) return;
+
+        let startTime = performance.now();
+
+        for (let i = 0; i < points.length - 1; i++) {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const dist = p1.distanceTo(p2);
+
+            _v1.lerpVectors(p1, p2, 0.5);
+            _v2.subVectors(p2, p1).normalize();
+            _quat.setFromUnitVectors(_axisX, _v2);
+
+            const wall = new THREE.Mesh(SHARED_GEO.box, MATERIALS.stone);
+            wall.position.copy(_v1);
+            wall.position.y += height / 2;
+            wall.quaternion.copy(_quat);
+            wall.scale.set(dist, height, thickness);
+            wall.castShadow = true;
+            GeneratorUtils.freezeStatic(wall);
+            ctx.scene.add(wall);
+
+            _pos.copy(_v1).setY(height / 2);
+            _scale.set(dist, height, thickness);
+
+            SectorBuilder.addObstacle(ctx, {
+                position: _pos.clone(),
+                quaternion: _quat.clone(),
+                collider: { type: 'box', size: _scale.clone() },
+                physicsGroup: PhysicsGroup.WALL,
+                materialId: MaterialType.STONE
+            });
+        }
     },
 
     createTree: (type: VEGETATION_TYPE = VEGETATION_TYPE.PINE, scale: number = 1.0, variant: number = 0): THREE.Group => {
@@ -642,8 +790,6 @@ export const VegetationGenerator = {
         }
 
         group.scale.setScalar(scale);
-
-        // Optimized single-shot freeze on root
         GeneratorUtils.freezeStatic(group);
 
         return group;
@@ -716,16 +862,7 @@ export const VegetationGenerator = {
         if (snowMesh) ctx.scene.add(snowMesh);
     },
 
-    /**
-     * Unified vegetation area-fill dispatcher.
-     *
-     * @param type  A single VEGETATION_TYPE or an array (trees only: randomly picks per instance)
-     * @param region  Either a polygon (THREE.Vector3[]) or an AABB {x,z,w,d} (corner, not center)
-     * @param density
-     *   - Tree types  → spacing in world-units (e.g. 8). Wider = fewer trees.
-     *   - Ground-cover → items per m² (e.g. 0.5–2.0). Higher = denser.
-     */
-    fillArea: (
+    fillArea: async (
         ctx: SectorContext,
         type: VEGETATION_TYPE | VEGETATION_TYPE[],
         region: THREE.Vector3[] | { x: number, z: number, w: number, d: number },
@@ -734,7 +871,6 @@ export const VegetationGenerator = {
         const types = Array.isArray(type) ? type : [type];
         const firstType = types[0];
 
-        // Route trees to the instanced-matrix path
         const isTree = firstType === VEGETATION_TYPE.PINE
             || firstType === VEGETATION_TYPE.SPRUCE
             || firstType === VEGETATION_TYPE.OAK
@@ -742,27 +878,26 @@ export const VegetationGenerator = {
             || firstType === VEGETATION_TYPE.DEAD_TREE;
 
         if (isTree) {
-            _placeTrees(ctx, region, density, types);
+            await _placeTrees(ctx, region, density, types);
             return;
         }
 
-        // Ground-cover types
         switch (firstType) {
-            case VEGETATION_TYPE.WHEAT: _placeGroundCover(ctx, region, density, SHARED_GEO.grass, MATERIALS.wheat, true); break;
-            case VEGETATION_TYPE.GRASS: _placeGroundCover(ctx, region, density, SHARED_GEO.grassTuft, MATERIALS.grassTuft, false); break;
-            case VEGETATION_TYPE.FLOWER: _placeGroundCover(ctx, region, density, SHARED_GEO.grass, MATERIALS.flower, false); break;
-            case VEGETATION_TYPE.SUNFLOWER: _placeSunflowers(ctx, region, density); break;
-            case VEGETATION_TYPE.BUSH: _placeGroundCover(ctx, region, density, SHARED_GEO.box, MATERIALS.hedge, false); break;
+            case VEGETATION_TYPE.WHEAT: await _placeGroundCover(ctx, region, density, SHARED_GEO.grass, MATERIALS.wheat, true); break;
+            case VEGETATION_TYPE.GRASS: await _placeGroundCover(ctx, region, density, SHARED_GEO.grassTuft, MATERIALS.grassTuft, false); break;
+            case VEGETATION_TYPE.FLOWER: await _placeGroundCover(ctx, region, density, SHARED_GEO.grass, MATERIALS.flower, false); break;
+            case VEGETATION_TYPE.SUNFLOWER: await _placeSunflowers(ctx, region, density); break;
+            case VEGETATION_TYPE.BUSH: await _placeGroundCover(ctx, region, density, SHARED_GEO.box, MATERIALS.hedge, false); break;
         }
     },
 
-    createForest: (ctx: SectorContext,
+    createForest: async (ctx: SectorContext,
         region: { x: number, z: number, w: number, d: number } | THREE.Vector3[],
         countOrSpacing: number,
         type: string | string[] = 'PINE') => {
 
         if (Array.isArray(region)) {
-            VegetationGenerator.createForestFromPolygon(ctx, region, countOrSpacing, type as string | string[]);
+            await VegetationGenerator.createForestFromPolygon(ctx, region, countOrSpacing, type as string | string[]);
             return;
         }
 
@@ -771,7 +906,14 @@ export const VegetationGenerator = {
         const matrixBuckets: Record<string, THREE.Matrix4[]> = {};
         const rand = () => Math.random();
 
+        let startTime = performance.now();
+
         for (let i = 0; i < count; i++) {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+
             const x = area.x + (rand() - 0.5) * area.w;
             const z = area.z + (rand() - 0.5) * area.d;
 
@@ -798,9 +940,11 @@ export const VegetationGenerator = {
             if (!matrixBuckets[key]) matrixBuckets[key] = [];
             matrixBuckets[key].push(mat);
 
+            _v1.set(x, 0, z);
+            _quat.set(0, 0, 0, 1);
             SectorBuilder.addObstacle(ctx, {
-                position: new THREE.Vector3(x, 0, z),
-                quaternion: new THREE.Quaternion(),
+                position: _v1.clone(),
+                quaternion: _quat.clone(),
                 collider: { type: 'cylinder', radius: 0.5 * scale, height: 4 },
                 id: `tree_${i}`,
                 materialId: MaterialType.WOOD
@@ -812,7 +956,7 @@ export const VegetationGenerator = {
         }
     },
 
-    createForestFromPolygon: (ctx: SectorContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'PINE') => {
+    createForestFromPolygon: async (ctx: SectorContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'PINE') => {
         if (!polygon || polygon.length < 3) return;
 
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -827,7 +971,14 @@ export const VegetationGenerator = {
         const matrixBuckets: Record<string, THREE.Matrix4[]> = {};
         const rand = () => Math.random();
 
+        let startTime = performance.now();
+
         for (let i = 0; i < count; i++) {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+
             const x = minX + rand() * width;
             const z = minZ + rand() * depth;
 
@@ -855,9 +1006,11 @@ export const VegetationGenerator = {
                 if (!matrixBuckets[key]) matrixBuckets[key] = [];
                 matrixBuckets[key].push(mat);
 
+                _v1.set(x, 0, z);
+                _quat.set(0, 0, 0, 1);
                 SectorBuilder.addObstacle(ctx, {
-                    position: new THREE.Vector3(x, 0, z),
-                    quaternion: new THREE.Quaternion(),
+                    position: _v1.clone(),
+                    quaternion: _quat.clone(),
                     collider: { type: 'cylinder', radius: 0.5 * scale, height: 4 },
                     id: `tree_poly_${i}`,
                     materialId: MaterialType.WOOD
@@ -870,9 +1023,6 @@ export const VegetationGenerator = {
         }
     },
 
-
-
-
     createDeadTree: (variant: 'standing' | 'fallen' = 'standing', scale: number = 1.0): THREE.Group => {
         const tree = VegetationGenerator.createTree(VEGETATION_TYPE.DEAD_TREE, scale, Math.floor(Math.random() * 3));
         if (variant === 'fallen') {
@@ -880,17 +1030,22 @@ export const VegetationGenerator = {
             tree.position.y = 0.5 * scale;
         }
 
-        // Optimized single-shot freeze on root (covers both standing and fallen transforms)
         GeneratorUtils.freezeStatic(tree);
-
         return tree;
     },
 
-    createDeforestation: (ctx: SectorContext, x: number, z: number, w: number, d: number, count: number) => {
+    createDeforestation: async (ctx: SectorContext, x: number, z: number, w: number, d: number, count: number) => {
         const matrixBuckets: Record<string, THREE.Matrix4[]> = {};
         const rand = () => Math.random();
 
+        let startTime = performance.now();
+
         for (let i = 0; i < count; i++) {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+
             const tx = x + (rand() - 0.5) * w;
             const tz = z + (rand() - 0.5) * d;
 
@@ -918,8 +1073,9 @@ export const VegetationGenerator = {
             matrixBuckets[key].push(mat);
 
             if (!isFallen) {
+                _v1.set(tx, 0, tz);
                 SectorBuilder.addObstacle(ctx, {
-                    position: new THREE.Vector3(tx, 0, tz),
+                    position: _v1.clone(),
                     collider: { type: 'cylinder', radius: 0.4, height: 4 },
                     id: `deforest_tree_${i}`
                 });

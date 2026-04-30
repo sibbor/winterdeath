@@ -170,3 +170,20 @@ WEAPONS[DamageID.RADIO] = {
   icon: PNG_PATH + 'radio.png', iconIsPng: true,
   impactType: EnemyDeathState.SHOT, statusEffect: null
 };
+
+// --- PSEUDO-WEAPONS (Combat Moves) ---
+WEAPONS[DamageID.RUSH] = {
+  name: DamageID.RUSH, displayName: 'ui.combat.rush', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.PROJECTILE,
+  damage: 0, range: 0, icon: PNG_PATH + 'rush.png', iconIsPng: true,
+  impactType: EnemyDeathState.GIBBED, statusEffect: null
+};
+WEAPONS[DamageID.DODGE] = {
+  name: DamageID.DODGE, displayName: 'ui.combat.dodge', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.PROJECTILE,
+  damage: 0, range: 0, icon: PNG_PATH + 'dodge.png', iconIsPng: true,
+  impactType: EnemyDeathState.SHOT, statusEffect: null
+};
+WEAPONS[DamageID.VEHICLE] = {
+  name: DamageID.VEHICLE, displayName: 'ui.combat.vehicle', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.PROJECTILE,
+  damage: 0, range: 0, icon: PNG_PATH + 'vehicle.png', iconIsPng: true,
+  impactType: EnemyDeathState.GIBBED, statusEffect: null
+};

@@ -71,6 +71,14 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
     // Floor generation
     const allSpaces: Box[] = [...rooms, ...corridors];
+    let startTime = performance.now();
+    const yieldIfBudgetExceeded = async () => {
+        if (performance.now() - startTime > 12) {
+            if (ctx.yield) await ctx.yield();
+            startTime = performance.now();
+        }
+    };
+
     for (let i = 0; i < allSpaces.length; i++) {
         const s = allSpaces[i];
         const floorMat = MATERIALS.gravel.clone();
@@ -93,9 +101,8 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         floor.position.set(s.x, 0.06, s.z);
         floor.receiveShadow = true;
         innerCave.add(floor);
+        await yieldIfBudgetExceeded();
     }
-
-    if (ctx.yield) await ctx.yield();
 
     // Helpers
     const getCorners = (b: any, padding: number = 0) => {
@@ -297,6 +304,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
             if (isSegmentActive) {
                 createWallSegment(segmentStart, new THREE.Vector3(p2.x, 0, p2.z));
             }
+            await yieldIfBudgetExceeded();
         }
     }
 
@@ -333,6 +341,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
     for (const r of rooms) {
         // Lights
         createRoomLight(new THREE.Vector3(r.x, 4.5, r.z));
+        await yieldIfBudgetExceeded();
 
         if (r.type === 'ShelterRoom') {
             // ========================================================
@@ -363,7 +372,8 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         // Chest spawns
         if (r.chests) {
             for (let i = 0; i < r.chests; i++) {
-                SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), 'standard', Math.random() * Math.PI);
+                await SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), 'standard', Math.random() * Math.PI);
+                await yieldIfBudgetExceeded();
             }
         }
     }

@@ -211,6 +211,11 @@ export const EnemyAnimator = {
             }
         }
 
+        // VINTERDÖD: Physics Guard - Detect if we should let physics own the Y-axis
+        const isAirborne = (e.statusFlags & EnemyFlags.AIRBORNE) !== 0;
+        const isKnockedBack = e.knockbackVel.lengthSq() > 0.01;
+        const letPhysicsControlY = isAirborne || isKnockedBack;
+
         // Load targetPos that was just set in EnemyAttackHandler!
         const targetPos = e.targetPos || _v2.set(mesh.position.x, mesh.position.y, mesh.position.z);
 
@@ -323,7 +328,11 @@ export const EnemyAnimator = {
                 
                 const s = e.originalScale;
                 e.baseY = THREE.MathUtils.lerp(e.baseY, 1.0 * s, 10 * simDelta);
-                e.mesh.position.y = e.baseY;
+                
+                // VINTERDÖD: Only apply procedural Y if physics isn't controlling it
+                if (!letPhysicsControlY) {
+                    e.mesh.position.y = e.baseY;
+                }
 
                 e.animRotX = THREE.MathUtils.lerp(e.animRotX, 0, 10 * simDelta);
                 e.animRotZ = THREE.MathUtils.lerp(e.animRotZ, 0, 10 * simDelta);
@@ -361,10 +370,16 @@ export const EnemyAnimator = {
             if (forceYPos) {
                 mesh.position.y = _animState.targetPosY;
             } else {
-                mesh.position.y += (_animState.targetPosY - mesh.position.y) * 10 * simDelta;
+                // VINTERDÖD: Standard lerp-to-height only if not airborne
+                if (!letPhysicsControlY) {
+                    mesh.position.y += (_animState.targetPosY - mesh.position.y) * 10 * simDelta;
+                }
             }
         } else {
-            mesh.position.y += (_animState.targetPosY - mesh.position.y) * 15 * simDelta;
+            // VINTERDÖD: Standard lerp-to-height only if not airborne
+            if (!letPhysicsControlY) {
+                mesh.position.y += (_animState.targetPosY - mesh.position.y) * 15 * simDelta;
+            }
         }
 
         if ((e.statusFlags & EnemyFlags.FLASH_ACTIVE) && (renderTime - (e.hitRenderTime || 0)) < 200) {

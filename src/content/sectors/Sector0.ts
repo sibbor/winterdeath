@@ -14,6 +14,7 @@ import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { FamilyMemberID } from '../constants';
 import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
 import { WeatherType } from '../../core/engine/EngineTypes';
+import { FXParticleType } from '../../types/FXTypes';
 import { POI_TYPE } from '../../content/pois';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
 
@@ -105,8 +106,8 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
 
         if (events.spawnParticle) {
             // Use new scale parameter for massive cinematic explosion
-            events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, 'shockwave', 1, 2.5);
-            events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_smoke', 8, 2.0);
+            events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, FXParticleType.SHOCKWAVE, 1, undefined, undefined, undefined, 2.5);
+            events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, FXParticleType.LARGE_SMOKE, 8, undefined, undefined, undefined, 2.0);
         }
 
         // Make noise to attract enemies
@@ -343,74 +344,93 @@ export const Sector0: SectorDef = {
         lookAtOffset: LOCATIONS.CINEMATIC.LOOK_AT,
     },
 
-    setupProps: (ctx: SectorContext) => {
+    setupProps: async (ctx: SectorContext) => {
+        performance.mark('sector0-props-start');
         const { scene, obstacles } = ctx;
         (ctx as any).sectorState.ctx = ctx;
 
-        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        let startTime = performance.now();
+        const yieldIfBudgetExceeded = async () => {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+        };
+
+        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        await yieldIfBudgetExceeded();
 
         // Road: Vargstigen -> Drive Way
-        PathGenerator.createRoad(ctx, [
+        await PathGenerator.createRoad(ctx, [
             new THREE.Vector3(-10, 0, 2),
             new THREE.Vector3(-42, 0, 2),
         ], 10);
+        await yieldIfBudgetExceeded();
 
         // Road: Vargstigen
-        PathGenerator.createRoad(ctx, [
+        await PathGenerator.createRoad(ctx, [
             new THREE.Vector3(-42, 0, 2),
             new THREE.Vector3(-42, 0, 35),
             new THREE.Vector3(-42, 0, -48)
         ], 16);
+        await yieldIfBudgetExceeded();
 
         // Street Lights along Vargstigen
         for (let z = -40; z <= 30; z += 35) {
-            SectorBuilder.spawnStreetLight(ctx, -50, z, Math.PI / 2);
+            await SectorBuilder.spawnStreetLight(ctx, -50, z, Math.PI / 2);
+            await yieldIfBudgetExceeded();
         }
 
         // Path: Home -> SMU
-        PathGenerator.createDirtPath(ctx, [
+        await PathGenerator.createDirtPath(ctx, [
             new THREE.Vector3(25, 0, 28),
             new THREE.Vector3(35, 0, 48),
             new THREE.Vector3(79, 0, 49),
             new THREE.Vector3(103, 0, 74),
             new THREE.Vector3(203, 0, 78),
         ], 4, undefined, false, true);
+        await yieldIfBudgetExceeded();
 
         // Road: SMU -> Main Road
-        PathGenerator.createRoad(ctx, [
+        await PathGenerator.createRoad(ctx, [
             new THREE.Vector3(210, 0, 30),
             new THREE.Vector3(210, 0, 150),
             new THREE.Vector3(188, 0, 164),
             new THREE.Vector3(35, 0, 225)
         ], 16, undefined, MaterialType.ASPHALT, true);
+        await yieldIfBudgetExceeded();
 
         // Road: Church -> Grocery Store
-        PathGenerator.createRoad(ctx, [
+        await PathGenerator.createRoad(ctx, [
             new THREE.Vector3(135, 0, 193),
             new THREE.Vector3(147, 0, 270)
         ], 8);
+        await yieldIfBudgetExceeded();
 
         // Road: Town Center, main road
-        PathGenerator.createRoad(ctx, [
+        await PathGenerator.createRoad(ctx, [
             new THREE.Vector3(236, 0, 271),
             new THREE.Vector3(63, 0, 271),
         ], 16);
+        await yieldIfBudgetExceeded();
 
         // Street Lights along Main Road
         for (let x = 70; x <= 230; x += 40) {
-            SectorBuilder.spawnStreetLight(ctx, x, 280, Math.PI);
+            await SectorBuilder.spawnStreetLight(ctx, x, 280, Math.PI);
+            await yieldIfBudgetExceeded();
         }
 
         // Path: Home -> Forest Path (Footprints)
-        PathGenerator.createDecalPath(ctx, [
+        await PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(9, 0, 4),
             new THREE.Vector3(14, 0, 10),
             new THREE.Vector3(22, 0, 26),
             new THREE.Vector3(27, 0, 31)
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
+        await yieldIfBudgetExceeded();
 
         // Path: Home -> Forest Path (Footprints)
-        PathGenerator.createDecalPath(ctx, [
+        await PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(181, 0, 81),
             new THREE.Vector3(189, 0, 89),
             new THREE.Vector3(192, 0, 99),
@@ -420,37 +440,43 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(181, 0, 128),
             new THREE.Vector3(201, 0, 148)
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
+        await yieldIfBudgetExceeded();
 
         // Home - House
-        SectorBuilder.spawnBuilding(ctx, LOCATIONS.BUILDINGS.HOME.x - 2, LOCATIONS.BUILDINGS.HOME.z + 10, 20, 7, 25, 0, 0xffffff, true, true, 1.0);
+        await SectorBuilder.spawnBuilding(ctx, LOCATIONS.BUILDINGS.HOME.x - 2, LOCATIONS.BUILDINGS.HOME.z + 10, 20, 7, 25, 0, 0xffffff, true, true, 1.0);
+        await yieldIfBudgetExceeded();
 
         // Home - Police car and family's car
         VehicleGenerator.createPoliceCar().position.set(LOCATIONS.VEHICLES.POLICE_CAR.x, 0, LOCATIONS.VEHICLES.POLICE_CAR.z);
 
-        SectorBuilder.spawnVehicle(ctx, LOCATIONS.VEHICLES.POLICE_CAR.x, LOCATIONS.VEHICLES.POLICE_CAR.z, LOCATIONS.VEHICLES.POLICE_CAR.rotation, 'police');
-        const familyCar = SectorBuilder.spawnVehicle(ctx, LOCATIONS.VEHICLES.FAMILY_CAR.x, LOCATIONS.VEHICLES.FAMILY_CAR.z, 0.3, 'station wagon', 0x333333, false);
-        SectorBuilder.setOnFire(ctx, familyCar, { smoke: true, intensity: 100, distance: 30, onRoof: true });
+        await SectorBuilder.spawnVehicle(ctx, LOCATIONS.VEHICLES.POLICE_CAR.x, LOCATIONS.VEHICLES.POLICE_CAR.z, LOCATIONS.VEHICLES.POLICE_CAR.rotation, 'police');
+        const familyCar = await SectorBuilder.spawnVehicle(ctx, LOCATIONS.VEHICLES.FAMILY_CAR.x, LOCATIONS.VEHICLES.FAMILY_CAR.z, 0.3, 'station wagon', 0x333333, false);
+        await SectorBuilder.setOnFire(ctx, familyCar, { smoke: true, intensity: 100, distance: 30, onRoof: true });
+        await yieldIfBudgetExceeded();
 
         // Home: Hedges
-        SectorBuilder.createHedge(ctx, [new THREE.Vector3(-19, 0, 8), new THREE.Vector3(-29, 0, 8), new THREE.Vector3(-29, 0, 32), new THREE.Vector3(-17, 0, 40), new THREE.Vector3(11, 0, 40), new THREE.Vector3(23, 0, 33)]);
-        SectorBuilder.createHedge(ctx, [new THREE.Vector3(-6, 0, 0), new THREE.Vector3(31, 0, 0), new THREE.Vector3(31, 0, 31)]);
+        await SectorBuilder.createHedgePath(ctx, [new THREE.Vector3(-19, 0, 8), new THREE.Vector3(-29, 0, 8), new THREE.Vector3(-29, 0, 32), new THREE.Vector3(-17, 0, 40), new THREE.Vector3(11, 0, 40), new THREE.Vector3(23, 0, 33)]);
+        await SectorBuilder.createHedgePath(ctx, [new THREE.Vector3(-6, 0, 0), new THREE.Vector3(31, 0, 0), new THREE.Vector3(31, 0, 31)]);
+        await yieldIfBudgetExceeded();
 
         // Kindergarten
         const kindergarten = new THREE.Mesh(new THREE.BoxGeometry(60, 10, 50), MATERIALS.building);
         kindergarten.position.set(LOCATIONS.BUILDINGS.KINDGARTEN.x, 0, LOCATIONS.BUILDINGS.KINDGARTEN.z);
         kindergarten.castShadow = true;
         scene.add(kindergarten);
-        SectorBuilder.addObstacle(ctx, {
+        await SectorBuilder.addObstacle(ctx, {
             mesh: kindergarten,
             collider: { type: 'box', size: new THREE.Vector3(60, 20, 50) }
         });
+        await yieldIfBudgetExceeded();
 
         // Fence between kindergarten and SMU
-        SectorBuilder.createFence(ctx, [
+        await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(104, 0, 19),
             new THREE.Vector3(104, 0, 67),
             new THREE.Vector3(203, 0, 73)
         ], 'mesh', 1.5, false);
+        await yieldIfBudgetExceeded();
 
         // Random buildings
         const randomBuildings = [
@@ -462,15 +488,18 @@ export const Sector0: SectorDef = {
         ];
         for (let i = 0; i < randomBuildings.length; i++) {
             const b = randomBuildings[i];
-            SectorBuilder.spawnBuilding(ctx, b.x, b.z, b.s[0], b.s[1], b.s[2], b.rotation, b.color, true, true);
+            await SectorBuilder.spawnBuilding(ctx, b.x, b.z, b.s[0], b.s[1], b.s[2], b.rotation, b.color, true, true);
+            await yieldIfBudgetExceeded();
         }
 
         // SMU
-        const smu = SectorBuilder.spawnPoi(ctx, POI_TYPE.SMU, LOCATIONS.POIS.SMU.x, LOCATIONS.POIS.SMU.z, 0);
+        const smu = await SectorBuilder.spawnPoi(ctx, POI_TYPE.SMU, LOCATIONS.POIS.SMU.x, LOCATIONS.POIS.SMU.z, 0);
+        await yieldIfBudgetExceeded();
 
         // SMU - Containers
-        SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z - 5, 0, 0x0044cc);
-        SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z + 5, 0, 0x0044cc);
+        await SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z - 5, 0, 0x0044cc);
+        await SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z + 5, 0, 0x0044cc);
+        await yieldIfBudgetExceeded();
 
         // SMU - Cars
         const carColors = [0x3355ff, 0xcccccc, 0xcc2222];
@@ -478,38 +507,43 @@ export const Sector0: SectorDef = {
         for (let i = 0; i < 3; i++) {
             const rotation = Math.random() * Math.PI;
             const carPos = { x: LOCATIONS.POIS.SMU.x + 35, z: LOCATIONS.POIS.SMU.z + (i * 12) - 10 };
-            const car = SectorBuilder.spawnVehicle(ctx, carPos.x, carPos.z, rotation, carType[i], carColors[i]);
-            SectorBuilder.setOnFire(ctx, car, { smoke: true, intensity: 80, distance: 25, onRoof: true });
+            const car = await SectorBuilder.spawnVehicle(ctx, carPos.x, carPos.z, rotation, carType[i], carColors[i]);
+            await SectorBuilder.setOnFire(ctx, car, { smoke: true, intensity: 80, distance: 25, onRoof: true });
+            await yieldIfBudgetExceeded();
         }
 
         // SMU - Stone wall
-        SectorBuilder.createStoneWall(ctx, [
+        await SectorBuilder.createStoneWallPath(ctx, [
             new THREE.Vector3(203, 0, 71),
             new THREE.Vector3(206, 0, 112),
             new THREE.Vector3(205, 0, 134),
             new THREE.Vector3(203, 0, 146)
         ], 1.5, 1.5);
+        await yieldIfBudgetExceeded();
 
         // Town center - hedges
-        SectorBuilder.createHedge(ctx, [new THREE.Vector3(141, 0, 188), new THREE.Vector3(146, 0, 230)]);
-        SectorBuilder.createHedge(ctx, [new THREE.Vector3(139, 0, 195), new THREE.Vector3(136, 0, 231)]);
+        await SectorBuilder.createHedgePath(ctx, [new THREE.Vector3(141, 0, 188), new THREE.Vector3(146, 0, 230)]);
+        await SectorBuilder.createHedgePath(ctx, [new THREE.Vector3(139, 0, 195), new THREE.Vector3(136, 0, 231)]);
+        await yieldIfBudgetExceeded();
 
         // Church
-        SectorBuilder.spawnPoi(ctx, POI_TYPE.CHURCH, LOCATIONS.POIS.CHURCH.x, LOCATIONS.POIS.CHURCH.z, 0);
+        await SectorBuilder.spawnPoi(ctx, POI_TYPE.CHURCH, LOCATIONS.POIS.CHURCH.x, LOCATIONS.POIS.CHURCH.z, 0);
 
         // Cafe
-        SectorBuilder.spawnPoi(ctx, POI_TYPE.CAFE, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z, 0);
+        await SectorBuilder.spawnPoi(ctx, POI_TYPE.CAFE, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z, 0);
 
         // Grocery store
-        SectorBuilder.spawnPoi(ctx, POI_TYPE.GROCERY_STORE, LOCATIONS.POIS.GROCERY.x, LOCATIONS.POIS.GROCERY.z, 0);
-        SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.GROCERY.x - 5, LOCATIONS.POIS.GROCERY.z + 20, Math.PI / 2.5, 0x111111);
-        SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.GROCERY.x + 5, LOCATIONS.POIS.GROCERY.z + 20, Math.PI / 2.5, 0x111111);
+        await SectorBuilder.spawnPoi(ctx, POI_TYPE.GROCERY_STORE, LOCATIONS.POIS.GROCERY.x, LOCATIONS.POIS.GROCERY.z, 0);
+        await SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.GROCERY.x - 5, LOCATIONS.POIS.GROCERY.z + 20, Math.PI / 2.5, 0x111111);
+        await SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.GROCERY.x + 5, LOCATIONS.POIS.GROCERY.z + 20, Math.PI / 2.5, 0x111111);
+        await yieldIfBudgetExceeded();
 
         // Gym
-        SectorBuilder.spawnPoi(ctx, POI_TYPE.GYM, LOCATIONS.POIS.GYM.x, LOCATIONS.POIS.GYM.z, 0);
+        await SectorBuilder.spawnPoi(ctx, POI_TYPE.GYM, LOCATIONS.POIS.GYM.x, LOCATIONS.POIS.GYM.z, 0);
 
         // Pizzeria
-        SectorBuilder.spawnPoi(ctx, POI_TYPE.PIZZERIA, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z, 0);
+        await SectorBuilder.spawnPoi(ctx, POI_TYPE.PIZZERIA, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z, 0);
+        await yieldIfBudgetExceeded();
 
         // Embankment
         const embankmentWest = [
@@ -517,17 +551,18 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(84, 5, 350),
             new THREE.Vector3(133, 5, 345)
         ];
-        SectorBuilder.createEmbankment(ctx, embankmentWest, 18, 5, MATERIALS.dirt);
+        await SectorBuilder.createEmbankment(ctx, embankmentWest, 18, 5, MATERIALS.dirt);
 
         const embankmentEast = [
             new THREE.Vector3(145, 5, 345),
             new THREE.Vector3(264, 5, 345)
         ];
-        SectorBuilder.createEmbankment(ctx, embankmentEast, 18, 5, MATERIALS.dirt);
+        await SectorBuilder.createEmbankment(ctx, embankmentEast, 18, 5, MATERIALS.dirt);
+        await yieldIfBudgetExceeded();
 
         // Overpass
         const overpassPoints = LOCATIONS.OVERPASS.map(p => p.clone());
-        PathGenerator.createRoad(ctx, overpassPoints, 12);
+        await PathGenerator.createRoad(ctx, overpassPoints, 12);
 
         const guardRailSouth = [
             new THREE.Vector3(264, 5, 351),
@@ -535,20 +570,21 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(84, 5, 356),
             new THREE.Vector3(20, 5, 370)
         ];
-        SectorBuilder.createGuardrail(ctx, guardRailSouth, true);
+        await SectorBuilder.createGuardrail(ctx, guardRailSouth, true);
 
         const guardRailNorthWest = [
             new THREE.Vector3(113, 5, 339),
             new THREE.Vector3(84, 5, 344),
             new THREE.Vector3(20, 5, 358)
         ];
-        SectorBuilder.createGuardrail(ctx, guardRailNorthWest, true);
+        await SectorBuilder.createGuardrail(ctx, guardRailNorthWest, true);
 
         const guardRailNorthEast = [
             new THREE.Vector3(264, 5, 339),
             new THREE.Vector3(135, 5, 339)
         ];
-        SectorBuilder.createGuardrail(ctx, guardRailNorthEast, true);
+        await SectorBuilder.createGuardrail(ctx, guardRailNorthEast, true);
+        await yieldIfBudgetExceeded();
 
         // Debris
         const debrisGeo = new THREE.BoxGeometry(0.15, 0.3, 5);
@@ -565,11 +601,12 @@ export const Sector0: SectorDef = {
             mesh.rotation.set(0, d.ry, d.rz);
             mesh.castShadow = true;
             ctx.scene.add(mesh);
+            await yieldIfBudgetExceeded();
         }
 
         // Skid Marks (Sliding from West towards the broken edge)
         // Left tire
-        PathGenerator.createDecalPath(ctx, [
+        await PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(80, 6, 344),
             new THREE.Vector3(95, 6, 344),
             new THREE.Vector3(110, 6, 341.5),
@@ -577,12 +614,13 @@ export const Sector0: SectorDef = {
         ], { spacing: 0.2, size: 0.5, material: MATERIALS.skidMark, variance: 0.02 });
 
         // Right tire
-        PathGenerator.createDecalPath(ctx, [
+        await PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(80, 6, 346.5),
             new THREE.Vector3(95, 6, 345.5),
             new THREE.Vector3(110, 6, 343.5),
             new THREE.Vector3(125, 6, 341.5)
         ], { spacing: 0.2, size: 0.5, material: MATERIALS.skidMark, variance: 0.02 });
+        await yieldIfBudgetExceeded();
 
         // Tunnel
         const tunnelPos = new THREE.Vector3(LOCATIONS.TRIGGERS.TUNNEL.x, 0, LOCATIONS.TRIGGERS.TUNNEL.z);
@@ -594,11 +632,12 @@ export const Sector0: SectorDef = {
             const c = tunnel.userData.colliders[i];
             const wPos = tunnelPos.clone();
             if (c.offset) wPos.add(c.offset);
-            SectorBuilder.addObstacle(ctx, {
+            await SectorBuilder.addObstacle(ctx, {
                 position: wPos,
                 collider: { type: c.type, size: c.size, radius: c.radius },
                 materialId: MaterialType.CONCRETE
             });
+            await yieldIfBudgetExceeded();
         }
 
         // Bus (tunnel blocker)
@@ -672,42 +711,43 @@ export const Sector0: SectorDef = {
         const fenceHeight = 3;
 
         // South Side (Solid)
-        SectorBuilder.createFence(ctx, [
+        await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(ty.x - 60, 0, ty.z + 40),
             new THREE.Vector3(ty.x + 60, 0, ty.z + 40)
         ], 'mesh', fenceHeight, true);
 
         // North Side (Openings for path/railroad)
-        SectorBuilder.createFence(ctx, [
+        await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(ty.x - 60, 0, ty.z - 40),
             new THREE.Vector3(ty.x - 17, 0, ty.z - 40),
             new THREE.Vector3(ty.x - 17, 0, ty.z - 43),
         ], 'mesh', fenceHeight, true);
-        SectorBuilder.createFence(ctx, [
+        await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(ty.x - 5, 0, ty.z - 43),
             new THREE.Vector3(ty.x - 5, 0, ty.z - 40),
             new THREE.Vector3(ty.x + 60, 0, ty.z - 40)
         ], 'mesh', fenceHeight, true);
 
         // West Side (Opening for railroad)
-        SectorBuilder.createFence(ctx, [
+        await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(ty.x - 60, 0, ty.z - 40),
             new THREE.Vector3(ty.x - 60, 0, ty.z - 6)
         ], 'mesh', fenceHeight, true);
-        SectorBuilder.createFence(ctx, [
+        await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(ty.x - 60, 0, ty.z),
             new THREE.Vector3(ty.x - 60, 0, ty.z + 40)
         ], 'mesh', fenceHeight, true);
 
         // East Side (Opening for railroad)
-        SectorBuilder.createFence(ctx, [
+        await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(ty.x + 60, 0, ty.z - 40),
             new THREE.Vector3(ty.x + 60, 0, ty.z + 5),
         ], 'mesh', fenceHeight, true);
-        SectorBuilder.createFence(ctx, [
+        await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(ty.x + 60, 0, ty.z + 11),
             new THREE.Vector3(ty.x + 60, 0, ty.z + 40)
         ], 'mesh', fenceHeight, true);
+        await yieldIfBudgetExceeded();
 
         // Train yard - Ground
         const stationGround = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), MATERIALS.asphalt);
@@ -717,13 +757,14 @@ export const Sector0: SectorDef = {
         scene.add(stationGround);
 
         // Trainyard - rail track
-        PathGenerator.createRailTrack(ctx, [
+        await PathGenerator.createRailTrack(ctx, [
             new THREE.Vector3(-17, 0, 450),
             new THREE.Vector3(0, 0, 435),
             new THREE.Vector3(65, 0, 400),
             new THREE.Vector3(150, 0, 400),
             new THREE.Vector3(260, 0, 415),
         ]);
+        await yieldIfBudgetExceeded();
 
         // Train yard - Train
         const locomotive = ObjectGenerator.createLocomotive();
@@ -774,7 +815,8 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(99, 0, 67),
             new THREE.Vector3(76, 0, 43),
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
+        await yieldIfBudgetExceeded();
 
         forestPolygon = [
             new THREE.Vector3(-27, 0, 45),
@@ -792,7 +834,8 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(32, 0, 55),
             new THREE.Vector3(24, 0, 37),
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
+        await yieldIfBudgetExceeded();
 
         // Forest
         forestPolygon = [
@@ -803,7 +846,8 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(129, 0, 163),
             new THREE.Vector3(142, 0, 173),
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.PINE, forestPolygon, 12);
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.PINE, forestPolygon, 12);
+        await yieldIfBudgetExceeded();
 
         // Forest - Cafe
         forestPolygon = [
@@ -817,7 +861,8 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(122, 0, 253),
             new THREE.Vector3(138, 0, 253),
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, forestPolygon, 12);
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, forestPolygon, 12);
+        await yieldIfBudgetExceeded();
 
         // Forsest - Gym
         forestPolygon = [
@@ -829,7 +874,8 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(28, 0, 350),
 
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, forestPolygon, 10);
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, forestPolygon, 10);
+        await yieldIfBudgetExceeded();
 
         // Forest - Town center
         forestPolygon = [
@@ -852,7 +898,8 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(227, 0, 187),
             new THREE.Vector3(203, 0, 172),
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, forestPolygon, 8);
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, forestPolygon, 8);
+        await yieldIfBudgetExceeded();
 
         // Forest: Trainyard - North-West
         forestPolygon = [
@@ -862,7 +909,8 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(33, 0, 409),
             new THREE.Vector3(31, 0, 375),
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
+        await yieldIfBudgetExceeded();
 
         forestPolygon = [
             new THREE.Vector3(212, 0, 359),
@@ -870,7 +918,8 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(250, 0, 408),
             new THREE.Vector3(212, 0, 403),
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
+        await yieldIfBudgetExceeded();
 
         forestPolygon = [
             new THREE.Vector3(88, 0, 403),
@@ -883,7 +932,8 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(36, 0, 418),
             new THREE.Vector3(54, 0, 409),
         ];
-        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
+        await yieldIfBudgetExceeded();
 
         SectorBuilder.spawnDeadBody(ctx, 37, 44, EnemyType.WALKER, 0, true);
         SectorBuilder.spawnChest(ctx, 45, 45, 'standard');
@@ -892,6 +942,8 @@ export const Sector0: SectorDef = {
 
         // Spawn Loke
         SectorBuilder.spawnFamily(ctx, FamilyMemberID.LOKE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI);
+        performance.mark('sector0-props-end');
+        performance.measure('sector0-props', 'sector0-props-start', 'sector0-props-end');
     },
 
     setupContent: async (ctx: SectorContext) => {
@@ -971,7 +1023,8 @@ export const Sector0: SectorDef = {
 
         buildingPOIs.forEach(poi => {
             const dist = playerPos.distanceTo(new THREE.Vector3(poi.pos.x, 0, poi.pos.z));
-            if (dist < 45 && !sectorState.spawns[poi.name]) {
+            // VINTERDÖD: Increased trigger distance to 75 to match new spawner logic
+            if (dist < 75 && !sectorState.spawns[poi.name]) {
                 sectorState.spawns[poi.name] = true;
                 for (let i = 0; i < poi.count; i++) {
                     let type: EnemyType = EnemyType.WALKER;
@@ -987,7 +1040,8 @@ export const Sector0: SectorDef = {
         });
 
         const townCenterWoods = new THREE.Vector3(145, 0, 240);
-        if (playerPos.distanceTo(townCenterWoods) < 50 && !sectorState.spawns.town_forest) {
+        // VINTERDÖD: Increased trigger distance to 75 to match new spawner logic
+        if (playerPos.distanceTo(townCenterWoods) < 75 && !sectorState.spawns.town_forest) {
             sectorState.spawns.town_forest = true;
             for (let i = 0; i < 8; i++) {
                 let type = EnemyType.WALKER;
@@ -1013,7 +1067,7 @@ export const Sector0: SectorDef = {
                 const wx = tPos.x + (localX * Math.cos(yRot) - localZ * Math.sin(yRot));
                 const wz = tPos.z + (localX * Math.sin(yRot) + localZ * Math.cos(yRot));
 
-                events.spawnParticle(wx, localY, wz, 'black_smoke', 1);
+                events.spawnParticle(wx, localY, wz, FXParticleType.BLACK_SMOKE, 1);
             }
         }
 

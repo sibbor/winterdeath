@@ -3,8 +3,8 @@ import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { useHudStore } from '../../../../hooks/useHudStore';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
-import { HORIZONTAL_HATCHING_STYLE, HORIZONTAL_HATCHING_STYLE_DARK } from '../../layout/ScreenModalLayout';
-import { FamilyMemberID } from '../../../../content/constants';
+import { HORIZONTAL_HATCHING_STYLE_DARK } from '../../layout/ScreenModalLayout';
+import { StatusEffectType } from '../../../../content/perks';
 
 interface ScreenPlayerDiedProps {
     onContinue: () => void;
@@ -19,6 +19,8 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
     const killerName = useHudStore(s => s.killerName || 'UNKNOWN');
     const deathReason = useHudStore(s => s.killerAttackName || '');
     const killedByEnemy = useHudStore(s => s.killedByEnemy || false);
+    const lethalSourceId = useHudStore(s => s.lethalSourceId ?? -1);
+    const lethalStatusEffect = useHudStore(s => s.lethalStatusEffect ?? -1);
 
     useEffect(() => {
         UiSounds.playDefeat();
@@ -41,14 +43,32 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
         const nameResolved = killerName.includes('.') ? t(killerName) : killerName;
         const attackResolved = deathReason.includes('.') ? t(deathReason) : deathReason;
 
-        const hasSpecificAttack = killedByEnemy && deathReason && deathReason !== 'HIT' && deathReason !== 'HIDDEN';
-
         let displayName = nameResolved.toUpperCase();
-        if (hasSpecificAttack) {
-            displayName = `${nameResolved.toUpperCase()} (${attackResolved})`;
+
+        // Granular Attribution Logic
+        if (killedByEnemy) {
+            if (lethalStatusEffect !== -1) {
+                // Killed by Enemy via DoT (e.g. Walker (Bite [Bleeding]))
+                const effectName = t(DataResolver.getPerkName(lethalStatusEffect));
+                const attackType = lethalStatusEffect === StatusEffectType.BLEEDING ? 'BITE' : 'HIT'; // Improved mapping
+                const attackName = t(DataResolver.getAttackName(attackType as any));
+                displayName = `${nameResolved.toUpperCase()} (${attackName} [${effectName}])`;
+            } else if (deathReason && deathReason !== 'HIT' && deathReason !== 'HIDDEN') {
+                // Killed by Enemy via direct attack
+                displayName = `${nameResolved.toUpperCase()} (${attackResolved})`;
+            }
+        } else {
+            // Environmental Death
+            if (lethalStatusEffect !== -1) {
+                displayName = t(DataResolver.getPerkName(lethalStatusEffect)).toUpperCase();
+            } else {
+                displayName = nameResolved.toUpperCase();
+            }
         }
 
-        const description = (hasSpecificAttack || !killedByEnemy) ? t(DataResolver.getAttackDescription(deathReason as any)) : '';
+        const description = (killedByEnemy || lethalStatusEffect === -1)
+            ? t(DataResolver.getAttackDescription(deathReason as any))
+            : t(DataResolver.getPerkDescription(lethalStatusEffect));
 
         return {
             deathPhrase: phrase,
@@ -56,7 +76,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
             deathDescription: description,
             headerText: t('ui.player_died', { name: DataResolver.getPlayerName() })
         };
-    }, [killedByEnemy, killerName, deathReason]);
+    }, [killedByEnemy, killerName, deathReason, lethalSourceId, lethalStatusEffect]);
 
     return (
         <div

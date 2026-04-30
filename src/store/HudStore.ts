@@ -67,6 +67,15 @@ const INITIAL_HUD_STATE: HudState = {
     sectorName: '',
     isMobileDevice: false,
     discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 },
+    
+    // Real-time telemetry (Synced from persistent stats + session)
+    enemyKills: new Float64Array(16),
+    seenEnemies: [],
+    seenBosses: [],
+
+    // Death details
+    lethalSourceId: 0,
+    lethalStatusEffect: 0,
 
     // Nested structures pre-allocated to lock Hidden Class "Shapes"
     debugInfo: {
@@ -92,13 +101,13 @@ export type HudFastUpdateListener = (data: any) => void;
 
 class HudStoreClass {
     private state: HudState = INITIAL_HUD_STATE;
-    // Standby buffer for Zero-GC patch mutations. 
-    // VINTERDÖD FIX: We MUST ensure nested arrays have unique references 
-    // otherwise React's shallow checks skip re-renders for lists.
+    
+    // VINTERDÖD: Standby buffer for Zero-GC reference swapping.
     private standbyState: HudState = {
         ...INITIAL_HUD_STATE,
         statsBuffer: new Float32Array(64),
         vectorBuffer: new Float32Array(256),
+        enemyKills: new Float64Array(16),
         statusEffects: [],
         activePassives: [],
         activeBuffs: [],
@@ -106,47 +115,77 @@ class HudStoreClass {
         mapItems: [],
         systems: []
     };
+    
+    // PERFORMANCE: Version tracking for reference stability.
+    private versions = {
+        statusEffects: -1,
+        activePassives: -1,
+        activeBuffs: -1,
+        activeDebuffs: -1,
+        mapItems: -1
+    };
+
     private listeners: Listener[] = [];
     private fastListeners: HudFastUpdateListener[] = [];
 
     /**
-     * Updates the store with a completely new HUD buffer.
-     * Called at 60/120 FPS by the WinterEngine loop.
-     * PERFORMANCE: Since we use Double-Buffering in the HudSystem, we simply
-     * swap the reference here. React's useSyncExternalStore will detect the
-     * reference change (=== check) and trigger the UI update.
+     * Absolute Zero-GC Update Path.
+     * Synchronizes state between the engine buffer and the React state.
      */
     public update(nextState: HudState): void {
-        // PERFORMANCE (VINTERDÖD FIX): 
-        // If we simply set this.state = nextState, and nextState is always the 
-        // same memory reference (the pooled _current), React's useSyncExternalStore 
-        // will SKIP the update. We MUST use the ping-pong buffer to force a re-render.
-        this.patch(nextState);
+        // 1. Manual Copy of Primitives (Avoids Object.assign and spread GC)
+        const src = nextState as any;
+        const dst = this.standbyState as any;
+        
+        // VINTERDÖD: Explicit copy of critical telemetry primitives
+        dst.hp = src.hp;
+        dst.maxHp = src.maxHp;
+        dst.stamina = src.stamina;
+        dst.maxStamina = src.maxStamina;
+        dst.ammo = src.ammo;
+        dst.kills = src.kills;
+        dst.scrap = src.scrap;
+        dst.spEarned = src.spEarned;
+        dst.isDead = src.isDead;
+        dst.isDriving = src.isDriving;
+        dst.activeWeapon = src.activeWeapon;
+        dst.hudVisible = src.hudVisible;
+        
+        // 2. Version-Gated Array Sync (Smart Cloning)
+        // We only allocate a new array reference when the logical content changes.
+        if (src._effVersion !== this.versions.statusEffects) {
+            dst.statusEffects = [...src.statusEffects];
+            this.versions.statusEffects = src._effVersion;
+        } else {
+            dst.statusEffects = this.state.statusEffects; // Keep reference stable
+        }
+        
+        if (src._mapVersion !== this.versions.mapItems) {
+            dst.mapItems = [...src.mapItems];
+            this.versions.mapItems = src._mapVersion;
+        } else {
+            dst.mapItems = this.state.mapItems;
+        }
+
+        // Copy persistent buffers (TypedArrays are already stable, we just copy contents if needed, 
+        // but here we just copy the reference if they are the same buffers)
+        dst.statsBuffer = src.statsBuffer;
+        dst.vectorBuffer = src.vectorBuffer;
+        
+        // 3. Pointer Swap
+        const prev = this.state;
+        this.state = this.standbyState;
+        this.standbyState = prev;
+
+        this.notifyListeners();
     }
 
     /**
-     * Zero-GC alternative to the spread operator (...state).
-     * Mutates a standby buffer and swaps pointers to trigger React renders
-     * without allocating new objects in memory. Perfect for one-off events.
+     * Patch method for one-off event updates.
      */
     public patch(changes: Partial<HudState>): void {
-        // 1. Copy current state and apply changes into the standby buffer (in-place mutation)
-        Object.assign(this.standbyState, this.state, changes);
- 
-        // 1.5 VINTERDÖD FIX: Clone array references to force React re-renders for lists.
-        // Even if we are Zero-GC focussed, React REQUIRES reference changes for consistency.
-        if (changes.statusEffects) this.standbyState.statusEffects = [...changes.statusEffects];
-        if (changes.activeBuffs) this.standbyState.activeBuffs = [...changes.activeBuffs];
-        if (changes.activeDebuffs) this.standbyState.activeDebuffs = [...changes.activeDebuffs];
-        if (changes.activePassives) this.standbyState.activePassives = [...changes.activePassives];
-        if (changes.mapItems) this.standbyState.mapItems = [...changes.mapItems];
- 
-        // 2. Pointer swap (Ping-Pong) to give React a "new" root object
-        const temp = this.state;
-        this.state = this.standbyState;
-        this.standbyState = temp;
-
-        // 3. Trigger UI update
+        // Only used for sparse updates outside the main loop.
+        Object.assign(this.state, changes);
         this.notifyListeners();
     }
 

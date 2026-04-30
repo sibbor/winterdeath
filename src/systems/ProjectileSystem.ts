@@ -7,7 +7,7 @@ import { WeaponSounds, GamePlaySounds } from '../utils/audio/AudioLib';
 import { audioEngine } from '../utils/audio/AudioEngine';
 import { haptic } from '../utils/HapticManager';
 import { WEAPONS } from '../content/weapons';
-import { DamageID } from '../entities/player/CombatTypes';
+import { DamageID, EnemyAttackType } from '../entities/player/CombatTypes';
 import { StatusEffectType } from '../content/perks';
 import { PhysicsGroup } from '../core/world/CollisionResolution';
 import { SpatialGrid } from '../core/world/SpatialGrid';
@@ -29,6 +29,7 @@ export interface FireZone {
     _lastDamageTime?: number;
     audioPoolIdx: number;
     sourceWeapon: DamageID;
+    sourceId: number; // EnemyType or DamageID.PLAYER
 }
 
 export interface GameContext {
@@ -44,7 +45,7 @@ export interface GameContext {
     simTime: number;
     renderTime: number;
     playerPos: THREE.Vector3;
-    onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, attackName?: string) => void;
+    onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void;
     makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => void;
     weaponHandler: any;
     session: any;
@@ -59,6 +60,7 @@ export interface Projectile {
     mesh: THREE.Mesh;
     type: ProjectileType;
     weapon: DamageID;
+    sourceId: number; // EnemyType or DamageID.PLAYER
 
     vel: THREE.Vector3;
     origin: THREE.Vector3;
@@ -77,6 +79,7 @@ export interface Projectile {
 
     maxRadius?: number;
     marker?: THREE.Mesh;
+    _poolIdx: number;
 }
 
 const _v1 = new THREE.Vector3();
@@ -123,6 +126,7 @@ let _lastFlameSoundTime = 0;
 const FLAMETHROWER_CONE_ANGLE = Math.cos(28 * Math.PI / 180);
 
 const PROJECTILE_POOL: Projectile[] = [];
+const FREE_PROJECTILE_INDICES: number[] = [];
 const FIREZONE_POOL: FireZone[] = [];
 
 // --- SYSTEM ---
@@ -133,16 +137,17 @@ export const ProjectileSystem = {
     persistent: true,
 
     _getProjectile: (): Projectile => {
-        const pLen = PROJECTILE_POOL.length;
-        for (let i = 0; i < pLen; i++) {
-            const p = PROJECTILE_POOL[i];
-            if (!p.active) {
-                p.hitEntities.clear();
-                p.active = true;
-                return p;
-            }
+        // O(1) Zero-GC Free List Lookup
+        if (FREE_PROJECTILE_INDICES.length > 0) {
+            const idx = FREE_PROJECTILE_INDICES.pop()!;
+            const p = PROJECTILE_POOL[idx];
+            p.active = true;
+            p.hitEntities.clear();
+            return p;
         }
 
+        // Fallback: Expand Pool
+        const idx = PROJECTILE_POOL.length;
         const p: Projectile = {
             mesh: new THREE.Mesh(),
             type: ProjectileType.BULLET,
@@ -159,10 +164,18 @@ export const ProjectileSystem = {
             highImpactDamageFactor: 0,
             life: 0,
             hitEntities: new Set(),
-            active: true
+            active: true,
+            sourceId: 0,
+            _poolIdx: idx
         };
         PROJECTILE_POOL.push(p);
         return p;
+    },
+
+    releaseProjectile: (p: Projectile) => {
+        if (!p.active) return;
+        p.active = false;
+        FREE_PROJECTILE_INDICES.push(p._poolIdx);
     },
 
     launchBullet: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, dir: THREE.Vector3, weapon: DamageID, damage?: number) => {
@@ -172,6 +185,7 @@ export const ProjectileSystem = {
         const p = ProjectileSystem._getProjectile();
         p.type = ProjectileType.BULLET;
         p.weapon = weapon;
+        p.sourceId = 255; // 255 = PLAYER (Convention)
 
         p.mesh.geometry = GEOMETRY.bullet;
         p.mesh.material = MATERIALS.bullet;
@@ -227,6 +241,7 @@ export const ProjectileSystem = {
         const p = ProjectileSystem._getProjectile();
         p.type = ProjectileType.THROWABLE;
         p.weapon = weapon;
+        p.sourceId = 255; // PLAYER
         p.mesh.position.copy(origin);
         p.mesh.rotation.set(0, 0, 0);
 
@@ -557,7 +572,9 @@ export const ProjectileSystem = {
                     }
 
                     if (!playerHitThisFrame && ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
-                        ctx.onPlayerHit(3, null, DamageID.BURN, true, StatusEffectType.BURNING, 3000, 5, "BURN");
+                        // Pass a proxy attacker if it was an enemy
+                        const attackerProxy = fz.sourceId < 16 ? { type: fz.sourceId } : null;
+                        ctx.onPlayerHit(3, attackerProxy, DamageID.BURN, true, StatusEffectType.BURNING, 3000, 5, EnemyAttackType.ENVIRONMENTAL);
                         playerHitThisFrame = true;
                     }
                 }
@@ -581,7 +598,7 @@ export const ProjectileSystem = {
             const p = projectiles[i];
             if (p.mesh.parent) scene.remove(p.mesh);
             if (p.marker && p.marker.parent) scene.remove(p.marker);
-            p.active = false;
+            ProjectileSystem.releaseProjectile(p);
         }
 
         const fLen = fireZones.length;
@@ -663,6 +680,23 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
             _v6.copy(_v3).addScaledVector(_v2, t);
 
             if (_v6.distanceToSquared(_v5) < hitRad * hitRad) {
+                // VINTERDÖD: 3D Hitbox Verification (Early-out after 2D check passes)
+                // Calculate the interpolated Y-position of the bullet at the closest point 't' on the segment
+                const startY = projectile.mesh.position.y - projectile.vel.y * delta;
+                const bulletY = startY + t * (projectile.vel.y * delta);
+                
+                const enemyCenterY = enemy.mesh.position.y;
+                const halfHeight = enemy.originalScale; 
+                
+                // VINTERDÖD: 3D Hitbox Correction (Center-Pivot Alignment)
+                // Standard human is ~2.0m tall, pivot is at center (1.0m height).
+                const enemyBottomY = enemyCenterY - halfHeight;
+                const enemyTopY = enemyCenterY + halfHeight;
+                const verticalMargin = 0.4; // Generosity margin for high-speed perspective shots
+
+                if (bulletY < enemyBottomY - verticalMargin || bulletY > enemyTopY + verticalMargin) {
+                    continue; // Bullet passed above or below the enemy visual model
+                }
 
                 let isHighImpact = false;
                 if (projectile.highImpactDistSq > 0) {
@@ -718,7 +752,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
 
     if (destroyBullet || projectile.life <= 0) {
         ctx.scene.remove(projectile.mesh);
-        projectile.active = false;
+        ProjectileSystem.releaseProjectile(projectile);
 
         const pLen = projectiles.length;
         projectiles[index] = projectiles[pLen - 1];
@@ -846,7 +880,8 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
                             radiusSq: mRad * mRad,
                             life: 6.0,
                             audioPoolIdx: -1,
-                            sourceWeapon: p.weapon
+                            sourceWeapon: p.weapon,
+                            sourceId: p.sourceId
                         };
                         FIREZONE_POOL.push(fz);
                     } else {
@@ -854,6 +889,7 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
                         fz.radiusSq = mRad * mRad;
                         fz.life = 6.0;
                         fz.sourceWeapon = p.weapon;
+                        fz.sourceId = p.sourceId;
                     }
 
                     fz.radius = mRad;
@@ -922,7 +958,7 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
                 break;
         }
 
-        p.active = false;
+        ProjectileSystem.releaseProjectile(p);
 
         const pLen = projectiles.length;
         projectiles[index] = projectiles[pLen - 1];

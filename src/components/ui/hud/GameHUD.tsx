@@ -24,6 +24,11 @@ interface GameHUDProps {
     onRotateCamera?: (dir: number) => void;
 }
 
+// --- PERFORMANCE: Stable Ref Setters to avoid anonymous functions in render loops ---
+const _setPassiveRef = (refs: React.MutableRefObject<any[]>, i: number) => (el: any) => { if (el) refs.current[i] = el; };
+const _setEffectRef = (refs: React.MutableRefObject<any>, group: 'buffs' | 'debuffs', i: number) => (el: any) => { if (el) refs.current[group][i] = el; };
+const _setWeaponSlotRef = (refs: React.MutableRefObject<any[]>, i: number) => (el: any) => { if (el) refs.current[i] = el; };
+
 // --- PERFORMANCE: Static CSS ---
 const HUD_WRAPPER = "absolute inset-0 pointer-events-none transition-all duration-500 ease-in z-[60]";
 const BAR_WRAPPER = "hud-bar-container relative overflow-hidden";
@@ -262,46 +267,56 @@ const PassiveIconPooled = forwardRef(({ index, isMobileDevice, isLandscapeMode, 
 });
 
 const StatusEffectsPanel = React.memo(({ isMobileDevice, isLandscapeMode, handleActionEnter, handleActionLeave, effectRefs, passiveRefs }: any) => {
-    // We no longer use useHudStore here. Everything is handled via the passed REFS and internal registry listeners.
+    // PRE-GENERATED LISTS: Avoid Array.from().map() in every render
+    const passives = [];
+    for (let i = 0; i < POOL_SIZE_PASSIVE; i++) {
+        passives.push(
+            <PassiveIconPooled
+                key={`p-${i}`}
+                index={i}
+                isMobileDevice={isMobileDevice}
+                isLandscapeMode={isLandscapeMode}
+                handleActionEnter={handleActionEnter}
+                ref={_setPassiveRef(passiveRefs, i)}
+            />
+        );
+    }
+
+    const buffs = [];
+    for (let i = 0; i < POOL_SIZE_BUFF; i++) {
+        buffs.push(
+            <StatusEffectIconPooled
+                key={`b-${i}`}
+                index={i}
+                groupPrefix="buff"
+                isMobileDevice={isMobileDevice}
+                isLandscapeMode={isLandscapeMode}
+                handleActionEnter={handleActionEnter}
+                ref={_setEffectRef(effectRefs, 'buffs', i)}
+            />
+        );
+    }
+
+    const debuffs = [];
+    for (let i = 0; i < POOL_SIZE_DEBUFF; i++) {
+        debuffs.push(
+            <StatusEffectIconPooled
+                key={`d-${i}`}
+                index={i}
+                groupPrefix="debuff"
+                isMobileDevice={isMobileDevice}
+                isLandscapeMode={isLandscapeMode}
+                handleActionEnter={handleActionEnter}
+                ref={_setEffectRef(effectRefs, 'debuffs', i)}
+            />
+        );
+    }
+
     return (
         <div className={isMobileDevice && isLandscapeMode ? "absolute top-24 left-0 flex flex-col gap-2 pl-safe pointer-events-auto" : "flex flex-wrap gap-2 mt-1 ml-1 pointer-events-auto"}>
-            {/* 1. PASSIVES POOL */}
-            {Array.from({ length: POOL_SIZE_PASSIVE }).map((_, i) => (
-                <PassiveIconPooled
-                    key={`p-${i}`}
-                    index={i}
-                    isMobileDevice={isMobileDevice}
-                    isLandscapeMode={isLandscapeMode}
-                    handleActionEnter={handleActionEnter}
-                    ref={(el: any) => { if (el) passiveRefs.current[i] = el; }}
-                />
-            ))}
-
-            {/* 2. BUFFS POOL */}
-            {Array.from({ length: POOL_SIZE_BUFF }).map((_, i) => (
-                <StatusEffectIconPooled
-                    key={`b-${i}`}
-                    index={i}
-                    groupPrefix="buff"
-                    isMobileDevice={isMobileDevice}
-                    isLandscapeMode={isLandscapeMode}
-                    handleActionEnter={handleActionEnter}
-                    ref={(el: any) => { if (el) effectRefs.current.buffs[i] = el; }}
-                />
-            ))}
-
-            {/* 3. DEBUFFS POOL */}
-            {Array.from({ length: POOL_SIZE_DEBUFF }).map((_, i) => (
-                <StatusEffectIconPooled
-                    key={`d-${i}`}
-                    index={i}
-                    groupPrefix="debuff"
-                    isMobileDevice={isMobileDevice}
-                    isLandscapeMode={isLandscapeMode}
-                    handleActionEnter={handleActionEnter}
-                    ref={(el: any) => { if (el) effectRefs.current.debuffs[i] = el; }}
-                />
-            ))}
+            {passives}
+            {buffs}
+            {debuffs}
         </div>
     );
 });
@@ -393,6 +408,65 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
     const interactionType = useHudStore(s => interactionActive ? s.interactionPrompt.type : InteractionType.NONE);
     const interactionLabel = useHudStore(s => interactionActive ? s.interactionPrompt.label : '');
 
+    // VINTERDÖD: Zero-GC Loop pre-calculation (Step 14)
+    const slots = [];
+    if (!isDriving && weaponSlots) {
+        for (let i = 0; i < weaponSlots.length; i++) {
+            const { slot, type } = weaponSlots[i];
+            const wData = DataResolver.getWeapons()[Number(type)];
+            if (!wData) continue;
+
+            const isActive = activeWeapon === type;
+            const isThrowable = wData.category === WeaponCategory.THROWABLE;
+            const isRadio = type === WeaponType.RADIO;
+            const size = isMobileDevice ? "w-16 h-16" : "w-20 h-20";
+            const cColor = WeaponCategoryColors[wData.category] || 'white';
+
+            const dots = [];
+            if (isThrowable) {
+                const maxAmmo = wData.magSize || 0;
+                for (let j = 0; j < maxAmmo; j++) {
+                    dots.push(
+                        <div key={j} className={`h-1 flex-1 ${j < throwableAmmo ? 'shadow-sm' : 'bg-zinc-800 border border-zinc-700'}`}
+                            style={{ backgroundColor: j < throwableAmmo ? cColor : undefined }} />
+                    );
+                }
+            }
+
+            slots.push(
+                <button key={slot} data-slot={slot}
+                    onClick={!isMobileDevice ? handleSelectWeaponInternal : undefined}
+                    onTouchStart={isMobileDevice ? handleSelectWeaponInternal : undefined}
+                    className={`${SLOT_BASE} ${size} ${isActive ? 'scale-[1.15] z-20 border-[3px]' : 'opacity-80 border border-white/20 hover:opacity-80'} 
+                                   ${(isRadio && familyFound) || (isThrowable && throwableAmmo <= 0) ? 'grayscale' : ''}`}
+                    style={{
+                        borderColor: isActive ? cColor : undefined,
+                        boxShadow: isActive ? `0 0 20px -5px ${cColor}, inset 0 0 15px rgba(0,0,0,0.9)` : undefined
+                    }}>
+
+                    {isActive && <ReloadGrittyFill reloadBarRef={reloadBarRef} catColor={cColor} />}
+
+                    <div className="absolute inset-0 hud-noise-overlay opacity-20 mix-blend-overlay z-0" />
+
+                    <div className={`${isMobileDevice ? 'w-8 h-8' : 'w-10 h-10'} flex items-center justify-center mb-1 relative z-10`}
+                        style={{ filter: isActive ? 'drop-shadow(0_0_2px_rgba(255,255,255,1.0))' : 'opacity(0.8)' }}>
+                        {wData.iconIsPng ? <img src={wData.icon} alt="" className="w-full h-full object-contain filter brightness-0 invert" /> : <div className="w-full h-full text-white" dangerouslySetInnerHTML={{ __html: wData.icon }} />}
+                    </div>
+
+                    {!isMobileDevice && <span className="absolute bottom-1 right-2 text-[10px] font-mono font-bold text-white/20 z-10">{slot}</span>}
+
+                    {isThrowable && (
+                        <div className="absolute bottom-1 left-1 right-1 flex justify-center gap-0.5 z-10 px-1">
+                            {dots}
+                        </div>
+                    )}
+
+                    {isRadio && familyFound && <span className="absolute bottom-1 w-full text-center text-[9px] font-black uppercase text-blue-300 drop-shadow-md z-10">{t('ui.located')}</span>}
+                </button>
+            );
+        }
+    }
+
     return (
         <div className={`absolute ${isMobileDevice ? 'bottom-4' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
             <div ref={interactionRef} className="mb-4 animate-in fade-in slide-in-from-bottom-2 duration-300 pointer-events-auto" style={{ display: 'none' }}>
@@ -433,57 +507,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                 </div>
             ) : (
                 <div className={`flex ${isMobileDevice ? 'gap-1.5' : 'gap-3'} pointer-events-auto`}>
-                    {weaponSlots.map(({ slot, type }: any) => {
-                        const wData = DataResolver.getWeapons()[Number(type)];
-                        if (!wData) return null;
-
-                        const isActive = activeWeapon === type;
-
-                        // Special fix for Slot 4 (Special) highlight if type matching is ambiguous 
-                        // or if the engine state requires a more explicit check.
-                        const isSpecialSlot = slot === '4';
-
-                        const isThrowable = wData.category === WeaponCategory.THROWABLE;
-                        const isRadio = type === WeaponType.RADIO;
-                        const size = isMobileDevice ? "w-16 h-16" : "w-20 h-20";
-                        const catColor = WeaponCategoryColors[wData.category] || 'white';
-
-
-                        return (
-                            <button key={slot} data-slot={slot}
-                                onClick={!isMobileDevice ? handleSelectWeaponInternal : undefined}
-                                onTouchStart={isMobileDevice ? handleSelectWeaponInternal : undefined}
-                                className={`${SLOT_BASE} ${size} ${isActive ? 'scale-[1.15] z-20 border-[3px]' : 'opacity-80 border border-white/20 hover:opacity-80'} 
-                                               ${(isRadio && familyFound) || (isThrowable && throwableAmmo <= 0) ? 'grayscale' : ''}`}
-                                style={{
-                                    borderColor: isActive ? catColor : undefined,
-                                    boxShadow: isActive ? `0 0 20px -5px ${catColor}, inset 0 0 15px rgba(0,0,0,0.9)` : undefined
-                                }}>
-
-                                {isActive && <ReloadGrittyFill reloadBarRef={reloadBarRef} catColor={catColor} />}
-
-                                <div className="absolute inset-0 hud-noise-overlay opacity-20 mix-blend-overlay z-0" />
-
-                                <div className={`${isMobileDevice ? 'w-8 h-8' : 'w-10 h-10'} flex items-center justify-center mb-1 relative z-10`}
-                                    style={{ filter: isActive ? 'drop-shadow(0_0_2px_rgba(255,255,255,1.0))' : 'opacity(0.8)' }}>
-                                    {wData.iconIsPng ? <img src={wData.icon} alt="" className="w-full h-full object-contain filter brightness-0 invert" /> : <div className="w-full h-full text-white" dangerouslySetInnerHTML={{ __html: wData.icon }} />}
-                                </div>
-
-                                {!isMobileDevice && <span className="absolute bottom-1 right-2 text-[10px] font-mono font-bold text-white/20 z-10">{slot}</span>}
-
-                                {isThrowable && (
-                                    <div className="absolute bottom-1 left-1 right-1 flex justify-center gap-0.5 z-10 px-1">
-                                        {getCachedArray(wData.magSize || 0).map(i => (
-                                            <div key={i} className={`h-1 flex-1 ${i < throwableAmmo ? 'shadow-sm' : 'bg-zinc-800 border border-zinc-700'}`}
-                                                style={{ backgroundColor: i < throwableAmmo ? catColor : undefined }} />
-                                        ))}
-                                    </div>
-                                )}
-
-                                {isRadio && familyFound && <span className="absolute bottom-1 w-full text-center text-[9px] font-black uppercase text-blue-300 drop-shadow-md z-10">{t('ui.located')}</span>}
-                            </button>
-                        );
-                    })}
+                    {slots}
                 </div>
             )}
         </div>
@@ -757,8 +781,6 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
     const wep = DataResolver.getWeapons()[activeWeapon];
     const catColor = wep ? WeaponCategoryColors[wep.category] || 'white' : 'white';
-
-
     const hudVisible = useHudStore(s => s.hudVisible);
 
     return (

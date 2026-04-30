@@ -55,7 +55,8 @@ export const EnemySpawner = {
         // Visual Transformation Data
         e.originalScale = typeData.scale || 1.0;
         e.widthScale = typeData.widthScale || 1.0;
-        e.hitRadius = 0.5 * e.originalScale * e.widthScale;
+        // VINTERDÖD: Normalize hitbox to prevent extremely thin hitboxes on high-widthScale variants
+        e.hitRadius = 0.5 * e.originalScale * Math.max(0.7, e.widthScale);
         e.statusFlags = isBoss ? EnemyFlags.BOSS : 0;
 
         if (e.indicatorRing) {
@@ -89,7 +90,8 @@ export const EnemySpawner = {
             z = forcedPos.z + (Math.random() - 0.5) * 8;
         } else {
             const angle = Math.random() * Math.PI * 2;
-            const dist = 45 + Math.random() * 30;
+            // VINTERDÖD: Increased distance to ensure spawns happen outside the camera frustum (~70-80 units)
+            const dist = 75 + Math.random() * 35;
             x = playerPos.x + Math.cos(angle) * dist;
             z = playerPos.z + Math.sin(angle) * dist;
         }
@@ -127,7 +129,7 @@ export const EnemySpawner = {
 
             originalScale: typeData.scale || 1.0,
             widthScale: typeData.widthScale || 1.0,
-            hitRadius: 0.5 * baseScale,
+            hitRadius: 0.5 * (typeData.scale || 1.0) * Math.max(0.7, typeData.widthScale || 1.0),
             combatRadius: 1.2 * baseScale,
             state: AIState.IDLE,
             idleTimer: 1.0 + Math.random() * 2.0,
@@ -243,7 +245,7 @@ export const EnemySpawner = {
             color: bossData.color,
             originalScale: scale,
             widthScale: widthMod,
-            hitRadius: 0.5 * baseScale,
+            hitRadius: 0.5 * scale * Math.max(0.8, widthMod), // Bosses have slightly wider hitboxes
             combatRadius: 1.2 * baseScale,
             state: AIState.IDLE,
             idleTimer: 2.0,

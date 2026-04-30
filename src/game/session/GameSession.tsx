@@ -988,25 +988,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             setupContextRef.current = ctx;
             await GameSessionSetup.runSectorSetup(ctx, currentSetupId);
 
-            let framesToWait = 3;
-            await new Promise<void>((resolve) => {
-                const setupRAFRef = { id: 0 };
-                const checkReady = () => {
-                    if (framesToWait > 0) {
-                        framesToWait--;
-                        setupRAFRef.id = requestAnimationFrame(checkReady);
-                    } else {
-                        if (refs.isMounted.current && refs.setupIdRef.current === currentSetupId) {
-                            updateUiState({ isSectorLoading: false });
-                        }
-                        resolve();
-                    }
-                };
-
-                // Store the RAF ID in refs so we can cancel it on unmount
-                (refs as any).setupRAFId = setupRAFRef;
-                setupRAFRef.id = requestAnimationFrame(checkReady);
-            });
+            if (refs.isMounted.current && refs.setupIdRef.current === currentSetupId) {
+                updateUiState({ isSectorLoading: false });
+            }
         };
 
         initSector();
@@ -1069,10 +1053,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             refs.isMounted.current = false;
             const finalSetupId = ++refs.setupIdRef.current;
 
-            if ((refs as any).setupRAFId?.id) {
-                cancelAnimationFrame((refs as any).setupRAFId.id);
-            }
-
             if (refs.engineRef.current) {
                 const engine = refs.engineRef.current;
                 engine.onUpdate = null;
@@ -1083,7 +1063,17 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
             }
         };
-    }, [props.currentSector, props.isWarmup]);
+    }, [props.currentSector]);
+
+
+    // VINTERDÖD: Activation Phase
+    // When isWarmup toggles to false, we trigger the "live" systems (Zombies, Triggers, etc.)
+    useEffect(() => {
+        if (!props.isWarmup && refs.sectorContextRef.current && refs.isMounted.current) {
+            const currentSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
+            GameSessionSetup.activateSector(refs.sectorContextRef.current, currentSector);
+        }
+    }, [props.isWarmup, props.currentSector]);
 
 
     // Environmental Sync 

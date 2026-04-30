@@ -54,45 +54,24 @@ const LOCATIONS = {
 } as const;
 
 async function addProps(ctx: SectorContext) {
-    SectorBuilder.spawnPoi(ctx, POI_TYPE.CAMPFIRE, LOCATIONS.POIS.CAMPFIRE.x, LOCATIONS.POIS.CAMPFIRE.z, 0, { scale: 1.0, y: 0 });
+    await SectorBuilder.spawnPoi(ctx, POI_TYPE.CAMPFIRE, LOCATIONS.POIS.CAMPFIRE.x, LOCATIONS.POIS.CAMPFIRE.z, 0, { scale: 1.0, y: 0 });
 
-    SectorBuilder.spawnBarrel(ctx, 106, -65);
-    SectorBuilder.spawnBarrel(ctx, 108, -67);
+    await SectorBuilder.spawnBarrel(ctx, 106, -65);
+    await SectorBuilder.spawnBarrel(ctx, 108, -67);
 
-    SectorBuilder.spawnTimberPile(ctx, 92, -60, Math.PI * 0.25, 2);
-    SectorBuilder.spawnTimberPile(ctx, 88, -55, Math.PI * 0.20, 1.5);
+    await SectorBuilder.spawnTimberPile(ctx, 92, -60, Math.PI * 0.25, 2);
+    await SectorBuilder.spawnTimberPile(ctx, 88, -55, Math.PI * 0.20, 1.5);
 
-    SectorBuilder.spawnVehicle(ctx, 111, -64, Math.PI * 1.25, 'timber_truck', undefined, true);
+    await SectorBuilder.spawnVehicle(ctx, 111, -64, Math.PI * 1.25, 'timber_truck', undefined, true);
 
-    VegetationGenerator.createDeforestation(ctx, 135, -75, 50, 30, 25);
-
-    // Sparse grass
-    /*
-    const sparseGrass = [
-        new THREE.Vector3(-10, 0, 160),
-        new THREE.Vector3(20, 0, 160),
-        new THREE.Vector3(20, 0, 190),
-        new THREE.Vector3(-10, 0, 190)
-    ];
-    VegetationGenerator.fillArea(ctx, VEGETATION_TYPE.GRASS, sparseGrass, 0.8);
-    */
-
-
-    // Fallen trees near cave
-    /*
-    for (let i = 0; i < 8; i++) {
-        const deadTree = VegetationGenerator.createDeadTree('fallen', 0.7 + Math.random() * 0.5);
-        deadTree.position.set(85 + (Math.random() - 0.5) * 30, 0, -70 + (Math.random() - 0.5) * 20);
-        ctx.scene.add(deadTree);
-    }
-    */
+    await VegetationGenerator.createDeforestation(ctx, 135, -75, 50, 30, 25);
 }
 
 function spawnSectorHordes(ctx: SectorContext) {
     return;
 }
 
-function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vector3>) {
+async function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vector3>) {
     const boundryPoints = curve.getSpacedPoints(150);
     const wallOffset = 35;
 
@@ -113,32 +92,32 @@ function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vector3>) 
         const gap = 10;
         const part1 = blockPointsWest.slice(0, Math.max(0, splitIdx - gap));
         const part2 = blockPointsWest.slice(Math.min(blockPointsWest.length, splitIdx + gap));
-        if (part1.length > 1) SectorBuilder.createBoundry(ctx, part1, 'BoundryWall_West_A');
-        if (part2.length > 1) SectorBuilder.createBoundry(ctx, part2, 'BoundryWall_West_B');
+        if (part1.length > 1) await SectorBuilder.createBoundry(ctx, part1, 'BoundryWall_West_A');
+        if (part2.length > 1) await SectorBuilder.createBoundry(ctx, part2, 'BoundryWall_West_B');
     } else {
-        SectorBuilder.createBoundry(ctx, blockPointsWest, 'BoundryWall_West');
+        await SectorBuilder.createBoundry(ctx, blockPointsWest, 'BoundryWall_West');
     }
 
     // East wall is continuous
-    SectorBuilder.createBoundry(ctx, blockPointsEast, 'BoundryWall_East');
+    await SectorBuilder.createBoundry(ctx, blockPointsEast, 'BoundryWall_East');
 
-    SectorBuilder.createBoundry(ctx, [
+    await SectorBuilder.createBoundry(ctx, [
         new THREE.Vector3(-34, 0, 213),
         new THREE.Vector3(34, 0, 213)
     ], 'BoundryWall_Back');
 
-    SectorBuilder.createBoundry(ctx, [
+    await SectorBuilder.createBoundry(ctx, [
         new THREE.Vector3(158, 0, -88),
         new THREE.Vector3(158, 0, -17),
     ], 'BoundryWall_Tunnel');
 
-    SectorBuilder.createBoundry(ctx, [
+    await SectorBuilder.createBoundry(ctx, [
         new THREE.Vector3(55, 0, -65),
         new THREE.Vector3(94, 0, -70),
 
     ], 'BoundryWall_LeftOfCave');
 
-    SectorBuilder.createBoundry(ctx, [
+    await SectorBuilder.createBoundry(ctx, [
         new THREE.Vector3(107, 0, -70),
         new THREE.Vector3(118, 0, -85),
         new THREE.Vector3(135, 0, -90),
@@ -151,7 +130,7 @@ export const Sector1: SectorDef = {
     environment: {
         bgColor: 0x020208,
         fog: {
-            density: 200,
+            density: 0.02,
             color: 0x020208,
             height: 10
         },
@@ -159,7 +138,7 @@ export const Sector1: SectorDef = {
         ambientColor: 0x404050,
         groundColor: 0xddddff,
         fov: 50,
-        skyLight: { visible: true, color: 0x6688ff, intensity: 10.0, position: { x: 50, y: 35, z: 50 } },
+        skyLight: { visible: true, color: 0x6688ff, intensity: 1.0, position: { x: 50, y: 35, z: 50 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: {
@@ -189,11 +168,17 @@ export const Sector1: SectorDef = {
     },
 
     setupProps: async (ctx: SectorContext) => {
-        const { scene } = ctx;
-        (ctx as any).sectorState.ctx = ctx;
+        let startTime = performance.now();
+        const yieldIfBudgetExceeded = async () => {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+        };
 
         // Reward Chest at boss spawn
-        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        await yieldIfBudgetExceeded();
 
         // --- RAILWAY ---
         const railRoadPath = [
@@ -204,13 +189,15 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0, -50),
             new THREE.Vector3(200, 0, -53)
         ];
-        const railTrackCurve = PathGenerator.createRailTrack(ctx, railRoadPath);
+        const railTrackCurve = await PathGenerator.createRailTrack(ctx, railRoadPath);
+        await yieldIfBudgetExceeded();
 
         // Electric Poles along Railway
         const polyline = railTrackCurve.getSpacedPoints(15);
         for (let i = 0; i < polyline.length; i++) {
             if (i % 3 === 0) {
-                SectorBuilder.spawnElectricPole(ctx, polyline[i].x + 8, polyline[i].z, 0);
+                await SectorBuilder.spawnElectricPole(ctx, polyline[i].x + 8, polyline[i].z, 0);
+                await yieldIfBudgetExceeded();
             }
         }
 
@@ -236,11 +223,14 @@ export const Sector1: SectorDef = {
         for (let i = 0; i < forestLeft.length; i++) forestLeft[i].y = 0;
         for (let i = 0; i < forestRight.length; i++) forestRight[i].y = 0;
 
-        SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE], forestLeft, 12);
-        SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE], forestRight, 12);
+        await SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE], forestLeft, 12);
+        await yieldIfBudgetExceeded();
+        await SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE], forestRight, 12);
+        await yieldIfBudgetExceeded();
 
         // --- BOUNDARIES ---
-        createBoundries(ctx, railTrackCurve);
+        await createBoundries(ctx, railTrackCurve);
+        await yieldIfBudgetExceeded();
 
         // --- MOUNTAIN & CAVE OPENING ---
         const mountainPoints = [
@@ -253,40 +243,45 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(200, 0, -14)
         ];
 
-        SectorBuilder.createMountain(ctx, mountainPoints, 20, 20,
+        await SectorBuilder.createMountain(ctx, mountainPoints, 20, 20,
             {
                 position: new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0,
                     LOCATIONS.POIS.CAVE_ENTRANCE.z - 2),
                 rotation: 0
             }
         );
+        await yieldIfBudgetExceeded();
 
         // Train Tunnel
-        SectorBuilder.spawnPoi(ctx, POI_TYPE.TRAIN_TUNNEL, LOCATIONS.POIS.TUNNEL.x, LOCATIONS.POIS.TUNNEL.z, 0, {
+        await SectorBuilder.spawnPoi(ctx, POI_TYPE.TRAIN_TUNNEL, LOCATIONS.POIS.TUNNEL.x, LOCATIONS.POIS.TUNNEL.z, 0, {
             points: [
                 new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x, 0, LOCATIONS.POIS.TUNNEL.z),
                 new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x + 10, 0, LOCATIONS.POIS.TUNNEL.z)
             ]
         });
+        await yieldIfBudgetExceeded();
 
         // --- PROPS ---
         await addProps(ctx);
 
         // --- PATHS ---
-        PathGenerator.createDecalPath(ctx, [
+        await PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(12, 0, 43), new THREE.Vector3(8, 0, 33), new THREE.Vector3(3, 0, 29), new THREE.Vector3(2, 0, 21), new THREE.Vector3(-1, 0, 13)
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
+        await yieldIfBudgetExceeded();
 
-        PathGenerator.createDecalPath(ctx, [
+        await PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(2, 0, 10), new THREE.Vector3(10, 0, 6), new THREE.Vector3(17, 0, 3), new THREE.Vector3(23, 0, -2), new THREE.Vector3(36, 0, -5), new THREE.Vector3(42, 0, -9)
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
+        await yieldIfBudgetExceeded();
 
-        PathGenerator.createDecalPath(ctx, [
+        await PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(157, 0, -58), new THREE.Vector3(150, 0, -63), new THREE.Vector3(147, 0, -71), new THREE.Vector3(135, 0, -75), new THREE.Vector3(122, 0, -78), new THREE.Vector3(110, 0, -76), new THREE.Vector3(100, 0, -80)
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
+        await yieldIfBudgetExceeded();
 
         // Jordan - Inside the shelter, not following yet
-        SectorBuilder.spawnFamily(ctx, FamilyMemberID.JORDAN, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, visible: false });
+        await SectorBuilder.spawnFamily(ctx, FamilyMemberID.JORDAN, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, visible: false });
     },
 
     setupContent: async (ctx: SectorContext) => {

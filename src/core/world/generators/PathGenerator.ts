@@ -1,307 +1,305 @@
 import * as THREE from 'three';
+import { MATERIALS } from '../../../utils/assets/materials';
 import { SectorContext } from '../../../game/session/SectorTypes';
-import { MATERIALS } from '../../../utils/assets';
-import { ObjectGenerator } from './ObjectGenerator';
 import { SectorBuilder } from '../SectorBuilder';
-import { VegetationGenerator } from './VegetationGenerator';
-import { MaterialType, MATERIAL_TYPE } from '../../../content/environment';
 import { GeneratorUtils } from './GeneratorUtils';
 import { PhysicsGroup } from '../CollisionResolution';
+import { MaterialType } from '../../../content/environment';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
-const _pos = new THREE.Vector3(); // Added missing scratchpad for positions
-const _up = new THREE.Vector3(0, 1, 0);
+const _pos = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
-const _matrix = new THREE.Matrix4();
-const _euler = new THREE.Euler();
 const _scale = new THREE.Vector3();
+const _euler = new THREE.Euler();
+const _matrix = new THREE.Matrix4();
+const _axisY = new THREE.Vector3(0, 1, 0);
+const _axisX = new THREE.Vector3(1, 0, 0);
 
-let pathLayer = 0; // Incremental Y-offset to prevent Z-fighting
+// --- VINTERDÖD: SHARED CACHED GEOMETRIES (Zero-GC / Snap-to-Base) ---
+// Translation is performed ONCE at initialization to ensure abs(pos.y) in wind shader is 0 at ground.
+const _PLANE_GEO = new THREE.PlaneGeometry(1, 1);
 
-// --- CACHED ASSETS (ZERO-GC VRAM) ---
-const SHARED_GEO = {
-    box: new THREE.BoxGeometry(1, 1, 1),
-    plane: new THREE.PlaneGeometry(1, 1),
-    cylinder: new THREE.CylinderGeometry(1, 1, 1, 8).rotateX(Math.PI / 2) // Orient for rails
-};
+// Static reset for path layers to prevent Z-fighting
+let _pathLayerIndex = 0;
 
 /**
- * PathGenerator
- * Handles procedural generation of linear world elements.
+ * Highly optimized, Zero-GC Ribbon Geometry Builder.
+ * Avoids Array.push() by calculating exact buffer sizes upfront.
  */
+const buildRibbonGeometry = (points: THREE.Vector3[], width: number, yOffset: number): THREE.BufferGeometry => {
+    const segments = points.length;
+    const vertices = new Float32Array(segments * 2 * 3); // 2 vertices per segment, 3 coords (x,y,z)
+    const uvs = new Float32Array(segments * 2 * 2);      // 2 vertices per segment, 2 coords (u,v)
+    const indices = new Uint16Array((segments - 1) * 6); // 2 triangles (6 indices) per segment gap
+
+    let pathLength = 0;
+
+    for (let i = 0; i < segments; i++) {
+        const pt = points[i];
+
+        // Calculate Forward Vector
+        if (i < segments - 1) _v1.subVectors(points[i + 1], pt).normalize();
+        else if (i > 0) _v1.subVectors(pt, points[i - 1]).normalize();
+        else _v1.set(0, 0, 1);
+
+        // Calculate Right Vector
+        _v2.set(-_v1.z, 0, _v1.x).normalize();
+
+        // Left Vertex
+        _pos.copy(pt).addScaledVector(_v2, -width / 2);
+        vertices[i * 6 + 0] = _pos.x;
+        vertices[i * 6 + 1] = pt.y + yOffset;
+        vertices[i * 6 + 2] = _pos.z;
+
+        // Right Vertex
+        _pos.copy(pt).addScaledVector(_v2, width / 2);
+        vertices[i * 6 + 3] = _pos.x;
+        vertices[i * 6 + 4] = pt.y + yOffset;
+        vertices[i * 6 + 5] = _pos.z;
+
+        // Calculate UVs based on world distance
+        if (i > 0) pathLength += pt.distanceTo(points[i - 1]);
+        const uCoord = pathLength / width;
+
+        uvs[i * 4 + 0] = 0;
+        uvs[i * 4 + 1] = uCoord;
+        uvs[i * 4 + 2] = 1;
+        uvs[i * 4 + 3] = uCoord;
+
+        // Calculate Indices
+        if (i < segments - 1) {
+            const b = i * 2;
+            const idxOffset = i * 6;
+            indices[idxOffset + 0] = b;
+            indices[idxOffset + 1] = b + 1;
+            indices[idxOffset + 2] = b + 2;
+            indices[idxOffset + 3] = b + 1;
+            indices[idxOffset + 4] = b + 3;
+            indices[idxOffset + 5] = b + 2;
+        }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geo.setIndex(new THREE.BufferAttribute(indices, 1));
+
+    geo.computeVertexNormals();
+    geo.computeBoundingSphere(); // CRITICAL: Fixes the frustum culling bug!
+    geo.computeBoundingBox();
+
+    return geo;
+};
+
+
 export const PathGenerator = {
-    /**
-     * Resets stacking layers. Call at sector start.
-     */
-    resetPathLayer() {
-        pathLayer = 0;
+
+    resetPathLayer: () => {
+        _pathLayerIndex = 0;
     },
 
-    /**
-     * Calculates points offset from a spline path along its normal.
-     */
     getOffsetPoints: (points: THREE.Vector3[], offset: number): THREE.Vector3[] => {
+        if (points.length < 2) return [];
         const result: THREE.Vector3[] = [];
+
         for (let i = 0; i < points.length; i++) {
             const pt = points[i];
-            if (i < points.length - 1) _v1.subVectors(points[i + 1], pt).normalize();
-            else if (i > 0) _v1.subVectors(pt, points[i - 1]).normalize();
-            else _v1.set(0, 0, 1);
+            const next = points[i + 1] || points[i];
+            const prev = points[i - 1] || points[i];
 
-            _v2.crossVectors(_v1, _up).normalize();
-            // Expected clone() here to generate actual unique points for the path
-            result.push(pt.clone().addScaledVector(_v2, offset));
+            _v1.subVectors(next, prev).normalize();
+            _v2.set(-_v1.z, 0, _v1.x).normalize();
+
+            const newPt = new THREE.Vector3().copy(pt).addScaledVector(_v2, offset);
+            result.push(newPt);
         }
         return result;
     },
 
-    /**
-     * Creates invisible collision walls.
-     */
-    createBoundry: (ctx: SectorContext, points: THREE.Vector3[], name: string = 'BoundryWall') => {
+    createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string) => {
+        if (!polygon || polygon.length < 2) return;
         const height = 50;
-        const thickness = 4.0; // Increased from 2.0 to prevent clipping
+        const thickness = 4.0;
 
-        const consolidated = points;
+        for (let i = 0; i < polygon.length; i++) {
+            const p1 = polygon[i];
+            const p2 = polygon[(i + 1) % polygon.length];
 
-        for (let i = 0; i < consolidated.length - 1; i++) {
-            const curr = consolidated[i];
-            const next = consolidated[i + 1];
-            _v1.subVectors(next, curr);
-            const len = _v1.length();
-            const angle = Math.atan2(next.x - curr.x, next.z - curr.z);
-            _v2.addVectors(curr, next).multiplyScalar(0.5);
+            const dist = p1.distanceTo(p2);
+            _v1.lerpVectors(p1, p2, 0.5);
+            _v2.subVectors(p2, p1).normalize();
+            const angle = Math.atan2(_v2.x, _v2.z);
 
-            _quat.setFromAxisAngle(_up, angle);
+            _quat.setFromAxisAngle(_axisY, angle);
+
+            _pos.copy(_v1).setY(height / 2);
+            _scale.set(thickness, height, dist);
 
             SectorBuilder.addObstacle(ctx, {
-                position: _v2.clone().setY(height / 2),
+                position: _pos.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: 'box', size: new THREE.Vector3(thickness, height, len) },
-                type: 'Boundary',
-                id: `${name}_${i}`,
+                collider: { type: 'box', size: _scale.clone() },
+                physicsGroup: PhysicsGroup.WALL,
                 materialId: MaterialType.CONCRETE,
-                physicsGroup: PhysicsGroup.WALL
+                id: `${name}_bound_${i}`
             });
         }
     },
 
-    /**
-     * Generates a complete railway track.
-     */
-    createRailTrack: (ctx: SectorContext, points: THREE.Vector3[]) => {
+    createRoad: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 8, texture: THREE.Texture = null, matType: number = 8, spawnLoot: boolean = false) => {
+        if (points.length < 2) return;
+
         const curve = new THREE.CatmullRomCurve3(points);
-        curve.curveType = 'centripetal';
-        const length = curve.getLength();
-        const segments = Math.ceil(length / 0.5);
-        const pointsList = curve.getSpacedPoints(segments);
-
-        const buildRibbon = (pts: THREE.Vector3[], w: number, y: number, mat: THREE.Material, name: string, materialId: MATERIAL_TYPE) => {
-            const v: number[] = [], uv: number[] = [], idx: number[] = [];
-            for (let i = 0; i < pts.length; i++) {
-                const pt = pts[i];
-                if (i < pts.length - 1) _v1.subVectors(pts[i + 1], pt).normalize();
-                else _v1.subVectors(pt, pts[i - 1]).normalize();
-                _v2.crossVectors(_v1, _up).normalize();
-
-                _v3.copy(pt).addScaledVector(_v2, -w / 2);
-                v.push(_v3.x, _v3.y + y, _v3.z);
-                _v3.copy(pt).addScaledVector(_v2, w / 2);
-                v.push(_v3.x, _v3.y + y, _v3.z);
-
-                const u = i / segments * (length / w);
-                uv.push(0, u, 1, u);
-
-                if (i < pts.length - 1) {
-                    const b = i * 2;
-                    idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
-                }
-            }
-            const geo = new THREE.BufferGeometry();
-            geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
-            geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-            geo.setIndex(idx);
-            geo.computeVertexNormals();
-
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.name = `Ground_${name}`; // VINTERDÖD: Mandatory naming
-            mesh.receiveShadow = true;
-            mesh.userData.materialId = materialId; // VINTERDÖD: Unified tagging
-
-            // VINTERDÖD: Freeze ribbon matrix
-            GeneratorUtils.freezeStatic(mesh);
-
-            ctx.scene.add(mesh);
-
-            // VINTERDÖD: Mandatory material registration in the DOD grid
-            for (let i = 0; i < pts.length; i++) {
-                ctx.collisionGrid.registerGroundMaterial(pts[i].x, pts[i].z, w / 2, materialId);
-            }
-        };
-
-        buildRibbon(pointsList, 4.5, 0.05, MATERIALS.gravel, 'RailGravel', MaterialType.GRAVEL);
-        buildRibbon(pointsList, 5.5, 0.01, MATERIALS.frost, 'RailFrost', MaterialType.SNOW);
-
-        // Sleepers
-        const sleeperSpacing = 0.8;
-        const sleeperCount = Math.floor(length / sleeperSpacing);
-        const sleeperPoints = curve.getSpacedPoints(sleeperCount);
-
-        const sleeperIM = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.brownBrick, sleeperCount + 1);
-        sleeperIM.frustumCulled = false;
-        GeneratorUtils.freezeStatic(sleeperIM);
-
-        for (let i = 0; i < sleeperPoints.length; i++) {
-            const pt = sleeperPoints[i];
-            if (i < sleeperPoints.length - 1) _v1.subVectors(sleeperPoints[i + 1], pt).normalize();
-            else _v1.subVectors(pt, sleeperPoints[i - 1]).normalize();
-
-            _matrix.lookAt(pt, _v3.copy(pt).add(_v1), _up);
-            _quat.setFromRotationMatrix(_matrix);
-
-            // VINTERDÖD: Fixed GC leak (pt.clone().setY() -> _pos.copy(pt).setY())
-            _matrix.compose(_pos.copy(pt).setY(0.08), _quat, _v2.set(3.0, 0.15, 0.4));
-            sleeperIM.setMatrixAt(i, _matrix);
-        }
-        sleeperIM.instanceMatrix.needsUpdate = true;
-        ctx.scene.add(sleeperIM);
-
-        // Rails
-        const railMat = MATERIALS.blackMetal.clone();
-        (railMat as any).metalness = 0.9;
-        buildRibbon(PathGenerator.getOffsetPoints(pointsList, -1.0), 0.2, 0.08, railMat, 'Rail_L', MaterialType.METAL);
-        buildRibbon(PathGenerator.getOffsetPoints(pointsList, 1.0), 0.2, 0.08, railMat, 'Rail_R', MaterialType.METAL);
-
-        const railPts = curve.getSpacedPoints(20);
-        for (let i = 0; i < railPts.length; i++) {
-            const p = railPts[i];
-            ctx.mapItems.push({ id: `rail_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', label: null, icon: null, radius: 2, color: '#333' });
-        }
-        return curve;
-    },
-
-    /**
-     * Core path generation.
-     */
-    createPointPath: (ctx: SectorContext, points: THREE.Vector3[], width: number, material: THREE.Material, materialId: MATERIAL_TYPE, type: string = 'ROAD', showBlood: boolean = false, showFootprints: boolean = false, strict: boolean = false) => {
-        const curve = new THREE.CatmullRomCurve3(points);
-        curve.curveType = strict ? 'centripetal' : 'catmullrom';
-        const length = curve.getLength();
-        const segments = Math.ceil(length / 2);
+        const len = curve.getLength();
+        const segments = Math.floor(len / 2);
         const pts = curve.getSpacedPoints(segments);
 
-        pathLayer++;
-        const yOff = 0.03 + (pathLayer * 0.001);
-        const v: number[] = [], uv: number[] = [], idx: number[] = [];
+        // Calculate Y-offset to prevent Z-fighting with other paths
+        const yOff = 0.15 + (_pathLayerIndex * 0.001);
+        const geo = buildRibbonGeometry(pts, width, yOff);
 
+        const mat = matType === 7 ? MATERIALS.gravel : MATERIALS.asphalt;
+        const road = new THREE.Mesh(geo, mat);
+        road.receiveShadow = true;
+        road.userData.isEngineStatic = true;
+        road.userData.materialId = matType;
+
+        GeneratorUtils.freezeStatic(road);
+        ctx.scene.add(road);
+
+        // Register material for footstep audio
         for (let i = 0; i < pts.length; i++) {
-            const pt = pts[i];
-            if (i === 0) _v1.subVectors(pts[1], pt).normalize();
-            else if (i === pts.length - 1) _v1.subVectors(pt, pts[i - 1]).normalize();
-            else _v1.subVectors(pts[i + 1], pts[i - 1]).normalize();
-
-            _v2.crossVectors(_v1, _up).normalize();
-            _v3.copy(pt).addScaledVector(_v2, -width / 2);
-            v.push(_v3.x, _v3.y + yOff, _v3.z);
-            _v3.copy(pt).addScaledVector(_v2, width / 2);
-            v.push(_v3.x, _v3.y + yOff, _v3.z);
-
-            const uCoord = i / segments * (length / width);
-            uv.push(0, uCoord, 1, uCoord);
-
-            if (i < pts.length - 1) {
-                const b = i * 2;
-                idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
-            }
-
-            if ((showBlood || showFootprints) && i % 6 === 0) {
-                const decal = new THREE.Mesh(SHARED_GEO.plane, showBlood ? MATERIALS.bloodStainDecal : MATERIALS.footprintDecal);
-                decal.position.set(pt.x + (Math.random() - 0.5), yOff + 0.01, pt.z + (Math.random() - 0.5));
-                decal.rotation.x = -Math.PI / 2;
-                decal.rotation.z = Math.random() * Math.PI * 2;
-                decal.scale.setScalar(0.5 + Math.random() * 0.5);
-
-                // VINTERDÖD: Freeze decal matrices
-                GeneratorUtils.freezeStatic(decal);
-
-                ctx.scene.add(decal);
-            }
-        }
-
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
-        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-        geo.setIndex(idx);
-        geo.computeVertexNormals();
-
-        const mesh = new THREE.Mesh(geo, material);
-        mesh.name = `Ground_${type}_${Math.random().toString(36).substr(2, 4)}`; // VINTERDÖD
-        mesh.userData.materialId = materialId;
-        mesh.renderOrder = 2;
-        mesh.receiveShadow = true;
-
-        // VINTERDÖD: Freeze path matrix
-        GeneratorUtils.freezeStatic(mesh);
-
-        ctx.scene.add(mesh);
-
-        for (let i = 0; i < pts.length; i++) {
-            const p = pts[i];
-            // VINTERDÖD: Mandatory material registration in the DOD grid
-            ctx.collisionGrid.registerGroundMaterial(p.x, p.z, width / 2, materialId);
-
+            ctx.collisionGrid.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, matType);
             if (i % 10 === 0) {
-              ctx.mapItems.push({ id: `path_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', label: null, icon: null, radius: width / 2, color: type === 'ROAD' ? '#444' : '#6b5a4a' });
+                ctx.mapItems.push({ id: `road_${Math.random()}`, x: pts[i].x, z: pts[i].z, type: 'ROAD', label: null, icon: null, radius: width / 2, color: '#333' });
             }
         }
-        return curve;
+
+        _pathLayerIndex++;
     },
 
-    createRoad: (ctx: SectorContext, points: THREE.Vector3[], width: number = 10, material?: THREE.Material, materialId: MATERIAL_TYPE = MaterialType.ASPHALT, strict: boolean = false) => {
-        return PathGenerator.createPointPath(ctx, points, width, material || MATERIALS.asphalt, materialId, 'ROAD', false, false, strict);
-    },
+    createDirtPath: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, texture: THREE.Texture = null, showBorder: boolean = false, spawnLoot: boolean = false) => {
+        if (points.length < 2) return;
 
-    createGravelRoad: (ctx: SectorContext, points: THREE.Vector3[], width: number = 10, strict: boolean = false) => {
-        return PathGenerator.createRoad(ctx, points, width, MATERIALS.gravel, MaterialType.GRAVEL, strict);
-    },
-
-    createDirtRoad: (ctx: SectorContext, points: THREE.Vector3[], width: number = 10, strict: boolean = false) => {
-        return PathGenerator.createRoad(ctx, points, width, MATERIALS.dirt, MaterialType.DIRT, strict);
-    },
-
-    createPath: (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, material?: THREE.Material, materialId: MATERIAL_TYPE = MaterialType.DIRT, showBlood?: boolean, showFootprints?: boolean, strict: boolean = false) => {
-        return PathGenerator.createPointPath(ctx, points, width, material || MATERIALS.dirt, materialId, 'PATH', showBlood, showFootprints, strict);
-    },
-
-    createGravelPath: (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, blood?: boolean, steps?: boolean, strict?: boolean) => {
-        return PathGenerator.createPath(ctx, points, width, MATERIALS.gravel, MaterialType.GRAVEL, blood, steps, strict);
-    },
-
-    createDirtPath: (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, blood?: boolean, steps?: boolean, strict?: boolean) => {
-        return PathGenerator.createPath(ctx, points, width, MATERIALS.dirt, MaterialType.DIRT, blood, steps, strict);
-    },
-
-    createDecalPath: (ctx: SectorContext, points: THREE.Vector3[], options: { spacing: number, size: number, material: THREE.Material, variance?: number, color?: number, randomRotation?: boolean, yOffset?: number }) => {
         const curve = new THREE.CatmullRomCurve3(points);
-        curve.curveType = 'centripetal';
-        const length = curve.getLength();
-        const count = Math.ceil(length / options.spacing);
+        const len = curve.getLength();
+        const segments = Math.floor(len / 1.5);
+        const pts = curve.getSpacedPoints(segments);
+
+        const yOff = 0.14 + (_pathLayerIndex * 0.001);
+        const geo = buildRibbonGeometry(pts, width, yOff);
+
+        const path = new THREE.Mesh(geo, MATERIALS.dirt);
+        path.receiveShadow = true;
+        path.userData.isEngineStatic = true;
+        path.userData.materialId = MaterialType.DIRT;
+
+        GeneratorUtils.freezeStatic(path);
+        ctx.scene.add(path);
+
+        for (let i = 0; i < pts.length; i++) {
+            ctx.collisionGrid.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, MaterialType.DIRT);
+        }
+
+        _pathLayerIndex++;
+    },
+
+    createRailTrack: async (ctx: SectorContext, points: THREE.Vector3[]) => {
+        if (points.length < 2) return;
+        const curve = new THREE.CatmullRomCurve3(points);
+        const len = curve.getLength();
+        const sleepers = Math.floor(len / 0.8);
+        const railSegments = Math.floor(len / 0.5);
+
+        let startTime = performance.now();
+
+        // 1. Gravel Bed & Snow
+        const pts = curve.getSpacedPoints(railSegments);
+        const gravelGeo = buildRibbonGeometry(pts, 4.5, 0.05);
+        const snowGeo = buildRibbonGeometry(pts, 5.5, 0.01);
+
+        const gravelMesh = new THREE.Mesh(gravelGeo, MATERIALS.gravel);
+        gravelMesh.receiveShadow = true;
+        const snowMesh = new THREE.Mesh(snowGeo, MATERIALS.frost);
+        snowMesh.receiveShadow = true;
+
+        GeneratorUtils.freezeStatic(gravelMesh);
+        GeneratorUtils.freezeStatic(snowMesh);
+        ctx.scene.add(gravelMesh, snowMesh);
+
+        // 2. Sleepers (InstancedMesh)
+        const sleeperMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(2.5, 0.15, 0.4), MATERIALS.brownBrick, sleepers);
+        sleeperMesh.receiveShadow = true;
+        sleeperMesh.userData.isEngineStatic = true;
+        GeneratorUtils.freezeStatic(sleeperMesh);
+
+        for (let i = 0; i < sleepers; i++) {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+
+            const t = i / sleepers;
+            curve.getPoint(t, _pos);
+            curve.getTangent(t, _v1);
+
+            _v1.setY(0).normalize();
+            _quat.setFromUnitVectors(_axisX, _v1);
+
+            _pos.setY(0.08); // Elevate sleeper slightly
+            _scale.set(1, 1, 1);
+            _matrix.compose(_pos, _quat, _scale);
+            sleeperMesh.setMatrixAt(i, _matrix);
+        }
+
+        // 3. Rails (Ribbon instead of InstancedMesh for smooth curves)
+        const railMat = MATERIALS.blackMetal.clone();
+        (railMat as any).metalness = 0.9;
+
+        const leftRailGeo = buildRibbonGeometry(PathGenerator.getOffsetPoints(pts, -1.0), 0.2, 0.18);
+        const rightRailGeo = buildRibbonGeometry(PathGenerator.getOffsetPoints(pts, 1.0), 0.2, 0.18);
+
+        const leftRail = new THREE.Mesh(leftRailGeo, railMat);
+        const rightRail = new THREE.Mesh(rightRailGeo, railMat);
+        leftRail.receiveShadow = true;
+        rightRail.receiveShadow = true;
+
+        GeneratorUtils.freezeStatic(leftRail);
+        GeneratorUtils.freezeStatic(rightRail);
+
+        sleeperMesh.instanceMatrix.needsUpdate = true;
+        ctx.scene.add(sleeperMesh, leftRail, rightRail);
+
+        for (let i = 0; i < pts.length; i++) {
+            ctx.collisionGrid.registerGroundMaterial(pts[i].x, pts[i].z, 2.0, MaterialType.METAL);
+        }
+    },
+
+    createDecalPath: async (ctx: SectorContext, points: THREE.Vector3[], options: { spacing: number, size: number, material: THREE.Material, variance?: number, color?: number, randomRotation?: boolean, yOffset?: number }) => {
+        if (points.length < 2) return;
+        const curve = new THREE.CatmullRomCurve3(points);
+        const count = Math.ceil(curve.getLength() / options.spacing);
         const pts = curve.getSpacedPoints(count);
 
         const mat = options.material.clone();
         if (options.color !== undefined) (mat as any).color.setHex(options.color);
 
-        const im = new THREE.InstancedMesh(SHARED_GEO.plane, mat, count);
+        const im = new THREE.InstancedMesh(_PLANE_GEO, mat, count);
         im.frustumCulled = false;
         im.renderOrder = 5;
-
-        // VINTERDÖD: Freeze InstancedMesh
         GeneratorUtils.freezeStatic(im);
 
+        let startTime = performance.now();
+
         for (let i = 0; i < pts.length; i++) {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+
             const pt = pts[i];
             if (i < pts.length - 1) _v1.subVectors(pts[i + 1], pt).normalize();
             else if (i > 0) _v1.subVectors(pt, pts[i - 1]).normalize();
@@ -314,7 +312,7 @@ export const PathGenerator = {
             if (options.randomRotation) {
                 _quat.setFromEuler(_euler.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2));
             } else {
-                _matrix.lookAt(_v2, _v3.copy(pt).add(_v1), _up);
+                _matrix.lookAt(_v2, _v3.copy(pt).add(_v1), _axisY);
                 _quat.setFromRotationMatrix(_matrix);
                 _quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
 
@@ -322,7 +320,7 @@ export const PathGenerator = {
                 else _v2.addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(_quat), -0.2);
             }
 
-            _matrix.compose(_v2, _quat, _v3.set(options.size, options.size * 1.5, 1));
+            _matrix.compose(_v2, _quat, _scale.set(options.size, options.size * 1.5, 1));
             im.setMatrixAt(i, _matrix);
         }
         im.instanceMatrix.needsUpdate = true;
@@ -330,250 +328,175 @@ export const PathGenerator = {
     },
 
     createBloodPath: (ctx: SectorContext, points: THREE.Vector3[], spacing = 0.5, size = 0.8) => {
-        PathGenerator.createDecalPath(ctx, points, { spacing, size, material: MATERIALS.bloodDecal, variance: 0.4, yOffset: 0.12 });
+        PathGenerator.createDecalPath(ctx, points, { spacing, size, material: MATERIALS.bloodStainDecal, variance: 0.4, yOffset: 0.12 });
     },
 
     createFootprintPath: (ctx: SectorContext, points: THREE.Vector3[], spacing = 0.5, size = 0.5) => {
         PathGenerator.createDecalPath(ctx, points, { spacing, size, material: MATERIALS.footprintDecal, variance: 0.2, randomRotation: false });
     },
 
-    createFence: (ctx: SectorContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' | 'mesh' = 'wood', height: number = 1.2, strict: boolean = false) => {
-        const curve = new THREE.CatmullRomCurve3(points);
-        if (strict) curve.curveType = 'centripetal';
-        const length = curve.getLength();
-        const steps = Math.ceil(length / 2.0);
+    createFence: async (ctx: SectorContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' | 'mesh' = 'wood', height: number = 1.2, strict: boolean = false) => {
+        if (points.length < 2) return;
 
-        const proto = color === 'mesh' ? ObjectGenerator.createMeshFence(length / steps, height) : ObjectGenerator.createFence(length / steps);
-        const parts: { mesh: any, mat: THREE.Matrix4 }[] = [];
-        proto.traverse((c: any) => { if (c.isMesh) { c.updateMatrix(); parts.push({ mesh: c, mat: c.matrix.clone() }); } });
+        let mat = MATERIALS.wood;
+        if (color === 'white') mat = MATERIALS.concrete;
+        else if (color === 'black') mat = MATERIALS.blackMetal;
+        else if (color === 'mesh') mat = MATERIALS.fenceMesh;
 
-        const instanceData: { im: THREE.InstancedMesh, part: { mesh: any, mat: THREE.Matrix4 } }[] = [];
-        for (let k = 0; k < parts.length; k++) {
-            const p = parts[k];
-            const im = new THREE.InstancedMesh(p.mesh.geometry, p.mesh.material, steps);
-            im.frustumCulled = false;
-            GeneratorUtils.freezeStatic(im);
+        const count = points.length;
+        const postMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.15, height, 0.15), mat, count);
+        const railMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 0.15, 1.0), mat, (count - 1) * 2);
 
-            if (color !== 'wood' && color !== 'mesh') {
-                const m = p.mesh.material.clone();
-                m.color.setHex(color === 'white' ? 0xffffff : 0x222222);
-                im.material = m;
-            }
-            instanceData.push({ im, part: p });
-            ctx.scene.add(im);
-        }
+        postMesh.castShadow = true;
+        railMesh.castShadow = true;
+        GeneratorUtils.freezeStatic(postMesh);
+        GeneratorUtils.freezeStatic(railMesh);
 
-        let i = 0;
-        GeneratorUtils.distributeAlongPath(points, 2.0, strict, (mid, angle, dist) => {
-            for (let k = 0; k < instanceData.length; k++) {
-                const { im, part } = instanceData[k];
-                _quat.setFromAxisAngle(_up, angle);
-                _matrix.compose(mid, _quat, _v3.set(1, height / 1.2, 1));
-                _matrix.multiply(part.mat);
-                im.setMatrixAt(i, _matrix);
-                im.instanceMatrix.needsUpdate = true;
+        let startTime = performance.now();
+
+        for (let i = 0; i < count; i++) {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
             }
 
-            SectorBuilder.addObstacle(ctx, {
-                position: mid.clone(),
-                quaternion: _quat.clone(),
-                collider: { type: 'box', size: new THREE.Vector3(0.2, height, dist) },
-                materialId: color === 'mesh' ? MaterialType.METAL : MaterialType.WOOD,
-                physicsGroup: PhysicsGroup.WALL
-            });
-            i++;
-        });
-    },
+            const p1 = points[i];
 
-    createHedge: (ctx: SectorContext, points: THREE.Vector3[], height: number = 4, thickness: number = 1.5) => {
-        const curve = new THREE.CatmullRomCurve3(points);
-        const steps = Math.ceil(curve.getLength() / 2.0);
-        const proto = VegetationGenerator.createHedge(2.2, height, thickness);
-        const parts: { mesh: any, mat: THREE.Matrix4 }[] = [];
-        proto.traverse((c: any) => { if (c.isMesh) { c.updateMatrix(); parts.push({ mesh: c, mat: c.matrix.clone() }); } });
+            // Post
+            _pos.copy(p1).setY(height / 2);
+            _quat.set(0, 0, 0, 1);
+            _scale.set(1, 1, 1);
+            _matrix.compose(_pos, _quat, _scale);
+            postMesh.setMatrixAt(i, _matrix);
 
-        const instanceData: { im: THREE.InstancedMesh, part: { mesh: any, mat: THREE.Matrix4 } }[] = [];
-        for (let k = 0; k < parts.length; k++) {
-            const p = parts[k];
-            const im = new THREE.InstancedMesh(p.mesh.geometry, p.mesh.material, steps);
-            im.frustumCulled = false;
-            GeneratorUtils.freezeStatic(im);
-            instanceData.push({ im, part: p });
-            ctx.scene.add(im);
-        }
+            if (i < count - 1) {
+                const p2 = points[i + 1];
+                const dist = p1.distanceTo(p2);
 
-        let i = 0;
-        GeneratorUtils.distributeAlongPath(points, 2.0, false, (mid, angle, dist) => {
-            for (let k = 0; k < instanceData.length; k++) {
-                const { im, part } = instanceData[k];
-                _quat.setFromAxisAngle(_up, angle);
-                _matrix.compose(mid, _quat, _v3.set(1, 1, 1));
-                _matrix.multiply(part.mat);
-                im.setMatrixAt(i, _matrix);
-                im.instanceMatrix.needsUpdate = true;
-            }
+                _v1.lerpVectors(p1, p2, 0.5); // Center
+                _v2.subVectors(p2, p1).normalize();
+                _quat.setFromUnitVectors(_axisX, _v2);
 
-            SectorBuilder.addObstacle(ctx, {
-                position: mid.clone(),
-                quaternion: _quat.clone(), // already set above
-                collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.2) },
-                materialId: MaterialType.WOOD,
-                physicsGroup: PhysicsGroup.WALL
-            });
-            i++;
-        });
-    },
+                // Rails
+                for (let r = 0; r < 2; r++) {
+                    _pos.copy(_v1).setY(r === 0 ? height * 0.3 : height * 0.7);
+                    _scale.set(1, 1, dist);
+                    _matrix.compose(_pos, _quat, _scale);
+                    railMesh.setMatrixAt(i * 2 + r, _matrix);
+                }
 
-    createStoneWall: (ctx: SectorContext, points: THREE.Vector3[], height: number = 1.5, thickness: number = 0.8) => {
-        const curve = new THREE.CatmullRomCurve3(points);
-        const dist = 1.5;
-        const steps = Math.ceil(curve.getLength() / dist);
-
-        const im = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.stone, steps);
-        im.frustumCulled = false;
-        GeneratorUtils.freezeStatic(im);
-
-        let i = 0;
-        GeneratorUtils.distributeAlongPath(points, dist, false, (mid, angle, segDist) => {
-            _quat.setFromAxisAngle(_up, angle);
-            mid.y += height / 2;
-            _matrix.compose(mid, _quat, _v3.set(thickness, height, dist));
-            im.setMatrixAt(i, _matrix);
-
-            SectorBuilder.addObstacle(ctx, {
-                position: mid.clone(),
-                quaternion: _quat.clone(),
-                collider: { type: 'box', size: new THREE.Vector3(thickness, height, dist) },
-                materialId: MaterialType.STONE,
-                physicsGroup: PhysicsGroup.WALL
-            });
-            i++;
-        });
-
-        im.instanceMatrix.needsUpdate = true;
-        ctx.scene.add(im);
-    },
-
-    createGuardrail: (ctx: SectorContext, points: THREE.Vector3[], floating: boolean = false) => {
-        const curve = new THREE.CatmullRomCurve3(points);
-        const pts = curve.getSpacedPoints(Math.ceil(curve.getLength() / 2.0));
-
-        const group = new THREE.Group();
-
-        const postIM = new THREE.InstancedMesh(SHARED_GEO.cylinder, MATERIALS.blackMetal, pts.length);
-        postIM.frustumCulled = false;
-        const railIM = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.blackMetal, pts.length - 1);
-        railIM.frustumCulled = false;
-
-        for (let i = 0; i < pts.length; i++) {
-            _matrix.makeTranslation(pts[i].x, pts[i].y + 0.5, pts[i].z);
-            _scale.set(0.2, 1.0, 0.2);
-            _matrix.scale(_scale);
-            postIM.setMatrixAt(i, _matrix);
-        }
-
-        for (let i = 0; i < pts.length - 1; i++) {
-            const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5).setY(pts[i].y + 0.8);
-            const dist = pts[i].distanceTo(pts[i + 1]);
-            _matrix.lookAt(mid, _v2.copy(pts[i + 1]).setY(mid.y), _up);
-            _quat.setFromRotationMatrix(_matrix);
-            _matrix.compose(mid, _quat, _v3.set(0.15, 0.3, dist));
-            railIM.setMatrixAt(i, _matrix);
-
-            _quat.setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z));
-
-            SectorBuilder.addObstacle(ctx, {
-                position: mid.clone().setY(floating ? mid.y : mid.y / 2),
-                quaternion: _quat.clone(),
-                collider: { type: 'box', size: new THREE.Vector3(0.2, floating ? 0.3 : mid.y + 0.2, dist) },
-                materialId: MaterialType.METAL,
-                physicsGroup: PhysicsGroup.WALL
-            });
-        }
-        postIM.instanceMatrix.needsUpdate = true;
-        railIM.instanceMatrix.needsUpdate = true;
-        
-        group.add(postIM);
-        group.add(railIM);
-
-        // Optimized single-shot freeze on root group
-        GeneratorUtils.freezeStatic(group);
-
-        ctx.scene.add(group);
-    },
-
-    createEmbankment: (ctx: SectorContext, points: THREE.Vector3[], width: number = 20, height: number = 5, material: THREE.Material = MATERIALS.dirt) => {
-        const curve = new THREE.CatmullRomCurve3(points);
-        const segments = Math.ceil(curve.getLength() / 2);
-        const pts = curve.getSpacedPoints(segments);
-        const v: number[] = [], idx: number[] = [], uv: number[] = [];
-
-        const _v1_local = new THREE.Vector3();
-        const _v2_local = new THREE.Vector3();
-        const _up_local = new THREE.Vector3(0, 1, 0);
-        const _quat_local = new THREE.Quaternion();
-
-        for (let i = 0; i < pts.length; i++) {
-            const pt = pts[i];
-            if (i < pts.length - 1) _v1_local.subVectors(pts[i + 1], pt).normalize();
-            else _v1_local.subVectors(pt, pts[i - 1]).normalize();
-            _v2_local.crossVectors(_v1_local, _up_local).normalize();
-
-            const p1 = pt.clone().addScaledVector(_v2_local, (-width * 0.5) - 2.0).setY(0.1);
-            const p2 = pt.clone().addScaledVector(_v2_local, -width * 0.2).setY(height);
-            const p3 = pt.clone().addScaledVector(_v2_local, width * 0.2).setY(height);
-            const p4 = pt.clone().addScaledVector(_v2_local, (width * 0.5) + 2.0).setY(0.1);
-
-            v.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z, p4.x, p4.y, p4.z);
-
-            const u = i / segments * (curve.getLength() / width);
-            uv.push(0, u, 0.3, u, 0.7, u, 1, u);
-
-            if (i > 0) {
-                const o = (i - 1) * 4, c = i * 4;
-
-                idx.push(
-                    o, o + 1, c,
-                    o + 1, c + 1, c,
-                    o + 1, o + 2, c + 1,
-                    o + 2, c + 2, c + 1,
-                    o + 2, o + 3, c + 2,
-                    o + 3, c + 3, c + 2
-                );
-
-                const pPrev = pts[i - 1];
-                const pCurr = pts[i];
-                const mid = _v1_local.addVectors(pPrev, pCurr).multiplyScalar(0.5);
-                const angle = Math.atan2(pCurr.x - pPrev.x, pCurr.z - pPrev.z);
-                const dist = pPrev.distanceTo(pCurr);
-
-                _quat_local.setFromAxisAngle(_up_local, angle);
+                // Collision Obstacle
+                _pos.copy(_v1).setY(height / 2);
+                _v2.set(0.4, height, dist);
 
                 SectorBuilder.addObstacle(ctx, {
-                    position: mid.clone().setY(height / 2),
-                    quaternion: _quat_local.clone(),
-                    collider: { type: 'box', size: new THREE.Vector3(width + 4.0, height, dist) },
-                    materialId: MaterialType.STONE,
-                    physicsGroup: PhysicsGroup.WALL
+                    position: new THREE.Vector3().copy(_pos),
+                    quaternion: new THREE.Quaternion().copy(_quat),
+                    collider: { type: 'box', size: new THREE.Vector3().copy(_v2) },
+                    physicsGroup: PhysicsGroup.WALL,
+                    materialId: color === 'mesh' ? MaterialType.METAL : MaterialType.WOOD
                 });
             }
         }
 
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
-        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-        geo.setIndex(idx);
-
-        geo.computeVertexNormals();
-        geo.computeBoundingSphere();
-        geo.computeBoundingBox();
-
-        const mesh = new THREE.Mesh(geo, material);
-        mesh.receiveShadow = true;
-
-        // VINTERDÖD: Freeze matrix
-        GeneratorUtils.freezeStatic(mesh);
-
-        ctx.scene.add(mesh);
+        postMesh.instanceMatrix.needsUpdate = true;
+        railMesh.instanceMatrix.needsUpdate = true;
+        ctx.scene.add(postMesh, railMesh);
     },
+
+    createGuardrail: async (ctx: SectorContext, points: THREE.Vector3[], floating: boolean = false) => {
+        if (points.length < 2) return;
+        const height = 0.8;
+        const thickness = 0.3;
+
+        let startTime = performance.now();
+
+        for (let i = 0; i < points.length - 1; i++) {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const dist = p1.distanceTo(p2);
+
+            _v1.lerpVectors(p1, p2, 0.5);
+            _v2.subVectors(p2, p1).normalize();
+            _quat.setFromUnitVectors(_axisX, _v2);
+
+            const rail = new THREE.Mesh(new THREE.BoxGeometry(1, 0.4, 0.1), MATERIALS.steel);
+            rail.position.copy(_v1);
+            rail.position.y += height;
+            rail.quaternion.copy(_quat);
+            rail.scale.x = dist;
+            rail.castShadow = true;
+            GeneratorUtils.freezeStatic(rail);
+            ctx.scene.add(rail);
+
+            if (!floating) {
+                const post = new THREE.Mesh(new THREE.BoxGeometry(0.15, height, 0.15), MATERIALS.steel);
+                post.position.copy(p1);
+                post.position.y += height / 2;
+                GeneratorUtils.freezeStatic(post);
+                ctx.scene.add(post);
+            }
+
+            _pos.copy(_v1).setY(height / 2);
+            _scale.set(dist, height, thickness);
+
+            SectorBuilder.addObstacle(ctx, {
+                position: _pos.clone(),
+                quaternion: _quat.clone(),
+                collider: { type: 'box', size: _scale.clone() },
+                physicsGroup: PhysicsGroup.WALL,
+                materialId: MaterialType.METAL
+            });
+        }
+    },
+
+    createEmbankment: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 20, height: number = 5, material: THREE.Material = MATERIALS.dirt) => {
+        if (points.length < 2) return;
+
+        let startTime = performance.now();
+
+        for (let i = 0; i < points.length - 1; i++) {
+            if (performance.now() - startTime > 12) {
+                if (ctx.yield) await ctx.yield();
+                startTime = performance.now();
+            }
+
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const dist = p1.distanceTo(p2);
+
+            _v1.lerpVectors(p1, p2, 0.5);
+            _v2.subVectors(p2, p1).normalize();
+
+            _v3.set(-_v2.z, 0, _v2.x).normalize().multiplyScalar(width / 2);
+
+            const geo = new THREE.CylinderGeometry(width * 0.1, width, height, 4, 1, false);
+            geo.rotateY(Math.atan2(_v2.x, _v2.z) + Math.PI / 4);
+
+            const mesh = new THREE.Mesh(geo, material);
+            mesh.position.copy(_v1);
+            mesh.position.y += height / 2 - 0.5;
+            mesh.scale.set(1, 1, dist / (width * 0.7));
+            mesh.receiveShadow = true;
+            GeneratorUtils.freezeStatic(mesh);
+            ctx.scene.add(mesh);
+
+            _pos.copy(_v1).setY(height / 2);
+            _quat.setFromUnitVectors(_axisX, _v2);
+            _scale.set(dist, height, width * 0.6);
+
+            SectorBuilder.addObstacle(ctx, {
+                position: _pos.clone(),
+                quaternion: _quat.clone(),
+                collider: { type: 'box', size: _scale.clone() },
+                physicsGroup: PhysicsGroup.WALL,
+                materialId: MaterialType.STONE
+            });
+        }
+    }
 };

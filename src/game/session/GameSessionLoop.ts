@@ -11,13 +11,12 @@ import { FXSystem } from '../../systems/FXSystem';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { TriggerHandler } from '../../systems/TriggerHandler';
 import { CAMERA_HEIGHT, HEALTH_CRITICAL_THRESHOLD } from '../../content/constants';
-import { UiSounds, EnemySounds } from '../../utils/audio/AudioLib';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { WEAPONS, WeaponBehavior } from '../../content/weapons';
-import { Enemy, EnemyFlags, EnemyDeathState, NoiseType } from '../../entities/enemies/EnemyTypes';
+import { Enemy, EnemyFlags, EnemyDeathState, NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
-import { DamageID } from '../../entities/player/CombatTypes';
+import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
@@ -26,10 +25,13 @@ import { InteractionType } from '../../systems/InteractionTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { NavigationSystem } from '../../systems/NavigationSystem';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
+import { EffectType, SubEffectType } from '../../systems/EffectManager';
 import { SystemID } from '../../systems/System';
 import { WeaponFX } from '../../systems/WeaponFX';
 import { PerkFX } from '../../systems/PerkFX';
 import { SectorSystem } from '../../systems/SectorSystem';
+import { SectorUpdateContext } from './SectorTypes';
+
 interface LoopContext {
     engine: WinterEngine;
     session: GameSessionLogic;
@@ -39,7 +41,7 @@ interface LoopContext {
     callbacks: {
         concludeSector: (val: boolean) => void;
         gainXp: (val: number) => void;
-        spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => void;
+        spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
         showDamageText: (x: number, y: number, z: number, text: string, color?: string) => void;
         t: (k: string) => string;
@@ -49,18 +51,18 @@ interface LoopContext {
         onDeathStateChange?: (val: boolean) => void;
         gainSp: (amount: number) => void;
         gainScrap: (amount: number) => void;
-        // --- VINTERDÖD: NEW CALLBACKS ---
-        spawnZombie: (type: any, pos?: THREE.Vector3) => void;
-        spawnHorde: (count: number, type: any, pos?: THREE.Vector3) => void;
+        onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, sourceAttack?: EnemyAttackType) => void;
+        spawnZombie: (type: EnemyType, pos?: THREE.Vector3) => void;
+        spawnHorde: (count: number, type: EnemyType, pos?: THREE.Vector3) => void;
         setNotification: (n: any) => void;
         setInteraction: (interaction: any) => void;
         setOverlay: (type: string | null) => void;
-        playSound: (id: any) => void;
+        playSound: (id: SoundID) => void;
         playTone: (freq: number, type: any, duration: number, vol?: number) => void;
         cameraShake: (amount: number, type?: any) => void;
         startCinematic: (target: any, sectorId: number, dialogueId?: number, params?: any) => void;
         setCameraOverride: (params: any) => void;
-        makeNoise: (pos: THREE.Vector3, type: any, radius?: number) => void;
+        makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
     };
 }
 
@@ -81,10 +83,10 @@ const _bendInteractors = new Array(8).fill(null).map(() => new THREE.Vector4(0, 
 const _bendDistSq = new Float32Array(8);
 
 // Pre-define ALL properties to lock V8 Hidden Classes (Shapes)
-const _fxCallbacks: any = {
-    spawnParticle: null,
-    spawnDecal: null,
-    onPlayerHit: null
+const _fxCallbacks = {
+    spawnParticle: null as any,
+    spawnDecal: null as any,
+    onPlayerHit: null as any
 };
 
 // Pre-define ALL properties to lock V8 Hidden Classes (Shapes)
@@ -109,7 +111,7 @@ function getCachedNumberString(num: number): string {
 }
 
 // --- VINTERDÖD: PRE-ALLOCATED SECTOR UPDATE CONTEXT (ZERO-GC) ---
-const _sectorUpdateContext: any = {
+const _sectorUpdateContext: SectorUpdateContext = {
     delta: 0,
     simTime: 0,
     renderTime: 0,
@@ -126,8 +128,10 @@ const _sectorUpdateContext: any = {
     playSound: null,
     playTone: null,
     cameraShake: null,
-    t: null,
-    spawnParticle: null,
+    t: null as any,
+    spawnParticle: null as any,
+    spawnDecal: null as any,
+    onPlayerHit: null,
     startCinematic: null,
     setCameraOverride: null,
     makeNoise: null
@@ -143,10 +147,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
     // Initial binding for FX (will be updated in loop if needed)
     _fxCallbacks.spawnParticle = callbacks.spawnParticle;
     _fxCallbacks.spawnDecal = callbacks.spawnDecal;
-    _fxCallbacks.onPlayerHit = (damage: number, attacker: any, type: string, isDoT: boolean, effectType?: any, effectDuration?: number, effectDamage?: number, attackName?: string) => {
+    _fxCallbacks.onPlayerHit = (damage: number, attacker: any, type: DamageID, isDoT: boolean, effectType?: any, effectDuration?: number, effectIntensity?: number, sourceAttack?: EnemyAttackType) => {
         const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
         if (statsSystem) {
-            statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effectType, effectDuration, effectDamage, attackName);
+            statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effectType, effectDuration, effectIntensity, sourceAttack);
         }
     };
 
@@ -160,11 +164,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
     _sectorUpdateContext.playSound = callbacks.playSound;
     _sectorUpdateContext.playTone = callbacks.playTone;
     _sectorUpdateContext.cameraShake = callbacks.cameraShake;
-    _sectorUpdateContext.t = callbacks.t;
     _sectorUpdateContext.spawnParticle = callbacks.spawnParticle;
+    _sectorUpdateContext.spawnDecal = callbacks.spawnDecal;
     _sectorUpdateContext.startCinematic = callbacks.startCinematic;
     _sectorUpdateContext.setCameraOverride = callbacks.setCameraOverride;
     _sectorUpdateContext.makeNoise = callbacks.makeNoise;
+    _sectorUpdateContext.t = callbacks.t;
     _sectorUpdateContext.scene = engine.scene;
     _sectorUpdateContext.gameState = state;
 
@@ -235,8 +240,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             }
             if (type === 'hit') state.sessionStats.shotsHit += amt;
         },
-        onPlayerHit: (dmg: number, attacker: any, type: DamageID, isDoT: boolean = false, effect?: any, dur?: number, intense?: number, attackName?: string) => {
-            if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type, isDoT, effect, dur, intense, attackName);
+        onPlayerHit: (dmg: number, attacker: any, type: DamageID, isDoT: boolean = false, effect?: any, dur?: number, intense?: number, sourceAttack?: EnemyAttackType) => {
+            if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type, isDoT, effect, dur, intense, sourceAttack);
         },
         applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact: boolean = false, attributionOverride?: DamageID) => {
             if (enemy.deathState !== EnemyDeathState.ALIVE || amount <= 0) return false;
@@ -502,8 +507,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
                 for (let j = 0; j < effs.length; j++) {
                     const eff = effs[j];
-                    if (eff.type === 'emitter' && Math.random() < 0.8) {
-                        let count = eff.particle === 'flame' ? 2 : (eff.count || 1);
+                    if (eff.type === SubEffectType.EMITTER && Math.random() < 0.8) {
+                        let count = eff.particle === FXParticleType.FLAME ? 2 : (eff.count || 1);
                         if (eff.area && (eff.area.x * eff.area.z > 50)) count = Math.max(count, 3);
 
                         for (let k = 0; k < count; k++) {
@@ -520,7 +525,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                                 _vInteraction.z += (Math.random() - 0.5) * (eff.spread || 0.4);
                             }
 
-                            callbacks.spawnParticle(_vInteraction.x, _vInteraction.y, _vInteraction.z, eff.particle as any, 1, undefined, undefined, eff.color);
+                            callbacks.spawnParticle(_vInteraction.x, _vInteraction.y, _vInteraction.z, eff.particle as FXParticleType, 1, undefined, undefined, eff.color);
                         }
                     }
                 }
@@ -630,6 +635,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         _sectorUpdateContext.cameraShake = callbacks.cameraShake;
         _sectorUpdateContext.t = callbacks.t;
         _sectorUpdateContext.spawnParticle = callbacks.spawnParticle;
+        _sectorUpdateContext.onPlayerHit = callbacks.onPlayerHit;
         _sectorUpdateContext.startCinematic = (target: any, sectorId: number, dialogueId?: number, params?: any) => {
             const cinematicSys = session.getSystem<any>(SystemID.CINEMATIC);
             if (cinematicSys) cinematicSys.startCinematic(session, target, dialogueId || 0, params);

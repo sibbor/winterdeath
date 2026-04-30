@@ -262,6 +262,9 @@ export class GameSessionLogic {
             killerName: '',
             killerAttackName: '',
             killedByEnemy: false,
+            lethalSourceId: -1,
+            lethalStatusEffect: -1,
+            effectSources: new Uint8Array(32),
             playerBloodSpawned: false,
             playerAshSpawned: false,
             lastDrownTick: 0,
@@ -342,6 +345,8 @@ export class GameSessionLogic {
             renderTime: 0,
             lastSimDelta: 0.016,
             lastRenderDelta: 0.016,
+
+            hudVisible: true,
 
             // --- VINTERDÖD FIX: Pre-allocate input proxy for Mobile UI ---
             inputState: {

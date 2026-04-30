@@ -9,7 +9,9 @@ export enum EnemyAttackType {
     FREEZE_JUMP = 5,
     SCREECH = 6,
     ELECTRIC_BEAM = 7,
-    MAGNETIC_CHAIN = 8
+    MAGNETIC_CHAIN = 8,
+    GRAPPLE_BITE = 9,
+    ENVIRONMENTAL = 100
 }
 
 export const ENEMY_ATTACK_NAMES: Record<EnemyAttackType, string> = {
@@ -22,6 +24,8 @@ export const ENEMY_ATTACK_NAMES: Record<EnemyAttackType, string> = {
     [EnemyAttackType.SCREECH]: 'attacks.SCREECH.title',
     [EnemyAttackType.ELECTRIC_BEAM]: 'attacks.ELECTRIC_BEAM.title',
     [EnemyAttackType.MAGNETIC_CHAIN]: 'attacks.MAGNETIC_CHAIN.title',
+    [EnemyAttackType.GRAPPLE_BITE]: 'attacks.BITE.title',
+    [EnemyAttackType.ENVIRONMENTAL]: 'ui.environmental',
 };
 
 export enum PlayerDeathState {
@@ -120,6 +124,6 @@ export interface ActiveStatusEffect {
     intensity: number;  // Multiplier or value
     damage: number;     // Damage per tick
     lastTick: number;   // Timestamp of last DoT tick
-    sourceType?: string; // e.g. "WALKER"
-    sourceAttack?: string; // e.g. "BITE" (which caused BLEEDING)
+    sourceType?: number; // e.g. EnemyType
+    sourceAttack?: EnemyAttackType; // e.g. EnemyAttackType.BITE
 }
