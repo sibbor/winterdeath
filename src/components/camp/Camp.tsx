@@ -466,9 +466,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             window.removeEventListener('touchstart', onTS);
             window.removeEventListener('resize', onResize);
             if (engineRef.current) engineRef.current.clearUpdateContext();
-
-            // Wipe spatial chunks to prevent camp objects appearing in sectors
-            ChunkManager.clear();
+            // NOTE: ChunkManager.clear() is intentionally NOT called here.
+            // This cleanup runs on every isGameRunning/stats/loadout change, including
+            // the warmup-complete transition, which would wipe the camp trees.
+            // Camp→Sector cleanup is handled by GameSessionLoop and CampWorld.build().
         };
     }, [isGameRunning, stats, currentLoadout, currentSector]);
 

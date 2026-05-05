@@ -478,9 +478,19 @@ export const CampWorld = {
         );
         scene.add(hemiLight);
 
+        if (!isWarmup) {
+            // Flush any stale chunk registrations from the AssetPreloader warmup pass.
+            // The warmup calls CampWorld.build(_dummyScene, ..., true) which registers
+            // tree meshes against _dummyScene. If not cleared here, the _lastChunkX/Z
+            // guard in ChunkManager.update fires as a no-op and trees stay invisible.
+            ChunkManager.clear();
+        }
+
         await CampWorld.setupTerrain(scene, textures);
 
-        ChunkManager.update(new THREE.Vector3(0, 0, 0), scene);
+        if (!isWarmup) {
+            ChunkManager.update(new THREE.Vector3(0, 0, 0), scene);
+        }
 
         const { interactables, outlines } = CampWorld.setupStations(scene, textures, CAMP_SCENE.stationPositions);
         const envState = CampWorld.initEffects(scene, textures, weather, isWarmup);
