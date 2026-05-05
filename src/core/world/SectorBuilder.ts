@@ -144,14 +144,22 @@ export const SectorBuilder = {
 
     generateAutomaticContent: async (ctx: SectorContext, def: any) => {
         if (def.ground !== undefined && def.ground !== null) {
-            await SectorBuilder.generateGround(ctx, def.ground as GroundType, def.groundSize || { width: 2000, depth: 2000 });
+            // VINTERDÖD: During warmup, we only need a 1x1 plane to compile the ground material.
+            const size = ctx.isWarmup ? { width: 1, depth: 1 } : (def.groundSize || { width: 2000, depth: 2000 });
+            await SectorBuilder.generateGround(ctx, def.ground as GroundType, size);
         }
 
         if (def.collectibles) {
+            const spawnedTypes = new Set<any>();
             for (let i = 0; i < def.collectibles.length; i++) {
                 const c = def.collectibles[i];
                 const meta = getCollectibleById(c.id);
                 if (meta) {
+                    // VINTERDÖD: During warmup, only spawn one instance per model type to avoid scene bloat
+                    if (ctx.isWarmup) {
+                        if (spawnedTypes.has(meta.modelType)) continue;
+                        spawnedTypes.add(meta.modelType);
+                    }
                     SectorBuilder.spawnCollectible(ctx, c.x, c.z, c.id, meta.modelType as any);
                 }
                 if (ctx.yield) await ctx.yield();
@@ -160,7 +168,7 @@ export const SectorBuilder = {
 
         if (ctx.yield) await ctx.yield();
 
-        if (def.bounds) {
+        if (def.bounds && !ctx.isWarmup) {
             SectorBuilder.generateBoundaries(ctx, def.bounds);
         }
 
@@ -270,7 +278,11 @@ export const SectorBuilder = {
             engine.water.setLightPosition(_v1_sg);
         }
 
-        if (def.setupProps) await def.setupProps(ctx);
+        if (def.setupProps) {
+            // VINTERDÖD: During warmup, we could potentially wrap this to catch and skip redundant spawns,
+            // but for now we trust the specific spawn methods (spawnBuilding, etc.) to check ctx.isWarmup.
+            await def.setupProps(ctx);
+        }
         if (ctx.yield) await ctx.yield();
 
         if (def.setupContent) await def.setupContent(ctx);
@@ -603,6 +615,17 @@ export const SectorBuilder = {
         building.updateMatrix();
         building.updateMatrixWorld();
 
+        // VINTERDÖD: During warmup, we only need ONE building in the scene to compile the shader.
+        // We skip additional buildings to keep the compilation frame fast.
+        if (ctx.isWarmup) {
+            const warmedSet = (ctx as any)._warmedBuildings || (new Set<string>());
+            (ctx as any)._warmedBuildings = warmedSet;
+            
+            const sig = `${color}_${createRoof}_${withLights}`;
+            if (warmedSet.has(sig)) return building;
+            warmedSet.add(sig);
+        }
+
         ctx.scene.add(building);
 
         const hw = width / 2;
@@ -656,6 +679,13 @@ export const SectorBuilder = {
         vehicle.position.set(x, 0, z);
         vehicle.rotation.y = rotation;
         GeneratorUtils.freezeStatic(vehicle);
+
+        if (ctx.isWarmup) {
+            const warmedSet = (ctx as any)._warmedVehicles || (new Set<number>());
+            (ctx as any)._warmedVehicles = warmedSet;
+            if (warmedSet.has(type)) return vehicle;
+            warmedSet.add(type);
+        }
 
         ctx.scene.add(vehicle);
 

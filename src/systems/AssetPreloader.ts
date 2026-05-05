@@ -16,6 +16,8 @@ import { PoiGenerator } from '../core/world/generators/PoiGenerator';
 import { CampWorld, CAMP_SCENE } from '../components/camp/CampWorld';
 import { SectorSystem } from './SectorSystem';
 import { SectorBuilder } from '../core/world/SectorBuilder';
+import { WaterShape } from './WaterSystem';
+import { ChestType } from '../game/session/SectorTypes';
 import { registerSoundGenerators } from '../utils/audio/AudioLib';
 import { audioEngine } from '../utils/audio/AudioEngine';
 import { FXSystem } from './FXSystem';
@@ -198,8 +200,10 @@ export const AssetPreloader = {
             }
 
             // Populate with proxy lights - LightSystem will handle it
-            const ENGINE_MAX_VISIBLE = engine.maxVisibleLights;
-            const SHADOW_BUDGET = engine.maxSafeShadows;
+            // VINTERDÖD: Only add up to 5 lights for warmup. 
+            // Most shaders only care about 1-4 lights; adding 100+ is pure overhead.
+            const ENGINE_MAX_VISIBLE = Math.min(engine.maxVisibleLights || 3, 5);
+            const SHADOW_BUDGET = engine.maxSafeShadows || 1;
 
             for (let i = 0; i < ENGINE_MAX_VISIBLE; i++) {
                 const proxy = new THREE.PointLight(LIGHT_SETTINGS.DEFAULT_COLOR, 0, LIGHT_SETTINGS.DEFAULT_DISTANCE);
@@ -292,7 +296,19 @@ export const AssetPreloader = {
             // iOS WATCHDOG BYPASS (Time-Slicer)
             // =========================================================
             const safeCompileAsync = async (rootNode: THREE.Object3D, logName: string) => {
-                if (!isMobile) {
+                // VINTERDÖD: Calculate size of compilation batch
+                let objCount = 0;
+                _traverseStack.length = 0;
+                _traverseStack.push(rootNode);
+                while (_traverseStack.length > 0) {
+                    const obj = _traverseStack.pop() as any;
+                    if (obj.isMesh || obj.isSkinnedMesh) objCount++;
+                    for (let i = 0; i < obj.children.length; i++) _traverseStack.push(obj.children[i]);
+                }
+
+                // If the batch is small and we are on desktop, use the fast path.
+                // Otherwise, use time-slicing to prevent UI freezes.
+                if (!isMobile && objCount < 50) {
                     engine.renderer.compile(_dummyScene, engine.camera.threeCamera);
                     return;
                 }
@@ -513,7 +529,26 @@ export const AssetPreloader = {
 
     _populateSharedPool: async (engine: WinterEngine, yieldToMain?: () => Promise<void>) => {
 
+        const matSignatureSet = new Set<string>();
+
         const add = (obj: THREE.Object3D, createInstanced: boolean = true, forceShadow: boolean = false) => {
+            // VINTERDÖD: Fast signature check to prevent adding 100 versions of the same material mesh
+            let hasUniqueMat = false;
+            _traverseStack.length = 0;
+            _traverseStack.push(obj);
+            while (_traverseStack.length > 0) {
+                const curr = _traverseStack.pop() as any;
+                if (curr.isMesh && curr.material) {
+                    const uuid = Array.isArray(curr.material) ? curr.material[0].uuid : curr.material.uuid;
+                    if (!matSignatureSet.has(uuid)) {
+                        matSignatureSet.add(uuid);
+                        hasUniqueMat = true;
+                    }
+                }
+                for (let c = 0; c < curr.children.length; c++) _traverseStack.push(curr.children[c]);
+            }
+            if (!hasUniqueMat && !createInstanced) return;
+
             obj.visible = false;
             obj.matrixAutoUpdate = false;
             obj.updateMatrix();
@@ -555,22 +590,22 @@ export const AssetPreloader = {
             sharedPool.push(obj);
         };
 
-        for (const key in GEOMETRY) {
-            const geo = (GEOMETRY as any)[key];
-            if (geo instanceof THREE.BufferGeometry) add(new THREE.Mesh(geo, MATERIALS.zombie), false);
+        // --- VINTERDÖD: PRUNED SHARED POOL (CORE ONLY) ---
+        // We only add the absolutely essential base geometries and materials here.
+        // Everything else is warmed up via Sector skeletons.
+        add(new THREE.Mesh(GEOMETRY.box, MATERIALS.zombie), false);
+        add(new THREE.Mesh(GEOMETRY.sphere, MATERIALS.zombie), false);
+        add(new THREE.Mesh(GEOMETRY.barrel, MATERIALS.zombie), false);
+
+        // Core UI/Material testers
+        for (const key of ['snow', 'dirt', 'asphalt', 'stone', 'concrete']) {
+            const mat = (MATERIALS as any)[key];
+            if (mat) add(new THREE.Mesh(GEOMETRY.box, mat), false);
         }
 
-        for (const key in MATERIALS) {
-            if (key.startsWith('camp_')) continue;
-            const mat = (MATERIALS as any)[key];
-            if (mat instanceof THREE.Material) {
-                add(new THREE.Mesh(GEOMETRY.box, mat), false);
-                if ((mat as any).map) engine.renderer.initTexture((mat as any).map);
-            }
-        }
 
         // Using globally pre-allocated vectors to prevent GC spikes
-        const coreWaterMat = createWaterMaterial(10, 10, _dummyRipples, _dummyObjects, 'rect');
+        const coreWaterMat = createWaterMaterial(10, 10, _dummyRipples, _dummyObjects, WaterShape.RECT);
         add(new THREE.Mesh(GEOMETRY.plane, coreWaterMat), false);
 
         // FX
@@ -601,30 +636,16 @@ export const AssetPreloader = {
             add(iMesh, false);
         }
 
-        add(ObjectGenerator.createChest('standard'), true, true);
-        add(ObjectGenerator.createChest('big'), true, true);
+        // --- COMMON GAME ASSETS ---
+        add(ObjectGenerator.createChest(ChestType.STANDARD), true, true);
         add(ObjectGenerator.createBarrel(false), true, true);
         add(ObjectGenerator.createStreetLamp(), true, true);
         add(ObjectGenerator.createFence(), true, true);
-        add(ObjectGenerator.createContainer(), true, true);
-        add(ObjectGenerator.createTerminal('ARMORY'), true, true);
-        add(ObjectGenerator.createLocomotive(), false, true);
-        add(ObjectGenerator.createStandardTunnel(), false, true);
-
-        // POIs
+        
+        // POI - Only Church as a representative complex building
         add(PoiGenerator.createChurch(), true, true);
-        add(PoiGenerator.createCafe(), true, true);
-        add(PoiGenerator.createGroceryStore(), true, true);
-        add(PoiGenerator.createGym(), true, true);
-        add(PoiGenerator.createPizzeria(), true, true);
-        add(PoiGenerator.createDealership(), true, true);
-        add(PoiGenerator.createMast(), true, true);
-        add(PoiGenerator.createSmu(), true, true);
-        add(PoiGenerator.createFarm(), true, true);
-        add(PoiGenerator.createEggFarm(), true, true);
-        add(PoiGenerator.createBarn(), true, true);
-        add(PoiGenerator.createTrainTunnel([]), false, true);
         add(PoiGenerator.createCampfire(), true, true);
+
 
         // Zombies corpse
         for (let i = 0; i < DEAD_BODY_TYPES.length; i++) add(ObjectGenerator.createDeadBody(DEAD_BODY_TYPES[i]), true, true);

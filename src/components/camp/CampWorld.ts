@@ -486,7 +486,8 @@ export const CampWorld = {
             ChunkManager.clear();
         }
 
-        await CampWorld.setupTerrain(scene, textures);
+        const terrainSize = isWarmup ? 1 : 1500;
+        await CampWorld.setupTerrain(scene, textures, terrainSize);
 
         if (!isWarmup) {
             ChunkManager.update(new THREE.Vector3(0, 0, 0), scene);
@@ -498,7 +499,7 @@ export const CampWorld = {
         return { interactables, outlines, envState };
     },
 
-    setupTerrain: async (scene: THREE.Scene, textures: Textures) => {
+    setupTerrain: async (scene: THREE.Scene, textures: Textures, size: number = 1500) => {
         if (!cachedTerrainMat) {
             cachedTerrainMat = new THREE.MeshStandardMaterial().copy(MATERIALS.dirt as THREE.MeshStandardMaterial);
             cachedTerrainMat.userData = { isSharedAsset: true };
@@ -511,7 +512,7 @@ export const CampWorld = {
             cachedTerrainMat.bumpMap.repeat.set(60, 60);
         }
 
-        const groundGeo = new THREE.PlaneGeometry(120, 120);
+        const groundGeo = new THREE.PlaneGeometry(size, size);
         const ground = new THREE.Mesh(groundGeo, cachedTerrainMat);
 
         ground.rotation.x = -Math.PI / 2;
