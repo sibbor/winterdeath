@@ -468,13 +468,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         detailsKey = detailsKey || payload?.detailsKey || '';
 
         switch (type) {
-            case DiscoveryType.ENEMY:
+            case DiscoveryType.ZOMBIE:
                 const enemyId = Number(id);
                 if (!sets.seenEnemies.has(enemyId)) {
                     sets.seenEnemies.add(enemyId);
                     if (stats.seenEnemies.indexOf(enemyId) === -1) stats.seenEnemies.push(enemyId);
                     isNew = true;
-                    titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.ENEMY);
+                    titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.ZOMBIE);
                     detailsKey = DataResolver.getZombieName(enemyId);
                     if (currentProps.onEnemyDiscovered) currentProps.onEnemyDiscovered(enemyId);
                 }

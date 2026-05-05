@@ -78,7 +78,7 @@ interface ScreenModalLayoutProps {
 const OVERLAY_BASE = "absolute inset-0 z-[100] flex items-center justify-center p-0 md:p-4 overflow-hidden font-mono pointer-events-auto touch-auto transition-opacity duration-300";
 const MODAL_BOX_BASE = "bg-zinc-950 border shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden flex flex-col transition-all duration-300 origin-center";
 const HEADER_CONTAINER = "p-6 md:p-12 pb-0 relative z-20 shrink-0 pl-3 pr-3";
-const HEADER_INNER = "mb-2 md:mb-8 border-b-2 border-zinc-800/80 pb-4 md:pb-6 relative flex justify-between items-center w-full";
+const HEADER_INNER = "border-b-2 border-zinc-800/80 pb-4 md:pb-6 relative flex justify-between items-center w-full";
 const CONTENT_AREA = "flex-1 overflow-y-auto custom-scrollbar bg-transparent touch-auto relative z-20 px-safe px-4 md:px-14 pb-6";
 const FOOTER_CONTAINER = "bg-zinc-900/30 p-4 md:p-6 border-t border-zinc-800 flex justify-center gap-4 shrink-0 relative z-20 px-safe";
 
@@ -398,14 +398,26 @@ export const TacticalCard: React.FC<{
     id?: string, 
     className?: string,
     showHatching?: boolean,
-    onClick?: () => void
-}> = React.memo(({ children, isLocked, color = '#3b82f6', id, className = '', showHatching = false, onClick }) => (
+    showHover?: boolean,
+    onClick?: () => void,
+    style?: React.CSSProperties
+}> = React.memo(({ children, isLocked, color = '#3b82f6', id, className = '', showHatching = false, showHover = false, onClick, style }) => (
     <div 
         id={id} 
         onClick={onClick}
-        className={`p-6 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 backdrop-blur-md shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800' : ''} ${onClick ? 'cursor-pointer' : ''} ${className}`}
-        style={{ borderColor: isLocked ? '#1f2937' : `${color}66` }}
+        className={`p-6 border-2 relative overflow-hidden transition-all duration-300 backdrop-blur-md shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800 bg-black/60' : ''} ${onClick ? 'cursor-pointer' : ''} group/tcard ${className}`}
+        style={{ 
+            borderColor: isLocked ? '#1f2937' : `${color}66`,
+            backgroundColor: isLocked ? undefined : `${color}0A`, // Very subtle themed background (approx 4% opacity)
+            ...style
+        }}
     >
+        {showHover && !isLocked && (
+            <div 
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full scale-0 group-hover/tcard:scale-[6] transition-transform duration-700 pointer-events-none" 
+                style={{ backgroundColor: `${color}15` }}
+            />
+        )}
         {showHatching && (
             <div className="absolute inset-0 opacity-20 pointer-events-none" style={HORIZONTAL_HATCHING_STYLE} />
         )}
@@ -440,5 +452,28 @@ export const TacticalTab: React.FC<{
         </button>
     );
 });
+
+export const TacticalRow: React.FC<{
+    children: React.ReactNode,
+    onClick?: () => void,
+    color?: string,
+    className?: string,
+    showHover?: boolean
+}> = React.memo(({ children, onClick, color = '#3b82f6', className = '', showHover = true }) => (
+    <div 
+        onClick={onClick}
+        className={`relative overflow-hidden group/trow transition-colors ${onClick ? 'cursor-pointer' : ''} ${className}`}
+    >
+        {showHover && (
+            <div 
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full scale-0 group-hover/trow:scale-[10] transition-transform duration-700 pointer-events-none opacity-0 group-hover/trow:opacity-100" 
+                style={{ backgroundColor: `${color}0D` }} 
+            />
+        )}
+        <div className="relative z-10 w-full h-full">
+            {children}
+        </div>
+    </div>
+));
 
 export default ScreenModalLayout;

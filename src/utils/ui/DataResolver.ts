@@ -5,7 +5,7 @@ import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
 import { POIS } from '../../content/pois';
 import { PERKS, PERK_CATALOG, PerkCategory, StatusEffectType } from '../../content/perks';
-import { FAMILY_MEMBERS, FamilyMemberID, PLAYER_CHARACTER } from '../../content/constants';
+import { FAMILY_MEMBERS, FamilyMemberID, PLAYER_CHARACTER, SPEAKER_ID_TO_KEY } from '../../content/constants';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { CLUES } from '../../content/clues';
 import { COLLECTIBLES } from '../../content/collectibles';
@@ -32,12 +32,12 @@ export interface VoiceParams {
     pitchScale: number;
 }
 
-const DISCOVERY_BUCKETS: Record<string, any[]> = {
-    POI: Object.values(POIS),
-    COLLECTIBLE: Object.values(COLLECTIBLES),
-    CLUE: Object.values(CLUES),
-    BOSS: Object.entries(BOSSES).map(([id, boss]) => ({ ...boss, id: Number(id) })),
-    ENEMY: Object.entries(ZOMBIE_TYPES).map(([type, data]) => ({ ...data, id: type, type: Number(type) }))
+const DISCOVERY_BUCKETS: Record<number, any[]> = {
+    [DiscoveryType.POI]: Object.values(POIS),
+    [DiscoveryType.COLLECTIBLE]: Object.values(COLLECTIBLES),
+    [DiscoveryType.CLUE]: Object.values(CLUES),
+    [DiscoveryType.BOSS]: Object.entries(BOSSES).map(([id, boss]) => ({ ...boss, id: Number(id) })),
+    [DiscoveryType.ZOMBIE]: Object.entries(ZOMBIE_TYPES).map(([type, data]) => ({ ...data, id: type, type: Number(type) }))
 };
 
 const SPEAKER_COLORS: Record<string, string> = {
@@ -188,7 +188,7 @@ export const DataResolver = {
      */
     getFamilyMemberName(idOrIndex: number | string): string {
         const id = Number(idOrIndex);
-        if (id === FamilyMemberID.PLAYER) return PLAYER_CHARACTER.name;
+        if (id === FamilyMemberID.ROBERT) return PLAYER_CHARACTER.name;
         const member = typeof idOrIndex === 'number' ? FAMILY_MEMBERS[idOrIndex] : FAMILY_MEMBERS.find(m => m.id === id);
         return member ? member.name : 'ui.unknown';
     },
@@ -312,7 +312,7 @@ export const DataResolver = {
             case DiscoveryType.CLUE: return 'ui.discovered_clue';
             case DiscoveryType.POI: return 'ui.discovered_poi';
             case DiscoveryType.COLLECTIBLE: return 'ui.discovered_collectible';
-            case DiscoveryType.ENEMY: return 'ui.discovered_enemy';
+            case DiscoveryType.ZOMBIE: return 'ui.discovered_enemy';
             case DiscoveryType.BOSS: return 'ui.boss_encountered';
             case DiscoveryType.PERK: return 'ui.skill_point';
             default: return 'ui.discovery';
@@ -342,7 +342,7 @@ export const DataResolver = {
      * Resolves a speaker identifier to a CSS hex color.
      * O(1) lookup on pre-computed Record.
      */
-    getSpeakerColor(id: string | number): string {
+    getSpeakerColor(id: FamilyMemberID | string): string {
         const key = typeof id === 'string' ? id.toLowerCase() : id;
         return SPEAKER_COLORS[key] || '#ffffff';
     },
@@ -351,9 +351,8 @@ export const DataResolver = {
      * Returns localized chatter lines for a family member.
      * O(1) resolution via pre-mapped locale object.
      */
-    getChatterLines(id: number): string[] {
-        const member = FAMILY_MEMBERS[id];
-        const key = member?.name.toLowerCase();
+    getChatterLines(id: FamilyMemberID): string[] {
+        const key = SPEAKER_ID_TO_KEY[id];
         const chatter = t('chatter');
         return (chatter && (chatter as any)[key]) || ["..."];
     },

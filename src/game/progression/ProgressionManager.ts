@@ -190,8 +190,9 @@ export const aggregateStats = (
         }
     }
 
-    // Sync total skill points earned for UI displays
+    // Sync total skill points and challenge points earned for UI displays
     s.totalSkillPointsEarned = sb[PlayerStatID.SKILL_POINTS];
+    s.totalChallengePoints = sb[PlayerStatID.TOTAL_CHALLENGE_POINTS];
 
     return s;
 };

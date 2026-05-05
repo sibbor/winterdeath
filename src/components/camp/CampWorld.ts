@@ -903,28 +903,21 @@ export const CampWorld = {
         const familyGroup = new THREE.Group();
         const interactables: THREE.Mesh[] = [];
         const familyMembers: any[] = [];
-        const activeMembers: any[] = [playerCharacter];
+        const activeMembers: any[] = [];
+        const rescuedSet = new Set(rescuedIndices || []);
+        
+        // Always include all potential members to support Zero-GC toggling
+        const allMembers = [playerCharacter, ...familyMembersData];
+        const humans = allMembers.filter(m => m.race === 'human');
+        const animals = allMembers.filter(m => m.race === 'animal');
 
-        if (debugMode) {
-            for (let i = 0; i < familyMembersData.length; i++) {
-                activeMembers.push(familyMembersData[i]);
-            }
-        } else {
-            const indices = rescuedIndices || [];
-            for (let i = 0; i < indices.length; i++) {
-                const sectorId = indices[i];
-                if (familyMembersData[sectorId]) {
-                    activeMembers.push(familyMembersData[sectorId]);
-                }
-            }
-        }
-
-        const humans = activeMembers.filter(m => m.race === 'human');
-        const animals = activeMembers.filter(m => m.race === 'animal');
-
-        for (let globalIdx = 0; globalIdx < activeMembers.length; globalIdx++) {
-            const memberData = activeMembers[globalIdx];
+        for (let globalIdx = 0; globalIdx < allMembers.length; globalIdx++) {
+            const memberData = allMembers[globalIdx];
             const member = ModelFactory.createFamilyMember(memberData);
+
+            // Visibility Logic: Player is always visible, others depend on rescue status OR debug mode
+            const isRescued = memberData.id === 'player' || rescuedSet.has(familyMembersData.indexOf(memberData));
+            member.visible = isRescued || debugMode;
 
             if (memberData.id === 'player') {
                 member.userData.id = `player_${memberData.name}`;
@@ -950,8 +943,6 @@ export const CampWorld = {
                     break;
                 }
             }
-
-            if (bodyMesh) interactables.push(bodyMesh as THREE.Mesh);
 
             const emissiveMaterials: THREE.MeshStandardMaterial[] = [];
 
@@ -1000,16 +991,23 @@ export const CampWorld = {
             }
             familyGroup.add(member);
 
-            let baseY = member.userData.baseY ?? 0;
-            familyMembers.push({
+            const fmWrapper = {
+                id: memberData.id,
                 mesh: member,
-                baseY,
+                baseY: member.userData.baseY ?? 0,
                 phase: Math.random() * Math.PI * 2,
                 bounce: 0,
                 name: memberData.name,
                 seed: Math.random() * 100,
                 emissiveMaterials
-            });
+            };
+            
+            familyMembers.push(fmWrapper);
+
+            if (member.visible) {
+                activeMembers.push(fmWrapper);
+                if (bodyMesh) interactables.push(bodyMesh as THREE.Mesh);
+            }
         }
         scene.add(familyGroup);
         return { familyMembers, interactables, activeMembers };

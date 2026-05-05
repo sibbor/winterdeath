@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { PlayerStats, PlayerStatID } from '../../../entities/player/PlayerTypes';
 import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
+import { DiscoveryType } from '../hud/HudTypes';
 
 interface CampHUDProps {
     stats: PlayerStats;
@@ -14,6 +15,7 @@ interface CampHUDProps {
     onOpenStats: () => void;
     onOpenArmory: () => void;
     onOpenSkills: () => void;
+    onOpenAdventureLog: (tab?: DiscoveryType) => void;
     onOpenSettings: () => void;
     onStartSector: () => void;
 
@@ -23,6 +25,7 @@ interface CampHUDProps {
     onResetGame: () => void;
     onDebugScrap: () => void;
     onDebugSkill: () => void;
+    onDebugCP: () => void;
     isMobileDevice?: boolean;
 }
 
@@ -32,27 +35,64 @@ interface CampHUDProps {
 const areEqual = (prevProps: CampHUDProps, nextProps: CampHUDProps) => {
     // Om UI-state ändras, måste vi rita om
     if (prevProps.isIdle !== nextProps.isIdle) return false;
-    if (prevProps.debugMode !== nextProps.debugMode) return false;
     if (prevProps.isMobileDevice !== nextProps.isMobileDevice) return false;
     if (prevProps.currentSectorName !== nextProps.currentSectorName) return false;
     if (prevProps.hoveredStation !== nextProps.hoveredStation) return false;
 
-    // Kritiska stats som visas i CampHUD
-    const pb = prevProps.stats.statsBuffer;
-    const nb = nextProps.stats.statsBuffer;
-
-    return pb[PlayerStatID.LEVEL] === nb[PlayerStatID.LEVEL] &&
-        pb[PlayerStatID.CURRENT_XP] === nb[PlayerStatID.CURRENT_XP] &&
-        pb[PlayerStatID.SKILL_POINTS] === nb[PlayerStatID.SKILL_POINTS] &&
-        pb[PlayerStatID.SCRAP] === nb[PlayerStatID.SCRAP] &&
-        pb[PlayerStatID.TOTAL_CHALLENGE_POINTS] === nb[PlayerStatID.TOTAL_CHALLENGE_POINTS];
+    // VINTERDÖD PERFORMANCE FIX: Stats and DebugMode are now handled via useRef bypass.
+    return prevProps.stats === nextProps.stats;
 };
 
 const CampHUD: React.FC<CampHUDProps> = React.memo(({
     stats, hoveredStation, currentSectorName, hasCheckpoint, isIdle, currentLoadoutNames,
-    onOpenStats, onOpenArmory, onOpenSkills, onOpenSettings, onStartSector,
-    debugMode, onToggleDebug, onResetGame, onDebugScrap, onDebugSkill, isMobileDevice
+    onOpenStats, onOpenArmory, onOpenSkills, onOpenAdventureLog, onOpenSettings, onStartSector,
+    debugMode, onToggleDebug, onResetGame, onDebugScrap, onDebugSkill, onDebugCP, isMobileDevice
 }) => {
+    const spRef = React.useRef<HTMLSpanElement>(null);
+    const scrapRef = React.useRef<HTMLSpanElement>(null);
+    const cpRef = React.useRef<HTMLSpanElement>(null);
+    const debugBtnRef = React.useRef<HTMLDivElement>(null);
+    const debugTextRef = React.useRef<HTMLSpanElement>(null);
+    const debugModeRef = React.useRef(debugMode);
+
+    // Sync ref with prop for click handlers
+    React.useEffect(() => { debugModeRef.current = debugMode; }, [debugMode]);
+
+    // VINTERDÖD: Direct DOM Injection (Phase 13)
+    React.useEffect(() => {
+        const unsubscribe = (window as any).HudStore?.subscribeFastUpdate((data: any) => {
+            if (data.sp !== undefined && spRef.current) spRef.current.innerText = Math.floor(data.sp).toString();
+            if (data.scrap !== undefined && scrapRef.current) scrapRef.current.innerText = Math.floor(data.scrap).toString();
+            if (data.cp !== undefined && cpRef.current) cpRef.current.innerText = Math.floor(data.cp).toString();
+            
+            if (data.debugMode !== undefined) {
+                debugModeRef.current = data.debugMode;
+                if (debugBtnRef.current) {
+                    debugBtnRef.current.className = `flex items-center gap-2 cursor-pointer px-4 py-2 border transition-colors ${data.debugMode ? 'bg-green-900/50 border-green-500' : 'bg-black border-gray-500 hover:border-white'}`;
+                }
+                if (debugTextRef.current) {
+                    debugTextRef.current.className = `text-xs uppercase font-bold tracking-widest ${data.debugMode ? 'text-green-400' : 'text-gray-300'}`;
+                }
+            }
+        });
+        return unsubscribe;
+    }, []);
+
+    // Sync initial state and prop changes
+    React.useEffect(() => {
+        const b = stats.statsBuffer;
+        if (spRef.current) spRef.current.innerText = Math.floor(b[PlayerStatID.SKILL_POINTS] || 0).toString();
+        if (scrapRef.current) scrapRef.current.innerText = Math.floor(b[PlayerStatID.SCRAP] || 0).toString();
+        if (cpRef.current) cpRef.current.innerText = Math.floor(b[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0).toString();
+        
+        // Initial debug state sync
+        if (debugBtnRef.current) {
+            debugBtnRef.current.className = `flex items-center gap-2 cursor-pointer px-4 py-2 border transition-colors ${debugMode ? 'bg-green-900/50 border-green-500' : 'bg-black border-gray-500 hover:border-white'}`;
+        }
+        if (debugTextRef.current) {
+            debugTextRef.current.className = `text-xs uppercase font-bold tracking-widest ${debugMode ? 'text-green-400' : 'text-gray-300'}`;
+        }
+    }, [stats, debugMode]);
 
     const uiFadeClass = `transition-opacity ${isIdle ? 'duration-[2000ms] opacity-0' : 'duration-300 opacity-100'}`;
 
@@ -89,22 +129,23 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
                 <div className="flex gap-4 pointer-events-auto">
                     {/* Skill Points */}
                     <div onClick={() => { if (debugMode) onDebugSkill(); else onOpenSkills(); }}
-                        className={`w-20 h-20 aspect-square border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 flex flex-col items-center justify-center ${stats.statsBuffer[PlayerStatID.SKILL_POINTS] > 0 ? 'bg-purple-950/40 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-black/80 border-slate-700'}`}>
-                        <span className={`text-[10px] block uppercase font-bold ${stats.statsBuffer[PlayerStatID.SKILL_POINTS] > 0 ? 'text-purple-600' : 'text-slate-500'}`}>{t('ui.sp')}</span>
-                        <span className={`text-2xl font-bold font-mono ${stats.statsBuffer[PlayerStatID.SKILL_POINTS] > 0 ? 'text-purple-500' : 'text-white'}`}>{stats.statsBuffer[PlayerStatID.SKILL_POINTS]}</span>
+                        className={`w-20 h-20 aspect-square border-2 backdrop-blur-sm cursor-pointer transition-all hover:scale-105 flex flex-col items-center justify-center bg-purple-950/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.2)]`}>
+                        <span className={`text-[10px] block uppercase font-bold text-purple-400 opacity-70`}>{t('ui.sp')}</span>
+                        <span ref={spRef} className={`text-2xl font-bold font-mono text-purple-500`}>{stats.statsBuffer[PlayerStatID.SKILL_POINTS]}</span>
                     </div>
 
                     {/* Scrap */}
                     <div onClick={() => { if (debugMode) onDebugScrap(); else onOpenArmory(); }}
-                        className={`w-20 h-20 aspect-square border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 flex flex-col items-center justify-center ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'bg-yellow-950/40 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'bg-black/80 border-slate-700'}`}>
-                        <span className={`text-[10px] block uppercase font-bold ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'text-yellow-600' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
-                        <span className={`text-2xl font-bold font-mono ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'text-yellow-500' : 'text-white'}`}>{stats.statsBuffer[PlayerStatID.SCRAP]}</span>
+                        className={`w-20 h-20 aspect-square border-2 backdrop-blur-sm cursor-pointer transition-all hover:scale-105 flex flex-col items-center justify-center bg-yellow-950/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.2)]`}>
+                        <span className={`text-[10px] block uppercase font-bold text-yellow-500 opacity-70`}>{t('ui.scrap')}</span>
+                        <span ref={scrapRef} className={`text-2xl font-bold font-mono text-yellow-500`}>{stats.statsBuffer[PlayerStatID.SCRAP]}</span>
                     </div>
 
                     {/* Challenge Points (CP) */}
-                    <div className={`w-20 h-20 aspect-square border backdrop-blur-sm transition-all flex flex-col items-center justify-center ${stats.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] > 0 ? 'bg-red-950/40 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-black/80 border-slate-700'}`}>
-                        <span className={`text-[10px] block uppercase font-bold ${stats.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] > 0 ? 'text-red-600' : 'text-slate-500'}`}>CP</span>
-                        <span className={`text-2xl font-bold font-mono ${stats.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] > 0 ? 'text-red-500' : 'text-white'}`}>{stats.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0}</span>
+                    <div onClick={() => { if (debugMode) onDebugCP(); else onOpenAdventureLog(DiscoveryType.CHALLENGE); }}
+                        className={`w-20 h-20 aspect-square border-2 backdrop-blur-sm cursor-pointer transition-all hover:scale-105 flex flex-col items-center justify-center bg-red-950/20 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)]`}>
+                        <span className={`text-[10px] block uppercase font-bold text-red-500 opacity-70`}>CP</span>
+                        <span ref={cpRef} className={`text-2xl font-bold font-mono text-red-500`}>{stats.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0}</span>
                     </div>
                 </div>
             </div>
@@ -116,8 +157,14 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
                         <span className="text-xs uppercase text-gray-300 font-bold tracking-widest">{t('ui.settings')}</span>
                     </div>
 
-                    <div onClick={() => { UiSounds.playClick(); onToggleDebug(!debugMode); }} className={`flex items-center gap-2 cursor-pointer px-4 py-2 border transition-colors ${debugMode ? 'bg-green-900/50 border-green-500' : 'bg-black border-gray-500 hover:border-white'}`}>
-                        <span className={`text-xs uppercase font-bold tracking-widest ${debugMode ? 'text-green-400' : 'text-gray-300'}`}>{t('ui.debug_mode')}</span>
+                    <div ref={debugBtnRef} onClick={() => { 
+                        UiSounds.playClick(); 
+                        const cur = (window as any).HudStore?.getState().debugMode ?? debugModeRef.current;
+                        const next = !cur; 
+                        (window as any).HudStore?.patch({ debugMode: next }); // Use patch to notify everyone
+                        onToggleDebug(next); 
+                    }} className={`flex items-center gap-2 cursor-pointer px-4 py-2 border transition-colors ${debugMode ? 'bg-green-900/50 border-green-500' : 'bg-black border-gray-500 hover:border-white'}`}>
+                        <span ref={debugTextRef} className={`text-xs uppercase font-bold tracking-widest ${debugMode ? 'text-green-400' : 'text-gray-300'}`}>{t('ui.debug_mode')}</span>
                     </div>
 
                     <div onClick={() => { UiSounds.playClick(); onResetGame(); }} className="flex items-center gap-2 cursor-pointer bg-black px-4 py-2 border border-red-900 hover:border-red-500 hover:bg-red-900/20 transition-colors">

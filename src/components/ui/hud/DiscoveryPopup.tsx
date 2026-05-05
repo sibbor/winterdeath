@@ -116,24 +116,28 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         subtitle = `${t('ui.clue')} ${cluesFound}/${totalClues}`;
         icon = '🔍';
         break;
+
       case DiscoveryType.POI:
         title = t('ui.discovered_poi');
         const totalPois = Object.values(POIS).filter(p => p.sector === sector).length;
         subtitle = `${t('ui.poi_short')} ${poisFound}/${totalPois}`;
         icon = '📍';
         break;
+
       case DiscoveryType.COLLECTIBLE:
         title = t('ui.discovered_collectible');
         const totalCollectibles = Object.values(COLLECTIBLES).filter(c => c.sector === sector).length;
         subtitle = `${t(DataResolver.getCollectibleName(id))} (${collectiblesFound}/${totalCollectibles})`;
         icon = '📦';
         break;
-      case DiscoveryType.ENEMY:
+
+      case DiscoveryType.ZOMBIE:
       case DiscoveryType.BOSS:
         title = t('ui.discovered_enemy');
         icon = type === DiscoveryType.BOSS ? '💀' : '🧟';
         subtitle = t(DataResolver.getEnemyName(Number(id), type === DiscoveryType.BOSS ? Number(id) : -1));
         break;
+
       case DiscoveryType.PERK:
         title = t('ui.discovered_perk');
         const perk = PERKS[Number(id)];
@@ -141,6 +145,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         const catKey = perk?.category === PerkCategory.PASSIVE ? 'categories.passive' : (perk?.category === PerkCategory.BUFF ? 'categories.buff' : 'categories.debuff');
         subtitle = `${t(catKey)}: ${t(perk?.displayName || '')}`;
         break;
+
       default:
         // Use default title/subtitle if type is unhandled but strings exist
         if (!icon) icon = '✨';

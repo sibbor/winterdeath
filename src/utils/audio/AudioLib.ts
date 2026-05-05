@@ -4,6 +4,7 @@ import { SoundID, MusicID } from './AudioTypes';
 import { MATERIAL_TYPE, FOOTSTEP_MAP, IMPACT_MAP } from '../../content/environment';
 import { EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { VehicleCategory, VehicleImpactIntensity } from '../../entities/vehicles/VehicleTypes';
+import { FamilyMemberID } from '../../content/constants';
 import { audioEngine } from './AudioEngine';
 
 /**
@@ -904,14 +905,40 @@ export const VoiceSounds = {
         if (pos) audioEngine.playSpatialSound(SoundID.VO_FAMILY_CRY, pos, vol, 25);
         else audioEngine.playSound(SoundID.VO_FAMILY_CRY, vol, pitch);
     },
-    playDialogueBeep: (speaker: string) => {
-        // Map speaker names to distinct pitches (Zero-GC mapping)
+    playDialogueBeep: (id: FamilyMemberID) => {
+        // Map speaker IDs to distinct pitches (Zero-GC mapping)
         let pitch = 1.0;
-        const name = speaker.toLowerCase();
-        if (name === 'robert' || name === 'player') pitch = 0.8;
-        else if (name === 'family' || name === 'member') pitch = 1.2;
-        else if (name === 'mysterious') pitch = 0.6;
-        else pitch = 0.9 + (Math.random() * 0.2); // Random variation for unknowns
+
+        switch (id) {
+            case FamilyMemberID.ROBERT:
+                pitch = 0.8;
+                break;
+            case FamilyMemberID.JORDAN:
+                pitch = 1.6;
+                break;
+            case FamilyMemberID.LOKE:
+                pitch = 1.3;
+                break;
+            case FamilyMemberID.ESMERALDA:
+                pitch = 1.1;
+                break;
+            case FamilyMemberID.NATHALIE:
+                pitch = 1.0;
+                break;
+            case FamilyMemberID.SOTIS:
+            case FamilyMemberID.PANTER:
+                pitch = 1.8;
+                break;
+            case FamilyMemberID.UNKNOWN:
+                pitch = 0.6;
+                break;
+            case FamilyMemberID.RADIO:
+                pitch = 0.7;
+                break;
+            default:
+                pitch = 0.9 + (Math.random() * 0.2);
+                break;
+        }
 
         audioEngine.playSound(SoundID.UI_CHIME, 0.15, pitch);
     }
@@ -935,9 +962,9 @@ export const VehicleSounds = {
         audioEngine.updateVoiceVolume(index, 0.3 + (rpm * 0.2));
         // Note: playbackRate adjustment can be added to AudioEngine later if needed for RPM pitch
     },
-    playImpact: (intensity: number) => {
-        const vol = intensity === 2 ? 0.8 : 0.4; // 2 = HEAVY
-        const pitch = intensity === 2 ? 0.8 : 1.2;
+    playImpact: (intensity: VehicleImpactIntensity) => {
+        const vol = intensity === VehicleImpactIntensity.HEAVY ? 0.8 : 0.4;
+        const pitch = intensity === VehicleImpactIntensity.HEAVY ? 0.8 : 1.2;
         audioEngine.playSound(SoundID.VEHICLE_IMPACT, vol, pitch);
     },
     startSkid: () => audioEngine.playLoop(SoundID.VEHICLE_SKID, 0),

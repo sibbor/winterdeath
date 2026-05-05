@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { t } from '../../../../utils/i18n';
 import { SectorStats } from '../../../../types/StateTypes';
-import ScreenModalLayout, { TacticalCard, TacticalTab } from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { TacticalCard, TacticalTab, TacticalRow } from '../../layout/ScreenModalLayout';
 import { DamageID } from '../../../../entities/player/CombatTypes';
 import { StatWeaponIndex, StatEnemyIndex } from '../../../../entities/player/PlayerTypes';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
@@ -147,8 +147,8 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                         </div>
 
                         <div className="space-y-3">
-                            <StatBox label={t('report.stats.xp')} value={`+${stats.xpGained}`} colorClass="text-blue-400" borderColor="border-blue-500" bgColor="bg-blue-900/10" />
-                            <StatBox label={t('report.stats.sp')} value={`+${stats.spGained || 0}`} colorClass="text-purple-400" borderColor="border-purple-500" bgColor="bg-purple-900/10" />
+                            <StatBox label={t('report.stats.xp')} value={`+${stats.xpGained}`} colorClass="text-blue-400" borderColor="border-blue-500" />
+                            <StatBox label={t('report.stats.sp')} value={`+${stats.spGained || 0}`} colorClass="text-purple-400" borderColor="border-purple-500" />
                         </div>
                     </div>
 
@@ -156,8 +156,8 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     <div className="space-y-6">
                         <h3 className="text-white font-light uppercase text-xl border-b border-gray-800 pb-2 tracking-tighter">{t('ui.scavenging')}</h3>
                         <div className="space-y-3">
-                            <StatBox label={t('report.stats.scrap')} value={`+${stats.scrapLooted}`} colorClass="text-yellow-500" borderColor="border-yellow-500" bgColor="bg-yellow-900/10" />
-                            <StatBox label={t('report.stats.chests')} value={stats.chestsOpened + stats.bigChestsOpened} colorClass="text-yellow-400" borderColor="border-yellow-600" bgColor="bg-yellow-900/10" />
+                            <StatBox label={t('report.stats.scrap')} value={`+${stats.scrapLooted}`} colorClass="text-yellow-500" borderColor="border-yellow-500" />
+                            <StatBox label={t('report.stats.chests')} value={stats.chestsOpened + stats.bigChestsOpened} colorClass="text-yellow-400" borderColor="border-yellow-600" />
                         </div>
                     </div>
 
@@ -165,13 +165,13 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     <div className="space-y-6">
                         <h3 className="text-white font-light uppercase text-xl border-b border-gray-800 pb-2 tracking-tighter">{t('ui.exploration')}</h3>
                         <div className="space-y-3">
-                            <StatBox label={t('ui.collectible')} value={`${stats.collectiblesDiscovered?.length || 0} / 2`} colorClass="text-orange-400" borderColor="border-orange-500" bgColor="bg-orange-900/10" />
-                            <StatBox label={t('ui.clues_found')} value={stats.cluesFound?.length || 0} colorClass="text-orange-400" borderColor="border-orange-500" bgColor="bg-orange-900/10" />
-                            <StatBox label={t('ui.pois_discovered')} value={stats.discoveredPOIs?.length || 0} colorClass="text-orange-400" borderColor="border-orange-500" bgColor="bg-orange-900/10" />
+                            <StatBox label={t('ui.collectible')} value={`${stats.collectiblesDiscovered?.length || 0} / 2`} colorClass="text-orange-400" borderColor="border-orange-500" />
+                            <StatBox label={t('ui.clues_found')} value={stats.cluesFound?.length || 0} colorClass="text-orange-400" borderColor="border-orange-500" />
+                            <StatBox label={t('ui.pois_discovered')} value={stats.discoveredPOIs?.length || 0} colorClass="text-orange-400" borderColor="border-orange-500" />
                         </div>
                         <div className="space-y-3">
-                            <StatBox label={t('ui.time_elapsed')} value={formatTime(stats.timeElapsed)} colorClass="text-orange-400" borderColor="border-orange-500" bgColor="bg-orange-900/10" />
-                            <StatBox label={t('ui.distance_traveled')} value={formatDistance(stats.distanceTraveled || 0)} colorClass="text-orange-400" borderColor="border-orange-500" bgColor="bg-orange-900/10" />
+                            <StatBox label={t('ui.time_elapsed')} value={formatTime(stats.timeElapsed)} colorClass="text-orange-400" borderColor="border-orange-500" />
+                            <StatBox label={t('ui.distance_traveled')} value={formatDistance(stats.distanceTraveled || 0)} colorClass="text-orange-400" borderColor="border-orange-500" />
                         </div>
                     </div>
 
@@ -179,10 +179,10 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     <div className="space-y-6">
                         <h3 className="text-white font-light uppercase text-xl border-b border-gray-800 pb-2 tracking-tighter">{t('ui.combat')}</h3>
                         <div className="space-y-3">
-                            <StatBox label={t('report.stats.shots')} value={stats.shotsFired} colorClass="text-red-400" borderColor="border-red-500" bgColor="bg-red-900/10" />
-                            <StatBox label={t('report.stats.accuracy')} value={`${accuracy}%`} colorClass="text-red-400" borderColor="border-red-500" bgColor="bg-red-900/10" />
-                            <StatBox label={t('report.stats.kills')} value={totalKills} colorClass="text-red-500" borderColor="border-red-500" bgColor="bg-red-900/10" />
-                            <StatBox label={t('report.stats.throwables')} value={stats.throwablesThrown || 0} colorClass="text-red-400" borderColor="border-red-600" bgColor="bg-red-900/10" />
+                            <StatBox label={t('report.stats.shots')} value={stats.shotsFired} colorClass="text-red-400" borderColor="border-red-500" />
+                            <StatBox label={t('report.stats.accuracy')} value={`${accuracy}%`} colorClass="text-red-400" borderColor="border-red-500" />
+                            <StatBox label={t('report.stats.kills')} value={totalKills} colorClass="text-red-500" borderColor="border-red-500" />
+                            <StatBox label={t('report.stats.throwables')} value={stats.throwablesThrown || 0} colorClass="text-red-400" borderColor="border-red-600" />
                         </div>
                     </div>
                 </div>
@@ -222,7 +222,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                                                 const dmg = stats.incomingDamageBuffer[offset + attackId];
                                                 if (dmg <= 0) return null;
                                                 const atkName = t(DataResolver.getAttackName(attackId));
-                                                return <LineItem key={attackId} title={atkName.toUpperCase()} val={dmg} />;
+                                                return <LineItem key={attackId} title={atkName.toUpperCase()} val={dmg} color="#ef4444" />;
                                             })}
                                         </div>
                                     </div>
@@ -244,7 +244,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                                 const instrumentId = idx + 1;
                                 const name = t(DataResolver.getDamageName(instrumentId));
 
-                                return <LineItem key={idx} title={name.toUpperCase()} val={dmgVal} />;
+                                return <LineItem key={idx} title={name.toUpperCase()} val={dmgVal} color="#22c55e" />;
                             })}
                         </div>
                     </TacticalCard>
@@ -256,15 +256,28 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
 // --- REUSABLE SUB-COMPONENTS (HOISTED) ---
 
-const StatBox = React.memo(({ label, value, colorClass = 'text-white', borderColor = 'border-blue-500', bgColor = 'bg-blue-900/20' }: { label: string, value: string | number, colorClass?: string, borderColor?: string, bgColor?: string }) => (
-    <TacticalCard
-        color={borderColor.includes('blue') ? '#3b82f6' : (borderColor.includes('red') ? '#ef4444' : (borderColor.includes('green') ? '#22c55e' : (borderColor.includes('yellow') ? '#eab308' : '#3b82f6')))}
-        className="flex flex-col justify-center min-h-[80px]"
-    >
-        <span className={`block text-[10px] uppercase font-black tracking-widest mb-1 opacity-70 ${colorClass}`}>{label}</span>
-        <span className={`text-2xl font-bold uppercase ${colorClass}`}>{value}</span>
-    </TacticalCard>
-));
+const StatBox = React.memo(({ label, value, colorClass = 'text-white', borderColor = 'border-blue-500' }: { label: string, value: string | number, colorClass?: string, borderColor?: string }) => {
+    const tacticalColor = useMemo(() => {
+        if (borderColor.includes('red')) return '#ef4444';
+        if (borderColor.includes('green')) return '#22c55e';
+        if (borderColor.includes('yellow')) return '#eab308';
+        if (borderColor.includes('orange')) return '#f97316';
+        if (borderColor.includes('purple')) return '#a855f7';
+        if (borderColor.includes('blue')) return '#3b82f6';
+        return '#3b82f6';
+    }, [borderColor]);
+
+    return (
+        <TacticalCard
+            color={tacticalColor}
+            showHover={true}
+            className="flex flex-col justify-center min-h-[80px]"
+        >
+            <span className={`block text-[10px] uppercase font-black tracking-widest mb-1 opacity-70 ${colorClass}`}>{label}</span>
+            <span className={`text-2xl font-bold uppercase ${colorClass}`}>{value}</span>
+        </TacticalCard>
+    );
+});
 
 const SmallStat = React.memo(({ label, value, colorClass = 'text-slate-400' }: { label: string, value: string | number, colorClass?: string }) => (
     <div className="flex flex-col">
@@ -273,11 +286,11 @@ const SmallStat = React.memo(({ label, value, colorClass = 'text-slate-400' }: {
     </div>
 ));
 
-const LineItem = React.memo(({ title, val, isHeal = false }: { title: string, val: number, isHeal?: boolean }) => (
-    <div className="flex justify-between text-sm py-1 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors px-1 rounded">
+const LineItem = React.memo(({ title, val, isHeal = false, color = '#3b82f6' }: { title: string, val: number, isHeal?: boolean, color?: string }) => (
+    <TacticalRow color={color} className="flex justify-between text-sm py-1 border-b border-white/5 last:border-0 px-1 rounded">
         <span className="text-white/80">{title}</span>
         <span className={isHeal ? "text-green-400 font-mono" : "text-white font-mono"}>{Math.round(val)}</span>
-    </div>
+    </TacticalRow>
 ));
 
 export default ScreenSectorReport;

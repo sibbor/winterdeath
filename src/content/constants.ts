@@ -141,7 +141,7 @@ export const INITIAL_STATS: PlayerStats = {
     effectDurations: new Float32Array(32),
     effectMaxDurations: new Float32Array(32),
     effectIntensities: new Float32Array(32),
-    
+
     weaponKills: new Float64Array(StatWeaponIndex.COUNT),
     weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
     weaponShotsFired: new Float64Array(StatWeaponIndex.COUNT),
@@ -189,8 +189,20 @@ export const INITIAL_STATS: PlayerStats = {
     baseY: 0,
 };
 
+export enum FamilyMemberID {
+    LOKE = 0,
+    JORDAN = 1,
+    ESMERALDA = 2,
+    NATHALIE = 3,
+    SOTIS = 4,
+    PANTER = 5,
+    ROBERT = 100,
+    UNKNOWN = 200,
+    RADIO = 201
+}
+
 export const PLAYER_CHARACTER = {
-    id: 'player',
+    id: FamilyMemberID.ROBERT,
     name: 'Robert',
     race: 'human',
     gender: 'male',
@@ -199,15 +211,36 @@ export const PLAYER_CHARACTER = {
     scale: 1.0
 };
 
-export enum FamilyMemberID {
-    LOKE = 0,
-    JORDAN = 1,
-    ESMERALDA = 2,
-    NATHALIE = 3,
-    SOTIS = 4,
-    PANTER = 5,
-    PLAYER = 100
-}
+/**
+ * Maps speaker strings (from scripts/legacy systems) to SMI Enums.
+ */
+export const SPEAKER_NAME_MAP: Record<string, FamilyMemberID> = {
+    'Robert': FamilyMemberID.ROBERT,
+    'Player': FamilyMemberID.ROBERT,
+    'Loke': FamilyMemberID.LOKE,
+    'Jordan': FamilyMemberID.JORDAN,
+    'Esmeralda': FamilyMemberID.ESMERALDA,
+    'Nathalie': FamilyMemberID.NATHALIE,
+    'Sotis': FamilyMemberID.SOTIS,
+    'Panter': FamilyMemberID.PANTER,
+    'Unknown': FamilyMemberID.UNKNOWN,
+    'Radio': FamilyMemberID.RADIO
+};
+
+/**
+ * Maps SMI Enums to lowercase locale keys used in i18n files.
+ */
+export const SPEAKER_ID_TO_KEY: Record<FamilyMemberID, string> = {
+    [FamilyMemberID.ROBERT]: 'robert',
+    [FamilyMemberID.LOKE]: 'loke',
+    [FamilyMemberID.JORDAN]: 'jordan',
+    [FamilyMemberID.ESMERALDA]: 'esmeralda',
+    [FamilyMemberID.NATHALIE]: 'nathalie',
+    [FamilyMemberID.SOTIS]: 'sotis',
+    [FamilyMemberID.PANTER]: 'panter',
+    [FamilyMemberID.UNKNOWN]: 'unknown',
+    [FamilyMemberID.RADIO]: 'radio'
+};
 
 export const FAMILY_MEMBERS = [
     { id: FamilyMemberID.LOKE, name: 'Loke', race: 'human', gender: 'male', title: 'family.son', color: 0xfacc15, scale: 0.7 },

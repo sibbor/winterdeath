@@ -5,11 +5,10 @@ import { HudStore } from '../../../store/HudStore';
 import { SystemID } from '../../../systems/SystemID';
 import { t } from '../../../utils/i18n';
 
-interface DebugDisplayProps {
-    debugMode: boolean;
-}
+interface DebugDisplayProps {}
 
-const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => {
+const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
+    const [debugMode, setDebugMode] = useState(() => (window as any).HudStore?.getState().debugMode || false);
     const [isMinimized, setIsMinimized] = useState(() => localStorage.getItem('vinterdod_debug_minimized') === 'true');
     const [systemsExpanded, setSystemsExpanded] = useState(true);
     const [showLogs, setShowLogs] = useState(false);
@@ -40,16 +39,19 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
     const gcAlertRef = useRef<HTMLSpanElement>(null);
 
     useEffect(() => {
-        if (!debugMode) return;
-
         const monitor = PerformanceMonitor.getInstance();
         let lastUpdate = 0;
 
-        return HudStore.subscribe(() => {
+        const unsubscribe = HudStore.subscribe((state) => {
+            if (state.debugMode !== debugMode) {
+                setDebugMode(state.debugMode);
+            }
+            
+            if (!state.debugMode) return;
+
             const now = performance.now();
 
             // ZERO-GC: Throttle ALL DOM updates to ~4 times per second (250ms).
-            // Updating textContent 60fps causes massive string allocation GC spikes.
             if (now - lastUpdate < 250) return;
             lastUpdate = now;
 
@@ -88,6 +90,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                 gcAlertRef.current.className = recentGC ? 'text-yellow-400 font-bold' : 'text-white/20';
             }
         });
+        return unsubscribe;
     }, [debugMode]);
 
     const toggleMinimized = (e: React.MouseEvent) => {

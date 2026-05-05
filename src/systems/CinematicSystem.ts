@@ -340,27 +340,24 @@ export class CinematicSystem implements System {
         const activeScriptLine = cinematic.script[cinematic.lineIndex];
         const familyMembers = this.activeFamilyMembers.current;
 
-        const currentSpeakerName = activeScriptLine?.speaker || 'Unknown';
-        const isPlayerSpeaking = currentSpeakerName.toLowerCase() === 'robert' || currentSpeakerName.toLowerCase() === 'player';
+        const speakerId = activeScriptLine?.speaker ?? FamilyMemberID.UNKNOWN;
 
         // --- VINTERDÖD FIX: Audio Sync ---
         const timeSinceLastVoice = now - (cinematic.lastVoiceTime || 0);
         if (timeInLine < cinematic.typingDuration && timeSinceLastVoice > 150) {
             cinematic.lastVoiceTime = now;
-            VoiceSounds.playDialogueBeep(currentSpeakerName);
+            VoiceSounds.playDialogueBeep(speakerId);
         }
 
         // --- VINTERDÖD FIX: Zero-GC Animator Sync ---
         for (let i = -1; i < familyMembers.length; i++) {
             const mesh = i === -1 ? this.playerMeshRef.current : familyMembers[i]?.mesh;
-            const memberId = i === -1 ? FamilyMemberID.PLAYER : familyMembers[i]?.id;
-            const memberName = i === -1 ? 'Robert' : familyMembers[i]?.name;
+            const memberId = i === -1 ? FamilyMemberID.ROBERT : familyMembers[i]?.id;
 
             if (!mesh) continue;
 
-            // Match speaker by ID if possible, otherwise by Name string (fallback for dynamic NPC/Radio)
-            const isPlayer = memberId === FamilyMemberID.PLAYER;
-            const isCurrentSpeaker = (memberName === currentSpeakerName) || (isPlayer && isPlayerSpeaking);
+            // Match speaker by ID directly (Zero-GC SMI comparison)
+            const isCurrentSpeaker = memberId === speakerId;
             const isSpeaking = isCurrentSpeaker && timeInLine < cinematic.typingDuration;
             const isThinking = isCurrentSpeaker && activeScriptLine?.type === DialogueLineType.THOUGHT;
 

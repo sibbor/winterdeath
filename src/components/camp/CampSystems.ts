@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { System, SystemID } from '../../systems/System';
 import { CampWorld } from './CampWorld';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
-import { UiSounds } from '../../utils/audio/AudioLib';
+import { UiSounds, VoiceSounds } from '../../utils/audio/AudioLib';
 import { DataResolver } from '../../utils/ui/DataResolver';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { SoundID } from '../../utils/audio/AudioTypes';
@@ -100,35 +100,44 @@ export class CampChatterSystem implements System {
                 const speaker = activeMembers[Math.floor(Math.random() * activeMembers.length)];
                 if (!speaker || !speaker.mesh) continue;
 
-                const speakerId = speaker.mesh.userData.id;
-                const lines = DataResolver.getChatterLines(speakerId);
+                const lines = DataResolver.getChatterLines(speaker.id);
                 const text = lines[Math.floor(Math.random() * lines.length)];
                 const duration = 2000 + text.length * 60;
 
                 const el = document.createElement('div');
                 el.className = 'absolute bg-black/80 border-2 border-black text-white px-4 py-2 text-sm font-bold rounded-lg pointer-events-none opacity-0 transition-opacity duration-500 whitespace-normal z-40 w-max max-w-[280px] text-center shadow-lg';
                 el.innerText = text;
-
                 if (chatOverlay) {
                     chatOverlay.appendChild(el);
-                    // Sätt initial transform för att undvika layout thrashing
                     el.style.transform = 'translate3d(-50%, -100%, 0)';
-
-                    activeChats.push({
-                        id: `chat_${renderTime}_${i}`,
-                        mesh: speaker.mesh,
-                        text,
-                        startTime: renderTime + delayOffset,
-                        duration,
-                        element: el,
-                        playedSound: false,
-                        _lastX: -9999,
-                        _lastY: -9999
-                    });
-                    delayOffset += duration + 500;
                 }
+
+                activeChats.push({
+                    id: Math.random().toString(36).substr(2, 9),
+                    speakerId: speaker.id,
+                    mesh: speaker.mesh,
+                    text,
+                    startTime: renderTime + delayOffset,
+                    duration,
+                    element: el,
+                    playedSound: false,
+                    _lastX: -9999,
+                    _lastY: -9999
+                });
+                delayOffset += 2500 + Math.random() * 2000;
             }
-            nextChatterTime.set(renderTime + delayOffset + 10000 + Math.random() * 20000);
+            nextChatterTime.set(renderTime + 15000 + Math.random() * 15000);
+        }
+
+        // 3. Chatter Updates (O(1) DOM Sync)
+        for (let i = activeChats.length - 1; i >= 0; i--) {
+            const chat = activeChats[i];
+            const elapsed = renderTime - chat.startTime;
+
+            if (elapsed > 0 && !chat.playedSound) {
+                VoiceSounds.playDialogueBeep(chat.speakerId);
+                chat.playedSound = true;
+            }
         }
 
         // 2. Chat Bubble Positioning & Expiry
@@ -146,10 +155,6 @@ export class CampChatterSystem implements System {
             }
 
             else if (renderTime >= c.startTime) {
-                if (!c.playedSound) {
-                    c.playedSound = true;
-                    UiSounds.playConfirm();
-                }
 
                 // 1. Opacity - update only if it actually changes
                 const targetOpacity = renderTime < c.startTime + 500 ? String((renderTime - c.startTime) / 500) : (renderTime > c.startTime + c.duration - 500 ? String((c.startTime + c.duration - renderTime) / 500) : '1');

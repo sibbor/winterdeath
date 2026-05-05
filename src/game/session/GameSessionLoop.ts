@@ -265,7 +265,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 // Trigga UI bara om det inte är en boss
                 if (!isBoss && callbacks.onDiscovery) {
                     callbacks.onDiscovery(
-                        DiscoveryType.ENEMY,
+                        DiscoveryType.ZOMBIE,
                         String(enemy.type),
                         'ui.enemy_encountered',
                         DataResolver.getZombieName(enemy.type)

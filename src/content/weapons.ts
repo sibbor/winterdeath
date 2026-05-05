@@ -71,6 +71,7 @@ export interface WeaponStats {
   // Logic & Visuals
   icon: string;          // PNG filename
   iconIsPng?: boolean;   // Flag to indicate PNG icon
+  isPseudoWeapon?: boolean; // New: If true, this is a combat move (Dodge/Rush), not an equipable weapon.
   piercing?: boolean;    // If true, projectile passes through enemies
   pierceDecay?: number;  // Damage multiplier per hit (e.g. 0.7)
 
@@ -174,16 +175,16 @@ WEAPONS[DamageID.RADIO] = {
 // --- PSEUDO-WEAPONS (Combat Moves) ---
 WEAPONS[DamageID.RUSH] = {
   name: DamageID.RUSH, displayName: 'ui.combat.rush', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.PROJECTILE,
-  damage: 0, range: 0, icon: PNG_PATH + 'rush.png', iconIsPng: true,
+  damage: 0, range: 0, icon: PNG_PATH + 'rush.png', iconIsPng: true, isPseudoWeapon: true,
   impactType: EnemyDeathState.GIBBED, statusEffect: null
 };
 WEAPONS[DamageID.DODGE] = {
   name: DamageID.DODGE, displayName: 'ui.combat.dodge', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.PROJECTILE,
-  damage: 0, range: 0, icon: PNG_PATH + 'dodge.png', iconIsPng: true,
+  damage: 0, range: 0, icon: PNG_PATH + 'dodge.png', iconIsPng: true, isPseudoWeapon: true,
   impactType: EnemyDeathState.SHOT, statusEffect: null
 };
 WEAPONS[DamageID.VEHICLE] = {
   name: DamageID.VEHICLE, displayName: 'ui.combat.vehicle', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.PROJECTILE,
-  damage: 0, range: 0, icon: PNG_PATH + 'vehicle.png', iconIsPng: true,
+  damage: 0, range: 0, icon: PNG_PATH + 'vehicle.png', iconIsPng: true, isPseudoWeapon: true,
   impactType: EnemyDeathState.GIBBED, statusEffect: null
-};
+};

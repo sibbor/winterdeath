@@ -99,7 +99,7 @@ export enum DiscoveryType {
   CLUE = 0,
   POI = 1,
   COLLECTIBLE = 2,
-  ENEMY = 3,
+  ZOMBIE = 3,
   BOSS = 4,
   PERK = 5,
   CHALLENGE = 6

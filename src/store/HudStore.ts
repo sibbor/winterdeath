@@ -220,6 +220,13 @@ class HudStoreClass {
     public patch(changes: Partial<HudState>): void {
         // Only used for sparse updates outside the main loop.
         Object.assign(this.state, changes);
+
+        // ZERO-GC BRIDGE: If debugMode is patched, we MUST notify fast-listeners 
+        // because decoupled HUD components bypass the standard React notification loop.
+        if (changes.debugMode !== undefined) {
+            this.emitFastUpdate({ debugMode: changes.debugMode });
+        }
+
         this.notifyListeners();
     }
 
@@ -329,3 +336,4 @@ class HudStoreClass {
 }
 
 export const HudStore = new HudStoreClass();
+(window as any).HudStore = HudStore;

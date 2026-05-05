@@ -151,7 +151,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
                                         } 
                                         ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
                                     `}
-                                    style={isActive ? { backgroundColor: catColor + '33' } : {}}
+                                    style={isActive ? { backgroundColor: catColor + '33', '--pulse-color': catColor } as any : {}}
                                 >
                                     {isActive && (
                                         <div className="absolute inset-0 opacity-20 transition-opacity" 
@@ -199,7 +199,7 @@ interface WeaponListProps {
 const WeaponList: React.FC<WeaponListProps> = React.memo(({ activeTab, tempWeaponLevels, tempLoadout, scrapAmount, isMobileDevice, isLandscapeMode, onEquip, onUpgrade }) => {
     // PERFORMANCE FIX: Sorterar och hämtar vapen endast när man byter flik, inte varje gång Scrap ändras.
     const filteredWeapons = useMemo(() => {
-        return Object.values(DataResolver.getWeapons()).filter(w => w.category === activeTab);
+        return Object.values(DataResolver.getWeapons()).filter(w => w.category === activeTab && !w.isPseudoWeapon);
     }, [activeTab]);
 
     return (
@@ -256,10 +256,12 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
         <TacticalCard
             onClick={() => !isEquipped && isEquippable && onEquip(weapon.name, weapon.category)}
             isLocked={!isEquipped && !isEquippable}
-            color={isEquipped ? categoryColor : '#3b82f6'}
-            className={`flex flex-col p-0 ${isEquipped ? 'cursor-default' : (isEquippable ? 'hover:bg-gray-800/60 cursor-pointer' : 'cursor-default')}`}
+            color={categoryColor}
+            showHover={true}
+            className={`flex flex-col p-0 ${isEquipped ? 'cursor-default bg-gray-800/60' : (isEquippable ? 'hover:bg-gray-800/60 cursor-pointer' : 'cursor-default')}`}
             style={{
-                borderColor: isEquipped ? categoryColor : '#374151',
+                borderColor: categoryColor,
+                borderWidth: isEquipped ? '4px' : '2px',
                 boxShadow: isEquipped ? `0 0 15px ${categoryColor}44` : 'none',
                 minHeight: isMobileDevice ? 'auto' : '300px'
             }}
@@ -267,7 +269,7 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
             {/* Top Side (Image & Level) */}
             <div
                 className={`w-full flex flex-col border-b relative shrink-0 bg-black/40`}
-                style={{ borderColor: isEquipped ? categoryColor : '#374151' }}
+                style={{ borderColor: isEquipped ? categoryColor : '#374151', opacity: isEquipped ? 1 : 0.8 }}
             >
                 <div className={`${isMobileDevice ? 'h-32 min-h-[128px]' : 'h-40'} border-b border-gray-800/50 w-full flex items-center justify-center transition-transform group-hover:scale-110 duration-500`}>
                     {weapon.iconIsPng ? (

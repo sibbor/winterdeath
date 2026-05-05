@@ -106,7 +106,7 @@ export const loadGameState = (): GameState => {
                 stats: {
                     ...DEFAULT_STATE.stats,
                     ...(loaded.stats || {}),
-                    statsBuffer: PlayerStatsUtils.deserializeStats(loaded.stats?.statsBuffer || Array.from(INITIAL_STATS.statsBuffer)),
+                    statsBuffer: ensureBufferSize(loaded.stats?.statsBuffer, PlayerStatID.COUNT, Float32Array),
                     effectDurations: ensureBufferSize(loaded.stats?.effectDurations, 32, Float32Array),
                     effectMaxDurations: ensureBufferSize(loaded.stats?.effectMaxDurations, 32, Float32Array),
                     effectIntensities: ensureBufferSize(loaded.stats?.effectIntensities, 32, Float32Array),

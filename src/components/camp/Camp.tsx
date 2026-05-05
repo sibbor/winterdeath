@@ -55,6 +55,16 @@ interface CampProps {
     onInteractionStateChange: (type: string | null) => void;
 }
 
+const areEqual = (prevProps: CampProps, nextProps: CampProps) => {
+    return prevProps.stats === nextProps.stats &&
+        prevProps.currentLoadout === nextProps.currentLoadout &&
+        prevProps.currentSector === nextProps.currentSector &&
+        prevProps.activeOverlay === nextProps.activeOverlay &&
+        prevProps.weather === nextProps.weather &&
+        prevProps.isGameRunning === nextProps.isGameRunning;
+        // Ignore debugMode, rescuedFamilyIndices (handled via effects/Store)
+};
+
 const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, settings, onCampLoaded, isMobileDevice, weather, hasCheckpoint, isGameRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
     const monitor = PerformanceMonitor.getInstance();
 
@@ -90,6 +100,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
     const activeChats = useRef<Array<{ id: string, mesh: THREE.Object3D, text: string, startTime: number, duration: number, element: HTMLDivElement, playedSound: boolean }>>([]);
 
     const envStateRef = useRef<CampEffectsState | null>(null);
+    const debugModeRef = useRef(debugMode);
+    useEffect(() => { debugModeRef.current = debugMode; }, [debugMode]);
 
     const textures = useMemo(() => createProceduralTextures(), []);
 
@@ -143,56 +155,97 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         const scene = engine.scene;
         const camera = engine.camera;
 
+        const debugUnsubscribeRef = { current: null as (() => void) | null };
+
         // Reset & Setup Scene via CampWorld
         const setup = async () => {
             if (currentSetupId !== setupCounterRef.current) return;
 
             // ARCHITECTURAL UNIFICATION: Provide a minimal RuntimeState for the Camp
-            // This allows the Engine to use the same Dual-Clock logic everywhere.
             const campState: any = {
-                simTime: 0,
-                renderTime: 0,
-                lastSimDelta: 0.016,
-                lastRenderDelta: 0.016,
-                playerPos: camera.threeCamera.position, // Center of interaction
-                dynamicLights: [],
-                isDodging: false,
-                isDead: false,
-                staminaRatio: 1.0,
-                hp: 100,
-                maxHp: 100
+                simTime: 0, renderTime: 0, lastSimDelta: 0.016, lastRenderDelta: 0.016,
+                playerPos: camera.threeCamera.position, dynamicLights: [], isDodging: false,
+                isDead: false, staminaRatio: 1.0, hp: 100, maxHp: 100
             };
             campStateRef.current = campState;
-            engine.onUpdateContext = _campCtx; // IMMEDIATE INJECTION: Don't wait for the first update tick
+            engine.onUpdateContext = _campCtx;
             _campCtx.state = campState;
 
             engine.resetTime();
             const { interactables, outlines, envState } = await CampWorld.build(scene, textures, weather);
 
-            // Race condition check: If another setup started, abort this one
             if (setupCounterRef.current !== currentSetupId || !container.parentElement) return;
 
             envStateRef.current = envState;
 
             // Setup Family Members
-            const { familyMembers, interactables: familyInteractables, activeMembers } = CampWorld.setupFamilyMembers(
-                scene, rescuedFamilyIndices, debugMode, PLAYER_CHARACTER, DataResolver.getFamilyMembers()
-            );
+            const setupFamily = () => {
+                const curDebug = (window as any).HudStore?.getState().debugMode ?? debugModeRef.current;
+                const { familyMembers, interactables, activeMembers } = CampWorld.setupFamilyMembers(
+                    scene, rescuedFamilyIndices, curDebug, PLAYER_CHARACTER, DataResolver.getFamilyMembers()
+                );
+                return { familyMembers, familyInteractables: interactables, activeMembers };
+            };
+
+            const { familyMembers, familyInteractables, activeMembers } = setupFamily();
+            sceneFamilyMembersRef.current = familyMembers;
+            sceneActiveMembersRef.current = activeMembers;
+            sceneInteractablesRef.current = [...interactables, ...familyInteractables];
+
+            // Listen for debug mode changes
+            debugUnsubscribeRef.current = (window as any).HudStore?.subscribe((state: any) => {
+                if (state.debugMode !== debugModeRef.current) {
+                    debugModeRef.current = state.debugMode;
+                    
+                    const fmWrappers = sceneFamilyMembersRef.current;
+                    const rescuedIndices = rescuedFamilyIndices;
+                    const familyData = DataResolver.getFamilyMembers();
+                    
+                    // Rebuild interaction and active lists based on new visibility
+                    const nextInteractables = [...interactables]; // base camp interactables
+                    const nextActiveMembers: any[] = [];
+                    
+                    for (let i = 0; i < fmWrappers.length; i++) {
+                        const fm = fmWrappers[i];
+                        const isPlayer = fm.mesh.userData.id.startsWith('player_');
+                        
+                        if (isPlayer) {
+                            fm.mesh.visible = true;
+                            nextActiveMembers.push(fm);
+                        } else {
+                            const familyIdx = familyData.findIndex(d => d.name === fm.name);
+                            const isRescued = rescuedIndices.includes(familyIdx);
+                            const visible = isRescued || state.debugMode;
+                            
+                            fm.mesh.visible = visible;
+                            
+                            if (visible) {
+                                if (familyIdx !== -1) nextActiveMembers.push(fm);
+                                
+                                // Direct child traversal to find interaction mesh
+                                for (let c = 0; c < fm.mesh.children.length; c++) {
+                                    const child = fm.mesh.children[c];
+                                    if (child.userData.isBody) nextInteractables.push(child as THREE.Mesh);
+                                }
+                            }
+                        }
+                    }
+                    
+                    sceneInteractablesRef.current = nextInteractables;
+                    sceneActiveMembersRef.current = nextActiveMembers;
+                }
+            });
 
             if (setupCounterRef.current !== currentSetupId) return;
 
-            // VINTERDÖD FIX: Ensure persistent systems (like LightSystem proxies) are anchored natively to the Camp scene
             engine.syncSystemsToScene(scene);
 
             const allInteractables = [...interactables, ...familyInteractables];
-
             const aspect = container.clientWidth / container.clientHeight;
             if (aspect < 1.0) {
-                camera.set('fov', 68);
-                camera.setPosition(0, 10, 28, true);
+                camera.set('fov', 68); camera.setPosition(0, 10, 28, true);
             } else {
-                camera.set('fov', 50);
-                camera.setPosition(0, 10, 22, true);
+                camera.set('fov', 50); camera.setPosition(0, 10, 22, true);
             }
 
             sceneInteractablesRef.current = allInteractables;
@@ -201,7 +254,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             sceneFamilyMembersRef.current = familyMembers;
             sceneActiveMembersRef.current = activeMembers;
 
-            // Register Camp Systems to the Engine
             engine.registerSystem(SystemID.CAMP_EFFECT_MANAGER, new CampEffectsSystem());
             engine.registerSystem(SystemID.FAMILY_ANIMATION, new FamilyAnimationSystem());
             engine.registerSystem(SystemID.CAMP_CHATTER, new CampChatterSystem());
@@ -209,7 +261,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
         setup();
 
-        let framesToWait = 0;
+        let framesToWait = 2;
         const checkReady = () => {
             if (framesToWait > 0) {
                 framesToWait--;
@@ -219,7 +271,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             }
         };
         requestAnimationFrame(checkReady);
-    }, [rescuedFamilyIndices, debugMode, textures]);
+
+        return () => {
+            if (debugUnsubscribeRef.current) debugUnsubscribeRef.current();
+        };
+
+    }, [rescuedFamilyIndices, textures]);
 
     // --- INTERACTIVITY EFFECT: Registers loop + events ---
     useEffect(() => {
@@ -516,10 +573,32 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                     onOpenStats={() => onInteractionStateChange(OverlayType.STATION_STATISTICS)}
                     onOpenArmory={() => onInteractionStateChange(OverlayType.STATION_ARMORY)}
                     onOpenSkills={() => onInteractionStateChange(OverlayType.STATION_SKILLS)}
+                    onOpenAdventureLog={(tab) => { onInteractionStateChange(OverlayType.ADVENTURE_LOG); if (tab !== undefined) (window as any).dispatchEvent(new CustomEvent('open-adventure-log', { detail: { tab } })); }}
                     onOpenSettings={() => setActiveOverlay(OverlayType.SETTINGS)}
                     onStartSector={() => { }}
                     debugMode={debugMode} onToggleDebug={onToggleDebug} onResetGame={() => setActiveOverlay(OverlayType.RESET_CONFIRM)}
-                    onDebugScrap={() => onSaveStats({ ...stats, scrap: stats.scrap + 100 })} onDebugSkill={() => onSaveStats({ ...stats, skillPoints: stats.skillPoints + 1 })}
+                    onDebugScrap={() => {
+                        const next = { ...stats };
+                        next.statsBuffer = new Float32Array(stats.statsBuffer);
+                        next.statsBuffer[PlayerStatID.SCRAP] += 100;
+                        (window as any).HudStore?.emitFastUpdate({ scrap: next.statsBuffer[PlayerStatID.SCRAP] });
+                        onSaveStats(next);
+                    }}
+                    onDebugSkill={() => {
+                        const next = { ...stats };
+                        next.statsBuffer = new Float32Array(stats.statsBuffer);
+                        next.statsBuffer[PlayerStatID.SKILL_POINTS] += 10;
+                        (window as any).HudStore?.emitFastUpdate({ sp: next.statsBuffer[PlayerStatID.SKILL_POINTS] });
+                        onSaveStats(next);
+                    }}
+                    onDebugCP={() => {
+                        const next = { ...stats };
+                        next.totalChallengePoints += 10;
+                        next.statsBuffer = new Float32Array(stats.statsBuffer);
+                        next.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] += 10;
+                        (window as any).HudStore?.emitFastUpdate({ cp: next.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] });
+                        onSaveStats(next);
+                    }}
                     isMobileDevice={isMobileDevice}
                 />
             )}
@@ -528,4 +607,4 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
     );
 };
 
-export default Camp;
+export default React.memo(Camp, areEqual);

@@ -285,8 +285,7 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
     return (
         <div className="flex flex-col h-full gap-6 pb-12 overflow-y-auto pr-2 custom-scrollbar bg-zinc-950/20 backdrop-blur-sm rounded-lg p-1">
             <div className={`grid ${isMobileDevice ? 'grid-cols-1' : 'grid-cols-2'} gap-6`}>
-                <TacticalCard color="#3b82f6" className="flex flex-col items-center text-center shadow-[inset_0_0_50px_rgba(59,130,246,0.1)]">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                <TacticalCard color="#3b82f6" showHover={true} className="flex flex-col items-center text-center shadow-[inset_0_0_50px_rgba(59,130,246,0.1)]">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent opacity-50 relative z-10" />
                     <span className="text-blue-500/60 text-[10px] font-black uppercase tracking-[0.3em] mb-3">{t('ui.current_rank')}</span>
                     <h1 className="text-4xl font-light text-white uppercase tracking-tighter mb-4 leading-none">{getRank(level)}</h1>
@@ -305,8 +304,7 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
                         <span className="text-white uppercase tracking-tighter">{getRank(level + 1)}</span>
                     </div>
                 </TacticalCard>
-                <TacticalCard color="#3b82f6" className="group shadow-inner">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                <TacticalCard color="#3b82f6" showHover={true} className="group shadow-inner">
                     <h3 className="text-xl font-light text-white uppercase tracking-wider mb-6 border-b border-zinc-800 pb-3 relative z-10">{t('ui.family_header')}</h3>
                     <div className="flex flex-col gap-4 relative z-10">
                         <div className="flex flex-wrap items-baseline gap-2">
@@ -327,8 +325,8 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
 
             {/* HERO ROW: CAREER MILESTONES */}
             <div className={`grid ${isMobileDevice ? 'grid-cols-2' : 'grid-cols-4'} gap-4`}>
-                <div className="bg-blue-900/10 border-2 border-blue-500/20 p-4 flex flex-col relative group overflow-hidden">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                <div className="bg-blue-900/10 border-2 border-blue-500/20 p-4 flex flex-col relative group/hvr overflow-hidden">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <span className="text-blue-500/60 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.global_explorer')}</span>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{totalDistanceKm} <span className="text-xs">{t('ui.km')}</span></span>
 
@@ -388,23 +386,23 @@ const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: n
             <div className="bg-zinc-900/20 border border-zinc-800 p-8 w-full">
                 <h3 className="text-2xl font-light text-white uppercase tracking-tighter mb-8 border-b-2 border-zinc-800 pb-4">{t('ui.performance')}</h3>
                 <div className={`grid ${isMobileDevice ? 'grid-cols-2' : 'grid-cols-4'} gap-4 mb-8`}>
-                    <div className="bg-blue-900/10 border-2 border-blue-500/20 p-6 flex flex-col items-center justify-center relative group overflow-hidden shadow-inner">
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                    <div className="bg-blue-900/10 border-2 border-blue-500/20 p-6 flex flex-col items-center justify-center relative group/hvr overflow-hidden shadow-inner">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                         <span className="text-blue-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 relative z-10">{t('ui.xp_earned')}</span>
                         <span className="text-2xl font-light text-white font-mono relative z-10">{(currentXp + ((level - 1) * 1000)).toLocaleString()}</span>
                     </div>
-                    <div className="bg-purple-900/10 border-2 border-purple-500/20 p-6 flex flex-col items-center justify-center relative group overflow-hidden shadow-inner">
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-purple-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                    <div className="bg-purple-900/10 border-2 border-purple-500/20 p-6 flex flex-col items-center justify-center relative group/hvr overflow-hidden shadow-inner">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-purple-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                         <span className="text-purple-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 relative z-10">{t('ui.sp_earned')}</span>
                         <span className="text-2xl font-light text-white font-mono relative z-10">{stats.totalSkillPointsEarned}</span>
                     </div>
-                    <div className="bg-yellow-900/10 border-2 border-yellow-500/20 p-6 flex flex-col items-center justify-center relative group overflow-hidden shadow-inner">
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-yellow-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                    <div className="bg-yellow-900/10 border-2 border-yellow-500/20 p-6 flex flex-col items-center justify-center relative group/hvr overflow-hidden shadow-inner">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-yellow-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                         <span className="text-yellow-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 relative z-10">{t('ui.scrap_scavenged')}</span>
                         <span className="text-2xl font-light text-white font-mono relative z-10">{Math.floor(sb[PlayerStatID.TOTAL_SCRAP_COLLECTED] || 0).toLocaleString()}</span>
                     </div>
-                    <div className="bg-red-900/10 border-2 border-red-500/20 p-6 flex flex-col items-center justify-center relative group overflow-hidden shadow-inner">
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-red-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                    <div className="bg-red-900/10 border-2 border-red-500/20 p-6 flex flex-col items-center justify-center relative group/hvr overflow-hidden shadow-inner">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-red-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                         <span className="text-red-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 relative z-10">{t('ui.cp_earned')}</span>
                         <span className="text-2xl font-light text-white font-mono relative z-10">{Math.floor(sb[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0).toLocaleString()}</span>
                     </div>
@@ -493,22 +491,22 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
         <div className={`flex flex-col h-full gap-8 pb-12 ${isMobileDevice ? 'overflow-y-auto' : ''} custom-scrollbar`}>
             {/* NEW HERO ROW: COMBAT DIAGNOSTICS */}
             <div className={`grid ${isMobileDevice ? 'grid-cols-1' : 'grid-cols-3'} gap-4`}>
-                <div className="group relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                <div className="group/hvr relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1 relative z-10">{t('ui.crisis_averted')}</h4>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{crisisSaves}</span>
                     <span className="block text-[9px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.adrenaline_mgmt')}</span>
                 </div>
-                <div className="group relative p-6 border-2 border-red-900/20 bg-red-950/5 overflow-hidden">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-red-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                <div className="group/hvr relative p-6 border-2 border-red-900/20 bg-red-950/5 overflow-hidden">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-red-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <h4 className="text-[10px] font-black text-red-500/40 uppercase tracking-widest mb-1 relative z-10">{t('ui.nemesis_id')}</h4>
                     <div className="flex flex-col relative z-10">
                         <span className="text-xl font-bold text-red-500 uppercase tracking-tighter truncate">{nemesis.name}</span>
                         {nemesis.count > 0 && <span className="text-[10px] text-zinc-500 font-mono italic">{t('ui.killed_most_by')} ({nemesis.count})</span>}
                     </div>
                 </div>
-                <div className="group relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                <div className="group/hvr relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1 relative z-10">{t('ui.peak_aggression')}</h4>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{peakAggression}</span>
                     <span className="block text-[9px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.longest_killstreak')}</span>
@@ -516,23 +514,23 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
             </div>
 
             <div className={`grid ${isMobileDevice ? 'grid-cols-2' : 'grid-cols-4'} gap-4`}>
-                <div className="bg-zinc-900/20 border border-zinc-800 p-4 flex flex-col items-center justify-center relative group overflow-hidden">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                <div className="bg-zinc-900/20 border border-zinc-800 p-4 flex flex-col items-center justify-center relative group/hvr overflow-hidden">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <span className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.combat_efficiency')}</span>
                     <span className="text-2xl font-light text-white font-mono relative z-10">{efficiency}</span>
                 </div>
-                <div className="bg-zinc-900/20 border border-zinc-800 p-4 flex flex-col items-center justify-center relative group overflow-hidden">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                <div className="bg-zinc-900/20 border border-zinc-800 p-4 flex flex-col items-center justify-center relative group/hvr overflow-hidden">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <span className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.kd_ratio')}</span>
                     <span className="text-2xl font-light text-white font-mono relative z-10">{kdRatio}</span>
                 </div>
-                <div className="bg-zinc-900/20 border border-zinc-800 p-4 flex flex-col items-center justify-center relative group overflow-hidden">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                <div className="bg-zinc-900/20 border border-zinc-800 p-4 flex flex-col items-center justify-center relative group/hvr overflow-hidden">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <span className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.lethality')}</span>
                     <span className="text-2xl font-light text-white font-mono relative z-10">{lethality}</span>
                 </div>
-                <div className="bg-zinc-900/20 border border-zinc-800 p-4 flex flex-col items-center justify-center relative group overflow-hidden">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                <div className="bg-zinc-900/20 border border-zinc-800 p-4 flex flex-col items-center justify-center relative group/hvr overflow-hidden">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <span className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.on_field_time')}</span>
                     <span className="text-2xl font-light text-white font-mono relative z-10">{(time / 3600).toFixed(1)}H</span>
                 </div>
@@ -558,23 +556,24 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
             )}
         </div>
     );
-}); const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
-    const { weaponItems, signature, comfort, throwables } = useMemo(() => {
-        const items = WEAPONS.filter(w => w && w.name !== DamageID.RADIO && (stats.weaponDamageDealt[w.name - 1] || 0) > 0);
+});
 
+const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
+    const weaponItems = useMemo(() => Object.values(DataResolver.getWeapons()).filter(w => !w.isPseudoWeapon), []);
+
+    const { signature, comfort, throwables } = useMemo(() => {
         const sig = findSignatureWeapon(stats.weaponKills);
         const com = findComfortWeapon(stats.weaponTimeActive);
 
-        const sigData = sig.id !== -1 ? WEAPONS[sig.id + 1] : null;
-        const comData = com.id !== -1 ? WEAPONS[com.id + 1] : null;
+        const sigData = sig.id !== -1 ? WEAPONS[sig.id] : null;
+        const comData = com.id !== -1 ? WEAPONS[com.id] : null;
 
         return {
-            weaponItems: items,
             signature: sigData ? { name: t(sigData.displayName), icon: sigData.icon, isPng: sigData.iconIsPng, count: sig.count } : null,
             comfort: comData ? { name: t(comData.displayName), icon: comData.icon, isPng: comData.iconIsPng } : null,
             throwables: (stats.totalThrowablesThrown || 0).toLocaleString()
         };
-    }, [stats.weaponDamageDealt, stats.weaponKills, stats.weaponTimeActive, stats.totalThrowablesThrown]);
+    }, [stats.weaponKills, stats.weaponTimeActive, stats.totalThrowablesThrown]);
 
     return (
         <div className="space-y-8 pb-12">
@@ -587,14 +586,14 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
                 <>
                     {/* NEW HERO ROW: DOSSIER HIGHLIGHTS */}
                     <div className={`grid ${isMobileDevice ? 'grid-cols-1' : 'grid-cols-3'} gap-4`}>
-                        <div className="group relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                        <div className="group/hvr relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                             <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 relative z-10">{t('ui.tactical_usage')}</h4>
                             <span className="text-3xl font-light text-white font-mono relative z-10">{throwables}</span>
                             <span className="block text-[9px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.throwables_thrown')}</span>
                         </div>
-                        <div className="group relative p-6 border-2 border-blue-900/20 bg-blue-950/10 overflow-hidden">
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                        <div className="group/hvr relative p-6 border-2 border-blue-900/20 bg-blue-950/10 overflow-hidden">
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                             <h4 className="text-[10px] font-black text-blue-500/40 uppercase tracking-widest mb-2 relative z-10">{t('ui.signature_weapon')}</h4>
                             <div className="flex items-center gap-4 relative z-10">
                                 <div className="w-12 h-12 bg-black/40 border border-blue-500/20 flex items-center justify-center p-1">
@@ -625,14 +624,14 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
                         <h3 className="text-xl font-light text-white uppercase tracking-tighter mb-8 border-b-2 border-zinc-800 pb-4">{t('ui.weapon_performance_log')}</h3>
                         <div className="flex flex-col gap-2">
                             {weaponItems.map(wep => {
-                                const idx = wep.name - 1;
+                                const idx = wep.name;
                                 const fired = stats.weaponShotsFired[idx] || 0;
                                 const hit = stats.weaponShotsHit[idx] || 0;
                                 const dmg = stats.weaponDamageDealt[idx] || 0;
                                 const accuracy = fired > 0 ? ((hit / fired) * 100).toFixed(1) : '0.0';
                                 return (
-                                    <div key={wep.name} className="flex justify-between items-center px-4 py-3 bg-zinc-950/20 border border-transparent hover:border-blue-500/20 transition-all relative group overflow-hidden">
-                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[8] transition-transform duration-700 pointer-events-none" />
+                                    <div key={wep.name} className="flex justify-between items-center px-4 py-3 bg-zinc-950/20 border border-transparent hover:border-blue-500/20 transition-all relative group/hvr overflow-hidden">
+                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[8] transition-transform duration-700 pointer-events-none" />
                                         <div className="flex-1 flex items-center gap-4 relative z-10">
                                             <div className="w-10 h-10 bg-black/50 border border-zinc-800 flex items-center justify-center p-1">
                                                 {wep.iconIsPng ? <img src={wep.icon} alt={t(wep.displayName)} className="w-full h-full object-contain" /> : <span className="text-xl">{wep.icon}</span>}
@@ -683,8 +682,8 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
 
     const renderPerk = (perk: any) => {
         return (
-            <div key={perk.id} id={`log-item-${perk.id}`} className="bg-zinc-900/40 border border-zinc-800 p-6 relative group overflow-hidden">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+            <div key={perk.id} id={`log-item-${perk.id}`} className="bg-zinc-900/40 border border-zinc-800 p-6 relative group/hvr overflow-hidden">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                 <div className="flex flex-col relative z-10">
                     <div className="flex justify-between items-start mb-4 border-b border-zinc-800 pb-2">
                         <div className="flex flex-col">
@@ -741,14 +740,14 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
         <div className="space-y-12 pb-12 h-full overflow-y-auto pr-2 custom-scrollbar">
             {/* HERO HIGHLIGHTS: AUGMENTATION ROI */}
             <div className={`grid ${effectiveLandscape ? 'grid-cols-3' : 'grid-cols-1'} gap-4`}>
-                <div className="group relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                <div className="group/hvr relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 relative z-10">{t('ui.enhanced_state')}</h4>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{uptime}%</span>
                     <span className="block text-[9px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.buff_uptime')}</span>
                 </div>
-                <div className="group relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                <div className="group/hvr relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 relative z-10">{t('ui.resilience')}</h4>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{resilience}</span>
                     <span className="block text-[9px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.debuffs_neutralized')}</span>

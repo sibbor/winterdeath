@@ -499,7 +499,7 @@ const App: React.FC = () => {
         UiSounds.playConfirm();
     }, []);
 
-    const handleCancelReset = useCallback(() => setActiveOverlay(OverlayType.SETTINGS), []);
+    const handleCancelReset = useCallback(() => setActiveOverlay(OverlayType.NONE), []);
 
     // --- GLOBAL EVENT LISTENERS (For UI Bridge) ---
     useEffect(() => {
@@ -724,6 +724,7 @@ const App: React.FC = () => {
     const onStationInteraction = useCallback((type: OverlayType) => setActiveOverlay(type), []);
     const handleToggleDebug = useCallback((val: boolean) => {
         setGameState(prev => ({ ...prev, debugMode: val }));
+        HudStore.patch({ debugMode: val });
     }, []);
     const handlePauseToggle = useCallback((val: boolean) => setActiveOverlay(val ? OverlayType.PAUSE : OverlayType.NONE), []);
     const handleToggleShowFps = useCallback(() => {
@@ -1064,9 +1065,7 @@ const App: React.FC = () => {
                     )}
 
                     {(showFPS || gameState.debugMode) && (
-                        <DebugDisplay
-                            debugMode={gameState.debugMode}
-                        />
+                        <DebugDisplay />
                     )}
 
                     <ScreenLoading

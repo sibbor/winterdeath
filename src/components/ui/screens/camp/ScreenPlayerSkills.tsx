@@ -108,7 +108,7 @@ const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, ava
     const displayUpgrade = isSpeed ? upgradeVal.toFixed(2) : upgradeVal;
 
     return (
-        <TacticalCard color="#a855f7" className="flex flex-col items-center text-center">
+        <TacticalCard color="#a855f7" showHover={true} className="flex flex-col items-center text-center">
             <h3 className={`${isMobileDevice ? 'text-xl mb-1' : 'text-3xl mb-4'} font-semibold text-white uppercase tracking-tighter`}>{t(skill.labelKey)}</h3>
             <p className={`${isMobileDevice ? 'text-xs h-10 mb-2 leading-tight' : 'text-lg h-16 mb-2'} text-gray-400 leading-snug`}>{t(skill.descKey)}</p>
 
