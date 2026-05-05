@@ -32,10 +32,10 @@ export const useGameInput = (
             if (!engine) return;
 
             switch (action) {
-                case InputAction.LEFT: engine.camera.adjustAngle(Math.PI / 4); break;
-                case InputAction.RIGHT: engine.camera.adjustAngle(-Math.PI / 4); break;
-                case InputAction.UP: engine.camera.adjustPitch(2.0); break;
-                case InputAction.DOWN: engine.camera.adjustPitch(-2.0); break;
+                case InputAction.ARROW_LEFT: engine.camera.adjustAngle(Math.PI / 4); break;
+                case InputAction.ARROW_RIGHT: engine.camera.adjustAngle(-Math.PI / 4); break;
+                case InputAction.ARROW_UP: engine.camera.adjustPitch(2.0); break;
+                case InputAction.ARROW_DOWN: engine.camera.adjustPitch(-2.0); break;
             }
         };
         window.addEventListener('keydown', handleKeyDown);

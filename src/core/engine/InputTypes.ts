@@ -11,24 +11,29 @@ export enum InputAction {
     DOWN = 2,
     RIGHT = 3,
     DODGE = 4,      // Usually Space
-    RELOAD = 5,     // Usually R
-    INTERACT = 6,   // Usually E
-    FLASHLIGHT = 7, // Usually F
-    MAP = 8,        // Usually M
-    SLOT_1 = 9,
-    SLOT_2 = 10,
-    SLOT_3 = 11,
-    SLOT_4 = 12,
-    FIRE = 13,      // Mouse Left / Right Stick Trigger
-    ENTER = 14,
-    ESCAPE = 15,
-    SHIFT = 16,
-    CTRL = 17,
-    SCROLL_UP = 18,
-    SCROLL_DOWN = 19,
-    SLOT_5 = 20,
+    FIRE = 5,       // Mouse Left / Right Stick Trigger
+    RELOAD = 6,     // Usually R
+    INTERACT = 7,   // Usually E
+    FLASHLIGHT = 8, // Usually F
+    MAP = 9,        // Usually M
+    SLOT_1 = 10,
+    SLOT_2 = 11,
+    SLOT_3 = 12,
+    SLOT_4 = 13,
+    SLOT_5 = 14,
+    SCROLL_UP = 15,
+    SCROLL_DOWN = 16,
+    ENTER = 17,
+    ESCAPE = 18,
+    SHIFT = 19,
+    CTRL = 20,
 
-    COUNT = 21
+    ARROW_UP = 21,
+    ARROW_DOWN = 22,
+    ARROW_LEFT = 23,
+    ARROW_RIGHT = 24,
+
+    COUNT = 25
 }
 
 /**
@@ -49,10 +54,10 @@ export const INPUT_KEY_MAP: Record<string, InputAction> = {
     'Escape': InputAction.ESCAPE,
     'Shift': InputAction.SHIFT,
     'Control': InputAction.CTRL,
-    'ArrowUp': InputAction.UP,
-    'ArrowDown': InputAction.DOWN,
-    'ArrowLeft': InputAction.LEFT,
-    'ArrowRight': InputAction.RIGHT,
+    'ArrowUp': InputAction.ARROW_UP,
+    'ArrowDown': InputAction.ARROW_DOWN,
+    'ArrowLeft': InputAction.ARROW_LEFT,
+    'ArrowRight': InputAction.ARROW_RIGHT,
     '1': InputAction.SLOT_1, '2': InputAction.SLOT_2, '3': InputAction.SLOT_3, '4': InputAction.SLOT_4, '5': InputAction.SLOT_5
 };
 
