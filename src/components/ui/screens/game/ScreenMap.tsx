@@ -14,14 +14,14 @@ interface ScreenMapProps {
     isMobileDevice?: boolean;
 }
 
-const getItemPriority = (type: MapItemType | string): number => {
+const getItemPriority = (type: MapItemType | number): number => {
     switch (type) {
-        case 'PLAYER': return 100;
-        case 'BOSS': return 90;
-        case 'FAMILY': return 80;
-        case 'POI': return 70;
-        case 'TRIGGER': return 60;
-        case 'CHEST': return 50;
+        case MapItemType.PLAYER: return 100;
+        case MapItemType.BOSS: return 90;
+        case MapItemType.FAMILY: return 80;
+        case MapItemType.POI: return 70;
+        case MapItemType.TRIGGER: return 60;
+        case MapItemType.CHEST: return 50;
         default: return 0;
     }
 };
@@ -135,14 +135,14 @@ const MapCanvas = React.memo(({ mapItems, bounds, groupedEntities, setTooltipDat
                             return `${pos.x},${pos.y}`;
                         }).join(' ')}
                         fill={poly.color || 'gray'}
-                        fillOpacity={poly.type === 'BUILDING' ? 0.8 : 0.4}
+                        fillOpacity={poly.type === MapItemType.BUILDING ? 0.8 : 0.4}
                         stroke={poly.color || 'gray'}
                         strokeOpacity={0.6}
                         strokeWidth="0.2"
                     />
                 ))}
                 {/* Circular Lakes (Fallback for radius without points) */}
-                {mapItems.filter((item: MapItem) => item.type === 'LAKE' && !item.points).map((lake: MapItem) => {
+                {mapItems.filter((item: MapItem) => item.type === MapItemType.LAKE && !item.points).map((lake: MapItem) => {
                     const pos = getMapPercent(lake.x, lake.z, bounds);
                     const rx = (lake.radius! / (bounds.maxX - bounds.minX)) * 100;
                     const ry = (lake.radius! / (bounds.maxZ - bounds.minZ)) * 100;
@@ -170,9 +170,9 @@ const MapCanvas = React.memo(({ mapItems, bounds, groupedEntities, setTooltipDat
                 const pos = getMapPercent(topItem.x, topItem.z, bounds);
                 let content = <div className="w-2 h-2 rounded-full" style={{ backgroundColor: topItem.color || 'white' }} />;
 
-                if (topItem.type === 'POI') content = <span className="text-lg">📍</span>;
-                if (topItem.type === 'CHEST') content = <span className="text-lg">📦</span>;
-                if (topItem.type === 'TRIGGER' || topItem.label?.includes('clue')) content = <span className="text-lg">🔍</span>;
+                if (topItem.type === MapItemType.POI) content = <span className="text-lg">📍</span>;
+                if (topItem.type === MapItemType.CHEST) content = <span className="text-lg">📦</span>;
+                if (topItem.type === MapItemType.TRIGGER || topItem.label?.includes('clue')) content = <span className="text-lg">🔍</span>;
 
                 return (
                     <div
@@ -346,6 +346,7 @@ const LONG_PRESS_DURATION = 600;
 
 export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, isMobileDevice }) => {
     const mapItems = useHudStore(s => s.mapItems);
+    const sectorName = useHudStore(s => s.sectorName);
 
     const [mouseCoords, setMouseCoords] = useState<{ x: number, z: number } | null>(null);
     const [tooltipData, setTooltipData] = useState<any>(null);
@@ -444,6 +445,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
     return (
         <ScreenModalLayout
             title={t('ui.map')}
+            subtitle={sectorName.toUpperCase()}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
             onCancel={onClose}

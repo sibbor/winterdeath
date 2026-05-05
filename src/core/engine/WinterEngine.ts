@@ -98,6 +98,7 @@ export class WinterEngine {
     public onUpdateContext: any = null;
     public screenWidth: number = window.innerWidth;
     public screenHeight: number = window.innerHeight;
+    public frameCount: number = 0;
 
     // Cached Sets for O(1) Zero-GC lookups during cleanup
     private sharedGeoSet: Set<any> | null = null;
@@ -156,10 +157,10 @@ export class WinterEngine {
         this.registerSystem(SystemID.WEATHER, this.weather);
         this.registerSystem(SystemID.FOG, this.fog);
         this.registerSystem(SystemID.WATER, this.water);
-        
+
         // Register the singleton monitor as a passive system
         this.registerSystem(SystemID.PERFORMANCE_MONITOR, PerformanceMonitor.getInstance());
-        
+
         // Register the asset preloader as a passive system
         this.registerSystem(SystemID.ASSET_PRELOADER, AssetPreloader);
 
@@ -474,13 +475,11 @@ export class WinterEngine {
     /**
      * Main animation loop
      */
-    /**
-         * Main animation loop
-         */
     private animate = () => {
         if (!this.isRunning) return;
         this.requestID = requestAnimationFrame(this.animate);
 
+        this.frameCount++;
         const now = performance.now();
         const frameStart = now;
 

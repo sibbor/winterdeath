@@ -10,6 +10,7 @@ import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
 import { SoundID } from '../../../../utils/audio/AudioTypes';
 import { audioEngine } from '../../../../utils/audio/AudioEngine';
+import { BossID } from '../../../../game/session/SectorTypes';
 
 interface ScreenPlaygroundEnemyStationProps {
     onClose: () => void;
@@ -19,7 +20,7 @@ interface ScreenPlaygroundEnemyStationProps {
 
 const ZOMBIE_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, EnemyType.BOMBER];
 const SPAWN_LOCATIONS = ['NEAR', 'FOREST', 'FARM', 'VILLAGE'];
-const BOSS_IDS = [0, 1, 2, 3];
+const BOSS_IDS = [BossID.SECTOR_0, BossID.SECTOR_1, BossID.SECTOR_2, BossID.SECTOR_3];
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _centerPos = new THREE.Vector3();

@@ -3,6 +3,7 @@ import { ZOMBIE_TYPES, BOSSES } from '../../content/constants';
 import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
 import { EnemySounds } from '../../utils/audio/AudioLib';
 import { Enemy, AIState, EnemyDeathState, EnemyType, EnemyFlags, ENEMY_HP, ENEMY_SPEED, ENEMY_SCORE, NoiseType, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
+import { BossID } from '../../game/session/SectorTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { KMH_TO_MS } from '../../content/constants';
 import { DamageID } from '../../entities/player/CombatTypes';
@@ -140,7 +141,7 @@ export const EnemySpawner = {
             hearingThreshold: 1.0,
             awareness: 0,
             lastHeardNoiseType: NoiseType.NONE,
-            bossId: -1,
+            bossId: BossID.NONE,
             hitTime: 0,
             hitRenderTime: 0,
             lastStepTime: 0,

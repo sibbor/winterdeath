@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { SectorTrigger } from '../../systems/TriggerTypes';
 import { MapItem } from '../../components/ui/hud/HudTypes';
+import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
 import { WeatherType } from '../../core/engine/EngineTypes';
 import { SectorState } from '../../types/StateTypes';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
@@ -8,9 +9,77 @@ import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorEnvironment, EnvironmentalZone as AtmosphereZone } from '../../core/engine/EngineTypes';
 import { TriggerAction } from '../../systems/TriggerTypes';
-import { SoundID } from '../../utils/audio/AudioTypes';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
+
+export enum GroundType {
+    SNOW = 0,
+    GRAVEL = 1,
+    DIRT = 2,
+    ASPHALT = 3,
+    WOOD = 4,
+    METAL = 5,
+    ICE = 6,
+    WATER = 7
+}
+
+export enum BossID {
+    NONE = -1,
+    SECTOR_0 = 0,
+    SECTOR_1 = 1,
+    SECTOR_2 = 2,
+    SECTOR_3 = 3
+}
+
+export enum TerminalType {
+    ARMORY = 0,
+    SPAWNER = 1,
+    ENV = 2,
+    SKILLS = 3
+}
+
+export enum ChestType {
+    STANDARD = 0,
+    BIG = 1
+}
+
+export enum NatureFillType {
+    TREE = 0,
+    ROCK = 1,
+    DEBRIS = 2
+}
+
+export enum CameraShakeType {
+    GENERAL = 0,
+    HURT = 1,
+    EXPLOSION = 2,
+    GIANT_FOOTSTEP = 3
+}
+
+export enum ClueType {
+    THOUGHT = 0,
+    SPEAK = 1
+}
+
+export enum DialogueLineType {
+    NORMAL = 0,
+    GESTURE = 1,
+    ACTION = 2,
+    SOUND = 3,
+    THOUGHT = 4
+}
+
+export enum CollectibleModelType {
+    PHONE = 0,
+    PACIFIER = 1,
+    AXE = 2,
+    SCARF = 3,
+    JACKET = 4,
+    BADGE = 5,
+    DIARY = 6,
+    RING = 7,
+    TEDDY = 8
+}
 
 export type { AtmosphereZone };
 
@@ -44,7 +113,7 @@ export interface SectorContext {
     textures: any; // Dynamic textures passed from App/Canvas
     spawnZombie: (type: EnemyType, pos?: THREE.Vector3) => void;
     spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
-    spawnBoss: (type: string, pos?: THREE.Vector3) => void;
+    spawnBoss: (id: BossID, pos?: THREE.Vector3) => void;
     smokeEmitters: any[];
     cluesFound: string[];
     collectiblesDiscovered: string[];
@@ -62,7 +131,7 @@ export interface SectorContext {
     setCameraAngle?: (angle: number) => void;
     setCameraHeight?: (heightMod: number) => void;
     setCameraOverride?: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
-    shakeCamera?: (amount: number, type?: 'general' | 'hurt') => void;
+    shakeCamera?: (amount: number, type?: CameraShakeType) => void;
     makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
 
     // Required action bridge for triggers
@@ -71,11 +140,11 @@ export interface SectorContext {
 
 export interface SectorDef {
     id: number;
-    name: string;
+    ground: GroundType;
+    bossId?: BossID;
     environment: SectorEnvironment;
 
     // Automatic Ground Generation
-    groundType?: 'SNOW' | 'GRAVEL' | 'DIRT' | 'NONE';
     groundSize?: { width: number, depth: number };
 
     // Automatic Boundaries (Invisible Walls)
@@ -125,10 +194,10 @@ export interface SectorUpdateContext {
     spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
     setNotification: (n: { text: string, duration?: number }) => void;
     setInteraction: (interaction: { id: string, type: any, label: string, position?: THREE.Vector3 } | null) => void;
-    setOverlay: (type: string | null) => void;
+    setOverlay: (type: number | null) => void;
     playSound: (id: SoundID) => void;
-    playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => void;
-    cameraShake: (amount: number, type?: 'general' | 'hurt') => void;
+    playTone: (freq: number, type: ToneType, duration: number, vol?: number) => void;
+    cameraShake: (amount: number, type?: CameraShakeType) => void;
     t: (key: string) => string;
     scene: THREE.Scene;
     spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D | null, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;

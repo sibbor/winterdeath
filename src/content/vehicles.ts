@@ -3,9 +3,9 @@
 
 // --- TYPES ---
 
-import { VehicleDrivetrain, VehicleCategory } from '../entities/vehicles/VehicleTypes';
+import { VehicleDrivetrain, VehicleCategory, VehicleID } from '../entities/vehicles/VehicleTypes';
 
-export type VehicleType = 'tractor' | 'station_wagon' | 'sedan' | 'police' | 'ambulance' | 'bus' | 'timber_truck' | 'boat';
+export type VehicleType = VehicleID;
 export type Drivetrain = VehicleDrivetrain;
 export type VehicleCategoryType = VehicleCategory; // Renamed to avoid collision with enum
 
@@ -45,9 +45,9 @@ export interface VehicleDef {
 
 // --- DATABASE ---
 
-export const VEHICLES: Record<VehicleType, VehicleDef> = {
-    station_wagon: {
-        type: 'station_wagon',
+export const VEHICLES: Record<number, VehicleDef> = {
+    [VehicleID.STATION_WAGON]: {
+        type: VehicleID.STATION_WAGON,
         category: VehicleCategory.CAR,
         displayName: 'vehicles.station_wagon',
         maxSpeed: 125,
@@ -67,8 +67,8 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         dismountOffset: { x: 3.0, y: 0, z: 0 }   // PLUS X = Kliver ut vänster
     },
 
-    sedan: {
-        type: 'sedan',
+    [VehicleID.SEDAN]: {
+        type: VehicleID.SEDAN,
         category: VehicleCategory.CAR,
         displayName: 'vehicles.sedan',
         maxSpeed: 135,
@@ -88,8 +88,8 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         dismountOffset: { x: 3.0, y: 0, z: 0 }
     },
 
-    police: {
-        type: 'police',
+    [VehicleID.POLICE]: {
+        type: VehicleID.POLICE,
         category: VehicleCategory.CAR,
         displayName: 'vehicles.police',
         maxSpeed: 150,
@@ -109,8 +109,8 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         dismountOffset: { x: 3.0, y: 0, z: 0 }
     },
 
-    ambulance: {
-        type: 'ambulance',
+    [VehicleID.AMBULANCE]: {
+        type: VehicleID.AMBULANCE,
         category: VehicleCategory.TRUCK,
         displayName: 'vehicles.ambulance',
         maxSpeed: 110,
@@ -130,8 +130,8 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         dismountOffset: { x: 3.75, y: 0, z: 1.5 }
     },
 
-    bus: {
-        type: 'bus',
+    [VehicleID.BUS]: {
+        type: VehicleID.BUS,
         category: VehicleCategory.TRUCK,
         displayName: 'vehicles.bus',
         maxSpeed: 85,
@@ -151,8 +151,8 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         dismountOffset: { x: 4.5, y: 0, z: 7.5 }
     },
 
-    tractor: {
-        type: 'tractor',
+    [VehicleID.TRACTOR]: {
+        type: VehicleID.TRACTOR,
         category: VehicleCategory.AGRICULTURAL,
         displayName: 'vehicles.tractor',
         maxSpeed: 40,
@@ -172,8 +172,8 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         dismountOffset: { x: 3.0, y: 0, z: -0.75 }
     },
 
-    timber_truck: {
-        type: 'timber_truck',
+    [VehicleID.TIMBER_TRUCK]: {
+        type: VehicleID.TIMBER_TRUCK,
         category: VehicleCategory.TRUCK,
         displayName: 'vehicles.timber_truck',
         maxSpeed: 55,
@@ -193,8 +193,8 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         dismountOffset: { x: 3.75, y: 0, z: 6.0 }
     },
 
-    boat: {
-        type: 'boat',
+    [VehicleID.BOAT]: {
+        type: VehicleID.BOAT,
         category: VehicleCategory.BOAT,
         displayName: 'vehicles.boat',
         maxSpeed: 15,

@@ -269,6 +269,17 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
     const getRank = (lvl: number) => t(DataResolver.getRankName(lvl));
     const FAMILY_MEMBERS = DataResolver.getFamilyMembers();
 
+    // Build a Set of rescued FamilyMemberIDs from the sector-index array
+    const rescuedMemberIds = useMemo(() => {
+        const set = new Set<number>();
+        const indices = stats.rescuedFamilyIndices || [];
+        for (let i = 0; i < indices.length; i++) {
+            const fmId = DataResolver.getSectorFamilyMemberId(indices[i]);
+            if (fmId !== undefined) set.add(fmId);
+        }
+        return set;
+    }, [stats.rescuedFamilyIndices]);
+
     return (
         <div className="flex flex-col h-full gap-6 pb-12 overflow-y-auto pr-2 custom-scrollbar bg-zinc-950/20 backdrop-blur-sm rounded-lg p-1">
             <div className={`grid ${isMobileDevice ? 'grid-cols-1' : 'grid-cols-2'} gap-6`}>
@@ -299,13 +310,13 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
                         <div className="flex flex-wrap items-baseline gap-2">
                             <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest shrink-0">{t('ui.rescued')}:</span>
                             <span className="text-sm font-bold tracking-tight text-white/90">
-                                {FAMILY_MEMBERS.filter(m => stats.rescuedFamilyIds.includes(m.id)).map(m => m.name).join(', ') || t('ui.none')}
+                                {FAMILY_MEMBERS.filter(m => rescuedMemberIds.has(m.id)).map(m => m.name).join(', ') || t('ui.none')}
                             </span>
                         </div>
                         <div className="flex flex-wrap items-baseline gap-2 pt-2 border-t border-zinc-800/50">
                             <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest shrink-0">{t('ui.missing')}:</span>
                             <span className="text-sm font-medium text-zinc-500 italic">
-                                {FAMILY_MEMBERS.filter(m => !stats.rescuedFamilyIds.includes(m.id)).map(m => m.name).join(', ') || t('ui.none')}
+                                {FAMILY_MEMBERS.filter(m => !rescuedMemberIds.has(m.id)).map(m => m.name).join(', ') || t('ui.none')}
                             </span>
                         </div>
                     </div>

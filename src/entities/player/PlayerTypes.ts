@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { StatusEffectType } from '../../content/perks';
+import { DamageID } from './CombatTypes';
 
 /**
  * VINTERDÖD: Player DOD & Zero-GC Refactor (Phase 9)
@@ -63,32 +64,59 @@ export enum PlayerStatID {
     // Pre-calculated stats (Zero-GC / O(1))
     FINAL_SPEED = 38,
 
+    // --- CHALLENGE TRACKING ---
+    TOTAL_HEADSHOTS = 40,
+    TOTAL_ITEMS_COLLECTED = 41,
+    TOTAL_LONG_RANGE_KILLS = 42,
+    TOTAL_SECTORS_COMPLETED = 43,
+    TOTAL_CRITICAL_HITS = 44,
+
     // Buffer Size
-    COUNT = 40
+    COUNT = 48
 }
 
 /**
  * SMI-indexed index for weapon-specific statistics.
- * Used with Float64Arrays to avoid dictionary lookups in hot loops.
- * Maps to DamageID (1-15) via (id - 1).
+ * Optimized for Zero-GC performance by aligning with DamageID.
+ * Sized to 64 to provide ample headroom for tactical effects and future weapons.
  */
 export enum StatWeaponIndex {
-    SMG = 0,
-    SHOTGUN = 1,
-    RIFLE = 2,
-    PISTOL = 3,
-    REVOLVER = 4,
-    GRENADE = 5,
-    MOLOTOV = 6,
-    FLASHBANG = 7,
-    MINIGUN = 8,
-    FLAMETHROWER = 9,
-    ARC_CANNON = 10,
-    RADIO = 11,
-    RUSH = 12,
-    VEHICLE = 13,
-    DODGE = 14,
-    COUNT = 20 // Buffer for future expansion
+    NONE = 0,
+    SMG = 1,
+    SHOTGUN = 2,
+    RIFLE = 3,
+    PISTOL = 4,
+    REVOLVER = 5,
+    GRENADE = 6,
+    MOLOTOV = 7,
+    FLASHBANG = 8,
+    MINIGUN = 9,
+    FLAMETHROWER = 10,
+    ARC_CANNON = 11,
+    RADIO = 12,
+    RUSH = 13,
+    VEHICLE = 14,
+    DODGE = 15,
+
+    // --- TACTICAL & ENVIRONMENTAL (Synced with DamageID) ---
+    PHYSICAL = 21,
+    BURN = 22,
+    BLEED = 23,
+    DROWNING = 24,
+    FALL = 25,
+    EXPLOSION = 26,
+    BITE = 27,
+    ELECTRIC = 28,
+    BOSS = 29,
+    VEHICLE_SPLATTER = 30,
+    VEHICLE_RAM = 31,
+    VEHICLE_PUSH = 32,
+    FIRE = 33,
+    FALL_DAMAGE = 34,
+    OTHER = 35,
+    BOSS_GENERIC = 36,
+
+    COUNT = 64 
 }
 
 /**
@@ -202,17 +230,22 @@ export interface PlayerStats {
     collectiblesDiscovered: string[];
     viewedCollectibles?: string[];
     cluesFound: string[];
-    discoveredPOIs: string[];
+    mostUsedWeapon: DamageID;
+    totalEnemiesKilled: number;
     seenEnemies: number[];
     seenBosses: number[];
     discoveredPerks: StatusEffectType[];
+    discoveredPOIs: string[];
 
     // --- STORY & PROGRESSION ---
     prologueSeen?: boolean;
     rescuedFamilyIndices: number[];
 
     familyFoundCount: number;
-    mostUsedWeapon: string;
+ 
+    // --- CHALLENGE PROGRESSION ---
+    // Stores current tier (0-3) for each ChallengeID
+    challengeTiers: Int32Array;
 }
 
 /**
@@ -287,6 +320,7 @@ export const PlayerStatsUtils = {
             enemyKills: new Float64Array(StatEnemyIndex.COUNT),
             deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
             incomingDamageBuffer: new Float64Array(64 * 32),
+            challengeTiers: new Int32Array(64),
 
             activePassives: [] as StatusEffectType[],
             activeBuffs: [] as StatusEffectType[],

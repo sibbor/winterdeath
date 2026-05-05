@@ -6,11 +6,35 @@ export enum VehicleDrivetrain {
     AWD = 2
 }
 
+export enum VehicleID {
+    TRACTOR = 0,
+    STATION_WAGON = 1,
+    SEDAN = 2,
+    POLICE = 3,
+    AMBULANCE = 4,
+    BUS = 5,
+    TIMBER_TRUCK = 6,
+    BOAT = 7,
+    NONE = -1
+}
+
 export enum VehicleCategory {
     CAR = 0,
     TRUCK = 1,
     BOAT = 2,
     AGRICULTURAL = 3
+}
+
+export enum VehicleEngineState {
+    OFF = 0,
+    STARTING = 1,
+    RUNNING = 2
+}
+
+export enum VehicleImpactIntensity {
+    NONE = 0,
+    LIGHT = 1,
+    HEAVY = 2
 }
 
 /**
@@ -25,8 +49,8 @@ export interface VehicleState {
     prevFwdSpeed: number;
     speed: number;
     throttle: number;
-    type: string;
-    engineState: 'OFF' | 'STARTING' | 'RUNNING';
+    type: VehicleID;
+    engineState: VehicleEngineState;
     _lastNoiseTime: number;
 
     // Voices
@@ -63,8 +87,8 @@ export const VehicleTypes = {
         prevFwdSpeed: 0,
         speed: 0,
         throttle: 0,
-        type: '',
-        engineState: 'OFF',
+        type: VehicleID.STATION_WAGON,
+        engineState: VehicleEngineState.OFF,
         _lastNoiseTime: 0,
         engineVoiceIdx: -1,
         skidVoiceIdx: -1

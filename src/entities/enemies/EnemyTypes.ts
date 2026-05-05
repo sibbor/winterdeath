@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BossID } from '../../game/session/SectorTypes';
 import { AttackDefinition, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
@@ -177,7 +178,7 @@ export interface Enemy {
     lastHeardNoiseType: NoiseType;
 
     // Interaction & Boss States
-    bossId: number;
+    bossId: BossID;
     hitTime: number;
     hitRenderTime: number;
     lastStepTime: number;

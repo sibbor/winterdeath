@@ -1,9 +1,10 @@
+import { CollectibleModelType } from '../game/session/SectorTypes';
 
 export interface CollectibleDefinition {
     id: string;
     sector: number;
     index: number;
-    modelType: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy';
+    modelType: CollectibleModelType;
 }
 
 export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
@@ -12,13 +13,13 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
         id: 's0_collectible_1',
         sector: 0,
         index: 0,
-        modelType: 'phone'
+        modelType: CollectibleModelType.PHONE
     },
     's0_collectible_2': {
         id: 's0_collectible_2',
         sector: 0,
         index: 1,
-        modelType: 'axe'
+        modelType: CollectibleModelType.AXE
     },
 
     // Sector 1
@@ -26,13 +27,13 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
         id: 's1_collectible_1',
         sector: 1,
         index: 0,
-        modelType: 'pacifier'
+        modelType: CollectibleModelType.PACIFIER
     },
     's1_collectible_2': {
         id: 's1_collectible_2',
         sector: 1,
         index: 1,
-        modelType: 'teddy'
+        modelType: CollectibleModelType.TEDDY
     },
 
     // Sector 2
@@ -40,13 +41,13 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
         id: 's2_collectible_1',
         sector: 2,
         index: 0,
-        modelType: 'diary'
+        modelType: CollectibleModelType.DIARY
     },
     's2_collectible_2': {
         id: 's2_collectible_2',
         sector: 2,
         index: 1,
-        modelType: 'jacket'
+        modelType: CollectibleModelType.JACKET
     },
 
     // Sector 3
@@ -54,13 +55,13 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
         id: 's3_collectible_1',
         sector: 3,
         index: 0,
-        modelType: 'ring'
+        modelType: CollectibleModelType.RING
     },
     's3_collectible_2': {
         id: 's3_collectible_2',
         sector: 3,
         index: 1,
-        modelType: 'badge'
+        modelType: CollectibleModelType.BADGE
     },
 
     // Sector 4 (Playground Test)
@@ -68,7 +69,7 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
         id: 'dummy_badge_test',
         sector: 4,
         index: 0,
-        modelType: 'badge'
+        modelType: CollectibleModelType.BADGE
     }
 };
 

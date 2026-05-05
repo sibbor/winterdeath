@@ -13,6 +13,7 @@ import { KMH_TO_MS, FamilyMemberID } from '../content/constants';
 import { DataResolver } from '../utils/ui/DataResolver';
 import { FXParticleType } from '../types/FXTypes';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
+import { InputAction } from '../core/engine/InputTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -466,9 +467,10 @@ export class PlayerStatsSystem implements System {
         }
 
         const input = session.engine.input.state;
+        const acts = input.actions;
         _v1.set(0, 0, 0);
-        if (input.w) _v1.z -= 1; if (input.s) _v1.z += 1;
-        if (input.a) _v1.x -= 1; if (input.d) _v1.x += 1;
+        if (acts[InputAction.UP]) _v1.z -= 1; if (acts[InputAction.DOWN]) _v1.z += 1;
+        if (acts[InputAction.LEFT]) _v1.x -= 1; if (acts[InputAction.RIGHT]) _v1.x += 1;
 
         if (_v1.lengthSq() > 0) {
             state.deathVel.copy(_v1).normalize().multiplyScalar(15);

@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, GroundType, ChestType } from '../../game/session/SectorTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { VEGETATION_TYPE } from '../../content/environment';
 import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
+import { InteractionType, InteractionShape } from '../../systems/InteractionTypes';
+import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { FamilyMemberID } from '../constants';
@@ -74,7 +76,6 @@ let mastLightHubRef: THREE.Object3D | null = null;
 
 export const Sector2: SectorDef = {
     id: 2,
-    name: "sectors.sector_2_name",
     environment: {
         bgColor: 0x051015,
         fog: {
@@ -102,7 +103,7 @@ export const Sector2: SectorDef = {
     },
 
     // Set to SNOW as requested for clear visual debugging
-    groundType: 'SNOW',
+    ground: GroundType.SNOW,
     ambientLoop: SoundID.AMBIENT_CAVE,
 
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
@@ -156,7 +157,7 @@ export const Sector2: SectorDef = {
         fhGravel.receiveShadow = true;
         scene.add(fhGravel);
 
-        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, ChestType.BIG);
         await yieldIfBudgetExceeded();
 
         // --- 2. BUILDINGS & PROPS ---
@@ -169,7 +170,7 @@ export const Sector2: SectorDef = {
         await SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, EnemyType.TANK, Math.random() * Math.PI);
         await yieldIfBudgetExceeded();
 
-        await SectorBuilder.spawnDriveableVehicle(ctx, LOCATIONS.POIS.FARM.x - 20, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 2, 'tractor');
+        await SectorBuilder.spawnDriveableVehicle(ctx, LOCATIONS.POIS.FARM.x - 20, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 2, VehicleID.TRACTOR);
         await SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 15, LOCATIONS.POIS.FARM.z - 5, Math.random() * Math.PI, 1.2);
         await SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 18, LOCATIONS.POIS.FARM.z - 2, Math.random() * Math.PI, 1.1);
         await SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 4, LOCATIONS.POIS.FARM.z - 8, Math.random() * Math.PI, 1.0);
@@ -178,7 +179,7 @@ export const Sector2: SectorDef = {
         // Timberpiles + timbertruck
         await SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 15, LOCATIONS.POIS.FARM.z + 10, Math.PI / 4, 1.2);
         await SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 12, LOCATIONS.POIS.FARM.z + 14, Math.PI / 3, 1.0);
-        await SectorBuilder.spawnDriveableVehicle(ctx, 136, -92, -Math.PI / 3, 'timber_truck', 0x334433);
+        await SectorBuilder.spawnDriveableVehicle(ctx, 136, -92, -Math.PI / 3, VehicleID.TIMBER_TRUCK, 0x334433);
         await yieldIfBudgetExceeded();
 
         // POI - Egg farm
@@ -317,7 +318,7 @@ export const Sector2: SectorDef = {
         SectorBuilder.addObstacle(ctx, {
             mesh: stone,
             position: stone.position,
-            collider: { type: 'sphere', radius: 12.5 }
+            collider: { type: InteractionShape.SPHERE, radius: 12.5 }
         });
         await yieldIfBudgetExceeded();
 

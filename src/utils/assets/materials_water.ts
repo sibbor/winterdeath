@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TEXTURES } from './AssetLoader';
 import { WATER_SYSTEM } from '../../content/constants';
-
+import { WaterShape } from '../../systems/WaterSystem';
 
 // Safe fallback texture to satisfy WebGL samplers before the image loads
 const dummyNoise = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1, THREE.RGBAFormat);
@@ -69,7 +69,7 @@ export function createWaterMaterial(
     depth: number,
     ripples: THREE.Vector4[],
     objectPositions: THREE.Vector4[],
-    shape: 'rect' | 'circle' = 'rect'
+    shape: WaterShape = WaterShape.RECT
 ): THREE.ShaderMaterial {
     // Hardcoded "Nordic" style for max performance and consistency
     const baseColor = new THREE.Color(0x10479a);
@@ -84,7 +84,7 @@ export function createWaterMaterial(
             uShallowColor: { value: shallowColor },
             uFoamColor: { value: foamColor },
             uPlaneSize: { value: new THREE.Vector2(width, depth) },
-            uIsCircle: { value: shape === 'circle' ? 1.0 : 0.0 },
+            uIsCircle: { value: shape === WaterShape.CIRCLE ? 1.0 : 0.0 },
             uWaterDepth: { value: 2.0 },
             uRipples: { value: ripples },
             uObjectPositions: { value: objectPositions },

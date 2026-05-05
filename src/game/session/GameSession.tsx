@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { SectorStats } from '../../types/StateTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
+import { InputAction } from '../../core/engine/InputTypes';
 import { GameSessionLogic } from './GameSessionLogic';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { UiSounds, WeaponSounds } from '../../utils/audio/AudioLib';
@@ -22,10 +23,15 @@ import { PlayerStatsSystem } from '../../systems/PlayerStatsSystem';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { PlayerStatID } from '../../entities/player/PlayerTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
-import { DiscoveryType } from '../../components/ui/hud/HudTypes';
-import { FXParticleType, FXDecalType } from '../../types/FXTypes';
-import { SystemID } from '../../systems/System';
 import { TriggerType } from '../../systems/TriggerTypes';
+import { BossID } from './SectorTypes';
+import { OverlayType, DiscoveryType } from '../../components/ui/hud/HudTypes';
+import { DeathPhase } from '../../types/SessionTypes';
+import { FXParticleType, FXDecalType } from '../../types/FXTypes';
+import { SystemID } from '../../systems/SystemID';
+import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
+import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
+import { useUIEventBridge } from '../../hooks/useUIEventBridge';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -36,7 +42,7 @@ export interface GameSessionHandle {
     getSystems: () => { id: string; enabled: boolean }[];
     setSystemEnabled: (id: string, enabled: boolean) => void;
     getMergedSessionStats: () => any;
-    spawnBoss: (type: string, pos?: THREE.Vector3) => any;
+    spawnBoss: (type: number, pos?: THREE.Vector3) => any;
     spawnEnemies: (newEnemies: any[]) => void;
     respawnPlayer: () => void;
     restartSector: () => Promise<void>;
@@ -69,7 +75,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (engine) FXSystem.spawnDecal(engine.scene, refs.stateRef.current.bloodDecals, x, z, scale, material, type);
     }, [refs]);
 
-    const showDamageText = useCallback((x: number, y: number, z: number, text: string, color?: string) => {
+    const showDamageText = useCallback((x: number, y: number, z: number, text: string, color?: number) => {
         const session = refs.gameSessionRef.current;
         if (session) {
             const damageSystem = session.getSystem<any>(SystemID.DAMAGE_NUMBER);
@@ -108,7 +114,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     }, [getSectorStats, refs]);
 
     const spawnBubble = useCallback((text: string, duration?: number) => {
-        window.dispatchEvent(new CustomEvent('spawn-bubble', { detail: { text, duration } }));
+        UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration);
     }, []);
 
     const gainXp = useCallback((amount: number) => {
@@ -139,9 +145,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
 
         if (levelUps > 0) {
-            console.log(`DING! Level up: ${levelUps}`);
+            UIEventRingBuffer.push(UIEventType.LEVEL_UP, statsBuffer[PlayerStatID.LEVEL], levelUps);
             UiSounds.playLevelUp();
         }
+
+        UIEventRingBuffer.push(UIEventType.XP_GAIN, amount);
     }, [refs]);
 
     // --- PAUSE SYNCHRONIZATION (VINTERDÖD FIX: Centralized Prop-to-Engine Bridge) ---
@@ -186,7 +194,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
     const closeModal = useCallback(() => {
         const { props: currentProps } = latestStateRef.current;
-        if (currentProps.onInteractionStateChange) currentProps.onInteractionStateChange(null);
+        if (currentProps.onInteractionStateChange) currentProps.onInteractionStateChange(OverlayType.NONE);
 
         // Core UI State Cleanup (Fixes "Modal doesn't close" bugs)
         updateUiState({
@@ -258,18 +266,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 break;
 
             case 'SPAWN_BOSS':
-                window.dispatchEvent(new CustomEvent('boss-spawn-trigger', {
-                    detail: {
-                        type: payload.type || 'BOSS',
-                        pos: payload.pos
-                    }
-                }));
+                UIEventRingBuffer.push(UIEventType.BOSS_SPAWN, payload.type === 'BOSS' ? 1 : 0);
                 break;
 
             case 'FAMILY_MEMBER_FOLLOW':
-                window.dispatchEvent(new CustomEvent('family-follow', {
-                    detail: { active: true }
-                }));
+                UIEventRingBuffer.push(UIEventType.FAMILY_FOLLOW, 1);
                 break;
 
             case 'FAMILY_MEMBER_FOUND': {
@@ -291,9 +292,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 // [VINTERDÖD GUARDRAIL] Only dispatch global event and play chime if not already rescued
                 // This ensures rewards and permanent progression only happen once.
                 if (!props.familyAlreadyRescued) {
-                    window.dispatchEvent(new CustomEvent('family-member-found', {
-                        detail: { id: targetId, name: targetName }
-                    }));
+                    UIEventRingBuffer.push(UIEventType.FAMILY_FOUND, targetId || 0);
 
                     if (targetName) {
                         spawnBubble(targetName + " " + t('ui.saved'), 3000);
@@ -301,11 +300,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 } else {
                     // On Replay: Still fire the event for internal GameSession follow logic
-                    // but we could use a flag or just assume internal logic is safe.
-                    // Actually, handleFamilyMemberFound only sets fm.found/following.
-                    window.dispatchEvent(new CustomEvent('family-member-found', {
-                        detail: { id: targetId, name: targetName, isReplay: true }
-                    }));
+                    UIEventRingBuffer.push(UIEventType.FAMILY_FOUND, targetId || 0, 1); // p2=1 means replay
                 }
                 break;
             }
@@ -543,15 +538,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         if (isNew && currentProps.settings?.showDiscoveryPopups !== false) {
             audioEngine.playSound(SoundID.PASSIVE_GAINED);
-
-            // Push to queue instead of overwriting directly
-            (refs as any).discoveryQueueRef.current.push({
-                id,
-                type: type,
-                title: titleKey,
-                details: detailsKey,
-                timestamp: performance.now()
-            });
+            UIEventRingBuffer.pushString(UIEventType.DISCOVERY, id, type);
         }
     }, [refs, t]);
 
@@ -559,8 +546,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const uiCallbacks = React.useMemo(() => ({
         onContinue: () => {
             const { uiState: currentUi, props: currentProps } = latestStateRef.current;
-            if (currentUi.deathPhase === 'CONTINUE') {
-                updateUiState({ deathPhase: 'FADEOUT' as any });
+            if (currentUi.deathPhase === DeathPhase.CONTINUE) {
+                updateUiState({ deathPhase: DeathPhase.FADEOUT });
                 UiSounds.playConfirm();
                 setTimeout(() => {
                     currentProps.onSectorEnded({
@@ -589,13 +576,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     });
                 }, 1000);
             } else {
-                updateUiState({ deathPhase: 'CONTINUE' });
+                updateUiState({ deathPhase: DeathPhase.CONTINUE });
             }
         },
         onInteract: () => {
             if (refs.engineRef.current) {
-                refs.engineRef.current.input.state.e = true;
-                setTimeout(() => { if (refs.engineRef.current) refs.engineRef.current.input.state.e = false; }, 100);
+                refs.engineRef.current.input.state.actions[InputAction.INTERACT] = 1;
+                setTimeout(() => { if (refs.engineRef.current) refs.engineRef.current.input.state.actions[InputAction.INTERACT] = 0; }, 100);
             }
         },
         closeModal,
@@ -654,78 +641,92 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (currentProps.onEnvironmentOverrideChange) currentProps.onEnvironmentOverrideChange(overrides, weather);
         },
         spawnBubble,
-        spawnZombie: (type: string, pos: THREE.Vector3) => {
+        spawnZombie: (type: number, pos: THREE.Vector3) => {
             refs.sectorContextRef.current?.spawnZombie(type, pos);
         },
         onAction,
         gainXp
     }), [closeModal, gainXp, onAction, refs, spawnBubble, updateUiState]);
 
-    // --- ZERO-GC: Global Event Listeners ---
-    useEffect(() => {
-        const handleBossSpawn = (e: any) => {
-            const { type, pos } = e.detail || {};
-            const boss = refs.sectorContextRef.current?.spawnBoss(type, pos);
+    // --- ZERO-GC: Ring Buffer Bridge Listener ---
+    const handleUIEvent = useCallback((type: UIEventType, p1: any, p2: number) => {
+        switch (type) {
+            case UIEventType.BOSS_SPAWN: {
+                const bossType = p1 === 1 ? 'BOSS' : 'BOSS'; // Simplified for now
+                // VINTERDÖD: Boss spawning still needs a position, 
+                // but since we are polling, we might need to pass pos via buffer or find it.
+                // For now, use the sector's default spawn pos if not provided.
+                const sectorData = props.currentSectorData || SectorSystem.getSector(props.currentSector || 0);
+                const pos = sectorData?.bossSpawn || _spawnPosScratch.set(0, 0, 0);
 
-            if (boss) {
-                refs.bossIntroRef.current = {
-                    active: true,
-                    bossMesh: boss.mesh,
-                    startTime: WinterEngine.getInstance().renderTime
-                };
+                const boss = refs.sectorContextRef.current?.spawnBoss(bossType, pos);
+                if (boss) {
+                    refs.bossIntroRef.current = {
+                        active: true,
+                        bossMesh: boss.mesh,
+                        startTime: WinterEngine.getInstance().renderTime
+                    };
 
-                const bossNameKey = boss.bossId !== undefined ? DataResolver.getBossName(boss.bossId) : 'BOSS';
-                updateUiState({
-                    bossIntroActive: true,
-                    bossName: t(bossNameKey)
-                });
-                audioEngine.stopMusic();
+                    const bossNameKey = boss.bossId !== undefined && boss.bossId !== BossID.NONE ? DataResolver.getBossName(boss.bossId) : 'ui.boss';
+                    updateUiState({
+                        bossIntroActive: true,
+                        bossName: t(bossNameKey)
+                    });
+                    audioEngine.stopMusic();
 
-                if (boss.bossId !== undefined) audioEngine.playSound(SoundID.ZOMBIE_GROWL_TANK);
-                else audioEngine.playSound(SoundID.ZOMBIE_GROWL_TANK);
+                    audioEngine.playSound(SoundID.ZOMBIE_GROWL_TANK);
 
-                if (refs.bossIntroTimerRef.current) clearTimeout(refs.bossIntroTimerRef.current);
-                refs.bossIntroTimerRef.current = setTimeout(() => {
-                    refs.bossIntroRef.current.active = false;
-                    updateUiState({ bossIntroActive: false });
+                    if (refs.bossIntroTimerRef.current) clearTimeout(refs.bossIntroTimerRef.current);
+                    refs.bossIntroTimerRef.current = setTimeout(() => {
+                        refs.bossIntroRef.current.active = false;
+                        updateUiState({ bossIntroActive: false });
 
-                    const currentProps = latestStateRef.current.props;
-                    const sectorData = (currentProps as any).currentSectorData || { environment: { bossMusic: MusicID.BOSS_FIGHT } };
-                    audioEngine.playMusic(sectorData.environment.bossMusic || MusicID.BOSS_FIGHT);
-                }, 3000);
-            }
-        };
-
-        const handleFamilyFollow = (e: any) => {
-            const { active } = e.detail || {};
-            const fms = refs.activeFamilyMembers.current;
-            const len = fms.length;
-            for (let i = 0; i < len; i++) {
-                if (fms[i].found) fms[i].following = active;
-            }
-        };
-
-        const handleFamilyMemberFound = (e: any) => {
-            const { name, id } = e.detail || {};
-            const fms = refs.activeFamilyMembers.current;
-            let newlyFound = false;
-            const len = fms.length;
-
-            for (let i = 0; i < len; i++) {
-                const fm = fms[i];
-                if ((name && fm.name === name) || (id && fm.id === id)) {
-                    fm.found = true;
-                    fm.following = true;
-                    newlyFound = true;
+                        const currentProps = latestStateRef.current.props;
+                        const sectorData = (currentProps as any).currentSectorData || { environment: { bossMusic: MusicID.BOSS_FIGHT } };
+                        audioEngine.playMusic(sectorData.environment.bossMusic || MusicID.BOSS_FIGHT);
+                    }, 3000);
                 }
+                break;
             }
 
-            if (newlyFound && refs.gameSessionRef.current) {
-                const statsSystem = refs.gameSessionRef.current.getSystem<PlayerStatsSystem>(SystemID.PLAYER_STATS);
-                if (statsSystem) statsSystem.updatePassives(refs.gameSessionRef.current);
+            case UIEventType.FAMILY_FOLLOW: {
+                const active = p1 === 1;
+                const fms = refs.activeFamilyMembers.current;
+                const len = fms.length;
+                for (let i = 0; i < len; i++) {
+                    if (fms[i].found) fms[i].following = active;
+                }
+                break;
             }
-        };
 
+            case UIEventType.FAMILY_FOUND: {
+                const targetId = p1;
+                const fms = refs.activeFamilyMembers.current;
+                let newlyFound = false;
+                const len = fms.length;
+
+                for (let i = 0; i < len; i++) {
+                    const fm = fms[i];
+                    if (fm.id === targetId) {
+                        fm.found = true;
+                        fm.following = true;
+                        newlyFound = true;
+                    }
+                }
+
+                if (newlyFound && refs.gameSessionRef.current) {
+                    const statsSystem = refs.gameSessionRef.current.getSystem<PlayerStatsSystem>(SystemID.PLAYER_STATS);
+                    if (statsSystem) statsSystem.updatePassives(refs.gameSessionRef.current);
+                }
+                break;
+            }
+        }
+    }, [props.currentSector, props.currentSectorData, refs, updateUiState]);
+
+    useUIEventBridge(handleUIEvent);
+
+    // --- Legacy Listeners (Only for non-hotpath / external UI events) ---
+    useEffect(() => {
         const handleKeepCamera = (e: any) => {
             const { targetPos, lookAtPos, duration } = e.detail || {};
             if (targetPos && lookAtPos && refs.engineRef.current) {
@@ -749,17 +750,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (id) updateUiState({ stationOverlay: id });
         };
 
-        window.addEventListener('boss-spawn-trigger', handleBossSpawn);
-        window.addEventListener('family-follow', handleFamilyFollow);
-        window.addEventListener('family-member-found', handleFamilyMemberFound);
         window.addEventListener('keep_camera', handleKeepCamera);
         window.addEventListener('clearCameraOverride', handleClearCameraOverride);
         window.addEventListener('open_station', handleOpenStation);
 
         return () => {
-            window.removeEventListener('boss-spawn-trigger', handleBossSpawn);
-            window.removeEventListener('family-follow', handleFamilyFollow);
-            window.removeEventListener('family-member-found', handleFamilyMemberFound);
             window.removeEventListener('keep_camera', handleKeepCamera);
             window.removeEventListener('clearCameraOverride', handleClearCameraOverride);
             window.removeEventListener('open_station', handleOpenStation);
@@ -785,9 +780,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 setTimeout(() => {
                     if (refs.isMounted.current) {
                         const introText = t(currentSector.intro!.text);
-                        window.dispatchEvent(new CustomEvent('spawn-bubble', {
-                            detail: { text: `🧠 ${introText}`, duration: currentSector.intro!.duration || 4000 }
-                        }));
+                        UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, `🧠 ${introText}`, currentSector.intro!.duration || 4000);
                         if (currentSector.intro!.sound) audioEngine.playSound(currentSector.intro!.sound as any);
                     }
                 }, currentSector.intro.delay || 1500);
@@ -826,7 +819,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             const state = refs.stateRef.current;
             const session = refs.gameSessionRef.current;
             if (session) {
-                GameSessionSetup.respawnPlayer(session, engine, state, refs, props, (phase) => updateUiState({ deathPhase: phase as any }));
+                GameSessionSetup.respawnPlayer(session, engine, state, refs, props, (phase) => updateUiState({ deathPhase: phase }));
             }
         },
         restartSector: async () => {
@@ -881,10 +874,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 refs: refs,
                 ui: {
                     setIsSectorLoading: (val: boolean) => updateUiState({ isSectorLoading: val }),
-                    setDeathPhase: (val: any) => {
+                    setDeathPhase: (val: DeathPhase) => {
                         updateUiState({ deathPhase: val });
                         const pProps = latestStateRef.current.props;
-                        if ((val === 'MESSAGE' || val === 'CONTINUE') && pProps.onDeathStateChange) {
+                        if ((val === DeathPhase.MESSAGE || val === DeathPhase.CONTINUE) && pProps.onDeathStateChange) {
                             pProps.onDeathStateChange(true);
                         }
                     },
@@ -909,7 +902,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         const name = DataResolver.getFamilyMemberName(id);
                         updateUiState({ foundMemberName: name });
                     },
-                    setOverlay: (val: string | null) => {
+                    setOverlay: (val: number | null) => {
                         if (latestStateRef.current.props.onInteractionStateChange) latestStateRef.current.props.onInteractionStateChange(val);
                     }
                 },
@@ -918,7 +911,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     showDamageText,
                     onDiscovery: handleDiscovery,
                     spawnBubble: (text: string, duration?: number) => {
-                        window.dispatchEvent(new CustomEvent('spawn-bubble', { detail: { text, duration: duration || 3000 } }));
+                        UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000);
                     },
                     spawnParticle: (x, y, z, type: FXParticleType, count, customMesh, customVel, color, scale) => {
                         FXSystem.spawnParticle(engine.scene, refs.stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
@@ -931,7 +924,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         const simTime = refs.engineRef.current?.simTime || 0;
                         if (type === TriggerType.SPEAK) state.speakingUntil = simTime + duration;
                         else state.thinkingUntil = simTime + duration;
+                        if (state.callbacks.onTrigger) state.callbacks.onTrigger(type, duration);
                     },
+                    spawnHorde: (count: number, type: any, pos: any) => refs.sectorContextRef.current?.spawnHorde(count, type, pos),
+                    playSound: (id: any) => audioEngine.playSound(id),
                     onAction: (action: any) => onAction(action),
                     handleTriggerAction: (action: any, scene: THREE.Scene) => {
                         onAction(action);
@@ -1009,18 +1005,26 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 showDamageText,
                 t,
                 spawnBubble: (text: string, duration?: number) => {
-                    window.dispatchEvent(new CustomEvent('spawn-bubble', { detail: { text, duration: duration || 3000 } }));
+                    UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000);
                 },
                 onAction: (action: any) => setupContextRef.current?.callbacks.onAction(action),
                 onDiscovery: handleDiscovery,
                 onDeathStateChange: props.onDeathStateChange,
                 gainSp,
                 gainScrap,
+                onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, sourceAttack?: EnemyAttackType) => {
+                    const session = refs.gameSessionRef.current;
+                    if (!session) return;
+                    const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
+                    if (statsSystem) {
+                        statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, sourceAttack);
+                    }
+                },
                 // --- VINTERDÖD FIX: NEW STABLE CALLBACKS FOR SECTOR LOGIC ---
                 spawnZombie: (type: any, pos: any) => refs.sectorContextRef.current?.spawnZombie(type, pos),
                 spawnHorde: (count: number, type: any, pos: any) => refs.sectorContextRef.current?.spawnHorde(count, type, pos),
                 setNotification: (n: any) => {
-                    window.dispatchEvent(new CustomEvent('spawn-bubble', { detail: { text: n.text, duration: n.duration || 3000 } }));
+                    UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, n.text, n.duration || 3000);
                 },
                 setInteraction: (interaction: any) => {
                     const s = refs.stateRef.current;
@@ -1034,7 +1038,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         s.interaction.active = false;
                     }
                 },
-                setOverlay: (type: string | null) => props.onInteractionStateChange?.(type),
+                setOverlay: (type: number | null) => props.onInteractionStateChange?.(type),
                 playSound: (id: any) => audioEngine.playSound(id),
                 playTone: (freq: number, type: any, duration: number, vol?: number) => (audioEngine as any).playTone?.(freq, type, duration, vol),
                 cameraShake: (amount: number, type?: any) => engine.camera.shake(amount, type || 'general'),
@@ -1081,7 +1085,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (!props.isWarmup && refs.engineRef.current) {
             const engine = refs.engineRef.current;
             const sector = SectorSystem.getSector(props.currentSector);
-            
+
             if (!sector) {
                 console.warn(`[GameSession] Environmental sync deferred: Sector ${props.currentSector} not yet in cache.`);
                 return;
@@ -1113,26 +1117,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
         }
     }, [props.isWarmup, props.currentSector, props.environmentOverrides, props.weather, refs]);
-
-    // Discovery Queue Processor
-    useEffect(() => {
-        let interval = setInterval(() => {
-            const queue = refs.discoveryQueueRef.current;
-            if (!queue || queue.length === 0) return;
-
-            const hData = HudStore.getState();
-            if (!hData.discovery || !hData.discovery.active) {
-                const next = queue.shift();
-                if (next) {
-                    HudStore.update({
-                        ...hData,
-                        discovery: { ...next, active: true }
-                    });
-                }
-            }
-        }, 500);
-        return () => clearInterval(interval);
-    }, [refs]);
 
     return (
         <>

@@ -8,6 +8,7 @@ import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, LIGHT_SETTINGS, FLA
 import { VEGETATION_TYPE } from '../content/environment';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
 import { VEHICLES, VehicleType } from '../content/vehicles';
+import { VehicleID } from '../entities/vehicles/VehicleTypes';
 import { ObjectGenerator } from '../core/world/generators/ObjectGenerator';
 import { VehicleGenerator } from '../core/world/generators/VehicleGenerator';
 import { VegetationGenerator } from '../core/world/generators/VegetationGenerator';
@@ -630,7 +631,8 @@ export const AssetPreloader = {
 
         // Vehicles models
         for (const v in VEHICLES) {
-            add(v === 'boat' ? VehicleGenerator.createBoat() : VehicleGenerator.createVehicle(v as VehicleType), true, true);
+            const vId = Number(v) as VehicleType;
+            add(vId === VehicleID.BOAT ? VehicleGenerator.createBoat() : VehicleGenerator.createVehicle(vId), true, true);
         }
 
         // Player & family models

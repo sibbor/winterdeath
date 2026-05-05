@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { t } from '../../../../utils/i18n';
-import { SECTOR_THEMES } from '../../../../content/sectors/sector_themes';
+import { DataResolver } from '../../../../utils/ui/DataResolver';
 
 interface ScreenLoadingProps {
     sectorIndex: number;
@@ -15,11 +15,10 @@ interface ScreenLoadingProps {
 const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isInitialBoot, isPrologue, isMobileDevice, isDone }) => {
     const tips = useMemo(() => t('tips') as string[], []);
     const [randomTip, setRandomTip] = useState('');
-    const currentTheme = SECTOR_THEMES[sectorIndex];
 
     // Stable state to prevent text flickering during fade-out
     const [displayInfo, setDisplayInfo] = useState({
-        sectorKey: isCamp ? 'sectors.camp_name' : (currentTheme?.name || `sectors.sector_${sectorIndex}_name`),
+        sectorKey: isCamp ? 'sectors.camp_name' : DataResolver.getSectorName(sectorIndex),
         isCamp: !!isCamp,
         isInitialBoot: !!isInitialBoot,
         isPrologue: !!isPrologue
@@ -28,13 +27,13 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
     useEffect(() => {
         if (!isDone) {
             setDisplayInfo({
-                sectorKey: isCamp ? 'sectors.camp_name' : (currentTheme?.name || `sectors.sector_${sectorIndex}_name`),
+                sectorKey: isCamp ? 'sectors.camp_name' : DataResolver.getSectorName(sectorIndex),
                 isCamp: !!isCamp,
                 isInitialBoot: !!isInitialBoot,
                 isPrologue: !!isPrologue
             });
         }
-    }, [sectorIndex, isCamp, isInitialBoot, isPrologue, isDone, currentTheme]);
+    }, [sectorIndex, isCamp, isInitialBoot, isPrologue, isDone]);
 
     useEffect(() => {
         if (tips && Array.isArray(tips) && tips.length > 0) {

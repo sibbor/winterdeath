@@ -1,12 +1,19 @@
 export enum GameScreen {
-  CAMP = 'CAMP',
-  BRIEFING = 'BRIEFING',
-  SECTOR = 'SECTOR',
-  BOSS_STORY = 'BOSS_STORY',
-  BOSS_KILLED = 'BOSS_KILLED',
-  RECAP = 'RECAP',
-  DEATH = 'DEATH',
-  PROLOGUE = 'PROLOGUE',
+  CAMP = 0,
+  BRIEFING = 1,
+  SECTOR = 2,
+  BOSS_STORY = 3,
+  BOSS_KILLED = 4,
+  RECAP = 5,
+  DEATH = 6,
+  PROLOGUE = 7
 }
 
-export type DeathPhase = 'NONE' | 'ANIMATION' | 'MESSAGE' | 'CONTINUE';
+export enum DeathPhase {
+  NONE = 0,
+  ANIMATION = 1,
+  MESSAGE = 2,
+  CONTINUE = 3,
+  FADEOUT = 4,
+  DEAD = 5
+}

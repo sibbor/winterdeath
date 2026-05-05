@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, GroundType, ChestType } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
-import { InteractionType } from '../../systems/InteractionTypes';
+import { InteractionType, InteractionShape } from '../../systems/InteractionTypes';
+import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { VEGETATION_TYPE } from '../../content/environment';
@@ -16,6 +17,7 @@ import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { FamilyMemberID } from '../constants';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
 import { WeatherType } from '../../core/engine/EngineTypes';
+import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 
 const _vS1 = new THREE.Vector3(); // Zero-GC Scratchpad
 
@@ -62,7 +64,7 @@ async function addProps(ctx: SectorContext) {
     await SectorBuilder.spawnTimberPile(ctx, 92, -60, Math.PI * 0.25, 2);
     await SectorBuilder.spawnTimberPile(ctx, 88, -55, Math.PI * 0.20, 1.5);
 
-    await SectorBuilder.spawnVehicle(ctx, 111, -64, Math.PI * 1.25, 'timber_truck', undefined, true);
+    await SectorBuilder.spawnVehicle(ctx, 111, -64, Math.PI * 1.25, VehicleID.TIMBER_TRUCK, undefined, true);
 
     await VegetationGenerator.createDeforestation(ctx, 135, -75, 50, 30, 25);
 }
@@ -126,7 +128,6 @@ async function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vect
 
 export const Sector1: SectorDef = {
     id: 1,
-    name: "sectors.sector_1_name",
     environment: {
         bgColor: 0x020208,
         fog: {
@@ -150,7 +151,7 @@ export const Sector1: SectorDef = {
             angleVariance: Math.PI / 4
         }
     },
-    groundType: 'SNOW',
+    ground: GroundType.SNOW,
     groundSize: { width: 600, depth: 600 },
     ambientLoop: SoundID.AMBIENT_STORM,
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
@@ -177,7 +178,7 @@ export const Sector1: SectorDef = {
         };
 
         // Reward Chest at boss spawn
-        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, ChestType.BIG);
         await yieldIfBudgetExceeded();
 
         // --- RAILWAY ---
@@ -315,7 +316,7 @@ export const Sector1: SectorDef = {
                 id: 'cave_door',
                 type: InteractionType.SECTOR_SPECIFIC,
                 label: 'ui.interact_knock_on_port',
-                collider: { type: 'sphere', radius: 12.0 }
+                collider: { type: InteractionShape.SPHERE, radius: 12.0 }
             });
         }
     },
@@ -405,7 +406,7 @@ export const Sector1: SectorDef = {
                 sectorState.jordanEventTimer = simTime;
                 audioEngine.playSound(SoundID.DOOR_OPEN, 0.6);
 
-                window.dispatchEvent(new CustomEvent('hide_hud'));
+                UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 0); // 0 = HIDE
 
                 if (events.setCameraOverride) {
                     events.setCameraOverride({
@@ -499,7 +500,7 @@ export const Sector1: SectorDef = {
                     sectorState.jordanEventState = 7; // COMPLETE
                     sectorState.jordanEventTimer = simTime;
                     if (events.setCameraOverride) events.setCameraOverride(null);
-                    window.dispatchEvent(new CustomEvent('show_hud'));
+                    UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 1); // 1 = SHOW
 
                     // --- VINTERDÖD ACTION API ---
                     // NU, när dörren är stängd, skickar vi the globala händelserna!

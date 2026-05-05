@@ -24,8 +24,6 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
     const [selectedSectorIndex, setSelectedSectorIndex] = useState(currentSector);
     const textRef = useRef<HTMLSpanElement>(null);
 
-    const sectorThemes = DataResolver.getSectorThemes();
-    const sectorTheme = sectorThemes[selectedSectorIndex];
     const boss = DataResolver.getBosses()[selectedSectorIndex];
     const isRescued = rescuedFamilyIndices.includes(selectedSectorIndex);
     const isCleared = deadBossIndices.includes(selectedSectorIndex);
@@ -33,11 +31,11 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
     // -- Briefing Text Logic --
     const briefingData = useMemo(() => {
         const sectorName = t(DataResolver.getSectorName(selectedSectorIndex));
-        const sectorBriefing = t(sectorTheme.briefing);
+        const sectorBriefing = t(DataResolver.getSectorDescription(selectedSectorIndex));
         const bossName = boss ? t(DataResolver.getBossName(selectedSectorIndex)) : '';
 
         return { map: sectorName, boss: bossName, briefing: sectorBriefing };
-    }, [selectedSectorIndex, sectorTheme, boss]);
+    }, [selectedSectorIndex, boss]);
 
     useEffect(() => {
         // Reset and type-write text directly to the DOM for Zero-GC
@@ -220,10 +218,10 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                                     {t('ui.boss_status')}: {t(bossStatusKey)}
                                 </div>
 
-                                {sectorTheme.familyMemberId !== undefined && (
+                                {DataResolver.getSectorFamilyMemberId(selectedSectorIndex) !== undefined && (
                                     <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
                                         {t('ui.family_member')}: {isRescued
-                                            ? t(DataResolver.getFamilyMemberName(sectorTheme.familyMemberId!))
+                                            ? t(DataResolver.getFamilyMemberName(DataResolver.getSectorFamilyMemberId(selectedSectorIndex)!))
                                             : t(familyStatusKey)}
                                     </div>
                                 )}

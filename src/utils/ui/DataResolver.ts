@@ -12,8 +12,7 @@ import { COLLECTIBLES } from '../../content/collectibles';
 import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
 import { WeaponStats } from '../../content/weapons';
 import { sv } from '../../locales/sv';
-import { SECTORS } from '../../systems/SectorSystem';
-import { SoundID } from '../audio/AudioTypes';
+import { BossID } from '../../game/session/SectorTypes';
 
 /**
  * VINTERDÖD: Central Data Resolver (Facade Pattern)
@@ -109,24 +108,24 @@ export const DataResolver = {
     /**
      * Resolves the localized name key for a specific Boss ID.
      */
-    getBossName(id: number): string {
-        const boss = BOSSES[id];
+    getBossName(id: BossID): string {
+        const boss = BOSSES[id as any];
         return boss ? boss.name : 'ui.boss';
     },
 
     /**
      * Resolves the localized name key for a specific Boss ID.
      */
-    getBossStory(id: number): string {
-        const boss = BOSSES[id];
+    getBossStory(id: BossID): string {
+        const boss = BOSSES[id as any];
         return boss ? boss.story : 'ui.unknown';
     },
 
     /**
      * Resolves the localized name key for a specific Boss ID.
      */
-    getBossDeathStory(id: number): string {
-        const boss = BOSSES[id];
+    getBossDeathStory(id: BossID): string {
+        const boss = BOSSES[id as any];
         return boss ? boss.deathStory : 'ui.unknown';
     },
 
@@ -151,6 +150,21 @@ export const DataResolver = {
     getSectorName(id: number): string {
         const theme = SECTOR_THEMES[id];
         return theme ? theme.name : `sectors.sector_${id}_name`;
+    },
+
+    /**
+     * Resolves the localized description/briefing key for a Sector.
+     */
+    getSectorDescription(id: number): string {
+        const theme = SECTOR_THEMES[id];
+        return theme ? theme.briefing : `story.sector_${id}_briefing`;
+    },
+
+    /**
+     * Resolves the Family Member ID associated with a Sector.
+     */
+    getSectorFamilyMemberId(id: number): number | undefined {
+        return SECTOR_THEMES[id]?.familyMemberId;
     },
 
     /**
@@ -191,7 +205,7 @@ export const DataResolver = {
      * @param logFriendly If true, returns a localized or readable name (e.g. "Vandrare" or "Walker") 
      * instead of a raw translation key.
      */
-    getEnemyName(type: EnemyType, bossId: number = -1, logFriendly: boolean = false): string {
+    getEnemyName(type: EnemyType, bossId: BossID = BossID.NONE, logFriendly: boolean = false): string {
         let key = '';
         if (type === EnemyType.BOSS && bossId !== -1) {
             key = this.getBossName(bossId);
@@ -320,14 +334,7 @@ export const DataResolver = {
      * ZERO-GC: No allocations or filtering inside the getter.
      */
     getDiscoveryList(type: DiscoveryType): any[] {
-        let key = '';
-        if (type === DiscoveryType.POI) key = 'POI';
-        else if (type === DiscoveryType.COLLECTIBLE) key = 'COLLECTIBLE';
-        else if (type === DiscoveryType.CLUE) key = 'CLUE';
-        else if (type === DiscoveryType.BOSS) key = 'BOSS';
-        else if (type === DiscoveryType.ENEMY) key = 'ENEMY';
-
-        return DISCOVERY_BUCKETS[key] || [];
+        return DISCOVERY_BUCKETS[type] || [];
     },
 
     /**
@@ -432,6 +439,7 @@ export const DataResolver = {
             default: return 'ui.unknown';
         }
     },
+
 
     /**
      * Resolves the translation key for a Perk Category (short version).

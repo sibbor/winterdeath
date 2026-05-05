@@ -7,9 +7,10 @@ import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
 import { VehicleDef } from '../content/vehicles';
 import { FLASHLIGHT } from '../content/constants';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
-import { VehicleState, VehicleNodes, VehicleTypes, VehicleCategory } from '../entities/vehicles/VehicleTypes';
+import { VehicleState, VehicleNodes, VehicleTypes, VehicleCategory, VehicleID, VehicleEngineState, VehicleImpactIntensity } from '../entities/vehicles/VehicleTypes';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { SystemID } from './SystemID';
+import { InputAction } from '../core/engine/InputTypes';
 
 const HIT_COOLDOWN_MS = 350;
 const SPEED_SQ_PUSH = 1.0;
@@ -32,28 +33,50 @@ export const VehicleManager = {
     systemId: SystemID.VEHICLE_MANAGER,
     id: 'vehicle_manager',
 
+    handleEngineSounds: (state: any, def: VehicleDef) => {
+        const vState = state.vehicle;
+        if (vState.engineVoiceIdx === -1) return;
+
+        const speed = vState.speed || 0;
+        const throttle = vState.throttle || 0;
+        
+        // Simple RPM simulation: Idle + (Throttle * 0.5) + (Speed * 0.05)
+        const rpm = 0.2 + (Math.abs(throttle) * 0.5) + (speed * 0.05);
+        VehicleSounds.updateEngine(vState.engineVoiceIdx, Math.min(1.0, rpm));
+    },
+
     tick: (session: GameSessionLogic, playerGroup: THREE.Group, delta: number, simTime: number, renderTime: number) => {
         const state = session.state;
         const input = session.engine.input.state;
 
         // 1. Enter / Exit Logic
-        const isRunning = state.vehicle.active && state.vehicle.engineState !== 'OFF';
+        const engineState = state.vehicle.engineState as VehicleEngineState;
+        const isRunning = state.vehicle.active && engineState === VehicleEngineState.RUNNING;
         const vehicle = state.vehicle.mesh;
 
         if (state.vehicle.active && vehicle) {
             const def = vehicle.userData.vehicleDef;
             const vState = state.vehicle; // O(1) Ref
 
-            if (state.vehicle.engineState === 'OFF') {
-                VehicleManager.enterVehicle(playerGroup, vehicle, state, def);
+            if (engineState === VehicleEngineState.OFF) {
+                state.vehicle.engineState = VehicleEngineState.STARTING;
+            
+                state.vehicle.engineVoiceIdx = VehicleSounds.startEngine(def.category);
+            
+                setTimeout(() => {
+                    if (state.vehicle.engineState === VehicleEngineState.STARTING) {
+                        state.vehicle.engineState = VehicleEngineState.RUNNING;
+                    }
+                }, 800);
             }
 
-            if (input.e && !state.eDepressed && state.vehicle.engineState !== 'OFF') {
+            if (input.actions[InputAction.INTERACT] && !state.eDepressed && engineState !== VehicleEngineState.OFF) {
                 VehicleManager.exitVehicle(playerGroup, vehicle, state, def);
             }
 
             // 2. Collision Logic (OPTIMIZED - Using direct state)
-            if (state.vehicle.engineState !== 'OFF') {
+            if (engineState !== VehicleEngineState.OFF) {
+                VehicleManager.handleEngineSounds(state, def);
                 const vel = vState.velocity;
                 VehicleManager.handleEnemyCollisions(vehicle, vel, def, session, delta, simTime, renderTime);
                 VehicleManager.handleObstacleCollisions(vehicle, vel, def, session);
@@ -126,7 +149,7 @@ export const VehicleManager = {
         // Zero-GC Transfer: Copy properties from instance to runtime active buffer
         state.vehicle.type = def.type;
         state.vehicle.active = true;
-        state.vehicle.engineState = 'RUNNING';
+        state.vehicle.engineState = VehicleEngineState.RUNNING;
 
         // Link reference values
         state.vehicle.velocity = vState.velocity;
@@ -189,9 +212,9 @@ export const VehicleManager = {
         state.vehicle.active = false;
         state.vehicle.mesh = null;
         state.vehicle.nodes = null;
-        state.vehicle.type = '';
+        state.vehicle.type = 0; // STATION_WAGON (0)
         state.vehicle.speed = 0;
-        state.vehicle.engineState = 'OFF';
+        state.vehicle.engineState = VehicleEngineState.OFF;
 
         const vState = vehicle.userData.state as VehicleState;
 
@@ -200,7 +223,7 @@ export const VehicleManager = {
             vState.engineVoiceIdx = -1;
         }
 
-        VehicleSounds.playExit(def.category === VehicleCategory.BOAT ? 'BOAT' : 'CAR');
+        VehicleSounds.playExit(def.category);
 
         _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
             .applyQuaternion(vehicle.quaternion);
@@ -335,9 +358,7 @@ export const VehicleManager = {
         if (hitAnyone) {
             if (isHeavyHit) {
                 vState.suspVelY += 2.0;
-                VehicleSounds.playImpact('heavy');
-            } else {
-                VehicleSounds.playImpact('light');
+                VehicleSounds.playImpact(isHeavyHit ? VehicleImpactIntensity.HEAVY : VehicleImpactIntensity.LIGHT);
             }
         }
     },
@@ -383,7 +404,7 @@ export const VehicleManager = {
 
                 const impactSpeed = Math.abs(impactDot);
                 if (impactSpeed > 2.0) {
-                    VehicleSounds.playImpact(impactSpeed > 10.0 ? 'heavy' : 'light');
+                    VehicleSounds.playImpact(impactSpeed > 10.0 ? VehicleImpactIntensity.HEAVY : VehicleImpactIntensity.LIGHT);
                 }
             }
         }

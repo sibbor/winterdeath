@@ -9,7 +9,8 @@ import { VehicleDef } from '../content/vehicles';
 import { VehicleManager } from './VehicleManager';
 import { _buoyancyResult } from './WaterSystem';
 import { KMH_TO_MS } from '../content/constants';
-import { VehicleState, VehicleNodes, VehicleTypes, VehicleDrivetrain, VehicleCategory } from '../entities/vehicles/VehicleTypes';
+import { VehicleState, VehicleNodes, VehicleTypes, VehicleDrivetrain, VehicleCategory, VehicleEngineState, VehicleID } from '../entities/vehicles/VehicleTypes';
+import { InputAction } from '../core/engine/InputTypes';
 
 // --- PERFORMANCE SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
@@ -53,8 +54,8 @@ export class VehicleMovementSystem implements System {
 
         // Ensure engine sounds/state are reset if no vehicle is currently active
         const hasActiveVehicle = state.vehicle.active;
-        if (!hasActiveVehicle && state.vehicle.engineState !== 'OFF') {
-            state.vehicle.engineState = 'OFF';
+        if (!hasActiveVehicle && state.vehicle.engineState !== VehicleEngineState.OFF) {
+            state.vehicle.engineState = VehicleEngineState.OFF;
             state.vehicle.speed = 0;
             state.vehicle.throttle = 0;
 
@@ -107,11 +108,12 @@ export class VehicleMovementSystem implements System {
         let handbrake = false;
 
         if (input) {
-            if (input.w) throttle += 1;
-            if (input.s) throttle -= 1;
-            if (input.a) steer -= 1;
-            if (input.d) steer += 1;
-            if (input.space) handbrake = true;
+            const acts = input.actions;
+            if (acts[InputAction.UP]) throttle += 1;
+            if (acts[InputAction.DOWN]) throttle -= 1;
+            if (acts[InputAction.LEFT]) steer -= 1;
+            if (acts[InputAction.RIGHT]) steer += 1;
+            if (acts[InputAction.DODGE]) handbrake = true;
 
             if (input.joystickMove) throttle += input.joystickMove.y * -1;
             if (input.joystickAim) steer += input.joystickAim.x;
@@ -255,7 +257,7 @@ export class VehicleMovementSystem implements System {
         }
 
         // --- LIGHTING SYSTEM ---
-        const isEngineOn = (input !== null && state.vehicle.engineState !== 'OFF');
+        const isEngineOn = (input !== null && state.vehicle.engineState !== VehicleEngineState.OFF);
 
         if (vNodes.headlights) {
             (vNodes.headlights.material as THREE.MeshStandardMaterial).emissiveIntensity = isEngineOn ? 5.0 : 0.0;
@@ -297,7 +299,7 @@ export class VehicleMovementSystem implements System {
 
             state.vehicle.speed = speed * 3.6;
             state.vehicle.throttle = throttle;
-            state.vehicle.engineState = 'RUNNING';
+            state.vehicle.engineState = VehicleEngineState.RUNNING;
 
             if (Number.isFinite(normSpeed)) {
                 VehicleSounds.updateEngine(vState.engineVoiceIdx, normSpeed);

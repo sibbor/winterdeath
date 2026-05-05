@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { MapItem, DiscoveryType } from '../../components/ui/hud/HudTypes';
-import { SectorContext } from '../../game/session/SectorTypes';
+import { DeathPhase } from '../../types/SessionTypes';
+import { SectorContext, BossID } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
+import { VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
@@ -15,12 +17,11 @@ import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
 import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, PLAYER_BASE_SPEED, FamilyMemberID, INITIAL_ENEMY_POOL } from '../../content/constants';
-import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { SubEffectType } from '../../systems/EffectManager';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 import { PlayerDeathState, DamageID } from '../../entities/player/CombatTypes';
-import { SoundID } from '../../utils/audio/AudioTypes';
+import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { UiSounds } from '../../utils/audio/AudioLib';
@@ -36,14 +37,15 @@ import { SectorSystem } from '../../systems/SectorSystem';
 import { FamilySystem } from '../../systems/FamilySystem';
 import { CinematicSystem } from '../../systems/CinematicSystem';
 import { DeathSystem } from '../../systems/DeathSystem';
+import { DataResolver } from '../../utils/ui/DataResolver';
 import { HudStore } from '../../store/HudStore';
 import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
+import { ChallengeSystem } from '../../systems/ChallengeSystem';
 import { TriggerHandler } from '../../systems/TriggerHandler';
 import { HudSystem } from '../../systems/HudSystem';
 import { RuntimeState } from '../../core/RuntimeState';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
-import { DataResolver } from '../../utils/ui/DataResolver';
 import { PerkFX } from '../../systems/PerkFX';
 import { InteractionType } from '../../systems/InteractionTypes';
 
@@ -61,14 +63,14 @@ export interface SetupContext {
     refs: any;
     ui: {
         setIsSectorLoading: (val: boolean) => void;
-        setDeathPhase: (val: any) => void;
+        setDeathPhase: (val: DeathPhase) => void;
         setBossIntroActive: (val: boolean) => void;
         setBubbleTailPosition: (val: any) => void;
         setCurrentLine: (val: any) => void;
         setCinematicActive: (val: boolean) => void;
         setInteractionType: (val: any) => void;
         setFoundMember?: (id: FamilyMemberID) => void;
-        setOverlay: (type: string | null) => void;
+        setOverlay: (type: number | null) => void;
     };
     callbacks: {
         t: (k: string) => string;
@@ -78,7 +80,7 @@ export interface SetupContext {
         playCinematicLine: (index: number) => void;
         spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
-        showDamageText: (x: number, y: number, z: number, text: string, color?: string) => void;
+        showDamageText: (x: number, y: number, z: number, text: string, color?: number) => void;
         spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => void;
         concludeSector: (isExtraction: boolean) => void;
         handleTriggerAction: (action: any, scene: THREE.Scene) => void;
@@ -111,7 +113,7 @@ export class GameSessionSetup {
         }
 
         refs.isBuildingSectorRef.current = true;
-        refs.deathPhaseRef.current = 'NONE';
+        refs.deathPhaseRef.current = DeathPhase.NONE;
         state.statusFlags = PlayerStatusFlags.NONE;
         state.hudVisible = true;
 
@@ -125,8 +127,13 @@ export class GameSessionSetup {
         let sectorLoaded = false;
 
         try {
-            const currentSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
-            state.sectorName = currentSector.name || '';
+            // Ensure sector definition is in cache — may be cold on fresh save / first Prologue load
+            let currentSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
+            if (!currentSector) {
+                console.warn(`[GameSessionSetup] Sector ${props.currentSector} not in cache — loading now.`);
+                currentSector = await SectorSystem.loadSector(props.currentSector || 0);
+            }
+            state.sectorName = currentSector.name || DataResolver.getSectorName(currentSector.id);
 
             if (currentSector.initialAim) {
                 state.initialAim.active = true;
@@ -172,12 +179,12 @@ export class GameSessionSetup {
             PathGenerator.resetPathLayer();
             const setupStart = performance.now();
             console.info(`[SectorBuilder] ▶ START building sector ${props.currentSector} [LIVE]`);
-            
+
             performance.mark('build-start');
             await SectorBuilder.build(sectorCtx, currentSector);
             performance.mark('build-end');
             performance.measure('Sector Build', 'build-start', 'build-end');
-            
+
             console.info(`[SectorBuilder] ✅ DONE building sector ${props.currentSector} [LIVE] in ${(performance.now() - setupStart).toFixed(1)}ms`);
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
@@ -246,7 +253,7 @@ export class GameSessionSetup {
      */
     static async activateSector(ctx: SectorContext, def: any) {
         if (!ctx || !def) return;
-        
+
         const setupStart = performance.now();
         console.info(`[SectorBuilder] ▶ ACTIVATING live content for sector ${ctx.sectorId}`);
 
@@ -397,10 +404,9 @@ export class GameSessionSetup {
             return enemy;
         };
 
-        const spawnBoss = (type: string, pos?: THREE.Vector3) => {
+        const spawnBoss = (bossId: BossID, pos?: THREE.Vector3) => {
             const pSpawn = currentSector.playerSpawn;
             const bossPos = pos || (currentSector.bossSpawn ? new THREE.Vector3(currentSector.bossSpawn.x, 0, currentSector.bossSpawn.z) : new THREE.Vector3(pSpawn.x, 0, pSpawn.z));
-            const bossId = !isNaN(parseInt(type)) ? parseInt(type) : props.currentSector;
             const bossData = (BOSSES as any)[bossId];
 
             const boss = EnemyManager.spawnBoss(engine.scene, bossPos, bossData);
@@ -625,7 +631,7 @@ export class GameSessionSetup {
         // and may contain sector-specific family members added by SectorBuilder.
         const playerSpawn = currentSector.playerSpawn;
         const fSpawn = currentSector.familySpawn;
-        
+
         // VINTERDÖD FIX: Only spawn family members from PREVIOUS sectors that have been rescued.
         // This prevents the current sector's member (e.g. Loke) from spawning at the player start.
         const rescuedIndices = (props.rescuedFamilyIndices || []).filter((idx: number) => idx < props.currentSector);
@@ -640,10 +646,10 @@ export class GameSessionSetup {
         if (rescuedIndices.length > 0) {
             for (let i = 0; i < rescuedIndices.length; i++) {
                 const idx = rescuedIndices[i];
-                const theme = SECTOR_THEMES[idx];
+                const fmId = DataResolver.getSectorFamilyMemberId(idx);
 
-                if (theme && theme.familyMemberId !== undefined) {
-                    const fmData = FAMILY_MEMBERS[theme.familyMemberId];
+                if (fmId !== undefined) {
+                    const fmData = FAMILY_MEMBERS[fmId];
                     if (fmData) {
                         const mesh = ModelFactory.createFamilyMember(fmData);
                         mesh.position.set(playerSpawn.x + (Math.random() - 0.5) * 5, 0, playerSpawn.z + 5 + Math.random() * 5);
@@ -662,8 +668,7 @@ export class GameSessionSetup {
         let hasRescuedCurrent = rescuedIndices.indexOf(props.currentSector) !== -1;
 
         if (!props.familyAlreadyRescued) {
-            const theme = SECTOR_THEMES[props.currentSector];
-            const fmId = theme ? theme.familyMemberId : 0;
+            const fmId = DataResolver.getSectorFamilyMemberId(props.currentSector);
             if (!hasRescuedCurrent && fmId !== undefined) {
                 const fmData = FAMILY_MEMBERS[fmId];
                 if (fmData) {
@@ -708,6 +713,7 @@ export class GameSessionSetup {
 
         session.addSystem(new DamageNumberSystem(engine.scene));
         session.addSystem(new DamageTrackerSystem());
+        session.addSystem(new ChallengeSystem());
 
         const detectionSys = new EnemyDetectionSystem();
         session.addSystem(detectionSys);
@@ -783,7 +789,7 @@ export class GameSessionSetup {
             },
 
             playSound: (id: SoundID) => audioEngine.playSound(id),
-            playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => { },
+            playTone: (freq: number, type: ToneType, duration: number, vol?: number) => { },
             cameraShake: (amount: number) => engine.camera.shake(amount), scene: engine.scene,
             setCameraOverride: (params: any) => { refs.cameraOverrideRef.current = params; engine.camera.setCinematic(!!params); },
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
@@ -882,14 +888,14 @@ export class GameSessionSetup {
      * Respawns the player with full HP, stamina, ammo etc.
      * Enemies are respawned. Chests already opened remain open.
      * */
-    static respawnPlayer(session: GameSessionLogic, engine: WinterEngine, state: RuntimeState, refs: any, props: any, setDeathPhase: (phase: string) => void) {
+    static respawnPlayer(session: GameSessionLogic, engine: WinterEngine, state: RuntimeState, refs: any, props: any, setDeathPhase: (phase: DeathPhase) => void) {
         const scene = engine.scene;
 
         // --- 1. RESET PLAYER STATE (DOD / Zero-GC) ---
         // --- STATUS & EFFECT RESET (Zero-GC Clean Slate) ---
         state.statusFlags = PlayerStatusFlags.NONE; // Reset all flags (Dead, Airborne, etc.)
         state.hudVisible = true;
-        refs.deathPhaseRef.current = 'NONE';
+        refs.deathPhaseRef.current = DeathPhase.NONE;
         state.playerDeathState = PlayerDeathState.ALIVE;
         state.statsBuffer[PlayerStatID.HP] = state.statsBuffer[PlayerStatID.MAX_HP];
         state.statsBuffer[PlayerStatID.STAMINA] = state.statsBuffer[PlayerStatID.MAX_STAMINA];
@@ -921,7 +927,7 @@ export class GameSessionSetup {
         state.playerAshSpawned = false;
         state.hasLastTrailPos = false;
         state.lastBiteTime = 0;
-        state.vehicle.engineState = 'OFF';
+        state.vehicle.engineState = VehicleEngineState.OFF;
 
         // Reset Numeric Effect Buffers (Zero-GC: Filling contiguous arrays with 0)
         state.effectDurations.fill(0);
@@ -1042,7 +1048,7 @@ export class GameSessionSetup {
         // --- 7. FIX THE UI ---
         HudStore.patch({ isDead: false, hp: state.statsBuffer[PlayerStatID.MAX_HP] });
 
-        setDeathPhase('NONE');
+        setDeathPhase(DeathPhase.NONE);
     }
 
     /**
@@ -1096,7 +1102,7 @@ export class GameSessionSetup {
 
         await this.runSectorSetup(ctx, currentSetupId);
 
-        ui.setDeathPhase('NONE');
+        ui.setDeathPhase(DeathPhase.NONE);
     }
 
     static disposeSector(session: GameSessionLogic, state: RuntimeState) {

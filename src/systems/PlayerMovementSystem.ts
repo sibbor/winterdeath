@@ -15,6 +15,7 @@ import { FootprintSystem } from './FootprintSystem';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { PlayerStatsSystem } from './PlayerStatsSystem';
+import { InputAction } from '../core/engine/InputTypes';
 
 // --- SPEED AUDIT TELEMETRY (ZERO-GC) ---
 let _auditSimDist = 0;
@@ -204,7 +205,8 @@ export class PlayerMovementSystem implements System {
         const stats = state.statsBuffer;
 
         // --- 1. Ability Triggering (Rush & Dodge) ---
-        if (!input.space) {
+        const acts = input.actions;
+        if (!acts[InputAction.DODGE]) {
             // Check for Dodge trigger on release (Short Press)
             if (state.spaceDepressed) {
                 const pressDuration = simTime - state.spacePressTime;
@@ -383,8 +385,8 @@ export class PlayerMovementSystem implements System {
             if (state.dodgeDir.lengthSq() === 0) {
                 // Set direction once at start of dodge
                 _v6.set(0, 0, 0);
-                if (input.w) _v6.z -= 1; if (input.s) _v6.z += 1;
-                if (input.a) _v6.x -= 1; if (input.d) _v6.x += 1;
+                if (acts[InputAction.UP]) _v6.z -= 1; if (acts[InputAction.DOWN]) _v6.z += 1;
+                if (acts[InputAction.LEFT]) _v6.x -= 1; if (acts[InputAction.RIGHT]) _v6.x += 1;
 
                 if (_v6.lengthSq() > 0) {
                     const camAngle = session.cameraAngle || 0;
@@ -435,8 +437,8 @@ export class PlayerMovementSystem implements System {
             }
         } else if (!disableInput) {
             _v6.set(0, 0, 0);
-            if (input.w) _v6.z -= 1; if (input.s) _v6.z += 1;
-            if (input.a) _v6.x -= 1; if (input.d) _v6.x += 1;
+            if (acts[InputAction.UP]) _v6.z -= 1; if (acts[InputAction.DOWN]) _v6.z += 1;
+            if (acts[InputAction.LEFT]) _v6.x -= 1; if (acts[InputAction.RIGHT]) _v6.x += 1;
 
             if (input.joystickMove) {
                 _v6.x += input.joystickMove.x;
@@ -545,7 +547,7 @@ export class PlayerMovementSystem implements System {
             }
         }
 
-        if (isMovingVal || input.fire || input.space) state.lastActionTime = simTime;
+        if (isMovingVal || acts[InputAction.FIRE] || acts[InputAction.DODGE]) state.lastActionTime = simTime;
         return isMovingVal;
     }
 

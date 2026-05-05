@@ -15,7 +15,7 @@ interface DamageText {
     numericValue: number;
 }
 
-const DEFAULT_COLOR = '#ffffff';
+const DEFAULT_COLOR = 0xffffff;
 
 export class DamageNumberSystem implements System {
     readonly systemId = SystemID.DAMAGE_NUMBER;
@@ -29,40 +29,41 @@ export class DamageNumberSystem implements System {
      * Resolves the appropriate hex color for a damage number based on its source.
      * VINTERDÖD FIX: Uses numeric DamageID (SMI) for O(1) jump-table performance.
      */
-    public static getColorForType(type: DamageID, isHighImpact: boolean): string {
+    public static getColorForType(type: DamageID, isHighImpact: boolean): number {
         // High Impact (Crits/Heavy) fallback
-        if (isHighImpact) return '#ff0000';
+        if (isHighImpact) return 0xff0000;
 
         switch (type) {
             case DamageID.BURN:
             case DamageID.MOLOTOV:
             case DamageID.FLAMETHROWER:
-                return '#ffaa00';
+                return 0xffaa00;
 
             case DamageID.ELECTRIC:
             case DamageID.ARC_CANNON:
-                return '#00ffff';
+                return 0x00ffff;
 
             case DamageID.DROWNING:
-                return '#3b82f6';
+                return 0x3b82f6;
 
             case DamageID.FALL:
             case DamageID.PHYSICAL:
             case DamageID.RUSH:
-                return '#e887a7';
+                return 0xe887a7;
 
             case DamageID.VEHICLE:
             case DamageID.VEHICLE_PUSH:
             case DamageID.VEHICLE_RAM:
-                return '#cccccc';
+                return 0xcccccc;
 
             case DamageID.VEHICLE_SPLATTER:
-                return '#ff0000';
+                return 0xff0000;
 
             default: {
                 const weaponData = WEAPONS[type];
                 if (weaponData) {
-                    return WeaponCategoryColors[weaponData.category] || DEFAULT_COLOR;
+                    const colorStr = WeaponCategoryColors[weaponData.category] || '#ffffff';
+                    return parseInt(colorStr.replace('#', '0x'), 16);
                 }
             }
         }
@@ -115,7 +116,7 @@ export class DamageNumberSystem implements System {
         return pooled;
     }
 
-    public spawn(x: number, y: number, z: number, text: string, color: string = '#ffffff') {
+    public spawn(x: number, y: number, z: number, text: string, color: number = 0xffffff) {
         const parsedValue = parseFloat(text);
         const isNumeric = !isNaN(parsedValue);
 

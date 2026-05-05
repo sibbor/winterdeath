@@ -6,6 +6,11 @@ export const sv = {
         15: "Krigsherre", 16: "Rovdjur", 17: "Legend", 18: "Odödlig", 19: "Megaslaktare"
     },
     ui: {
+        category_world: "Världen",
+        category_combat: "Strid",
+        category_weapons: "Vapen",
+        category_tactics: "Taktik",
+        category_player: "Överlevare",
         scrap: "SKROT",
         aborted: "AVBRUTEN",
         game_title_1: "VINTER",
@@ -381,6 +386,28 @@ export const sv = {
         system_logs: "Systemloggar",
         clear: "RENSA",
         no_logs: "Inga loggar fångade...",
+    },
+    challenges: {
+        title: "Utmaningar",
+        marathon: { title: "Maraton", desc: "Spring en total distans på {target}m" },
+        scrapper: { title: "Skrotsamlare", desc: "Samla totalt {target} skrot" },
+        explorer: { title: "Utforskare", desc: "Upptäck {target} unika platser" },
+        treasure_hunter: { title: "Skattjägare", desc: "Öppna {target} förrådslådor" },
+        scavenger: { title: "Samlare", desc: "Samla {target} förbrukningsvaror" },
+        zombie_hunter: { title: "Zombiejägare", desc: "Eliminera {target} infekterade" },
+        walker_exterminator: { title: "Walker-utrotare", desc: "Eliminera {target} Walkers" },
+        knee_capper: { title: "Knäskålare", desc: "Eliminera {target} Runners" },
+        tank_buster: { title: "Tank-knäckare", desc: "Eliminera {target} tunga Tanks" },
+        boss_slayer: { title: "Boss-dräpare", desc: "Eliminera {target} legendariska bossar" },
+        marksman: { title: "Prickskytt", desc: "Eliminera {target} fiender med huvudskott" },
+        pyromaniac: { title: "Pyroman", desc: "Eliminera {target} fiender med eld" },
+        shock_therapy: { title: "Chockterapi", desc: "Eliminera {target} fiender med elektricitet" },
+        demolition_expert: { title: "Sprängexpert", desc: "Eliminera {target} fiender med explosioner" },
+        brawler: { title: "Slagsmålskämpe", desc: "Eliminera {target} fiender med närstrid eller rush" },
+        sharpshooter: { title: "Skarpskytt", desc: "Eliminera {target} fiender från långt håll" },
+        survivor: { title: "Överlevare", desc: "Överlev {target} dagar i ödemarken" },
+        veteran: { title: "Veteran", desc: "Nå spelarnivå {target}" },
+        untouchable: { title: "Oåtkomlig", desc: "Uppnå en killstreak på {target}" }
     },
     report: {
         damage: {

@@ -4,6 +4,7 @@ import { GameScreen } from './types/SessionTypes';
 import { PlayerStats, PlayerStatID, StatEnemyIndex } from './entities/player/PlayerTypes';
 import { WeatherType } from './core/engine/EngineTypes';
 import { SectorTrigger } from './systems/TriggerTypes';
+import { BossID } from './game/session/SectorTypes';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';
 import { aggregateStats } from './game/progression/ProgressionManager';
 import GameSession, { GameSessionHandle } from './game/session/GameSession';
@@ -39,13 +40,7 @@ import { AssetPreloader } from './systems/AssetPreloader';
 import { WinterEngine, GameSettings } from './core/engine/WinterEngine';
 import { HudStore } from './store/HudStore';
 import { SectorSystem } from './systems/SectorSystem';
-import { DiscoveryType } from './components/ui/hud/HudTypes';
-
-export type OverlayType =
-    | 'PAUSE' | 'SETTINGS' | 'MAP' | 'TELEPORT' | 'COLLECTIBLE' | 'DIALOGUE'
-    | 'ADVENTURE_LOG' | 'SECTOR_REPORT' | 'DEATH' | 'STATION_ARMORY'
-    | 'STATION_SKILLS' | 'STATION_SPAWNER' | 'STATION_ENVIRONMENT'
-    | 'STATION_SECTORS' | 'STATION_STATISTICS' | 'INTRO' | 'RESET_CONFIRM';
+import { OverlayType, DiscoveryType } from './components/ui/hud/HudTypes';
 
 // ============================================================================
 // ZERO-GC: Static Fallback Objects
@@ -74,7 +69,7 @@ const App: React.FC = () => {
     const [loadingTargetIsCamp, setLoadingTargetIsCamp] = useState(false);
     const [showLoadingOverlay, setShowLoadingOverlay] = useState(true);
 
-    const [activeOverlay, setActiveOverlay] = useState<OverlayType | null>(null);
+    const [activeOverlay, setActiveOverlay] = useState<OverlayType>(OverlayType.NONE);
     const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
     const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
     const [activeCollectible, setActiveCollectible] = useState<string | null>(null);
@@ -112,7 +107,7 @@ const App: React.FC = () => {
             const itemId = e.detail?.itemId;
             setInitialAdventureLogTab(tab ?? null);
             setInitialAdventureLogItem(itemId || null);
-            setActiveOverlay('ADVENTURE_LOG');
+            setActiveOverlay(OverlayType.ADVENTURE_LOG);
             UiSounds.playConfirm();
         };
 
@@ -135,7 +130,7 @@ const App: React.FC = () => {
 
     // Ensure pointer lock is released when an overlay opens
     useEffect(() => {
-        if (activeOverlay && document.pointerLockElement) {
+        if (activeOverlay !== OverlayType.NONE && document.pointerLockElement) {
             document.exitPointerLock();
         }
     }, [activeOverlay]);
@@ -248,7 +243,7 @@ const App: React.FC = () => {
     }, []);
 
     const handleOpenMap = useCallback(() => {
-        setActiveOverlay('MAP');
+        setActiveOverlay(OverlayType.MAP);
         UiSounds.playConfirm();
     }, []);
 
@@ -256,7 +251,7 @@ const App: React.FC = () => {
 
     const handleCollectibleDiscoveredAction = useCallback((id: string) => {
         setActiveCollectible(id);
-        setActiveOverlay('COLLECTIBLE');
+        setActiveOverlay(OverlayType.COLLECTIBLE);
         setGameState(prev => {
             if (prev.stats.collectiblesDiscovered.includes(id)) return prev;
 
@@ -319,11 +314,11 @@ const App: React.FC = () => {
         });
     }, []);
 
-    const handleDialogueStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? 'DIALOGUE' : null), []);
-    const handleDeathStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? 'DEATH' : null), []);
-    const handleBossIntroStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? 'INTRO' : null), []);
+    const handleDialogueStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? OverlayType.DIALOGUE : OverlayType.NONE), []);
+    const handleDeathStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? OverlayType.DEATH : OverlayType.NONE), []);
+    const handleBossIntroStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? OverlayType.INTRO : OverlayType.NONE), []);
 
-    const handleBossDefeatedAction = useCallback((bossId: number) => {
+    const handleBossDefeatedAction = useCallback((bossId: BossID) => {
         setGameState(prev => {
             if (prev.deadBossIndices.includes(prev.currentSector)) return prev;
 
@@ -374,12 +369,12 @@ const App: React.FC = () => {
     }, []);
 
     const handleTogglePauseAction = useCallback(() => {
-        setActiveOverlay('PAUSE');
+        setActiveOverlay(OverlayType.PAUSE);
         UiSounds.playClick();
     }, []);
 
     const handleToggleMapAction = useCallback(() => {
-        setActiveOverlay('MAP');
+        setActiveOverlay(OverlayType.MAP);
         UiSounds.playConfirm();
     }, []);
 
@@ -396,21 +391,21 @@ const App: React.FC = () => {
         if (currentGameState.screen === GameScreen.SECTOR && !isMobile) {
             gameCanvasRef.current?.requestPointerLock();
         }
-        setActiveOverlay(null);
+        setActiveOverlay(OverlayType.NONE);
     }, []);
 
-    const handleOpenSettingsAction = useCallback(() => setActiveOverlay('SETTINGS'), []);
+    const handleOpenSettingsAction = useCallback(() => setActiveOverlay(OverlayType.SETTINGS), []);
     const handleOpenAdventureLogAction = useCallback((tab?: DiscoveryType, itemId?: string) => {
         setInitialAdventureLogTab(tab ?? DiscoveryType.CLUE);
         setInitialAdventureLogItem(itemId || null);
-        setActiveOverlay('ADVENTURE_LOG');
+        setActiveOverlay(OverlayType.ADVENTURE_LOG);
         UiSounds.playConfirm();
     }, []);
 
     const handleOpenStatisticsAction = useCallback((tab?: string, itemId?: string) => {
         setInitialStatisticsTab(tab || 'overview');
         setInitialStatisticsItem(itemId || null);
-        setActiveOverlay('STATION_STATISTICS');
+        setActiveOverlay(OverlayType.STATION_STATISTICS);
         UiSounds.playConfirm();
     }, []);
 
@@ -419,7 +414,7 @@ const App: React.FC = () => {
         if (currentGameState.screen === GameScreen.SECTOR && !isMobile) {
             gameCanvasRef.current?.requestPointerLock();
         }
-        setActiveOverlay(null);
+        setActiveOverlay(OverlayType.NONE);
     }, []);
 
     const handleMarkCollectiblesViewedAction = useCallback((ids: string[]) => {
@@ -448,22 +443,22 @@ const App: React.FC = () => {
 
         UiSounds.playConfirm();
         setGameState(prev => ({ ...prev, screen: GameScreen.RECAP }));
-        setActiveOverlay(null);
+        setActiveOverlay(OverlayType.NONE);
     }, [handleDie]);
 
     const handleSaveArmoryAction = useCallback((s: any, l: any, wl: any) => {
         setGameState(prev => ({ ...prev, stats: s, loadout: l, weaponLevels: wl }));
-        setActiveOverlay(null);
+        setActiveOverlay(OverlayType.NONE);
     }, []);
 
     const handleSaveArmoryPlaygroundAction = useCallback((newStats: any, newLoadout: any, newLevels: any, newSectorState: any) => {
         setGameState(prev => ({ ...prev, stats: newStats, loadout: newLoadout, weaponLevels: newLevels, sectorState: newSectorState }));
-        setActiveOverlay(null);
+        setActiveOverlay(OverlayType.NONE);
     }, []);
 
     const handleSaveSkillsPlaygroundAction = useCallback((newStats: any, newSectorState: any) => {
         setGameState(prev => ({ ...prev, stats: newStats, sectorState: newSectorState }));
-        setActiveOverlay(null);
+        setActiveOverlay(OverlayType.NONE);
     }, []);
 
     const handleWeatherChangeAction = useCallback((w: any) => setGameState(prev => ({ ...prev, weather: w })), []);
@@ -474,17 +469,17 @@ const App: React.FC = () => {
 
     const handleMapSelectCoordsAction = useCallback((x: number, z: number) => {
         setTeleportInitialCoords({ x, z });
-        setActiveOverlay('TELEPORT');
+        setActiveOverlay(OverlayType.TELEPORT);
     }, []);
 
     const handleJumpAction = useCallback((x: number, z: number) => {
         gameCanvasRef.current?.requestPointerLock();
         setTeleportTarget({ x, z, timestamp: Date.now() });
-        setActiveOverlay(null);
+        setActiveOverlay(OverlayType.NONE);
     }, []);
 
     const handleTeleportCancelAction = useCallback(() => {
-        setActiveOverlay('MAP');
+        setActiveOverlay(OverlayType.MAP);
         setTeleportInitialCoords(null);
     }, []);
 
@@ -504,7 +499,7 @@ const App: React.FC = () => {
         UiSounds.playConfirm();
     }, []);
 
-    const handleCancelReset = useCallback(() => setActiveOverlay('SETTINGS'), []);
+    const handleCancelReset = useCallback(() => setActiveOverlay(OverlayType.SETTINGS), []);
 
     // --- GLOBAL EVENT LISTENERS (For UI Bridge) ---
     useEffect(() => {
@@ -622,7 +617,7 @@ const App: React.FC = () => {
 
             setTeleportTarget(null);
             setActiveCollectible(null);
-            setActiveOverlay(null);
+            setActiveOverlay(OverlayType.NONE);
 
             setGameState(prev => ({
                 ...prev,
@@ -649,7 +644,7 @@ const App: React.FC = () => {
             // Clean-up
             setTeleportTarget(null);
             setActiveCollectible(null);
-            setActiveOverlay(null);
+            setActiveOverlay(OverlayType.NONE);
 
             setGameState(prev => ({
                 ...prev,
@@ -672,7 +667,7 @@ const App: React.FC = () => {
         }
 
         // VINTERDÖD FIX: Clear UI state instantly for "blixtsnabb" feedback
-        setActiveOverlay(null);
+        setActiveOverlay(OverlayType.NONE);
         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         setSectorStats(null);
         setDeathDetails(null);
@@ -686,7 +681,7 @@ const App: React.FC = () => {
 
         gameCanvasRef.current?.restartSector();
 
-        setActiveOverlay(null);
+        setActiveOverlay(OverlayType.NONE);
         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         setSectorStats(null);
         setDeathDetails(null);
@@ -697,7 +692,7 @@ const App: React.FC = () => {
 
     const handleAbortSector = useCallback(() => {
         if (!gameCanvasRef.current) return;
-        setActiveOverlay(null);
+        setActiveOverlay(OverlayType.NONE);
         const stats = gameCanvasRef.current.getSectorStats(false, true);
         handleSectorEnded(stats);
         UiSounds.playClick();
@@ -712,7 +707,7 @@ const App: React.FC = () => {
     const handleCollectibleClose = useCallback(() => {
         const { isMobileDevice: isMobile } = latestStateRef.current;
         if (gameCanvasRef.current && !isMobile) gameCanvasRef.current.requestPointerLock();
-        setActiveOverlay(null);
+        setActiveOverlay(OverlayType.NONE);
         setActiveCollectible(null);
     }, []);
 
@@ -726,16 +721,16 @@ const App: React.FC = () => {
         tryDismissLoading();
     }, [tryDismissLoading]);
 
-    const onStationInteraction = useCallback((type: OverlayType | null) => setActiveOverlay(type), []);
+    const onStationInteraction = useCallback((type: OverlayType) => setActiveOverlay(type), []);
     const handleToggleDebug = useCallback((val: boolean) => {
         setGameState(prev => ({ ...prev, debugMode: val }));
     }, []);
-    const handlePauseToggle = useCallback((val: boolean) => setActiveOverlay(val ? 'PAUSE' : null), []);
+    const handlePauseToggle = useCallback((val: boolean) => setActiveOverlay(val ? OverlayType.PAUSE : OverlayType.NONE), []);
     const handleToggleShowFps = useCallback(() => {
         setGameState(prev => ({ ...prev, showFps: !prev.showFps }));
         UiSounds.playClick();
     }, []);
-    const handleOverlayClose = useCallback(() => setActiveOverlay(null), []);
+    const handleOverlayClose = useCallback(() => setActiveOverlay(OverlayType.NONE), []);
 
     const globalInputActions = React.useMemo(() => ({
         setActiveOverlay,
@@ -746,8 +741,8 @@ const App: React.FC = () => {
 
     useGlobalInput(activeOverlay, { screen: gameState.screen }, globalInputActions);
 
-    const cursorHidden = isMobileDevice || isPointerLocked || (hasInteracted && gameState.screen === GameScreen.SECTOR && !activeOverlay);
-    const showHUD = hasInteracted && (!activeOverlay || activeOverlay === 'INTRO') && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && gameState.screen !== GameScreen.PROLOGUE;
+    const cursorHidden = isMobileDevice || isPointerLocked || (hasInteracted && gameState.screen === GameScreen.SECTOR && activeOverlay === OverlayType.NONE);
+    const showHUD = hasInteracted && (activeOverlay === OverlayType.NONE || activeOverlay === OverlayType.INTRO) && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && gameState.screen !== GameScreen.PROLOGUE;
 
     // VINTERDÖD FIX: Boolean to check if we should mount/keep GameSession alive
     const shouldKeepSessionAlive =
@@ -759,7 +754,15 @@ const App: React.FC = () => {
     // Tog bort "&& !transitionTaskRef.current"
 
     return (
-        <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
+        <div 
+            className="relative w-full h-full overflow-hidden bg-black select-none cursor-none"
+            onPointerDown={() => {
+                if (!hasInteracted) setHasInteracted(true);
+                if (gameState.screen === GameScreen.SECTOR && activeOverlay === OverlayType.NONE && !isMobileDevice && !document.pointerLockElement) {
+                    gameCanvasRef.current?.requestPointerLock();
+                }
+            }}
+        >
             {!hasInteracted ? (
                 <ScreenStartGame
                     onStart={() => setHasInteracted(true)}
@@ -817,7 +820,7 @@ const App: React.FC = () => {
                                     debugMode={gameState.debugMode}
                                     isGameRunning={gameState.screen === GameScreen.SECTOR && !activeOverlay && !isLoadingSector}
                                     isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE || gameState.screen === GameScreen.RECAP || gameState.screen === GameScreen.DEATH}
-                                    disableInput={activeOverlay === 'COLLECTIBLE' || isLoadingSector || activeOverlay === 'ADVENTURE_LOG'}
+                                    disableInput={activeOverlay === OverlayType.COLLECTIBLE || isLoadingSector || activeOverlay === OverlayType.ADVENTURE_LOG}
                                     onDie={handleDie}
                                     onSectorEnded={handleSectorEnded}
                                     onPauseToggle={handleTogglePauseAction}
@@ -835,7 +838,7 @@ const App: React.FC = () => {
                                     onPOIdiscovered={handlePOIdiscoveredAction}
                                     onEnemyDiscovered={handleEnemyDiscoveredAction}
                                     onBossDiscovered={handleBossDiscoveredAction}
-                                    isCollectibleOpen={activeOverlay === 'COLLECTIBLE'}
+                                    isCollectibleOpen={activeOverlay === OverlayType.COLLECTIBLE}
                                     onCollectibleClose={handleCollectibleClose}
                                     onDialogueStateChange={handleDialogueStateChangeAction}
                                     onDeathStateChange={handleDeathStateChangeAction}
@@ -857,7 +860,7 @@ const App: React.FC = () => {
                                         loadout={gameState.loadout}
                                         weaponLevels={gameState.weaponLevels}
                                         debugMode={gameState.debugMode}
-                                        isBossIntro={activeOverlay === 'INTRO'}
+                                        isBossIntro={activeOverlay === OverlayType.INTRO}
                                         isMobileDevice={isMobileDevice}
                                         onTogglePause={handleTogglePauseAction}
                                         onToggleMap={handleToggleMapAction}
@@ -870,7 +873,7 @@ const App: React.FC = () => {
                     </div>
 
                     {/* UNIVERSAL OVERLAYS */}
-                    {activeOverlay === 'PAUSE' && (
+                    {activeOverlay === OverlayType.PAUSE && (
                         <ScreenPause
                             onResume={handleResumeAction}
                             onAbort={handleAbortSector}
@@ -882,7 +885,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {activeOverlay === 'SETTINGS' && (
+                    {activeOverlay === OverlayType.SETTINGS && (
                         <ScreenSettings
                             onClose={handleCloseAction}
                             settings={gameState.settings}
@@ -893,7 +896,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {activeOverlay === 'ADVENTURE_LOG' && (
+                    {activeOverlay === OverlayType.ADVENTURE_LOG && (
                         <ScreenAdventureLog
                             stats={gameState.screen === GameScreen.SECTOR ? (gameCanvasRef.current?.getMergedSessionStats() || gameState.stats) : gameState.stats}
                             onClose={handleCloseAction}
@@ -905,7 +908,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {activeOverlay === 'COLLECTIBLE' && activeCollectible && (
+                    {activeOverlay === OverlayType.COLLECTIBLE && activeCollectible && (
                         <ScreenCollectibleDiscovered
                             collectibleId={activeCollectible}
                             onClose={handleCollectibleClose}
@@ -913,7 +916,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {activeOverlay === 'STATION_STATISTICS' && (
+                    {activeOverlay === OverlayType.STATION_STATISTICS && (
                         <ScreenStatistics
                             stats={gameState.screen === GameScreen.SECTOR ? (gameCanvasRef.current?.getMergedSessionStats() || gameState.stats) : gameState.stats}
                             onClose={handleCloseAction}
@@ -925,7 +928,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {activeOverlay === 'STATION_ARMORY' && (
+                    {activeOverlay === OverlayType.STATION_ARMORY && (
                         gameState.screen === GameScreen.CAMP ? (
                             <ScreenArmory
                                 stats={gameState.stats}
@@ -948,7 +951,7 @@ const App: React.FC = () => {
                         )
                     )}
 
-                    {activeOverlay === 'STATION_SKILLS' && (
+                    {activeOverlay === OverlayType.STATION_SKILLS && (
                         gameState.screen === GameScreen.CAMP ? (
                             <ScreenPlayerSkills
                                 stats={gameState.stats}
@@ -967,7 +970,7 @@ const App: React.FC = () => {
                         )
                     )}
 
-                    {activeOverlay === 'STATION_ENVIRONMENT' && (
+                    {activeOverlay === OverlayType.STATION_ENVIRONMENT && (
                         <ScreenPlaygroundEnvironmentStation
                             onClose={handleCloseAction}
                             isMobileDevice={isMobileDevice}
@@ -979,7 +982,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {activeOverlay === 'STATION_SPAWNER' && (
+                    {activeOverlay === OverlayType.STATION_SPAWNER && (
                         <ScreenPlaygroundEnemyStation
                             onClose={handleCloseAction}
                             isMobileDevice={isMobileDevice}
@@ -987,7 +990,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {activeOverlay === 'MAP' && (
+                    {activeOverlay === OverlayType.MAP && (
                         <ScreenMap
                             onClose={handleCloseAction}
                             onSelectCoords={handleMapSelectCoordsAction}
@@ -995,7 +998,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {activeOverlay === 'TELEPORT' && (
+                    {activeOverlay === OverlayType.TELEPORT && (
                         <ScreenTeleport
                             initialCoords={teleportInitialCoords}
                             onJump={handleJumpAction}
@@ -1014,7 +1017,7 @@ const App: React.FC = () => {
                     )}
 
                     {/* VINTERDÖD FIX: Unify Death Screen logic (Overlay or Screen State) */}
-                    {(gameState.screen === GameScreen.DEATH || activeOverlay === 'DEATH') && (
+                    {(gameState.screen === GameScreen.DEATH || activeOverlay === OverlayType.DEATH) && (
                         <ScreenPlayerDied
                             onRespawn={handleRespawnSector}
                             onContinue={handleContinueFromDeath}
@@ -1039,7 +1042,7 @@ const App: React.FC = () => {
                         <Prologue onComplete={handlePrologueCompleteAction} isMobileDevice={isMobileDevice} />
                     )}
 
-                    {activeOverlay === 'STATION_SECTORS' && (
+                    {activeOverlay === OverlayType.STATION_SECTORS && (
                         <ScreenSectorOverview
                             currentSector={gameState.currentSector}
                             rescuedFamilyIndices={gameState.rescuedFamilyIndices}
@@ -1053,7 +1056,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {activeOverlay === 'RESET_CONFIRM' && (
+                    {activeOverlay === OverlayType.RESET_CONFIRM && (
                         <ScreenResetConfirm
                             onConfirm={handleResetGame}
                             onCancel={handleCancelReset}

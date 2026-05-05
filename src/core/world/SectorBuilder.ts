@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { MATERIALS, ModelFactory } from '../../utils/assets';
-import { EffectType } from '../../systems/EffectManager';
-import { SectorContext } from '../../game/session/SectorTypes';
+import { EffectType, SubEffectType } from '../../systems/EffectManager';
+import { FXParticleType } from '../../types/FXTypes';
+import { SectorContext, GroundType, BossID, TerminalType, ChestType, NatureFillType, CameraShakeType } from '../../game/session/SectorTypes';
 import { ObjectGenerator } from './generators/ObjectGenerator';
 import { VehicleGenerator } from './generators/VehicleGenerator';
 import { TerrainGenerator } from './generators/TerrainGenerator';
@@ -13,7 +14,7 @@ import { EffectManager } from '../../systems/EffectManager';
 import { getCollectibleById } from '../../content/collectibles';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { SectorTrigger, TriggerType, TriggerAction, TriggerStatus } from '../../systems/TriggerTypes';
-import { WaterBodyType, WaterBody } from '../../systems/WaterSystem';
+import { WaterBodyType, WaterBody, WaterShape, WaterFloraType } from '../../systems/WaterSystem';
 import { GEOMETRY } from '../../utils/assets';
 import { WinterEngine } from '../engine/WinterEngine';
 import { LIGHT_SYSTEM, FAMILY_MEMBERS, FamilyMemberID } from '../../content/constants';
@@ -21,7 +22,9 @@ import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
 import { POI_TYPE } from '../../content/pois';
 import { PoiGenerator } from './generators/PoiGenerator';
-import { InteractionType } from '../../systems/InteractionTypes';
+import { InteractionType, InteractionShape } from '../../systems/InteractionTypes';
+import { MapItemType } from '../../components/ui/hud/HudTypes';
+import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { PhysicsGroup } from './CollisionResolution';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -31,14 +34,11 @@ const _v3 = new THREE.Vector3();
 const _v4_sg = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _q1_sg = new THREE.Quaternion();
-const _q2_sg = new THREE.Quaternion();
 const _box_sg = new THREE.Box3();
 const _axisY = new THREE.Vector3(0, 1, 0);
-const _scale_sg = new THREE.Vector3();
 
-// VINTERDÖD: Nya gränssnitt för den datadrivna interaktionen
 export interface InteractionCollider {
-    type: 'sphere' | 'box';
+    type: InteractionShape;
     radius?: number;       // For sphere
     size?: THREE.Vector3;  // For box
     margin?: number;       // Extra reach padding (default: 2.0)
@@ -65,7 +65,7 @@ export const SectorBuilder = {
         if (!exists) ctx.obstacles.push(obstacle);
 
         // Auto-calculate radius for Box colliders if missing
-        if (!obstacle.radius && obstacle.collider?.type === 'box' && obstacle.collider.size) {
+        if (!obstacle.radius && obstacle.collider?.type === InteractionShape.BOX && obstacle.collider.size) {
             const s = obstacle.collider.size;
             obstacle.radius = Math.sqrt(s.x * s.x + s.z * s.z) * 0.5;
         }
@@ -110,9 +110,9 @@ export const SectorBuilder = {
         // Data-Driven Interaction Shapes
         if (params?.collider) {
             object.userData.interactionShape = params.collider.type;
-            if (params.collider.type === 'box' && params.collider.size) {
+            if (params.collider.type === InteractionShape.BOX && params.collider.size) {
                 object.userData.interactionSize = params.collider.size;
-            } else if (params.collider.type === 'sphere' && params.collider.radius) {
+            } else if (params.collider.type === InteractionShape.SPHERE && params.collider.radius) {
                 object.userData.interactionRadius = params.collider.radius;
             }
             if (params.collider.margin !== undefined) {
@@ -143,8 +143,8 @@ export const SectorBuilder = {
     },
 
     generateAutomaticContent: async (ctx: SectorContext, def: any) => {
-        if (def.groundType && def.groundType !== 'NONE') {
-            await SectorBuilder.generateGround(ctx, def.groundType, def.groundSize || { width: 2000, depth: 2000 });
+        if (def.ground !== undefined && def.ground !== null) {
+            await SectorBuilder.generateGround(ctx, def.ground as GroundType, def.groundSize || { width: 2000, depth: 2000 });
         }
 
         if (def.collectibles) {
@@ -292,14 +292,14 @@ export const SectorBuilder = {
         }
     },
 
-    generateGround: async (ctx: SectorContext, type: 'SNOW' | 'GRAVEL' | 'DIRT', size: { width: number, depth: number }) => {
+    generateGround: async (ctx: SectorContext, type: GroundType, size: { width: number, depth: number }) => {
         const ground = TerrainGenerator.createGroundLayer(type, size.width, size.depth);
         ctx.scene.add(ground);
 
         // VINTERDÖD: Sync the DOD material grid
         let mat = MaterialType.SNOW;
-        if (type === 'DIRT') mat = MaterialType.DIRT;
-        else if (type === 'GRAVEL') mat = MaterialType.GRAVEL;
+        if (type === GroundType.DIRT) mat = MaterialType.DIRT;
+        else if (type === GroundType.GRAVEL) mat = MaterialType.GRAVEL;
         ctx.collisionGrid.fillGroundMaterial(mat);
 
         const engine = WinterEngine.getInstance();
@@ -319,7 +319,7 @@ export const SectorBuilder = {
         SectorBuilder.addObstacle(ctx, {
             position: _v1_sg.clone(), // Clone for registry
             quaternion: _q1_sg.clone(),
-            collider: { type: 'box', size: _v2_sg.clone() },
+            collider: { type: InteractionShape.BOX, size: _v2_sg.clone() },
             physicsGroup: PhysicsGroup.WALL
         });
     },
@@ -336,7 +336,7 @@ export const SectorBuilder = {
             _v2_sg.set(sx, h, sz);
             SectorBuilder.addObstacle(ctx, {
                 position: _v1_sg.clone(),
-                collider: { type: 'box' as const, size: _v2_sg.clone() },
+                collider: { type: InteractionShape.BOX as const, size: _v2_sg.clone() },
                 physicsGroup: PhysicsGroup.WALL
             });
         };
@@ -347,7 +347,7 @@ export const SectorBuilder = {
         createWall(w / 2, 0, 2, d);
     },
 
-    spawnChest: (ctx: SectorContext, x: number, z: number, type: 'standard' | 'big', rot: number = 0) => {
+    spawnChest: (ctx: SectorContext, x: number, z: number, type: ChestType = ChestType.STANDARD, rot: number = 0) => {
         const chest = ObjectGenerator.createChest(type);
         chest.position.set(x, 0, z);
         chest.rotation.y = rot;
@@ -358,7 +358,7 @@ export const SectorBuilder = {
 
         ctx.scene.add(chest);
 
-        const isBig = type === 'big';
+        const isBig = type === ChestType.BIG;
         const scale = isBig ? 1.5 : 1.0;
         _v1_sg.set(1.5 * scale, 1.0 * scale, 1.0 * scale);
 
@@ -370,7 +370,7 @@ export const SectorBuilder = {
             scrap: isBig ? 100 : 25,
             opened: false,
             collider: {
-                type: 'box',
+                type: InteractionShape.BOX,
                 size: _v1_sg.clone()
             },
             physicsGroup: PhysicsGroup.OBJECT
@@ -386,7 +386,7 @@ export const SectorBuilder = {
             type: InteractionType.CHEST,
             label: isBig ? 'ui.open_large_chest' : 'ui.open_chest',
             collider: {
-                type: 'box',
+                type: InteractionShape.BOX,
                 size: _v1_sg.clone(),
                 margin: 3.5
             }
@@ -395,7 +395,7 @@ export const SectorBuilder = {
         ctx.mapItems.push({
             id: `chest_${x}_${z}`,
             x, z,
-            type: 'CHEST',
+            type: MapItemType.CHEST,
             label: isBig ? 'ui.large_chest' : 'ui.chest',
             icon: '📦',
             color: isBig ? '#ffd700' : '#8b4513',
@@ -467,14 +467,14 @@ export const SectorBuilder = {
 
         ctx.mapItems.push({
             id: `collectible_${id}`,
-            x, z, type: 'TRIGGER', label: 'ui.collectible', icon: '🎁', color: '#ffd700', radius: null
+            x, z, type: MapItemType.TRIGGER, label: 'ui.collectible', icon: '🎁', color: '#ffd700', radius: null
         });
 
         SectorBuilder.addInteractable(ctx, group, {
             id: id,
             type: InteractionType.COLLECTIBLE,
             label: 'ui.interact_pickup_collectible',
-            collider: { type: 'sphere', radius: 4.0 }
+            collider: { type: InteractionShape.SPHERE, radius: 4.0 }
         });
     },
 
@@ -565,7 +565,7 @@ export const SectorBuilder = {
 
         SectorBuilder.addObstacle(ctx, {
             mesh: bale,
-            collider: { type: 'sphere' as const, radius: 1.2 * scale },
+            collider: { type: InteractionShape.SPHERE as const, radius: 1.2 * scale },
             physicsGroup: PhysicsGroup.OBJECT
         });
     },
@@ -584,7 +584,7 @@ export const SectorBuilder = {
             mesh: timber,
             position: timber.position,
             quaternion: timber.quaternion,
-            collider: { type: 'box' as const, size: _v1_sg.clone(), center: _v2_sg.clone() },
+            collider: { type: InteractionShape.BOX as const, size: _v1_sg.clone(), center: _v2_sg.clone() },
             type: 'TimberPile',
             physicsGroup: PhysicsGroup.DEBRIS
         });
@@ -612,7 +612,7 @@ export const SectorBuilder = {
 
         ctx.mapItems.push({
             id: `building_${x}_${z}`,
-            x, z, type: 'BUILDING', label: 'ui.building', icon: null, color: '#1e293b', radius: null,
+            x, z, type: MapItemType.BUILDING, label: 'ui.building', icon: null, color: '#1e293b', radius: null,
             points: [
                 { x: x + (-hw * cos - -hd * sin), z: z + (-hw * sin + -hd * cos) },
                 { x: x + (hw * cos - -hd * sin), z: z + (hw * sin + -hd * cos) },
@@ -626,7 +626,7 @@ export const SectorBuilder = {
             position: building.position,
             quaternion: building.quaternion,
             collider: {
-                type: 'box',
+                type: InteractionShape.BOX,
                 size: (building.userData.size as THREE.Vector3).clone(),
             },
             physicsGroup: PhysicsGroup.WALL
@@ -640,13 +640,15 @@ export const SectorBuilder = {
         ctx.scene.add(scarecrow);
         SectorBuilder.addObstacle(ctx, {
             mesh: scarecrow,
-            collider: { type: 'sphere', radius: 0.5 },
+            collider: { type: InteractionShape.SPHERE, radius: 0.5 },
             physicsGroup: PhysicsGroup.OBJECT
         });
     },
 
-    spawnVehicle: (ctx: SectorContext, x: number, z: number, rotation: number, type: 'station wagon' | 'sedan' | 'police' | 'ambulance' | 'suv' | 'minivan' | 'pickup' | 'bus' | 'tractor' | 'timber_truck' = 'station wagon', colorOverride?: number, addSnow?: boolean) => {
-        const vehicle = VehicleGenerator.createVehicle(type, colorOverride, addSnow);
+    spawnVehicle: (ctx: SectorContext, x: number, z: number, rotation: number, type: VehicleID = VehicleID.STATION_WAGON, colorOverride?: number, addSnow?: boolean) => {
+        const vId = type;
+
+        const vehicle = VehicleGenerator.createVehicle(vId, colorOverride, addSnow);
 
         _box_sg.setFromObject(vehicle);
         const size = _box_sg.getSize(new THREE.Vector3());
@@ -662,28 +664,27 @@ export const SectorBuilder = {
             position: vehicle.position,
             quaternion: vehicle.quaternion,
             collider: {
-                type: 'box',
+                type: InteractionShape.BOX,
                 size: size.clone(),
                 center: new THREE.Vector3(0, size.y / 2, 0)
             },
-            type: `Vehicle_${type}`,
+            type: `Vehicle_${vId}`,
             physicsGroup: PhysicsGroup.OBJECT
         });
 
         return vehicle;
     },
 
-    spawnDriveableVehicle: (ctx: SectorContext, x: number, z: number, rotation: number, vehicleType: VehicleType, colorOverride?: number, addSnow?: boolean) => {
+    spawnDriveableVehicle: (ctx: SectorContext, x: number, z: number, rotation: number, vehicleType: VehicleID, colorOverride?: number, addSnow?: boolean) => {
         const def = VEHICLES[vehicleType];
         if (!def) return null;
 
         const vehicleRoot = new THREE.Group();
         let visualMesh: THREE.Object3D;
-        if (vehicleType === 'boat') {
+        if (vehicleType === VehicleID.BOAT) {
             visualMesh = VehicleGenerator.createBoat();
         } else {
-            const visualType = vehicleType === 'station_wagon' ? 'station wagon' : vehicleType;
-            visualMesh = VehicleGenerator.createVehicle(visualType as any, colorOverride, addSnow);
+            visualMesh = VehicleGenerator.createVehicle(vehicleType, colorOverride, addSnow);
         }
 
         vehicleRoot.add(visualMesh);
@@ -692,11 +693,11 @@ export const SectorBuilder = {
         if (visualMesh.userData.sirenOn !== undefined) vehicleRoot.userData.sirenOn = visualMesh.userData.sirenOn;
         if (visualMesh.userData.material) vehicleRoot.userData.material = visualMesh.userData.material;
 
-        const spawnY = vehicleType === 'boat' ? 1.5 : 0.0;
+        const spawnY = vehicleType === VehicleID.BOAT ? 1.5 : 0.0;
         vehicleRoot.position.set(x, spawnY, z);
         vehicleRoot.rotation.y = rotation;
 
-        if (vehicleType === 'boat') vehicleRoot.userData.floatOffset = 1.5;
+        if (vehicleType === VehicleID.BOAT) vehicleRoot.userData.floatOffset = 1.5;
 
         vehicleRoot.userData.vehicleDef = def;
         vehicleRoot.userData.velocity = new THREE.Vector3();
@@ -713,7 +714,7 @@ export const SectorBuilder = {
             position: vehicleRoot.position,
             quaternion: vehicleRoot.quaternion,
             collider: {
-                type: 'box' as const,
+                type: InteractionShape.BOX,
                 size: _v1_sg.clone(),
             },
             type: `Vehicle_${vehicleType}`,
@@ -730,7 +731,7 @@ export const SectorBuilder = {
             type: InteractionType.VEHICLE,
             label: 'ui.enter_vehicle',
             collider: {
-                type: 'box',
+                type: InteractionShape.BOX,
                 size: _v1_sg.clone(),
                 margin: 3.0
             }
@@ -739,17 +740,17 @@ export const SectorBuilder = {
         return vehicleRoot;
     },
 
-    spawnFloatableVehicle: (ctx: SectorContext, x: number, z: number, rotation: number, vehicleType: VehicleType = 'boat', colorOverride?: number) => {
+    spawnFloatableVehicle: (ctx: SectorContext, x: number, z: number, rotation: number, vehicleType: VehicleType = VehicleID.BOAT, colorOverride?: number) => {
         return SectorBuilder.spawnDriveableVehicle(ctx, x, z, rotation, vehicleType, colorOverride, false);
     },
 
-    addWaterBody: (ctx: SectorContext, type: WaterBodyType, x: number, z: number, width: number, depth: number, options?: { shape?: 'rect' | 'circle'; flowDirection?: THREE.Vector2; flowStrength?: number; maxDepth?: number; }): WaterBody | null => {
+    addWaterBody: (ctx: SectorContext, type: WaterBodyType, x: number, z: number, width: number, depth: number, options?: { shape?: WaterShape; flowDirection?: THREE.Vector2; flowStrength?: number; maxDepth?: number; }): WaterBody | null => {
         const engine = WinterEngine.getInstance();
         if (!engine?.water) return null;
         return engine.water.addWaterBody(type, x, z, width, depth, options);
     },
 
-    spawnLakeBed: (ctx: SectorContext, x: number, z: number, width: number, depth: number, floorDepth: number = 4.0, shape: 'rect' | 'circle' = 'rect') => {
+    spawnLakeBed: (ctx: SectorContext, x: number, z: number, width: number, depth: number, floorDepth: number = 4.0, shape: WaterShape = WaterShape.RECT) => {
         const lake = TerrainGenerator.createLakeBed(width, depth, floorDepth, shape);
         lake.position.set(x, -0.1, z);
         ctx.scene.add(lake);
@@ -757,12 +758,12 @@ export const SectorBuilder = {
     },
 
     addLake: (ctx: SectorContext, x: number, z: number, radius: number, floorDepth: number = 5.0) => {
-        const water = SectorBuilder.addWaterBody(ctx, 'lake', x, z, radius * 2, radius * 2, { shape: 'circle', maxDepth: floorDepth });
-        SectorBuilder.spawnLakeBed(ctx, x, z, radius * 2, radius * 2, floorDepth, 'circle');
+        const water = SectorBuilder.addWaterBody(ctx, WaterBodyType.LAKE, x, z, radius * 2, radius * 2, { shape: WaterShape.CIRCLE, maxDepth: floorDepth });
+        SectorBuilder.spawnLakeBed(ctx, x, z, radius * 2, radius * 2, floorDepth, WaterShape.CIRCLE);
 
         ctx.mapItems.push({
             id: `lake_${x}_${z}`,
-            x, z, type: 'LAKE', label: 'ui.lake', icon: null, color: '#3b82f6', radius, points: null
+            x, z, type: MapItemType.LAKE, label: 'ui.lake', icon: null, color: '#3b82f6', radius, points: null
         });
 
         const numProps = Math.floor(radius * radius * 0.05);
@@ -832,7 +833,7 @@ export const SectorBuilder = {
             position: container.position,
             quaternion: container.quaternion,
             collider: {
-                type: 'box',
+                type: InteractionShape.BOX,
                 size: _v1_sg.clone(),
                 center: _v2_sg.clone()
             },
@@ -863,7 +864,7 @@ export const SectorBuilder = {
         SectorBuilder.addObstacle(ctx, {
             mesh: lightGroup,
             position: lightGroup.position,
-            collider: { type: 'sphere', radius: 1.0 },
+            collider: { type: InteractionShape.SPHERE, radius: 1.0 },
             physicsGroup: PhysicsGroup.OBJECT
         });
 
@@ -910,7 +911,7 @@ export const SectorBuilder = {
             mesh: building,
             position: building.position,
             quaternion: building.quaternion,
-            collider: { type: 'box', size: size.clone() }
+            collider: { type: InteractionShape.BOX, size: size.clone() }
         });
 
         if (building.userData.logicalLights && ctx.dynamicLights) {
@@ -957,7 +958,7 @@ export const SectorBuilder = {
             mesh: stairs,
             position: stairs.position,
             quaternion: stairs.quaternion,
-            collider: { type: 'box', size: _v1_sg.clone() }
+            collider: { type: InteractionShape.BOX, size: _v1_sg.clone() }
         });
 
         return stairs;
@@ -970,7 +971,7 @@ export const SectorBuilder = {
         GeneratorUtils.freezeStatic(pole);
         ctx.scene.add(pole);
 
-        SectorBuilder.addObstacle(ctx, { mesh: pole, collider: { type: 'sphere', radius: 1 } });
+        SectorBuilder.addObstacle(ctx, { mesh: pole, collider: { type: InteractionShape.SPHERE, radius: 1 } });
 
         return pole;
     },
@@ -994,7 +995,7 @@ export const SectorBuilder = {
             mesh: group,
             position: group.position,
             quaternion: group.quaternion,
-            collider: { type: 'box', size: _v1_sg.clone() }
+            collider: { type: InteractionShape.BOX, size: _v1_sg.clone() }
         });
 
         return group;
@@ -1040,7 +1041,7 @@ export const SectorBuilder = {
             mesh: vehicleStack,
             position: vehicleStack.position,
             quaternion: vehicleStack.quaternion,
-            collider: { type: 'box' as const, size: stackSize }
+            collider: { type: InteractionShape.BOX, size: stackSize }
         });
     },
 
@@ -1058,14 +1059,14 @@ export const SectorBuilder = {
         SectorBuilder.addObstacle(ctx, {
             mesh: tree,
             position: tree.position,
-            collider: { type: 'sphere', radius: 0.5 * scaleMultiplier }
+            collider: { type: InteractionShape.SPHERE, radius: 0.5 * scaleMultiplier }
         });
     },
 
     spawnEnemy: (ctx: SectorContext, type: string, x: number, z: number) => {
         ctx.mapItems.push({
             id: `enemy_spawn_${x}_${z}`,
-            x, z, type: 'ENEMY', label: type, color: '#f00', radius: 1, icon: null
+            x, z, type: MapItemType.ENEMY, label: type, color: '#f00', radius: 1, icon: null
         });
     },
 
@@ -1074,7 +1075,7 @@ export const SectorBuilder = {
         barrel.position.set(x, 0, z);
         GeneratorUtils.freezeStatic(barrel);
         ctx.scene.add(barrel);
-        SectorBuilder.addObstacle(ctx, { mesh: barrel, position: barrel.position, collider: { type: 'sphere', radius: 0.6 } });
+        SectorBuilder.addObstacle(ctx, { mesh: barrel, position: barrel.position, collider: { type: InteractionShape.SPHERE, radius: 0.6 } });
     },
 
     updateAtmosphere: (dt: number, now: number, playerPos: THREE.Vector3, gameState: any, sectorState: any, events: any, sectorDef: any, zones?: any[]) => {
@@ -1084,7 +1085,7 @@ export const SectorBuilder = {
         }
     },
 
-    fillArea: async (ctx: SectorContext, center: { x: number, z: number }, size: { width: number, height: number } | number, count: number, type: 'tree' | 'rock' | 'debris', avoidCenterRadius: number = 0, exclusionZones: { pos: THREE.Vector3, radius: number }[] = []) => {
+    fillArea: async (ctx: SectorContext, center: { x: number, z: number }, size: { width: number, height: number } | number, count: number, type: NatureFillType, avoidCenterRadius: number = 0, exclusionZones: { pos: THREE.Vector3, radius: number }[] = []) => {
         await NaturePropGenerator.fillArea(ctx, center, size, count, type, avoidCenterRadius);
     },
 
@@ -1101,7 +1102,7 @@ export const SectorBuilder = {
                 ctx.mapItems.push({
                     id: `veg_${(region as THREE.Vector3[])[0].x}_${(region as THREE.Vector3[])[0].z}`,
                     x: (region as THREE.Vector3[])[0].x, z: (region as THREE.Vector3[])[0].z,
-                    type: isWheat ? 'WHEAT' : 'FOREST',
+                    type: isWheat ? MapItemType.WHEAT : MapItemType.FOREST,
                     label: isWheat ? 'ui.field' : 'ui.forest',
                     icon: null,
                     color: isWheat ? '#eab308' : '#16a34a',
@@ -1124,7 +1125,7 @@ export const SectorBuilder = {
         ctx.mapItems.push({
             id: `mountain_${points[0].x}_${points[0].z}`,
             x: points[0].x, z: points[0].z,
-            type: 'MOUNTAIN', label: 'ui.mountain', icon: null, color: '#64748b', radius: null, points: pts
+            type: MapItemType.MOUNTAIN, label: 'ui.mountain', icon: null, color: '#64748b', radius: null, points: pts
         });
 
         TerrainGenerator.createMountain(ctx, points, depth, height, caveConfig);
@@ -1141,7 +1142,7 @@ export const SectorBuilder = {
         ctx.mapItems.push({
             id: `forest_${polygon[0].x}_${polygon[0].z}`,
             x: polygon[0].x, z: polygon[0].z,
-            type: 'FOREST', label: 'ui.forest', icon: null, color: '#16a34a', radius: null, points: pts
+            type: MapItemType.FOREST, label: 'ui.forest', icon: null, color: '#16a34a', radius: null, points: pts
         });
 
         let genType = type;
@@ -1245,7 +1246,7 @@ export const SectorBuilder = {
             SectorBuilder.addObstacle(ctx, {
                 position: _v1_sg.clone(),
                 quaternion: new THREE.Quaternion().setFromAxisAngle(_up, rotation),
-                collider: { type: 'box', size: ud.size }
+                collider: { type: InteractionShape.BOX, size: ud.size }
             });
         }
 
@@ -1338,7 +1339,7 @@ export const SectorBuilder = {
                 ctx.mapItems.push({
                     id: trigger.id || `poi_${trigger.position.x}_${trigger.position.z}`,
                     x: trigger.position.x, z: trigger.position.z,
-                    type: 'POI', label: trigger.content || trigger.id, icon: '📍', color: '#f59e0b',
+                    type: MapItemType.POI, label: trigger.content || trigger.id, icon: '📍', color: '#f59e0b',
                     radius: trigger.radius || 10
                 });
             }
@@ -1347,20 +1348,21 @@ export const SectorBuilder = {
                 ctx.mapItems.push({
                     id: trigger.id || `family_${trigger.familyId}`,
                     x: trigger.position.x, z: trigger.position.z,
-                    type: 'FAMILY', label: 'ui.family_hint', icon: '❤️', color: '#ef4444',
+                    type: MapItemType.FAMILY, label: 'ui.family_hint', icon: '❤️', color: '#ef4444',
                     radius: 12
                 });
             }
         }
     },
 
-    attachEffect: (ctx: SectorContext, parent: THREE.Object3D, eff: { type: string, color?: number, intensity?: number, offset?: { x: number, y: number, z: number } }) => {
+    attachEffect: (ctx: SectorContext, parent: THREE.Object3D, eff: { type: EffectType, color?: number, intensity?: number, offset?: { x: number, y: number, z: number }, onRoof?: boolean }) => {
         const oX = eff.offset?.x || 0;
         const oY = eff.offset?.y || 0;
         const oZ = eff.offset?.z || 0;
+        const targetOffset = eff.offset || _v4_sg.set(0, 0, 0);
 
-        if (eff.type === 'light' || eff.type === 'fire') {
-            const isFire = eff.type === 'fire';
+        if (eff.type === EffectType.NEON_SIGN || eff.type === EffectType.FLICKER_LIGHT || eff.type === EffectType.FIRE) {
+            const isFire = eff.type === EffectType.FIRE;
             const baseColor = isFire ? 0xff6600 : (eff.color || 0xffaa00);
             const baseIntensity = isFire ? 2.0 : (eff.intensity || 1.0);
             const yOffset = isFire ? oY + 1.0 : oY;
@@ -1386,20 +1388,20 @@ export const SectorBuilder = {
             }
         }
 
-        if (eff.type === 'fire') {
+        if (eff.type === EffectType.FIRE) {
             parent.userData.isFire = true;
             if (parent.userData.effects === undefined) parent.userData.effects = [];
 
             const isLarge = (eff as any).onRoof || (eff.intensity && eff.intensity > 100);
-            const firePart = isLarge ? 'large_fire' : 'flame';
-            const smokePart = isLarge ? 'large_smoke' : 'smoke';
+            const firePart = isLarge ? FXParticleType.LARGE_FIRE : FXParticleType.FLAME;
+            const smokePart = isLarge ? FXParticleType.LARGE_SMOKE : FXParticleType.SMOKE;
 
             _v4_sg.set(oX, oY + (isLarge ? 1.0 : 0.5), oZ);
             _v1_sg.set(oX, oY + (isLarge ? 2.0 : 1.0), oZ);
 
             parent.userData.effects.push(
-                { type: 'emitter', particle: firePart, interval: isLarge ? 40 : 50, count: 1, offset: _v4_sg.clone(), spread: isLarge ? 1.5 : 0.3, color: 0xffaa00 },
-                { type: 'emitter', particle: smokePart, interval: isLarge ? 80 : 150, count: 1, offset: _v1_sg.clone(), spread: isLarge ? 2.0 : 0.4, color: isLarge ? 0x333333 : 0xffdd00 }
+                { type: SubEffectType.EMITTER, particle: firePart, interval: isLarge ? 40 : 50, count: 1, offset: _v4_sg.clone(), spread: isLarge ? 1.5 : 0.3, color: 0xffaa00 },
+                { type: SubEffectType.EMITTER, particle: smokePart, interval: isLarge ? 80 : 150, count: 1, offset: _v1_sg.clone(), spread: isLarge ? 2.0 : 0.4, color: isLarge ? 0x333333 : 0xffdd00 }
             );
         }
     },
@@ -1422,7 +1424,7 @@ export const SectorBuilder = {
             type: InteractionType.SECTOR_SPECIFIC,
             label: 'ui.interact',
             collider: {
-                type: 'box',
+                type: InteractionShape.BOX,
                 size: boxSize,
                 margin: 2.0
             }
@@ -1431,7 +1433,7 @@ export const SectorBuilder = {
         SectorBuilder.addObstacle(ctx, {
             mesh: terminal,
             position: terminal.position,
-            collider: { type: 'box', size: boxSize.clone() }
+            collider: { type: InteractionShape.BOX, size: boxSize.clone() }
         });
 
         return terminal;

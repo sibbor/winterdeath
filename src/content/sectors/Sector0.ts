@@ -1,16 +1,17 @@
 import * as THREE from 'three';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
-import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
-import { SoundID } from '../../utils/audio/AudioTypes';
+import { SectorDef, SectorContext, GroundType, ChestType } from '../../game/session/SectorTypes';
+import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
-import { InteractionType } from '../../systems/InteractionTypes';
+import { InteractionType, InteractionShape } from '../../systems/InteractionTypes';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
 import { VehicleGenerator } from '../../core/world/generators/VehicleGenerator';
 import { GeneratorUtils } from '../../core/world/generators/GeneratorUtils';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
+import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { FamilyMemberID } from '../constants';
 import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
 import { WeatherType } from '../../core/engine/EngineTypes';
@@ -301,7 +302,6 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
 
 export const Sector0: SectorDef = {
     id: 0,
-    name: "sectors.sector_0_name",
     environment: {
         bgColor: 0x020208,
         ambientIntensity: 0.4,
@@ -327,7 +327,7 @@ export const Sector0: SectorDef = {
             particles: 2000
         },
     },
-    groundType: 'SNOW',
+    ground: GroundType.SNOW,
     ambientLoop: SoundID.AMBIENT_WIND,
 
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
@@ -357,7 +357,7 @@ export const Sector0: SectorDef = {
             }
         };
 
-        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, ChestType.BIG);
         await yieldIfBudgetExceeded();
 
         // Road: Vargstigen -> Drive Way
@@ -449,8 +449,8 @@ export const Sector0: SectorDef = {
         // Home - Police car and family's car
         VehicleGenerator.createPoliceCar().position.set(LOCATIONS.VEHICLES.POLICE_CAR.x, 0, LOCATIONS.VEHICLES.POLICE_CAR.z);
 
-        await SectorBuilder.spawnVehicle(ctx, LOCATIONS.VEHICLES.POLICE_CAR.x, LOCATIONS.VEHICLES.POLICE_CAR.z, LOCATIONS.VEHICLES.POLICE_CAR.rotation, 'police');
-        const familyCar = await SectorBuilder.spawnVehicle(ctx, LOCATIONS.VEHICLES.FAMILY_CAR.x, LOCATIONS.VEHICLES.FAMILY_CAR.z, 0.3, 'station wagon', 0x333333, false);
+        await SectorBuilder.spawnVehicle(ctx, LOCATIONS.VEHICLES.POLICE_CAR.x, LOCATIONS.VEHICLES.POLICE_CAR.z, LOCATIONS.VEHICLES.POLICE_CAR.rotation, VehicleID.POLICE);
+        const familyCar = await SectorBuilder.spawnVehicle(ctx, LOCATIONS.VEHICLES.FAMILY_CAR.x, LOCATIONS.VEHICLES.FAMILY_CAR.z, 0.3, VehicleID.STATION_WAGON, 0x333333, false);
         await SectorBuilder.setOnFire(ctx, familyCar, { smoke: true, intensity: 100, distance: 30, onRoof: true });
         await yieldIfBudgetExceeded();
 
@@ -466,7 +466,7 @@ export const Sector0: SectorDef = {
         scene.add(kindergarten);
         await SectorBuilder.addObstacle(ctx, {
             mesh: kindergarten,
-            collider: { type: 'box', size: new THREE.Vector3(60, 20, 50) }
+            collider: { type: InteractionShape.BOX, size: new THREE.Vector3(60, 20, 50) }
         });
         await yieldIfBudgetExceeded();
 
@@ -503,7 +503,7 @@ export const Sector0: SectorDef = {
 
         // SMU - Cars
         const carColors = [0x3355ff, 0xcccccc, 0xcc2222];
-        const carType = ['suv', 'station wagon', 'sedan'] as const;
+        const carType = [VehicleID.SEDAN, VehicleID.STATION_WAGON, VehicleID.SEDAN] as const;
         for (let i = 0; i < 3; i++) {
             const rotation = Math.random() * Math.PI;
             const carPos = { x: LOCATIONS.POIS.SMU.x + 35, z: LOCATIONS.POIS.SMU.z + (i * 12) - 10 };
@@ -634,7 +634,7 @@ export const Sector0: SectorDef = {
             if (c.offset) wPos.add(c.offset);
             await SectorBuilder.addObstacle(ctx, {
                 position: wPos,
-                collider: { type: c.type, size: c.size, radius: c.radius },
+                collider: { type: c.type as any, size: c.size, radius: c.radius },
                 materialId: MaterialType.CONCRETE
             });
             await yieldIfBudgetExceeded();
@@ -662,7 +662,7 @@ export const Sector0: SectorDef = {
 
         // Obstacle
         const busIdx = obstacles.length;
-        const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: 'box' as const, size: busSize } };
+        const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: InteractionShape.BOX, size: busSize } };
         SectorBuilder.addObstacle(ctx, obstacle_bus);
 
         // Interactable
@@ -670,7 +670,7 @@ export const Sector0: SectorDef = {
             id: 'tunnel_bus_explode',
             label: 'ui.interact_blow_up_bus',
             type: InteractionType.SECTOR_SPECIFIC,
-            collider: { type: 'sphere', radius: 15.0 }
+            collider: { type: InteractionShape.SPHERE, radius: 15.0 }
         });
         // Non-interactble from start
         bus.userData.isInteractable = false;
@@ -802,7 +802,7 @@ export const Sector0: SectorDef = {
             scene.add(container);
             SectorBuilder.addObstacle(ctx, {
                 mesh: container,
-                collider: { type: 'box', size: new THREE.Vector3(6.0, 2.6, 2.4) }
+                collider: { type: InteractionShape.BOX, size: new THREE.Vector3(6.0, 2.6, 2.4) }
             });
         }
 
@@ -936,9 +936,9 @@ export const Sector0: SectorDef = {
         await yieldIfBudgetExceeded();
 
         SectorBuilder.spawnDeadBody(ctx, 37, 44, EnemyType.WALKER, 0, true);
-        SectorBuilder.spawnChest(ctx, 45, 45, 'standard');
-        SectorBuilder.spawnChest(ctx, 110, 80, 'standard');
-        SectorBuilder.spawnChest(ctx, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z + 5, 'standard');
+        SectorBuilder.spawnChest(ctx, 45, 45, ChestType.STANDARD);
+        SectorBuilder.spawnChest(ctx, 110, 80, ChestType.STANDARD);
+        SectorBuilder.spawnChest(ctx, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z + 5, ChestType.STANDARD);
 
         // Spawn Loke
         SectorBuilder.spawnFamily(ctx, FamilyMemberID.LOKE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI);
@@ -1239,7 +1239,7 @@ export const Sector0: SectorDef = {
                 sectorState.busRing = busExplosionRing;
             }
 
-            if (events.playTone) events.playTone(880, 'sine', 0.1, 0.2);
+            if (events.playTone) events.playTone(880, ToneType.SINE, 0.1, 0.2);
             if (events.setInteraction) events.setInteraction(null);
         }
 
@@ -1254,7 +1254,7 @@ export const Sector0: SectorDef = {
                 const beepInterval = elapsed > 2000 ? 250 : 500;
                 if (simTime - sectorState.lastBeepTime > beepInterval) {
                     sectorState.lastBeepTime = simTime;
-                    if (events.playTone) events.playTone(880, 'sine', 0.1, 0.15);
+                    if (events.playTone) events.playTone(880, ToneType.SINE, 0.1, 0.15);
                 }
 
                 // Pulsating visual effect on the ring

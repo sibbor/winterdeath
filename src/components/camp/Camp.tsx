@@ -2,8 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { PlayerStats, PlayerStatID } from '../../entities/player/PlayerTypes';;
 import { WeaponType } from '../../content/weapons';
-import { PLAYER_CHARACTER, PLAYER_BASE_SPEED } from '../../content/constants';
-import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
+import { PLAYER_CHARACTER } from '../../content/constants';
 import { UiSounds, AmbientSounds, VoiceSounds } from '../../utils/audio/AudioLib';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { DataResolver } from '../../utils/ui/DataResolver';
@@ -26,6 +25,7 @@ const weaponName = (id: number): string => DataResolver.getDamageName(id);
 
 // Import UI Components
 import CampHUD from '../ui/hud/CampHUD';
+import { OverlayType } from '../ui/hud/HudTypes';
 
 interface CampProps {
     stats: PlayerStats;
@@ -253,15 +253,15 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                     if (fmWrapper) { fmWrapper.bounce = 1; VoiceSounds.playDialogueBeep(fmWrapper.mesh.userData.name); }
                 } else {
                     UiSounds.playConfirm();
-                    const typeMap: Record<string, string> = {
-                        'armory': 'STATION_ARMORY',
-                        'skills': 'STATION_SKILLS',
-                        'sectors': 'STATION_SECTORS',
-                        'stats': 'STATION_STATISTICS',
-                        'adventure_log': 'ADVENTURE_LOG',
-                        'settings': 'SETTINGS'
+                    const typeMap: Record<string, OverlayType> = {
+                        'armory': OverlayType.STATION_ARMORY,
+                        'skills': OverlayType.STATION_SKILLS,
+                        'sectors': OverlayType.STATION_SECTORS,
+                        'stats': OverlayType.STATION_STATISTICS,
+                        'adventure_log': OverlayType.ADVENTURE_LOG,
+                        'settings': OverlayType.SETTINGS
                     };
-                    onInteractionStateChange(typeMap[hovered] || null);
+                    onInteractionStateChange(typeMap[hovered] || OverlayType.NONE);
                 }
             }
         };
@@ -391,7 +391,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                                 } else if (newHover === 'adventure_log') {
                                     toolTipSubText = `${t('camp_tooltips.collectibles')}: ${stats.collectiblesDiscovered?.length || 0} • ${t('camp_tooltips.clues')}: ${stats.cluesFound?.length || 0} • ${t('camp_tooltips.poi')}: ${stats.discoveredPOIs?.length || 0} • ${t('camp_tooltips.enemies')}: ${stats.seenEnemies?.length || 0} • ${t('camp_tooltips.bosses')}: ${stats.seenBosses?.length || 0}`;
                                 } else if (newHover === 'sectors') {
-                                    toolTipSubText = `${t('camp_tooltips.finished_sectors')}: ${stats.sectorsCompleted} • ${t('camp_tooltips.selected_sector')}: ${t(SECTOR_THEMES[currentSector]?.name || '')}`;
+                                    toolTipSubText = `${t('camp_tooltips.finished_sectors')}: ${stats.sectorsCompleted} • ${t('camp_tooltips.selected_sector')}: ${t(DataResolver.getSectorName(currentSector))}`;
                                 } else if (newHover === 'skills') {
                                     toolTipSubText = `${t('camp_tooltips.vitality')}: ${stats.statsBuffer[PlayerStatID.MAX_HP]} • ${t('camp_tooltips.adrenaline')}: ${stats.statsBuffer[PlayerStatID.MAX_STAMINA]} • ${t('camp_tooltips.reflexes')}: ${stats.statsBuffer[PlayerStatID.SPEED].toFixed(1)} ${t('ui.speed_unit')}`;
                                 }
@@ -468,7 +468,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         };
     }, [isGameRunning, stats, currentLoadout, currentSector]);
 
-    const closeModal = () => { UiSounds.playClick(); setActiveOverlay(null); };
+    const closeModal = () => { UiSounds.playClick(); setActiveOverlay(OverlayType.NONE); };
 
     return (
         <div className={`relative w-full h-full bg-black font-sans overflow-hidden`} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
@@ -506,14 +506,14 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
             {!activeOverlay && (
                 <CampHUD
-                    stats={stats} hoveredStation={hoveredStation} currentSectorName={t(SECTOR_THEMES[currentSector]?.name || '')} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
+                    stats={stats} hoveredStation={hoveredStation} currentSectorName={t(DataResolver.getSectorName(currentSector))} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
                     currentLoadoutNames={{ pri: t(weaponName(currentLoadout.primary)), sec: t(weaponName(currentLoadout.secondary)), thr: t(weaponName(currentLoadout.throwable)) }}
-                    onOpenStats={() => onInteractionStateChange('STATION_STATISTICS')}
-                    onOpenArmory={() => onInteractionStateChange('STATION_ARMORY')}
-                    onOpenSkills={() => onInteractionStateChange('STATION_SKILLS')}
-                    onOpenSettings={() => setActiveOverlay('SETTINGS')}
+                    onOpenStats={() => onInteractionStateChange(OverlayType.STATION_STATISTICS)}
+                    onOpenArmory={() => onInteractionStateChange(OverlayType.STATION_ARMORY)}
+                    onOpenSkills={() => onInteractionStateChange(OverlayType.STATION_SKILLS)}
+                    onOpenSettings={() => setActiveOverlay(OverlayType.SETTINGS)}
                     onStartSector={() => { }}
-                    debugMode={debugMode} onToggleDebug={onToggleDebug} onResetGame={() => setActiveOverlay('RESET_CONFIRM')}
+                    debugMode={debugMode} onToggleDebug={onToggleDebug} onResetGame={() => setActiveOverlay(OverlayType.RESET_CONFIRM)}
                     onDebugScrap={() => onSaveStats({ ...stats, scrap: stats.scrap + 100 })} onDebugSkill={() => onSaveStats({ ...stats, skillPoints: stats.skillPoints + 1 })}
                     isMobileDevice={isMobileDevice}
                 />

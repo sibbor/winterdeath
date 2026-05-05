@@ -3,7 +3,8 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 import { MATERIALS, GEOMETRY, ModelFactory } from '../../../utils/assets';
 import { EffectManager, EffectType, SubEffectType } from '../../../systems/EffectManager';
 import { FXParticleType } from '../../../types/FXTypes';
-import { SectorContext } from '../../../game/session/SectorTypes';
+import { SectorContext, ChestType, TerminalType } from '../../../game/session/SectorTypes';
+import { InteractionShape } from '../../../systems/InteractionTypes';
 import { ZOMBIE_TYPES } from '../../../content/enemies/zombies';
 import { EnemyType } from '../../../entities/enemies/EnemyTypes';
 import { MaterialType } from '../../../content/environment';
@@ -67,9 +68,9 @@ export const ObjectGenerator = {
         return GeneratorUtils.createTextSprite(text, spriteTextureCache, MATERIALS.textSprite);
     },
 
-    createChest: (type: 'standard' | 'big' = 'standard') => {
+    createChest: (type: ChestType = ChestType.STANDARD) => {
         const chest = new THREE.Group();
-        const isBig = type === 'big';
+        const isBig = type === ChestType.BIG;
 
         if (isBig) chest.scale.set(1.5, 1.5, 1.5);
 
@@ -115,7 +116,7 @@ export const ObjectGenerator = {
         const trainBody = new THREE.Mesh(mergedTrainGeo, MATERIALS.train);
         group.add(trainBody);
 
-        group.userData.colliders = [{ type: 'box', size: new THREE.Vector3(18, 12, 6) }];
+        group.userData.colliders = [{ type: InteractionShape.BOX, size: new THREE.Vector3(18, 12, 6) }];
 
         return GeneratorUtils.freezeStatic(group);
     },
@@ -139,8 +140,8 @@ export const ObjectGenerator = {
         group.add(roof);
 
         group.userData.colliders = [
-            { type: 'box', size: new THREE.Vector3(wallThick, height, length), offset: new THREE.Vector3(-width / 2 - wallThick / 2, 0, 0) },
-            { type: 'box', size: new THREE.Vector3(wallThick, height, length), offset: new THREE.Vector3(width / 2 + wallThick / 2, 0, 0) }
+            { type: InteractionShape.BOX, size: new THREE.Vector3(wallThick, height, length), offset: new THREE.Vector3(-width / 2 - wallThick / 2, 0, 0) },
+            { type: InteractionShape.BOX, size: new THREE.Vector3(wallThick, height, length), offset: new THREE.Vector3(width / 2 + wallThick / 2, 0, 0) }
         ];
 
         return GeneratorUtils.freezeStatic(group);
@@ -819,7 +820,7 @@ export const ObjectGenerator = {
         ctx.scene.add(mesh);
     },
 
-    createTerminal: (type: 'ARMORY' | 'SPAWNER' | 'ENV' | 'SKILLS', scale: number = 1.0) => {
+    createTerminal: (type: TerminalType, scale: number = 1.0) => {
         const group = new THREE.Group();
         group.scale.setScalar(scale);
 
@@ -838,9 +839,9 @@ export const ObjectGenerator = {
         consoleTop.rotation.x = -Math.PI / 6;
         group.add(consoleTop);
 
-        const color = type === 'ARMORY' ? 0xffaa00 :
-            type === 'SPAWNER' ? 0xff0000 :
-                type === 'SKILLS' ? 0x00ff00 :
+        const color = type === TerminalType.ARMORY ? 0xffaa00 :
+            type === TerminalType.SPAWNER ? 0xff0000 :
+                type === TerminalType.SKILLS ? 0x00ff00 :
                     0x00ffff;
 
         const screenCacheKey = `screen_${color}`;

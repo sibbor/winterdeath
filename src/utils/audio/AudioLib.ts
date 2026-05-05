@@ -3,6 +3,7 @@ import { WeaponType } from '../../content/weapons';
 import { SoundID, MusicID } from './AudioTypes';
 import { MATERIAL_TYPE, FOOTSTEP_MAP, IMPACT_MAP } from '../../content/environment';
 import { EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
+import { VehicleCategory, VehicleImpactIntensity } from '../../entities/vehicles/VehicleTypes';
 import { audioEngine } from './AudioEngine';
 
 /**
@@ -917,16 +918,16 @@ export const VoiceSounds = {
 };
 
 export const VehicleSounds = {
-    playEnter: (type: 'BOAT' | 'CAR') => {
-        const id = type === 'BOAT' ? SoundID.FOOTSTEP_WATER : SoundID.DOOR_OPEN;
+    playEnter: (category: VehicleCategory) => {
+        const id = category === VehicleCategory.BOAT ? SoundID.FOOTSTEP_WATER : SoundID.DOOR_OPEN;
         audioEngine.playSound(id, 0.4);
     },
-    playExit: (type: 'BOAT' | 'CAR') => {
-        const id = type === 'BOAT' ? SoundID.FOOTSTEP_WATER : SoundID.DOOR_SHUT;
+    playExit: (category: VehicleCategory) => {
+        const id = category === VehicleCategory.BOAT ? SoundID.FOOTSTEP_WATER : SoundID.DOOR_SHUT;
         audioEngine.playSound(id, 0.4);
     },
-    startEngine: (type: 'BOAT' | 'CAR') => {
-        const id = type === 'BOAT' ? SoundID.VEHICLE_ENGINE_BOAT : SoundID.VEHICLE_ENGINE_CAR;
+    startEngine: (category: VehicleCategory) => {
+        const id = category === VehicleCategory.BOAT ? SoundID.VEHICLE_ENGINE_BOAT : SoundID.VEHICLE_ENGINE_CAR;
         return audioEngine.playLoop(id, 0.3);
     },
     updateEngine: (index: number, rpm: number) => {
@@ -934,9 +935,9 @@ export const VehicleSounds = {
         audioEngine.updateVoiceVolume(index, 0.3 + (rpm * 0.2));
         // Note: playbackRate adjustment can be added to AudioEngine later if needed for RPM pitch
     },
-    playImpact: (type: 'light' | 'heavy') => {
-        const vol = type === 'heavy' ? 0.8 : 0.4;
-        const pitch = type === 'heavy' ? 0.8 : 1.2;
+    playImpact: (intensity: number) => {
+        const vol = intensity === 2 ? 0.8 : 0.4; // 2 = HEAVY
+        const pitch = intensity === 2 ? 0.8 : 1.2;
         audioEngine.playSound(SoundID.VEHICLE_IMPACT, vol, pitch);
     },
     startSkid: () => audioEngine.playLoop(SoundID.VEHICLE_SKID, 0),

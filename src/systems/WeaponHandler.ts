@@ -11,6 +11,8 @@ import { DamageID } from '../entities/player/CombatTypes';
 import { WeaponFX } from './WeaponFX';
 import { SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
+import { InputAction } from '../core/engine/InputTypes';
+import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -181,7 +183,8 @@ export const WeaponHandler = {
         if (disableInput || state.vehicle.active || state.cinematicActive) return;
 
         // 1. Optimized Scroll Switching (Zero-GC)
-        if (input.scrollDown || input.scrollUp) {
+        const acts = input.actions;
+        if (acts[InputAction.SCROLL_DOWN] || acts[InputAction.SCROLL_UP]) {
 
             let currentIdx = -1;
             _validWeaponsScratch.length = 0;
@@ -202,7 +205,7 @@ export const WeaponHandler = {
             }
 
             if (currentIdx !== -1 && vCount > 1) {
-                const step = input.scrollDown ? 1 : -1;
+                const step = acts[InputAction.SCROLL_DOWN] ? 1 : -1;
                 const nextIdx = (currentIdx + step + vCount) % vCount;
                 const nextWep = _validWeaponsScratch[nextIdx];
 
@@ -215,7 +218,8 @@ export const WeaponHandler = {
                     haptic.weaponSwap();
                 }
             }
-            input.scrollDown = input.scrollUp = false;
+            input.actions[InputAction.SCROLL_DOWN] = 0;
+            input.actions[InputAction.SCROLL_UP] = 0;
         }
 
         // 2. Weapon Validation
@@ -231,10 +235,11 @@ export const WeaponHandler = {
         const isRadio = state.activeWeapon === WeaponType.RADIO;
         const isEnergy = !!wep.isEnergy;
 
-        if (input.r && !state.isReloading && !isThrowable && !isRadio && !isEnergy && (state.weaponAmmo[state.activeWeapon] || 0) < (wep.magSize || 0)) {
+        if (acts[InputAction.RELOAD] && !state.isReloading && !isThrowable && !isRadio && !isEnergy && (state.weaponAmmo[state.activeWeapon] || 0) < (wep.magSize || 0)) {
             state.isReloading = true;
             const actualReloadTime = (wep.reloadTime || 0) * (state.statsBuffer[PlayerStatID.MULTIPLIER_RELOAD] || 1.0);
             state.reloadEndTime = simTime + actualReloadTime;
+            UIEventRingBuffer.push(UIEventType.RELOAD_START, actualReloadTime);
             WeaponSounds.playMagOut();
             haptic.reload();
         }
@@ -271,7 +276,7 @@ export const WeaponHandler = {
         }
 
         if (state.activeWeapon === WeaponType.RADIO) {
-            if (input.fire) WeaponSounds.playRadio();
+            if (input.actions[InputAction.FIRE]) WeaponSounds.playRadio();
             state.throwChargeStart = 0;
             if (aimCrossMesh) aimCrossMesh.visible = false;
             if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
@@ -283,7 +288,7 @@ export const WeaponHandler = {
         for (let i = 0; i < 4; i++) {
             const wId = loadout[_SLOTS[i]];
             if (wId && (WEAPONS as any)[wId]?.isEnergy) {
-                const isFiring = input.fire && state.activeWeapon === wId;
+                const isFiring = input.actions[InputAction.FIRE] && state.activeWeapon === wId;
                 if (!isFiring) {
                     // Regenerate 10% per second
                     state.weaponAmmo[wId] = Math.min(100, (state.weaponAmmo[wId] || 0) + 10 * delta);
@@ -297,7 +302,7 @@ export const WeaponHandler = {
                 if (aimCrossMesh) aimCrossMesh.visible = false;
                 if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
-                if (input.fire) {
+                if (input.actions[InputAction.FIRE]) {
                     const isUnlimited = !!state.sectorState?.unlimitedAmmo;
                     const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
 
@@ -311,6 +316,10 @@ export const WeaponHandler = {
                             if (simTime > state.lastShotTime + actualFireRate) {
                                 state.weaponAmmo[state.activeWeapon]--;
                                 state.lastShotTime = simTime;
+
+                                if (state.weaponAmmo[state.activeWeapon] === 5) {
+                                    UIEventRingBuffer.push(UIEventType.AMMO_LOW, 5);
+                                }
 
                                 const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                                 if (tracker) tracker.recordShot(session, state.activeWeapon);
@@ -358,7 +367,7 @@ export const WeaponHandler = {
                             WeaponSounds.playFlamethrowerEnd();
                         }
 
-                        if (input.fire && simTime > state.lastShotTime + 500) {
+                        if (input.actions[InputAction.FIRE] && simTime > state.lastShotTime + 500) {
                             WeaponSounds.playEmptyClick();
                             state.lastShotTime = simTime;
                         }
@@ -379,14 +388,14 @@ export const WeaponHandler = {
                         WeaponFX.createMuzzleSmoke(_v2);
                     }
                 }
-                (state as any).lastFireState = !!input.fire;
+                (state as any).lastFireState = !!input.actions[InputAction.FIRE];
                 break;
 
             case WeaponBehavior.PROJECTILE:
                 if (aimCrossMesh) aimCrossMesh.visible = false;
                 if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
-                if (input.fire) {
+                if (input.actions[InputAction.FIRE]) {
                     const isUnlimited = !!state.sectorState?.unlimitedAmmo;
                     const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
                     const actualFireRate = (wep.fireRate || 0) / (state.statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] || 1.0);
@@ -435,14 +444,16 @@ export const WeaponHandler = {
 
                             ProjectileSystem.launchBullet(scene, state.projectiles, _v2, _v3, wep.name as unknown as DamageID, damagePerPellet);
                         }
-                    } else if (input.fire && (state.weaponAmmo[state.activeWeapon] || 0) <= 0 && simTime > state.lastShotTime + (wep.fireRate || 0)) {
+                    } else if (input.actions[InputAction.FIRE] && (state.weaponAmmo[state.activeWeapon] || 0) <= 0 && simTime > state.lastShotTime + (wep.fireRate || 0)) {
                         state.lastShotTime = simTime;
                         if (state.sectorState.noReload) {
                             state.weaponAmmo[state.activeWeapon] = wep.magSize || 0;
                         } else {
                             WeaponSounds.playEmptyClick();
                             state.isReloading = true;
-                            state.reloadEndTime = simTime + (wep.reloadTime || 0);
+                            const actualReloadTime = (wep.reloadTime || 0);
+                            state.reloadEndTime = simTime + actualReloadTime;
+                            UIEventRingBuffer.push(UIEventType.RELOAD_START, actualReloadTime);
                             WeaponSounds.playMagOut();
                         }
                     }
@@ -452,7 +463,7 @@ export const WeaponHandler = {
             case WeaponBehavior.THROWABLE:
                 const canCharge = (state.weaponAmmo[state.activeWeapon] > 0) && simTime > (state.lastShotTime || 0) + 500;
 
-                if (input.fire && canCharge) {
+                if (input.actions[InputAction.FIRE] && canCharge) {
                     if (state.throwChargeStart === 0) {
                         state.throwChargeStart = simTime;
                         state.throwChargeRotation.copy(playerGroup.quaternion);

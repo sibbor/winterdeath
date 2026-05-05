@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SoundID, MusicID, MAX_SOUND_ID } from './AudioTypes';
+import { SoundID, MusicID, MAX_SOUND_ID, ToneType } from './AudioTypes';
 
 /**
  * VOICE (A Pooled Audio Node Pair)
@@ -257,12 +257,20 @@ export class AudioEngine {
     }
 
     /** Procedural beeps/tones for UI or events */
-    public playTone(freq: number, type: OscillatorType = 'sine', duration: number = 0.1, volume: number = 0.2) {
+    public playTone(freq: number, type: ToneType | OscillatorType = ToneType.SINE, duration: number = 0.1, volume: number = 0.2) {
         this.resume();
         const osc = this.ctx.createOscillator();
         const g = this.ctx.createGain();
         
-        osc.type = type;
+        // Map SMI Enum to WebAudio string if needed
+        if (typeof type === 'number') {
+            if (type === ToneType.SQUARE) osc.type = 'square';
+            else if (type === ToneType.SAWTOOTH) osc.type = 'sawtooth';
+            else if (type === ToneType.TRIANGLE) osc.type = 'triangle';
+            else osc.type = 'sine';
+        } else {
+            osc.type = type;
+        }
         osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
         
         g.gain.setValueAtTime(0, this.ctx.currentTime);

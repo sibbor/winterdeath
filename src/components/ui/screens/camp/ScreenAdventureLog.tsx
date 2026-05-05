@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { PlayerStats, StatEnemyIndex } from '../../../../entities/player/PlayerTypes';
+import { PlayerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex } from '../../../../entities/player/PlayerTypes';
 import { t } from '../../../../utils/i18n';
 import { useOrientation } from '../../../../hooks/useOrientation';
 import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalTab } from '../../layout/ScreenModalLayout';
@@ -8,6 +8,8 @@ import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DiscoveryType } from '../../hud/HudTypes';
 import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { BossID } from '../../../../game/session/SectorTypes';
+import { GAME_CHALLENGES, ChallengeID, ChallengeCategory } from '../../../../content/ChallengeTypes';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
@@ -27,6 +29,7 @@ const TABS: { id: DiscoveryType, label: string }[] = [
     { id: DiscoveryType.POI, label: 'ui.log_poi' },
     { id: DiscoveryType.ENEMY, label: 'ui.log_zombies' },
     { id: DiscoveryType.BOSS, label: 'ui.log_bosses' },
+    { id: DiscoveryType.CHALLENGE, label: 'challenges.title' },
 ];
 const SECTORS = [0, 1, 2, 3];
 const THEME_COLOR = '#16a34a'; // green-600
@@ -123,7 +126,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 break;
             }
             case DiscoveryType.BOSS: {
-                const allBossIds = [0, 1, 2, 3];
+                const allBossIds = [BossID.SECTOR_0, BossID.SECTOR_1, BossID.SECTOR_2, BossID.SECTOR_3];
                 stats.seenBosses = [...new Set([...(stats.seenBosses || []), ...allBossIds])];
                 stats.bossesDefeated = [...new Set([...(stats.bossesDefeated || []), ...allBossIds])];
                 break;
@@ -173,6 +176,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                     {activeTab === DiscoveryType.COLLECTIBLE && <CollectiblesTab stats={stats} isMobileDevice={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
                     {activeTab === DiscoveryType.CLUE && <CluesTab stats={stats} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
                     {activeTab === DiscoveryType.POI && <PoiTab stats={stats} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
+                    {activeTab === DiscoveryType.CHALLENGE && <ChallengesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={isDebugMode} />}
                 </div>
             </div>
 
@@ -301,7 +305,7 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
 
     const filteredSectors = useMemo(() => {
         return sectorsList.filter(sectorIndex => {
-            const boss = bossesList[sectorIndex];
+            const boss = bossesList.find((b: any) => b.id === sectorIndex);
             const seenBosses = stats.seenBosses || EMPTY_ARRAY;
             const defeatedBosses = stats.bossesDefeated || EMPTY_ARRAY;
             const isSeen = boss && (seenBosses.includes(sectorIndex) || defeatedBosses.includes(sectorIndex));
@@ -312,7 +316,7 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
     return (
         <div className="space-y-16 pb-12">
             {filteredSectors.map(sectorIndex => {
-                const boss = bossesList[sectorIndex];
+                const boss = bossesList.find((b: any) => b.id === sectorIndex);
                 const theme = themesList[sectorIndex];
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= sectorIndex;
                 const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorIndex)) : `${t('ui.sector')} ${sectorIndex}`) : '???';
@@ -602,4 +606,117 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevi
     );
 };
 
-export default ScreenAdventureLog;
+const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, isDebug }) => {
+    const categories = [
+        { id: ChallengeCategory.WORLD, label: 'ui.category_world' },
+        { id: ChallengeCategory.COMBAT, label: 'ui.category_combat' },
+        { id: ChallengeCategory.WEAPONS, label: 'ui.category_weapons' },
+        { id: ChallengeCategory.TACTICS, label: 'ui.category_tactics' },
+        { id: ChallengeCategory.PLAYER, label: 'ui.category_player' },
+    ];
+
+    const getChallengeProgress = (id: ChallengeID): number => {
+        const buffer = stats.statsBuffer;
+        const wk = stats.weaponKills;
+        const ek = stats.enemyKills;
+
+        switch (id) {
+            case ChallengeID.MARATHON: return buffer[PlayerStatID.TOTAL_DISTANCE_TRAVELED];
+            case ChallengeID.SCRAPPER: return buffer[PlayerStatID.TOTAL_SCRAP_COLLECTED];
+            case ChallengeID.EXPLORER: return stats.discoveredPOIs.length;
+            case ChallengeID.TREASURE_HUNTER: return buffer[PlayerStatID.TOTAL_CHESTS_OPENED];
+            case ChallengeID.SCAVENGER: return buffer[PlayerStatID.TOTAL_ITEMS_COLLECTED];
+            case ChallengeID.ZOMBIE_HUNTER: return buffer[PlayerStatID.TOTAL_KILLS];
+            case ChallengeID.WALKER_EXTERMINATOR: return ek[0];
+            case ChallengeID.KNEE_CAPPER: return ek[1];
+            case ChallengeID.TANK_BUSTER: return ek[2];
+            case ChallengeID.BOSS_SLAYER: return ek[StatEnemyIndex.BOSS];
+            case ChallengeID.MARKSMAN: return buffer[PlayerStatID.TOTAL_HEADSHOTS];
+            case ChallengeID.PYROMANIAC: return wk[StatWeaponIndex.FIRE] + wk[StatWeaponIndex.BURN] + wk[StatWeaponIndex.MOLOTOV] + wk[StatWeaponIndex.FLAMETHROWER];
+            case ChallengeID.SHOCK_THERAPY: return wk[StatWeaponIndex.ELECTRIC] + wk[StatWeaponIndex.ARC_CANNON];
+            case ChallengeID.DEMOLITION_EXPERT: return wk[StatWeaponIndex.EXPLOSION] + wk[StatWeaponIndex.GRENADE];
+            case ChallengeID.BRAWLER: return wk[StatWeaponIndex.RUSH] + wk[StatWeaponIndex.PHYSICAL] + wk[StatWeaponIndex.DODGE];
+            case ChallengeID.SHARPSHOOTER: return buffer[PlayerStatID.TOTAL_LONG_RANGE_KILLS];
+            case ChallengeID.SURVIVOR: return buffer[PlayerStatID.TOTAL_SECTORS_COMPLETED];
+            case ChallengeID.VETERAN: return buffer[PlayerStatID.LEVEL];
+            case ChallengeID.UNTOUCHABLE: return buffer[PlayerStatID.LONGEST_KILLSTREAK];
+            default: return 0;
+        }
+    };
+
+    return (
+        <div className="space-y-12 pb-24">
+            {categories.map(cat => {
+                const catChallenges = GAME_CHALLENGES.filter(c => c.categoryId === cat.id);
+                if (catChallenges.length === 0) return null;
+
+                return (
+                    <div key={cat.id} className="space-y-6">
+                        <div className="border-b-2 border-zinc-800 pb-2">
+                            <h3 className="text-2xl font-light uppercase tracking-tighter text-zinc-400">
+                                {t(cat.label)}
+                            </h3>
+                        </div>
+                        <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-4'}`}>
+                            {catChallenges.map(challenge => {
+                                const tier = stats.challengeTiers[challenge.id];
+                                const value = getChallengeProgress(challenge.id);
+                                const nextTier = tier < 3 ? tier + 1 : 3;
+                                const target = challenge.targets[nextTier - 1];
+                                const progress = Math.min(100, (value / target) * 100);
+                                const isMaxed = tier >= 3;
+
+                                return (
+                                    <TacticalCard 
+                                        key={challenge.id} 
+                                        color={isMaxed ? '#eab308' : (tier > 0 ? '#16a34a' : '#4b5563')}
+                                        className="p-4 bg-zinc-900/50"
+                                    >
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="flex flex-col">
+                                                <h4 className="text-lg font-bold text-white uppercase tracking-tight">
+                                                    {t(challenge.titleKey)}
+                                                </h4>
+                                                <p className="text-[11px] text-zinc-500 italic mt-1 leading-tight">
+                                                    {t(challenge.descriptionKey).replace('{target}', target.toString())}
+                                                </p>
+                                            </div>
+                                            <div className="flex flex-col items-end">
+                                                <div className="flex gap-1">
+                                                    {[1, 2, 3].map(i => (
+                                                        <div 
+                                                            key={i} 
+                                                            className={`w-3 h-1.5 rounded-full ${i <= tier ? 'bg-yellow-500' : 'bg-zinc-800'}`}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                <span className="text-[10px] font-black text-zinc-600 uppercase mt-1">
+                                                    {isMaxed ? 'MASTERED' : `TIER ${nextTier}`}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-4 space-y-1">
+                                            <div className="flex justify-between text-[10px] font-mono text-zinc-400">
+                                                <span>{Math.floor(value).toLocaleString()}</span>
+                                                <span>{target.toLocaleString()}</span>
+                                            </div>
+                                            <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                                                <div 
+                                                    className={`h-full transition-all duration-1000 ${isMaxed ? 'bg-yellow-500' : 'bg-green-600'}`}
+                                                    style={{ width: `${progress}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </TacticalCard>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+});
+
+export default ScreenAdventureLog;

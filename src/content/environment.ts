@@ -52,27 +52,23 @@ export const IMPACT_MAP: Partial<Record<MATERIAL_TYPE, SoundID>> = {
  * Standardized vegetation types for environment generation
  */
 export enum VEGETATION_TYPE {
-    PINE = 'PINE',
-    SPRUCE = 'SPRUCE',
-    OAK = 'OAK',
-    BIRCH = 'BIRCH',
-    DEAD_TREE = 'DEAD_TREE',
-    GRASS = 'GRASS',
-    BUSH = 'BUSH',
-    SUNFLOWER = 'SUNFLOWER',
-    FLOWER = 'FLOWER',
-    WHEAT = 'WHEAT'
+    PINE = 0,
+    SPRUCE = 1,
+    OAK = 2,
+    BIRCH = 3,
+    DEAD_TREE = 4,
+    GRASS = 5,
+    BUSH = 6,
+    SUNFLOWER = 7,
+    FLOWER = 8,
+    WHEAT = 9
 }
 
-/**
- * Standardized prop types for environment generation
- */
 export enum PROP_TYPE {
-    ROCK = 'ROCK',
-    DEBRIS = 'DEBRIS',
-    HEDGE = 'HEDGE',
-    FENCE_WOOD = 'FENCE_WOOD',
-    STONE_WALL = 'STONE_WALL',
-    MESH_FENCE = 'MESH_FENCE'
+    ROCK = 0,
+    DEBRIS = 1,
+    HEDGE = 2,
+    FENCE_WOOD = 3,
+    STONE_WALL = 4,
+    MESH_FENCE = 5
 }
-

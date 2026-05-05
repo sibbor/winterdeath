@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { MATERIAL_TYPE } from '../../content/environment';
+import { InteractionShape } from '../../systems/InteractionTypes';
 
 export enum PhysicsGroup {
     NONE = 0,
@@ -11,7 +12,7 @@ export enum PhysicsGroup {
     WATER = 6
 }
 
-export type ColliderType = 'sphere' | 'box';
+export type ColliderType = InteractionShape;
 
 export interface ColliderData {
     type: ColliderType;
@@ -84,7 +85,7 @@ export const applyCollisionResolution = (
     const entityMaxY = entityMinY + height;
 
     // 1. Box Collider (Oriented Bounding Box)
-    if (col && col.type === 'box' && col.size) {
+    if (col && col.type === InteractionShape.BOX && col.size) {
         const size = col.size;
 
         // Fast World-to-Local space transformation

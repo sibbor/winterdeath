@@ -1,9 +1,9 @@
-
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SectorContext } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, GroundType, ChestType } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
+import { InteractionShape } from '../../systems/InteractionTypes';
 
 export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Group) => {
     const { scene, obstacles, flickeringLights, triggers } = ctx;
@@ -189,7 +189,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
             // Simple collider for props
             SectorGenerator.addObstacle(ctx, {
                 mesh: prop.children[0] as THREE.Mesh,
-                collider: { type: 'box' as const, size: new THREE.Vector3(1, 2, 1) }
+                collider: { type: InteractionShape.BOX, size: new THREE.Vector3(1, 2, 1) }
             });
         }
     };
@@ -232,7 +232,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
         SectorBuilder.addObstacle(ctx, {
             mesh: dummy,
-            collider: { type: 'box' as const, size: new THREE.Vector3(width, height, depth) }
+            collider: { type: InteractionShape.BOX, size: new THREE.Vector3(width, height, depth) }
         });
     };
 
@@ -372,7 +372,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         // Chest spawns
         if (r.chests) {
             for (let i = 0; i < r.chests; i++) {
-                await SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), 'standard', Math.random() * Math.PI);
+                await SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), ChestType.STANDARD, Math.random() * Math.PI);
                 await yieldIfBudgetExceeded();
             }
         }
@@ -400,7 +400,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
     frameGroup.add(rightPost);
     SectorBuilder.addObstacle(ctx, {
         mesh: frameGroup,
-        collider: { type: 'box', size: new THREE.Vector3(22, 17, 4) }
+        collider: { type: InteractionShape.BOX, size: new THREE.Vector3(22, 17, 4) }
     });
 
     scene.add(frameGroup);
@@ -412,7 +412,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
     const doorObstacleL = {
         mesh: doorL,
-        collider: { type: 'box', size: new THREE.Vector3(10, 17, 1) }
+        collider: { type: InteractionShape.BOX, size: new THREE.Vector3(10, 17, 1) }
     };
     SectorBuilder.addObstacle(ctx, doorObstacleL);
     (ctx as any).sectorState.doorObstacleL = doorObstacleL;
@@ -424,7 +424,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
     const doorObstacleR = {
         mesh: doorR,
-        collider: { type: 'box', size: new THREE.Vector3(10, 17, 1) }
+        collider: { type: InteractionShape.BOX, size: new THREE.Vector3(10, 17, 1) }
     };
     SectorBuilder.addObstacle(ctx, doorObstacleR);
     (ctx as any).sectorState.doorObstacleR = doorObstacleR;

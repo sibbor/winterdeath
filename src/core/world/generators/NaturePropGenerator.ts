@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../../../utils/assets/materials';
-import { SectorContext } from '../../../game/session/SectorTypes';
+import { SectorContext, NatureFillType } from '../../../game/session/SectorTypes';
 import { SectorBuilder } from '../SectorBuilder';
 import { VegetationGenerator } from './VegetationGenerator';
 import { MaterialType } from '../../../content/environment';
+import { InteractionShape } from '../../../systems/InteractionTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -128,9 +129,9 @@ export const NaturePropGenerator = {
     /**
      * Fills an area with rocks or debris.
      */
-    fillArea: (ctx: SectorContext, centerOrArea: { x: number, z: number, w: number, d: number } | { x: number, z: number }, sizeOrDensity: { width: number, height: number } | number, count?: number, type: 'tree' | 'rock' | 'debris' = 'tree', avoidCenterRadius: number = 0) => {
+    fillArea: (ctx: SectorContext, centerOrArea: { x: number, z: number, w: number, d: number } | { x: number, z: number }, sizeOrDensity: { width: number, height: number } | number, count?: number, type: NatureFillType = NatureFillType.TREE, avoidCenterRadius: number = 0) => {
         // Legacy delegation: if type is tree, hand over to VegetationGenerator
-        if (type === 'tree') {
+        if (type === NatureFillType.TREE) {
             const area = (centerOrArea as any).w !== undefined ? centerOrArea as { x: number, z: number, w: number, d: number } : { x: (centerOrArea as any).x, z: (centerOrArea as any).z, w: (sizeOrDensity as any).width || (sizeOrDensity as number), d: (sizeOrDensity as any).height || (sizeOrDensity as number) };
             VegetationGenerator.createForest(ctx, area as any, count || 20, 'PINE');
             return;
@@ -144,7 +145,7 @@ export const NaturePropGenerator = {
         const area = { x: (centerOrArea as any).w !== undefined ? (centerOrArea as any).x : center.x, z: (centerOrArea as any).d !== undefined ? (centerOrArea as any).z : center.z, w, d };
         const numItems = count || 20;
 
-        const isRock = type === 'rock';
+        const isRock = type === NatureFillType.ROCK;
         const geo = isRock ? SHARED_GEO.rock : SHARED_GEO.debris;
         const mat = isRock ? MATERIALS.stone : MATERIALS.deadWood;
 
@@ -167,7 +168,7 @@ export const NaturePropGenerator = {
                 // Need a unique Vector3 allocation here since SpatialGrid keeps the reference
                 SectorBuilder.addObstacle(ctx, {
                     position: new THREE.Vector3(x, s / 2, z),
-                    collider: { type: 'sphere', radius: s },
+                    collider: { type: InteractionShape.SPHERE, radius: s },
                     materialId: MaterialType.STONE
                 });
             } else {

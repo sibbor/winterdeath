@@ -5,6 +5,7 @@ import { SoundID } from '../utils/audio/AudioTypes';
 import { DataResolver } from '../utils/ui/DataResolver';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
 import { SystemID } from './SystemID';
+import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 
 export const TriggerHandler = {
     systemId: SystemID.TRIGGER_HANDLER,
@@ -124,14 +125,20 @@ export const TriggerHandler = {
 
                     // --- FIRE NARRATIVE ---
                     let narrativeContent = trig.content;
-                    if (!narrativeContent && trig.type === TriggerType.POI && trig.id) {
-                        narrativeContent = DataResolver.getPoiReaction(trig.id);
+                    if (!narrativeContent && trig.id) {
+                        if (trig.type === TriggerType.POI) {
+                            narrativeContent = DataResolver.getPoiReaction(trig.id);
+                        } else if (trig.type === TriggerType.CLUE) {
+                            narrativeContent = DataResolver.getClueReaction(trig.id);
+                        } else if (trig.type === TriggerType.THOUGHT || trig.type === TriggerType.SPEAK) {
+                            narrativeContent = DataResolver.getClueReaction(trig.id);
+                        }
                     }
 
                     if (narrativeContent) {
                         const translatedText = callbacks.t(narrativeContent);
                         const duration = 2000 + translatedText.length * 50;
-                        callbacks.spawnBubble(translatedText, duration);
+                        UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, translatedText, duration, simTime);
 
                         switch (trig.type) {
                             case TriggerType.SPEAK:
@@ -156,13 +163,7 @@ export const TriggerHandler = {
 
                                 // VINTERDÖD: Discovery and SP reward only on the very first visit
                                 if (callbacks.onDiscovery && (!state.discoverySets || !state.discoverySets.pois.has(trig.id))) {
-                                    callbacks.onDiscovery(
-                                        DiscoveryType.POI,
-                                        trig.id,
-                                        DataResolver.getPoiName(trig.id),
-                                        DataResolver.getPoiDescription(trig.id),
-                                        trig.data
-                                    );
+                                    UIEventRingBuffer.pushString(UIEventType.DISCOVERY, trig.id, DiscoveryType.POI, simTime);
                                 }
                                 break;
 
@@ -172,13 +173,7 @@ export const TriggerHandler = {
 
                                 // VINTERDÖD: Discovery and SP reward only on the very first visit
                                 if (callbacks.onDiscovery && (!state.discoverySets || !state.discoverySets.clues.has(trig.id))) {
-                                    callbacks.onDiscovery(
-                                        DiscoveryType.CLUE,
-                                        trig.id,
-                                        DataResolver.getClueReaction(trig.id), 
-                                        DataResolver.getClueDescription(trig.id),
-                                        trig.data
-                                    );
+                                    UIEventRingBuffer.pushString(UIEventType.DISCOVERY, trig.id, DiscoveryType.CLUE, simTime);
                                 }
                                 break;
 
@@ -187,13 +182,7 @@ export const TriggerHandler = {
                                 callbacks.onTrigger(TriggerType.COLLECTIBLE, duration);
 
                                 if (callbacks.onDiscovery && (!state.discoverySets || !state.discoverySets.collectibles.has(trig.id))) {
-                                    callbacks.onDiscovery(
-                                        DiscoveryType.COLLECTIBLE,
-                                        trig.id,
-                                        DataResolver.getCollectibleName(trig.id),
-                                        DataResolver.getCollectibleDescription(trig.id),
-                                        trig.data
-                                    );
+                                    UIEventRingBuffer.pushString(UIEventType.DISCOVERY, trig.id, DiscoveryType.COLLECTIBLE, simTime);
                                 }
                                 break;
 

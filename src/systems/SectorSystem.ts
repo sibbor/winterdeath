@@ -5,6 +5,10 @@ import { SectorDef } from '../game/session/SectorTypes';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { EnemyType, NoiseType } from '../entities/enemies/EnemyTypes';
 import { LIGHT_SYSTEM } from '../content/constants';
+import { InteractionType } from './InteractionTypes';
+import { FXParticleType, FXDecalType } from '../types/FXTypes';
+import { ToneType, SoundID } from '../utils/audio/AudioTypes';
+
 /**
  * VINTERDÖD: Dynamic Sector Registry
  * Prevents all sectors from being initialized at startup.
@@ -17,10 +21,14 @@ const SECTOR_LOADERS: Record<number, () => Promise<any>> = {
     4: () => import('../content/sectors/Sector4'),
 };
 
+const OSC_MAP: Record<ToneType, OscillatorType> = {
+    [ToneType.SINE]: 'sine',
+    [ToneType.SQUARE]: 'square',
+    [ToneType.SAWTOOTH]: 'sawtooth',
+    [ToneType.TRIANGLE]: 'triangle'
+};
+
 const SECTOR_CACHE: Record<number, SectorDef> = {};
-import { InteractionType } from './InteractionTypes';
-import { SoundID } from '../utils/audio/AudioTypes';
-import { FXParticleType, FXDecalType } from '../types/FXTypes';
 
 // VINTERDÖD: Fallback for components that still expect a synchronous SECTORS object.
 // These will return undefined if not pre-loaded via SectorSystem.loadSector().
@@ -51,14 +59,14 @@ export class SectorSystem implements System {
             startCinematic: (target: THREE.Object3D, id: number, params?: any) => void;
             setInteraction: (interaction: any | null) => void;
             playSound: (id: SoundID) => void;
-            playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => void;
+            playTone: (freq: number, type: ToneType, duration: number, vol?: number) => void;
             cameraShake: (amount: number) => void;
             scene: THREE.Scene;
             setCameraOverride: (params: any | null) => void;
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => void;
             spawnZombie: (type: EnemyType, pos?: THREE.Vector3) => void;
             spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
-            setOverlay: (type: string | null) => void;
+            setOverlay: (type: number | null) => void;
         }
     ) {
         this.currentSector = SectorSystem.getSector(mapId);
@@ -77,9 +85,9 @@ export class SectorSystem implements System {
         const module = await loader();
         // Sectors are exported as 'Sector0', 'Sector1', etc.
         const sector = module[`Sector${mapId}`] || module.default || module.Sector;
-        
+
         if (!sector) throw new Error(`[SectorSystem] Failed to find SectorDef in module for sector ${mapId}`);
-        
+
         SECTOR_CACHE[mapId] = sector;
         return sector;
     }

@@ -7,6 +7,7 @@ import { STORY_SCRIPTS } from '../content/dialogues';
 import { RuntimeState } from '../core/RuntimeState';
 import { FamilyMemberID } from '../content/constants';
 import { System, SystemID } from './System';
+import { DialogueLineType } from '../game/session/SectorTypes';
 
 // Zero-GC Vektorer för kameramatte
 const _v1 = new THREE.Vector3();
@@ -361,7 +362,7 @@ export class CinematicSystem implements System {
             const isPlayer = memberId === FamilyMemberID.PLAYER;
             const isCurrentSpeaker = (memberName === currentSpeakerName) || (isPlayer && isPlayerSpeaking);
             const isSpeaking = isCurrentSpeaker && timeInLine < cinematic.typingDuration;
-            const isThinking = isCurrentSpeaker && activeScriptLine?.type === 'thought';
+            const isThinking = isCurrentSpeaker && activeScriptLine?.type === DialogueLineType.THOUGHT;
 
             const body = mesh.userData.isBody ? mesh : mesh.children.find((c: any) => c.userData?.isBody);
 

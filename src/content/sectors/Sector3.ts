@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, GroundType, ChestType } from '../../game/session/SectorTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { VEGETATION_TYPE } from '../../content/environment';
@@ -10,9 +10,11 @@ import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/Tri
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
-import { InteractionType } from '../../systems/InteractionTypes';
+import { InteractionType, InteractionShape } from '../../systems/InteractionTypes';
+import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { FamilyMemberID } from '../constants';
 import { WeatherType } from '../../core/engine/EngineTypes';
+import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 
 // ─── Zero-GC Scratchpads ──────────────────────────────────────────────────────
 const _vS3a = new THREE.Vector3();
@@ -76,7 +78,6 @@ const RING_OFFSETS: [number, number][] = [
 
 export const Sector3: SectorDef = {
     id: 3,
-    name: "sectors.sector_3_name",
     environment: {
         bgColor: 0x110500,
         fog: {
@@ -102,7 +103,7 @@ export const Sector3: SectorDef = {
             angleVariance: Math.PI / 4
         }
     },
-    groundType: 'DIRT',
+    ground: GroundType.DIRT,
     ambientLoop: SoundID.AMBIENT_FOREST,
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
     bossSpawn: LOCATIONS.SPAWN.BOSS,
@@ -131,7 +132,7 @@ export const Sector3: SectorDef = {
         };
 
         // Reward Chest at boss spawn
-        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, ChestType.BIG);
         await yieldIfBudgetExceeded();
 
         // Stacks of Cars (Maze) — Sektor 4 Bilskroten
@@ -166,7 +167,7 @@ export const Sector3: SectorDef = {
             LOCATIONS.ESCAPE_CAR.x,
             LOCATIONS.ESCAPE_CAR.z,
             LOCATIONS.ESCAPE_CAR.rot,
-            'station_wagon',
+            VehicleID.STATION_WAGON,
             0x223344,
             false  // addInteractable = false initially
         );
@@ -379,7 +380,7 @@ export const Sector3: SectorDef = {
                     sectorState.epilogueState = EP.AWAIT_INSIDE;
                     sectorState.epilogueTimer = simTime;
                     if (events.setCameraOverride) events.setCameraOverride(null);
-                    window.dispatchEvent(new CustomEvent('show_hud'));
+                    UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 1); // 1 = SHOW
                 }
             }
         }
@@ -405,7 +406,7 @@ export const Sector3: SectorDef = {
                     lookAtPos: camLookBuilding,
                     endTime: renderTime + 60000
                 });
-                window.dispatchEvent(new CustomEvent('hide_hud'));
+                UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 0); // 0 = HIDE
             }
 
             const family = getFamilyMembers();
@@ -568,7 +569,7 @@ export const Sector3: SectorDef = {
                                 id: 's3_escape_car',
                                 type: InteractionType.VEHICLE,
                                 label: 'ui.interact_enter_car',
-                                collider: { type: 'sphere', radius: 4.0 }
+                                collider: { type: InteractionShape.SPHERE, radius: 4.0 }
                             }
                         );
                     }
@@ -594,7 +595,7 @@ export const Sector3: SectorDef = {
                 sectorState.epilogueTimer = simTime;
                 // Return camera control to player and show HUD
                 if (events.setCameraOverride) events.setCameraOverride(null);
-                window.dispatchEvent(new CustomEvent('show_hud'));
+                UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 1); // 1 = SHOW
                 // Player can now interact with the car
             }
         }

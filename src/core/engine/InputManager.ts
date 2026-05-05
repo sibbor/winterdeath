@@ -1,55 +1,27 @@
 import * as THREE from 'three';
+import { InputAction, InputState } from './InputTypes';
+import { System, SystemID } from '../../systems/System';
 
-export interface InputState {
-    w: boolean;
-    a: boolean;
-    s: boolean;
-    d: boolean;
-    space: boolean;
-    fire: boolean;
-    r: boolean;
-    e: boolean;
-    f: boolean;
-    m: boolean;
-    enter: boolean;
-    escape: boolean;
-    shift: boolean;
-    '1': boolean;
-    '2': boolean;
-    '3': boolean;
-    '4': boolean;
-    scrollUp: boolean;
-    scrollDown: boolean;
-    mouse: THREE.Vector2;
-    aimVector: THREE.Vector2;
-    cursorPos: { x: number, y: number };
-    joystickMove: THREE.Vector2;
-    joystickAim: THREE.Vector2;
-    locked: boolean;
-}
-
-// Map both uppercase and lowercase to avoid string allocation (.toLowerCase()) at runtime
-const KEY_MAP: Record<string, keyof InputState> = {
-    'w': 'w', 'W': 'w',
-    'a': 'a', 'A': 'a',
-    's': 's', 'S': 's',
-    'd': 'd', 'D': 'd',
-    ' ': 'space',
-    'r': 'r', 'R': 'r',
-    'e': 'e', 'E': 'e',
-    'f': 'f', 'F': 'f',
-    'm': 'm', 'M': 'm',
-    'Enter': 'enter',
-    'Escape': 'escape',
-    'Shift': 'shift',
-    '1': '1', '2': '2', '3': '3', '4': '4'
+/**
+ * Mapping keyboard event keys to SMI-hardened InputActions.
+ * Zero-GC: Using a Record for O(1) lookup during key events.
+ */
+const KEY_MAP: Record<string, InputAction> = {
+    'w': InputAction.UP, 'W': InputAction.UP,
+    'a': InputAction.LEFT, 'A': InputAction.LEFT,
+    's': InputAction.DOWN, 'S': InputAction.DOWN,
+    'd': InputAction.RIGHT, 'D': InputAction.RIGHT,
+    ' ': InputAction.DODGE,
+    'r': InputAction.RELOAD, 'R': InputAction.RELOAD,
+    'e': InputAction.INTERACT, 'E': InputAction.INTERACT,
+    'f': InputAction.FLASHLIGHT, 'F': InputAction.FLASHLIGHT,
+    'm': InputAction.MAP, 'M': InputAction.MAP,
+    'Enter': InputAction.ENTER,
+    'Escape': InputAction.ESCAPE,
+    'Shift': InputAction.SHIFT,
+    'Control': InputAction.CTRL,
+    '1': InputAction.SLOT_1, '2': InputAction.SLOT_2, '3': InputAction.SLOT_3, '4': InputAction.SLOT_4
 };
-
-// Static array avoids runtime allocation during resets
-const _RESET_KEYS: (keyof InputState)[] = [
-    'w', 'a', 's', 'd', 'space', 'fire', 'r', 'e', 'f', 'm',
-    'enter', 'escape', 'shift', '1', '2', '3', '4'
-];
 
 // Pre-calculated math constants
 const MAX_AIM_RADIUS = 300;
@@ -58,9 +30,7 @@ const MIN_AIM_RADIUS = 50;
 const MIN_AIM_RADIUS_SQ = MIN_AIM_RADIUS * MIN_AIM_RADIUS;
 const INV_MAX_AIM_RADIUS = 1.0 / MAX_AIM_RADIUS;
 
-import { System, SystemID } from '../../systems/System';
-
-export class InputManager {
+export class InputManager implements System {
     readonly systemId = SystemID.INPUT;
     id = 'input';
     enabled = true;
@@ -84,11 +54,7 @@ export class InputManager {
 
     constructor() {
         this.state = {
-            w: false, a: false, s: false, d: false,
-            space: false, fire: false, r: false, e: false,
-            f: false, m: false, enter: false, escape: false, shift: false,
-            '1': false, '2': false, '3': false, '4': false,
-            scrollUp: false, scrollDown: false,
+            actions: new Uint8Array(InputAction.COUNT),
             mouse: new THREE.Vector2(),
             aimVector: new THREE.Vector2(1, 0),
             cursorPos: { x: this.screenHalfWidth, y: this.screenHalfHeight },
@@ -109,16 +75,21 @@ export class InputManager {
         this.resetState();
     }
 
+    /**
+     * Resets the input buffer. Zero-GC.
+     */
     private resetState() {
-        // Classic for-loop over static array for Zero-GC
-        for (let i = 0; i < _RESET_KEYS.length; i++) {
-            (this.state[_RESET_KEYS[i]] as boolean) = false;
-        }
-
+        this.state.actions.fill(0);
         this.state.joystickMove.set(0, 0);
         this.state.joystickAim.set(0, 0);
-        this.state.scrollUp = false;
-        this.state.scrollDown = false;
+    }
+
+    /**
+     * VINTERDÖD: Direct buffer check.
+     * High-frequency systems should use state.actions[InputAction.X] directly.
+     */
+    public isPressed(action: InputAction): boolean {
+        return this.state.actions[action] === 1;
     }
 
     private bindEvents() {
@@ -160,10 +131,9 @@ export class InputManager {
         if (!this.isEnabled) return;
 
         // Zero-GC: Direct property lookup avoids string mutation
-        const stateKey = KEY_MAP[e.key];
-
-        if (stateKey) {
-            (this.state[stateKey] as boolean) = true;
+        const action = KEY_MAP[e.key];
+        if (action !== undefined) {
+            this.state.actions[action] = 1;
         }
 
         if (this.onKeyDown) this.onKeyDown(e.key);
@@ -173,10 +143,9 @@ export class InputManager {
         if (!this.isEnabled) return;
 
         // Zero-GC: Direct property lookup avoids string mutation
-        const stateKey = KEY_MAP[e.key];
-
-        if (stateKey) {
-            (this.state[stateKey] as boolean) = false;
+        const action = KEY_MAP[e.key];
+        if (action !== undefined) {
+            this.state.actions[action] = 0;
         }
 
         if (this.onKeyUp) this.onKeyUp(e.key);
@@ -185,9 +154,17 @@ export class InputManager {
     private handleVirtualKey = (e: CustomEvent) => {
         if (!this.isEnabled) return;
         const { key, pressed } = e.detail;
-        const stateKey = KEY_MAP[key] || key;
-        if (this.state[stateKey as keyof InputState] !== undefined) {
-             (this.state[stateKey as keyof InputState] as boolean) = pressed;
+        
+        // Try mapping from key string first
+        let action = KEY_MAP[key];
+        
+        // If not found, it might be a direct enum index passed as a string or number
+        if (action === undefined && !isNaN(key)) {
+            action = Number(key);
+        }
+
+        if (action !== undefined && action < InputAction.COUNT) {
+            this.state.actions[action] = pressed ? 1 : 0;
         }
     };
 
@@ -231,11 +208,15 @@ export class InputManager {
     };
 
     private handleMouseDown = (e: MouseEvent) => {
-        if (this.isEnabled && e.button === 0) this.state.fire = true;
+        if (this.isEnabled && e.button === 0) {
+            this.state.actions[InputAction.FIRE] = 1;
+        }
     };
 
     private handleMouseUp = (e: MouseEvent) => {
-        if (this.isEnabled && e.button === 0) this.state.fire = false;
+        if (this.isEnabled && e.button === 0) {
+            this.state.actions[InputAction.FIRE] = 0;
+        }
     };
 
     private handleWheel = (e: WheelEvent) => {
@@ -244,9 +225,9 @@ export class InputManager {
         // Zero-GC: Handled purely as flags. The game loop (WeaponHandler) 
         // will consume these and set them back to false immediately.
         if (e.deltaY < 0) {
-            this.state.scrollUp = true;
+            this.state.actions[InputAction.SCROLL_UP] = 1;
         } else if (e.deltaY > 0) {
-            this.state.scrollDown = true;
+            this.state.actions[InputAction.SCROLL_DOWN] = 1;
         }
     };
 
@@ -279,4 +260,4 @@ export class InputManager {
     public setJoystickAim(x: number, y: number) {
         this.state.joystickAim.set(x, y);
     }
-}
+}

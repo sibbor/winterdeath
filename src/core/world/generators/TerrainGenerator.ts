@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MATERIALS } from '../../../utils/assets/materials';
 import { MaterialType } from '../../../content/environment';
-import { SectorContext } from '../../../game/session/SectorTypes';
+import { SectorContext, GroundType } from '../../../game/session/SectorTypes';
 import { GeneratorUtils } from './GeneratorUtils';
 import { WinterEngine } from '../../engine/WinterEngine';
 import { PhysicsGroup } from '../CollisionResolution';
+import { WaterShape } from '../../../systems/WaterSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -28,10 +29,10 @@ export const TerrainGenerator = {
     /**
      * Creates the ground plane geometry and materials.
      */
-    createGroundLayer: (type: 'SNOW' | 'GRAVEL' | 'DIRT', width: number, depth: number) => {
+    createGroundLayer: (type: GroundType, width: number, depth: number) => {
         let mat: THREE.Material;
-        if (type === 'GRAVEL') mat = MATERIALS.gravelCutout;
-        else if (type === 'DIRT') mat = MATERIALS.dirtCutout;
+        if (type === GroundType.GRAVEL) mat = MATERIALS.gravelCutout;
+        else if (type === GroundType.DIRT) mat = MATERIALS.dirtCutout;
         else mat = MATERIALS.snowCutout;
 
         const geo = new THREE.PlaneGeometry(width, depth);
@@ -45,7 +46,7 @@ export const TerrainGenerator = {
 
         const mesh = new THREE.Mesh(geo, mat);
         mesh.name = `Ground_Surface`;
-        mesh.userData.materialId = type === 'SNOW' ? MaterialType.SNOW : (type === 'GRAVEL' ? MaterialType.GRAVEL : MaterialType.DIRT);
+        mesh.userData.materialId = type === GroundType.SNOW ? MaterialType.SNOW : (type === GroundType.GRAVEL ? MaterialType.GRAVEL : MaterialType.DIRT);
         mesh.userData.physicsGroup = PhysicsGroup.GROUND; // VINTERDÖD
         mesh.rotation.x = -Math.PI / 2;
         mesh.position.y = -0.05;
@@ -66,11 +67,11 @@ export const TerrainGenerator = {
     /**
      * Creates a sloped lake bed geometry.
      */
-    createLakeBed: (width: number, depth: number, floorDepth: number = 4.0, shape: 'rect' | 'circle' = 'rect') => {
+    createLakeBed: (width: number, depth: number, floorDepth: number = 4.0, shape: WaterShape = WaterShape.RECT) => {
         const segmentsX = Math.max(16, Math.floor(width / 2));
         const segmentsY = Math.max(16, Math.floor(depth / 2));
 
-        const geo = shape === 'circle'
+        const geo = shape === WaterShape.CIRCLE
             ? new THREE.CircleGeometry(width / 2, segmentsX * 2)
             : new THREE.PlaneGeometry(width, depth, segmentsX, segmentsY);
 
@@ -88,7 +89,7 @@ export const TerrainGenerator = {
             const vz = posAttr.getY(i);
 
             let rawDist = 0;
-            if (shape === 'circle') {
+            if (shape === WaterShape.CIRCLE) {
                 rawDist = Math.sqrt((vx * vx) / (rX * rX) + (vz * vz) / (rZ * rZ));
             } else {
                 rawDist = Math.max(Math.abs(vx) / rX, Math.abs(vz) / rZ);

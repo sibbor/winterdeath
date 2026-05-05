@@ -12,7 +12,7 @@ import { HudStore } from '../store/HudStore';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { FXParticleType, FXDecalType } from '../types/FXTypes';
 import { PlayerStatusFlags, PlayerStatID } from '../entities/player/PlayerTypes';
-
+import { DeathPhase } from '../types/SessionTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -63,7 +63,7 @@ export class DeathSystem implements System {
     private playerMeshRef: React.MutableRefObject<THREE.Group>;
     private fmMeshRef: React.MutableRefObject<any>;
     private activeFamilyMembers: React.MutableRefObject<any[]>;
-    private deathPhaseRef: React.MutableRefObject<string>;
+    private deathPhaseRef: React.MutableRefObject<DeathPhase>;
     private inputRef: () => any;
     private cameraRef: () => THREE.Camera;
     private propsRef: React.MutableRefObject<any>;
@@ -79,7 +79,7 @@ export class DeathSystem implements System {
         playerMeshRef: React.MutableRefObject<THREE.Group>;
         fmMeshRef: React.MutableRefObject<any>;
         activeFamilyMembers: React.MutableRefObject<any[]>;
-        deathPhaseRef: React.MutableRefObject<string>;
+        deathPhaseRef: React.MutableRefObject<DeathPhase>;
         inputRef: () => any;
         cameraRef: () => THREE.Camera;
         propsRef: React.MutableRefObject<any>;
@@ -119,9 +119,9 @@ export class DeathSystem implements System {
 
         // --- 1. Phase Management ---
         switch (this.deathPhaseRef.current) {
-            case 'NONE':
-                this.deathPhaseRef.current = 'ANIMATION';
-                this.setDeathPhase('ANIMATION');
+            case DeathPhase.NONE:
+                this.deathPhaseRef.current = DeathPhase.ANIMATION;
+                this.setDeathPhase(DeathPhase.ANIMATION);
                 VoiceSounds.playDeathScream();
 
                 // Fetch HUD data once for death state to avoid GC hits
@@ -130,17 +130,17 @@ export class DeathSystem implements System {
                 HudStore.update(hudData);
                 break;
 
-            case 'ANIMATION':
+            case DeathPhase.ANIMATION:
                 if (simTime - state.deathStartTime > PLAYER_DEATH_TIMER) {
-                    this.deathPhaseRef.current = 'MESSAGE';
-                    this.setDeathPhase('MESSAGE');
+                    this.deathPhaseRef.current = DeathPhase.MESSAGE;
+                    this.setDeathPhase(DeathPhase.MESSAGE);
                 }
                 break;
 
-            case 'MESSAGE':
+            case DeathPhase.MESSAGE:
                 if (simTime - state.deathStartTime > 3000) {
-                    this.deathPhaseRef.current = 'CONTINUE';
-                    this.setDeathPhase('CONTINUE');
+                    this.deathPhaseRef.current = DeathPhase.CONTINUE;
+                    this.setDeathPhase(DeathPhase.CONTINUE);
                 }
                 break;
         }
@@ -192,7 +192,7 @@ export class DeathSystem implements System {
                 this.fxCallbacks.spawnParticle(pgPos.x, 0.5, pgPos.z, FXParticleType.SPARK, 1);
             }
 
-            if (isBiting && this.deathPhaseRef.current === 'ANIMATION') {
+            if (isBiting && this.deathPhaseRef.current === DeathPhase.ANIMATION) {
                 playerMesh.position.x = Math.sin(renderTime * 0.05) * 0.1;
                 playerMesh.position.z = Math.cos(renderTime * 0.05) * 0.1;
 
@@ -209,7 +209,7 @@ export class DeathSystem implements System {
                     state.deathVel.x *= 0.95;
                     state.deathVel.z *= 0.95;
 
-                    if (this.deathPhaseRef.current === 'ANIMATION') {
+                    if (this.deathPhaseRef.current === DeathPhase.ANIMATION) {
                         if (renderTime % 500 < 50) {
                             this.fxCallbacks.spawnParticle(pgPos.x, pgPos.y + 1.0, pgPos.z, FXParticleType.SPLASH, 2);
                         }

@@ -4,6 +4,7 @@ import { GameCanvasProps } from '../../types/CanvasTypes';
 import { UiSounds } from '../../utils/audio/AudioLib';
 import { FLASHLIGHT } from '../../content/constants';
 import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
+import { InputAction } from '../../core/engine/InputTypes';
 
 export const useGameInput = (
     refs: any,
@@ -127,7 +128,7 @@ export const useGameInput = (
                 }
 
                 // VINTERDÖD FIX: Ignore if CTRL is held (Quick Inspect)
-                if (refs.engineRef.current?.input.state.ctrl) {
+                if (refs.engineRef.current?.input.state.actions[InputAction.CTRL]) {
                     return;
                 }
 

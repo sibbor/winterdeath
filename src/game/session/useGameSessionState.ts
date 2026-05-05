@@ -45,7 +45,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
     // Modal / UI Sync Refs
     const activeModalRef = useRef<'armory' | 'spawner' | 'environment' | 'skills' | null>(null);
     const isBuildingSectorRef = useRef(true);
-    const deathPhaseRef = useRef<DeathPhase>('NONE');
+    const deathPhaseRef = useRef<DeathPhase>(DeathPhase.NONE);
     const interactionTypeRef = useRef<InteractionType>(InteractionType.NONE);
     const lastInteractionPosRef = useRef<{ x: number, y: number } | null>(null);
 
@@ -108,7 +108,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
     // --- REACT STATE TANK ---
     const [uiState, setUiState] = useState<UIState>({
         isSectorLoading: true,
-        deathPhase: 'NONE',
+        deathPhase: DeathPhase.NONE,
         cinematicActive: false,
         bubbleTailPosition: 'bottom',
         currentLine: null,

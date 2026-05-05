@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, AtmosphereZone } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, AtmosphereZone, GroundType } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
 import { t } from '../../utils/i18n';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
@@ -8,8 +8,9 @@ import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
 import { VehicleGenerator } from '../../core/world/generators/VehicleGenerator';
 import { GeneratorUtils } from '../../core/world/generators/GeneratorUtils';
-import { InteractionType } from '../../systems/InteractionTypes';
-import { SoundID } from '../../utils/audio/AudioTypes';
+import { InteractionType, InteractionShape } from '../../systems/InteractionTypes';
+import { ToneType, SoundID } from '../../utils/audio/AudioTypes';
+import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { NoiseType } from '../../entities/enemies/EnemyBase';
 import { VEGETATION_TYPE } from '../../content/environment';
 import { WeatherType } from '../../core/engine/EngineTypes';
@@ -18,7 +19,6 @@ import { StatusEffectType } from '../../content/perks';
 import { DamageID } from '../../entities/player/CombatTypes';
 import { FXParticleType } from '../../types/FXTypes';
 import { EnemyFlags } from '../../entities/enemies/EnemyTypes';
-import { SystemID } from '../../systems/System';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -105,7 +105,6 @@ export const SECTOR6_ZONES: AtmosphereZone[] = [
 
 export const Sector4: SectorDef = {
     id: 4,
-    name: "sectors.sector_4_name",
     environment: {
         bgColor: 0x020208,
         fog: {
@@ -132,7 +131,7 @@ export const Sector4: SectorDef = {
         }
     },
     atmosphereZones: SECTOR6_ZONES,
-    groundType: 'SNOW',
+    ground: GroundType.SNOW,
     ambientLoop: SoundID.AMBIENT_METAL,
 
     playerSpawn: { x: 0, z: 0 },
@@ -220,11 +219,11 @@ export const Sector4: SectorDef = {
         };
 
         // Vehicles at the spawn point
-        await SectorBuilder.spawnDriveableVehicle(ctx, -20, 10, Math.PI / 1, 'sedan', undefined, false);
-        await SectorBuilder.spawnDriveableVehicle(ctx, 0, 30, Math.PI / 2, 'timber_truck', undefined, false);
-        await SectorBuilder.spawnDriveableVehicle(ctx, -20, 20, Math.PI / 3, 'bus', undefined, false);
-        await SectorBuilder.spawnDriveableVehicle(ctx, 20, 10, Math.PI / 4, 'police', undefined, false);
-        await SectorBuilder.spawnDriveableVehicle(ctx, 20, 20, Math.PI / 5, 'ambulance', undefined, false);
+        await SectorBuilder.spawnDriveableVehicle(ctx, -20, 10, Math.PI / 1, VehicleID.SEDAN, undefined, false);
+        await SectorBuilder.spawnDriveableVehicle(ctx, 0, 30, Math.PI / 2, VehicleID.TIMBER_TRUCK, undefined, false);
+        await SectorBuilder.spawnDriveableVehicle(ctx, -20, 20, Math.PI / 3, VehicleID.BUS, undefined, false);
+        await SectorBuilder.spawnDriveableVehicle(ctx, 20, 10, Math.PI / 4, VehicleID.POLICE, undefined, false);
+        await SectorBuilder.spawnDriveableVehicle(ctx, 20, 20, Math.PI / 5, VehicleID.AMBULANCE, undefined, false);
         await yieldIfBudgetExceeded();
 
 
@@ -270,7 +269,7 @@ export const Sector4: SectorDef = {
             const rock = NaturePropGenerator.createRock(4 + Math.random() * 4, 2 + Math.random() * 2);
             rock.position.set(rX, 0, rZ);
             scene.add(rock);
-            await SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 4, collider: { type: 'sphere', radius: 3 } });
+            await SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 4, collider: { type: InteractionShape.SPHERE, radius: 3 } });
             await yieldIfBudgetExceeded();
         }
 
@@ -286,7 +285,7 @@ export const Sector4: SectorDef = {
         await yieldIfBudgetExceeded();
 
         // --- Tractor (Driveable) ---
-        await SectorBuilder.spawnDriveableVehicle(ctx, p1.x, p1.z, Math.random() * Math.PI, 'tractor');
+        await SectorBuilder.spawnDriveableVehicle(ctx, p1.x, p1.z, Math.random() * Math.PI, VehicleID.TRACTOR);
         await yieldIfBudgetExceeded();
 
         // 3. VILLAGE
@@ -307,13 +306,13 @@ export const Sector4: SectorDef = {
                 });
 
                 scene.add(house);
-                await SectorBuilder.addObstacle(ctx, { mesh: house, position: house.position, collider: { type: 'box', size: new THREE.Vector3(10, 8, 10) } });
+                await SectorBuilder.addObstacle(ctx, { mesh: house, position: house.position, collider: { type: InteractionShape.BOX, size: new THREE.Vector3(10, 8, 10) } });
                 await yieldIfBudgetExceeded();
             }
         }
 
         // --- Car (Driveable) ---
-        await SectorBuilder.spawnDriveableVehicle(ctx, p2.x, p2.z, Math.PI / 2, 'station_wagon');
+        await SectorBuilder.spawnDriveableVehicle(ctx, p2.x, p2.z, Math.PI / 2, VehicleID.STATION_WAGON);
         await yieldIfBudgetExceeded();
 
         // 4. WATER
@@ -333,7 +332,7 @@ export const Sector4: SectorDef = {
             mesh: bigStone,
             position: bigStone.position,
             radius: 10,
-            collider: { type: 'sphere', radius: 10 }
+            collider: { type: InteractionShape.SPHERE, radius: 10 }
         });
         await yieldIfBudgetExceeded();
 
@@ -375,7 +374,7 @@ export const Sector4: SectorDef = {
             mesh: ball,
             position: ball.position,
             radius: 1.5,
-            collider: { type: 'sphere', radius: 1.5 },
+            collider: { type: InteractionShape.SPHERE, radius: 1.5 },
             type: 'Ball'
         };
         await SectorBuilder.addObstacle(ctx, ballObstacle);
@@ -396,7 +395,7 @@ export const Sector4: SectorDef = {
             pillar.position.set(px, 8, pz);
             pillar.castShadow = true;
             scene.add(pillar);
-            await SectorBuilder.addObstacle(ctx, { mesh: pillar, position: pillar.position, collider: { type: 'box', size: new THREE.Vector3(4, 30, 4) } });
+            await SectorBuilder.addObstacle(ctx, { mesh: pillar, position: pillar.position, collider: { type: InteractionShape.BOX, size: new THREE.Vector3(4, 30, 4) } });
             await yieldIfBudgetExceeded();
         }
         // Add a small pond in the center of the ruins
@@ -419,7 +418,7 @@ export const Sector4: SectorDef = {
                 pondCenter.z + Math.sin(angle) * (pondRadius + 5)
             );
             scene.add(rock);
-            await SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 5, collider: { type: 'sphere', radius: 5 } });
+            await SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 5, collider: { type: InteractionShape.SPHERE, radius: 5 } });
             await yieldIfBudgetExceeded();
         }
 
@@ -442,7 +441,7 @@ export const Sector4: SectorDef = {
         GeneratorUtils.freezeStatic(colMesh);
         scene.add(colMesh);
 
-        const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: 'box' as const, size: busSize } };
+        const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: InteractionShape.BOX, size: busSize } };
         await SectorBuilder.addObstacle(ctx, obstacle_bus);
         await yieldIfBudgetExceeded();
         await SectorBuilder.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });
@@ -452,7 +451,7 @@ export const Sector4: SectorDef = {
             id: EXPLODING_BUS_ID,
             label: 'ui.interact_blow_up_bus',
             type: InteractionType.SECTOR_SPECIFIC,
-            collider: { type: 'sphere', radius: 15.0 }
+            collider: { type: InteractionShape.SPHERE, radius: 15.0 }
         });
         await yieldIfBudgetExceeded();
         bus.userData.isInteractable = true;
@@ -629,7 +628,7 @@ export const Sector4: SectorDef = {
             const lastBeep = sectorState.lastBusBeep || 0;
             if (plantingElapsed > lastBeep + 500) {
                 sectorState.lastBusBeep = lastBeep + 500;
-                if (events.playTone) events.playTone(880, 'square', 0.05, 0.02);
+                if (events.playTone) events.playTone(880, ToneType.SQUARE, 0.05, 0.02);
             }
 
             if (plantingElapsed > 3000) {

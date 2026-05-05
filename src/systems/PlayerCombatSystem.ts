@@ -4,6 +4,7 @@ import { WeaponHandler } from './WeaponHandler';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { System, SystemID } from './System';
+import { InputAction } from '../core/engine/InputTypes';
 
 export class PlayerCombatSystem implements System {
     readonly systemId = SystemID.PLAYER_COMBAT;
@@ -78,8 +79,8 @@ export class PlayerCombatSystem implements System {
                 if (this.trajectoryLine) this.trajectoryLine.visible = false;
 
                 // Reset inputs internally to prevent holding a trigger through a cinematic
-                input.fire = false;
-                input.r = false;
+                input.actions[InputAction.FIRE] = 0;
+                input.actions[InputAction.RELOAD] = 0;
 
                 this._wasLocked = true;
             }
@@ -92,17 +93,17 @@ export class PlayerCombatSystem implements System {
         }
 
         // --- Weapon Slot Switching ---
-        if (input['1'] && !this._p1) WeaponHandler.handleSlotSwitch(state, state.loadout, '1');
-        if (input['2'] && !this._p2) WeaponHandler.handleSlotSwitch(state, state.loadout, '2');
-        if (input['3'] && !this._p3) WeaponHandler.handleSlotSwitch(state, state.loadout, '3');
-        if (input['4'] && !this._p4) WeaponHandler.handleSlotSwitch(state, state.loadout, '4');
-        if (input['5'] && !this._p5) WeaponHandler.handleSlotSwitch(state, state.loadout, '5');
+        const acts = input.actions;
+        if (acts[InputAction.SLOT_1] && !this._p1) WeaponHandler.handleSlotSwitch(state, state.loadout, '1');
+        if (acts[InputAction.SLOT_2] && !this._p2) WeaponHandler.handleSlotSwitch(state, state.loadout, '2');
+        if (acts[InputAction.SLOT_3] && !this._p3) WeaponHandler.handleSlotSwitch(state, state.loadout, '3');
+        if (acts[InputAction.SLOT_4] && !this._p4) WeaponHandler.handleSlotSwitch(state, state.loadout, '4');
 
-        this._p1 = !!input['1'];
-        this._p2 = !!input['2'];
-        this._p3 = !!input['3'];
-        this._p4 = !!input['4'];
-        this._p5 = !!input['5'];
+        this._p1 = !!acts[InputAction.SLOT_1];
+        this._p2 = !!acts[InputAction.SLOT_2];
+        this._p3 = !!acts[InputAction.SLOT_3];
+        this._p4 = !!acts[InputAction.SLOT_4];
+        this._p5 = false; // Slot 5 not yet in InputAction enum
 
         WeaponHandler.handleInput(input, state, state.loadout, simTime, false);
 

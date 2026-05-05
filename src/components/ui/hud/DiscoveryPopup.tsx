@@ -3,6 +3,8 @@ import { HudStore } from '../../../store/HudStore';
 import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import { DiscoveryType } from './HudTypes';
+import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
+import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
 import { DataResolver } from '../../../utils/ui/DataResolver';
 import { PERKS, PerkCategory } from '../../../content/perks';
 import { CLUES } from '../../../content/clues';
@@ -22,33 +24,27 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
   const [visible, setVisible] = useState(false);
   const lastTimestamp = useRef(0);
 
-  useEffect(() => {
-    // Synchronous listener: Only trigger react when discovery.timestamp genuinely increments
-    return HudStore.subscribe(() => {
-      const state = HudStore.getState();
-      const d = state.discovery;
+  const handleUIEvent = useCallback((type: UIEventType, id: any, discoveryType: number, timestamp: number) => {
+    if (type !== UIEventType.DISCOVERY) return;
 
-      if (d.active && d.timestamp > lastTimestamp.current) {
-        lastTimestamp.current = d.timestamp;
+    const state = HudStore.getState();
+    lastTimestamp.current = timestamp;
 
-        // Resolve content once and push to state
-        setActiveDiscovery({
-          id: d.id,
-          type: d.type,
-          title: d.title,
-          details: d.details,
-          timestamp: d.timestamp,
-          isMobile: state.isMobileDevice,
-          sector: state.currentSector,
-          cluesFound: state.cluesFoundCount,
-          poisFound: state.poisFoundCount,
-          collectiblesFound: state.collectiblesFoundCount
-        });
-        setVisible(true);
-        UiSounds.playDiscovery();
-      }
+    setActiveDiscovery({
+      id: id,
+      type: discoveryType as DiscoveryType,
+      timestamp: timestamp,
+      isMobile: state.isMobileDevice,
+      sector: state.currentSector,
+      cluesFound: state.cluesFoundCount,
+      poisFound: state.poisFoundCount,
+      collectiblesFound: state.collectiblesFoundCount
     });
+    setVisible(true);
+    UiSounds.playDiscovery();
   }, []);
+
+  useUIEventBridge(handleUIEvent);
 
   const handleInteraction = useCallback(() => {
     if (!visible || !activeDiscovery) return;
@@ -63,7 +59,18 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
       const tab = DataResolver.getAdventureLogTab(activeDiscovery.type);
       onOpenAdventureLog(tab, activeDiscovery.id);
     }
-    setVisible(false);
+    const closeDiscovery = () => {
+      setVisible(false);
+      const state = HudStore.getState();
+      if (state.discovery.active) {
+        HudStore.update({
+          ...state,
+          discovery: { ...state.discovery, active: false }
+        });
+      }
+    };
+
+    closeDiscovery();
   }, [activeDiscovery, visible, onOpenAdventureLog]);
 
   useEffect(() => {
@@ -80,7 +87,16 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [visible, handleInteraction]);
 
-  const handleAnimationEnd = () => setVisible(false);
+  const handleAnimationEnd = () => {
+    setVisible(false);
+    const state = HudStore.getState();
+    if (state.discovery.active) {
+      HudStore.update({
+        ...state,
+        discovery: { ...state.discovery, active: false }
+      });
+    }
+  };
 
   // --- CONTENT RESOLUTION ---
   const content = useMemo(() => {

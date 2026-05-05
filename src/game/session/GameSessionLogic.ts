@@ -9,14 +9,14 @@ import { RuntimeState } from '../../core/RuntimeState';
 import { System, SystemID } from '../../systems/System';
 import { PlayerDeathState, DamageID } from '../../entities/player/CombatTypes';
 import { KMH_TO_MS } from '../../content/constants';
-import { WEAPONS, ZOMBIE_TYPES, PLAYER_BASE_SPEED } from '../../content/constants';
+import { WEAPONS, PLAYER_BASE_SPEED } from '../../content/constants';
 import { ScrapItem } from '../../systems/WorldLootSystem';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { Obstacle } from '../../core/world/CollisionResolution';
 import { ParticleState } from '../../types/FXTypes';
 import { PlayerStatID, PlayerStatusFlags, PlayerStatsUtils, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
+import { VehicleID, VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
 import { InteractionType } from '../../systems/InteractionTypes';
-import { PerkFX } from '../../systems/PerkFX';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 
 export class GameSessionLogic {
@@ -310,10 +310,10 @@ export class GameSessionLogic {
                 active: false,
                 mesh: null,
                 nodes: null,
-                type: '',
+                type: VehicleID.NONE,
                 speed: 0,
                 throttle: 0,
-                engineState: 'OFF',
+                engineState: VehicleEngineState.OFF,
                 velocity: new THREE.Vector3(),
                 angularVelocity: new THREE.Vector3(),
                 suspY: 0,
@@ -483,7 +483,7 @@ export class GameSessionLogic {
             this.state.vehicle.active = false;
             this.state.vehicle.mesh = null;
             this.state.vehicle.speed = 0;
-            this.state.vehicle.engineState = 'OFF';
+            this.state.vehicle.engineState = VehicleEngineState.OFF;
             this.state.vehicle.velocity.set(0, 0, 0);
             this.state.vehicle.angularVelocity.set(0, 0, 0);
             this.state.vehicle.suspY = 0;

@@ -4,10 +4,18 @@ import { MATERIALS } from '../utils/assets';
 import { LogicalLight } from './LightSystem';
 import { FXParticleType, FXDecalType } from '../types/FXTypes';
 
+export enum WeaponLightType {
+    ELECTRIC = 0,
+    FIRE = 1
+}
+
 // --- ZERO-GC SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
+const _v6 = new THREE.Vector3();
 const _v7 = new THREE.Vector3();
 const _v8 = new THREE.Vector3();
 
@@ -28,7 +36,7 @@ interface WeaponLightNode extends LogicalLight {
     maxLife: number;
     initialIntensity: number;
     active: boolean;
-    type: 'electric' | 'fire';
+    type: WeaponLightType;
 }
 
 const _lightningPool: LightningNode[] = [];
@@ -77,7 +85,7 @@ const initPools = (scene: THREE.Scene) => {
             maxLife: 1,
             initialIntensity: 0,
             active: false,
-            type: 'electric'
+            type: WeaponLightType.ELECTRIC
         });
     }
 
@@ -121,7 +129,7 @@ export const WeaponFX = {
                     const alpha = node.life / node.maxLife;
                     let intensity = node.initialIntensity * alpha;
 
-                    if (node.type === 'fire') {
+                    if (node.type === WeaponLightType.FIRE) {
                         intensity *= (0.8 + Math.random() * 0.4);
                     }
                     node.intensity = intensity;
@@ -130,7 +138,7 @@ export const WeaponFX = {
         }
     },
 
-    spawnDynamicLight: (scene: THREE.Scene, pos: THREE.Vector3, color: number, intensity: number, distance: number, life: number, type: 'electric' | 'fire' = 'electric') => {
+    spawnDynamicLight: (scene: THREE.Scene, pos: THREE.Vector3, color: number, intensity: number, distance: number, life: number, type: WeaponLightType = WeaponLightType.ELECTRIC) => {
         initPools(scene);
 
         // Light Recycling: Prevent pool starvation by moving the existing active light
@@ -267,7 +275,7 @@ export const WeaponFX = {
         ctx.spawnParticle(pos.x, pos.y + 0.05, pos.z, FXParticleType.BLAST_RADIUS, 1, undefined, _v2, undefined, radius, 1.2);
 
         // Massive Intensity Buff (5.0 -> 25.0)
-        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xffaa00, 25.0, radius * 6, 0.5, 'fire');
+        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xffaa00, 25.0, radius * 6, 0.5, WeaponLightType.FIRE);
     },
 
     createMolotovImpact: (pos: THREE.Vector3, radius: number, hitWater: boolean, ctx: any) => {
@@ -280,7 +288,7 @@ export const WeaponFX = {
         ctx.spawnParticle(pos.x, pos.y + 0.5, pos.z, FXParticleType.LARGE_FIRE, 8, undefined, undefined, undefined, 1.8);
 
         // Intensity Buff (3.0 -> 15.0)
-        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xff6600, 15.0, radius * 5, 0.4, 'fire');
+        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xff6600, 15.0, radius * 5, 0.4, WeaponLightType.FIRE);
         ctx.spawnDecal(pos.x, pos.z, radius * 2.0, MATERIALS.scorchDecal, FXDecalType.SCORCH);
     },
 
@@ -309,7 +317,7 @@ export const WeaponFX = {
         if (Math.random() < 0.1) {
             _v1.copy(pos); // Changed _v4 to _v1 to prevent ReferenceError
             _v1.y += 1.0;
-            WeaponFX.spawnDynamicLight(ctx.scene, _v1, 0xff8800, 2.5 + Math.random() * 2.0, radius * 3.5, 0.15, 'fire');
+            WeaponFX.spawnDynamicLight(ctx.scene, _v1, 0xff8800, 2.5 + Math.random() * 2.0, radius * 3.5, 0.15, WeaponLightType.FIRE);
         }
     },
 

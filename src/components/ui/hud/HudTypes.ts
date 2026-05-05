@@ -23,7 +23,24 @@ export interface HudBossInfo {
   maxHp: number;
 }
 
-export type MapItemType = 'POI' | 'BUILDING' | 'ROAD' | 'OBSTACLE' | 'CHEST' | 'TRIGGER' | 'FAMILY' | 'PLAYER' | 'BOSS' | 'ENEMY' | 'OTHER' | 'LAKE' | 'FOREST' | 'WHEAT' | 'MOUNTAIN';
+export enum MapItemType {
+  POI = 0,
+  BUILDING = 1,
+  ROAD = 2,
+  OBSTACLE = 3,
+  CHEST = 4,
+  TRIGGER = 5,
+  FAMILY = 6,
+  PLAYER = 7,
+  BOSS = 8,
+  ENEMY = 9,
+  OTHER = 10,
+  LAKE = 11,
+  FOREST = 12,
+  WHEAT = 13,
+  MOUNTAIN = 14,
+  ZOMBIE_WAVE = 15
+}
 
 export interface MapItem {
   id: string;
@@ -84,7 +101,29 @@ export enum DiscoveryType {
   COLLECTIBLE = 2,
   ENEMY = 3,
   BOSS = 4,
-  PERK = 5
+  PERK = 5,
+  CHALLENGE = 6
+}
+
+export enum OverlayType {
+  NONE = 0,
+  PAUSE = 1,
+  SETTINGS = 2,
+  MAP = 3,
+  TELEPORT = 4,
+  COLLECTIBLE = 5,
+  DIALOGUE = 6,
+  ADVENTURE_LOG = 7,
+  SECTOR_REPORT = 8,
+  DEATH = 9,
+  STATION_ARMORY = 10,
+  STATION_SKILLS = 11,
+  STATION_SPAWNER = 12,
+  STATION_ENVIRONMENT = 13,
+  STATION_SECTORS = 14,
+  STATION_STATISTICS = 15,
+  INTRO = 16,
+  RESET_CONFIRM = 17
 }
 
 export interface DiscoveryEvent {

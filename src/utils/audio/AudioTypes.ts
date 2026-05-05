@@ -113,6 +113,13 @@ export enum SoundID {
     HEARTBEAT = 115,
 }
 
+export enum ToneType {
+    SINE = 0,
+    SQUARE = 1,
+    SAWTOOTH = 2,
+    TRIANGLE = 3
+}
+
 export enum FXID {
     NONE = 0,
     BLOOD_SPLATTER = 1,

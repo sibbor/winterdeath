@@ -145,6 +145,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
                                     key={cat} 
                                     onClick={() => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
                                     className={`relative px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
+                                        ${isActive
                                             ? 'text-white animate-tab-pulsate'
                                             : 'bg-transparent text-zinc-400 hover:bg-white/5 shadow-none'
                                         } 

@@ -7,6 +7,7 @@ import { VEGETATION_TYPE } from '../../../content/environment';
 import { MaterialType } from '../../../content/environment';
 import { GeneratorUtils } from './GeneratorUtils';
 import { PhysicsGroup } from '../CollisionResolution';
+import { InteractionShape } from '../../../systems/InteractionTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -32,6 +33,9 @@ interface TreePrototype {
 
 // Module-level storage for prototypes
 const prototypes: Record<string, TreePrototype> = {};
+
+// Stable enum-value → string-name lookup (avoids Object.keys() GC in hot paths)
+const VTYPE_NAME: string[] = ['PINE', 'SPRUCE', 'OAK', 'BIRCH', 'DEAD_TREE', 'GRASS', 'BUSH', 'SUNFLOWER', 'FLOWER', 'WHEAT'];
 
 // --- ZERO-GC CACHES ---
 const _createCrossGeo = () => {
@@ -437,7 +441,7 @@ const _placeTrees = async (ctx: SectorContext, region: Region, spacing: number, 
 
         const selectedType = types.length === 1 ? types[0] : types[Math.floor(rand() * types.length)];
         const variant = i % 3;
-        const key = `${selectedType}_${variant}`;
+        const key = `${VTYPE_NAME[selectedType]}_${variant}`;
 
         if (!matrixBuckets[key]) matrixBuckets[key] = [];
         matrixBuckets[key].push(mat);
@@ -447,7 +451,7 @@ const _placeTrees = async (ctx: SectorContext, region: Region, spacing: number, 
         SectorBuilder.addObstacle(ctx, {
             position: _v1.clone(),
             quaternion: _quat.clone(),
-            collider: { type: 'cylinder', radius: 0.5 * scale, height: 4 },
+            collider: { type: InteractionShape.CYLINDER, radius: 0.5 * scale, height: 4 },
             id: `tree_fill_${i}`,
             materialId: MaterialType.WOOD
         });
@@ -618,11 +622,11 @@ export const VegetationGenerator = {
     initNaturePrototypes: async (yieldToMain?: () => Promise<void>) => {
         const VARIANTS = 3;
         for (let i = 0; i < VARIANTS; i++) {
-            if (!prototypes[`${VEGETATION_TYPE.PINE}_${i}`]) prototypes[`${VEGETATION_TYPE.PINE}_${i}`] = generatePinePrototype(i);
-            if (!prototypes[`${VEGETATION_TYPE.SPRUCE}_${i}`]) prototypes[`${VEGETATION_TYPE.SPRUCE}_${i}`] = generateSprucePrototype(i);
-            if (!prototypes[`${VEGETATION_TYPE.OAK}_${i}`]) prototypes[`${VEGETATION_TYPE.OAK}_${i}`] = generateOakPrototype(i);
-            if (!prototypes[`${VEGETATION_TYPE.BIRCH}_${i}`]) prototypes[`${VEGETATION_TYPE.BIRCH}_${i}`] = generateBirchPrototype(i);
-            if (!prototypes[`${VEGETATION_TYPE.DEAD_TREE}_${i}`]) prototypes[`${VEGETATION_TYPE.DEAD_TREE}_${i}`] = generateDeadTreePrototype(i);
+            if (!prototypes[`PINE_${i}`]) prototypes[`PINE_${i}`] = generatePinePrototype(i);
+            if (!prototypes[`SPRUCE_${i}`]) prototypes[`SPRUCE_${i}`] = generateSprucePrototype(i);
+            if (!prototypes[`OAK_${i}`]) prototypes[`OAK_${i}`] = generateOakPrototype(i);
+            if (!prototypes[`BIRCH_${i}`]) prototypes[`BIRCH_${i}`] = generateBirchPrototype(i);
+            if (!prototypes[`DEAD_TREE_${i}`]) prototypes[`DEAD_TREE_${i}`] = generateDeadTreePrototype(i);
             if (yieldToMain) await yieldToMain();
         }
     },
@@ -699,7 +703,7 @@ export const VegetationGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: _pos.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: 'box', size: _scale.clone() },
+                collider: { type: InteractionShape.BOX, size: _scale.clone() },
                 physicsGroup: PhysicsGroup.WALL,
                 materialId: MaterialType.WOOD
             });
@@ -749,7 +753,7 @@ export const VegetationGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: _pos.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: 'box', size: _scale.clone() },
+                collider: { type: InteractionShape.BOX, size: _scale.clone() },
                 physicsGroup: PhysicsGroup.WALL,
                 materialId: MaterialType.STONE
             });
@@ -758,15 +762,16 @@ export const VegetationGenerator = {
 
     createTree: (type: VEGETATION_TYPE = VEGETATION_TYPE.PINE, scale: number = 1.0, variant: number = 0): THREE.Group => {
         const group = new THREE.Group();
-        const key = `${type}_${variant % 3}`;
-        const proto = prototypes[key] || prototypes[`${type}_0`] || prototypes[`${VEGETATION_TYPE.PINE}_0`];
+        const typeName = VTYPE_NAME[type] || 'PINE';
+        const key = `${typeName}_${variant % 3}`;
+        const proto = prototypes[key] || prototypes[`${typeName}_0`] || prototypes['PINE_0'];
 
         if (!proto) return group;
 
         let trunkMat = MATERIALS.treeTrunk;
-        if (type === 'OAK') trunkMat = MATERIALS.treeTrunkOak;
-        else if (type === 'BIRCH') trunkMat = MATERIALS.treeTrunkBirch;
-        else if (type === 'DEAD_TREE') trunkMat = MATERIALS.deadWood;
+        if (type === VEGETATION_TYPE.OAK) trunkMat = MATERIALS.treeTrunkOak;
+        else if (type === VEGETATION_TYPE.BIRCH) trunkMat = MATERIALS.treeTrunkBirch;
+        else if (type === VEGETATION_TYPE.DEAD_TREE) trunkMat = MATERIALS.deadWood;
 
         const trunk = new THREE.Mesh(proto.trunkGeo, trunkMat);
         trunk.castShadow = true; trunk.receiveShadow = true;
@@ -774,8 +779,8 @@ export const VegetationGenerator = {
 
         if (proto.leavesGeo) {
             let mat = MATERIALS.treeFirNeedles;
-            if (type === 'OAK') mat = MATERIALS.treeLeavesOak;
-            else if (type === 'BIRCH') mat = MATERIALS.treeLeavesBirch;
+            if (type === VEGETATION_TYPE.OAK) mat = MATERIALS.treeLeavesOak;
+            else if (type === VEGETATION_TYPE.BIRCH) mat = MATERIALS.treeLeavesBirch;
 
             const leaves = new THREE.Mesh(proto.leavesGeo, mat);
             leaves.castShadow = true; leaves.receiveShadow = true;

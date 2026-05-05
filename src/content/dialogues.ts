@@ -1,6 +1,8 @@
+import { DialogueLineType } from '../game/session/SectorTypes';
+
 export interface CinematicLine {
     speaker: string;
-    type?: string;
+    type?: DialogueLineType;
     text: string;
     trigger?: string[];
     duration?: number;
@@ -19,13 +21,13 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: 'Robert', text: "dialogue.0_0" },
             { speaker: 'Loke', text: "dialogue.0_1" },
             { speaker: 'Robert', text: "dialogue.0_2" },
-            { speaker: 'Robert', type: 'gesture', text: "dialogue.0_3" },
+            { speaker: 'Robert', type: DialogueLineType.GESTURE, text: "dialogue.0_3" },
             { speaker: 'Loke', text: "dialogue.0_4" },
             { speaker: 'Robert', text: "dialogue.0_5" },
             { speaker: 'Loke', text: "dialogue.0_6" },
             { speaker: 'Robert', text: "dialogue.0_7" },
             { speaker: 'Loke', text: "dialogue.0_8" },
-            { speaker: 'Loke', type: 'gesture', text: "dialogue.0_9" },
+            { speaker: 'Loke', type: DialogueLineType.GESTURE, text: "dialogue.0_9" },
             { speaker: 'Robert', text: "dialogue.0_10" },
             { speaker: 'Robert', text: "dialogue.0_11" },
             {
@@ -41,13 +43,13 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
     1: {
         // Part 1: The Shelter Door
         0: [
-            { speaker: 'Robert', type: 'action', text: "dialogue.1_0" },
+            { speaker: 'Robert', type: DialogueLineType.ACTION, text: "dialogue.1_0" },
             { speaker: 'Unknown', text: "dialogue.1_1" },
-            { speaker: 'Unknown', type: 'action', text: "dialogue.1_2" },
+            { speaker: 'Unknown', type: DialogueLineType.ACTION, text: "dialogue.1_2" },
             { speaker: 'Robert', text: "dialogue.1_3" },
             { speaker: 'Unknown', text: "dialogue.1_4" },
             { speaker: 'Robert', text: "dialogue.1_5" },
-            { speaker: 'Unknown', type: 'action', text: "dialogue.1_6" },
+            { speaker: 'Unknown', type: DialogueLineType.ACTION, text: "dialogue.1_6" },
             { speaker: 'Unknown', text: "dialogue.1_7" },
             { speaker: 'Robert', text: "dialogue.1_8" },
             { speaker: 'Unknown', text: "dialogue.1_9" },
@@ -58,7 +60,7 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: 'Unknown', text: "dialogue.1_14" },
             { speaker: 'Robert', text: "dialogue.1_15" },
             {
-                speaker: 'Unknown', type: 'action', text: "dialogue.1_16",
+                speaker: 'Unknown', type: DialogueLineType.ACTION, text: "dialogue.1_16",
                 trigger: ['SPAWN_JORDAN']
             }
         ],
@@ -71,7 +73,7 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: 'Robert', text: "dialogue.1_21" },
             { speaker: 'Unknown', text: "dialogue.1_22" },
             {
-                speaker: 'Unknown', type: 'action', text: "dialogue.1_23",
+                speaker: 'Unknown', type: DialogueLineType.ACTION, text: "dialogue.1_23",
                 trigger: ['CLOSE_DOORS']
             }
         ]
@@ -86,12 +88,12 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: 'Esmeralda', text: "dialogue.2_1" },
             { speaker: 'Robert', text: "dialogue.2_2" },
             { speaker: 'Robert', text: "dialogue.2_3" },
-            { speaker: 'Unknown', type: 'action', text: "dialogue.2_4" },
+            { speaker: 'Unknown', type: DialogueLineType.ACTION, text: "dialogue.2_4" },
             { speaker: 'Esmeralda', text: "dialogue.2_5" },
             { speaker: 'Robert', text: "dialogue.2_6" },
             { speaker: 'Esmeralda', text: "dialogue.2_7" },
-            { speaker: 'Esmeralda', type: 'action', text: "dialogue.2_8" },
-            { speaker: 'Radio', type: 'sound', text: "dialogue.2_9" },
+            { speaker: 'Esmeralda', type: DialogueLineType.ACTION, text: "dialogue.2_8" },
+            { speaker: 'Radio', type: DialogueLineType.SOUND, text: "dialogue.2_9" },
             { speaker: 'Robert', text: "dialogue.2_10" },
             { speaker: 'Radio', text: "dialogue.2_11" },
             { speaker: 'Robert', text: "dialogue.2_12" },

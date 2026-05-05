@@ -5,6 +5,8 @@ import { SectorBuilder } from '../SectorBuilder';
 import { GeneratorUtils } from './GeneratorUtils';
 import { PhysicsGroup } from '../CollisionResolution';
 import { MaterialType } from '../../../content/environment';
+import { InteractionShape } from '../../../systems/InteractionTypes';
+import { MapItemType } from '../../../components/ui/hud/HudTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -141,7 +143,7 @@ export const PathGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: _pos.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: 'box', size: _scale.clone() },
+                collider: { type: InteractionShape.BOX, size: _scale.clone() },
                 physicsGroup: PhysicsGroup.WALL,
                 materialId: MaterialType.CONCRETE,
                 id: `${name}_bound_${i}`
@@ -149,8 +151,8 @@ export const PathGenerator = {
         }
     },
 
-    createRoad: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 8, texture: THREE.Texture = null, matType: number = 8, spawnLoot: boolean = false) => {
-        if (points.length < 2) return;
+    createRoad: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 8, texture: THREE.Texture = null, matType: number = 8, spawnLoot: boolean = false): Promise<THREE.CatmullRomCurve3> => {
+        if (points.length < 2) return null;
 
         const curve = new THREE.CatmullRomCurve3(points);
         const len = curve.getLength();
@@ -174,15 +176,20 @@ export const PathGenerator = {
         for (let i = 0; i < pts.length; i++) {
             ctx.collisionGrid.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, matType);
             if (i % 10 === 0) {
-                ctx.mapItems.push({ id: `road_${Math.random()}`, x: pts[i].x, z: pts[i].z, type: 'ROAD', label: null, icon: null, radius: width / 2, color: '#333' });
+                ctx.mapItems.push({ id: `road_${Math.random()}`, x: pts[i].x, z: pts[i].z, type: MapItemType.ROAD, label: null, icon: null, radius: width / 2, color: '#333' });
             }
         }
 
         _pathLayerIndex++;
+        return curve;
     },
 
-    createDirtPath: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, texture: THREE.Texture = null, showBorder: boolean = false, spawnLoot: boolean = false) => {
-        if (points.length < 2) return;
+    createGravelRoad: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 6): Promise<THREE.CatmullRomCurve3> => {
+        return PathGenerator.createRoad(ctx, points, width, null, 1); // 1 = GRAVEL from GroundType
+    },
+
+    createDirtPath: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, texture: THREE.Texture = null, showBorder: boolean = false, spawnLoot: boolean = false): Promise<THREE.CatmullRomCurve3> => {
+        if (points.length < 2) return null;
 
         const curve = new THREE.CatmullRomCurve3(points);
         const len = curve.getLength();
@@ -205,10 +212,11 @@ export const PathGenerator = {
         }
 
         _pathLayerIndex++;
+        return curve;
     },
 
-    createRailTrack: async (ctx: SectorContext, points: THREE.Vector3[]) => {
-        if (points.length < 2) return;
+    createRailTrack: async (ctx: SectorContext, points: THREE.Vector3[]): Promise<THREE.CatmullRomCurve3> => {
+        if (points.length < 2) return null;
         const curve = new THREE.CatmullRomCurve3(points);
         const len = curve.getLength();
         const sleepers = Math.floor(len / 0.8);
@@ -392,7 +400,7 @@ export const PathGenerator = {
                 SectorBuilder.addObstacle(ctx, {
                     position: new THREE.Vector3().copy(_pos),
                     quaternion: new THREE.Quaternion().copy(_quat),
-                    collider: { type: 'box', size: new THREE.Vector3().copy(_v2) },
+                    collider: { type: InteractionShape.BOX, size: new THREE.Vector3().copy(_v2) },
                     physicsGroup: PhysicsGroup.WALL,
                     materialId: color === 'mesh' ? MaterialType.METAL : MaterialType.WOOD
                 });
@@ -448,7 +456,7 @@ export const PathGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: _pos.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: 'box', size: _scale.clone() },
+                collider: { type: InteractionShape.BOX, size: _scale.clone() },
                 physicsGroup: PhysicsGroup.WALL,
                 materialId: MaterialType.METAL
             });
@@ -493,7 +501,7 @@ export const PathGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: _pos.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: 'box', size: _scale.clone() },
+                collider: { type: InteractionShape.BOX, size: _scale.clone() },
                 physicsGroup: PhysicsGroup.WALL,
                 materialId: MaterialType.STONE
             });

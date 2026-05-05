@@ -15,6 +15,7 @@ import { audioEngine } from '../../utils/audio/AudioEngine';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { WEAPONS, WeaponBehavior } from '../../content/weapons';
 import { Enemy, EnemyFlags, EnemyDeathState, NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
+import { DeathPhase } from '../../types/SessionTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
@@ -25,7 +26,7 @@ import { InteractionType } from '../../systems/InteractionTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { NavigationSystem } from '../../systems/NavigationSystem';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
-import { EffectType, SubEffectType } from '../../systems/EffectManager';
+import { SubEffectType } from '../../systems/EffectManager';
 import { SystemID } from '../../systems/System';
 import { WeaponFX } from '../../systems/WeaponFX';
 import { PerkFX } from '../../systems/PerkFX';
@@ -43,7 +44,7 @@ interface LoopContext {
         gainXp: (val: number) => void;
         spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
-        showDamageText: (x: number, y: number, z: number, text: string, color?: string) => void;
+        showDamageText: (x: number, y: number, z: number, text: string, color?: number) => void;
         t: (k: string) => string;
         spawnBubble: (text: string, duration?: number) => void;
         onAction: (action: any) => void;
@@ -56,7 +57,7 @@ interface LoopContext {
         spawnHorde: (count: number, type: EnemyType, pos?: THREE.Vector3) => void;
         setNotification: (n: any) => void;
         setInteraction: (interaction: any) => void;
-        setOverlay: (type: string | null) => void;
+        setOverlay: (type: number | null) => void;
         playSound: (id: SoundID) => void;
         playTone: (freq: number, type: any, duration: number, vol?: number) => void;
         cameraShake: (amount: number, type?: any) => void;
@@ -401,8 +402,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         const sf = state.statusFlags;
         const isDead = (sf & PlayerStatusFlags.DEAD) !== 0;
 
-        if (isDead && refs.deathPhaseRef.current === 'NONE') {
-            refs.deathPhaseRef.current = 'DEAD';
+        if (isDead && refs.deathPhaseRef.current === DeathPhase.NONE) {
+            // Let DeathSystem handle the phase transition to ANIMATION.
+            // We trigger the UI overlay state here.
             callbacks.onDeathStateChange?.(true);
         }
 
@@ -432,18 +434,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
             if (!playerGroup || playerGroup.children.length === 0) return;
 
-            const queue = (refs as any).discoveryQueueRef.current;
-            if (queue && queue.length > 0 && !state.discovery.active) {
-                const next = queue.shift();
-                if (next) {
-                    state.discovery.active = true;
-                    state.discovery.id = next.id;
-                    state.discovery.type = next.type;
-                    state.discovery.title = next.title;
-                    state.discovery.details = next.details;
-                    state.discovery.timestamp = next.timestamp;
-                }
-            }
+            if (!playerGroup || playerGroup.children.length === 0) return;
 
             if (state.discovery.active && now - state.discovery.timestamp > 4000) {
                 state.discovery.active = false;

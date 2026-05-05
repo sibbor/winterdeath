@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MATERIALS } from '../../../utils/assets';
 import { MaterialType } from '../../../content/environment';
+import { VehicleID } from '../../../entities/vehicles/VehicleTypes';
 
 /**
  * VehicleGenerator
@@ -386,13 +387,13 @@ export const VehicleGenerator = {
         return VehicleGenerator._finalize(root);
     },
 
-    createVehicle: (type: string = 'station wagon', colorOverride?: number, addSnow: boolean = true): THREE.Group => {
-        if (type === 'police') return VehicleGenerator.createPoliceCar(colorOverride, addSnow);
-        if (type === 'ambulance') return VehicleGenerator.createAmbulance(colorOverride, addSnow);
-        if (type === 'bus') return VehicleGenerator.createBus(colorOverride, addSnow);
-        if (type === 'tractor') return VehicleGenerator.createTractor(colorOverride, addSnow);
-        if (type === 'timber_truck') return VehicleGenerator.createTimberTruck(colorOverride, addSnow);
-        if (type === 'sedan') return VehicleGenerator.createSedan(colorOverride, addSnow);
+    createVehicle: (type: VehicleID = VehicleID.STATION_WAGON, colorOverride?: number, addSnow: boolean = true): THREE.Group => {
+        if (type === VehicleID.POLICE) return VehicleGenerator.createPoliceCar(colorOverride, addSnow);
+        if (type === VehicleID.AMBULANCE) return VehicleGenerator.createAmbulance(colorOverride, addSnow);
+        if (type === VehicleID.BUS) return VehicleGenerator.createBus(colorOverride, addSnow);
+        if (type === VehicleID.TRACTOR) return VehicleGenerator.createTractor(colorOverride, addSnow);
+        if (type === VehicleID.TIMBER_TRUCK) return VehicleGenerator.createTimberTruck(colorOverride, addSnow);
+        if (type === VehicleID.SEDAN) return VehicleGenerator.createSedan(colorOverride, addSnow);
         return VehicleGenerator.createStationWagon(colorOverride, addSnow);
     },
 

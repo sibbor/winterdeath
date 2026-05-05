@@ -10,7 +10,10 @@ import { UiSounds } from '../../../utils/audio/AudioLib';
 import DamageVignette from './DamageVignette';
 import DiscoveryPopup from './DiscoveryPopup';
 import InteractionPrompt from './InteractionPrompt';
+import ChallengeTracker from './ChallengeTracker';
 import { InteractionType } from '../../../systems/InteractionTypes';
+import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
+import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
 
 interface GameHUDProps {
     loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
@@ -469,13 +472,6 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
 
     return (
         <div className={`absolute ${isMobileDevice ? 'bottom-4' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-            <div ref={interactionRef} className="mb-4 animate-in fade-in slide-in-from-bottom-2 duration-300 pointer-events-auto" style={{ display: 'none' }}>
-                <InteractionPrompt
-                    ref={interactionComponentRef}
-                    isMobileDevice={isMobileDevice}
-                    onInteract={(active) => HudStore.triggerInteraction(active)}
-                />
-            </div>
 
             {!isDriving && wep && wep.category !== WeaponCategory.THROWABLE && activeWeapon !== WeaponType.RADIO && (
                 <div className={`${isMobileDevice ? 'mb-2' : 'mb-4'} text-center animate-fadeIn flex items-baseline`}>
@@ -560,6 +556,31 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const effectRefs = useRef<{ buffs: any[], debuffs: any[] }>({ buffs: [], debuffs: [] });
 
     const prevTelemetry = useRef({ kills: 0, scrap: 0, sp: 0 });
+
+    // --- ASYNCHRONOUS UI EVENT BRIDGE (VINTERDÖD HARDENING) ---
+    useUIEventBridge(useCallback((type, p1, p2) => {
+        switch (type) {
+            case UIEventType.HUD_COMMAND:
+                // p1: 0 = HIDE, 1 = SHOW
+                HudStore.setHudVisible(p1 === 1);
+                break;
+
+            case UIEventType.RELOAD_START:
+                // p1: actualReloadTime
+                // Handled via data.reloadProgress in handleFastUpdate for now,
+                // but we could trigger a specific "START RELOAD" animation here if needed.
+                break;
+
+            case UIEventType.AMMO_LOW:
+                // p1: 5 (threshold)
+                if (ammoTextRef.current) {
+                    ammoTextRef.current.classList.remove('hud-ammo-low-pulse');
+                    void ammoTextRef.current.offsetWidth;
+                    ammoTextRef.current.classList.add('hud-ammo-low-pulse');
+                }
+                break;
+        }
+    }, []));
 
     // --- FAST HUD UPDATE LISTENER ---
     // ZERO-GC: Switched from browser CustomEvents to the HudFastRegistry
@@ -792,6 +813,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 // In winterdeath, we often use CustomEvents or props.
                 window.dispatchEvent(new CustomEvent('open-adventure-log', { detail: { tab, itemId } }));
             }} />
+            <ChallengeTracker />
 
             <div className={`${HUD_WRAPPER} ${!hudVisible || isDead || isDisoriented ? 'opacity-0 -translate-y-4 blur-[5px]' : 'opacity-100 translate-y-0 blur-0 animate-hudFadeIn'}`}>
 
@@ -937,6 +959,19 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     .animate-bling { animation: bling 0.6s ease-out; }
                     .animate-bling-yellow { animation: bling-yellow 0.6s ease-out; }
                 `}</style>
+            </div>
+
+            {/* Interaction Prompt (Highest Priority - Centered and scaled for mobile) */}
+            <div 
+                ref={interactionRef} 
+                className={`absolute ${isMobileDevice ? 'bottom-[25%] scale-150' : 'bottom-40'} left-1/2 -translate-x-1/2 z-[200] pointer-events-auto transition-all duration-300 ease-out`} 
+                style={{ display: 'none' }}
+            >
+                <InteractionPrompt
+                    ref={interactionComponentRef}
+                    isMobileDevice={isMobileDevice}
+                    onInteract={(active) => HudStore.triggerInteraction(active)}
+                />
             </div>
         </div>
     );

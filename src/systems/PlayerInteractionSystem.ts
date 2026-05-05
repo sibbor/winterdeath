@@ -10,6 +10,8 @@ import { InteractionType, InteractionShape } from './InteractionTypes';
 import { FXParticleType } from '../types/FXTypes';
 import { TriggerType, TriggerStatus } from './TriggerTypes';
 import { PlayerStatID } from '../entities/player/PlayerTypes';
+import { VehicleID } from '../entities/vehicles/VehicleTypes';
+import { InputAction } from '../core/engine/InputTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -123,7 +125,7 @@ export class PlayerInteractionSystem implements System {
         }
 
         // 2. Handle Interaction Press (Edge Triggered)
-        if (input.e) {
+        if (input.actions[InputAction.INTERACT]) {
             if (!state.eDepressed) {
                 state.eDepressed = true;
 
@@ -445,7 +447,7 @@ export class PlayerInteractionSystem implements System {
                 if (_detectionResult.object) {
                     state.vehicle.active = true;
                     state.vehicle.mesh = _detectionResult.object;
-                    state.vehicle.type = _detectionResult.object.userData.vehicleDef?.type || '';
+                    state.vehicle.type = _detectionResult.object.userData.vehicleDef?.type ?? VehicleID.NONE;
                 }
                 break;
 

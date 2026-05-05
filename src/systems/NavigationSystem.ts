@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SystemID } from './SystemID';
 import { SectorContext } from '../game/session/SectorTypes';
 import { Obstacle } from '../core/world/CollisionResolution';
+import { InteractionShape } from './InteractionTypes';
 
 /**
  * Hardened Navigation System
@@ -197,10 +198,10 @@ function isCellBlocked(wx: number, wz: number, obs: Obstacle): boolean {
 
     if (distSq > r * r) return false;
 
-    if (obs.collider && obs.collider.type === 'box' && obs.collider.size) {
-        // Correcting tuple indexing: [0]=X, [2]=Z
-        const hx = (obs.collider.size[0] * 0.5) + 0.5;
-        const hz = (obs.collider.size[2] * 0.5) + 0.5;
+    if (obs.collider && obs.collider.type === InteractionShape.BOX && obs.collider.size) {
+        // Correcting access: size is THREE.Vector3
+        const hx = (obs.collider.size.x * 0.5) + 0.5;
+        const hz = (obs.collider.size.z * 0.5) + 0.5;
         return Math.abs(dx) < hx && Math.abs(dz) < hz;
     }
 

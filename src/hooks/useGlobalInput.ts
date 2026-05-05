@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { UiSounds } from '../utils/audio/AudioLib';
-import { OverlayType } from '../App';
+import { OverlayType } from '../components/ui/hud/HudTypes';
 import { GameScreen } from '../types/SessionTypes';
 import { HudStore } from '../store/HudStore';
 
@@ -59,33 +59,38 @@ export const useGlobalInput = (
                 // Read death state synchronously from the store to bypass React cycle
                 const isDead = HudStore.getState().isDead;
 
-                if (current === 'TELEPORT') {
+                if (current === OverlayType.TELEPORT) {
                     acts.setTeleportInitialCoords(null);
-                    acts.setActiveOverlay('MAP');
+                    acts.setActiveOverlay(OverlayType.MAP);
                     UiSounds.playClick();
-                } else if (current === 'RESET_CONFIRM') {
-                    acts.setActiveOverlay('SETTINGS');
+                } else if (current === OverlayType.RESET_CONFIRM) {
+                    acts.setActiveOverlay(OverlayType.SETTINGS);
                     UiSounds.playClick();
-                } else if (current === 'SETTINGS' || current === 'ADVENTURE_LOG') {
+                } else if (current === OverlayType.SETTINGS || current === OverlayType.ADVENTURE_LOG) {
                     if (screen === GameScreen.CAMP) {
-                        acts.setActiveOverlay(null);
+                        acts.setActiveOverlay(OverlayType.NONE);
                     } else {
-                        acts.setActiveOverlay('PAUSE');
+                        acts.setActiveOverlay(OverlayType.PAUSE);
                     }
                     UiSounds.playClick();
-                } else if (current === 'PAUSE' || current === 'MAP' || current === 'COLLECTIBLE' || (current && current.startsWith('STATION_'))) {
-                    if (current === 'COLLECTIBLE' && acts.onCollectibleClose) {
+                } else if (
+                    current === OverlayType.PAUSE || 
+                    current === OverlayType.MAP || 
+                    current === OverlayType.COLLECTIBLE || 
+                    (current && current >= OverlayType.STATION_ARMORY && current <= OverlayType.STATION_STATISTICS)
+                ) {
+                    if (current === OverlayType.COLLECTIBLE && acts.onCollectibleClose) {
                         acts.onCollectibleClose();
                     } else {
-                        acts.setActiveOverlay(null);
+                        acts.setActiveOverlay(OverlayType.NONE);
                         acts.requestPointerLock?.();
                     }
                     UiSounds.playClick();
                 } else if (!current && !isDead) {
                     if (screen === GameScreen.CAMP) {
-                        acts.setActiveOverlay('SETTINGS');
+                        acts.setActiveOverlay(OverlayType.SETTINGS);
                     } else {
-                        acts.setActiveOverlay('PAUSE');
+                        acts.setActiveOverlay(OverlayType.PAUSE);
                         // Always release pointer lock when entering menu
                         if (document.pointerLockElement) document.exitPointerLock();
                     }
@@ -97,11 +102,11 @@ export const useGlobalInput = (
             else if (e.key === 'm' || e.key === 'M') {
                 const isDead = HudStore.getState().isDead;
                 if (!current && !isDead) {
-                    acts.setActiveOverlay('MAP');
+                    acts.setActiveOverlay(OverlayType.MAP);
                     if (document.pointerLockElement) document.exitPointerLock();
                     UiSounds.playConfirm();
-                } else if (current === 'MAP') {
-                    acts.setActiveOverlay(null);
+                } else if (current === OverlayType.MAP) {
+                    acts.setActiveOverlay(OverlayType.NONE);
                     acts.requestPointerLock?.();
                     UiSounds.playClick();
                 }

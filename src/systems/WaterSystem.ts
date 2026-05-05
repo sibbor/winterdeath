@@ -13,8 +13,13 @@ interface WaterBind {
     uClarity?: { value: number };
 }
 
+export enum WaterFloraType {
+    LILY = 0,
+    SEAWEED = 1
+}
+
 export interface LakeFloraInstance {
-    type: 'lily' | 'seaweed';
+    type: WaterFloraType;
     position: THREE.Vector3;
     rotationY: number;
     scale: { x: number, y: number, z: number };
@@ -28,21 +33,32 @@ const _sharedDummy = new THREE.Object3D();
 const _sharedDummyFlower = new THREE.Object3D();
 const _sharedWhiteColor = new THREE.Color(0xffffff);
 
-export type WaterBodyType = 'lake' | 'pond' | 'pool' | 'stream' | 'waterfall';
+export enum WaterBodyType {
+    LAKE = 0,
+    POND = 1,
+    POOL = 2,
+    STREAM = 3,
+    WATERFALL = 4
+}
+
+export enum WaterShape {
+    RECT = 0,
+    CIRCLE = 1
+}
 
 export interface WaterBodyDef {
-    shape: 'rect' | 'circle';
+    shape: WaterShape;
     buoyancyForce: number;
     ambientRippleChance: number;
     maxDepth: number; // Vertical distance to the bottom
 }
 
 const WATER_BODY_PRESETS: Record<WaterBodyType, WaterBodyDef> = {
-    lake: { shape: 'circle', buoyancyForce: 10, ambientRippleChance: 0.0, maxDepth: 8.0 },
-    pond: { shape: 'circle', buoyancyForce: 10, ambientRippleChance: 0.0, maxDepth: 3.5 },
-    pool: { shape: 'rect', buoyancyForce: 12, ambientRippleChance: 0.005, maxDepth: 2.0 },
-    stream: { shape: 'rect', buoyancyForce: 8, ambientRippleChance: 0.03, maxDepth: 1.5 },
-    waterfall: { shape: 'rect', buoyancyForce: 15, ambientRippleChance: 0.05, maxDepth: 10.0 }
+    [WaterBodyType.LAKE]: { shape: WaterShape.CIRCLE, buoyancyForce: 10, ambientRippleChance: 0.0, maxDepth: 8.0 },
+    [WaterBodyType.POND]: { shape: WaterShape.CIRCLE, buoyancyForce: 10, ambientRippleChance: 0.0, maxDepth: 3.5 },
+    [WaterBodyType.POOL]: { shape: WaterShape.RECT, buoyancyForce: 12, ambientRippleChance: 0.005, maxDepth: 2.0 },
+    [WaterBodyType.STREAM]: { shape: WaterShape.RECT, buoyancyForce: 8, ambientRippleChance: 0.03, maxDepth: 1.5 },
+    [WaterBodyType.WATERFALL]: { shape: WaterShape.RECT, buoyancyForce: 15, ambientRippleChance: 0.05, maxDepth: 10.0 }
 };
 
 export class WaterSurface {
@@ -53,7 +69,7 @@ export class WaterSurface {
 
     constructor(
         x: number, z: number, width: number, depth: number,
-        shape: 'rect' | 'circle',
+        shape: WaterShape,
         rippleData: THREE.Vector4[], objectPositions: THREE.Vector4[]
     ) {
         this.bounds = { x, z, width, depth };
@@ -65,8 +81,8 @@ export class WaterSurface {
         // We need ~1 vertex per meter for stable dFdx derivatives on 2m waves.
         const res = Math.min(128, Math.max(32, Math.floor(Math.max(width, depth) * 0.8)));
         const geometry = new THREE.PlaneGeometry(
-            shape === 'circle' ? Math.max(width, depth) : width,
-            shape === 'circle' ? Math.max(width, depth) : depth,
+            shape === WaterShape.CIRCLE ? Math.max(width, depth) : width,
+            shape === WaterShape.CIRCLE ? Math.max(width, depth) : depth,
             res, res
         );
 
@@ -172,8 +188,8 @@ export class WaterSystem implements System {
         const floraLen = flora.length;
         for (let i = 0; i < floraLen; i++) {
             const f = flora[i];
-            if (f.type === 'lily') lilies.push(f);
-            else if (f.type === 'seaweed') seaweed.push(f);
+            if (f.type === WaterFloraType.LILY) lilies.push(f);
+            else if (f.type === WaterFloraType.SEAWEED) seaweed.push(f);
         }
 
         if (seaweed.length > 0) {
@@ -348,7 +364,7 @@ export class WaterSystem implements System {
                     b.surface.bounds.x,
                     b.surface.bounds.z,
                     b.surface.bounds.width * 0.5, // radius
-                    b.def.shape === 'circle' ? 1.0 : 0.0
+                    b.def.shape === WaterShape.CIRCLE ? 1.0 : 0.0
                 );
             } else {
                 this._groundUniformData[i].set(0, 0, 0, -1); // Inactive
@@ -702,7 +718,7 @@ export class WaterSystem implements System {
             let inBounds = false;
             let edgeDist = 0;
 
-            if (shape === 'circle') {
+            if (shape === WaterShape.CIRCLE) {
                 const dx = x - b.x;
                 const dz = z - b.z;
                 const distSq = dx * dx + dz * dz;

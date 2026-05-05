@@ -150,6 +150,35 @@ class HudStoreClass {
         dst.isDriving = src.isDriving;
         dst.activeWeapon = src.activeWeapon;
         dst.hudVisible = src.hudVisible;
+        dst.level = src.level;
+        dst.currentXp = src.currentXp;
+        dst.nextLevelXp = src.nextLevelXp;
+        dst.cinematicActive = src.cinematicActive;
+        dst.isDisoriented = src.isDisoriented;
+
+        // Nested Object Property Sync (Zero-GC / Shape Stable)
+        dst.discovery.active = src.discovery.active;
+        dst.discovery.id = src.discovery.id;
+        dst.discovery.type = src.discovery.type;
+        dst.discovery.title = src.discovery.title;
+        dst.discovery.details = src.discovery.details;
+        dst.discovery.timestamp = src.discovery.timestamp;
+
+        dst.currentLine.active = src.currentLine.active;
+        dst.currentLine.speaker = src.currentLine.speaker;
+        dst.currentLine.text = src.currentLine.text;
+
+        dst.interactionPrompt.active = src.interactionPrompt.active;
+        dst.interactionPrompt.type = src.interactionPrompt.type;
+        dst.interactionPrompt.label = src.interactionPrompt.label;
+        dst.interactionPrompt.x = src.interactionPrompt.x;
+        dst.interactionPrompt.y = src.interactionPrompt.y;
+        dst.interactionPrompt.targetId = src.interactionPrompt.targetId;
+
+        dst.boss.active = src.boss.active;
+        dst.boss.name = src.boss.name;
+        dst.boss.hp = src.boss.hp;
+        dst.boss.maxHp = src.boss.maxHp;
         
         // 2. Version-Gated Array Sync (Smart Cloning)
         // We only allocate a new array reference when the logical content changes.
@@ -186,6 +215,18 @@ class HudStoreClass {
     public patch(changes: Partial<HudState>): void {
         // Only used for sparse updates outside the main loop.
         Object.assign(this.state, changes);
+        this.notifyListeners();
+    }
+
+    public setHudVisible(visible: boolean): void {
+        if (this.state.hudVisible !== visible) {
+            this.state.hudVisible = visible;
+            this.notifyListeners();
+        }
+    }
+
+    public setDiscovery(discovery: any): void {
+        this.state.discovery = discovery;
         this.notifyListeners();
     }
 

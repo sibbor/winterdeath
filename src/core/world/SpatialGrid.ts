@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Obstacle } from './CollisionResolution';
 import { Enemy, EnemyDeathState, EnemyFlags } from '../../entities/enemies/EnemyTypes';
 import { MaterialType } from '../../content/environment';
+import { InteractionShape } from '../../systems/InteractionTypes';
 import { System, SystemID } from '../../systems/System';
 
 // Prime number for optimal spatial hash distribution without collisions
@@ -446,7 +447,7 @@ export class SpatialGrid {
         // Read the newly structured data-driven interaction shape
         let radius = obj.userData.interactionRadius || 4.0;
 
-        if (obj.userData.interactionShape === 'box') {
+        if (obj.userData.interactionShape === InteractionShape.BOX) {
             const size = obj.userData.interactionSize || obj.userData.vehicleDef?.size || obj.userData.chestData?.collider?.size;
             if (size) {
                 const margin = obj.userData.interactionMargin ?? 2.0;

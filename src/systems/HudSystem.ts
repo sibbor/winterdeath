@@ -4,10 +4,11 @@ import { PerformanceMonitor } from './PerformanceMonitor';
 import { StatusEffectType } from '../content/perks';
 import { InteractionType } from './InteractionTypes';
 import { HudStore } from '../store/HudStore';
-import { DiscoveryType } from '../components/ui/hud/HudTypes';
+import { DiscoveryType, MapItemType } from '../components/ui/hud/HudTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { DataResolver } from '../utils/ui/DataResolver';
 import { WeaponType } from '../content/weapons';
+import { InputAction } from '../core/engine/InputTypes';
 import { CLUES } from '../content/clues';
 import { POIS } from '../content/pois';
 import { COLLECTIBLES } from '../content/collectibles';
@@ -178,7 +179,7 @@ export const HudSystem = {
         const stats = state.statsBuffer;
 
         // Clamp reloadProgress for stable rendering
-        const reloadDuration = (wep?.reloadTime || 1000) + (input.fire ? 1000 : 0);
+        const reloadDuration = (wep?.reloadTime || 1000) + (input.actions[InputAction.FIRE] ? 1000 : 0);
         const reloadRemaining = state.reloadEndTime - now;
         const reloadProgress = state.isReloading
             ? Math.max(0, Math.min(1, 1 - (reloadRemaining / reloadDuration)))
@@ -276,7 +277,7 @@ export const HudSystem = {
         // --- 2. REST OF DATA SYNC ---
         if (activeBossObj) {
             _current.boss.active = true;
-            _current.boss.name = activeBossObj.bossId !== undefined ? DataResolver.getBossName(activeBossObj.bossId) : 'BOSS';
+            _current.boss.name = activeBossObj.bossId !== undefined ? DataResolver.getBossName(activeBossObj.bossId) : 'ui.boss';
             _current.boss.hp = activeBossObj.hp;
             _current.boss.maxHp = activeBossObj.maxHp;
             _current.bossPos.x = activeBossObj.mesh.position.x;
@@ -305,7 +306,7 @@ export const HudSystem = {
 
         const wep = DataResolver.getWeapons()[state.activeWeapon];
         _current.reloadProgress = state.isReloading
-            ? 1 - ((state.reloadEndTime - now) / ((wep?.reloadTime || 1000) + (input.fire ? 1000 : 0)))
+            ? 1 - ((state.reloadEndTime - now) / ((wep?.reloadTime || 1000) + (input.actions[InputAction.FIRE] ? 1000 : 0)))
             : 0;
 
         const spGained = state.sessionStats.spGained;
@@ -384,7 +385,7 @@ export const HudSystem = {
         _current.throwableAmmo = state.weaponAmmo[props.loadout?.throwable] || 0;
         _current.distanceTraveled = Math.floor(distanceTraveled);
         _current.kills = state.sessionStats.kills;
-        _current.discovery = state.discovery;
+        _current.discovery.active = false;
 
         // Sync persistent telemetry
         if (state.stats) {
@@ -492,17 +493,7 @@ export const HudSystem = {
         _bufferB.currentLine.speaker = state.cinematicLine.speaker || '';
         _bufferB.currentLine.text = state.cinematicLine.text || '';
 
-        if (state.discovery.active) {
-            _current.discovery.active = true;
-            _current.discovery.id = state.discovery.id;
-
-            _current.discovery.type = state.discovery.type;
-            _current.discovery.title = state.discovery.title;
-            _current.discovery.details = state.discovery.details;
-            _current.discovery.timestamp = state.discovery.timestamp;
-        } else {
-            _current.discovery.active = false;
-        }
+        _current.discovery.active = false;
 
         // Debug mapping
         if (input.aimVector) {
@@ -512,12 +503,13 @@ export const HudSystem = {
             _current.debugInfo.aim.x = 0; _current.debugInfo.aim.y = 0;
         }
 
-        _current.debugInfo.input.w = input.w ? 1 : 0;
-        _current.debugInfo.input.a = input.a ? 1 : 0;
-        _current.debugInfo.input.s = input.s ? 1 : 0;
-        _current.debugInfo.input.d = input.d ? 1 : 0;
-        _current.debugInfo.input.fire = input.fire ? 1 : 0;
-        _current.debugInfo.input.reload = input.reload ? 1 : 0;
+        const dbgActs = input.actions;
+        _current.debugInfo.input.w = dbgActs[InputAction.UP] ? 1 : 0;
+        _current.debugInfo.input.a = dbgActs[InputAction.LEFT] ? 1 : 0;
+        _current.debugInfo.input.s = dbgActs[InputAction.DOWN] ? 1 : 0;
+        _current.debugInfo.input.d = dbgActs[InputAction.RIGHT] ? 1 : 0;
+        _current.debugInfo.input.fire = dbgActs[InputAction.FIRE] ? 1 : 0;
+        _current.debugInfo.input.reload = dbgActs[InputAction.RELOAD] ? 1 : 0;
         _current.debugInfo.cam.x = truncate1(camera.position.x);
         _current.debugInfo.cam.y = truncate1(camera.position.y);
         _current.debugInfo.cam.z = truncate1(camera.position.z);

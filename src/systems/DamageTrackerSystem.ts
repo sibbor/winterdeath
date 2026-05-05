@@ -3,6 +3,7 @@ import { System, SystemID } from './System';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
 import { DamageID } from '../entities/player/CombatTypes';
 import { StatWeaponIndex, PlayerStatID, StatEnemyIndex } from '../entities/player/PlayerTypes';
+import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 
 // Zero-GC: Pre-allocate boss keys to prevent template literal string allocations during runtime
 const MAX_BOSS_IDS = 32;
@@ -28,9 +29,9 @@ export class DamageTrackerSystem implements System {
         // --- TRACK WEAPON USAGE (TIME ACTIVE) ---
         const state = session.state;
         const activeWeapon = state.activeWeapon;
-        if (activeWeapon !== DamageID.NONE && activeWeapon !== DamageID.RADIO) {
-            const idx = (activeWeapon as number) - 1;
-            // VINTERDÖD HARDENING: Strict bounds check
+        if (activeWeapon !== DamageID.NONE) {
+            const idx = activeWeapon as number;
+            // VINTERDÖD HARDENING: Strict bounds check (64 slots)
             if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
                 state.sessionStats.weaponTimeActive[idx] += delta;
             }
@@ -59,10 +60,10 @@ export class DamageTrackerSystem implements System {
         const state = session.state;
         const stats = state.sessionStats;
         const playerStats = state.statsBuffer;
-        
+
         stats.damageTaken += amount;
         playerStats[PlayerStatID.TOTAL_DAMAGE_TAKEN] += amount;
-        
+
         if (isBoss) stats.bossDamageTaken += amount;
 
         // --- NEW BUFFERED TELEMETRY (Zero-GC) ---
@@ -70,7 +71,7 @@ export class DamageTrackerSystem implements System {
         // Sources 0-15: EnemyType (Reserved)
         // Sources 16-63: DamageID 
         // Attacks 0-31: EnemyAttackType or Boss Attack ID
-        
+
         // We use DamageID as the primary source ID for environment damage,
         // and DamageID.BOSS (29) for boss attacks.
         // If we want per-enemy-type breakdown, we should pass the enemy type as sourceId 
@@ -81,7 +82,7 @@ export class DamageTrackerSystem implements System {
         const sIdx = sourceId < 0 ? 0 : (sourceId > 63 ? 63 : sourceId);
         const aIdx = attackId < 0 ? 0 : (attackId > 31 ? 31 : attackId);
         const bufferIdx = (sIdx * 32) + aIdx;
-        
+
         // Final sanity check before write
         if (bufferIdx >= 0 && bufferIdx < 2048) {
             stats.incomingDamageBuffer[bufferIdx] += amount;
@@ -102,13 +103,13 @@ export class DamageTrackerSystem implements System {
 
         const stats = session.state.sessionStats;
         const playerStats = session.state.statsBuffer;
-        
+
         stats.damageDealt += amount;
         playerStats[PlayerStatID.TOTAL_DAMAGE_DEALT] += amount;
-        
+
         if (isBoss) stats.bossDamageDealt += amount;
 
-        const idx = (weaponId as number) - 1;
+        const idx = weaponId as number;
         if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
             stats.weaponDamageDealt[idx] += amount;
         }
@@ -122,11 +123,11 @@ export class DamageTrackerSystem implements System {
 
         const stats = session.state.sessionStats;
         const playerStats = session.state.statsBuffer;
-        
+
         stats.shotsFired++;
         playerStats[PlayerStatID.TOTAL_SHOTS_FIRED]++;
 
-        const idx = (weaponId as number) - 1;
+        const idx = weaponId as number;
         if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
             stats.weaponShotsFired[idx]++;
         }
@@ -140,11 +141,11 @@ export class DamageTrackerSystem implements System {
 
         const stats = session.state.sessionStats;
         const playerStats = session.state.statsBuffer;
-        
+
         stats.shotsHit++;
         playerStats[PlayerStatID.TOTAL_SHOTS_HIT]++;
 
-        const idx = (weaponId as number) - 1;
+        const idx = weaponId as number;
         if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
             stats.weaponShotsHit[idx]++;
         }
@@ -163,7 +164,7 @@ export class DamageTrackerSystem implements System {
     ) {
         const stats = session.state.sessionStats;
         const playerStats = session.state.statsBuffer;
-        
+
         stats.kills++;
         playerStats[PlayerStatID.TOTAL_KILLS]++;
 
@@ -181,8 +182,8 @@ export class DamageTrackerSystem implements System {
             playerStats[PlayerStatID.TOTAL_ENGAGEMENT_DISTANCE_SQ] += distSq;
         }
 
-        if (weaponId && !this.isTechnical(weaponId)) {
-            const idx = weaponId - 1;
+        if (weaponId && (weaponId as number) !== DamageID.NONE) {
+            const idx = weaponId as number;
             if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
                 stats.weaponKills[idx]++;
                 if (distSq !== undefined) {
@@ -202,6 +203,15 @@ export class DamageTrackerSystem implements System {
                 stats.enemyKills[StatEnemyIndex.BOSS]++;
                 session.state.enemyKills[StatEnemyIndex.BOSS]++;
             }
+        }
+
+        // --- VINTERDÖD CHALLENGES (Zero-GC) ---
+        // TODO: IMPLEMENT PROPER CHALLENGE SYSTEM
+        if (stats.kills === 50) {
+            UIEventRingBuffer.push(UIEventType.CHALLENGE_COMPLETE, 1); // 1: Session Slayer
+        }
+        if (this.currentKillstreak === 10) {
+            UIEventRingBuffer.push(UIEventType.CHALLENGE_COMPLETE, 2); // 2: Untouchable
         }
     }
 
@@ -255,11 +265,11 @@ export class DamageTrackerSystem implements System {
 
         const stats = session.state.sessionStats;
         const playerStats = session.state.statsBuffer;
-        
+
         stats.throwablesThrown++;
         playerStats[PlayerStatID.TOTAL_THROWABLES_THROWN]++;
 
-        const idx = (weaponId as number) - 1;
+        const idx = weaponId as number;
         if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
             stats.weaponShotsFired[idx]++; // For throwables, fired = hit attempt
         }
@@ -324,4 +334,4 @@ export class DamageTrackerSystem implements System {
     clear() {
         // System state is held in session.state, no local cleanup needed
     }
-}
+}
