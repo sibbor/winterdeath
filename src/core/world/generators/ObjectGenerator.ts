@@ -68,6 +68,10 @@ export const ObjectGenerator = {
         return GeneratorUtils.createTextSprite(text, spriteTextureCache, MATERIALS.textSprite);
     },
 
+    createTextMesh: (text: string) => {
+        return GeneratorUtils.createTextMesh(text, spriteTextureCache);
+    },
+
     createChest: (type: ChestType = ChestType.STANDARD) => {
         const chest = new THREE.Group();
         const isBig = type === ChestType.BIG;
@@ -506,9 +510,9 @@ export const ObjectGenerator = {
             group.add(base);
         }
 
-        const label = ObjectGenerator.createTextSprite(text);
+        const label = ObjectGenerator.createTextMesh(text);
         label.position.z = withBacking ? 0.12 : 0;
-        label.scale.set(text.length * 0.6, 0.8, 1);
+        label.scale.set(text.length * 0.4, 0.6, 1);
         group.add(label);
 
         EffectManager.attachEffect(group, EffectType.NEON_SIGN, { color, intensity: 15, distance: 20 });

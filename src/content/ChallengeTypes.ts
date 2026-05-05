@@ -76,7 +76,7 @@ export const GAME_CHALLENGES: ReadonlyArray<ChallengeDef> = [
         categoryId: ChallengeCategory.WORLD,
         titleKey: 'challenges.marathon.title',
         descriptionKey: 'challenges.marathon.desc',
-        targets: [5000, 20000, 100000],
+        targets: [5000, 21098, 42195],
         cpRewards: [10, 25, 100]
     },
     {

@@ -2,7 +2,7 @@ import { GameState } from '../types/StateTypes';
 import { GameScreen } from '../types/SessionTypes';
 import { WeaponType } from '../content/weapons';
 import { INITIAL_STATS, DEFAULT_SETTINGS, OVERRIDE_DEFAULT_SECTOR } from '../content/constants';
-import { PlayerStatsUtils, PlayerStatID } from '../entities/player/PlayerTypes';
+import { PlayerStatsUtils, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../entities/player/PlayerTypes';
 import { WeatherType } from '../core/engine/EngineTypes';
 
 export const DEFAULT_STATE: GameState = {
@@ -63,7 +63,8 @@ export const getPersistentState = (state: GameState) => {
             perkDamageAbsorbed: Array.from(state.stats.perkDamageAbsorbed || []),
             perkDamageDealt: Array.from(state.stats.perkDamageDealt || []),
             perkDebuffsCleansed: Array.from(state.stats.perkDebuffsCleansed || []),
-            enemyKills: Array.from(state.stats.enemyKills || [])
+            enemyKills: Array.from(state.stats.enemyKills || []),
+            challengeTiers: Array.from(state.stats.challengeTiers || [])
         },
         currentSector: state.currentSector,
         loadout: state.loadout,
@@ -82,6 +83,16 @@ export const getPersistentState = (state: GameState) => {
 
 const SAVE_KEY = 'winterDeathSave_v1';
 
+const ensureBufferSize = (loaded: any, defaultSize: number, Type: any = Float64Array) => {
+    const arr = new Type(defaultSize);
+    if (loaded && Array.isArray(loaded)) {
+        for (let i = 0; i < Math.min(loaded.length, defaultSize); i++) {
+            arr[i] = loaded[i];
+        }
+    }
+    return arr;
+};
+
 export const loadGameState = (): GameState => {
     const saved = localStorage.getItem(SAVE_KEY);
     let state: GameState;
@@ -96,20 +107,22 @@ export const loadGameState = (): GameState => {
                     ...DEFAULT_STATE.stats,
                     ...(loaded.stats || {}),
                     statsBuffer: PlayerStatsUtils.deserializeStats(loaded.stats?.statsBuffer || Array.from(INITIAL_STATS.statsBuffer)),
-                    effectDurations: new Float32Array(loaded.stats?.effectDurations || 32),
-                    effectMaxDurations: new Float32Array(loaded.stats?.effectMaxDurations || 32),
-                    effectIntensities: new Float32Array(loaded.stats?.effectIntensities || 32),
-                    weaponKills: new Float64Array(loaded.stats?.weaponKills || 20),
-                    weaponDamageDealt: new Float64Array(loaded.stats?.weaponDamageDealt || 20),
-                    weaponShotsFired: new Float64Array(loaded.stats?.weaponShotsFired || 20),
-                    weaponShotsHit: new Float64Array(loaded.stats?.weaponShotsHit || 20),
-                    weaponTimeActive: new Float64Array(loaded.stats?.weaponTimeActive || 20),
-                    weaponEngagementDistSq: new Float64Array(loaded.stats?.weaponEngagementDistSq || 20),
-                    perkTimesGained: new Float64Array(loaded.stats?.perkTimesGained || 32),
-                    perkDamageAbsorbed: new Float64Array(loaded.stats?.perkDamageAbsorbed || 32),
-                    perkDamageDealt: new Float64Array(loaded.stats?.perkDamageDealt || 32),
-                    perkDebuffsCleansed: new Float64Array(loaded.stats?.perkDebuffsCleansed || 32),
-                    enemyKills: new Float64Array(loaded.stats?.enemyKills || 8)
+                    effectDurations: ensureBufferSize(loaded.stats?.effectDurations, 32, Float32Array),
+                    effectMaxDurations: ensureBufferSize(loaded.stats?.effectMaxDurations, 32, Float32Array),
+                    effectIntensities: ensureBufferSize(loaded.stats?.effectIntensities, 32, Float32Array),
+                    weaponKills: ensureBufferSize(loaded.stats?.weaponKills, StatWeaponIndex.COUNT),
+                    weaponDamageDealt: ensureBufferSize(loaded.stats?.weaponDamageDealt, StatWeaponIndex.COUNT),
+                    weaponShotsFired: ensureBufferSize(loaded.stats?.weaponShotsFired, StatWeaponIndex.COUNT),
+                    weaponShotsHit: ensureBufferSize(loaded.stats?.weaponShotsHit, StatWeaponIndex.COUNT),
+                    weaponTimeActive: ensureBufferSize(loaded.stats?.weaponTimeActive, StatWeaponIndex.COUNT),
+                    weaponEngagementDistSq: ensureBufferSize(loaded.stats?.weaponEngagementDistSq, StatWeaponIndex.COUNT),
+                    perkTimesGained: ensureBufferSize(loaded.stats?.perkTimesGained, StatPerkIndex.COUNT),
+                    perkDamageAbsorbed: ensureBufferSize(loaded.stats?.perkDamageAbsorbed, StatPerkIndex.COUNT),
+                    perkDamageDealt: ensureBufferSize(loaded.stats?.perkDamageDealt, StatPerkIndex.COUNT),
+                    perkDebuffsCleansed: ensureBufferSize(loaded.stats?.perkDebuffsCleansed, StatPerkIndex.COUNT),
+                    enemyKills: ensureBufferSize(loaded.stats?.enemyKills, StatEnemyIndex.COUNT),
+                    challengeTiers: ensureBufferSize(loaded.stats?.challengeTiers, 32, Int32Array),
+                    totalChallengePoints: loaded.stats?.totalChallengePoints || 0
                 },
                 loadout: (function() {
                     const saved = loaded.loadout;

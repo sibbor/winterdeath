@@ -5,6 +5,8 @@ import { SectorBuilder } from '../SectorBuilder';
 import { VegetationGenerator } from './VegetationGenerator';
 import { MaterialType } from '../../../content/environment';
 import { InteractionShape } from '../../../systems/InteractionTypes';
+import { ChunkManager } from '../ChunkManager';
+import { GeneratorUtils } from './GeneratorUtils';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -75,7 +77,7 @@ export const NaturePropGenerator = {
         const mat = material == null ? MATERIALS.steel : material;
 
         const mesh = new THREE.InstancedMesh(SHARED_GEO.box, mat, count);
-        mesh.frustumCulled = false;
+        mesh.frustumCulled = true;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.userData.materialId = mat;
@@ -149,8 +151,7 @@ export const NaturePropGenerator = {
         const geo = isRock ? SHARED_GEO.rock : SHARED_GEO.debris;
         const mat = isRock ? MATERIALS.stone : MATERIALS.deadWood;
 
-        const instMesh = new THREE.InstancedMesh(geo, mat, numItems);
-        instMesh.frustumCulled = false;
+        const chunkBuckets = new Map<number, THREE.Matrix4[]>();
         let valid = 0;
 
         for (let i = 0; i < numItems; i++) {
@@ -165,7 +166,6 @@ export const NaturePropGenerator = {
                 _euler.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
                 _scale.setScalar(s);
 
-                // Need a unique Vector3 allocation here since SpatialGrid keeps the reference
                 SectorBuilder.addObstacle(ctx, {
                     position: new THREE.Vector3(x, s / 2, z),
                     collider: { type: InteractionShape.SPHERE, radius: s },
@@ -177,20 +177,32 @@ export const NaturePropGenerator = {
                 _scale.setScalar(1);
             }
 
-            // FIX: Actually apply the Euler rotation to the Quaternion!
             _quat.setFromEuler(_euler);
             _matrix.compose(_position, _quat, _scale);
-            instMesh.setMatrixAt(valid++, _matrix);
+            
+            const key = ChunkManager.getSmiKey(ChunkManager.getCoordIndex(x), ChunkManager.getCoordIndex(z));
+            let bucket = chunkBuckets.get(key);
+            if (!bucket) {
+                bucket = [];
+                chunkBuckets.set(key, bucket);
+            }
+            bucket.push(_matrix.clone());
+            valid++;
         }
 
-        if (valid > 0) {
-            instMesh.count = valid;
+        chunkBuckets.forEach((matrices, key) => {
+            const ix = key >> 8;
+            const iz = key & 0xFF;
+            const instMesh = new THREE.InstancedMesh(geo, mat, matrices.length);
+            instMesh.frustumCulled = true;
             if (isRock) {
                 instMesh.castShadow = true;
                 instMesh.receiveShadow = true;
             }
+            for (let i = 0; i < matrices.length; i++) instMesh.setMatrixAt(i, matrices[i]);
             instMesh.instanceMatrix.needsUpdate = true;
-            ctx.scene.add(instMesh);
-        }
+            GeneratorUtils.freezeStatic(instMesh);
+            ChunkManager.registerMesh(ix, iz, instMesh);
+        });
     }
 };

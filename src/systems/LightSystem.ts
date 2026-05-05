@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { LIGHT_SYSTEM, LIGHT_SETTINGS } from '../content/constants';
+import { ChunkManager } from '../core/world/ChunkManager';
 
 export interface LogicalLight {
     isLogicalLight: boolean;
@@ -19,11 +20,13 @@ export interface LogicalLight {
     shadowMapSize?: number;
 
     // Zero-GC data
+    currentChunkKey?: number;
     _sqDist?: number;
     _worldPos?: THREE.Vector3;
 }
 
 const _tempLights: LogicalLight[] = [];
+let _lastLightSource: LogicalLight[] | null = null;
 
 export class LightSystem implements System {
     readonly systemId = SystemID.LIGHT;
@@ -35,6 +38,10 @@ export class LightSystem implements System {
     private proxyPool: THREE.PointLight[] = [];
     private maxProxies: number;
     private maxShadows: number;
+
+    // Internal spatial index for lights (SMI Key -> LogicalLight[])
+    private lightBuckets = new Map<number, LogicalLight[]>();
+    private dynamicLightsList: LogicalLight[] = [];
 
     constructor(scene: THREE.Scene, maxProxies: number = LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS,
         maxShadows: number = LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS) {
@@ -84,31 +91,56 @@ export class LightSystem implements System {
             return;
         }
 
+        // --- SPATIAL AUDIT ---
+        // 1. Re-bucket lights if they changed (usually during init or effect spawn)
+        // Optimization: In a real mission, we'd only do this when the array reference changes.
+        this.rebuildBuckets(logicalLights);
+
         _tempLights.length = 0;
 
-        for (let i = 0; i < logicalLights.length; i++) {
-            const logicalLight = logicalLights[i];
-
-            // Initiera _worldPos en enda gång per ljus om det saknas
-            if (!logicalLight._worldPos) logicalLight._worldPos = new THREE.Vector3();
-
-            if (logicalLight.targetObject) {
-                logicalLight.targetObject.getWorldPosition(logicalLight._worldPos);
-                if (logicalLight.offset) {
-                    logicalLight._worldPos.x += logicalLight.offset.x;
-                    logicalLight._worldPos.y += logicalLight.offset.y;
-                    logicalLight._worldPos.z += logicalLight.offset.z;
+        // 2. Query Active Chunks (Zero-GC)
+        const activeKeys = ChunkManager.getActiveKeys();
+        
+        // 3. Process Static Lights in Active Chunks
+        activeKeys.forEach(key => {
+            const bucket = this.lightBuckets.get(key);
+            if (bucket) {
+                for (let i = 0; i < bucket.length; i++) {
+                    const l = bucket[i];
+                    if (!l._worldPos) l._worldPos = new THREE.Vector3();
+                    if (l.position) l._worldPos.copy(l.position);
+                    
+                    const sqDist = l._worldPos.distanceToSquared(playerPos);
+                    // Standard Light Culling (60 units)
+                    if (sqDist < 3600) {
+                        l._sqDist = sqDist;
+                        _tempLights.push(l);
+                    }
                 }
-            } else if (logicalLight.position) {
-                logicalLight._worldPos.copy(logicalLight.position);
+            }
+        });
+
+        // 4. Process Dynamic Lights (Muzzle flashes, player lights, attached lights)
+        // These are exempt from chunking because they move every frame.
+        for (let i = 0; i < this.dynamicLightsList.length; i++) {
+            const l = this.dynamicLightsList[i];
+            if (!l._worldPos) l._worldPos = new THREE.Vector3();
+            
+            if (l.targetObject) {
+                l.targetObject.getWorldPosition(l._worldPos);
+                if (l.offset) {
+                    l._worldPos.x += l.offset.x;
+                    l._worldPos.y += l.offset.y;
+                    l._worldPos.z += l.offset.z;
+                }
+            } else if (l.position) {
+                l._worldPos.copy(l.position);
             }
 
-            const sqDist = logicalLight._worldPos.distanceToSquared(playerPos);
-
-            // 3600 = 60 enheter. Räcker gott och väl.
+            const sqDist = l._worldPos.distanceToSquared(playerPos);
             if (sqDist < 3600) {
-                logicalLight._sqDist = sqDist;
-                _tempLights.push(logicalLight);
+                l._sqDist = sqDist;
+                _tempLights.push(l);
             }
         }
 
@@ -160,6 +192,36 @@ export class LightSystem implements System {
                 proxy.intensity = 0;
                 proxy.position.set(0, -1000, 0);
                 proxy.distance = 0.01;
+            }
+        }
+    }
+
+    private rebuildBuckets(lights: LogicalLight[]) {
+        // Optimization: Only rebuild if the reference to the global list changed
+        if (_lastLightSource === lights) return;
+        _lastLightSource = lights;
+
+        this.lightBuckets.forEach(b => b.length = 0);
+        this.dynamicLightsList.length = 0;
+
+        for (let i = 0; i < lights.length; i++) {
+            const l = lights[i];
+            
+            // Attached lights (targetObject) go to the dynamic list
+            if (l.targetObject) {
+                this.dynamicLightsList.push(l);
+            } else if (l.position) {
+                const nx = ChunkManager.getCoordIndex(l.position.x);
+                const nz = ChunkManager.getCoordIndex(l.position.z);
+                const key = ChunkManager.getSmiKey(nx, nz);
+                
+                l.currentChunkKey = key;
+                let bucket = this.lightBuckets.get(key);
+                if (!bucket) {
+                    bucket = [];
+                    this.lightBuckets.set(key, bucket);
+                }
+                bucket.push(l);
             }
         }
     }

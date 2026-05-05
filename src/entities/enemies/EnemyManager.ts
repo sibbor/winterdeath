@@ -19,6 +19,8 @@ import { SoundID } from '../../utils/audio/AudioTypes';
 import { SystemID } from '../../systems/System';
 import { GameSessionLogic } from '../../game/session/GameSessionLogic';
 import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
+import { SPATIAL_CONFIG } from '../../config/SpatialConfig';
+import { ChunkManager } from '../../core/world/ChunkManager';
 
 export type { Enemy };
 
@@ -44,6 +46,8 @@ const _traverseStack: THREE.Object3D[] = [];
 let zombieRenderer: ZombieRenderer | null = null;
 let corpseRenderer: CorpseRenderer | null = null;
 let ashRenderer: AshRenderer | null = null;
+
+let _frameCount = 0;
 
 // --- ZERO-GC MATERIAL HELPERS ---
 function applyElectrifiedGlow(root: any, colorObj: THREE.Color, intensity: number) {
@@ -139,6 +143,9 @@ const _aiContext: AIContext = {
     _realOnPlayerHit: null
 };
 
+// Map SMI Key -> Enemy[]
+const buckets = new Map<number, Enemy[]>();
+
 export const EnemyManager = {
     systemId: SystemID.ENEMY_MANAGER,
     id: 'enemy_manager',
@@ -157,17 +164,18 @@ export const EnemyManager = {
         else ashRenderer.reAttach(scene);
 
         enemyPool.length = 0;
+        buckets.forEach(b => b.length = 0);
+        buckets.clear();
+        _frameCount = 0;
 
         // VINTERDÖD: Pool Inflation (Zero-GC Pre-allocation)
-        // We pre-allocate the CPU memory for enemies during the loading screen
-        // to ensure that spawning during gameplay never triggers a 'new' allocation.
         const dummyScene = new THREE.Scene();
         const dummyPos = new THREE.Vector3();
         for (let i = 0; i < initialPoolSize; i++) {
             const enemy = EnemySpawner.spawn(dummyScene, dummyPos, EnemyType.WALKER);
             if (enemy) {
                 enemy.mesh.visible = false;
-                enemy.mesh.removeFromParent(); // Detach from dummy scene
+                enemy.mesh.removeFromParent();
                 enemyPool.push(enemy);
             }
         }
@@ -189,11 +197,14 @@ export const EnemyManager = {
 
         const state = session.state;
         const collisionGrid = state.collisionGrid;
-
         if (!collisionGrid) return;
 
         const playerPos = session.playerPos || session.engine.camera?.lookAtTarget;
-        const enemies = state.enemies;
+        if (!playerPos) return;
+
+        const pX = playerPos.x;
+        const pZ = playerPos.z;
+
         const isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
         const playerStatusFlags = state.statusFlags;
         const water = session.engine.water;
@@ -204,7 +215,7 @@ export const EnemyManager = {
         const spawnBubble = callbacks?.spawnBubble;
         const applyDamage = state.applyDamage;
 
-        collisionGrid.updateEnemyGrid(enemies);
+        _frameCount++;
         _syncList.length = 0;
 
         _aiContext._realOnPlayerHit = onPlayerHit;
@@ -221,130 +232,141 @@ export const EnemyManager = {
         const cameraPos = camera.threeCamera.position;
         const cameraDir = _camDir.set(0, 0, -1).applyQuaternion(camera.threeCamera.quaternion);
 
-        const len = enemies.length;
+        // --- 3-TIER SPATIAL UPDATE LOOP ---
+        // We iterate over all buckets and perform frequency-gated updates.
+        buckets.forEach((enemies, chunkKey) => {
+            const len = enemies.length;
+            if (len === 0) return;
 
-        for (let i = 0; i < len; i++) {
-            const e = enemies[i];
+            // Optional: Skip entire bucket if obviously too far (Hysteresis)
+            // But per-enemy check is safer for boundary crossing.
 
-            if (e.deathState === EnemyDeathState.ALIVE) {
-                // Let EnemyAI handle duration updates and physics!
-                EnemyAI.updateEnemy(e, playerPos, playerStatusFlags, collisionGrid, isDead, _aiContext, water, scaledDelta, simTime, renderTime);
-            }
+            for (let i = len - 1; i >= 0; i--) {
+                const e = enemies[i];
 
-            if (e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD) {
-                EnemyManager.processDeathAnimation(e, _aiContext, scaledDelta, simTime, renderTime);
-            }
+                // --- 1. SPATIAL GATING (Zero-GC) ---
+                const dx = e.mesh.position.x - pX;
+                const dz = e.mesh.position.z - pZ;
+                const distSq = dx * dx + dz * dz;
 
-            const deathState = e.deathState;
+                const isDying = e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD;
+                
+                let updateFrequency = 0; // 0 = Hibernate, 1 = Core, 6 = Throttle
+                
+                if (isDying || distSq < SPATIAL_CONFIG.AI_CORE_RADIUS_SQ) {
+                    updateFrequency = 1;
+                } else if (distSq < SPATIAL_CONFIG.AI_THROTTLED_RADIUS_SQ) {
+                    updateFrequency = 6;
+                }
 
-            switch (deathState) {
-                case EnemyDeathState.BURNED:
-                case EnemyDeathState.ELECTROCUTED:
-                case EnemyDeathState.DROWNED:
-                    e.mesh.visible = true;
-                    e.mesh.matrixAutoUpdate = true;
-                    break;
+                const shouldUpdate = updateFrequency > 0 && (_frameCount % updateFrequency === 0);
 
-                case EnemyDeathState.DEAD:
-                    // Handled by pooling/removal logic
-                    break;
-
-                default:
-                    // Visibility culling for standard enemies
-                    if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !(e.statusFlags & EnemyFlags.EXPLODED)) {
-                        let isVisible = true;
-                        if (cameraPos && cameraDir) {
-                            _v2.subVectors(e.mesh.position, cameraPos);
-                            const dot = cameraDir.dot(_v2);
-                            const distSq = _v2.lengthSq();
-
-                            if (dot < -2.0 && distSq > 625) {
-                                isVisible = false;
-                            }
-                        }
-
-                        const isTelegraphing = e.indicatorRing && e.indicatorRing.visible;
-
-                        if (isVisible && !isTelegraphing) {
-                            e.mesh.visible = false;
-                            e.mesh.matrixAutoUpdate = false;
-                            e.mesh.updateMatrix();
-                            _syncList.push(e);
-                        } else {
-                            e.mesh.visible = isVisible;
-                            e.mesh.matrixAutoUpdate = true;
-                        }
-                    } else {
-                        // Bosses and exploded entities usually stay visible
-                        e.mesh.visible = true;
-                        e.mesh.matrixAutoUpdate = true;
-                    }
-                    break;
-            }
-
-            if (deathState === EnemyDeathState.ALIVE && e.color !== undefined) {
-                const isBoss = (e.statusFlags & EnemyFlags.BOSS) !== 0;
-                const timeSinceHit = simTime - e.hitTime;
-                const isRecentHit = timeSinceHit < 100;
-
-                if (isBoss) {
-                    if (isRecentHit) {
-                        if (!(e.statusFlags & EnemyFlags.FLASH_ACTIVE)) {
-                            e.statusFlags |= EnemyFlags.FLASH_ACTIVE;
-                            const isArc = e.lastDamageType === DamageID.ARC_CANNON;
-
-                            if (isArc) _flashColor.setHex(0x00ffff).lerp(_white, 0.4);
-                            else _flashColor.setHex(0xffffff);
-
-                            const intensity = isArc ? 2.0 : 1.0;
-
-                            _traverseStack.length = 0;
-                            _traverseStack.push(e.mesh);
-                            while (_traverseStack.length > 0) {
-                                const c = _traverseStack.pop() as any;
-                                if (c.isMesh && c.material && c.material.emissive) {
-                                    c.material.emissive.copy(_flashColor);
-                                    c.material.emissiveIntensity = intensity;
-                                }
-                                if (c.children) {
-                                    for (let k = 0; k < c.children.length; k++) {
-                                        _traverseStack.push(c.children[k]);
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        if (e.statusFlags & EnemyFlags.FLASH_ACTIVE) {
-                            e.statusFlags &= ~EnemyFlags.FLASH_ACTIVE;
-                            resetMaterialEmissive(e.mesh);
-                        }
+                if (shouldUpdate) {
+                    // --- 2. LOGIC UPDATE ---
+                    if (e.deathState === EnemyDeathState.ALIVE) {
+                        EnemyAI.updateEnemy(e, playerPos, playerStatusFlags, collisionGrid, isDead, _aiContext, water, scaledDelta * updateFrequency, simTime, renderTime);
+                    } else if (isDying) {
+                        EnemyManager.processDeathAnimation(e, _aiContext, scaledDelta, simTime, renderTime);
                     }
 
-                    // No boss
-                } else {
-                    if (isRecentHit) {
-                        if (!(e.statusFlags & EnemyFlags.FLASH_ACTIVE)) {
-                            e.statusFlags |= EnemyFlags.FLASH_ACTIVE;
-                            e.originalColor = e.color;
-                            const isArc = e.lastDamageType === DamageID.ARC_CANNON;
-                            if (isArc) {
-                                e.color = _flashColor.setHex(0x00ffff).lerp(_white, 0.4).getHex();
-                            } else {
-                                e.color = 0xffffff;
-                            }
+                    // --- 3. BUCKET MIGRATION (Zero-GC Swap-and-Pop) ---
+                    const nx = ChunkManager.getCoordIndex(e.mesh.position.x);
+                    const nz = ChunkManager.getCoordIndex(e.mesh.position.z);
+                    const newKey = ChunkManager.getSmiKey(nx, nz);
+
+                    if (newKey !== e.currentChunkKey) {
+                        // Remove from current bucket (O(1) Swap-and-Pop)
+                        enemies[i] = enemies[enemies.length - 1];
+                        enemies.pop();
+
+                        // Add to new bucket
+                        e.currentChunkKey = newKey;
+                        let newBucket = buckets.get(newKey);
+                        if (!newBucket) {
+                            newBucket = [];
+                            buckets.set(newKey, newBucket);
                         }
-                    } else {
-                        if (e.statusFlags & EnemyFlags.FLASH_ACTIVE) {
-                            e.statusFlags &= ~EnemyFlags.FLASH_ACTIVE;
-                            e.color = e.originalColor;
-                        }
+                        newBucket.push(e);
+                        continue; // Enemy moved bucket, index i is now a different enemy (or end)
                     }
                 }
-            }
-        }
 
+                // --- 4. RENDER SYNC FILTERING ---
+                // Only CORE, THROTTLED, and DYING enemies are synced to renderers and grid.
+                if (updateFrequency > 0 || isDying) {
+                    _syncList.push(e);
+
+                    // Standard Visibility Culling (Logic from original loop)
+                    const deathState = e.deathState;
+                    switch (deathState) {
+                        case EnemyDeathState.BURNED:
+                        case EnemyDeathState.ELECTROCUTED:
+                        case EnemyDeathState.DROWNED:
+                            e.mesh.visible = true;
+                            e.mesh.matrixAutoUpdate = true;
+                            break;
+                        case EnemyDeathState.DEAD:
+                            break;
+                        default:
+                            if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !(e.statusFlags & EnemyFlags.EXPLODED)) {
+                                let isVisible = true;
+                                if (cameraPos && cameraDir) {
+                                    _v2.subVectors(e.mesh.position, cameraPos);
+                                    const dot = cameraDir.dot(_v2);
+                                    const dSq = _v2.lengthSq();
+                                    if (dot < -2.0 && dSq > 625) isVisible = false;
+                                }
+                                const isTelegraphing = e.indicatorRing && e.indicatorRing.visible;
+                                if (isVisible && !isTelegraphing) {
+                                    e.mesh.visible = false;
+                                    e.mesh.matrixAutoUpdate = false;
+                                    e.mesh.updateMatrix();
+                                } else {
+                                    e.mesh.visible = isVisible;
+                                    e.mesh.matrixAutoUpdate = true;
+                                }
+                            } else {
+                                e.mesh.visible = true;
+                                e.mesh.matrixAutoUpdate = true;
+                            }
+                            break;
+                    }
+
+                    // Flash feedback (Logic from original loop)
+                    if (deathState === EnemyDeathState.ALIVE && e.color !== undefined) {
+                        const isBoss = (e.statusFlags & EnemyFlags.BOSS) !== 0;
+                        const timeSinceHit = simTime - e.hitTime;
+                        if (timeSinceHit < 100) {
+                            if (!(e.statusFlags & EnemyFlags.FLASH_ACTIVE)) {
+                                e.statusFlags |= EnemyFlags.FLASH_ACTIVE;
+                                e.originalColor = e.color;
+                                const isArc = e.lastDamageType === DamageID.ARC_CANNON;
+                                if (isBoss) {
+                                    if (isArc) _flashColor.setHex(0x00ffff).lerp(_white, 0.4);
+                                    else _flashColor.setHex(0xffffff);
+                                    applyElectrifiedGlow(e.mesh, _flashColor, isArc ? 2.0 : 1.0);
+                                } else {
+                                    e.color = isArc ? _flashColor.setHex(0x00ffff).lerp(_white, 0.4).getHex() : 0xffffff;
+                                }
+                            }
+                        } else if (e.statusFlags & EnemyFlags.FLASH_ACTIVE) {
+                            e.statusFlags &= ~EnemyFlags.FLASH_ACTIVE;
+                            if (isBoss) resetMaterialEmissive(e.mesh);
+                            else e.color = e.originalColor;
+                        }
+                    }
+                } else {
+                    // HIBERNATED: Hide and stop matrix updates
+                    e.mesh.visible = false;
+                    e.mesh.matrixAutoUpdate = false;
+                }
+            }
+        });
+
+        // Pass ONLY active/throttled/dying enemies to systems
+        collisionGrid.updateEnemyGrid(_syncList);
         if (zombieRenderer) zombieRenderer.sync(_syncList, simTime);
-        if (ashRenderer) ashRenderer.update(Math.max(simTime, 1));
+        if (ashRenderer) ashRenderer.update(Math.max(simTime, 1), playerPos);
     },
 
     clear: () => {
@@ -355,6 +377,7 @@ export const EnemyManager = {
         corpseRenderer = null;
         ashRenderer = null;
         enemyPool.length = 0;
+        buckets.clear();
     },
 
     getAshRenderer: () => ashRenderer,
@@ -373,6 +396,20 @@ export const EnemyManager = {
 
         if (enemy) {
             enemy.mesh.visible = (enemy.statusFlags & EnemyFlags.BOSS) !== 0;
+            
+            // Add to bucket
+            const nx = ChunkManager.getCoordIndex(enemy.mesh.position.x);
+            const nz = ChunkManager.getCoordIndex(enemy.mesh.position.z);
+            const key = ChunkManager.getSmiKey(nx, nz);
+            enemy.currentChunkKey = key;
+            
+            let bucket = buckets.get(key);
+            if (!bucket) {
+                bucket = [];
+                buckets.set(key, bucket);
+            }
+            enemy.bucketIndex = bucket.length;
+            bucket.push(enemy);
         }
 
         return enemy;
@@ -412,6 +449,7 @@ export const EnemyManager = {
             const dist = 45 + Math.random() * 30;
             e.mesh.position.set(playerPos.x + Math.cos(angle) * dist, 0, playerPos.z + Math.sin(angle) * dist);
         }
+
 
         e.deathState = EnemyDeathState.ALIVE;
         e.velocity.set(0, 0, 0);
@@ -477,11 +515,28 @@ export const EnemyManager = {
             e.indicatorRing.visible = false;
             e.indicatorRing.matrixAutoUpdate = false;
         }
+
+        e.currentChunkKey = -1;
+        e.bucketIndex = -1;
     },
 
     spawnBoss: (scene: THREE.Scene, pos: { x: number, z: number }, bossData: any) => {
         const boss = EnemySpawner.spawnBoss(scene, pos, bossData);
-        if (boss) boss.mesh.visible = true;
+        if (boss) {
+            boss.mesh.visible = true;
+            // Add to bucket
+            const nx = ChunkManager.getCoordIndex(boss.mesh.position.x);
+            const nz = ChunkManager.getCoordIndex(boss.mesh.position.z);
+            const key = ChunkManager.getSmiKey(nx, nz);
+            boss.currentChunkKey = key;
+            let bucket = buckets.get(key);
+            if (!bucket) {
+                bucket = [];
+                buckets.set(key, bucket);
+            }
+            boss.bucketIndex = bucket.length;
+            bucket.push(boss);
+        }
         return boss;
     },
 
@@ -508,12 +563,15 @@ export const EnemyManager = {
 
     createCorpse: (enemy: Enemy, forcedColor?: number) => {
         if (corpseRenderer) {
+            const isFloating = enemy.deathState === EnemyDeathState.DROWNED || (enemy.statusFlags & EnemyFlags.DROWNING) !== 0;
+            
             corpseRenderer.addCorpse(
                 enemy.mesh.position,
                 enemy.mesh.quaternion,
                 enemy.originalScale,
                 enemy.widthScale,
-                forcedColor !== undefined ? forcedColor : enemy.color
+                forcedColor !== undefined ? forcedColor : enemy.color,
+                isFloating
             );
         }
     },
@@ -990,14 +1048,26 @@ export const EnemyManager = {
 
                 if (e.indicatorRing?.parent) e.indicatorRing.parent.remove(e.indicatorRing);
 
-                const recycled = enemies[i];
+                // --- O(1) REMOVAL FROM GLOBAL LIST ---
                 enemies[i] = enemies[enemies.length - 1];
                 enemies.pop();
 
-                recycled.statusFlags |= EnemyFlags.DEAD;
-                recycled.deathState = EnemyDeathState.DEAD;
+                // --- O(1) REMOVAL FROM BUCKET ---
+                const bucket = buckets.get(e.currentChunkKey);
+                if (bucket) {
+                    const bIdx = e.bucketIndex;
+                    const bLastIdx = bucket.length - 1;
+                    if (bIdx !== bLastIdx) {
+                        const bLastEnemy = bucket[bLastIdx];
+                        bucket[bIdx] = bLastEnemy;
+                        bLastEnemy.bucketIndex = bIdx;
+                    }
+                    bucket.pop();
+                }
 
-                if ((recycled.statusFlags & EnemyFlags.BOSS) === 0) enemyPool.push(recycled);
+                e.statusFlags |= EnemyFlags.DEAD;
+                e.deathState = EnemyDeathState.DEAD;
+                if ((e.statusFlags & EnemyFlags.BOSS) === 0) enemyPool.push(e);
             }
         }
     }

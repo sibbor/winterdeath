@@ -51,7 +51,6 @@ export const GeneratorUtils = {
             onPlace(mid, angle, dist);
         }
     },
-    // Insert createTextSprite logic here
     createTextSprite: (text: string, spriteTextureCache: Record<string, THREE.CanvasTexture>, spriteMaterialTemplate: THREE.SpriteMaterial) => {
         if (spriteTextureCache[text]) {
             const mat = spriteMaterialTemplate.clone();
@@ -79,5 +78,32 @@ export const GeneratorUtils = {
         const sprite = new THREE.Sprite(mat);
         sprite.scale.set(4, 1, 1);
         return sprite;
+    },
+
+    createTextMesh: (text: string, spriteTextureCache: Record<string, THREE.CanvasTexture>) => {
+        let tex = spriteTextureCache[text];
+        if (!tex) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d')!;
+            canvas.width = 256;
+            canvas.height = 64;
+            ctx.font = 'bold 24px Arial';
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+            tex = new THREE.CanvasTexture(canvas);
+            spriteTextureCache[text] = tex;
+        }
+
+        const mat = new THREE.MeshBasicMaterial({
+            map: tex,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+        return mesh;
     }
 };

@@ -10,6 +10,7 @@ import { PERKS, PerkCategory } from '../../../content/perks';
 import { CLUES } from '../../../content/clues';
 import { POIS } from '../../../content/pois';
 import { COLLECTIBLES } from '../../../content/collectibles';
+import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputTypes';
 
 interface DiscoveryPopupProps {
   onOpenAdventureLog: (tab?: DiscoveryType, itemId?: string) => void;
@@ -77,7 +78,8 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
     if (!visible) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
+      const action = INPUT_KEY_MAP[e.key];
+      if (action === InputAction.ENTER) {
         e.preventDefault();
         e.stopPropagation();
         handleInteraction();

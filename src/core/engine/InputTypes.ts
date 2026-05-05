@@ -26,9 +26,35 @@ export enum InputAction {
     CTRL = 17,
     SCROLL_UP = 18,
     SCROLL_DOWN = 19,
+    SLOT_5 = 20,
 
-    COUNT = 20
+    COUNT = 21
 }
+
+/**
+ * Mapping keyboard event keys to SMI-hardened InputActions.
+ * Zero-GC: Using a Record for O(1) lookup during key events.
+ */
+export const INPUT_KEY_MAP: Record<string, InputAction> = {
+    'w': InputAction.UP, 'W': InputAction.UP,
+    'a': InputAction.LEFT, 'A': InputAction.LEFT,
+    's': InputAction.DOWN, 'S': InputAction.DOWN,
+    'd': InputAction.RIGHT, 'D': InputAction.RIGHT,
+    ' ': InputAction.DODGE,
+    'r': InputAction.RELOAD, 'R': InputAction.RELOAD,
+    'e': InputAction.INTERACT, 'E': InputAction.INTERACT,
+    'f': InputAction.FLASHLIGHT, 'F': InputAction.FLASHLIGHT,
+    'm': InputAction.MAP, 'M': InputAction.MAP,
+    'Enter': InputAction.ENTER,
+    'Escape': InputAction.ESCAPE,
+    'Shift': InputAction.SHIFT,
+    'Control': InputAction.CTRL,
+    'ArrowUp': InputAction.UP,
+    'ArrowDown': InputAction.DOWN,
+    'ArrowLeft': InputAction.LEFT,
+    'ArrowRight': InputAction.RIGHT,
+    '1': InputAction.SLOT_1, '2': InputAction.SLOT_2, '3': InputAction.SLOT_3, '4': InputAction.SLOT_4, '5': InputAction.SLOT_5
+};
 
 /**
  * Optimized InputState for Zero-GC performance.

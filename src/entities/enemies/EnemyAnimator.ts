@@ -94,11 +94,15 @@ _executeHandlers[EnemyAttackType.JUMP] = (e, targetPos) => {
     _animState.hijackPhysics = true;
 
     // Prevent overlap! Calculate a landing offset so the enemy lands in front of the player
-    _v1.subVectors(_animState.startPos, targetPos).normalize().multiplyScalar(e.attackOffset + 0.5);
+    _v1.subVectors(_animState.startPos, targetPos).normalize().multiplyScalar(e.attackOffset);
     _v2.copy(targetPos).add(_v1);
 
-    _animState.targetPosX = THREE.MathUtils.lerp(_animState.startPos.x, _v2.x, _animState.progress);
-    _animState.targetPosZ = THREE.MathUtils.lerp(_animState.startPos.z, _v2.z, _animState.progress);
+    const progress = _animState.progress;
+    // Parabolic horizontal interpolation to make the leap feel more explosive at the start
+    const horizontalProgress = Math.pow(progress, 0.8);
+
+    _animState.targetPosX = THREE.MathUtils.lerp(_animState.startPos.x, _v2.x, horizontalProgress);
+    _animState.targetPosZ = THREE.MathUtils.lerp(_animState.startPos.z, _v2.z, horizontalProgress);
 };
 
 // --- SMASH & FREEZE JUMP ---
@@ -386,6 +390,20 @@ export const EnemyAnimator = {
             const jitter = 0.15;
             mesh.rotation.x += (Math.random() - 0.5) * jitter;
             mesh.rotation.z += (Math.random() - 0.5) * jitter;
+        }
+
+        // --- ELECTRIC JITTER (Phase 15 Visual Polish) ---
+        if (e.statusFlags & EnemyFlags.ELECTROCUTED) {
+            const jitterTime = renderTime * 0.06;
+            const jitterY = Math.sin(jitterTime) * 0.12;
+            const jitterScale = 1.0 + Math.sin(jitterTime * 1.3) * 0.08;
+            
+            mesh.position.y += jitterY;
+            mesh.scale.set(
+                _animState.targetScaleX * jitterScale,
+                _animState.targetScaleY * jitterScale,
+                _animState.targetScaleZ * jitterScale
+            );
         }
     }
 };

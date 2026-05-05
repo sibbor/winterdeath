@@ -5,6 +5,7 @@ import { GameSettings } from '../../../../core/engine/EngineTypes';
 import { SHADOW_PRESETS } from '../../../../content/constants';
 import { useOrientation } from '../../../../hooks/useOrientation';
 import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalButton, TacticalTab } from '../../layout/ScreenModalLayout';
+import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputTypes';
 
 interface ScreenSettingsProps {
     onClose: () => void;
@@ -65,11 +66,12 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, set
         if (!showReloadConfirm) return;
 
         const handleKeys = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
+            const action = INPUT_KEY_MAP[e.key];
+            if (action === InputAction.ESCAPE) {
                 e.stopPropagation();
                 setShowReloadConfirm(false);
                 UiSounds.playClick();
-            } else if (e.key === 'Enter') {
+            } else if (action === InputAction.ENTER) {
                 e.stopPropagation();
                 confirmReload();
             }

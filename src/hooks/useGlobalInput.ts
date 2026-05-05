@@ -3,6 +3,7 @@ import { UiSounds } from '../utils/audio/AudioLib';
 import { OverlayType } from '../components/ui/hud/HudTypes';
 import { GameScreen } from '../types/SessionTypes';
 import { HudStore } from '../store/HudStore';
+import { InputAction, INPUT_KEY_MAP } from '../core/engine/InputTypes';
 
 interface UIActions {
     setActiveOverlay: (val: OverlayType | null) => void;
@@ -44,8 +45,10 @@ export const useGlobalInput = (
             const screen = stateRef.current;
             const acts = actionsRef.current;
 
+            const action = INPUT_KEY_MAP[e.key];
+
             // ESC Logic
-            if (e.key === 'Escape') {
+            if (action === InputAction.ESCAPE) {
                 // Throttle ESC to prevent double-toggle on rapid presses
                 if (now - lastEscTimeRef.current < 150) return;
                 lastEscTimeRef.current = now;
@@ -98,8 +101,7 @@ export const useGlobalInput = (
                 }
             }
             // Map Logic (M)
-            // Manual character check avoids .toLowerCase() heap allocation
-            else if (e.key === 'm' || e.key === 'M') {
+            else if (action === InputAction.MAP) {
                 const isDead = HudStore.getState().isDead;
                 if (!current && !isDead) {
                     acts.setActiveOverlay(OverlayType.MAP);

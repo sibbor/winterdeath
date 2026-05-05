@@ -18,10 +18,6 @@ export class WeatherSystem implements System {
 
     private instancedMesh: THREE.InstancedMesh | null = null;
 
-    // Buffers for raw physics data
-    private positions: Float32Array;
-    private velocities: Float32Array;
-
     private scene: THREE.Scene;
     public type: WeatherType = WeatherType.NONE;
     private count: number = 0;
@@ -30,27 +26,14 @@ export class WeatherSystem implements System {
     private camera: THREE.Camera;
     private maxCount: number;
 
-    // Cached physics multiplier to avoid string checks in hot loop
+    // Cached physics multiplier for shader uniforms
     private swayMult: number = 0.0;
-
-    // VINTERDÖD FIX: Ökade LUT (Look-Up Table) från 512 till 4096 för massivt ökad variation
-    private _randLUT: Float32Array = new Float32Array(4096);
-    private _randIdx: number = 0;
 
     constructor(scene: THREE.Scene, wind: WindSystem, camera: THREE.Camera, maxCount: number = WEATHER_SYSTEM.MAX_NUM_PARTICLES) {
         this.scene = scene;
         this.wind = wind;
         this.camera = camera;
-
         this.maxCount = maxCount;
-
-        // Pre-allocate flat memory buffers
-        this.positions = new Float32Array(this.maxCount * 3);
-        this.velocities = new Float32Array(this.maxCount * 3);
-
-        for (let i = 0; i < this._randLUT.length; i++) {
-            this._randLUT[i] = Math.random();
-        }
     }
 
     public sync(type: WeatherType, targetCount: number, areaSize: number = 100) {
@@ -61,33 +44,32 @@ export class WeatherSystem implements System {
         this.count = actualCount;
         this.areaSize = areaSize;
 
+        // Set physics multipliers for the shader
+        switch (type) {
+            case WeatherType.RAIN: this.swayMult = 5.0; break;
+            case WeatherType.ASH: this.swayMult = 15.0; break;
+            case WeatherType.EMBER: this.swayMult = 25.0; break;
+            default: this.swayMult = 40.0; break;
+        }
+
         if (type === WeatherType.NONE || actualCount <= 0) {
             if (this.instancedMesh) this.instancedMesh.visible = false;
             return;
         }
 
-        let selectedMaterial: THREE.Material;
-        switch (type) {
-            case WeatherType.RAIN:
-                selectedMaterial = MATERIALS.particle_rain;
-                this.swayMult = 5.0; // Heavy, low sway
-                break;
-            case WeatherType.ASH:
-                selectedMaterial = MATERIALS.particle_ash;
-                this.swayMult = 15.0; // Light, drifting
-                break;
-            case WeatherType.EMBER:
-                selectedMaterial = MATERIALS.particle_ember;
-                this.swayMult = 25.0; // Very light, erratic
-                break;
-            default:
-                selectedMaterial = MATERIALS.particle_snow;
-                this.swayMult = 40.0; // Soft sway
-                break;
-        }
-
         if (!this.instancedMesh) {
-            this.instancedMesh = new THREE.InstancedMesh(GEOMETRY.weatherParticle, selectedMaterial, this.maxCount);
+            // VINTERDÖD: Clone geometry once to add custom attributes without affecting shared assets.
+            // This happens only once during system initialization or first weather sync.
+            const geo = GEOMETRY.weatherParticle.clone();
+            
+            const posArr = new Float32Array(this.maxCount * 3);
+            const velArr = new Float32Array(this.maxCount * 3);
+            
+            geo.setAttribute('initialPos', new THREE.InstancedBufferAttribute(posArr, 3));
+            geo.setAttribute('velocity', new THREE.InstancedBufferAttribute(velArr, 3));
+
+            const initialMaterial = this.createWeatherMaterial(type);
+            this.instancedMesh = new THREE.InstancedMesh(geo, initialMaterial, this.maxCount);
             this.instancedMesh.name = 'WeatherSystem_Particles';
             this.instancedMesh.userData = { isPersistent: true, isEngineStatic: true };
             this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -95,7 +77,11 @@ export class WeatherSystem implements System {
             this.instancedMesh.renderOrder = 999;
             this.scene.add(this.instancedMesh);
         } else if (isNewMaterial) {
-            this.instancedMesh.material = selectedMaterial;
+            // Clean up old shader material to prevent memory leaks
+            if (this.instancedMesh.material instanceof THREE.ShaderMaterial) {
+                this.instancedMesh.material.dispose();
+            }
+            this.instancedMesh.material = this.createWeatherMaterial(type);
         }
 
         this.instancedMesh.visible = true;
@@ -103,36 +89,26 @@ export class WeatherSystem implements System {
 
         this.instancedMesh.count = actualCount;
 
-        const pos = this.positions;
-        const vel = this.velocities;
-        const matrixArray = this.instancedMesh.instanceMatrix.array;
+        const initialPosAttr = this.instancedMesh.geometry.getAttribute('initialPos') as THREE.InstancedBufferAttribute;
+        const velocityAttr = this.instancedMesh.geometry.getAttribute('velocity') as THREE.InstancedBufferAttribute;
+        const pos = initialPosAttr.array as Float32Array;
+        const vel = velocityAttr.array as Float32Array;
 
-        const sX = type === WeatherType.RAIN ? 0.4 : 1.0;
-        const sY = type === WeatherType.RAIN ? 4.0 : 1.0;
-        const sZ = 1.0;
         const areaHalf = areaSize * 0.5;
 
-        const centerX = this.camera.position?.x || 0;
-        const centerZ = this.camera.position?.z || 0;
-
+        // Seed particles once during sync
         for (let i = 0; i < this.maxCount; i++) {
             const i3 = i * 3;
-            const matIdx = i * 16;
 
             if (i >= actualCount) {
-                matrixArray[matIdx + 0] = 0;
-                matrixArray[matIdx + 5] = 0;
-                matrixArray[matIdx + 10] = 0;
+                pos[i3 + 1] = -1000; // Hide unused
                 continue;
             }
 
-            const x = centerX + (Math.random() * areaSize) - areaHalf;
-            const y = Math.random() * 40;
-            const z = centerZ + (Math.random() * areaSize) - areaHalf;
-
-            pos[i3 + 0] = x;
-            pos[i3 + 1] = y;
-            pos[i3 + 2] = z;
+            // Initial random distribution (Seed-space, shader handles camera offset)
+            pos[i3 + 0] = (Math.random() * areaSize) - areaHalf;
+            pos[i3 + 1] = Math.random() * 40;
+            pos[i3 + 2] = (Math.random() * areaSize) - areaHalf;
 
             switch (type) {
                 case WeatherType.SNOW:
@@ -157,154 +133,114 @@ export class WeatherSystem implements System {
                     vel[i3 + 2] = 0;
                     break;
             }
-
-            matrixArray[matIdx + 0] = sX;   // Scale X
-            matrixArray[matIdx + 1] = 0;
-            matrixArray[matIdx + 2] = 0;
-            matrixArray[matIdx + 3] = 0;
-
-            matrixArray[matIdx + 4] = 0;
-            matrixArray[matIdx + 5] = sY;   // Scale Y
-            matrixArray[matIdx + 6] = 0;
-            matrixArray[matIdx + 7] = 0;
-
-            matrixArray[matIdx + 8] = 0;
-            matrixArray[matIdx + 9] = 0;
-            matrixArray[matIdx + 10] = sZ;  // Scale Z
-            matrixArray[matIdx + 11] = 0;
-
-            matrixArray[matIdx + 12] = x;   // Position X
-            matrixArray[matIdx + 13] = y;   // Position Y
-            matrixArray[matIdx + 14] = z;   // Position Z
-            matrixArray[matIdx + 15] = 1;   // W (Required for visibility)
         }
 
+        initialPosAttr.needsUpdate = true;
+        velocityAttr.needsUpdate = true;
+        
+        // Reset the instanceMatrix to Identity since we handle positioning in shader
+        this.instancedMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+        const identity = new THREE.Matrix4();
+        for(let i=0; i<this.maxCount; i++) this.instancedMesh.setMatrixAt(i, identity);
         this.instancedMesh.instanceMatrix.needsUpdate = true;
-
-        for (let i = 0; i < this._randLUT.length; i++) this._randLUT[i] = Math.random();
-        this._randIdx = 0;
     }
 
     public update(ctx: any, delta: number, simTime: number, renderTime: number) {
         if (!this.instancedMesh || !this.instancedMesh.visible || this.count === 0) return;
 
+        const mat = this.instancedMesh.material as THREE.ShaderMaterial;
+        if (!mat.uniforms) return;
+
+        // --- ZERO-GC UNIFORM UPDATE ---
+        mat.uniforms.uTime.value = renderTime * 0.001;
+
         const windVec = this.wind.current;
-        const wx = windVec.x * this.swayMult;
-        const wy = windVec.y * this.swayMult;
+        mat.uniforms.uWind.value.set(windVec.x * this.swayMult, windVec.y * this.swayMult);
 
-        const count = this.count;
-        const pos = this.positions;
-        const vel = this.velocities;
-        const areaSize = this.areaSize;
-        const areaHalf = areaSize * 0.5;
-
-        const isRain = this.type === WeatherType.RAIN;
-        const sY = isRain ? 4.0 : 1.0;
-
-        const centerX = this.camera.position?.x || 0;
-        const centerZ = this.camera.position?.z || 0;
-
-        const yTop = 40.0;
-        const matrixArray = this.instancedMesh.instanceMatrix.array;
-
-        for (let i = 0; i < count; i++) {
-            const i3 = i * 3;
-
-            // Physical integration
-            const vx = vel[i3 + 0] + wx;
-            const vy = vel[i3 + 1];
-            const vz = vel[i3 + 2] + wy;
-
-            let x = pos[i3 + 0] + vx * delta;
-            let y = pos[i3 + 1] + vy * delta;
-            let z = pos[i3 + 2] + vz * delta;
-
-            let needsReset = false;
-
-            // 1. Wrap Vertical
-            if (y < 0.0) {
-                y = yTop;
-                needsReset = true;
-            } else if (y > yTop) {
-                y = 0.0;
-                needsReset = true;
-            }
-
-            // 2. Wrap Horizontal
-            let wrappedX = false;
-            let wrappedZ = false;
-            while (x < centerX - areaHalf) { x += areaSize; wrappedX = true; }
-            while (x > centerX + areaHalf) { x -= areaSize; wrappedX = true; }
-            while (z < centerZ - areaHalf) { z += areaSize; wrappedZ = true; }
-            while (z > centerZ + areaHalf) { z -= areaSize; wrappedZ = true; }
-
-            if (wrappedX || wrappedZ) {
-                // Randomisera höjden så mönstret bryts när spelaren rör sig!
-                y = this._randLUT[this._randIdx++ & 4095] * yTop;
-                needsReset = true;
-            }
-
-            // 3. VINTERDÖD FIX: Total Randomization
-            // When a particle is reset, give it a NEW position AND a NEW velocity.
-            // This kills the repetitive "rain clusters".
-            if (needsReset) {
-                const r0 = this._randLUT[this._randIdx++ & 4095];
-                const r1 = this._randLUT[this._randIdx++ & 4095];
-                const r2 = this._randLUT[this._randIdx++ & 4095];
-
-                // If it hit the ceiling/floor, randomize X/Z
-                if (!wrappedX && !wrappedZ) {
-                    x = centerX + (r0 * areaSize - areaHalf);
-                    z = centerZ + (r1 * areaSize - areaHalf);
-                }
-
-                // Generate a completely new velocity
-                switch (this.type) {
-                    case WeatherType.RAIN:
-                        vel[i3 + 1] = -(50 + r2 * 30);
-                        break;
-                    case WeatherType.SNOW:
-                        vel[i3 + 1] = -(2.5 + r2 * 3.5);
-                        vel[i3 + 0] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 1.2;
-                        vel[i3 + 2] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 1.2;
-                        break;
-                    case WeatherType.ASH:
-                        vel[i3 + 1] = -(1.5 + r2 * 2.5);
-                        vel[i3 + 0] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 1.5;
-                        vel[i3 + 2] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 1.5;
-                        break;
-                    case WeatherType.EMBER:
-                        vel[i3 + 1] = (1 + r2 * 4);
-                        vel[i3 + 0] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 3;
-                        vel[i3 + 2] = (this._randLUT[this._randIdx++ & 4095] - 0.5) * 3;
-                        break;
-                }
-            }
-
-            pos[i3 + 0] = x;
-            pos[i3 + 1] = y;
-            pos[i3 + 2] = z;
-
-            const matIdx = i * 16;
-
-            // 4. Physical Shear (tilt the rain)
-            if (isRain) {
-                // By mapping the geometry Y-axis (col 1) to the velocity vector,
-                // the particle tilts exactly in the direction the wind and gravity are pulling it.
-                const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
-                // We invert the vectors so +Y points up towards the wind source, preventing skewed normals
-                matrixArray[matIdx + 4] = -(vx / speed) * sY;
-                matrixArray[matIdx + 5] = -(vy / speed) * sY;
-                matrixArray[matIdx + 6] = -(vz / speed) * sY;
-            }
-
-            // Update the position
-            matrixArray[matIdx + 12] = x;
-            matrixArray[matIdx + 13] = y;
-            matrixArray[matIdx + 14] = z;
+        if (this.camera.position) {
+            mat.uniforms.uPlayerPos.value.copy(this.camera.position);
         }
+    }
 
-        this.instancedMesh.instanceMatrix.needsUpdate = true;
+    private createWeatherMaterial(type: WeatherType): THREE.ShaderMaterial {
+        const isRain = type === WeatherType.RAIN;
+        const color = isRain ? 0xaaaaff : (type === WeatherType.ASH ? 0x333333 : (type === WeatherType.EMBER ? 0xff4400 : 0xffffff));
+        const opacity = isRain ? 0.6 : 0.8;
+
+        return new THREE.ShaderMaterial({
+            uniforms: {
+                uTime: { value: 0 },
+                uWind: { value: new THREE.Vector2() },
+                uPlayerPos: { value: new THREE.Vector3() },
+                uAreaSize: { value: this.areaSize },
+                uYTop: { value: 40.0 },
+                uColor: { value: new THREE.Color(color) },
+                uOpacity: { value: opacity },
+                uIsRain: { value: isRain ? 1.0 : 0.0 }
+            },
+            vertexShader: `
+                uniform float uTime;
+                uniform vec2 uWind;
+                uniform vec3 uPlayerPos;
+                uniform float uAreaSize;
+                uniform float uYTop;
+                uniform float uIsRain;
+
+                attribute vec3 initialPos;
+                attribute vec3 velocity;
+
+                void main() {
+                    float areaHalf = uAreaSize * 0.5;
+                    
+                    // 1. Calculate world-space position with wrap-around
+                    // We use initialPos as the seed.
+                    vec3 pos = initialPos;
+                    
+                    // Apply velocity and wind
+                    pos.x += (velocity.x + uWind.x) * uTime;
+                    pos.y += velocity.y * uTime;
+                    pos.z += (velocity.z + uWind.y) * uTime;
+                    
+                    // 2. Wrap Y (Vertical Loop)
+                    pos.y = mod(pos.y, uYTop);
+                    
+                    // 3. Wrap X and Z around the player camera
+                    // This creates a "moving volume" of particles
+                    pos.x = uPlayerPos.x + mod(pos.x - uPlayerPos.x + areaHalf, uAreaSize) - areaHalf;
+                    pos.z = uPlayerPos.z + mod(pos.z - uPlayerPos.z + areaHalf, uAreaSize) - areaHalf;
+                    
+                    // 4. Handle Rain Tilting (Physical Shear)
+                    vec3 localPos = position;
+                    if (uIsRain > 0.5) {
+                        vec3 totalVel = vec3(velocity.x + uWind.x, velocity.y, velocity.z + uWind.y);
+                        float speed = length(totalVel);
+                        vec3 dir = totalVel / speed;
+                        
+                        // Tilt the geometry based on its Y-coordinate
+                        // If localPos.y is 1 (top of rain streak), offset it by the direction
+                        if (localPos.y > 0.0) {
+                            // Rain is stretched on Y in geometry, so we tilt the top part
+                            // (This is a simplified version of the CPU logic)
+                            localPos.x += dir.x * localPos.y * 2.0;
+                            localPos.z += dir.z * localPos.y * 2.0;
+                        }
+                    }
+
+                    vec4 worldPos = vec4(pos + localPos, 1.0);
+                    gl_Position = projectionMatrix * viewMatrix * worldPos;
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 uColor;
+                uniform float uOpacity;
+                void main() {
+                    gl_FragColor = vec4(uColor, uOpacity);
+                }
+            `,
+            transparent: true,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
     }
 
     public clear() {

@@ -5,6 +5,8 @@ import { MATERIALS } from '../utils/assets/materials';
 import { NoiseType } from '../entities/enemies/EnemyTypes';
 import { System, SystemID } from './System';
 import { FXParticleType } from '../types/FXTypes';
+import { ChunkManager } from '../core/world/ChunkManager';
+import { SPATIAL_CONFIG } from '../config/SpatialConfig';
 
 interface WaterBind {
     uTime: { value: number };
@@ -93,7 +95,7 @@ export class WaterSurface {
         this.mesh = new THREE.Mesh(geometry, this.material);
         this.mesh.position.set(x, 0.35, z);
         this.mesh.renderOrder = 1;
-        this.mesh.frustumCulled = false;
+        this.mesh.frustumCulled = true; // RESTORE FRUSTUM CULLING
         this.mesh.userData.material = 'WATER';
     }
 
@@ -196,16 +198,9 @@ export class WaterSystem implements System {
             const geo = new THREE.PlaneGeometry(0.3, 1.5, 2, 4);
             geo.translate(0, 0.75, 0);
 
-            let totalStrands = 0;
+            const chunkBuckets = new Map<number, THREE.Matrix4[]>();
             const seaweedLen = seaweed.length;
-            for (let i = 0; i < seaweedLen; i++) totalStrands += 3 + Math.floor(Math.random() * 3);
-
-            this.seaweedMesh = new THREE.InstancedMesh(geo, MATERIALS.seaweed, totalStrands);
-            this.seaweedMesh.userData.material = 'LEAVES';
-            this.seaweedMesh.frustumCulled = false;
-            this.seaweedMesh.renderOrder = 2; // Above water
-
-            let idx = 0;
+            
             for (let i = 0; i < seaweedLen; i++) {
                 const s = seaweed[i];
                 const strands = 3 + Math.floor(Math.random() * 3);
@@ -216,11 +211,28 @@ export class WaterSystem implements System {
                     _sharedDummy.scale.set(s.scale.x, s.scale.y, s.scale.x);
                     _sharedDummy.rotation.y = s.rotationY + Math.random() * Math.PI;
                     _sharedDummy.updateMatrix();
-                    this.seaweedMesh!.setMatrixAt(idx++, _sharedDummy.matrix);
+                    
+                    const key = ChunkManager.getSmiKey(ChunkManager.getCoordIndex(_sharedDummy.position.x), ChunkManager.getCoordIndex(_sharedDummy.position.z));
+                    let bucket = chunkBuckets.get(key);
+                    if (!bucket) {
+                        bucket = [];
+                        chunkBuckets.set(key, bucket);
+                    }
+                    bucket.push(_sharedDummy.matrix.clone());
                 }
             }
-            this.seaweedMesh.instanceMatrix.needsUpdate = true;
-            this.scene.add(this.seaweedMesh);
+
+            chunkBuckets.forEach((matrices, key) => {
+                const ix = key >> 8;
+                const iz = key & 0xFF;
+                const mesh = new THREE.InstancedMesh(geo, MATERIALS.seaweed, matrices.length);
+                mesh.userData.material = 'LEAVES';
+                mesh.frustumCulled = true;
+                mesh.renderOrder = 2;
+                for (let i = 0; i < matrices.length; i++) mesh.setMatrixAt(i, matrices[i]);
+                mesh.instanceMatrix.needsUpdate = true;
+                ChunkManager.registerMesh(ix, iz, mesh);
+            });
         }
 
         if (lilies.length > 0) {
@@ -230,72 +242,67 @@ export class WaterSystem implements System {
             stemGeo.translate(0, -stemLength / 2, 0);
             const flowerGeo = new THREE.ConeGeometry(0.15, 0.2, 5);
 
-            this.lilyPads = new THREE.InstancedMesh(padGeo, MATERIALS.waterLily, lilies.length);
-            this.lilyPads.userData.material = 'PLANT';
-            this.lilyPads.frustumCulled = false;
-
-            this.lilyStems = new THREE.InstancedMesh(stemGeo, MATERIALS.seaweed, lilies.length);
-            this.lilyStems.frustumCulled = false;
-
-            this.lilyFlowers = new THREE.InstancedMesh(flowerGeo, MATERIALS.waterLilyFlower, lilies.length);
-            this.lilyFlowers.frustumCulled = false;
-
-            this.lilyData = [];
-
+            const chunkBuckets = new Map<number, { matrices: THREE.Matrix4[], flowerMatrices: THREE.Matrix4[] }>();
             const liliesLen = lilies.length;
+            
             for (let i = 0; i < liliesLen; i++) {
                 const l = lilies[i];
+                const key = ChunkManager.getSmiKey(ChunkManager.getCoordIndex(l.position.x), ChunkManager.getCoordIndex(l.position.z));
+                let bucket = chunkBuckets.get(key);
+                if (!bucket) {
+                    bucket = { matrices: [], flowerMatrices: [] };
+                    chunkBuckets.set(key, bucket);
+                }
 
                 _sharedDummy.position.copy(l.position);
                 _sharedDummy.rotation.y = l.rotationY;
                 _sharedDummy.scale.set(l.scale.x, 1, l.scale.z * 0.8);
                 _sharedDummy.updateMatrix();
+                const mat = _sharedDummy.matrix.clone();
+                bucket.matrices.push(mat);
 
-                this.lilyPads!.setMatrixAt(i, _sharedDummy.matrix);
-                this.lilyPads!.setColorAt(i, _sharedWhiteColor);
-
-                _sharedDummy.scale.set(l.scale.x, l.scale.y, l.scale.z);
-                _sharedDummy.updateMatrix();
-                this.lilyStems!.setMatrixAt(i, _sharedDummy.matrix);
-
-                const hasFlower = Math.random() > 0.6;
-                const flowerRot = new THREE.Euler((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.4);
-
-                if (hasFlower) {
+                if (Math.random() > 0.6) {
                     _sharedDummyFlower.copy(_sharedDummy);
                     _sharedDummyFlower.position.x += 0.1 * l.scale.x;
                     _sharedDummyFlower.position.y += 0.1;
                     _sharedDummyFlower.position.z += 0.1 * l.scale.z;
-                    _sharedDummyFlower.rotation.copy(flowerRot);
+                    _sharedDummyFlower.rotation.set((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.4);
                     _sharedDummyFlower.updateMatrix();
-                    this.lilyFlowers!.setMatrixAt(i, _sharedDummyFlower.matrix);
-                    this.lilyFlowers!.setColorAt(i, _sharedWhiteColor);
-                } else {
-                    _sharedDummyFlower.scale.set(0, 0, 0);
-                    _sharedDummyFlower.updateMatrix();
-                    this.lilyFlowers!.setMatrixAt(i, _sharedDummyFlower.matrix);
+                    bucket.flowerMatrices.push(_sharedDummyFlower.matrix.clone());
                 }
-
-                this.lilyData.push({
-                    position: l.position.clone(),
-                    velocity: 0,
-                    scale: new THREE.Vector3(l.scale.x, l.scale.y, l.scale.z),
-                    rotationY: l.rotationY,
-                    hasFlower,
-                    flowerRot
-                });
             }
 
-            this.lilyPads.instanceMatrix.needsUpdate = true;
-            this.lilyStems.instanceMatrix.needsUpdate = true;
-            this.lilyFlowers.instanceMatrix.needsUpdate = true;
+            chunkBuckets.forEach((data, key) => {
+                const ix = key >> 8;
+                const iz = key & 0xFF;
+                
+                const pads = new THREE.InstancedMesh(padGeo, MATERIALS.waterLily, data.matrices.length);
+                pads.frustumCulled = true;
+                pads.userData.material = 'PLANT';
+                for (let i = 0; i < data.matrices.length; i++) {
+                    pads.setMatrixAt(i, data.matrices[i]);
+                    pads.setColorAt(i, _sharedWhiteColor);
+                }
+                pads.instanceMatrix.needsUpdate = true;
+                ChunkManager.registerMesh(ix, iz, pads);
 
-            if (this.lilyPads.instanceColor) this.lilyPads.instanceColor.needsUpdate = true;
-            if (this.lilyFlowers.instanceColor) this.lilyFlowers.instanceColor.needsUpdate = true;
+                const stems = new THREE.InstancedMesh(stemGeo, MATERIALS.seaweed, data.matrices.length);
+                stems.frustumCulled = true;
+                for (let i = 0; i < data.matrices.length; i++) stems.setMatrixAt(i, data.matrices[i]);
+                stems.instanceMatrix.needsUpdate = true;
+                ChunkManager.registerMesh(ix, iz, stems);
 
-            this.scene.add(this.lilyPads);
-            this.scene.add(this.lilyStems);
-            this.scene.add(this.lilyFlowers);
+                if (data.flowerMatrices.length > 0) {
+                    const flowers = new THREE.InstancedMesh(flowerGeo, MATERIALS.waterLilyFlower, data.flowerMatrices.length);
+                    flowers.frustumCulled = true;
+                    for (let i = 0; i < data.flowerMatrices.length; i++) {
+                        flowers.setMatrixAt(i, data.flowerMatrices[i]);
+                        flowers.setColorAt(i, _sharedWhiteColor);
+                    }
+                    flowers.instanceMatrix.needsUpdate = true;
+                    ChunkManager.registerMesh(ix, iz, flowers);
+                }
+            });
         }
     }
 
@@ -540,8 +547,19 @@ export class WaterSystem implements System {
     private updateBodyPhysics(body: WaterBody, dt: number, now: number): void {
         const props = body.floatingProps;
         const len = props.length;
+        const pPos = this.playerGroup?.position;
+        const throttleSq = SPATIAL_CONFIG.AI_THROTTLED_RADIUS_SQ;
+
         for (let i = 0; i < len; i++) {
             const prop = props[i];
+
+            // --- DISTANCE GATING ---
+            if (pPos) {
+                const dx = prop.position.x - pPos.x;
+                const dz = prop.position.z - pPos.z;
+                if (dx * dx + dz * dz > throttleSq) continue;
+            }
+
             const vel = prop.userData.velocity as THREE.Vector3;
             this.checkBuoyancy(prop.position.x, prop.position.y, prop.position.z, now);
             vel.y -= 19.8 * dt;
@@ -647,9 +665,18 @@ export class WaterSystem implements System {
 
         let needsUpdate = false;
         const len = this.lilyData.length;
+        const pPos = this.playerGroup?.position;
+        const throttleSq = SPATIAL_CONFIG.AI_THROTTLED_RADIUS_SQ;
 
         for (let i = 0; i < len; i++) {
             const data = this.lilyData[i];
+
+            // --- DISTANCE GATING ---
+            if (pPos) {
+                const dx = data.position.x - pPos.x;
+                const dz = data.position.z - pPos.z;
+                if (dx * dx + dz * dz > throttleSq) continue;
+            }
 
             this.checkBuoyancy(data.position.x, data.position.y, data.position.z, now);
             data.velocity -= 19.8 * dt;

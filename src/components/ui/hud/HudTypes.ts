@@ -160,6 +160,7 @@ export interface HudState {
   magSize: number;
   score: number;
   scrap: number;
+  challengePoints: number;
   multiplier: number;
   activeWeapon: WeaponType;
   isReloading: boolean;
@@ -230,4 +231,5 @@ export interface HudState {
   sectorName: string;
   isMobileDevice: boolean;
   discovery: DiscoveryEvent;
+  challengeTiers: Int32Array;
 }

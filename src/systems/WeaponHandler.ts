@@ -138,17 +138,17 @@ export const WeaponHandler = {
     enabled: true,
     persistent: true,
 
-    // Handle switching weapons via 1-4 keys
-    handleSlotSwitch: (state: any, loadout: any, key: string) => {
+    // Handle switching weapons via 1-5 keys
+    handleSlotSwitch: (state: any, loadout: any, action: InputAction) => {
         // Block input during cinematics
         if (state.vehicle.active || state.cinematicActive) return;
         let next: WeaponType | null = null;
-        switch (key) {
-            case '1': next = loadout.primary; break;
-            case '2': next = loadout.secondary; break;
-            case '3': next = loadout.throwable; break;
-            case '4': next = loadout.special; break;
-            case '5': next = WeaponType.RADIO; break;
+        switch (action) {
+            case InputAction.SLOT_1: next = loadout.primary; break;
+            case InputAction.SLOT_2: next = loadout.secondary; break;
+            case InputAction.SLOT_3: next = loadout.throwable; break;
+            case InputAction.SLOT_4: next = loadout.special; break;
+            case InputAction.SLOT_5: next = WeaponType.RADIO; break;
         }
 
         if (!next) return;

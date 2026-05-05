@@ -44,7 +44,8 @@ const areEqual = (prevProps: CampHUDProps, nextProps: CampHUDProps) => {
     return pb[PlayerStatID.LEVEL] === nb[PlayerStatID.LEVEL] &&
         pb[PlayerStatID.CURRENT_XP] === nb[PlayerStatID.CURRENT_XP] &&
         pb[PlayerStatID.SKILL_POINTS] === nb[PlayerStatID.SKILL_POINTS] &&
-        pb[PlayerStatID.SCRAP] === nb[PlayerStatID.SCRAP];
+        pb[PlayerStatID.SCRAP] === nb[PlayerStatID.SCRAP] &&
+        pb[PlayerStatID.TOTAL_CHALLENGE_POINTS] === nb[PlayerStatID.TOTAL_CHALLENGE_POINTS];
 };
 
 const CampHUD: React.FC<CampHUDProps> = React.memo(({
@@ -98,6 +99,12 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
                         className={`w-20 h-20 aspect-square border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 flex flex-col items-center justify-center ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'bg-yellow-950/40 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'bg-black/80 border-slate-700'}`}>
                         <span className={`text-[10px] block uppercase font-bold ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'text-yellow-600' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
                         <span className={`text-2xl font-bold font-mono ${stats.statsBuffer[PlayerStatID.SCRAP] > 0 ? 'text-yellow-500' : 'text-white'}`}>{stats.statsBuffer[PlayerStatID.SCRAP]}</span>
+                    </div>
+
+                    {/* Challenge Points (CP) */}
+                    <div className={`w-20 h-20 aspect-square border backdrop-blur-sm transition-all flex flex-col items-center justify-center ${stats.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] > 0 ? 'bg-red-950/40 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-black/80 border-slate-700'}`}>
+                        <span className={`text-[10px] block uppercase font-bold ${stats.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] > 0 ? 'text-red-600' : 'text-slate-500'}`}>CP</span>
+                        <span className={`text-2xl font-bold font-mono ${stats.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] > 0 ? 'text-red-500' : 'text-white'}`}>{stats.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS]}</span>
                     </div>
                 </div>
             </div>

@@ -15,6 +15,7 @@ import { WeatherType } from '../../core/engine/EngineTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { CampEffectsSystem, FamilyAnimationSystem, CampChatterSystem } from './CampSystems';
 import { SystemID } from '../../systems/System';
+import { ChunkManager } from '../../core/world/ChunkManager';
 
 // Zero-GC Scratchpads
 const _v1 = new THREE.Vector3();
@@ -465,6 +466,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             window.removeEventListener('touchstart', onTS);
             window.removeEventListener('resize', onResize);
             if (engineRef.current) engineRef.current.clearUpdateContext();
+
+            // Wipe spatial chunks to prevent camp objects appearing in sectors
+            ChunkManager.clear();
         };
     }, [isGameRunning, stats, currentLoadout, currentSector]);
 

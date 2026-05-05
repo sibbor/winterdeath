@@ -70,6 +70,7 @@ export enum PlayerStatID {
     TOTAL_LONG_RANGE_KILLS = 42,
     TOTAL_SECTORS_COMPLETED = 43,
     TOTAL_CRITICAL_HITS = 44,
+    TOTAL_CHALLENGE_POINTS = 45,
 
     // Buffer Size
     COUNT = 48
@@ -246,6 +247,7 @@ export interface PlayerStats {
     // --- CHALLENGE PROGRESSION ---
     // Stores current tier (0-3) for each ChallengeID
     challengeTiers: Int32Array;
+    totalChallengePoints: number;
 }
 
 /**

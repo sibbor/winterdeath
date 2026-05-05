@@ -4,7 +4,7 @@ import { GameCanvasProps } from '../../types/CanvasTypes';
 import { UiSounds } from '../../utils/audio/AudioLib';
 import { FLASHLIGHT } from '../../content/constants';
 import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
-import { InputAction } from '../../core/engine/InputTypes';
+import { InputAction, INPUT_KEY_MAP } from '../../core/engine/InputTypes';
 
 export const useGameInput = (
     refs: any,
@@ -19,8 +19,11 @@ export const useGameInput = (
         const handleKeyDown = (e: KeyboardEvent) => {
             if (props.isPaused) return;
 
-            // Only trap arrow keys in debug mode
-            if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+            const action = INPUT_KEY_MAP[e.key];
+            const isArrowKey = action === InputAction.UP || action === InputAction.DOWN || action === InputAction.LEFT || action === InputAction.RIGHT;
+
+            // Only trap directional keys in debug mode for camera control
+            if (isArrowKey) {
                 if (!props.debugMode) return;
                 e.preventDefault();
             }
@@ -28,11 +31,11 @@ export const useGameInput = (
             const engine = refs.engineRef.current;
             if (!engine) return;
 
-            switch (e.key) {
-                case 'ArrowLeft': engine.camera.adjustAngle(Math.PI / 4); break;
-                case 'ArrowRight': engine.camera.adjustAngle(-Math.PI / 4); break;
-                case 'ArrowUp': engine.camera.adjustPitch(2.0); break;
-                case 'ArrowDown': engine.camera.adjustPitch(-2.0); break;
+            switch (action) {
+                case InputAction.LEFT: engine.camera.adjustAngle(Math.PI / 4); break;
+                case InputAction.RIGHT: engine.camera.adjustAngle(-Math.PI / 4); break;
+                case InputAction.UP: engine.camera.adjustPitch(2.0); break;
+                case InputAction.DOWN: engine.camera.adjustPitch(-2.0); break;
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -53,19 +56,19 @@ export const useGameInput = (
             const state = refs.stateRef.current;
             if (!state) return;
 
+            const action = INPUT_KEY_MAP[e.key];
+
             // Escape is handled by Global Hook in App.tsx
             // We just return here for Escape to avoid double-processing
-            if (e.key === 'Escape') {
+            if (action === InputAction.ESCAPE) {
                 return;
             }
 
 
             if (!isInputEnabled) return;
 
-            const key = e.key.toLowerCase();
-
             // Flashlight Toggle
-            if (key === 'f') {
+            if (action === InputAction.FLASHLIGHT) {
                 if (state.flashlightOn === undefined) state.flashlightOn = true;
                 state.flashlightOn = !state.flashlightOn;
 
@@ -83,7 +86,7 @@ export const useGameInput = (
 
         const handleKeyUp = (e: KeyboardEvent) => {
             if (!isInputEnabled) return;
-            const key = e.key;
+            const action = INPUT_KEY_MAP[e.key];
 
             const state = refs.stateRef.current;
             const engine = refs.engineRef.current;
@@ -92,7 +95,8 @@ export const useGameInput = (
             if (state.statusFlags & PlayerStatusFlags.DEAD) return;
 
             // Dodging / Rushing cleanup (Movement handling is moved to PlayerMovementSystem)
-            if (key === ' ') {
+            if (action === InputAction.DODGE) {
+                // Space released
             }
         };
 

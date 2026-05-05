@@ -63,6 +63,7 @@ const createHudBuffer = () => ({
     magSize: 0,
     score: 0,
     scrap: 0,
+    challengePoints: 0,
     multiplier: 1,
     activeWeapon: WeaponType.PISTOL,
     isReloading: false,
@@ -130,7 +131,8 @@ const createHudBuffer = () => ({
 
     sectorName: '',
     isMobileDevice: false,
-    discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 }
+    discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 },
+    challengeTiers: new Int32Array(64)
 });
 
 // Double-buffering
@@ -159,6 +161,7 @@ const _fastUpdateDetail = {
     throttleState: 0,
     kills: 0,
     scrap: 0,
+    challengePoints: 0,
     spEarned: 0,
     // Phase 12 Expansion
     isCritical: false,
@@ -217,6 +220,7 @@ export const HudSystem = {
         _fastUpdateDetail.throttleState = state.vehicle.active ? state.vehicle.throttle : 0;
         _fastUpdateDetail.kills = state.sessionStats.kills;
         _fastUpdateDetail.scrap = (props.stats?.statsBuffer?.[PlayerStatID.SCRAP] || 0) + state.statsBuffer[PlayerStatID.SCRAP];
+        _fastUpdateDetail.challengePoints = (props.stats?.statsBuffer?.[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0) + state.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS];
         _fastUpdateDetail.spEarned = state.sessionStats.spGained;
 
         // Phase 12 Additions
@@ -372,6 +376,7 @@ export const HudSystem = {
         _current.magSize = wep?.magSize || 0;
         _current.score = state.statsBuffer[PlayerStatID.SCORE];
         _current.scrap = (props.stats?.statsBuffer?.[PlayerStatID.SCRAP] || 0) + state.statsBuffer[PlayerStatID.SCRAP];
+        _current.challengePoints = (props.stats?.statsBuffer?.[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0) + state.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS];
 
         _current.activeWeapon = state.activeWeapon;
         _current.isReloading = state.isReloading;
@@ -392,10 +397,14 @@ export const HudSystem = {
             _current.enemyKills.set(state.enemyKills);
             
             // Note: We use reference copy for arrays since they are mostly static 
-            // but we might need to clone if discovery happens at high frequency.
             // For now, stable arrays in stats are fine.
             _current.seenEnemies = state.stats.seenEnemies;
             _current.seenBosses = state.stats.seenBosses;
+
+            // Sync challenge tiers
+            if (state.stats.challengeTiers) {
+                _current.challengeTiers.set(state.stats.challengeTiers);
+            }
         }
 
         if (state.sectorState) {

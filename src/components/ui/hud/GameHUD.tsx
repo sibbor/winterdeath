@@ -10,7 +10,7 @@ import { UiSounds } from '../../../utils/audio/AudioLib';
 import DamageVignette from './DamageVignette';
 import DiscoveryPopup from './DiscoveryPopup';
 import InteractionPrompt from './InteractionPrompt';
-import ChallengeTracker from './ChallengeTracker';
+import ChallengePopup from './ChallengePopup';
 import { InteractionType } from '../../../systems/InteractionTypes';
 import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
 import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
@@ -807,13 +807,15 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     return (
         <div ref={hudContainerRef} className="absolute inset-0 pointer-events-none">
             <DamageVignette />
+
             <DiscoveryPopup onOpenAdventureLog={(tab, itemId) => {
                 // We assume there's a prop or global way to open it, 
                 // but usually GameHUD is used inside a screen that handles this.
                 // In winterdeath, we often use CustomEvents or props.
                 window.dispatchEvent(new CustomEvent('open-adventure-log', { detail: { tab, itemId } }));
             }} />
-            <ChallengeTracker />
+
+            <ChallengePopup />
 
             <div className={`${HUD_WRAPPER} ${!hudVisible || isDead || isDisoriented ? 'opacity-0 -translate-y-4 blur-[5px]' : 'opacity-100 translate-y-0 blur-0 animate-hudFadeIn'}`}>
 
@@ -962,9 +964,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             </div>
 
             {/* Interaction Prompt (Highest Priority - Centered and scaled for mobile) */}
-            <div 
-                ref={interactionRef} 
-                className={`absolute ${isMobileDevice ? 'bottom-[25%] scale-150' : 'bottom-40'} left-1/2 -translate-x-1/2 z-[200] pointer-events-auto transition-all duration-300 ease-out`} 
+            <div
+                ref={interactionRef}
+                className={`absolute ${isMobileDevice ? 'bottom-[25%] scale-150' : 'bottom-40'} left-1/2 -translate-x-1/2 z-[200] pointer-events-auto transition-all duration-300 ease-out`}
                 style={{ display: 'none' }}
             >
                 <InteractionPrompt

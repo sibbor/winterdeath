@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
+import { SPATIAL_CONFIG } from '../../config/SpatialConfig';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _tempColor = new THREE.Color();
@@ -130,11 +131,29 @@ export class AshRenderer {
     /**
      * Updates active animations every frame
      */
-    public update(now: number) {
+    public update(now: number, playerPos?: THREE.Vector3) {
         let dirty = false;
+
+        const pX = playerPos ? playerPos.x : 0;
+        const pZ = playerPos ? playerPos.z : 0;
+        const checkDist = playerPos !== undefined;
+        const throttleDistSq = SPATIAL_CONFIG.AI_THROTTLED_RADIUS_SQ;
 
         for (let i = this.animatingList.length - 1; i >= 0; i--) {
             const anim = this.animatingList[i];
+
+            // --- SPATIAL GATING (Zero-GC) ---
+            if (checkDist) {
+                const dx = anim.pos.x - pX;
+                const dz = anim.pos.z - pZ;
+                if (dx * dx + dz * dz > throttleDistSq) {
+                    // Too far to animate or show, but keep in list to finish later 
+                    // or just hide if we want to be aggressive.
+                    // For ash, let's just skip the matrix update.
+                    continue;
+                }
+            }
+
             const age = now - anim.startTime;
             let progress = age / anim.duration;
 

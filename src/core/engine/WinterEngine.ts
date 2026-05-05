@@ -60,6 +60,9 @@ export class WinterEngine {
     private requestID: number | null = null;
     private isRunning: boolean = false;
     private container: HTMLElement | null = null;
+    public depthTexture: THREE.DepthTexture | null = null;
+    private renderTarget: THREE.WebGLRenderTarget | null = null;
+    private screenQuad: THREE.Mesh | null = null;
 
     // --- FIXED-STEP ACCUMULATOR ---
     /** 60Hz Physics/Logic target in seconds */
@@ -204,6 +207,20 @@ export class WinterEngine {
         this.renderer.shadowMap.enabled = this.settings.shadows;
         this.renderer.shadowMap.type = this.settings.shadowMapType as THREE.ShadowMapType;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+        // VINTERDÖD: Depth Texture Support for Soft Fog/Particles
+        if (this.settings.volumetricFog) {
+            this.depthTexture = new THREE.DepthTexture(window.innerWidth, window.innerHeight);
+            this.renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+                depthTexture: this.depthTexture,
+                depthBuffer: true
+            });
+            
+            // Fullscreen quad for blitting the result back to the screen
+            const quadGeo = new THREE.PlaneGeometry(2, 2);
+            const quadMat = new THREE.MeshBasicMaterial({ map: this.renderTarget.texture });
+            this.screenQuad = new THREE.Mesh(quadGeo, quadMat);
+        }
 
         // VINTERDÖD: The canvas never needs pointer events on any device.
         // All interactions are captured by the GameSessionUI click-catcher overlay,
@@ -470,6 +487,14 @@ export class WinterEngine {
 
         this.camera.set('aspect', width / height);
         this.renderer.setSize(width, height);
+        
+        if (this.renderTarget) {
+            this.renderTarget.setSize(width, height);
+            if (this.depthTexture) {
+                this.depthTexture.image.width = width;
+                this.depthTexture.image.height = height;
+            }
+        }
     };
 
     /**
@@ -557,6 +582,37 @@ export class WinterEngine {
         if (!this.isRenderingPaused) {
             if (this.onRender) {
                 this.onRender();
+            } else if (this.renderTarget && this.settings.volumetricFog) {
+                // VINTERDÖD FIX: Prevent Feedback Loop (Feedback loop formed between Framebuffer and active Texture)
+                // We must render the scene WITHOUT the depth-reading volumetric fog mesh first,
+                // then render the fog mesh in a second pass once the depth texture is populated.
+                const fogMesh = this.fog?.fogMesh;
+                const fogWasVisible = fogMesh ? fogMesh.visible : false;
+                
+                if (fogMesh && fogWasVisible) {
+                    fogMesh.visible = false;
+                }
+
+                // 1. Render Scene to Target (Captures Depth from opaque geometry)
+                this.renderer.setRenderTarget(this.renderTarget);
+                this.renderer.render(this.scene, this.camera.threeCamera);
+                
+                // 2. Render Target Texture to Screen (Blit)
+                this.renderer.setRenderTarget(null);
+                if (this.screenQuad) {
+                    const oldAutoClear = this.renderer.autoClear;
+                    this.renderer.autoClear = false;
+                    // Render the quad with a simple internal orthographic projection
+                    this.renderer.render(this.screenQuad as any, new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1));
+
+                    // 3. Render Volumetric Fog (Now that we are on the screen buffer, no feedback loop with depth texture!)
+                    if (fogMesh && fogWasVisible) {
+                        fogMesh.visible = true;
+                        this.renderer.render(fogMesh, this.camera.threeCamera);
+                    }
+
+                    this.renderer.autoClear = oldAutoClear;
+                }
             } else {
                 monitor.begin('render_draw');
                 this.renderer.render(this.scene, this.camera.threeCamera);

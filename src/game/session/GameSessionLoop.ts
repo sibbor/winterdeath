@@ -32,6 +32,7 @@ import { WeaponFX } from '../../systems/WeaponFX';
 import { PerkFX } from '../../systems/PerkFX';
 import { SectorSystem } from '../../systems/SectorSystem';
 import { SectorUpdateContext } from './SectorTypes';
+import { ChunkManager } from '../../core/world/ChunkManager';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -142,6 +143,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
     const { engine, session, state, refs, propsRef, callbacks } = ctx;
 
     let frame = 0;
+    ChunkManager.clear();
 
     const getActiveCallbacks = () => state.callbacks || callbacks || EMPTY_OBJECT;
 
@@ -602,6 +604,13 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
         session.update(delta, propsRef.current.mapId || 0);
         monitor.end('session_update');
+
+        // VINTERDÖD: Chunk-based spatial mounting
+        monitor.begin('chunk_mounting');
+        if (playerGroup) {
+            ChunkManager.update(playerGroup.position, engine.scene);
+        }
+        monitor.end('chunk_mounting');
 
         // VINTERDÖD: Sector Specific Logic Updates
         monitor.begin('sector_update');

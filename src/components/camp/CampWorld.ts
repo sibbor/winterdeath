@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory, CAMP_PROP_PALETTE } from '../../utils/assets';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
+import { ChunkManager } from '../../core/world/ChunkManager';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { WIND_SYSTEM, WEATHER_SYSTEM } from '../../content/constants';
 import { WeatherType } from '../../core/engine/EngineTypes';
@@ -15,7 +16,7 @@ export const CAMP_SCENE = {
     // Fog & Background
     bgColor: 0x161629,
     fog: {
-        color: 0x999999, //161629,
+        color: 0x161629,
         density: 100,
         height: 2
     },
@@ -477,7 +478,9 @@ export const CampWorld = {
         );
         scene.add(hemiLight);
 
-        CampWorld.setupTerrain(scene, textures);
+        await CampWorld.setupTerrain(scene, textures);
+
+        ChunkManager.update(new THREE.Vector3(0, 0, 0), scene);
 
         const { interactables, outlines } = CampWorld.setupStations(scene, textures, CAMP_SCENE.stationPositions);
         const envState = CampWorld.initEffects(scene, textures, weather, isWarmup);
@@ -485,7 +488,7 @@ export const CampWorld = {
         return { interactables, outlines, envState };
     },
 
-    setupTerrain: (scene: THREE.Scene, textures: Textures) => {
+    setupTerrain: async (scene: THREE.Scene, textures: Textures) => {
         if (!cachedTerrainMat) {
             cachedTerrainMat = new THREE.MeshStandardMaterial().copy(MATERIALS.dirt as THREE.MeshStandardMaterial);
             cachedTerrainMat.userData = { isSharedAsset: true };
@@ -505,7 +508,7 @@ export const CampWorld = {
         ground.receiveShadow = true;
         scene.add(ground);
 
-        setupTrees(scene);
+        await setupTrees(scene);
     },
 
     setupStations: (scene: THREE.Scene, textures: Textures, stationsPos: { id: string, pos: THREE.Vector3 }[]) => {

@@ -244,6 +244,10 @@ export interface Enemy {
     drownDmgTimer: number;
     fallStartY: number;
 
+    // --- SPATIAL CHUNKING ---
+    currentChunkKey: number;
+    bucketIndex: number;
+
     // --- DAMAGE TRACKING (Zero-GC) ---
     _accumulatedDamage: number;
     _lastDamageTextTime: number;

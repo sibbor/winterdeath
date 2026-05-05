@@ -94,16 +94,17 @@ export class PlayerCombatSystem implements System {
 
         // --- Weapon Slot Switching ---
         const acts = input.actions;
-        if (acts[InputAction.SLOT_1] && !this._p1) WeaponHandler.handleSlotSwitch(state, state.loadout, '1');
-        if (acts[InputAction.SLOT_2] && !this._p2) WeaponHandler.handleSlotSwitch(state, state.loadout, '2');
-        if (acts[InputAction.SLOT_3] && !this._p3) WeaponHandler.handleSlotSwitch(state, state.loadout, '3');
-        if (acts[InputAction.SLOT_4] && !this._p4) WeaponHandler.handleSlotSwitch(state, state.loadout, '4');
+        if (acts[InputAction.SLOT_1] && !this._p1) WeaponHandler.handleSlotSwitch(state, state.loadout, InputAction.SLOT_1);
+        if (acts[InputAction.SLOT_2] && !this._p2) WeaponHandler.handleSlotSwitch(state, state.loadout, InputAction.SLOT_2);
+        if (acts[InputAction.SLOT_3] && !this._p3) WeaponHandler.handleSlotSwitch(state, state.loadout, InputAction.SLOT_3);
+        if (acts[InputAction.SLOT_4] && !this._p4) WeaponHandler.handleSlotSwitch(state, state.loadout, InputAction.SLOT_4);
+        if (acts[InputAction.SLOT_5] && !this._p5) WeaponHandler.handleSlotSwitch(state, state.loadout, InputAction.SLOT_5);
 
         this._p1 = !!acts[InputAction.SLOT_1];
         this._p2 = !!acts[InputAction.SLOT_2];
         this._p3 = !!acts[InputAction.SLOT_3];
         this._p4 = !!acts[InputAction.SLOT_4];
-        this._p5 = false; // Slot 5 not yet in InputAction enum
+        this._p5 = !!acts[InputAction.SLOT_5];
 
         WeaponHandler.handleInput(input, state, state.loadout, simTime, false);
 

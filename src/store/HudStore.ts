@@ -20,6 +20,7 @@ const INITIAL_HUD_STATE: HudState = {
     magSize: 0,
     score: 0,
     scrap: 0,
+    challengePoints: 0,
     multiplier: 1,
     activeWeapon: WeaponType.PISTOL,
     isReloading: false,
@@ -88,12 +89,13 @@ const INITIAL_HUD_STATE: HudState = {
         objects: 0,
         drawCalls: 0,
         coords: { x: 0, z: 0 },
-        performance: {
+            performance: {
             cpu: null,
             memory: { heapLimit: 0, heapTotal: 0, heapUsed: 0 },
             renderer: null
         }
-    }
+    },
+    challengeTiers: new Int32Array(64)
 };
 
 type Listener = (state: HudState) => void;
@@ -113,7 +115,8 @@ class HudStoreClass {
         activeBuffs: [],
         activeDebuffs: [],
         mapItems: [],
-        systems: []
+        systems: [],
+        challengeTiers: new Int32Array(64)
     };
     
     // PERFORMANCE: Version tracking for reference stability.
@@ -145,6 +148,7 @@ class HudStoreClass {
         dst.ammo = src.ammo;
         dst.kills = src.kills;
         dst.scrap = src.scrap;
+        dst.challengePoints = src.challengePoints;
         dst.spEarned = src.spEarned;
         dst.isDead = src.isDead;
         dst.isDriving = src.isDriving;
@@ -200,6 +204,7 @@ class HudStoreClass {
         // but here we just copy the reference if they are the same buffers)
         dst.statsBuffer = src.statsBuffer;
         dst.vectorBuffer = src.vectorBuffer;
+        dst.challengeTiers = src.challengeTiers;
         
         // 3. Pointer Swap
         const prev = this.state;

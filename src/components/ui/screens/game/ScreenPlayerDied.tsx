@@ -5,6 +5,7 @@ import { useHudStore } from '../../../../hooks/useHudStore';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
 import { HORIZONTAL_HATCHING_STYLE_DARK } from '../../layout/ScreenModalLayout';
 import { StatusEffectType } from '../../../../content/perks';
+import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputTypes';
 
 interface ScreenPlayerDiedProps {
     onContinue: () => void;
@@ -30,7 +31,9 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
 
     // Allow pressing Enter to continue
     useEffect(() => {
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter') onContinue(); };
+        const onKey = (e: KeyboardEvent) => { 
+            if (INPUT_KEY_MAP[e.key] === InputAction.ENTER) onContinue(); 
+        };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [onContinue]);

@@ -10,6 +10,7 @@ import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
 import { BossID } from '../../../../game/session/SectorTypes';
 import { GAME_CHALLENGES, ChallengeID, ChallengeCategory } from '../../../../content/ChallengeTypes';
+import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputTypes';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
@@ -24,12 +25,12 @@ interface ScreenAdventureLogProps {
 // --- ZERO-GC STATIC ARRAYS & CONFIGS (PRESERVES REACT.MEMO STABILITY) ---
 const EMPTY_ARRAY: any[] = [];
 const TABS: { id: DiscoveryType, label: string }[] = [
+    { id: DiscoveryType.CHALLENGE, label: 'challenges.title' },
     { id: DiscoveryType.CLUE, label: 'ui.log_clues' },
     { id: DiscoveryType.COLLECTIBLE, label: 'ui.log_collectibles' },
     { id: DiscoveryType.POI, label: 'ui.log_poi' },
     { id: DiscoveryType.ENEMY, label: 'ui.log_zombies' },
     { id: DiscoveryType.BOSS, label: 'ui.log_bosses' },
-    { id: DiscoveryType.CHALLENGE, label: 'challenges.title' },
 ];
 const SECTORS = [0, 1, 2, 3];
 const THEME_COLOR = '#16a34a'; // green-600
@@ -46,7 +47,7 @@ const darkenColor = (hex: string, percent: number) => {
 const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, isMobileDevice, debugMode, initialTab, initialItemId }) => {
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
-    const [activeTab, setActiveTab] = useState<DiscoveryType>(initialTab ?? DiscoveryType.CLUE);
+    const [activeTab, setActiveTab] = useState<DiscoveryType>(initialTab ?? DiscoveryType.CHALLENGE);
 
     const isDebugMode = (debugMode !== undefined ? debugMode : false) || (window as any).gameEngine?.sectorContext?.debugMode || (window as any).WD_DEBUG === true || localStorage.getItem('wd_debug') === 'true';
 
@@ -88,7 +89,8 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
     // Keyboard support for closing
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' || e.key === 'Enter') {
+            const action = INPUT_KEY_MAP[e.key];
+            if (action === InputAction.ESCAPE || action === InputAction.ENTER) {
                 onClose();
             }
         };
@@ -171,12 +173,12 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
 
                 {/* Content Area - DYNAMIC MOUNTING */}
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar relative">
+                    {activeTab === DiscoveryType.CHALLENGE && <ChallengesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={isDebugMode} />}
                     {activeTab === DiscoveryType.ENEMY && <ZombiesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={isDebugMode} />}
                     {activeTab === DiscoveryType.BOSS && <BossesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={isDebugMode} />}
                     {activeTab === DiscoveryType.COLLECTIBLE && <CollectiblesTab stats={stats} isMobileDevice={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
                     {activeTab === DiscoveryType.CLUE && <CluesTab stats={stats} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
                     {activeTab === DiscoveryType.POI && <PoiTab stats={stats} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
-                    {activeTab === DiscoveryType.CHALLENGE && <ChallengesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={isDebugMode} />}
                 </div>
             </div>
 
@@ -194,7 +196,155 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
     );
 };
 
-// --- SUB-COMPONENTS (MEMOIZED FOR PERFORMANCE) ---
+const CHALLENGE_CATEGORIES = [
+    { id: ChallengeCategory.WORLD, label: 'ui.category_world' },
+    { id: ChallengeCategory.COMBAT, label: 'ui.category_combat' },
+    { id: ChallengeCategory.WEAPONS, label: 'ui.category_weapons' },
+    { id: ChallengeCategory.TACTICS, label: 'ui.category_tactics' },
+    { id: ChallengeCategory.PLAYER, label: 'ui.category_player' },
+];
+
+const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, isDebug }) => {
+    const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+    const toggleCategory = useCallback((id: string) => {
+        setCollapsed(prev => ({ ...prev, [id]: !prev[id] }));
+        UiSounds.playClick();
+    }, []);
+
+    const categoryProgress = useMemo(() => {
+        const progress: Record<string, number> = {};
+        CHALLENGE_CATEGORIES.forEach(cat => {
+            const catChallenges = GAME_CHALLENGES.filter(c => c.categoryId === cat.id);
+            if (catChallenges.length === 0) {
+                progress[cat.id] = 0;
+                return;
+            }
+
+            const totalPossiblePoints = catChallenges.length * 3.0;
+            let currentPoints = 0;
+
+            catChallenges.forEach(c => {
+                const tier = (stats.challengeTiers ? stats.challengeTiers[c.id] : 0) || 0;
+                const value = DataResolver.getChallengeValue(stats, c.id);
+                
+                // 1. Add full points for completed tiers
+                currentPoints += tier;
+
+                // 2. Add partial points for the current in-progress tier
+                if (tier < 3) {
+                    const prevTarget = tier > 0 ? c.targets[tier - 1] : 0;
+                    const nextTarget = c.targets[tier];
+                    const tierRange = nextTarget - prevTarget;
+                    
+                    if (tierRange > 0) {
+                        const tierProgress = (value - prevTarget) / tierRange;
+                        currentPoints += Math.max(0, Math.min(1, isNaN(tierProgress) ? 0 : tierProgress));
+                    }
+                }
+            });
+
+            const rawProgress = (currentPoints / totalPossiblePoints) * 100;
+            progress[cat.id] = isNaN(rawProgress) || !isFinite(rawProgress) ? 0 : Math.round(rawProgress);
+        });
+        return progress;
+    }, [stats.challengeTiers, stats.totalEnemiesKilled, stats]);
+
+    return (
+        <div className="space-y-12 pb-24">
+            {CHALLENGE_CATEGORIES.map(cat => {
+                const catChallenges = GAME_CHALLENGES.filter(c => c.categoryId === cat.id);
+                if (catChallenges.length === 0) return null;
+
+                const isCollapsed = collapsed[cat.id] || false;
+                const progress = categoryProgress[cat.id];
+
+                return (
+                    <div key={cat.id} className="space-y-6">
+                        <div 
+                            className="border-b-2 border-zinc-800 pb-2 flex justify-between items-end cursor-pointer group hover:border-zinc-600 transition-colors"
+                            onClick={() => toggleCategory(cat.id)}
+                        >
+                            <div className="flex items-baseline gap-4">
+                                <h3 className="text-2xl font-light uppercase tracking-tighter text-zinc-400 group-hover:text-zinc-200 transition-colors">
+                                    {t(cat.label)}
+                                </h3>
+                                <span className="text-xs font-mono text-zinc-600 font-bold">
+                                    {progress}%
+                                </span>
+                            </div>
+                            <div className={`text-zinc-600 group-hover:text-zinc-400 transition-all duration-300 transform ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+                        
+                        {!isCollapsed && (
+                            <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-4'}`}>
+                            {catChallenges.map(challenge => {
+                                // VINTERDÖD CRASH FIX: Add null-check for challengeTiers (Old save games or init race conditions)
+                                const tier = stats.challengeTiers ? stats.challengeTiers[challenge.id] : 0;
+                                const value = DataResolver.getChallengeValue(stats, challenge.id);
+                                const nextTier = tier < 3 ? tier + 1 : 3;
+                                const target = challenge.targets[nextTier - 1] || 1;
+                                const progress = Math.min(100, (value / target) * 100) || 0;
+                                const isMaxed = tier >= 3;
+
+                                return (
+                                    <TacticalCard
+                                        key={challenge.id}
+                                        id={`log-item-${challenge.id}`}
+                                        color={isMaxed ? '#eab308' : (tier > 0 ? '#16a34a' : '#4b5563')}
+                                        className="p-4 bg-zinc-900/50"
+                                    >
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="flex flex-col">
+                                                <h4 className="text-lg font-bold text-white uppercase tracking-tight">
+                                                    {t(challenge.titleKey)}
+                                                </h4>
+                                                <p className="text-[11px] text-zinc-500 italic mt-1 leading-tight">
+                                                    {t(challenge.descriptionKey).replace('{target}', target.toString())}
+                                                </p>
+                                            </div>
+                                            <div className="flex flex-col items-end">
+                                                <div className="flex gap-1">
+                                                    {[1, 2, 3].map(i => (
+                                                        <div
+                                                            key={i}
+                                                            className={`w-3 h-1.5 rounded-full ${i <= tier ? 'bg-yellow-500' : 'bg-zinc-800'}`}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                <span className="text-[10px] font-black text-zinc-600 uppercase mt-1">
+                                                    {isMaxed ? t('ui.challenge_mastered') : t('ui.challenge_tier', { tier: nextTier })}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-4 space-y-1">
+                                            <div className="flex justify-between text-[10px] font-mono text-zinc-400">
+                                                <span>{Math.floor(value || 0).toLocaleString()}</span>
+                                                <span>{target.toLocaleString()}</span>
+                                            </div>
+                                            <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full transition-all duration-1000 ${isMaxed ? 'bg-yellow-500' : 'bg-green-600'}`}
+                                                    style={{ width: `${progress}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </TacticalCard>
+                                );
+                            })}
+                        </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+});
 
 const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, isDebug }) => {
     const zombies = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.ENEMY), []);
@@ -207,6 +357,10 @@ const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDeb
         });
     }, [zombies, stats.seenEnemies, stats.enemyKills, isDebug]);
 
+    if (filteredZombies.length === 0) {
+        return <NoDataMessage />;
+    }
+
     return (
         <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'} pb-12`}>
             {filteredZombies.map(item => {
@@ -215,9 +369,9 @@ const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDeb
                 const deaths = stats.deathsByEnemyType[typeSmi] || 0;
                 const key = `enemy-${typeSmi}`;
                 const itemColor = '#' + (item.color || 0xffffff).toString(16).padStart(6, '0');
-                
+
                 // Since we filtered, we can assume isSeen is true for rendered items
-                const isSeen = true; 
+                const isSeen = true;
 
                 return (
                     <TacticalCard key={key} id={`log-item-${key}`} isLocked={!isSeen} color={itemColor} showHatching={isSeen}>
@@ -313,6 +467,10 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
         });
     }, [sectorsList, bossesList, stats.seenBosses, stats.bossesDefeated, isDebug]);
 
+    if (filteredSectors.length === 0) {
+        return <NoDataMessage />;
+    }
+
     return (
         <div className="space-y-16 pb-12">
             {filteredSectors.map(sectorIndex => {
@@ -320,7 +478,7 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
                 const theme = themesList[sectorIndex];
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= sectorIndex;
                 const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorIndex)) : `${t('ui.sector')} ${sectorIndex}`) : '???';
-                
+
                 const isSeen = true; // Since we filtered
                 const isDefeated = (stats.bossesDefeated || EMPTY_ARRAY).includes(sectorIndex);
                 const isBossUnlocked = true; // Since we filtered
@@ -422,6 +580,13 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.COLLECTIBLE), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
 
+    const hasAny = useMemo(() => SECTORS.some(sectorId => {
+        const sectorItems = items.filter(c => c.sector === sectorId);
+        return sectorItems.length > 0 && (isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId);
+    }), [items, stats.sectorsCompleted, isDebug]);
+
+    if (!hasAny) return <NoDataMessage />;
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
             {SECTORS.map(sectorId => {
@@ -463,6 +628,13 @@ const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effecti
     const foundIds = stats.cluesFound || EMPTY_ARRAY;
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.CLUE), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
+
+    const hasAny = useMemo(() => SECTORS.some(sectorId => {
+        const sectorItems = items.filter(c => c.sector === sectorId);
+        return sectorItems.length > 0 && (isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId);
+    }), [items, stats.sectorsCompleted, isDebug]);
+
+    if (!hasAny) return <NoDataMessage />;
 
     return (
         <div className="space-y-16 pb-12">
@@ -522,6 +694,13 @@ const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effective
     const visitedList = stats.discoveredPOIs || EMPTY_ARRAY;
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.POI), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
+
+    const hasAny = useMemo(() => SECTORS.some(sectorId => {
+        const sectorItems = items.filter(poi => poi.sector === sectorId);
+        return sectorItems.length > 0 && (isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId);
+    }), [items, stats.sectorsCompleted, isDebug]);
+
+    if (!hasAny) return <NoDataMessage />;
 
     return (
         <div className="space-y-16 pb-12">
@@ -584,6 +763,15 @@ const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effective
 
 // --- HELPER COMPONENTS ---
 
+const NoDataMessage: React.FC<{ message?: string }> = ({ message }) => (
+    <div className="flex flex-col items-center justify-center py-24 opacity-30">
+        <span className="text-zinc-500 italic tracking-widest uppercase text-sm">
+            {message || t('ui.no_data_available')}
+        </span>
+        <div className="w-12 h-0.5 bg-zinc-800 mt-4" />
+    </div>
+);
+
 const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevice?: boolean }> = ({ item, isFound, isMobileDevice }) => {
     const [isExpanded, setIsExpanded] = useState(false);
 
@@ -606,117 +794,5 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevi
     );
 };
 
-const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, isDebug }) => {
-    const categories = [
-        { id: ChallengeCategory.WORLD, label: 'ui.category_world' },
-        { id: ChallengeCategory.COMBAT, label: 'ui.category_combat' },
-        { id: ChallengeCategory.WEAPONS, label: 'ui.category_weapons' },
-        { id: ChallengeCategory.TACTICS, label: 'ui.category_tactics' },
-        { id: ChallengeCategory.PLAYER, label: 'ui.category_player' },
-    ];
 
-    const getChallengeProgress = (id: ChallengeID): number => {
-        const buffer = stats.statsBuffer;
-        const wk = stats.weaponKills;
-        const ek = stats.enemyKills;
-
-        switch (id) {
-            case ChallengeID.MARATHON: return buffer[PlayerStatID.TOTAL_DISTANCE_TRAVELED];
-            case ChallengeID.SCRAPPER: return buffer[PlayerStatID.TOTAL_SCRAP_COLLECTED];
-            case ChallengeID.EXPLORER: return stats.discoveredPOIs.length;
-            case ChallengeID.TREASURE_HUNTER: return buffer[PlayerStatID.TOTAL_CHESTS_OPENED];
-            case ChallengeID.SCAVENGER: return buffer[PlayerStatID.TOTAL_ITEMS_COLLECTED];
-            case ChallengeID.ZOMBIE_HUNTER: return buffer[PlayerStatID.TOTAL_KILLS];
-            case ChallengeID.WALKER_EXTERMINATOR: return ek[0];
-            case ChallengeID.KNEE_CAPPER: return ek[1];
-            case ChallengeID.TANK_BUSTER: return ek[2];
-            case ChallengeID.BOSS_SLAYER: return ek[StatEnemyIndex.BOSS];
-            case ChallengeID.MARKSMAN: return buffer[PlayerStatID.TOTAL_HEADSHOTS];
-            case ChallengeID.PYROMANIAC: return wk[StatWeaponIndex.FIRE] + wk[StatWeaponIndex.BURN] + wk[StatWeaponIndex.MOLOTOV] + wk[StatWeaponIndex.FLAMETHROWER];
-            case ChallengeID.SHOCK_THERAPY: return wk[StatWeaponIndex.ELECTRIC] + wk[StatWeaponIndex.ARC_CANNON];
-            case ChallengeID.DEMOLITION_EXPERT: return wk[StatWeaponIndex.EXPLOSION] + wk[StatWeaponIndex.GRENADE];
-            case ChallengeID.BRAWLER: return wk[StatWeaponIndex.RUSH] + wk[StatWeaponIndex.PHYSICAL] + wk[StatWeaponIndex.DODGE];
-            case ChallengeID.SHARPSHOOTER: return buffer[PlayerStatID.TOTAL_LONG_RANGE_KILLS];
-            case ChallengeID.SURVIVOR: return buffer[PlayerStatID.TOTAL_SECTORS_COMPLETED];
-            case ChallengeID.VETERAN: return buffer[PlayerStatID.LEVEL];
-            case ChallengeID.UNTOUCHABLE: return buffer[PlayerStatID.LONGEST_KILLSTREAK];
-            default: return 0;
-        }
-    };
-
-    return (
-        <div className="space-y-12 pb-24">
-            {categories.map(cat => {
-                const catChallenges = GAME_CHALLENGES.filter(c => c.categoryId === cat.id);
-                if (catChallenges.length === 0) return null;
-
-                return (
-                    <div key={cat.id} className="space-y-6">
-                        <div className="border-b-2 border-zinc-800 pb-2">
-                            <h3 className="text-2xl font-light uppercase tracking-tighter text-zinc-400">
-                                {t(cat.label)}
-                            </h3>
-                        </div>
-                        <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-4'}`}>
-                            {catChallenges.map(challenge => {
-                                const tier = stats.challengeTiers[challenge.id];
-                                const value = getChallengeProgress(challenge.id);
-                                const nextTier = tier < 3 ? tier + 1 : 3;
-                                const target = challenge.targets[nextTier - 1];
-                                const progress = Math.min(100, (value / target) * 100);
-                                const isMaxed = tier >= 3;
-
-                                return (
-                                    <TacticalCard 
-                                        key={challenge.id} 
-                                        color={isMaxed ? '#eab308' : (tier > 0 ? '#16a34a' : '#4b5563')}
-                                        className="p-4 bg-zinc-900/50"
-                                    >
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div className="flex flex-col">
-                                                <h4 className="text-lg font-bold text-white uppercase tracking-tight">
-                                                    {t(challenge.titleKey)}
-                                                </h4>
-                                                <p className="text-[11px] text-zinc-500 italic mt-1 leading-tight">
-                                                    {t(challenge.descriptionKey).replace('{target}', target.toString())}
-                                                </p>
-                                            </div>
-                                            <div className="flex flex-col items-end">
-                                                <div className="flex gap-1">
-                                                    {[1, 2, 3].map(i => (
-                                                        <div 
-                                                            key={i} 
-                                                            className={`w-3 h-1.5 rounded-full ${i <= tier ? 'bg-yellow-500' : 'bg-zinc-800'}`}
-                                                        />
-                                                    ))}
-                                                </div>
-                                                <span className="text-[10px] font-black text-zinc-600 uppercase mt-1">
-                                                    {isMaxed ? 'MASTERED' : `TIER ${nextTier}`}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-4 space-y-1">
-                                            <div className="flex justify-between text-[10px] font-mono text-zinc-400">
-                                                <span>{Math.floor(value).toLocaleString()}</span>
-                                                <span>{target.toLocaleString()}</span>
-                                            </div>
-                                            <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
-                                                <div 
-                                                    className={`h-full transition-all duration-1000 ${isMaxed ? 'bg-yellow-500' : 'bg-green-600'}`}
-                                                    style={{ width: `${progress}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    </TacticalCard>
-                                );
-                            })}
-                        </div>
-                    </div>
-                );
-            })}
-        </div>
-    );
-});
-
-export default ScreenAdventureLog;
+export default ScreenAdventureLog;

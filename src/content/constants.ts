@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PlayerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../entities/player/PlayerTypes';
+import { DamageID } from '../entities/player/CombatTypes';
 import { GameSettings } from '../core/engine/EngineTypes';
 
 // Re-export Data
@@ -176,7 +177,10 @@ export const INITIAL_STATS: PlayerStats = {
     prologueSeen: false,
     rescuedFamilyIndices: [],
     familyFoundCount: 0,
-    mostUsedWeapon: '',
+    mostUsedWeapon: DamageID.NONE,
+    challengeTiers: new Int32Array(32),
+    totalEnemiesKilled: 0,
+    totalChallengePoints: 0,
 
     // --- VINTERDÖD: CACHED ENTITY STATE (Phase 13) ---
     velocity: new THREE.Vector3(),

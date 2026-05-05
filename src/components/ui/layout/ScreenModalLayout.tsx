@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback, useMemo } from 'react';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import { t } from '../../../utils/i18n';
+import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputTypes';
 
 // --- SHARED TACTICAL STYLE TOKENS (One Place to Rule Them All) ---
 export const BACKGROUND_PATTERN_STYLE: React.CSSProperties = {
@@ -141,13 +142,14 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
 
         const handleKeys = (e: KeyboardEvent) => {
             const { onClose: currClose, onConfirm: currConfirm, canConfirm: currCanConfirm, onCancel: currCancel } = callbacksRef.current;
+            const action = INPUT_KEY_MAP[e.key];
 
-            if (e.key === 'Escape') {
+            if (action === InputAction.ESCAPE) {
                 e.stopPropagation();
                 UiSounds.playClick();
                 if (currCancel) currCancel();
                 else currClose();
-            } else if (e.key === 'Enter' && currConfirm && currCanConfirm) {
+            } else if (action === InputAction.ENTER && currConfirm && currCanConfirm) {
                 e.stopPropagation();
                 e.preventDefault();
                 UiSounds.playConfirm();
@@ -162,11 +164,11 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
 
                     let nextIndex = currentIndex;
                     if (currOrient === 'vertical') {
-                        if (e.key === 'ArrowDown') nextIndex = (currentIndex + 1) % currTabs.length;
-                        else if (e.key === 'ArrowUp') nextIndex = (currentIndex - 1 + currTabs.length) % currTabs.length;
+                        if (action === InputAction.DOWN) nextIndex = (currentIndex + 1) % currTabs.length;
+                        else if (action === InputAction.UP) nextIndex = (currentIndex - 1 + currTabs.length) % currTabs.length;
                     } else {
-                        if (e.key === 'ArrowRight') nextIndex = (currentIndex + 1) % currTabs.length;
-                        else if (e.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + currTabs.length) % currTabs.length;
+                        if (action === InputAction.RIGHT) nextIndex = (currentIndex + 1) % currTabs.length;
+                        else if (action === InputAction.LEFT) nextIndex = (currentIndex - 1 + currTabs.length) % currTabs.length;
                     }
 
                     if (nextIndex !== currentIndex) {

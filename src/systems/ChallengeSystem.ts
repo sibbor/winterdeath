@@ -40,6 +40,7 @@ export class ChallengeSystem implements System {
     private evaluateAll(session: GameSessionLogic) {
         const stats = session.state.stats;
         const tiers = stats.challengeTiers;
+        if (!tiers) return;
 
         for (let i = 0; i < ChallengeID.COUNT; i++) {
             const currentTier = tiers[i];
@@ -54,6 +55,11 @@ export class ChallengeSystem implements System {
                 // MILESTONE REACHED!
                 tiers[i] = nextTier;
                 
+                // Award CP!
+                const cpReward = def.cpRewards[nextTier - 1] || 0;
+                stats.totalChallengePoints += cpReward;
+                stats.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] += cpReward;
+
                 // Emit Zero-GC completion event to the HUD
                 // Data format: (ChallengeID << 8) | NewTier
                 UIEventRingBuffer.push(
@@ -62,7 +68,7 @@ export class ChallengeSystem implements System {
                 );
                 
                 // Console log for debugging the clean state
-                console.log(`[CHALLENGE] Completed ${def.titleKey} Tier ${nextTier}!`);
+                console.log(`[CHALLENGE] Completed ${def.titleKey} Tier ${nextTier}! Awarded ${cpReward} CP.`);
             }
         }
     }

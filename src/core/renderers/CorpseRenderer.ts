@@ -30,10 +30,49 @@ export class CorpseRenderer {
         this.mesh = new THREE.InstancedMesh(GEOMETRY.zombie, material, this.maxInstances);
         this.mesh.frustumCulled = false;
         this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.maxInstances * 3), 3);
+        
+        // --- BUOYANCY ATTRIBUTE (Phase 15) ---
+        // 1.0 = Floating on water, 0.0 = Static on ground
+        this.mesh.geometry.setAttribute('aIsFloating', new THREE.InstancedBufferAttribute(new Float32Array(this.maxInstances), 1));
+
         this.mesh.castShadow = true;
         this.mesh.receiveShadow = true;
         this.mesh.count = 0;
         this.mesh.boundingSphere = this._sharedBoundingSphere;
+
+        // --- SHADER INJECTION ---
+        material.onBeforeCompile = (shader) => {
+            shader.uniforms.uTime = { value: 0 };
+            
+            shader.vertexShader = `
+                attribute float aIsFloating;
+                varying float vIsFloating;
+                uniform float uTime;
+                ${shader.vertexShader}
+            `.replace(
+                '#include <begin_vertex>',
+                `
+                #include <begin_vertex>
+                vIsFloating = aIsFloating;
+                if (aIsFloating > 0.5) {
+                    // Optimized procedural buoyancy based on world-space coordinates
+                    // We extract the instance position directly from the modelMatrix (which is the instanceMatrix in Three.js)
+                    vec3 instancePos = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+                    
+                    // Sine-wave oscillation seed based on position and time
+                    float seed = (instancePos.x * 0.4) + (instancePos.z * 0.4) + (uTime * 1.8);
+                    float wave = sin(seed) * 0.12;
+                    float wave2 = cos(seed * 0.7) * 0.08;
+                    
+                    transformed.y += wave + wave2;
+                    
+                    // Suble tilt detail (optional but looks great for floaters)
+                    // transformed.x += wave * 0.2;
+                }
+                `
+            );
+            this.mesh.userData.shader = shader;
+        };
 
         this.scene.add(this.mesh);
     }
@@ -57,7 +96,8 @@ export class CorpseRenderer {
         rotation: THREE.Euler | THREE.Quaternion,
         scale: number,
         widthScale: number = 1.0,
-        colorHex?: number
+        colorHex?: number,
+        isFloating: boolean = false
     ) {
         const idx = this.insertIndex;
 
@@ -88,7 +128,12 @@ export class CorpseRenderer {
             this.mesh.setColorAt(idx, _defaultDeadColor);
         }
 
-        // 3. Increment internal counter & Wrap around for circular logic
+        // 3. Sync Buoyancy State (Zero-GC Attribute update)
+        const floatingAttr = this.mesh.geometry.getAttribute('aIsFloating') as THREE.InstancedBufferAttribute;
+        floatingAttr.setX(idx, isFloating ? 1.0 : 0.0);
+        floatingAttr.needsUpdate = true;
+
+        // 4. Increment internal counter & Wrap around for circular logic
         this.insertIndex = (this.insertIndex + 1) % this.maxInstances;
 
         // Increase render count up to max limits
@@ -100,6 +145,15 @@ export class CorpseRenderer {
         this.mesh.instanceMatrix.needsUpdate = true;
         if (this.mesh.instanceColor) {
             this.mesh.instanceColor.needsUpdate = true;
+        }
+    }
+
+    /**
+     * Updates uniform data for all corpses (e.g. buoyancy time).
+     */
+    public update(renderTime: number) {
+        if (this.mesh.userData.shader) {
+            this.mesh.userData.shader.uniforms.uTime.value = renderTime * 0.001;
         }
     }
 

@@ -9,10 +9,13 @@ import { FAMILY_MEMBERS, FamilyMemberID, PLAYER_CHARACTER } from '../../content/
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { CLUES } from '../../content/clues';
 import { COLLECTIBLES } from '../../content/collectibles';
-import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
+import { ChallengeID } from '../../content/ChallengeTypes';
 import { WeaponStats } from '../../content/weapons';
-import { sv } from '../../locales/sv';
+import { PlayerStatID, StatWeaponIndex, StatEnemyIndex, PlayerStats } from '../../entities/player/PlayerTypes';
 import { BossID } from '../../game/session/SectorTypes';
+import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
+import { t } from '../i18n';
+import { en } from '../../locales/en';
 
 /**
  * VINTERDÖD: Central Data Resolver (Facade Pattern)
@@ -45,19 +48,17 @@ const SPEAKER_COLORS: Record<string, string> = {
     'radio': '#9ca3af'
 };
 
-const CHATTER_MAP: Record<string, string[]> = (sv.chatter as Record<string, string[]>);
-
 // Pre-populate family member colors and IDs
-FAMILY_MEMBERS.forEach(m => {
-    const colorHex = '#' + m.color.toString(16).padStart(6, '0');
-    SPEAKER_COLORS[m.id] = colorHex;
-});
-
 const VOICE_PARAMS_MAP: Record<number, VoiceParams> = {
     [-1]: { baseFreq: 110, oscType: 'sawtooth', pitchScale: 1.0 } // Robert
 };
 
-FAMILY_MEMBERS.forEach(m => {
+const familyLen = FAMILY_MEMBERS.length;
+for (let i = 0; i < familyLen; i++) {
+    const m = FAMILY_MEMBERS[i];
+    const colorHex = '#' + m.color.toString(16).padStart(6, '0');
+    SPEAKER_COLORS[m.id] = colorHex;
+
     let baseFreq = 220;
     const id = m.id;
     if (id === FamilyMemberID.NATHALIE) baseFreq = 380;
@@ -71,7 +72,7 @@ FAMILY_MEMBERS.forEach(m => {
         oscType: id === FamilyMemberID.NATHALIE || m.race === 'animal' ? 'sine' : 'triangle',
         pitchScale: 1.0 / (m.scale || 1.0)
     };
-});
+}
 
 export const DataResolver = {
     /**
@@ -234,8 +235,8 @@ export const DataResolver = {
         if (!key) return 'Unknown';
         const parts = key.split('.');
 
-        // 1. Attempt O(N) traversal of the 'sv' locale object
-        let current: any = sv;
+        // 1. Attempt O(N) traversal of the 'en' locale object (Logs are always English)
+        let current: any = en;
         for (let i = 0; i < parts.length; i++) {
             current = current?.[parts[i]];
             if (!current) break;
@@ -353,7 +354,8 @@ export const DataResolver = {
     getChatterLines(id: number): string[] {
         const member = FAMILY_MEMBERS[id];
         const key = member?.name.toLowerCase();
-        return CHATTER_MAP[key] || ["..."];
+        const chatter = t('chatter');
+        return (chatter && (chatter as any)[key]) || ["..."];
     },
 
     /**
@@ -450,6 +452,39 @@ export const DataResolver = {
             case PerkCategory.BUFF: return 'categories.buff';
             case PerkCategory.DEBUFF: return 'categories.debuff';
             default: return 'ui.unknown';
+        }
+    },
+
+    /**
+     * Resolves the current numeric value for a specific challenge.
+     * ZERO-GC: Direct buffer access.
+     */
+    getChallengeValue(stats: PlayerStats, id: ChallengeID): number {
+        const buffer = stats.statsBuffer;
+        const wk = stats.weaponKills;
+        const ek = stats.enemyKills;
+
+        switch (id) {
+            case ChallengeID.MARATHON: return buffer[PlayerStatID.TOTAL_DISTANCE_TRAVELED];
+            case ChallengeID.SCRAPPER: return buffer[PlayerStatID.TOTAL_SCRAP_COLLECTED];
+            case ChallengeID.EXPLORER: return stats.discoveredPOIs.length;
+            case ChallengeID.TREASURE_HUNTER: return buffer[PlayerStatID.TOTAL_CHESTS_OPENED];
+            case ChallengeID.SCAVENGER: return buffer[PlayerStatID.TOTAL_ITEMS_COLLECTED];
+            case ChallengeID.ZOMBIE_HUNTER: return buffer[PlayerStatID.TOTAL_KILLS];
+            case ChallengeID.WALKER_EXTERMINATOR: return ek[StatEnemyIndex.WALKER];
+            case ChallengeID.KNEE_CAPPER: return ek[StatEnemyIndex.RUNNER];
+            case ChallengeID.TANK_BUSTER: return ek[StatEnemyIndex.TANK];
+            case ChallengeID.BOSS_SLAYER: return ek[StatEnemyIndex.BOSS];
+            case ChallengeID.MARKSMAN: return buffer[PlayerStatID.TOTAL_HEADSHOTS];
+            case ChallengeID.PYROMANIAC: return wk[StatWeaponIndex.FIRE] + wk[StatWeaponIndex.BURN] + wk[StatWeaponIndex.MOLOTOV] + wk[StatWeaponIndex.FLAMETHROWER];
+            case ChallengeID.SHOCK_THERAPY: return wk[StatWeaponIndex.ELECTRIC] + wk[StatWeaponIndex.ARC_CANNON];
+            case ChallengeID.DEMOLITION_EXPERT: return wk[StatWeaponIndex.EXPLOSION] + wk[StatWeaponIndex.GRENADE];
+            case ChallengeID.BRAWLER: return wk[StatWeaponIndex.RUSH] + wk[StatWeaponIndex.PHYSICAL] + wk[StatWeaponIndex.DODGE];
+            case ChallengeID.SHARPSHOOTER: return buffer[PlayerStatID.TOTAL_LONG_RANGE_KILLS];
+            case ChallengeID.SURVIVOR: return buffer[PlayerStatID.TOTAL_SECTORS_COMPLETED];
+            case ChallengeID.VETERAN: return buffer[PlayerStatID.LEVEL];
+            case ChallengeID.UNTOUCHABLE: return buffer[PlayerStatID.LONGEST_KILLSTREAK];
+            default: return 0;
         }
     }
 };

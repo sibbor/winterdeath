@@ -1,27 +1,6 @@
 import * as THREE from 'three';
-import { InputAction, InputState } from './InputTypes';
+import { InputAction, InputState, INPUT_KEY_MAP } from './InputTypes';
 import { System, SystemID } from '../../systems/System';
-
-/**
- * Mapping keyboard event keys to SMI-hardened InputActions.
- * Zero-GC: Using a Record for O(1) lookup during key events.
- */
-const KEY_MAP: Record<string, InputAction> = {
-    'w': InputAction.UP, 'W': InputAction.UP,
-    'a': InputAction.LEFT, 'A': InputAction.LEFT,
-    's': InputAction.DOWN, 'S': InputAction.DOWN,
-    'd': InputAction.RIGHT, 'D': InputAction.RIGHT,
-    ' ': InputAction.DODGE,
-    'r': InputAction.RELOAD, 'R': InputAction.RELOAD,
-    'e': InputAction.INTERACT, 'E': InputAction.INTERACT,
-    'f': InputAction.FLASHLIGHT, 'F': InputAction.FLASHLIGHT,
-    'm': InputAction.MAP, 'M': InputAction.MAP,
-    'Enter': InputAction.ENTER,
-    'Escape': InputAction.ESCAPE,
-    'Shift': InputAction.SHIFT,
-    'Control': InputAction.CTRL,
-    '1': InputAction.SLOT_1, '2': InputAction.SLOT_2, '3': InputAction.SLOT_3, '4': InputAction.SLOT_4
-};
 
 // Pre-calculated math constants
 const MAX_AIM_RADIUS = 300;
@@ -131,7 +110,7 @@ export class InputManager implements System {
         if (!this.isEnabled) return;
 
         // Zero-GC: Direct property lookup avoids string mutation
-        const action = KEY_MAP[e.key];
+        const action = INPUT_KEY_MAP[e.key];
         if (action !== undefined) {
             this.state.actions[action] = 1;
         }
@@ -143,7 +122,7 @@ export class InputManager implements System {
         if (!this.isEnabled) return;
 
         // Zero-GC: Direct property lookup avoids string mutation
-        const action = KEY_MAP[e.key];
+        const action = INPUT_KEY_MAP[e.key];
         if (action !== undefined) {
             this.state.actions[action] = 0;
         }
@@ -156,7 +135,7 @@ export class InputManager implements System {
         const { key, pressed } = e.detail;
         
         // Try mapping from key string first
-        let action = KEY_MAP[key];
+        let action = INPUT_KEY_MAP[key];
         
         // If not found, it might be a direct enum index passed as a string or number
         if (action === undefined && !isNaN(key)) {

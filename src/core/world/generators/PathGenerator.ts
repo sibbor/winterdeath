@@ -7,6 +7,7 @@ import { PhysicsGroup } from '../CollisionResolution';
 import { MaterialType } from '../../../content/environment';
 import { InteractionShape } from '../../../systems/InteractionTypes';
 import { MapItemType } from '../../../components/ui/hud/HudTypes';
+import { ChunkManager } from '../ChunkManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -238,11 +239,9 @@ export const PathGenerator = {
         GeneratorUtils.freezeStatic(snowMesh);
         ctx.scene.add(gravelMesh, snowMesh);
 
-        // 2. Sleepers (InstancedMesh)
-        const sleeperMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(2.5, 0.15, 0.4), MATERIALS.brownBrick, sleepers);
-        sleeperMesh.receiveShadow = true;
-        sleeperMesh.userData.isEngineStatic = true;
-        GeneratorUtils.freezeStatic(sleeperMesh);
+        // 2. Sleepers (Chunked InstancedMesh)
+        const sleeperGeo = new THREE.BoxGeometry(2.5, 0.15, 0.4);
+        const chunkBuckets = new Map<number, THREE.Matrix4[]>();
 
         for (let i = 0; i < sleepers; i++) {
             if (performance.now() - startTime > 12) {
@@ -260,8 +259,28 @@ export const PathGenerator = {
             _pos.setY(0.08); // Elevate sleeper slightly
             _scale.set(1, 1, 1);
             _matrix.compose(_pos, _quat, _scale);
-            sleeperMesh.setMatrixAt(i, _matrix);
+            
+            const key = ChunkManager.getSmiKey(ChunkManager.getCoordIndex(_pos.x), ChunkManager.getCoordIndex(_pos.z));
+            let bucket = chunkBuckets.get(key);
+            if (!bucket) {
+                bucket = [];
+                chunkBuckets.set(key, bucket);
+            }
+            bucket.push(_matrix.clone());
         }
+
+        chunkBuckets.forEach((matrices, key) => {
+            const ix = key >> 8;
+            const iz = key & 0xFF;
+            const mesh = new THREE.InstancedMesh(sleeperGeo, MATERIALS.brownBrick, matrices.length);
+            mesh.frustumCulled = true;
+            mesh.receiveShadow = true;
+            mesh.userData.isEngineStatic = true;
+            for (let i = 0; i < matrices.length; i++) mesh.setMatrixAt(i, matrices[i]);
+            mesh.instanceMatrix.needsUpdate = true;
+            GeneratorUtils.freezeStatic(mesh);
+            ChunkManager.registerMesh(ix, iz, mesh);
+        });
 
         // 3. Rails (Ribbon instead of InstancedMesh for smooth curves)
         const railMat = MATERIALS.blackMetal.clone();
@@ -278,8 +297,7 @@ export const PathGenerator = {
         GeneratorUtils.freezeStatic(leftRail);
         GeneratorUtils.freezeStatic(rightRail);
 
-        sleeperMesh.instanceMatrix.needsUpdate = true;
-        ctx.scene.add(sleeperMesh, leftRail, rightRail);
+        ctx.scene.add(leftRail, rightRail);
 
         for (let i = 0; i < pts.length; i++) {
             ctx.collisionGrid.registerGroundMaterial(pts[i].x, pts[i].z, 2.0, MaterialType.METAL);
@@ -291,15 +309,10 @@ export const PathGenerator = {
         const curve = new THREE.CatmullRomCurve3(points);
         const count = Math.ceil(curve.getLength() / options.spacing);
         const pts = curve.getSpacedPoints(count);
-
         const mat = options.material.clone();
         if (options.color !== undefined) (mat as any).color.setHex(options.color);
 
-        const im = new THREE.InstancedMesh(_PLANE_GEO, mat, count);
-        im.frustumCulled = false;
-        im.renderOrder = 5;
-        GeneratorUtils.freezeStatic(im);
-
+        const chunkBuckets = new Map<number, THREE.Matrix4[]>();
         let startTime = performance.now();
 
         for (let i = 0; i < pts.length; i++) {
@@ -315,24 +328,43 @@ export const PathGenerator = {
             const varVal = options.variance || 0;
             const y = options.yOffset !== undefined ? options.yOffset : 0.04;
 
-            _v2.set(pt.x + (Math.random() - 0.5) * varVal, pt.y + y, pt.z + (Math.random() - 0.5) * varVal);
+            _pos.set(pt.x + (Math.random() - 0.5) * varVal, pt.y + y + _pathLayerIndex * 0.001, pt.z + (Math.random() - 0.5) * varVal);
 
             if (options.randomRotation) {
                 _quat.setFromEuler(_euler.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2));
             } else {
-                _matrix.lookAt(_v2, _v3.copy(pt).add(_v1), _axisY);
-                _quat.setFromRotationMatrix(_matrix);
+                _v2.subVectors(pt.clone().add(_v1), pt).normalize();
+                _quat.setFromUnitVectors(_axisX, _v1);
                 _quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
-
-                if (i % 2 === 0) _v2.addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(_quat), 0.2);
-                else _v2.addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(_quat), -0.2);
+                
+                if (i % 2 === 0) _pos.addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(_quat), 0.2);
+                else _pos.addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(_quat), -0.2);
             }
 
-            _matrix.compose(_v2, _quat, _scale.set(options.size, options.size * 1.5, 1));
-            im.setMatrixAt(i, _matrix);
+            _matrix.compose(_pos, _quat, _scale.set(options.size, options.size * 1.5, 1));
+            
+            const key = ChunkManager.getSmiKey(ChunkManager.getCoordIndex(_pos.x), ChunkManager.getCoordIndex(_pos.z));
+            let bucket = chunkBuckets.get(key);
+            if (!bucket) {
+                bucket = [];
+                chunkBuckets.set(key, bucket);
+            }
+            bucket.push(_matrix.clone());
         }
-        im.instanceMatrix.needsUpdate = true;
-        ctx.scene.add(im);
+
+        chunkBuckets.forEach((matrices, key) => {
+            const ix = key >> 8;
+            const iz = key & 0xFF;
+            const im = new THREE.InstancedMesh(_PLANE_GEO, mat, matrices.length);
+            im.frustumCulled = true;
+            im.renderOrder = 5;
+            for (let i = 0; i < matrices.length; i++) im.setMatrixAt(i, matrices[i]);
+            im.instanceMatrix.needsUpdate = true;
+            GeneratorUtils.freezeStatic(im);
+            ChunkManager.registerMesh(ix, iz, im);
+        });
+
+        _pathLayerIndex++;
     },
 
     createBloodPath: (ctx: SectorContext, points: THREE.Vector3[], spacing = 0.5, size = 0.8) => {
@@ -342,7 +374,6 @@ export const PathGenerator = {
     createFootprintPath: (ctx: SectorContext, points: THREE.Vector3[], spacing = 0.5, size = 0.5) => {
         PathGenerator.createDecalPath(ctx, points, { spacing, size, material: MATERIALS.footprintDecal, variance: 0.2, randomRotation: false });
     },
-
     createFence: async (ctx: SectorContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' | 'mesh' = 'wood', height: number = 1.2, strict: boolean = false) => {
         if (points.length < 2) return;
 
@@ -351,15 +382,11 @@ export const PathGenerator = {
         else if (color === 'black') mat = MATERIALS.blackMetal;
         else if (color === 'mesh') mat = MATERIALS.fenceMesh;
 
+        const postGeo = new THREE.BoxGeometry(0.15, height, 0.15);
+        const railGeo = new THREE.BoxGeometry(0.1, 0.15, 1.0);
+        
+        const chunkBuckets = new Map<number, { posts: THREE.Matrix4[], rails: THREE.Matrix4[] }>();
         const count = points.length;
-        const postMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.15, height, 0.15), mat, count);
-        const railMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 0.15, 1.0), mat, (count - 1) * 2);
-
-        postMesh.castShadow = true;
-        railMesh.castShadow = true;
-        GeneratorUtils.freezeStatic(postMesh);
-        GeneratorUtils.freezeStatic(railMesh);
-
         let startTime = performance.now();
 
         for (let i = 0; i < count; i++) {
@@ -369,13 +396,19 @@ export const PathGenerator = {
             }
 
             const p1 = points[i];
+            const key = ChunkManager.getSmiKey(ChunkManager.getCoordIndex(p1.x), ChunkManager.getCoordIndex(p1.z));
+            let bucket = chunkBuckets.get(key);
+            if (!bucket) {
+                bucket = { posts: [], rails: [] };
+                chunkBuckets.set(key, bucket);
+            }
 
             // Post
             _pos.copy(p1).setY(height / 2);
             _quat.set(0, 0, 0, 1);
             _scale.set(1, 1, 1);
             _matrix.compose(_pos, _quat, _scale);
-            postMesh.setMatrixAt(i, _matrix);
+            bucket.posts.push(_matrix.clone());
 
             if (i < count - 1) {
                 const p2 = points[i + 1];
@@ -390,7 +423,7 @@ export const PathGenerator = {
                     _pos.copy(_v1).setY(r === 0 ? height * 0.3 : height * 0.7);
                     _scale.set(1, 1, dist);
                     _matrix.compose(_pos, _quat, _scale);
-                    railMesh.setMatrixAt(i * 2 + r, _matrix);
+                    bucket.rails.push(_matrix.clone());
                 }
 
                 // Collision Obstacle
@@ -407,9 +440,30 @@ export const PathGenerator = {
             }
         }
 
-        postMesh.instanceMatrix.needsUpdate = true;
-        railMesh.instanceMatrix.needsUpdate = true;
-        ctx.scene.add(postMesh, railMesh);
+        chunkBuckets.forEach((data, key) => {
+            const ix = key >> 8;
+            const iz = key & 0xFF;
+            
+            if (data.posts.length > 0) {
+                const posts = new THREE.InstancedMesh(postGeo, mat, data.posts.length);
+                posts.frustumCulled = true;
+                posts.castShadow = true;
+                for (let i = 0; i < data.posts.length; i++) posts.setMatrixAt(i, data.posts[i]);
+                posts.instanceMatrix.needsUpdate = true;
+                GeneratorUtils.freezeStatic(posts);
+                ChunkManager.registerMesh(ix, iz, posts);
+            }
+            
+            if (data.rails.length > 0) {
+                const rails = new THREE.InstancedMesh(railGeo, mat, data.rails.length);
+                rails.frustumCulled = true;
+                rails.castShadow = true;
+                for (let i = 0; i < data.rails.length; i++) rails.setMatrixAt(i, data.rails[i]);
+                rails.instanceMatrix.needsUpdate = true;
+                GeneratorUtils.freezeStatic(rails);
+                ChunkManager.registerMesh(ix, iz, rails);
+            }
+        });
     },
 
     createGuardrail: async (ctx: SectorContext, points: THREE.Vector3[], floating: boolean = false) => {

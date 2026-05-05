@@ -17,7 +17,7 @@ export class FogSystem implements System {
     private wind: WindSystem;
     private camera: THREE.Camera;
 
-    private fogMesh: THREE.InstancedMesh | null = null;
+    public fogMesh: THREE.InstancedMesh | null = null;
     private fogMaterial: THREE.ShaderMaterial | null = null;
 
     private positions: Float32Array;
@@ -95,12 +95,12 @@ export class FogSystem implements System {
         for (let i = 0; i < this.fogCount; i++) {
             const i3 = i * 3;
             this.positions[i3 + 0] = centerX + (Math.random() * FOG_AREA_SIZE) - areaHalf;
-            // Variera höjden något för volym-känsla (men shadern mjukar ut klippningen)
-            this.positions[i3 + 1] = 0.5 + Math.random() * 3.0;
+            // Horizontal planes stick closer to ground (0-2m)
+            this.positions[i3 + 1] = 0.1 + Math.random() * 1.5;
             this.positions[i3 + 2] = centerZ + (Math.random() * FOG_AREA_SIZE) - areaHalf;
 
-            this.velocities[i3 + 0] = (Math.random() - 0.5) * 0.5;
-            this.velocities[i3 + 2] = (Math.random() - 0.5) * 0.5;
+            this.velocities[i3 + 0] = (Math.random() - 0.5) * 0.2;
+            this.velocities[i3 + 2] = (Math.random() - 0.5) * 0.2;
         }
     }
 
@@ -126,7 +126,20 @@ export class FogSystem implements System {
         const matrixArray = this.fogMesh.instanceMatrix.array;
 
         if (this.fogMaterial) {
-            this.fogMaterial.uniforms.uTime.value = renderTime * 0.001;
+            const uniforms = this.fogMaterial.uniforms;
+            uniforms.uTime.value = renderTime * 0.001;
+            uniforms.uWind.value.set(this.wind.current.x, this.wind.current.y);
+            
+            // Resolve Depth Texture and Resolution from Engine Instance
+            if (engine.depthTexture) uniforms.uDepthTexture.value = engine.depthTexture;
+            if (engine.renderer) {
+                const size = engine.renderer.getSize(new THREE.Vector2());
+                uniforms.uResolution.value.copy(size);
+            }
+            if (this.camera instanceof THREE.PerspectiveCamera) {
+                uniforms.uCameraNear.value = this.camera.near;
+                uniforms.uCameraFar.value = this.camera.far;
+            }
         }
 
         for (let i = 0; i < this.fogCount; i++) {

@@ -8,6 +8,7 @@ import { MaterialType } from '../../../content/environment';
 import { GeneratorUtils } from './GeneratorUtils';
 import { PhysicsGroup } from '../CollisionResolution';
 import { InteractionShape } from '../../../systems/InteractionTypes';
+import { ChunkManager } from '../ChunkManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -21,6 +22,7 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _axisX = new THREE.Vector3(1, 0, 0);
 const PI2 = Math.PI * 2;
+type Region = { x: number, z: number, w: number, d: number } | THREE.Vector3[];
 
 // --- TYPES ---
 interface TreePrototype {
@@ -394,8 +396,6 @@ const generateBirchPrototype = (seed: number): TreePrototype => {
 
 // --- PRIVATE FILL HELPERS ---
 
-type Region = THREE.Vector3[] | { x: number, z: number, w: number, d: number };
-
 const _getBounds = (region: Region) => {
     if (Array.isArray(region)) {
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -474,14 +474,9 @@ const _placeGroundCover = async (
     const count = Math.floor(bounds.w * bounds.d * density);
     if (count <= 0) return;
 
-    const mesh = new THREE.InstancedMesh(geo, mat, count);
-    mesh.frustumCulled = false;
-    mesh.receiveShadow = true;
-
+    const chunkBuckets = new Map<number, { pos: THREE.Vector3, mat: THREE.Matrix4 }[]>();
     const rand = () => Math.random();
     const isPolygon = Array.isArray(region);
-    let valid = 0;
-
     let startTime = performance.now();
 
     for (let i = 0; i < count; i++) {
@@ -494,24 +489,48 @@ const _placeGroundCover = async (
         const z = bounds.z + rand() * bounds.d;
         if (isPolygon && !GeneratorUtils.isPointInPolygon(x, z, region as THREE.Vector3[])) continue;
 
-        _pos.set(x, 0, z);
+        const p = new THREE.Vector3(x, 0, z);
+        _pos.copy(p);
         _euler.set(0, rand() * PI2, 0);
         _quat.setFromEuler(_euler);
         if (tallScale) {
-            _scale.set(1, 1.5 + rand(), 1);
+            _scale.set(1, 1.5 + rand() * 1.5, 1);
         } else {
             _scale.setScalar(0.7 + rand() * 0.6);
         }
         _mat.compose(_pos, _quat, _scale);
-        mesh.setMatrixAt(valid++, _mat);
+
+        const ix = ChunkManager.getCoordIndex(x);
+        const iz = ChunkManager.getCoordIndex(z);
+        const key = ChunkManager.getSmiKey(ix, iz);
+
+        let bucket = chunkBuckets.get(key);
+        if (!bucket) {
+            bucket = [];
+            chunkBuckets.set(key, bucket);
+        }
+        bucket.push({ pos: p, mat: _mat.clone() });
 
         ctx.collisionGrid.registerVegetation(x, z, 1.2, MaterialType.PLANT);
     }
 
-    mesh.count = valid;
-    mesh.instanceMatrix.needsUpdate = true;
-    GeneratorUtils.freezeStatic(mesh);
-    ctx.scene.add(mesh);
+    // Create instanced mesh per chunk
+    chunkBuckets.forEach((bucket, key) => {
+        const ix = key >> 8;
+        const iz = key & 0xFF;
+
+        const mesh = new THREE.InstancedMesh(geo, mat, bucket.length);
+        mesh.frustumCulled = true; // VINTERDÖD: Restored culling!
+        mesh.receiveShadow = true;
+
+        for (let i = 0; i < bucket.length; i++) {
+            mesh.setMatrixAt(i, bucket[i].mat);
+        }
+
+        mesh.instanceMatrix.needsUpdate = true;
+        GeneratorUtils.freezeStatic(mesh);
+        ChunkManager.registerMesh(ix, iz, mesh);
+    });
 };
 
 const _placeSunflowers = async (ctx: SectorContext, region: Region, density: number) => {
@@ -519,21 +538,9 @@ const _placeSunflowers = async (ctx: SectorContext, region: Region, density: num
     const count = Math.floor(bounds.w * bounds.d * density);
     if (count <= 0) return;
 
-    const sStem = new THREE.InstancedMesh(SHARED_GEO.sunflowerStem, MATERIALS.sunflowerStem, count);
-    const sHead = new THREE.InstancedMesh(SHARED_GEO.sunflowerHead, MATERIALS.sunflowerHead, count);
-    const sCent = new THREE.InstancedMesh(SHARED_GEO.sunflowerCenter, MATERIALS.sunflowerCenter, count);
-    sStem.frustumCulled = false;
-    sHead.frustumCulled = false;
-    sCent.frustumCulled = false;
-    for (const m of [sStem, sHead, sCent]) {
-        m.userData.windAffected = true;
-        GeneratorUtils.freezeStatic(m);
-    }
-
+    const chunkBuckets = new Map<number, THREE.Matrix4[]>();
     const rand = () => Math.random();
     const isPolygon = Array.isArray(region);
-    let valid = 0;
-
     let startTime = performance.now();
 
     for (let i = 0; i < count; i++) {
@@ -552,19 +559,45 @@ const _placeSunflowers = async (ctx: SectorContext, region: Region, density: num
         _scale.setScalar(0.8 + rand() * 0.5);
         _mat.compose(_pos, _quat, _scale);
 
-        sStem.setMatrixAt(valid, _mat);
-        sHead.setMatrixAt(valid, _mat);
-        sCent.setMatrixAt(valid, _mat);
-        valid++;
+        const ix = ChunkManager.getCoordIndex(x);
+        const iz = ChunkManager.getCoordIndex(z);
+        const key = ChunkManager.getSmiKey(ix, iz);
+
+        let bucket = chunkBuckets.get(key);
+        if (!bucket) {
+            bucket = [];
+            chunkBuckets.set(key, bucket);
+        }
+        bucket.push(_mat.clone());
 
         ctx.collisionGrid.registerVegetation(x, z, 1.5, MaterialType.PLANT);
     }
 
-    sStem.count = valid; sHead.count = valid; sCent.count = valid;
-    sStem.instanceMatrix.needsUpdate = true;
-    sHead.instanceMatrix.needsUpdate = true;
-    sCent.instanceMatrix.needsUpdate = true;
-    ctx.scene.add(sStem, sHead, sCent);
+    chunkBuckets.forEach((matrices, key) => {
+        const ix = key >> 8;
+        const iz = key & 0xFF;
+
+        const sStem = new THREE.InstancedMesh(SHARED_GEO.sunflowerStem, MATERIALS.sunflowerStem, matrices.length);
+        const sHead = new THREE.InstancedMesh(SHARED_GEO.sunflowerHead, MATERIALS.sunflowerHead, matrices.length);
+        const sCent = new THREE.InstancedMesh(SHARED_GEO.sunflowerCenter, MATERIALS.sunflowerCenter, matrices.length);
+
+        sStem.frustumCulled = true;
+        sHead.frustumCulled = true;
+        sCent.frustumCulled = true;
+
+        for (let i = 0; i < matrices.length; i++) {
+            sStem.setMatrixAt(i, matrices[i]);
+            sHead.setMatrixAt(i, matrices[i]);
+            sCent.setMatrixAt(i, matrices[i]);
+        }
+
+        for (const m of [sStem, sHead, sCent]) {
+            m.userData.windAffected = true;
+            m.instanceMatrix.needsUpdate = true;
+            GeneratorUtils.freezeStatic(m);
+            ChunkManager.registerMesh(ix, iz, m);
+        }
+    });
 };
 
 export const VegetationGenerator = {
@@ -819,52 +852,74 @@ export const VegetationGenerator = {
             else if (baseType === 'DEAD_TREE') { trunkMat = MATERIALS.deadWood; }
         }
 
-        const trunkMesh = new THREE.InstancedMesh(proto.trunkGeo, trunkMat, matrices.length);
-        trunkMesh.frustumCulled = false;
-        trunkMesh.castShadow = !materialOverride;
-        trunkMesh.receiveShadow = !materialOverride;
-        trunkMesh.userData.windAffected = true;
-        trunkMesh.userData.isEngineStatic = true;
-        GeneratorUtils.freezeStatic(trunkMesh);
-
-        let leavesMesh: THREE.InstancedMesh | undefined;
-        if (proto.leavesGeo) {
-            leavesMesh = new THREE.InstancedMesh(proto.leavesGeo, leavesMat, matrices.length);
-            leavesMesh.frustumCulled = false;
-            leavesMesh.castShadow = !materialOverride;
-            leavesMesh.receiveShadow = !materialOverride;
-            leavesMesh.userData.windAffected = true;
-            leavesMesh.userData.isEngineStatic = true;
-            GeneratorUtils.freezeStatic(leavesMesh);
-
-            if (!materialOverride) {
-                leavesMesh.customDepthMaterial = getTreeDepthMaterial(leavesMat);
-            }
-        }
-
-        let snowMesh: THREE.InstancedMesh | undefined;
-        if (proto.snowGeo && !materialOverride) {
-            snowMesh = new THREE.InstancedMesh(proto.snowGeo, MATERIALS.snow, matrices.length);
-            snowMesh.castShadow = true;
-            snowMesh.userData.windAffected = true;
-            snowMesh.userData.isEngineStatic = true;
-            GeneratorUtils.freezeStatic(snowMesh);
-        }
-
+        // Group matrices by chunk
+        const chunkBuckets = new Map<number, THREE.Matrix4[]>();
         for (let i = 0; i < matrices.length; i++) {
-            trunkMesh.setMatrixAt(i, matrices[i]);
-            if (leavesMesh) leavesMesh.setMatrixAt(i, matrices[i]);
-            if (snowMesh) snowMesh.setMatrixAt(i, matrices[i]);
+            const m = matrices[i];
+            _v1.setFromMatrixPosition(m);
+            const ix = ChunkManager.getCoordIndex(_v1.x);
+            const iz = ChunkManager.getCoordIndex(_v1.z);
+            const key = ChunkManager.getSmiKey(ix, iz);
+
+            let bucket = chunkBuckets.get(key);
+            if (!bucket) {
+                bucket = [];
+                chunkBuckets.set(key, bucket);
+            }
+            bucket.push(m);
         }
 
-        trunkMesh.instanceMatrix.needsUpdate = true;
-        if (leavesMesh) leavesMesh.instanceMatrix.needsUpdate = true;
-        if (snowMesh) snowMesh.instanceMatrix.needsUpdate = true;
+        chunkBuckets.forEach((chunkMatrices, key) => {
+            const ix = key >> 8;
+            const iz = key & 0xFF;
 
-        if (!(ctx as any).uniqueMeshes) (ctx as any).uniqueMeshes = [];
-        ctx.scene.add(trunkMesh);
-        if (leavesMesh) ctx.scene.add(leavesMesh);
-        if (snowMesh) ctx.scene.add(snowMesh);
+            const trunkMesh = new THREE.InstancedMesh(proto.trunkGeo, trunkMat, chunkMatrices.length);
+            trunkMesh.frustumCulled = true; // VINTERDÖD: Restored culling!
+            trunkMesh.castShadow = !materialOverride;
+            trunkMesh.receiveShadow = !materialOverride;
+            trunkMesh.userData.windAffected = true;
+            trunkMesh.userData.isEngineStatic = true;
+            GeneratorUtils.freezeStatic(trunkMesh);
+
+            let leavesMesh: THREE.InstancedMesh | undefined;
+            if (proto.leavesGeo) {
+                leavesMesh = new THREE.InstancedMesh(proto.leavesGeo, leavesMat, chunkMatrices.length);
+                leavesMesh.frustumCulled = true; // VINTERDÖD: Restored culling!
+                leavesMesh.castShadow = !materialOverride;
+                leavesMesh.receiveShadow = !materialOverride;
+                leavesMesh.userData.windAffected = true;
+                leavesMesh.userData.isEngineStatic = true;
+                GeneratorUtils.freezeStatic(leavesMesh);
+
+                if (!materialOverride) {
+                    leavesMesh.customDepthMaterial = getTreeDepthMaterial(leavesMat);
+                }
+            }
+
+            let snowMesh: THREE.InstancedMesh | undefined;
+            if (proto.snowGeo && !materialOverride) {
+                snowMesh = new THREE.InstancedMesh(proto.snowGeo, MATERIALS.snow, chunkMatrices.length);
+                snowMesh.frustumCulled = true;
+                snowMesh.castShadow = true;
+                snowMesh.userData.windAffected = true;
+                snowMesh.userData.isEngineStatic = true;
+                GeneratorUtils.freezeStatic(snowMesh);
+            }
+
+            for (let i = 0; i < chunkMatrices.length; i++) {
+                trunkMesh.setMatrixAt(i, chunkMatrices[i]);
+                if (leavesMesh) leavesMesh.setMatrixAt(i, chunkMatrices[i]);
+                if (snowMesh) snowMesh.setMatrixAt(i, chunkMatrices[i]);
+            }
+
+            trunkMesh.instanceMatrix.needsUpdate = true;
+            if (leavesMesh) leavesMesh.instanceMatrix.needsUpdate = true;
+            if (snowMesh) snowMesh.instanceMatrix.needsUpdate = true;
+
+            ChunkManager.registerMesh(ix, iz, trunkMesh);
+            if (leavesMesh) ChunkManager.registerMesh(ix, iz, leavesMesh);
+            if (snowMesh) ChunkManager.registerMesh(ix, iz, snowMesh);
+        });
     },
 
     fillArea: async (

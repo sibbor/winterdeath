@@ -14,6 +14,7 @@ import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
 import { PERKS, PerkCategory } from '../../../../content/perks';
 import { WEAPONS, WeaponCategory } from '../../../../content/weapons';
+import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputTypes';
 
 interface ScreenStatisticsProps {
     stats: PlayerStats;
@@ -115,7 +116,8 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
     // Keyboard support for closing
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' || e.key === 'Enter') {
+            const action = INPUT_KEY_MAP[e.key];
+            if (action === InputAction.ESCAPE || action === InputAction.ENTER) {
                 onClose();
             }
         };
@@ -372,8 +374,6 @@ const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: n
     const totalRushDistance = (sb[PlayerStatID.TOTAL_RUSH_DISTANCE] || 0).toFixed(1);
     const hasData = stats.sectorsCompleted > 0 || stats.totalSkillPointsEarned > 0 || sb[PlayerStatID.TOTAL_GAME_TIME] > 10;
 
-    const scrapDensity = stats.sectorsCompleted > 0 ? (sb[PlayerStatID.TOTAL_SCRAP_COLLECTED] / stats.sectorsCompleted).toFixed(0) : '0';
-
     if (!hasData) {
         return (
             <div className="flex flex-col items-center justify-center p-20 border-2 border-dashed border-zinc-800 bg-zinc-900/10">
@@ -403,10 +403,10 @@ const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: n
                         <span className="text-yellow-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 relative z-10">{t('ui.scrap_scavenged')}</span>
                         <span className="text-2xl font-light text-white font-mono relative z-10">{Math.floor(sb[PlayerStatID.TOTAL_SCRAP_COLLECTED] || 0).toLocaleString()}</span>
                     </div>
-                    <div className="bg-green-900/10 border-2 border-green-500/20 p-6 flex flex-col items-center justify-center relative group overflow-hidden shadow-inner">
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-green-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
-                        <span className="text-green-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 relative z-10">{t('ui.scrap_density')}</span>
-                        <span className="text-2xl font-light text-white font-mono relative z-10">{scrapDensity}</span>
+                    <div className="bg-red-900/10 border-2 border-red-500/20 p-6 flex flex-col items-center justify-center relative group overflow-hidden shadow-inner">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-red-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
+                        <span className="text-red-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 relative z-10">{t('ui.cp_earned')}</span>
+                        <span className="text-2xl font-light text-white font-mono relative z-10">{Math.floor(sb[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0).toLocaleString()}</span>
                     </div>
                 </div>
 
