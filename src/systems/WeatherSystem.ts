@@ -29,6 +29,10 @@ export class WeatherSystem implements System {
     // Cached physics multiplier for shader uniforms
     private swayMult: number = 0.0;
 
+    // --- VINTERDÖD: WEATHER INERTIA SCRATCHPADS (Zero-GC) ---
+    private _windOffset = new THREE.Vector2(0, 0);
+    private _smoothWind = new THREE.Vector2(0, 0);
+
     constructor(scene: THREE.Scene, wind: WindSystem, camera: THREE.Camera, maxCount: number = WEATHER_SYSTEM.MAX_NUM_PARTICLES) {
         this.scene = scene;
         this.wind = wind;
@@ -43,6 +47,10 @@ export class WeatherSystem implements System {
         this.type = type;
         this.count = actualCount;
         this.areaSize = areaSize;
+
+        // Reset wind accumulation for clean transitions
+        this._windOffset.set(0, 0);
+        this._smoothWind.copy(this.wind.current);
 
         // Set physics multipliers for the shader
         switch (type) {
@@ -154,8 +162,17 @@ export class WeatherSystem implements System {
         // --- ZERO-GC UNIFORM UPDATE ---
         mat.uniforms.uTime.value = renderTime * 0.001;
 
-        const windVec = this.wind.current;
-        mat.uniforms.uWind.value.set(windVec.x * this.swayMult, windVec.y * this.swayMult);
+        // Apply Weather Inertia (Smoothing)
+        // delta is in seconds. lerp factor gives it "weight" compared to the global wind.
+        const lerpFactor = 1.0 - Math.exp(-0.8 * delta);
+        this._smoothWind.lerp(this.wind.current, lerpFactor);
+
+        // Integrate wind into offset (Movement over time)
+        this._windOffset.x += this._smoothWind.x * this.swayMult * delta;
+        this._windOffset.y += this._smoothWind.y * this.swayMult * delta;
+
+        mat.uniforms.uWindOffset.value.copy(this._windOffset);
+        mat.uniforms.uSmoothWind.value.copy(this._smoothWind);
 
         if (this.camera.position) {
             mat.uniforms.uPlayerPos.value.copy(this.camera.position);
@@ -170,7 +187,8 @@ export class WeatherSystem implements System {
         return new THREE.ShaderMaterial({
             uniforms: {
                 uTime: { value: 0 },
-                uWind: { value: new THREE.Vector2() },
+                uWindOffset: { value: new THREE.Vector2() },
+                uSmoothWind: { value: new THREE.Vector2() },
                 uPlayerPos: { value: new THREE.Vector3() },
                 uAreaSize: { value: this.areaSize },
                 uYTop: { value: 40.0 },
@@ -180,7 +198,8 @@ export class WeatherSystem implements System {
             },
             vertexShader: `
                 uniform float uTime;
-                uniform vec2 uWind;
+                uniform vec2 uWindOffset;
+                uniform vec2 uSmoothWind;
                 uniform vec3 uPlayerPos;
                 uniform float uAreaSize;
                 uniform float uYTop;
@@ -193,34 +212,29 @@ export class WeatherSystem implements System {
                     float areaHalf = uAreaSize * 0.5;
                     
                     // 1. Calculate world-space position with wrap-around
-                    // We use initialPos as the seed.
                     vec3 pos = initialPos;
                     
-                    // Apply velocity and wind
-                    pos.x += (velocity.x + uWind.x) * uTime;
+                    // Apply velocity and Integrated Wind Offset
+                    pos.x += velocity.x * uTime + uWindOffset.x;
                     pos.y += velocity.y * uTime;
-                    pos.z += (velocity.z + uWind.y) * uTime;
+                    pos.z += velocity.z * uTime + uWindOffset.y;
                     
                     // 2. Wrap Y (Vertical Loop)
                     pos.y = mod(pos.y, uYTop);
                     
                     // 3. Wrap X and Z around the player camera
-                    // This creates a "moving volume" of particles
                     pos.x = uPlayerPos.x + mod(pos.x - uPlayerPos.x + areaHalf, uAreaSize) - areaHalf;
                     pos.z = uPlayerPos.z + mod(pos.z - uPlayerPos.z + areaHalf, uAreaSize) - areaHalf;
                     
-                    // 4. Handle Rain Tilting (Physical Shear)
+                    // 4. Handle Rain Tilting (Physical Shear) using Smooth Wind
                     vec3 localPos = position;
                     if (uIsRain > 0.5) {
-                        vec3 totalVel = vec3(velocity.x + uWind.x, velocity.y, velocity.z + uWind.y);
+                        // For rain, we use a consistent sway multiplier to determine the tilt vector
+                        vec3 totalVel = vec3(velocity.x + uSmoothWind.x * 5.0, velocity.y, velocity.z + uSmoothWind.y * 5.0);
                         float speed = length(totalVel);
                         vec3 dir = totalVel / speed;
                         
-                        // Tilt the geometry based on its Y-coordinate
-                        // If localPos.y is 1 (top of rain streak), offset it by the direction
                         if (localPos.y > 0.0) {
-                            // Rain is stretched on Y in geometry, so we tilt the top part
-                            // (This is a simplified version of the CPU logic)
                             localPos.x += dir.x * localPos.y * 2.0;
                             localPos.z += dir.z * localPos.y * 2.0;
                         }
