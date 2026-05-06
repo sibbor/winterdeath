@@ -1110,7 +1110,12 @@ export class GameSessionSetup {
         AssetLoader.getInstance().clearCache();
 
         const engine = WinterEngine.getInstance();
-        engine.input.disable();
+        // VINTERDÖD FIX: Idempotent disablement.
+        // Only disable input if this session is the one currently driving the engine.
+        // This prevents a "late" cleanup from disabling input for a newly mounted sector.
+        if (engine.onUpdateContext === session) {
+            engine.input.disable();
+        }
         audioEngine.setReverb(0);
         audioEngine.stopAll();
 

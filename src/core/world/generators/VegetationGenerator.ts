@@ -67,7 +67,8 @@ const _createGrassTuftGeo = () => {
 };
 
 const SHARED_GEO = {
-    box: new THREE.BoxGeometry(1, 1, 1), // VINTERDOD FIX: Restored center pivot to fix floating hedges and ugly bushes
+    box: new THREE.BoxGeometry(1, 1, 1), // Standard centered box for general props
+    hedgeBox: new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), // VINTERDÖD: Bottom-anchored pivot for wind-sway hedges
     cylinder: new THREE.CylinderGeometry(1, 1, 2, 8),
     plane: new THREE.PlaneGeometry(1, 1),
     grass: _createCrossGeo(),
@@ -671,10 +672,9 @@ export const VegetationGenerator = {
     createHedge: (length: number = 2.0, height: number = 1.2, thickness: number = 0.8) => {
         const geometries = [];
 
-        // VINTERDÖD: SHARED_GEO.box is perfectly centered again.
-        const mainGeo = SHARED_GEO.box.clone();
+        // VINTERDÖD: Use the shifted hedgeBox to ensure position.y=0 is the base for the wind shader.
+        const mainGeo = SHARED_GEO.hedgeBox.clone();
         _matrix.makeScale(thickness, height, length);
-        _matrix.setPosition(0, height / 2, 0); // Sets hedge perfectly on the ground
         mainGeo.applyMatrix4(_matrix);
         geometries.push(mainGeo);
 
@@ -721,11 +721,11 @@ export const VegetationGenerator = {
             _v2.subVectors(p2, p1).normalize();
             _quat.setFromUnitVectors(_axisX, _v2);
 
-            const hedge = new THREE.Mesh(SHARED_GEO.box, MATERIALS.hedge);
+            // VINTERDÖD: Use shifted box so we don't need manual Y-offsetting for the pivot.
+            const hedge = new THREE.Mesh(SHARED_GEO.hedgeBox, MATERIALS.hedge);
             hedge.position.copy(_v1);
             hedge.quaternion.copy(_quat);
             hedge.scale.set(dist, height, thickness);
-            hedge.position.y += height / 2; // Offset for centered box
             hedge.castShadow = true;
             GeneratorUtils.freezeStatic(hedge);
             ctx.scene.add(hedge);
@@ -947,7 +947,7 @@ export const VegetationGenerator = {
             case VEGETATION_TYPE.GRASS: await _placeGroundCover(ctx, region, density, SHARED_GEO.grassTuft, MATERIALS.grassTuft, false); break;
             case VEGETATION_TYPE.FLOWER: await _placeGroundCover(ctx, region, density, SHARED_GEO.grass, MATERIALS.flower, false); break;
             case VEGETATION_TYPE.SUNFLOWER: await _placeSunflowers(ctx, region, density); break;
-            case VEGETATION_TYPE.BUSH: await _placeGroundCover(ctx, region, density, SHARED_GEO.box, MATERIALS.hedge, false); break;
+            case VEGETATION_TYPE.BUSH: await _placeGroundCover(ctx, region, density, SHARED_GEO.hedgeBox, MATERIALS.hedge, false); break;
         }
     },
 

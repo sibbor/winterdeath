@@ -216,6 +216,28 @@ export const createProceduralDiffuse = () => {
         ctx.beginPath(); ctx.moveTo(340 * s, 100 * s); ctx.lineTo(300 * s, 140 * s); ctx.stroke();
     });
 
+    const dirt = draw(512, 512, (ctx, s) => {
+        const w = ctx.canvas.width; const h = ctx.canvas.height;
+        ctx.fillStyle = '#3d2b1f'; ctx.fillRect(0, 0, w, h);
+        const count = Math.floor(20000 * s * s);
+        for (let i = 0; i < count; i++) {
+            const size = (1 + Math.random()) * s;
+            ctx.fillStyle = Math.random() > 0.5 ? '#2d1f16' : '#4d3b2a';
+            ctx.fillRect(Math.random() * w, Math.random() * h, size, size);
+        }
+    });
+
+    const snow = draw(512, 512, (ctx, s) => {
+        const w = ctx.canvas.width; const h = ctx.canvas.height;
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
+        const count = Math.floor(15000 * s * s);
+        for (let i = 0; i < count; i++) {
+            const size = (1 + Math.random() * 2) * s;
+            ctx.fillStyle = `rgba(200, 220, 255, ${0.1 + Math.random() * 0.2})`;
+            ctx.fillRect(Math.random() * w, Math.random() * h, size, size);
+        }
+    });
+
     const frostAlpha = drawAlpha(256, 256, (ctx, s) => {
         const w = ctx.canvas.width; const h = ctx.canvas.height;
         const grad = ctx.createLinearGradient(0, 0, w, 0);
@@ -362,7 +384,7 @@ export const createProceduralDiffuse = () => {
     });
 
     // Final cache population
-    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, map, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint, scorchAlpha, treeLeaves };
+    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, map, dirt, snow, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint, scorchAlpha, treeLeaves };
 
     return cachedTextures;
 };

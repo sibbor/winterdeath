@@ -503,17 +503,24 @@ export const CampWorld = {
         if (!cachedTerrainMat) {
             cachedTerrainMat = new THREE.MeshStandardMaterial().copy(MATERIALS.dirt as THREE.MeshStandardMaterial);
             cachedTerrainMat.userData = { isSharedAsset: true };
+        } else if (!cachedTerrainMat.map && MATERIALS.dirt.map) {
+            // Ensure textures are synchronized if they were missing during warmup phase
+            cachedTerrainMat.map = MATERIALS.dirt.map;
+            if (MATERIALS.dirt.bumpMap) cachedTerrainMat.bumpMap = MATERIALS.dirt.bumpMap;
         }
 
         if (cachedTerrainMat.map && cachedTerrainMat.map.repeat.x !== 60) {
             cachedTerrainMat.map.repeat.set(60, 60);
+            cachedTerrainMat.map.updateMatrix();
         }
         if (cachedTerrainMat.bumpMap && cachedTerrainMat.bumpMap.repeat.x !== 60) {
             cachedTerrainMat.bumpMap.repeat.set(60, 60);
+            cachedTerrainMat.bumpMap.updateMatrix();
         }
 
         const groundGeo = new THREE.PlaneGeometry(size, size);
         const ground = new THREE.Mesh(groundGeo, cachedTerrainMat);
+        ground.name = 'GROUND';
 
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;

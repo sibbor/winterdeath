@@ -16,7 +16,9 @@ export function patchCutoutMaterial<T extends THREE.Material>(mat: T): T {
     mat.userData.uWaterBodies = { value: Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) };
 
     mat.onBeforeCompile = (shader) => {
-        if (!mat.userData.uWaterBodies || !mat.userData.uWaterBodies.value || typeof mat.userData.uWaterBodies.value[0].isVector4 === 'undefined') {
+        // Ensure uWaterBodies exists and is an array of Vector4s. 
+        // We check .x instead of .isVector4 for maximum compatibility with both Vector4 and plain objects.
+        if (!mat.userData.uWaterBodies || !mat.userData.uWaterBodies.value || mat.userData.uWaterBodies.value.length === 0 || typeof mat.userData.uWaterBodies.value[0].x === 'undefined') {
             mat.userData.uWaterBodies = { value: Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) };
         }
 

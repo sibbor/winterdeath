@@ -51,6 +51,13 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
 
     const isDebugMode = (debugMode !== undefined ? debugMode : false) || (window as any).gameEngine?.sectorContext?.debugMode || (window as any).WD_DEBUG === true || localStorage.getItem('wd_debug') === 'true';
 
+    // Sync tab when initialTab changes (e.g. when opened from Pause Menu)
+    useEffect(() => {
+        if (initialTab !== undefined) {
+            setActiveTab(initialTab);
+        }
+    }, [initialTab]);
+
     // Mark all found collectibles as viewed when the log is opened
     useEffect(() => {
         const foundIds = stats.collectiblesDiscovered || EMPTY_ARRAY;

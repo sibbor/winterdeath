@@ -99,6 +99,13 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
         nextLevelXp: Math.floor(stats.statsBuffer[PlayerStatID.NEXT_LEVEL_XP])
     }), [stats.statsBuffer]);
 
+    // Sync tab when initialTab changes (e.g. when opened from Pause Menu)
+    useEffect(() => {
+        if (initialTab) {
+            setActiveTab(initialTab);
+        }
+    }, [initialTab]);
+
     // Scroll to item if provided
     useEffect(() => {
         if (initialItemId) {

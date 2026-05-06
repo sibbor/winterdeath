@@ -126,8 +126,8 @@ export const useGameInput = (
         const handleLockChange = () => {
             if (!document.pointerLockElement && props.isGameRunning && !props.isPaused) {
 
-                // Ignore if we JUST unpaused (lock takes a frame or two to acquire)
-                if (performance.now() - unpauseTimeRef.current < 500) {
+                // VINTERDÖD FIX: Slightly reduced safety window (500->300ms) for tighter responsiveness
+                if (performance.now() - unpauseTimeRef.current < 300) {
                     return;
                 }
 
@@ -136,8 +136,12 @@ export const useGameInput = (
                     return;
                 }
 
-                const isExpected = refs.cinematicRef.current.active || refs.bossIntroTimerRef.current || (refs.stateRef.current?.statusFlags & PlayerStatusFlags.DEAD);
-                if (!isExpected) {
+                // VINTERDÖD FIX: Only trigger pause if we are in a state that expects input focus
+                const isExpected = refs.cinematicRef.current.active || 
+                                 refs.bossIntroTimerRef.current || 
+                                 (refs.stateRef.current?.statusFlags & PlayerStatusFlags.DEAD);
+                                 
+                if (!isExpected && props.isGameRunning && !props.isPaused) {
                     props.onPauseToggle(true);
                 }
             }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { createProceduralDiffuse } from '../../../utils/assets/procedural';
 import { MATERIALS } from '../../../utils/assets/materials';
 import { MaterialType } from '../../../content/environment';
 import { SectorContext, GroundType } from '../../../game/session/SectorTypes';
@@ -34,6 +35,15 @@ export const TerrainGenerator = {
         if (type === GroundType.GRAVEL) mat = MATERIALS.gravelCutout;
         else if (type === GroundType.DIRT) mat = MATERIALS.dirtCutout;
         else mat = MATERIALS.snowCutout;
+
+        // VINTERDÖD FIX: Ensure terrain material is fully initialized if textures were skipped during warmup
+        const mMat = mat as THREE.MeshStandardMaterial;
+        if (!mMat.map) {
+            const procedural = createProceduralDiffuse();
+            if (type === GroundType.GRAVEL) mMat.map = procedural.stone;
+            else if (type === GroundType.DIRT) mMat.map = procedural.dirt;
+            else mMat.map = procedural.snow;
+        }
 
         const geo = new THREE.PlaneGeometry(width, depth);
         const repeatX = width / 10;

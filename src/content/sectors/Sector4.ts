@@ -19,6 +19,7 @@ import { StatusEffectType } from '../../content/perks';
 import { DamageID } from '../../entities/player/CombatTypes';
 import { FXParticleType } from '../../types/FXTypes';
 import { EnemyFlags } from '../../entities/enemies/EnemyTypes';
+import { OverlayType } from '../../components/ui/hud/HudTypes';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -496,16 +497,16 @@ export const Sector4: SectorDef = {
 
         // STATIONS
         if (id === 'TERMINAL_ARMORY') {
-            events.setOverlay('STATION_ARMORY');
+            events.setOverlay(OverlayType.STATION_ARMORY);
         }
         else if (id === 'TERMINAL_SPAWNER') {
-            events.setOverlay('STATION_SPAWNER');
+            events.setOverlay(OverlayType.STATION_SPAWNER);
         }
         else if (id === 'TERMINAL_ENV') {
-            events.setOverlay('STATION_ENVIRONMENT');
+            events.setOverlay(OverlayType.STATION_ENVIRONMENT);
         }
         else if (id === 'TERMINAL_SKILLS') {
-            events.setOverlay('STATION_SKILLS');
+            events.setOverlay(OverlayType.STATION_SKILLS);
         }
 
         // BUS EXPLOSION

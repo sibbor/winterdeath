@@ -388,15 +388,23 @@ const App: React.FC = () => {
 
     const handleResumeAction = useCallback(() => {
         const { gameState: currentGameState, isMobileDevice: isMobile } = latestStateRef.current;
-        if (currentGameState.screen === GameScreen.SECTOR && !isMobile) {
-            gameCanvasRef.current?.requestPointerLock();
-        }
+        
         setActiveOverlay(OverlayType.NONE);
+        
+        // VINTERDÖD: Immediate engine wake-up
+        const engine = WinterEngine.getInstance();
+        engine.isSimulationPaused = false;
+        engine.input.enable();
+
+        // Re-request pointer lock
+        if (currentGameState.screen === GameScreen.SECTOR && !isMobile && gameCanvasRef.current) {
+            gameCanvasRef.current.requestPointerLock();
+        }
     }, []);
 
     const handleOpenSettingsAction = useCallback(() => setActiveOverlay(OverlayType.SETTINGS), []);
     const handleOpenAdventureLogAction = useCallback((tab?: DiscoveryType, itemId?: string) => {
-        setInitialAdventureLogTab(tab ?? DiscoveryType.CLUE);
+        setInitialAdventureLogTab(tab ?? DiscoveryType.CHALLENGE);
         setInitialAdventureLogItem(itemId || null);
         setActiveOverlay(OverlayType.ADVENTURE_LOG);
         UiSounds.playConfirm();
@@ -921,7 +929,7 @@ const App: React.FC = () => {
                         <ScreenStatistics
                             stats={gameState.screen === GameScreen.SECTOR ? (gameCanvasRef.current?.getMergedSessionStats() || gameState.stats) : gameState.stats}
                             onClose={handleCloseAction}
-                            onOpenDiscovery={() => handleOpenAdventureLogAction('clues')}
+                            onOpenDiscovery={() => handleOpenAdventureLogAction(DiscoveryType.CLUE)}
                             isMobileDevice={isMobileDevice}
                             debugMode={gameState.debugMode}
                             initialTab={initialStatisticsTab as any}

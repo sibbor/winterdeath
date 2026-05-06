@@ -32,6 +32,13 @@ export class InputManager implements System {
     public onKeyUp?: (key: string) => void;
 
     constructor() {
+        this.screenWidth = window.innerWidth;
+        this.screenHeight = window.innerHeight;
+        this.invScreenWidth = 1.0 / Math.max(1, this.screenWidth);
+        this.invScreenHeight = 1.0 / Math.max(1, this.screenHeight);
+        this.screenHalfWidth = this.screenWidth * 0.5;
+        this.screenHalfHeight = this.screenHeight * 0.5;
+
         this.state = {
             actions: new Uint8Array(InputAction.COUNT),
             mouse: new THREE.Vector2(),
@@ -41,6 +48,19 @@ export class InputManager implements System {
             joystickAim: new THREE.Vector2(0, 0),
             locked: false
         };
+
+        // --- VINTERDÖD: ZERO-GC PRE-BINDING ---
+        this.handleKeyDown = this.handleKeyDown.bind(this);
+        this.handleKeyUp = this.handleKeyUp.bind(this);
+        this.handleMouseMove = this.handleMouseMove.bind(this);
+        this.handleMouseDown = this.handleMouseDown.bind(this);
+        this.handleMouseUp = this.handleMouseUp.bind(this);
+        this.handleWheel = this.handleWheel.bind(this);
+        this.handleResize = this.handleResize.bind(this);
+        this.handleVirtualKey = this.handleVirtualKey.bind(this);
+        this.handleLockChange = this.handleLockChange.bind(this);
+        this.handleFocus = this.handleFocus.bind(this);
+        this.handleBlur = this.handleBlur.bind(this);
 
         this.bindEvents();
     }
@@ -79,6 +99,8 @@ export class InputManager implements System {
         window.addEventListener('mouseup', this.handleMouseUp);
         window.addEventListener('wheel', this.handleWheel, { passive: true });
         window.addEventListener('resize', this.handleResize);
+        window.addEventListener('focus', this.handleFocus);
+        window.addEventListener('blur', this.handleBlur);
         window.addEventListener('hud-virtual-key', this.handleVirtualKey as any);
         document.addEventListener('pointerlockchange', this.handleLockChange);
     }
@@ -91,46 +113,46 @@ export class InputManager implements System {
         window.removeEventListener('mouseup', this.handleMouseUp);
         window.removeEventListener('wheel', this.handleWheel);
         window.removeEventListener('resize', this.handleResize);
+        window.removeEventListener('focus', this.handleFocus);
+        window.removeEventListener('blur', this.handleBlur);
         window.removeEventListener('hud-virtual-key', this.handleVirtualKey as any);
         document.removeEventListener('pointerlockchange', this.handleLockChange);
     }
 
-    private handleResize = () => {
+    private handleResize() {
         this.screenWidth = window.innerWidth;
         this.screenHeight = window.innerHeight;
-
-        // Cache multiplication-friendly values
-        this.invScreenWidth = 1.0 / this.screenWidth;
-        this.invScreenHeight = 1.0 / this.screenHeight;
+        this.invScreenWidth = 1.0 / Math.max(1, this.screenWidth);
+        this.invScreenHeight = 1.0 / Math.max(1, this.screenHeight);
         this.screenHalfWidth = this.screenWidth * 0.5;
         this.screenHalfHeight = this.screenHeight * 0.5;
-    };
+    }
 
-    private handleKeyDown = (e: KeyboardEvent) => {
+    private handleKeyDown(e: KeyboardEvent) {
         if (!this.isEnabled) return;
 
-        // Zero-GC: Direct property lookup avoids string mutation
+        if (this.onKeyDown) this.onKeyDown(e.key);
+
+        if (e.repeat) return;
+
         const action = INPUT_KEY_MAP[e.key];
         if (action !== undefined) {
             this.state.actions[action] = 1;
         }
+    }
 
-        if (this.onKeyDown) this.onKeyDown(e.key);
-    };
-
-    private handleKeyUp = (e: KeyboardEvent) => {
+    private handleKeyUp(e: KeyboardEvent) {
         if (!this.isEnabled) return;
 
-        // Zero-GC: Direct property lookup avoids string mutation
+        if (this.onKeyUp) this.onKeyUp(e.key);
+
         const action = INPUT_KEY_MAP[e.key];
         if (action !== undefined) {
             this.state.actions[action] = 0;
         }
-
-        if (this.onKeyUp) this.onKeyUp(e.key);
-    };
+    }
     
-    private handleVirtualKey = (e: CustomEvent) => {
+    private handleVirtualKey(e: CustomEvent) {
         if (!this.isEnabled) return;
         const { key, pressed } = e.detail;
         
@@ -145,9 +167,9 @@ export class InputManager implements System {
         if (action !== undefined && action < InputAction.COUNT) {
             this.state.actions[action] = pressed ? 1 : 0;
         }
-    };
+    }
 
-    private handleMouseMove = (e: MouseEvent) => {
+    private handleMouseMove(e: MouseEvent) {
         if (!this.isEnabled) {
             this.state.cursorPos.x = e.clientX;
             this.state.cursorPos.y = e.clientY;
@@ -158,17 +180,13 @@ export class InputManager implements System {
             this.virtualAimPos.x += e.movementX;
             this.virtualAimPos.y += e.movementY;
 
-            const distSq = this.virtualAimPos.lengthSq();
-
-            // Zero-GC manual length clamping to avoid redundant Math.sqrt
+            // Clamp virtual position to circle radius
+            const distSq = this.virtualAimPos.x * this.virtualAimPos.x + this.virtualAimPos.y * this.virtualAimPos.y;
             if (distSq > MAX_AIM_RADIUS_SQ) {
-                const invDist = MAX_AIM_RADIUS / Math.sqrt(distSq);
-                this.virtualAimPos.x *= invDist;
-                this.virtualAimPos.y *= invDist;
-            } else if (distSq < MIN_AIM_RADIUS_SQ && distSq > 0) {
-                const invDist = MIN_AIM_RADIUS / Math.sqrt(distSq);
-                this.virtualAimPos.x *= invDist;
-                this.virtualAimPos.y *= invDist;
+                const dist = Math.sqrt(distSq);
+                const invDist = 1.0 / dist;
+                this.virtualAimPos.x *= invDist * MAX_AIM_RADIUS;
+                this.virtualAimPos.y *= invDist * MAX_AIM_RADIUS;
             }
 
             this.state.aimVector.copy(this.virtualAimPos);
@@ -184,23 +202,20 @@ export class InputManager implements System {
 
             this.state.aimVector.set(e.clientX - this.screenHalfWidth, e.clientY - this.screenHalfHeight);
         }
-    };
+    }
 
-    private handleMouseDown = (e: MouseEvent) => {
-        if (this.isEnabled && e.button === 0) {
-            this.state.actions[InputAction.FIRE] = 1;
-        }
-    };
-
-    private handleMouseUp = (e: MouseEvent) => {
-        if (this.isEnabled && e.button === 0) {
-            this.state.actions[InputAction.FIRE] = 0;
-        }
-    };
-
-    private handleWheel = (e: WheelEvent) => {
+    private handleMouseDown(e: MouseEvent) {
         if (!this.isEnabled) return;
+        this.state.actions[InputAction.FIRE] = 1;
+    }
 
+    private handleMouseUp(e: MouseEvent) {
+        if (!this.isEnabled) return;
+        this.state.actions[InputAction.FIRE] = 0;
+    }
+
+    private handleWheel(e: WheelEvent) {
+        // Implement weapon switching with scroll wheel if needed
         // Zero-GC: Handled purely as flags. The game loop (WeaponHandler) 
         // will consume these and set them back to false immediately.
         if (e.deltaY < 0) {
@@ -210,9 +225,25 @@ export class InputManager implements System {
         }
     };
 
-    private handleLockChange = () => {
+    private handleLockChange() {
         this.state.locked = !!document.pointerLockElement;
-    };
+    }
+
+    private handleFocus() {
+        // --- VINTERDÖD FIX: Forced State Recovery ---
+        // Ensure the locked flag is synchronized with the actual document state
+        // and re-enable input if it was supposed to be enabled.
+        this.state.locked = !!document.pointerLockElement;
+        
+        // We don't automatically .enable() here because some overlays might want it disabled,
+        // but we ensure that if we ARE enabled, we are truly capturing.
+    }
+
+    private handleBlur() {
+        // --- VINTERDÖD FIX: Zero-GC State Flush ---
+        // Prevent "Infinite Walking" by completely clearing the action buffer when the window loses focus.
+        this.resetState();
+    }
 
     /**
      * Centralized Pointer Lock Request.

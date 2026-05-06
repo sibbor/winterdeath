@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { TEXTURES } from './AssetLoader';
 import { createProceduralDiffuse } from './procedural'
 import { patchCutoutMaterial, patchWaterVegetationMaterial } from './materials_water';
-import { patchWindMaterial } from './materials_wind';
+import { patchTreeWindMaterial, patchHedgeWindMaterial, patchGrassWindMaterial } from './materials_wind';
 
 // --- HELPERS ---
 const createSmokeTexture = () => {
@@ -81,7 +81,7 @@ export const getSharedGlowTexture = (): THREE.CanvasTexture => {
         canvas.height = 64;
         const ctx = canvas.getContext('2d')!;
 
-        // VINTERDÖD: Perfekt radiell gradient för Additive Blending
+        // VINTERDÖD: Perfect radial gradient for Additive Blending
         const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
         gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
         gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.4)');
@@ -92,7 +92,7 @@ export const getSharedGlowTexture = (): THREE.CanvasTexture => {
 
         _sharedGlowTexture = new THREE.CanvasTexture(canvas);
 
-        // Zero-GC Optimering: Stäng av mipmaps för mjuka gradienter
+        // Zero-GC Optimization: Disable mipmaps for smooth gradients
         _sharedGlowTexture.generateMipmaps = false;
         _sharedGlowTexture.minFilter = THREE.LinearFilter;
     }
@@ -130,32 +130,32 @@ export const MATERIALS = {
         side: THREE.DoubleSide
     }),
 
-    // ---- ENVIRONMENTAL (VEGETATION & TRÄD - ALLA PATCHADE) ----
-    grass: patchWindMaterial(new THREE.MeshStandardMaterial({
+    // ---- ENVIRONMENTAL (VEGETATION & TREES - ALL PATCHED) ----
+    grass: patchGrassWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x4a6e4a,
         roughness: 1.0,
         flatShading: true,
         side: THREE.DoubleSide
     })),
-    flower: patchWindMaterial(new THREE.MeshStandardMaterial({
+    flower: patchGrassWindMaterial(new THREE.MeshStandardMaterial({
         color: 0xffffff,
         roughness: 0.8,
         vertexColors: true,
         side: THREE.DoubleSide
     })),
-    wheat: patchWindMaterial(new THREE.MeshStandardMaterial({
+    wheat: patchGrassWindMaterial(new THREE.MeshStandardMaterial({
         color: 0xd4af37,
         roughness: 1.0,
         flatShading: true,
         side: THREE.DoubleSide
     })),
-    grassTuft: patchWindMaterial(new THREE.MeshStandardMaterial({
+    grassTuft: patchGrassWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x3a7d3a,
         roughness: 1.0,
         flatShading: true,
         side: THREE.DoubleSide
     })),
-    hedge: patchWindMaterial(new THREE.MeshStandardMaterial({
+    hedge: patchHedgeWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x2d4c1e,
         roughness: 0.9,
         flatShading: true
@@ -179,49 +179,49 @@ export const MATERIALS = {
         flatShading: true,
         side: THREE.DoubleSide
     })),
-    treeSilhouette: patchWindMaterial(new THREE.MeshStandardMaterial({
+    treeSilhouette: patchTreeWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x1e1e1e,
         roughness: 1.0,
         metalness: 0.0,
         flatShading: true,
         side: THREE.DoubleSide
     })),
-    treeFirNeedles: patchWindMaterial(new THREE.MeshStandardMaterial({
+    treeFirNeedles: patchTreeWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x2d4c1e, // Deep green base
         roughness: 0.9,
         flatShading: true,
         side: THREE.DoubleSide
     })),
-    treeLeavesOak: patchWindMaterial(new THREE.MeshStandardMaterial({
+    treeLeavesOak: patchTreeWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x4a6b30, // Green for Oak
         roughness: 0.9,
         flatShading: true,
         side: THREE.DoubleSide
     })),
-    treeLeavesBirch: patchWindMaterial(new THREE.MeshStandardMaterial({
+    treeLeavesBirch: patchTreeWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x8DA331, // Yellowish-Green for Birch
         roughness: 0.9,
         flatShading: true,
         side: THREE.DoubleSide
     })),
-    treeTrunk: patchWindMaterial(new THREE.MeshStandardMaterial({
+    treeTrunk: patchTreeWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x4a3c31, // Flat dark brown
         roughness: 1.0,
         flatShading: true
     })),
-    treeTrunkBirch: patchWindMaterial(new THREE.MeshStandardMaterial({
+    treeTrunkBirch: patchTreeWindMaterial(new THREE.MeshStandardMaterial({
         color: 0xffffff,
         roughness: 0.9,
         flatShading: true
     })),
-    treeTrunkOak: patchWindMaterial(new THREE.MeshStandardMaterial({
+    treeTrunkOak: patchTreeWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x5a504a,
         roughness: 1.0,
         bumpMap: TEXTURES.bark_rough_bump,
         bumpScale: 0.1,
         flatShading: true
     })),
-    deadWood: patchWindMaterial(new THREE.MeshStandardMaterial({
+    deadWood: patchTreeWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x5c5046,
         roughness: 1.0,
         map: DIFFUSE.bark,
@@ -316,9 +316,9 @@ export const MATERIALS = {
     vehicleSign: new THREE.MeshBasicMaterial({ transparent: true }),
 
     // ---- VEGETATION ----
-    sunflowerStem: patchWindMaterial(new THREE.MeshStandardMaterial({ color: 0x228B22 })),
-    sunflowerHead: patchWindMaterial(new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.8 })),
-    sunflowerCenter: patchWindMaterial(new THREE.MeshStandardMaterial({ color: 0x3E2723, roughness: 1.0 })),
+    sunflowerStem: patchGrassWindMaterial(new THREE.MeshStandardMaterial({ color: 0x228B22 })),
+    sunflowerHead: patchGrassWindMaterial(new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.8 })),
+    sunflowerCenter: patchGrassWindMaterial(new THREE.MeshStandardMaterial({ color: 0x3E2723, roughness: 1.0 })),
 
     // ---- SPECIAL ----
     textSprite: new THREE.SpriteMaterial({ transparent: true, depthWrite: false, depthTest: true }),
@@ -547,6 +547,7 @@ export const MATERIALS = {
     // ---- GROUND (ROADS, PATHS, SNOW) ----
     snow: new THREE.MeshStandardMaterial({
         color: 0xffffff, // Brighter white snow
+        map: DIFFUSE.snow,
         roughness: 1.0, // Fully diffuse
         metalness: 0.0,
         bumpMap: TEXTURES.snow_bump,
@@ -556,6 +557,7 @@ export const MATERIALS = {
     }),
     snowCutout: patchCutoutMaterial(new THREE.MeshStandardMaterial({
         color: 0xffffff,
+        map: DIFFUSE.snow,
         roughness: 1.0,
         metalness: 0.0,
         bumpMap: TEXTURES.snow_bump,
@@ -593,7 +595,7 @@ export const MATERIALS = {
     })),
     dirt: new THREE.MeshStandardMaterial({
         color: 0x4a3b32,
-        map: DIFFUSE.gravel,
+        map: DIFFUSE.dirt,
         roughness: 1.0,
         bumpMap: TEXTURES.stone_bump,
         bumpScale: 2.8,
@@ -602,7 +604,7 @@ export const MATERIALS = {
     }),
     dirtCutout: patchCutoutMaterial(new THREE.MeshStandardMaterial({
         color: 0x4a3b32,
-        map: DIFFUSE.gravel,
+        map: DIFFUSE.dirt,
         roughness: 1.0,
         bumpMap: TEXTURES.stone_bump,
         bumpScale: 2.8,

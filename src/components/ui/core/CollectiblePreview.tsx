@@ -140,9 +140,9 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
 
         const renderer = new THREE.WebGLRenderer({
             antialias: true,
-            alpha: true, // Transparent bakgrund så TacticalCard lyser igenom
+            alpha: true,
             powerPreference: 'high-performance',
-            precision: 'mediump'
+            precision: 'highp'
         });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(width, height);
