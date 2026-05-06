@@ -158,7 +158,10 @@ export const AssetPreloader = {
                 const uiAssetsSet = new Set<string>([
                     '/assets/icons/ui/icon_dodge.png',
                     '/assets/icons/ui/icon_reload.png',
-                    '/assets/icons/ui/icon_flashlight.png'
+                    '/assets/icons/ui/icon_flashlight.png',
+                    '/assets/icons/ui/skill_vitality.png',
+                    '/assets/icons/ui/skill_adrenaline.png',
+                    '/assets/icons/ui/skill_reflex.png'
                 ]);
 
                 for (const key in WEAPONS) {

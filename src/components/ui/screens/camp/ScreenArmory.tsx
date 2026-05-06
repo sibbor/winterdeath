@@ -106,10 +106,12 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
         }
     }, [hasChanges, onSave, onClose, tempStats, tempLoadout, tempWeaponLevels]);
 
-    const scrapHeader = useMemo(() => (
-        <div className={`px-4 py-1.5 border bg-black border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] flex flex-col items-start gap-0`}>
-            <span className={`text-[9px] block uppercase font-bold text-yellow-500 leading-tight opacity-70`}>{t('ui.scrap')}</span>
-            <span className={`text-xl md:text-2xl font-bold font-mono text-yellow-400 leading-none`}>{tempStats.statsBuffer[PlayerStatID.SCRAP]}</span>
+    const scrapSubtitle = useMemo(() => (
+        <div className="flex flex-col gap-1 mt-2">
+            <div className="px-3 py-1 bg-yellow-950/40 border border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.2)] flex items-center gap-3 w-fit">
+                <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">{t('ui.scrap')}</span>
+                <span className="text-xl font-mono font-black text-white">{tempStats.statsBuffer[PlayerStatID.SCRAP]}</span>
+            </div>
         </div>
     ), [tempStats.statsBuffer[PlayerStatID.SCRAP]]);
 
@@ -118,13 +120,13 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
     return (
         <ScreenModalLayout
             title={t('stations.armory')}
+            subtitle={scrapSubtitle}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
             onConfirm={handleConfirm}
             confirmLabel={t('ui.confirm_loadout')}
             closeLabel={hasChanges ? t('ui.cancel') : t('ui.close')}
             canConfirm={hasChanges}
-            extraHeaderContent={scrapHeader}
             titleColorClass="text-yellow-600"
             tabs={TABS}
             activeTab={activeTab}
@@ -141,8 +143,8 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
                             const catName = DataResolver.getWeaponCategoryName(cat);
 
                             return (
-                                <button 
-                                    key={cat} 
+                                <button
+                                    key={cat}
                                     onClick={() => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
                                     className={`relative px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
                                         ${isActive
@@ -154,8 +156,8 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
                                     style={isActive ? { backgroundColor: catColor + '33', '--pulse-color': catColor } as any : {}}
                                 >
                                     {isActive && (
-                                        <div className="absolute inset-0 opacity-20 transition-opacity" 
-                                            style={HORIZONTAL_HATCHING_STYLE} 
+                                        <div className="absolute inset-0 opacity-20 transition-opacity"
+                                            style={HORIZONTAL_HATCHING_STYLE}
                                         />
                                     )}
                                     <span className="relative z-10">{t(catName)}</span>
@@ -248,35 +250,47 @@ interface WeaponCardProps {
     onUpgrade: (e: React.MouseEvent, weapon: WeaponType) => void;
 }
 
-const WeaponCard: React.FC<WeaponCardProps> = React.memo(({ 
-    weapon, level, cost, isEquipped, canAfford, categoryColor, 
-    isEquippable, isUpgradeable, isMobileDevice, onEquip, onUpgrade 
+const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
+    weapon, level, cost, isEquipped, canAfford, categoryColor,
+    isEquippable, isUpgradeable, isMobileDevice, onEquip, onUpgrade
 }) => {
+    const isPrimaryColor = categoryColor.toLowerCase() === '#ff3333' || categoryColor.toLowerCase() === 'red';
+
     return (
         <TacticalCard
             onClick={() => !isEquipped && isEquippable && onEquip(weapon.name, weapon.category)}
             isLocked={!isEquipped && !isEquippable}
             color={categoryColor}
-            showHover={true}
-            className={`flex flex-col p-0 ${isEquipped ? 'cursor-default bg-gray-800/60' : (isEquippable ? 'hover:bg-gray-800/60 cursor-pointer' : 'cursor-default')}`}
+            showHover={!isEquipped}
+            className={`flex flex-col p-0 transition-all duration-300 ${isEquipped ? 'cursor-default' : (isEquippable ? 'hover:bg-gray-800/40 cursor-pointer' : 'cursor-default')}`}
             style={{
-                borderColor: categoryColor,
-                borderWidth: isEquipped ? '4px' : '2px',
-                boxShadow: isEquipped ? `0 0 15px ${categoryColor}44` : 'none',
-                minHeight: isMobileDevice ? 'auto' : '300px'
+                borderColor: isEquipped ? categoryColor : 'rgba(63, 63, 70, 0.5)',
+                borderWidth: '2px',
+                boxShadow: isEquipped ? `0 0 30px ${categoryColor}22, inset 0 0 20px ${categoryColor}11` : 'none',
+                minHeight: isMobileDevice ? 'auto' : '300px',
+                backgroundColor: isEquipped ? `${categoryColor}15` : 'transparent'
             }}
         >
+            {isEquipped && (
+                <div className="absolute inset-0 opacity-10 pointer-events-none" style={HORIZONTAL_HATCHING_STYLE} />
+            )}
+
             {/* Top Side (Image & Level) */}
             <div
-                className={`w-full flex flex-col border-b relative shrink-0 bg-black/40`}
-                style={{ borderColor: isEquipped ? categoryColor : '#374151', opacity: isEquipped ? 1 : 0.8 }}
+                className={`w-full flex flex-col border-b relative shrink-0 transition-colors duration-300`}
+                style={{ borderColor: isEquipped ? `${categoryColor}44` : 'rgba(63, 63, 70, 0.5)' }}
             >
-                <div className={`${isMobileDevice ? 'h-32 min-h-[128px]' : 'h-40'} border-b border-gray-800/50 w-full flex items-center justify-center transition-transform group-hover:scale-110 duration-500`}>
-                    {weapon.iconIsPng ? (
-                        <img src={weapon.icon} alt="" className="w-full h-full object-contain filter brightness-0 invert" />
-                    ) : (
-                        <div className="w-16 h-16 md:w-24 md:h-24" dangerouslySetInnerHTML={{ __html: weapon.icon }} style={{ color: categoryColor }} />
+                <div className={`${isMobileDevice ? 'h-32 min-h-[128px]' : 'h-40'} border-b border-white/5 w-full flex items-center justify-center relative overflow-hidden`}>
+                    {isEquipped && (
+                        <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/5 to-transparent animate-pulse" />
                     )}
+                    <div className="transition-transform group-hover:scale-110 duration-700 relative z-10">
+                        {weapon.iconIsPng ? (
+                            <img src={weapon.icon} alt="" className={`w-full h-full object-contain filter brightness-0 invert ${isEquipped ? 'opacity-100' : 'opacity-60'}`} />
+                        ) : (
+                            <div className={`w-16 h-16 md:w-24 md:h-24 ${isEquipped ? 'opacity-100' : 'opacity-60'}`} dangerouslySetInnerHTML={{ __html: weapon.icon }} style={{ color: categoryColor }} />
+                        )}
+                    </div>
                 </div>
 
                 {isUpgradeable && (
@@ -284,73 +298,74 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
                         onClick={(e) => onUpgrade(e, weapon.name)}
                         disabled={!canAfford}
                         variant={canAfford ? 'primary' : 'ghost'}
-                        className="w-full h-10 text-[10px]"
-                        style={canAfford ? { backgroundColor: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderColor: '#eab30844' } : {}}
+                        className="w-full h-10 text-[10px] border-none font-mono"
+                        style={canAfford ? { backgroundColor: 'rgba(234, 179, 8, 0.1)', color: '#eab308' } : { opacity: 0.4 }}
                     >
-                        {t('ui.upgrade')} ({cost})
+                        <span className="opacity-60 mr-1.5">{t('ui.upgrade')}</span>
+                        <span className="font-bold">[{cost}]</span>
                     </TacticalButton>
                 )}
 
-                <div className={`absolute top-0 left-0 bg-gray-900/80 ${isMobileDevice ? 'text-[9px] px-1.5 py-0.5' : 'text-sm px-3 py-1'} font-bold text-gray-400 border-r border-b border-gray-700`}>
+                <div className={`absolute top-0 left-0 ${isMobileDevice ? 'text-[9px] px-2 py-1' : 'text-[11px] px-3 py-1.5'} font-mono font-bold bg-zinc-950 border-r border-b border-white/10 text-zinc-400 tracking-tighter uppercase`}>
                     {t('ui.lvl')} {level}
                 </div>
 
                 {isEquipped && (
-                    <div className={`absolute top-0 right-0 px-1.5 py-0.5 bg-white text-black font-bold uppercase tracking-tighter text-[10px] border-b border-l border-black shadow-lg z-20`}>
-                        {t('ui.equipped')}
+                    <div className={`absolute top-0 right-0 ${isMobileDevice ? 'w-6 h-6' : 'w-8 h-8'} bg-zinc-950 border-l border-b border-white/10 flex items-center justify-center`}>
+                        <div
+                            className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full shadow-[0_0_10px_currentColor]"
+                            style={{ backgroundColor: categoryColor, color: categoryColor }}
+                        />
                     </div>
                 )}
             </div>
 
             {/* Bottom Side (Stats) */}
-            <div className={`flex-1 flex flex-col justify-between ${isMobileDevice ? 'p-2 min-w-0' : 'p-5 gap-4'}`}>
+            <div className={`flex-1 flex flex-col justify-between ${isMobileDevice ? 'p-3 min-w-0' : 'p-6 gap-4'}`}>
                 <div className="min-w-0">
-                    <h3 className={`${isMobileDevice ? 'text-lg leading-tight' : 'text-2xl'} font-semibold uppercase tracking-tighter truncate mb-1`}
-                        style={{ color: isEquipped ? categoryColor : 'white' }}>
-                        {t(DataResolver.getWeaponName(weapon.name))}
-                    </h3>
+                    <div className="flex items-center gap-2 mb-2">
+                        <h3 className={`${isMobileDevice ? 'text-lg leading-tight' : 'text-xl'} font-bold uppercase tracking-tight truncate`}
+                            style={{ color: isEquipped ? 'white' : 'rgba(255,255,255,0.7)' }}>
+                            {t(DataResolver.getWeaponName(weapon.name))}
+                        </h3>
+                    </div>
 
-                    <div className={`flex flex-col gap-y-2 ${isMobileDevice ? 'text-xs' : 'text-sm'} font-mono text-gray-400`}>
-                        <div className="flex justify-between border-b border-gray-800/50 pb-1">
-                            <span className="opacity-60">{t('ui.damage')}</span>
-                            <div className="flex items-baseline gap-1.5">
-                                <span className="text-yellow-500 font-bold text-lg leading-none">
+                    <div className={`flex flex-col gap-y-1.5 ${isMobileDevice ? 'text-[11px]' : 'text-[13px]'} font-mono`}>
+                        <div className="flex justify-between items-center py-1 border-b border-white/5">
+                            <span className="text-zinc-500 uppercase text-[10px] tracking-widest">{t('ui.damage')}</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-yellow-500 font-bold">
                                     {Math.floor(weapon.damage + (weapon.damage * (level - 1) * 0.1))}
                                 </span>
-                                <span className="text-white text-[10px] font-bold opacity-80 whitespace-nowrap">
-                                    ({Math.floor(weapon.damage)} + <span className="text-yellow-500">{Math.floor(weapon.damage * (level - 1) * 0.1)}</span>)
+                                <span className="text-[9px] text-zinc-600 font-bold italic">
+                                    +{Math.floor(weapon.damage * (level - 1) * 0.1)}
                                 </span>
                             </div>
                         </div>
-                        <div className="flex justify-between border-b border-gray-800/50 pb-1">
-                            <span className="opacity-60">{t('ui.range')}</span>
-                            <span className="text-white font-bold">{weapon.range > 0 ? `${weapon.range}m` : '-'}</span>
+                        <div className="flex justify-between items-center py-1 border-b border-white/5">
+                            <span className="text-zinc-500 uppercase text-[10px] tracking-widest">{t('ui.range')}</span>
+                            <span className="text-zinc-300 font-bold">{weapon.range > 0 ? `${weapon.range}m` : '-'}</span>
                         </div>
                         {weapon.radius && weapon.radius > 0 && (
-                            <div className="flex justify-between border-b border-gray-800/50 pb-1">
-                                <span className="opacity-60">{t('ui.radius')}</span>
-                                <span className="text-white font-bold">{weapon.radius}m</span>
+                            <div className="flex justify-between items-center py-1 border-b border-white/5">
+                                <span className="text-zinc-500 uppercase text-[10px] tracking-widest">{t('ui.radius')}</span>
+                                <span className="text-zinc-300 font-bold">{weapon.radius}m</span>
                             </div>
                         )}
                         {weapon.magSize && weapon.magSize > 0 && (
-                            <div className="flex justify-between border-b border-gray-800/50 pb-1">
-                                <span className="opacity-60">{t('ui.magazine')}</span>
-                                <span className="text-white font-bold">{weapon.magSize}</span>
+                            <div className="flex justify-between items-center py-1 border-b border-white/5">
+                                <span className="text-zinc-500 uppercase text-[10px] tracking-widest">{t('ui.magazine')}</span>
+                                <span className="text-zinc-300 font-bold">{weapon.magSize}</span>
                             </div>
                         )}
                         {weapon.reloadTime && weapon.reloadTime > 0 && (
-                            <div className="flex justify-between border-b border-gray-800/50 pb-1">
-                                <span className="opacity-60">{t('ui.reload')}</span>
-                                <span className="text-white font-bold">{(weapon.reloadTime / 1000).toFixed(1)}s</span>
+                            <div className="flex justify-between items-center py-1 border-b border-white/5">
+                                <span className="text-zinc-500 uppercase text-[10px] tracking-widest">{t('ui.reload')}</span>
+                                <span className="text-zinc-300 font-bold">{(weapon.reloadTime / 1000).toFixed(1)}s</span>
                             </div>
                         )}
                     </div>
                 </div>
-                {!isEquipped && isEquippable && (
-                    <TacticalButton variant="primary" onClick={() => onEquip(weapon.name, weapon.category)} className="w-full mt-2">
-                        {t('ui.equip')}
-                    </TacticalButton>
-                )}
             </div>
         </TacticalCard>
     );

@@ -12,6 +12,7 @@ import DiscoveryPopup from './DiscoveryPopup';
 import InteractionPrompt from './InteractionPrompt';
 import ChallengePopup from './ChallengePopup';
 import { InteractionType } from '../../../systems/InteractionTypes';
+import ChatBubblesUI from './ChatBubblesUI';
 import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
 import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
 
@@ -814,6 +815,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 // In winterdeath, we often use CustomEvents or props.
                 window.dispatchEvent(new CustomEvent('open-adventure-log', { detail: { tab, itemId } }));
             }} />
+
+            <ChatBubblesUI />
 
             <ChallengePopup />
 

@@ -40,7 +40,7 @@ export const TerrainGenerator = {
         const mMat = mat as THREE.MeshStandardMaterial;
         if (!mMat.map) {
             const procedural = createProceduralDiffuse();
-            if (type === GroundType.GRAVEL) mMat.map = procedural.stone;
+            if (type === GroundType.GRAVEL) mMat.map = procedural.gravel;
             else if (type === GroundType.DIRT) mMat.map = procedural.dirt;
             else mMat.map = procedural.snow;
         }

@@ -26,6 +26,7 @@ import { InteractionType, InteractionShape } from '../../systems/InteractionType
 import { MapItemType } from '../../components/ui/hud/HudTypes';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { PhysicsGroup } from './CollisionResolution';
+import { warmupProceduralTextures, isProceduralTexturesReady } from '../../utils/assets/procedural';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1_sg = new THREE.Vector3();
@@ -258,6 +259,12 @@ export const SectorBuilder = {
         if (ctx.mapItems) ctx.mapItems.length = 0;
 
         if (engine?.water) engine.water.clear();
+
+        // [VINTERDÖD] TextureReady Semaphore: Gate initialization until GPU buffers are committed
+        if (!isProceduralTexturesReady()) {
+            await warmupProceduralTextures();
+        }
+        ctx.texturesReady = true;
 
         await SectorBuilder.generateAutomaticContent(ctx, def);
 
@@ -1284,7 +1291,7 @@ export const SectorBuilder = {
         if (ud.effects && Array.isArray(ud.effects)) {
             for (let i = 0; i < ud.effects.length; i++) {
                 const fx = ud.effects[i];
-                if (fx.type === 'fire') {
+                if (fx.type === EffectType.FIRE) {
                     const target = fx.target ? poi.getObjectByName(fx.target) || poi : poi;
                     SectorBuilder.setOnFire(ctx, target, { smoke: fx.smoke, intensity: fx.intensity, distance: fx.distance, onRoof: fx.onRoof });
                 }

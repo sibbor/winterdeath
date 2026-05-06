@@ -240,13 +240,13 @@ export const createProceduralDiffuse = () => {
 
     const frostAlpha = drawAlpha(256, 256, (ctx, s) => {
         const w = ctx.canvas.width; const h = ctx.canvas.height;
-        const grad = ctx.createLinearGradient(0, 0, w, 0);
-        grad.addColorStop(0.0, 'rgba(255,255,255,1.0)');
-        grad.addColorStop(0.35, 'rgba(255,255,255,0.4)');
-        grad.addColorStop(0.5, 'rgba(255,255,255,0.0)');
-        grad.addColorStop(0.65, 'rgba(255,255,255,0.4)');
-        grad.addColorStop(1.0, 'rgba(255,255,255,1.0)');
-        ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+        const grid = ctx.createLinearGradient(0, 0, w, 0);
+        grid.addColorStop(0.0, 'rgba(255,255,255,1.0)');
+        grid.addColorStop(0.35, 'rgba(255,255,255,0.4)');
+        grid.addColorStop(0.5, 'rgba(255,255,255,0.0)');
+        grid.addColorStop(0.65, 'rgba(255,255,255,0.4)');
+        grid.addColorStop(1.0, 'rgba(255,255,255,1.0)');
+        ctx.fillStyle = grid; ctx.fillRect(0, 0, w, h);
         const noiseCount = Math.floor(8000 * s * s);
         for (let i = 0; i < noiseCount; i++) {
             const x = Math.random() * w; const y = Math.random() * h;
@@ -390,6 +390,27 @@ export const createProceduralDiffuse = () => {
 };
 
 /**
+ * [VINTERDÖD] TextureReady Semaphore
+ * Ensures all procedural textures are fully generated and committed.
+ */
+let _isTexturesReady = false;
+
+export const warmupProceduralTextures = async (): Promise<boolean> => {
+    if (_isTexturesReady) return true;
+
+    // Trigger generation (Synchronous CPU drawing)
+    createProceduralDiffuse();
+
+    // Small delay to allow browser/GPU handshake if needed
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    _isTexturesReady = true;
+    return true;
+};
+
+export const isProceduralTexturesReady = () => _isTexturesReady;
+
+/**
  * Disposes of cached textures to free GPU memory
  */
 export const disposeProceduralTextures = () => {
@@ -397,4 +418,5 @@ export const disposeProceduralTextures = () => {
     const vals = Object.values(cachedTextures);
     for (let i = 0; i < vals.length; i++) vals[i].dispose();
     cachedTextures = null;
+    _isTexturesReady = false;
 };

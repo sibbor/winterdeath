@@ -9,13 +9,14 @@ import { DiscoveryType } from '../../hud/HudTypes';
 import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
 import { BossID } from '../../../../game/session/SectorTypes';
-import { GAME_CHALLENGES, ChallengeID, ChallengeCategory } from '../../../../content/ChallengeTypes';
+import { GAME_CHALLENGES, ChallengeID, ChallengeCategory, ChallengeDef } from '../../../../content/ChallengeTypes';
 import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputTypes';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
     onClose: () => void;
     onMarkCollectiblesViewed?: (collectibleIds: string[]) => void;
+    onToggleChallengeTracking?: (challengeId: number) => void;
     isMobileDevice?: boolean;
     debugMode?: boolean;
     initialTab?: DiscoveryType;
@@ -44,7 +45,7 @@ const darkenColor = (hex: string, percent: number) => {
     return '#' + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
 };
 
-const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, isMobileDevice, debugMode, initialTab, initialItemId }) => {
+const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, onToggleChallengeTracking, isMobileDevice, debugMode, initialTab, initialItemId }) => {
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
     const [activeTab, setActiveTab] = useState<DiscoveryType>(initialTab ?? DiscoveryType.CHALLENGE);
@@ -180,7 +181,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
 
                 {/* Content Area - DYNAMIC MOUNTING */}
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar relative">
-                    {activeTab === DiscoveryType.CHALLENGE && <ChallengesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={isDebugMode} />}
+                    {activeTab === DiscoveryType.CHALLENGE && <ChallengesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={isDebugMode} onToggleTracking={onToggleChallengeTracking} />}
                     {activeTab === DiscoveryType.ZOMBIE && <ZombiesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={isDebugMode} />}
                     {activeTab === DiscoveryType.BOSS && <BossesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={isDebugMode} />}
                     {activeTab === DiscoveryType.COLLECTIBLE && <CollectiblesTab stats={stats} isMobileDevice={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
@@ -203,6 +204,14 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
     );
 };
 
+const CHALLENGE_CATEGORY_COLORS: Record<number, string> = {
+    [ChallengeCategory.WORLD]: '#22c55e',   // green-500
+    [ChallengeCategory.COMBAT]: '#ef4444',  // red-500
+    [ChallengeCategory.WEAPONS]: '#a855f7', // purple-500
+    [ChallengeCategory.TACTICS]: '#3b82f6', // blue-500
+    [ChallengeCategory.PLAYER]: '#eab308',  // yellow-500
+};
+
 const CHALLENGE_CATEGORIES = [
     { id: ChallengeCategory.WORLD, label: 'ui.category_world' },
     { id: ChallengeCategory.COMBAT, label: 'ui.category_combat' },
@@ -211,13 +220,18 @@ const CHALLENGE_CATEGORIES = [
     { id: ChallengeCategory.PLAYER, label: 'ui.category_player' },
 ];
 
-const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, isDebug }) => {
+const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebug?: boolean, onToggleTracking?: (id: number) => void }> = React.memo(({ stats, isMobileDevice, isDebug, onToggleTracking }) => {
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
     const toggleCategory = useCallback((id: string) => {
         setCollapsed(prev => ({ ...prev, [id]: !prev[id] }));
         UiSounds.playClick();
     }, []);
+
+    const trackedIds = stats.trackedChallengeIds || [];
+    const trackedChallenges = useMemo(() => {
+        return GAME_CHALLENGES.filter(c => trackedIds.includes(c.id));
+    }, [trackedIds]);
 
     const categoryProgress = useMemo(() => {
         const progress: Record<string, number> = {};
@@ -235,10 +249,7 @@ const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, is
                 const tier = (stats.challengeTiers ? stats.challengeTiers[c.id] : 0) || 0;
                 const value = DataResolver.getChallengeValue(stats, c.id);
 
-                // 1. Add full points for completed tiers
                 currentPoints += tier;
-
-                // 2. Add partial points for the current in-progress tier
                 if (tier < 3) {
                     const prevTarget = tier > 0 ? c.targets[tier - 1] : 0;
                     const nextTarget = c.targets[tier];
@@ -259,6 +270,34 @@ const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, is
 
     return (
         <div className="space-y-12 pb-24">
+            {/* --- HERO SECTION: TRACKED CHALLENGES --- */}
+            {trackedChallenges.length > 0 && (
+                <div className="space-y-6">
+                    <div className="border-b-2 border-green-600/50 pb-2 flex items-baseline gap-4">
+                        <h3 className="text-2xl font-black uppercase tracking-tighter text-green-500">
+                            {t('ui.tracked_challenges')}
+                        </h3>
+                        <span className="text-[10px] font-mono text-green-700 font-bold uppercase tracking-widest">
+                            {trackedChallenges.length} / 3
+                        </span>
+                    </div>
+
+                    <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-1 md:grid-cols-2 gap-6'}`}>
+                        {trackedChallenges.map(challenge => (
+                            <ChallengeCard
+                                key={`hero-${challenge.id}`}
+                                challenge={challenge}
+                                stats={stats}
+                                isMobileDevice={isMobileDevice}
+                                onToggleTracking={onToggleTracking}
+                                isTracked={true}
+                                isHero={true}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {CHALLENGE_CATEGORIES.map(cat => {
                 const catChallenges = GAME_CHALLENGES.filter(c => c.categoryId === cat.id);
                 if (catChallenges.length === 0) return null;
@@ -289,68 +328,104 @@ const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, is
 
                         {!isCollapsed && (
                             <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-4'}`}>
-                                {catChallenges.map(challenge => {
-                                    // VINTERDÖD CRASH FIX: Add null-check for challengeTiers (Old save games or init race conditions)
-                                    const tier = stats.challengeTiers ? stats.challengeTiers[challenge.id] : 0;
-                                    const value = DataResolver.getChallengeValue(stats, challenge.id);
-                                    const nextTier = tier < 3 ? tier + 1 : 3;
-                                    const target = challenge.targets[nextTier - 1] || 1;
-                                    const progress = Math.min(100, (value / target) * 100) || 0;
-                                    const isMaxed = tier >= 3;
-
-                                    return (
-                                        <TacticalCard
-                                            key={challenge.id}
-                                            id={`log-item-${challenge.id}`}
-                                            showHover={true}
-                                            color={isMaxed ? '#eab308' : (tier > 0 ? '#16a34a' : '#4b5563')}
-                                            className="p-4 bg-zinc-900/50"
-                                        >
-                                            <div className="flex justify-between items-start mb-2">
-                                                <div className="flex flex-col">
-                                                    <h4 className="text-lg font-bold text-white uppercase tracking-tight">
-                                                        {t(challenge.titleKey)}
-                                                    </h4>
-                                                    <p className="text-[11px] text-zinc-500 italic mt-1 leading-tight">
-                                                        {t(challenge.descriptionKey).replace('{target}', target.toString())}
-                                                    </p>
-                                                </div>
-                                                <div className="flex flex-col items-end">
-                                                    <div className="flex gap-1">
-                                                        {[1, 2, 3].map(i => (
-                                                            <div
-                                                                key={i}
-                                                                className={`w-3 h-1.5 rounded-full ${i <= tier ? 'bg-yellow-500' : 'bg-zinc-800'}`}
-                                                            />
-                                                        ))}
-                                                    </div>
-                                                    <span className="text-[10px] font-black text-zinc-600 uppercase mt-1">
-                                                        {isMaxed ? t('ui.challenge_mastered') : t('ui.challenge_tier', { tier: nextTier })}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <div className="mt-4 space-y-1">
-                                                <div className="flex justify-between text-[10px] font-mono text-zinc-400">
-                                                    <span>{Math.floor(value || 0).toLocaleString()}</span>
-                                                    <span>{target.toLocaleString()}</span>
-                                                </div>
-                                                <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
-                                                    <div
-                                                        className={`h-full transition-all duration-1000 ${isMaxed ? 'bg-yellow-500' : 'bg-green-600'}`}
-                                                        style={{ width: `${progress}%` }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </TacticalCard>
-                                    );
-                                })}
+                                {catChallenges.map(challenge => (
+                                    <ChallengeCard
+                                        key={challenge.id}
+                                        challenge={challenge}
+                                        stats={stats}
+                                        isMobileDevice={isMobileDevice}
+                                        onToggleTracking={onToggleTracking}
+                                        isTracked={trackedIds.includes(challenge.id)}
+                                    />
+                                ))}
                             </div>
                         )}
                     </div>
                 );
             })}
         </div>
+    );
+});
+
+const ChallengeCard: React.FC<{
+    challenge: ChallengeDef;
+    stats: PlayerStats;
+    isMobileDevice?: boolean;
+    isTracked: boolean;
+    isHero?: boolean;
+    onToggleTracking?: (id: number) => void;
+}> = React.memo(({ challenge, stats, isMobileDevice, isTracked, isHero, onToggleTracking }) => {
+    const tier = stats.challengeTiers ? stats.challengeTiers[challenge.id] : 0;
+    const value = DataResolver.getChallengeValue(stats, challenge.id);
+    const nextTier = tier < 3 ? tier + 1 : 3;
+    const target = challenge.targets[nextTier - 1] || 1;
+    const progress = Math.min(100, (value / target) * 100) || 0;
+    const isMaxed = tier >= 3;
+    const categoryColor = CHALLENGE_CATEGORY_COLORS[challenge.categoryId] || '#4b5563';
+
+    return (
+        <TacticalCard
+            id={`log-item-${challenge.id}`}
+            showHover={true}
+            color={isHero ? categoryColor : (isMaxed ? '#eab308' : (tier > 0 ? '#16a34a' : '#4b5563'))}
+            className={`p-4 transition-all duration-300 cursor-pointer relative overflow-hidden ${isHero ? 'bg-zinc-900/80 border-white/20' : 'bg-zinc-900/50 border-white/5'}`}
+            onClick={() => onToggleTracking?.(challenge.id)}
+        >
+            {isHero && (
+                <div className="absolute inset-0 opacity-10 pointer-events-none" style={HORIZONTAL_HATCHING_STYLE} />
+            )}
+
+            <div className="flex justify-between items-start mb-2 relative z-10">
+                <div className="flex flex-col">
+                    <h4 className={`${isHero ? 'text-xl' : 'text-lg'} font-bold text-white uppercase tracking-tight`}>
+                        {t(challenge.titleKey)}
+                    </h4>
+                    <p className={`${isHero ? 'text-xs' : 'text-[11px]'} text-zinc-500 italic mt-1 leading-tight max-w-[80%]`}>
+                        {t(challenge.descriptionKey).replace('{target}', target.toString())}
+                    </p>
+                </div>
+
+                {/* TRACKED INDICATOR (LED STYLE) */}
+                {isTracked && (
+                    <div className={`absolute top-[-1rem] right-[-1rem] ${isMobileDevice ? 'w-8 h-8' : 'w-10 h-10'} bg-zinc-950 border-l border-b border-white/10 flex items-center justify-center`}>
+                        <div
+                            className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full shadow-[0_0_10px_currentColor]"
+                            style={{ backgroundColor: categoryColor, color: categoryColor }}
+                        />
+                    </div>
+                )}
+
+                <div className="flex flex-col items-end">
+                    <div className="flex gap-1">
+                        {[1, 2, 3].map(i => (
+                            <div
+                                key={i}
+                                className={`w-3 h-1.5 rounded-full ${i <= tier ? 'bg-yellow-500' : 'bg-zinc-800'}`}
+                            />
+                        ))}
+                    </div>
+                    <span className="text-[10px] font-black text-zinc-600 uppercase mt-1">
+                        {isMaxed ? t('ui.challenge_mastered') : t('ui.challenge_tier', { tier: nextTier })}
+                    </span>
+                </div>
+            </div>
+
+            <div className={`mt-4 space-y-1 relative z-10 ${isHero ? 'scale-105 origin-left' : ''}`}>
+                <div className="flex justify-between text-[10px] font-mono text-zinc-400">
+                    <span className={isHero ? 'text-white font-bold' : ''}>{Math.floor(value || 0).toLocaleString()}</span>
+                    <span>{target.toLocaleString()}</span>
+                </div>
+                <div className={`h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden ${isHero ? 'h-2 border border-white/10' : ''}`}>
+                    <div
+                        className={`h-full transition-all duration-1000 ${isMaxed ? 'bg-yellow-500' : (isHero ? '' : 'bg-green-600')}`}
+                        style={{
+                            width: `${progress}%`,
+                            backgroundColor: !isMaxed && isHero ? categoryColor : undefined
+                        }}
+                    />
+                </div>
+            </div>
+        </TacticalCard>
     );
 });
 

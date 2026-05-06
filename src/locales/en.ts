@@ -399,6 +399,8 @@ export const en = {
         no_logs: "No logs captured...",
         challenge_mastered: "MASTERED",
         challenge_tier: "TIER {tier}",
+        tracked_challenges: "TRACKED CHALLENGES",
+        active_perks: "ACTIVE PERKS",
     },
     challenges: {
         title: "Challenges",

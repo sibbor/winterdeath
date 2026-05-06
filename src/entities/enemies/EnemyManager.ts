@@ -234,15 +234,17 @@ export const EnemyManager = {
 
         // --- 3-TIER SPATIAL UPDATE LOOP ---
         // We iterate over all buckets and perform frequency-gated updates.
-        buckets.forEach((enemies, chunkKey) => {
+        for (const enemies of buckets.values()) {
             const len = enemies.length;
-            if (len === 0) return;
-
-            // Optional: Skip entire bucket if obviously too far (Hysteresis)
-            // But per-enemy check is safer for boundary crossing.
+            if (len === 0) continue;
 
             for (let i = len - 1; i >= 0; i--) {
                 const e = enemies[i];
+                // [VINTERDÖD FIX] Defensive null-guard for race conditions during iteration/recycling
+                if (!e || !e.mesh) {
+                    if (e && !e.mesh) console.warn('EnemyManager: Enemy found without mesh at index', i);
+                    continue;
+                }
 
                 // --- 1. SPATIAL GATING (Zero-GC) ---
                 const dx = e.mesh.position.x - pX;
@@ -361,7 +363,7 @@ export const EnemyManager = {
                     e.mesh.matrixAutoUpdate = false;
                 }
             }
-        });
+        }
 
         // Pass ONLY active/throttled/dying enemies to systems
         collisionGrid.updateEnemyGrid(_syncList);

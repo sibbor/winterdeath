@@ -390,6 +390,8 @@ export const sv = {
         no_logs: "Inga loggar fångade...",
         challenge_mastered: "MÄSTARE",
         challenge_tier: "NIVÅ {tier}",
+        tracked_challenges: "SPÅRADE UTMANINGAR",
+        active_perks: "AKTIVA FÖRMÅGOR",
     },
     challenges: {
         title: "Utmaningar",

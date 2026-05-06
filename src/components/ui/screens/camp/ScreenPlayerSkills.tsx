@@ -1,10 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { LEVEL_CAP, PLAYER_BASE_SPEED } from '../../../../content/constants';
 import { useOrientation } from '../../../../hooks/useOrientation';
-import ScreenModalLayout, { TacticalCard, TacticalButton } from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { TacticalCard, TacticalButton, HORIZONTAL_HATCHING_STYLE } from '../../layout/ScreenModalLayout';
 
 const SKILLS_CONFIG = [
     { statId: PlayerStatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', cost: 1, value: 20, base: 100 },
@@ -48,9 +48,21 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = React.memo(({ stat
     const isMaxRank = stats.statsBuffer[PlayerStatID.LEVEL] >= LEVEL_CAP;
     const hasChanges = tempStats.statsBuffer[PlayerStatID.SKILL_POINTS] !== stats.statsBuffer[PlayerStatID.SKILL_POINTS];
 
+    const spSubtitle = useMemo(() => (
+        <div className="flex flex-col gap-1 mt-2">
+            <div className="flex items-center gap-4">
+                <div className="px-3 py-1 bg-purple-950/40 border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.2)] flex items-center gap-3">
+                    <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">{t('ui.sp')}</span>
+                    <span className="text-xl font-mono font-black text-white">{tempStats.statsBuffer[PlayerStatID.SKILL_POINTS]}</span>
+                </div>
+            </div>
+        </div>
+    ), [tempStats.statsBuffer[PlayerStatID.SKILL_POINTS], isMaxRank, xpNeeded]);
+
     return (
         <ScreenModalLayout
             title={t('stations.skills')}
+            subtitle={spSubtitle}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
             onConfirm={handleConfirm}
@@ -60,19 +72,15 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = React.memo(({ stat
             showCancel={true}
             titleColorClass="text-purple-600"
         >
-            <div className={`grid ${(!isMobileDevice || isLandscapeMode) ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'} gap-4 md:gap-8 h-full ${isMobileDevice ? 'overflow-y-auto content-center' : ''}`}>
-                {/* Header Section */}
-                <div className="col-span-full text-center mb-4 md:mb-8">
-                    <span className="text-purple-500 font-bold uppercase tracking-widest text-xs md:text-sm block mb-1">{t('ui.available_skill_points')}</span>
-                    <span className={`${isMobileDevice ? 'text-4xl' : 'text-6xl'} font-mono text-white leading-none font-bold`}>{tempStats.statsBuffer[PlayerStatID.SKILL_POINTS]}</span>
-                    <div className="">
-                        <span className="text-purple-300 font-bold text-sm uppercase tracking-wider block max-w-2xl mx-auto">
-                            {isMaxRank
-                                ? t('ui.sp_hint_max')
-                                : t('ui.sp_hint_rankup', { xp: xpNeeded })}
-                        </span>
-                    </div>
-                </div>
+
+            <div className="hidden md:block">
+                <span className="text-purple-300 font-bold text-sm uppercase tracking-wider block max-w-2xl mx-auto">
+                    {isMaxRank
+                        ? t('ui.sp_hint_max')
+                        : t('ui.sp_hint_rankup', { xp: xpNeeded })}
+                </span>
+            </div>
+            <div className={`grid ${(!isMobileDevice || isLandscapeMode) ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'} gap-6 md:gap-10 h-full pt-8 ${isMobileDevice ? 'overflow-y-auto' : ''}`}>
                 {SKILLS_CONFIG.map(skill => (
                     <SkillCard
                         key={skill.statId}
@@ -96,11 +104,14 @@ interface SkillCardProps {
     onUpgrade: (statId: PlayerStatID, cost: number, value: number) => void;
 }
 
+const UI_ICON_PATH = '/assets/icons/ui/';
+
 const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, availableSP, isMobileDevice, onUpgrade }) => {
     const cost = skill.cost;
     const canAfford = availableSP >= cost;
     const baseVal = skill.base;
     const upgradeVal = currentVal - baseVal;
+    const isUpgraded = upgradeVal > 0;
 
     // Format for display
     const isSpeed = skill.statId === PlayerStatID.SPEED;
@@ -108,33 +119,58 @@ const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, ava
     const displayUpgrade = isSpeed ? upgradeVal.toFixed(2) : upgradeVal;
 
     return (
-        <TacticalCard color="#a855f7" showHover={true} className="flex flex-col items-center text-center">
-            <h3 className={`${isMobileDevice ? 'text-xl mb-1' : 'text-3xl mb-4'} font-semibold text-white uppercase tracking-tighter`}>{t(skill.labelKey)}</h3>
-            <p className={`${isMobileDevice ? 'text-xs h-10 mb-2 leading-tight' : 'text-lg h-16 mb-2'} text-gray-400 leading-snug`}>{t(skill.descKey)}</p>
+        <TacticalCard
+            color="#a855f7"
+            showHover={true}
+            className={`flex flex-col p-0 border-white/5 bg-transparent transition-all duration-300 ${isUpgraded ? 'bg-purple-500/5' : ''}`}
+            style={{
+                borderColor: isUpgraded ? '#a855f744' : 'rgba(63, 63, 70, 0.3)',
+                boxShadow: isUpgraded ? '0 0 20px rgba(168,85,247,0.1)' : 'none'
+            }}
+        >
+            {isUpgraded && (
+                <div className="absolute inset-0 opacity-5 pointer-events-none" style={HORIZONTAL_HATCHING_STYLE} />
+            )}
 
-            <div className={`flex flex-col items-center justify-center gap-0 mt-0 mb-4`}>
-                <div className="flex items-baseline gap-1">
-                    <span className={`${isMobileDevice ? 'text-2xl' : 'text-5xl'} font-mono text-purple-500 font-bold leading-none`}>
-                        {isSpeed ? currentVal.toFixed(2) : currentVal}
-                    </span>
-                    {isSpeed && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>{t('ui.speed_unit')}</span>}
-                    {skill.statId === PlayerStatID.MAX_HP && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>{t('ui.hp')}</span>}
-                    {skill.statId === PlayerStatID.MAX_STAMINA && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>{t('ui.stamina_short')}</span>}
+            <div className="p-6 flex flex-col items-center text-center flex-1">
+                <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full border-2 mb-4 flex items-center justify-center transition-all duration-500 overflow-hidden ${isUpgraded ? 'border-purple-500 bg-purple-500/20 shadow-[0_0_20px_rgba(168,85,247,0.4)]' : 'border-zinc-800 bg-zinc-900/50'}`}>
+                    {skill.statId === PlayerStatID.MAX_HP && <img src={`${UI_ICON_PATH}skill_vitality.png`} alt="" className="w-full h-full object-cover mix-blend-screen opacity-80" />}
+                    {skill.statId === PlayerStatID.MAX_STAMINA && <img src={`${UI_ICON_PATH}skill_adrenaline.png`} alt="" className="w-full h-full object-cover mix-blend-screen opacity-80" />}
+                    {skill.statId === PlayerStatID.SPEED && <img src={`${UI_ICON_PATH}skill_reflex.png`} alt="" className="w-full h-full object-cover mix-blend-screen opacity-80" />}
                 </div>
-                <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-mono text-white font-bold opacity-80`}>
-                    ({displayBase} + <span className="text-purple-400">{displayUpgrade}</span>)
-                </span>
-            </div>
 
-            <TacticalButton
-                onClick={() => onUpgrade(skill.statId, cost, skill.value)}
-                disabled={!canAfford}
-                variant={canAfford ? 'primary' : 'ghost'}
-                className="w-full"
-                style={canAfford ? { backgroundColor: 'rgba(147, 51, 234, 0.1)', color: '#a855f7', borderColor: '#a855f744' } : {}}
-            >
-                {t('ui.upgrade')} ({cost} SP)
-            </TacticalButton>
+                <h3 className={`${isMobileDevice ? 'text-lg mb-1' : 'text-xl mb-2'} font-bold text-white uppercase tracking-tight`}>{t(skill.labelKey)}</h3>
+                <p className={`${isMobileDevice ? 'text-[10px] h-8 mb-2 leading-tight' : 'text-sm h-12 mb-4'} text-zinc-500 font-medium leading-relaxed`}>{t(skill.descKey)}</p>
+
+                <div className="w-full bg-zinc-950/50 border border-white/5 p-4 mb-6 relative overflow-hidden">
+                    <div className="flex flex-col items-center relative z-10">
+                        <div className="flex items-baseline gap-2">
+                            <span className={`${isMobileDevice ? 'text-2xl' : 'text-4xl'} font-mono text-white font-black leading-none`}>
+                                {isSpeed ? currentVal.toFixed(2) : currentVal}
+                            </span>
+                            <span className="text-[10px] font-black text-purple-500 uppercase tracking-widest opacity-80">
+                                {skill.statId === PlayerStatID.MAX_HP ? t('ui.hp') : (skill.statId === PlayerStatID.MAX_STAMINA ? t('ui.stamina_short') : t('ui.speed_unit'))}
+                            </span>
+                        </div>
+                        {isUpgraded && (
+                            <div className="mt-2 text-[10px] font-mono font-bold text-purple-400/60 uppercase">
+                                {displayBase} + <span className="text-purple-400">{displayUpgrade}</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <TacticalButton
+                    onClick={() => onUpgrade(skill.statId, cost, skill.value)}
+                    disabled={!canAfford}
+                    variant={canAfford ? 'primary' : 'ghost'}
+                    className="w-full h-12 text-xs border-none font-black"
+                    style={canAfford ? { backgroundColor: 'rgba(168, 85, 247, 0.1)', color: '#a855f7' } : { opacity: 0.3 }}
+                >
+                    <span className="opacity-60 mr-2">{t('ui.upgrade')}</span>
+                    <span className="font-mono">[{cost} SP]</span>
+                </TacticalButton>
+            </div>
         </TacticalCard>
     );
 });

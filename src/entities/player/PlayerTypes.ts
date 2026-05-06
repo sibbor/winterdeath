@@ -248,6 +248,7 @@ export interface PlayerStats {
     // Stores current tier (0-3) for each ChallengeID
     challengeTiers: Int32Array;
     totalChallengePoints: number;
+    trackedChallengeIds: number[];
 }
 
 /**
@@ -328,7 +329,8 @@ export const PlayerStatsUtils = {
             activeBuffs: [] as StatusEffectType[],
             activeDebuffs: [] as StatusEffectType[],
             discoveredPerks: [] as StatusEffectType[],
-            rescuedFamilyIndices: [] as number[]
+            rescuedFamilyIndices: [] as number[],
+            trackedChallengeIds: [] as number[]
         };
     },
 

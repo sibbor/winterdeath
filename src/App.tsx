@@ -541,6 +541,25 @@ const App: React.FC = () => {
         setGameState(prev => ({ ...prev, stats: newStats }));
     }, []);
 
+    const handleToggleChallengeTrackingAction = useCallback((challengeId: number) => {
+        setGameState(prev => {
+            const tracked = prev.stats.trackedChallengeIds || [];
+            const isTracked = tracked.includes(challengeId);
+            const newTracked = isTracked
+                ? tracked.filter(id => id !== challengeId)
+                : [...tracked, challengeId];
+            
+            return {
+                ...prev,
+                stats: {
+                    ...prev.stats,
+                    trackedChallengeIds: newTracked
+                }
+            };
+        });
+        UiSounds.playClick();
+    }, []);
+
     const handleSaveGraphics = useCallback((newG: GameSettings) => {
         setGameState(prev => ({ ...prev, settings: newG }));
         WinterEngine.getInstance().updateSettings(newG);
@@ -820,7 +839,7 @@ const App: React.FC = () => {
                             <>
                                 <GameSession
                                     ref={gameCanvasRef}
-                                    isWarmup={isLoadingSector}
+                                    isWarmup={false}
                                     stats={gameState.stats}
                                     loadout={gameState.loadout}
                                     weaponLevels={gameState.weaponLevels}
@@ -890,6 +909,7 @@ const App: React.FC = () => {
                             onOpenSettings={handleOpenSettingsAction}
                             onOpenAdventureLog={handleOpenAdventureLogAction}
                             onOpenStatistics={handleOpenStatisticsAction}
+                            stats={gameState.screen === GameScreen.SECTOR ? (gameCanvasRef.current?.getMergedSessionStats() || gameState.stats) : gameState.stats}
                             isMobileDevice={isMobileDevice}
                         />
                     )}
@@ -910,6 +930,7 @@ const App: React.FC = () => {
                             stats={gameState.screen === GameScreen.SECTOR ? (gameCanvasRef.current?.getMergedSessionStats() || gameState.stats) : gameState.stats}
                             onClose={handleCloseAction}
                             onMarkCollectiblesViewed={handleMarkCollectiblesViewedAction}
+                            onToggleChallengeTracking={handleToggleChallengeTrackingAction}
                             isMobileDevice={isMobileDevice}
                             debugMode={gameState.debugMode}
                             initialTab={initialAdventureLogTab}

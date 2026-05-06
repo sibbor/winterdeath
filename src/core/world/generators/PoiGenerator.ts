@@ -288,7 +288,7 @@ export const PoiGenerator = {
         group.add(smu);
 
         group.userData.colliders = [
-            { type: InteractionShape.SPHERE, radius: 30, height: 5 }
+            { type: InteractionShape.BOX, size: new THREE.Vector3(50, 10, 50) }
         ];
         group.userData.effects = [
             { type: EffectType.FIRE, smoke: true, intensity: 120, distance: 35, onRoof: true }

@@ -38,6 +38,10 @@ const pump = () => {
             p1Value = UIEventRingBuffer.getString(p1);
         }
 
+        if (process.env.NODE_ENV === 'development') {
+            console.debug(`[UIBridge] Broadcast: ${UIEventType[type]} | P1: ${p1Value} | P2: ${p2} | Time: ${time}`);
+        }
+
         // Notify all bridge listeners (Zero-GC Loop)
         for (const cb of listeners) {
             cb(type, p1Value, p2, time);

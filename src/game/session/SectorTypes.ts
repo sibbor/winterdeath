@@ -126,6 +126,7 @@ export interface SectorContext {
     uniqueMeshes?: any[]; // For instanced meshes or unique geometry
     yield: () => Promise<void>;
     isWarmup?: boolean; // When true: skip triggers, enemies, and story logic (preloader ghost-render mode)
+    texturesReady?: boolean; // [VINTERDÖD] Semaphore for procedural asset availability
 
     // --- CAMERA CALLBACKS ---
     setCameraAngle?: (angle: number) => void;
