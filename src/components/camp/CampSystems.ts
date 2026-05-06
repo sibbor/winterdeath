@@ -88,7 +88,7 @@ export class CampChatterSystem implements System {
 
         // 1. Ambient Wildlife
         if (renderTime > nextWildlifeTime.val) {
-            if (Math.random() > 0.5) audioEngine.playSound(SoundID.OWL_HOOT, 0.3);
+            audioEngine.playSound(SoundID.OWL_HOOT, 0.3);
             nextWildlifeTime.set(renderTime + 30000 + Math.random() * 60000);
         }
 

@@ -15,7 +15,6 @@ import { WeatherType } from '../../core/engine/EngineTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { CampEffectsSystem, FamilyAnimationSystem, CampChatterSystem } from './CampSystems';
 import { SystemID } from '../../systems/System';
-import { ChunkManager } from '../../core/world/ChunkManager';
 
 // Zero-GC Scratchpads
 const _v1 = new THREE.Vector3();
@@ -62,7 +61,7 @@ const areEqual = (prevProps: CampProps, nextProps: CampProps) => {
         prevProps.activeOverlay === nextProps.activeOverlay &&
         prevProps.weather === nextProps.weather &&
         prevProps.isGameRunning === nextProps.isGameRunning;
-        // Ignore debugMode, rescuedFamilyIndices (handled via effects/Store)
+    // Ignore debugMode, rescuedFamilyIndices (handled via effects/Store)
 };
 
 const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, settings, onCampLoaded, isMobileDevice, weather, hasCheckpoint, isGameRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
@@ -196,19 +195,19 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             debugUnsubscribeRef.current = (window as any).HudStore?.subscribe((state: any) => {
                 if (state.debugMode !== debugModeRef.current) {
                     debugModeRef.current = state.debugMode;
-                    
+
                     const fmWrappers = sceneFamilyMembersRef.current;
                     const rescuedIndices = rescuedFamilyIndices;
                     const familyData = DataResolver.getFamilyMembers();
-                    
+
                     // Rebuild interaction and active lists based on new visibility
                     const nextInteractables = [...interactables]; // base camp interactables
                     const nextActiveMembers: any[] = [];
-                    
+
                     for (let i = 0; i < fmWrappers.length; i++) {
                         const fm = fmWrappers[i];
                         const isPlayer = fm.mesh.userData.id.startsWith('player_');
-                        
+
                         if (isPlayer) {
                             fm.mesh.visible = true;
                             nextActiveMembers.push(fm);
@@ -216,12 +215,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                             const familyIdx = familyData.findIndex(d => d.name === fm.name);
                             const isRescued = rescuedIndices.includes(familyIdx);
                             const visible = isRescued || state.debugMode;
-                            
+
                             fm.mesh.visible = visible;
-                            
+
                             if (visible) {
                                 if (familyIdx !== -1) nextActiveMembers.push(fm);
-                                
+
                                 // Direct child traversal to find interaction mesh
                                 for (let c = 0; c < fm.mesh.children.length; c++) {
                                     const child = fm.mesh.children[c];
@@ -230,7 +229,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                             }
                         }
                     }
-                    
+
                     sceneInteractablesRef.current = nextInteractables;
                     sceneActiveMembersRef.current = nextActiveMembers;
                 }

@@ -25,7 +25,7 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = React.memo(({ stat
 
     // PERFORMANCE FIX: useCallback prevents re-rendering all SkillCards when one is clicked
     const handleUpgradeSkill = useCallback((statId: PlayerStatID, cost: number, value: number) => {
-        UiSounds.playClick();
+        UiSounds.playUpgrade();
 
         setTempStats(prevStats => {
             const sp = prevStats.statsBuffer[PlayerStatID.SKILL_POINTS];

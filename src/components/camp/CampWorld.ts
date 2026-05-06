@@ -17,8 +17,8 @@ export const CAMP_SCENE = {
     bgColor: 0x161629,
     fog: {
         color: 0x161629,
-        density: 100,
-        height: 2
+        density: 20,
+        height: 0.2
     },
     ambientIntensity: 0.4,
     skyLight: {
@@ -912,7 +912,7 @@ export const CampWorld = {
         const familyMembers: any[] = [];
         const activeMembers: any[] = [];
         const rescuedSet = new Set(rescuedIndices || []);
-        
+
         // Always include all potential members to support Zero-GC toggling
         const allMembers = [playerCharacter, ...familyMembersData];
         const humans = allMembers.filter(m => m.race === 'human');
@@ -923,10 +923,10 @@ export const CampWorld = {
             const member = ModelFactory.createFamilyMember(memberData);
 
             // Visibility Logic: Player is always visible, others depend on rescue status OR debug mode
-            const isRescued = memberData.id === 'player' || rescuedSet.has(familyMembersData.indexOf(memberData));
+            const isRescued = globalIdx === 0 || rescuedSet.has(familyMembersData.indexOf(memberData));
             member.visible = isRescued || debugMode;
 
-            if (memberData.id === 'player') {
+            if (globalIdx === 0) {
                 member.userData.id = `player_${memberData.name}`;
                 member.userData.type = 'family';
             }
@@ -1008,7 +1008,7 @@ export const CampWorld = {
                 seed: Math.random() * 100,
                 emissiveMaterials
             };
-            
+
             familyMembers.push(fmWrapper);
 
             if (member.visible) {

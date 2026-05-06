@@ -47,7 +47,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
     // PERFORMANCE FIX: useCallback förhindrar att barn-komponenter renderas om i onödan.
     const handleUpgradeWeapon = useCallback((e: React.MouseEvent, weapon: WeaponType) => {
         e.stopPropagation();
-        UiSounds.playClick();
+        UiSounds.playUpgrade();
 
         // Use a functional state update to ensure we have the latest levels without needing it in the dependency array
         setTempWeaponLevels(prevLevels => {

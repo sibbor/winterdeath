@@ -56,6 +56,22 @@ export const Generators = {
         }
         return buffer;
     },
+    owl_hoot: (ctx: AudioContext) => {
+        const sr = ctx.sampleRate;
+        const dur = 1.5;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            // Hoo - Hoo (Double hoot)
+            const h1 = t < 0.4 ? Math.sin(Math.PI * (t / 0.4)) : 0;
+            const h2 = (t > 0.5 && t < 0.9) ? Math.sin(Math.PI * ((t - 0.5) / 0.4)) : 0;
+            const f = t < 0.4 ? 180 : 160;
+            const wave = Math.sin(2 * Math.PI * f * t) + 0.3 * Math.sin(2 * Math.PI * f * 2 * t);
+            d[i] = wave * (h1 + h2) * 0.15;
+        }
+        return buf;
+    },
 
     // --- GAMEPLAY ENHANCEMENTS ---
     passive_gained: (ctx: AudioContext) => {
@@ -814,6 +830,7 @@ export const UiSounds = {
     playClick: () => audioEngine.playSound(SoundID.UI_CLICK, 0.3),
     playConfirm: () => audioEngine.playSound(SoundID.UI_CONFIRM, 0.3),
     playLevelUp: () => audioEngine.playSound(SoundID.UI_LEVEL_UP, 0.4),
+    playUpgrade: () => audioEngine.playSound(SoundID.UI_LEVEL_UP, 0.4),
     playPickUp: () => audioEngine.playSound(SoundID.UI_PICKUP, 0.2),
     playVictory: () => audioEngine.playSound(SoundID.UI_VICTORY, 0.6),
     playDefeat: () => audioEngine.playSound(SoundID.UI_DEFEAT, 0.7),
@@ -995,6 +1012,7 @@ export function registerSoundGenerators() {
     map(SoundID.UI_DEFEAT, Generators.ui_defeat);
     map(SoundID.UI_DISCOVERY, Generators.ui_discovery);
     map(SoundID.UI_LEVEL_UP, Generators.ui_level_up);
+    map(SoundID.OWL_HOOT, Generators.owl_hoot);
     map(SoundID.PASSIVE_GAINED, Generators.passive_gained);
     map(SoundID.BUFF_GAINED, Generators.buff_gained);
     map(SoundID.DEBUFF_GAINED, Generators.debuff_gained);
