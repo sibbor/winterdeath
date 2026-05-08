@@ -1,85 +1,115 @@
-import { HudState, DiscoveryType } from '../components/ui/hud/HudTypes';
+import {
+    HudState as IHudState,
+    DiscoveryType,
+    MAX_STATUS_EFFECTS,
+    MAX_PASSIVES,
+    MAX_BUFFS,
+    MAX_DEBUFFS,
+    MAX_MAP_ITEMS,
+    MapItemType,
+    MapItem,
+    HudVector2,
+    DebugInfoData
+} from '../components/ui/hud/HudTypes';
 import { WeaponType } from '../content/weapons';
-import { InteractionType } from '../systems/InteractionTypes';
+import { InteractionType, InteractionPromptId, MetaActionId, UIEventBridge } from '../systems/ui/UIEventBridge';
 
-// ============================================================================
-// INITIAL STATE
-// Mirrored perfectly from HudSystem's Double-Buffer structure.
-// This ensures that the first React render has valid objects to read from,
-// preventing "cannot read property x of null" errors.
-// ============================================================================
-const INITIAL_HUD_STATE: HudState = {
-    statsBuffer: new Float32Array(64), // Expanded for Phase 12
-    vectorBuffer: new Float32Array(256), // 128 entities (x, z pairs)
-    statusFlags: 0,
-    hp: 100,
-    maxHp: 100,
-    stamina: 100,
-    maxStamina: 100,
-    ammo: 0,
-    magSize: 0,
-    score: 0,
-    scrap: 0,
-    challengePoints: 0,
-    multiplier: 1,
-    activeWeapon: WeaponType.PISTOL,
-    isReloading: false,
-    boss: { active: false, name: '', hp: 0, maxHp: 0 },
-    bossSpawned: false,
-    bossDefeated: false,
-    familyFound: false,
-    familySignal: 0,
-    level: 1,
-    currentXp: 0,
-    nextLevelXp: 1000,
-    throwableAmmo: 0,
-    reloadProgress: 0,
-    playerPos: { x: 0, z: 0 },
-    familyPos: { x: 0, z: 0 },
-    bossPos: { x: 0, z: 0 },
-    distanceTraveled: 0,
-    kills: 0,
-    spEarned: 0,
-    isDead: false,
-    isDriving: false,
-    vehicleSpeed: 0,
-    throttleState: 0,
-    currentSector: 0,
-    cluesFoundCount: 0,
-    poisFoundCount: 0,
-    collectiblesFoundCount: 0,
-    fps: 60,
-    sectorStats: { unlimitedAmmo: false, unlimitedThrowables: false, isInvincible: false, waveActive: false, waveKills: 0, waveTarget: 0, currentWave: 1, totalWaves: 1 },
-    statusEffects: [],
-    isDisoriented: false,
-    activePassives: [],
-    activeBuffs: [],
-    activeDebuffs: [],
-    killerName: '',
-    killerAttackName: '',
-    killedByEnemy: false,
-    mapItems: [],
-    debugMode: false,
-    systems: [],
-    currentLine: { active: false, speaker: '', text: '' },
-    cinematicActive: false,
-    interactionPrompt: { active: false, type: InteractionType.NONE, label: '', x: 0, y: 0, targetId: '' },
-    hudVisible: false,
-    sectorName: '',
-    isMobileDevice: false,
-    discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 },
-    
-    // Real-time telemetry (Synced from persistent stats + session)
-    enemyKills: new Float64Array(16),
-    seenEnemies: [],
-    seenBosses: [],
+/**
+ * HudState Implementation
+ * Optimized for Zero-GC and V8 Hidden Class stability.
+ */
+export class HudStateSoA implements IHudState {
+    // --- DOD BUFFERS ---
+    public statsBuffer = new Float32Array(64);
+    public vectorBuffer = new Float32Array(256);
+    public statusFlags = 0;
 
-    // Death details
-    lethalSourceId: 0,
-    lethalStatusEffect: 0,
+    public hp = 0;
+    public maxHp = 0;
+    public stamina = 0;
+    public maxStamina = 0;
+    public ammo = 0;
+    public magSize = 0;
+    public score = 0;
+    public scrap = 0;
+    public challengePoints = 0;
+    public multiplier = 1;
+    public activeWeapon = WeaponType.PISTOL;
+    public isReloading = false;
 
-    // Nested structures pre-allocated to lock Hidden Class "Shapes"
-    debugInfo: {
+    // Complex slices (Flattened for Zero-GC)
+    public bossActive = false;
+    public bossName = '';
+    public bossHp = 0;
+    public bossMaxHp = 0;
+
+    public bossSpawned = false;
+    public bossDefeated = false;
+    public familyFound = false;
+    public familySignal = 0;
+
+    public level = 1;
+    public currentXp = 0;
+    public nextLevelXp = 1000;
+    public throwableAmmo = 0;
+    public reloadProgress = 0;
+
+    public playerPos: HudVector2 = { x: 0, z: 0 };
+    public familyPos: HudVector2 | null = { x: 0, z: 0 };
+    public bossPos: HudVector2 | null = { x: 0, z: 0 };
+    public distanceTraveled = 0;
+
+    public kills = 0;
+    public spEarned = 0;
+    public isDead = false;
+    public isDriving = false;
+    public vehicleSpeed = 0;
+    public throttleState = 0;
+    public currentSector = 0;
+    public cluesFoundCount = 0;
+    public poisFoundCount = 0;
+    public collectiblesFoundCount = 0;
+    public fps = 60;
+    // Sector Stats (Flattened)
+    public unlimitedAmmo = false;
+    public unlimitedThrowables = false;
+    public isInvincible = false;
+    public waveActive = false;
+    public waveKills = 0;
+    public waveTarget = 0;
+    public currentWave = 1;
+    public totalWaves = 1;
+
+    public enemyKills = new Float64Array(16);
+    public seenEnemies: number[] = [];
+    public seenBosses: number[] = [];
+
+    // SoA Status Effects
+    public StatusEffectIDs = new Int32Array(MAX_STATUS_EFFECTS);
+    public statusEffectDurations = new Float32Array(MAX_STATUS_EFFECTS);
+    public statusEffectMaxDurations = new Float32Array(MAX_STATUS_EFFECTS);
+    public statusEffectIntensities = new Float32Array(MAX_STATUS_EFFECTS);
+    public statusEffectProgress = new Float32Array(MAX_STATUS_EFFECTS);
+    public statusEffectsCount = 0;
+
+    public isDisoriented = false;
+    public activePassives = new Int32Array(MAX_PASSIVES);
+    public activePassivesCount = 0;
+    public activeBuffs = new Int32Array(MAX_BUFFS);
+    public activeBuffsCount = 0;
+    public activeDebuffs = new Int32Array(MAX_DEBUFFS);
+    public activeDebuffsCount = 0;
+
+    public killerName = '';
+    public killerAttackName = '';
+    public killedByEnemy = false;
+    public lethalSourceId = 0;
+    public lethalStatusEffect = 0;
+
+    public mapItems: MapItem[];
+    public mapItemsCount = 0;
+    public debugMode = false;
+    public debugInfo: DebugInfoData = {
         aim: { x: 0, y: 0 },
         input: { w: 0, a: 0, s: 0, d: 0, fire: 0, reload: 0 },
         cam: { x: 0, y: 0, z: 0 },
@@ -89,196 +119,290 @@ const INITIAL_HUD_STATE: HudState = {
         objects: 0,
         drawCalls: 0,
         coords: { x: 0, z: 0 },
-            performance: {
+        performance: {
             cpu: null,
             memory: { heapLimit: 0, heapTotal: 0, heapUsed: 0 },
             renderer: null
         }
-    },
-    challengeTiers: new Int32Array(64)
-};
-
-type Listener = (state: HudState) => void;
-export type HudFastUpdateListener = (data: any) => void;
-
-class HudStoreClass {
-    private state: HudState = INITIAL_HUD_STATE;
-    
-    // VINTERDÖD: Standby buffer for Zero-GC reference swapping.
-    private standbyState: HudState = {
-        ...INITIAL_HUD_STATE,
-        statsBuffer: new Float32Array(64),
-        vectorBuffer: new Float32Array(256),
-        enemyKills: new Float64Array(16),
-        statusEffects: [],
-        activePassives: [],
-        activeBuffs: [],
-        activeDebuffs: [],
-        mapItems: [],
-        systems: [],
-        challengeTiers: new Int32Array(64)
     };
-    
-    // PERFORMANCE: Version tracking for reference stability.
-    private versions = {
-        statusEffects: -1,
-        activePassives: -1,
-        activeBuffs: -1,
-        activeDebuffs: -1,
-        mapItems: -1
-    };
+    public systems: any[] = [];
 
-    private listeners: Listener[] = [];
-    private fastListeners: HudFastUpdateListener[] = [];
+    // Cinematics & Interactions (Flattened)
+    public dialogueActive = false;
+    public dialogueSpeaker = '';
+    public dialogueText = '';
+    public cinematicActive = false;
+    public interactionActive = false;
+    public interactionType = InteractionType.NONE;
+    public interactionLabel = '';
+    public interactionTargetId = '';
+    public interactionX = 0;
+    public interactionY = 0;
+    public interactionId: InteractionPromptId = InteractionPromptId.NONE;
+    public hudVisible = false;
+    public sectorName = '';
+    public isMobileDevice = false;
 
-    /**
-     * Absolute Zero-GC Update Path.
-     * Synchronizes state between the engine buffer and the React state.
-     */
-    public update(nextState: HudState): void {
-        // 1. Manual Copy of Primitives (Avoids Object.assign and spread GC)
-        const src = nextState as any;
-        const dst = this.standbyState as any;
-        
-        // VINTERDÖD: Explicit copy of critical telemetry primitives
-        dst.hp = src.hp;
-        dst.maxHp = src.maxHp;
-        dst.stamina = src.stamina;
-        dst.maxStamina = src.maxStamina;
-        dst.ammo = src.ammo;
-        dst.kills = src.kills;
-        dst.scrap = src.scrap;
-        dst.challengePoints = src.challengePoints;
-        dst.spEarned = src.spEarned;
-        dst.isDead = src.isDead;
-        dst.isDriving = src.isDriving;
-        dst.activeWeapon = src.activeWeapon;
-        dst.hudVisible = src.hudVisible;
-        dst.level = src.level;
-        dst.currentXp = src.currentXp;
-        dst.nextLevelXp = src.nextLevelXp;
-        dst.cinematicActive = src.cinematicActive;
-        dst.isDisoriented = src.isDisoriented;
+    public discoveryActive = false;
+    public discoveryId = '';
+    public discoveryType = DiscoveryType.CLUE;
+    public discoveryTitle = '';
+    public discoveryDetails = '';
+    public discoveryTimestamp = 0;
+    public challengeTiers = new Int32Array(64);
+    public lastMetaSignal: MetaActionId = MetaActionId.NONE;
+    public metaSignalTimestamp = 0;
+    public isCritical = false;
+    public isGibMaster = false;
+    public isQuickFinger = false;
 
-        // Nested Object Property Sync (Zero-GC / Shape Stable)
-        dst.discovery.active = src.discovery.active;
-        dst.discovery.id = src.discovery.id;
-        dst.discovery.type = src.discovery.type;
-        dst.discovery.title = src.discovery.title;
-        dst.discovery.details = src.discovery.details;
-        dst.discovery.timestamp = src.discovery.timestamp;
-
-        dst.currentLine.active = src.currentLine.active;
-        dst.currentLine.speaker = src.currentLine.speaker;
-        dst.currentLine.text = src.currentLine.text;
-
-        dst.interactionPrompt.active = src.interactionPrompt.active;
-        dst.interactionPrompt.type = src.interactionPrompt.type;
-        dst.interactionPrompt.label = src.interactionPrompt.label;
-        dst.interactionPrompt.x = src.interactionPrompt.x;
-        dst.interactionPrompt.y = src.interactionPrompt.y;
-        dst.interactionPrompt.targetId = src.interactionPrompt.targetId;
-
-        dst.boss.active = src.boss.active;
-        dst.boss.name = src.boss.name;
-        dst.boss.hp = src.boss.hp;
-        dst.boss.maxHp = src.boss.maxHp;
-        
-        // 2. Version-Gated Array Sync (Smart Cloning)
-        // We only allocate a new array reference when the logical content changes.
-        if (src._effVersion !== this.versions.statusEffects) {
-            dst.statusEffects = [...src.statusEffects];
-            this.versions.statusEffects = src._effVersion;
-        } else {
-            dst.statusEffects = this.state.statusEffects; // Keep reference stable
+    constructor() {
+        // Initialize map items pool
+        this.mapItems = new Array(MAX_MAP_ITEMS);
+        for (let i = 0; i < MAX_MAP_ITEMS; i++) {
+            this.mapItems[i] = { id: '', x: 0, z: 0, type: MapItemType.OTHER, label: null, icon: null, color: null, radius: null, points: null };
         }
-        
-        if (src._mapVersion !== this.versions.mapItems) {
-            dst.mapItems = [...src.mapItems];
-            this.versions.mapItems = src._mapVersion;
-        } else {
-            dst.mapItems = this.state.mapItems;
-        }
-
-        // Copy persistent buffers (TypedArrays are already stable, we just copy contents if needed, 
-        // but here we just copy the reference if they are the same buffers)
-        dst.statsBuffer = src.statsBuffer;
-        dst.vectorBuffer = src.vectorBuffer;
-        dst.challengeTiers = src.challengeTiers;
-        
-        // 3. Pointer Swap
-        const prev = this.state;
-        this.state = this.standbyState;
-        this.standbyState = prev;
-
-        this.notifyListeners();
     }
 
     /**
-     * Patch method for one-off event updates.
+     * V8 Optimized Deep Copy (Zero-GC)
      */
-    public patch(changes: Partial<HudState>): void {
-        // Only used for sparse updates outside the main loop.
-        Object.assign(this.state, changes);
+    public copy(src: IHudState): void {
+        this.statsBuffer.set(src.statsBuffer);
+        this.vectorBuffer.set(src.vectorBuffer);
+        this.statusFlags = src.statusFlags;
 
-        // ZERO-GC BRIDGE: If debugMode is patched, we MUST notify fast-listeners 
-        // because decoupled HUD components bypass the standard React notification loop.
+        this.hp = src.hp;
+        this.maxHp = src.maxHp;
+        this.stamina = src.stamina;
+        this.maxStamina = src.maxStamina;
+        this.ammo = src.ammo;
+        this.magSize = src.magSize;
+        this.score = src.score;
+        this.scrap = src.scrap;
+        this.challengePoints = src.challengePoints;
+        this.multiplier = src.multiplier;
+        this.activeWeapon = src.activeWeapon;
+        this.isReloading = src.isReloading;
+
+        this.bossActive = src.bossActive;
+        this.bossName = src.bossName;
+        this.bossHp = src.bossHp;
+        this.bossMaxHp = src.bossMaxHp;
+
+        this.bossSpawned = src.bossSpawned;
+        this.bossDefeated = src.bossDefeated;
+        this.familyFound = src.familyFound;
+        this.familySignal = src.familySignal;
+
+        this.level = src.level;
+        this.currentXp = src.currentXp;
+        this.nextLevelXp = src.nextLevelXp;
+        this.throwableAmmo = src.throwableAmmo;
+        this.reloadProgress = src.reloadProgress;
+
+        this.playerPos.x = src.playerPos.x;
+        this.playerPos.z = src.playerPos.z;
+        if (src.familyPos && this.familyPos) {
+            this.familyPos.x = src.familyPos.x;
+            this.familyPos.z = src.familyPos.z;
+        }
+        if (src.bossPos && this.bossPos) {
+            this.bossPos.x = src.bossPos.x;
+            this.bossPos.z = src.bossPos.z;
+        }
+        this.distanceTraveled = src.distanceTraveled;
+
+        this.kills = src.kills;
+        this.spEarned = src.spEarned;
+        this.isDead = src.isDead;
+        this.isDriving = src.isDriving;
+        this.vehicleSpeed = src.vehicleSpeed;
+        this.throttleState = src.throttleState;
+        this.currentSector = src.currentSector;
+        this.cluesFoundCount = src.cluesFoundCount;
+        this.poisFoundCount = src.poisFoundCount;
+        this.collectiblesFoundCount = src.collectiblesFoundCount;
+        this.fps = src.fps;
+
+        this.unlimitedAmmo = src.unlimitedAmmo;
+        this.unlimitedThrowables = src.unlimitedThrowables;
+        this.isInvincible = src.isInvincible;
+        this.waveActive = src.waveActive;
+        this.waveKills = src.waveKills;
+        this.waveTarget = src.waveTarget;
+        this.currentWave = src.currentWave;
+        this.totalWaves = src.totalWaves;
+
+        this.enemyKills.set(src.enemyKills);
+        // Note: Reference copy for seen lists as they change infrequently
+        this.seenEnemies = src.seenEnemies;
+        this.seenBosses = src.seenBosses;
+
+        this.StatusEffectIDs.set(src.StatusEffectIDs);
+        this.statusEffectDurations.set(src.statusEffectDurations);
+        this.statusEffectMaxDurations.set(src.statusEffectMaxDurations);
+        this.statusEffectIntensities.set(src.statusEffectIntensities);
+        this.statusEffectProgress.set(src.statusEffectProgress);
+        this.statusEffectsCount = src.statusEffectsCount;
+
+        this.isDisoriented = src.isDisoriented;
+        this.activePassives.set(src.activePassives);
+        this.activePassivesCount = src.activePassivesCount;
+        this.activeBuffs.set(src.activeBuffs);
+        this.activeBuffsCount = src.activeBuffsCount;
+        this.activeDebuffs.set(src.activeDebuffs);
+        this.activeDebuffsCount = src.activeDebuffsCount;
+
+        this.killerName = src.killerName;
+        this.killerAttackName = src.killerAttackName;
+        this.killedByEnemy = src.killedByEnemy;
+        this.lethalSourceId = src.lethalSourceId;
+        this.lethalStatusEffect = src.lethalStatusEffect;
+
+        this.mapItemsCount = src.mapItemsCount;
+        for (let i = 0; i < this.mapItemsCount; i++) {
+            const s = src.mapItems[i];
+            const d = this.mapItems[i];
+            d.id = s.id;
+            d.x = s.x;
+            d.z = s.z;
+            d.type = s.type;
+            d.label = s.label;
+            d.icon = s.icon;
+            d.color = s.color;
+            d.radius = s.radius;
+            d.points = s.points;
+        }
+
+        this.debugMode = src.debugMode;
+        // Skip deep copy of debugInfo for now if performance is an issue, 
+        // but here's a primitive sync:
+        this.debugInfo.enemies = src.debugInfo.enemies;
+        this.debugInfo.objects = src.debugInfo.objects;
+        this.debugInfo.drawCalls = src.debugInfo.drawCalls;
+        this.debugInfo.modes = src.debugInfo.modes;
+        this.debugInfo.coords.x = src.debugInfo.coords.x;
+        this.debugInfo.coords.z = src.debugInfo.coords.z;
+
+        this.dialogueActive = src.dialogueActive;
+        this.dialogueSpeaker = src.dialogueSpeaker;
+        this.dialogueText = src.dialogueText;
+
+        this.cinematicActive = src.cinematicActive;
+
+        this.interactionActive = src.interactionActive;
+        this.interactionType = src.interactionType;
+        this.interactionLabel = src.interactionLabel;
+        this.interactionTargetId = src.interactionTargetId;
+        this.interactionX = src.interactionX;
+        this.interactionY = src.interactionY;
+
+        this.interactionId = src.interactionId;
+        this.hudVisible = src.hudVisible;
+        this.sectorName = src.sectorName;
+        this.isMobileDevice = src.isMobileDevice;
+
+        this.discoveryActive = src.discoveryActive;
+        this.discoveryId = src.discoveryId;
+        this.discoveryType = src.discoveryType;
+        this.discoveryTitle = src.discoveryTitle;
+        this.discoveryDetails = src.discoveryDetails;
+        this.discoveryTimestamp = src.discoveryTimestamp;
+
+        this.challengeTiers.set(src.challengeTiers);
+        this.lastMetaSignal = src.lastMetaSignal;
+        this.metaSignalTimestamp = src.metaSignalTimestamp;
+
+        this.isCritical = src.isCritical;
+        this.isGibMaster = src.isGibMaster;
+        this.isQuickFinger = src.isQuickFinger;
+    }
+}
+
+type Listener = (state: IHudState) => void;
+export type HudFastUpdateListener = (data: any) => void;
+
+class HudStoreClass {
+    private activeBuffer: HudStateSoA;
+    private standbyBuffer: HudStateSoA;
+    private listeners: Listener[] = [];
+    private fastListeners: HudFastUpdateListener[] = [];
+
+    constructor() {
+        this.activeBuffer = new HudStateSoA();
+        this.standbyBuffer = new HudStateSoA();
+    }
+
+    /**
+     * Swaps pointers and synchronizes buffers (Zero-GC).
+     */
+    public update(nextState: IHudState): void {
+        // Swap buffers
+        const temp = this.activeBuffer;
+        this.activeBuffer = this.standbyBuffer;
+        this.standbyBuffer = temp;
+
+        // Sync standby to newest active
+        this.activeBuffer.copy(nextState);
+
+        // Finalize pointers for React consumers
+        this.notifyListeners();
+    }
+
+    public patch(changes: Partial<IHudState>): void {
+        Object.assign(this.activeBuffer, changes);
         if (changes.debugMode !== undefined) {
             this.emitFastUpdate({ debugMode: changes.debugMode });
         }
-
         this.notifyListeners();
     }
 
     public setHudVisible(visible: boolean): void {
-        if (this.state.hudVisible !== visible) {
-            this.state.hudVisible = visible;
+        if (this.activeBuffer.hudVisible !== visible) {
+            this.activeBuffer.hudVisible = visible;
             this.notifyListeners();
         }
     }
 
-    public setDiscovery(discovery: any): void {
-        this.state.discovery = discovery;
+    public getState(): IHudState {
+        return this.activeBuffer;
+    }
+
+    /**
+     * Bridge for UI interaction events (e.g. mobile button press).
+     */
+    public triggerInteraction(active: boolean): void {
+        UIEventBridge.setInteractionTrigger(active);
+        this.emitFastUpdate({ interactionActive: active, triggerInteraction: true });
+    }
+
+    /**
+     * Bridge for UI meta actions (Pause, Map, etc.).
+     */
+    public triggerMetaAction(actionId: MetaActionId): void {
+        this.activeBuffer.lastMetaSignal = actionId;
+        this.activeBuffer.metaSignalTimestamp = Date.now();
+
+        // Also bridge to engine for Zero-GC polling systems (e.g. INTERACT_TAP)
+        UIEventBridge.triggerUiAction(actionId);
+
         this.notifyListeners();
     }
 
-    /**
-     * Synchronous getter for current state.
-     * Used by useSyncExternalStore to get the current buffer.
-     */
-    public getState(): HudState {
-        return this.state;
-    }
-
-    /**
-     * Subscribes a listener (usually a React update trigger).
-     * Returns a Zero-GC cleanup function.
-     */
     public subscribe(listener: Listener): () => void {
         this.listeners.push(listener);
-
-        // Immediate notify to prevent UI "pop-in" or flickering on mount
-        listener(this.state);
-
+        listener(this.activeBuffer);
         return () => {
             const index = this.listeners.indexOf(listener);
             if (index !== -1) {
-                // Zero-GC Swap-and-Pop Strategy:
-                // Instead of splice (which creates a new array and shifts indices),
-                // we move the last element to the target index and truncate.
                 const lastIndex = this.listeners.length - 1;
-                if (index !== lastIndex) {
-                    this.listeners[index] = this.listeners[lastIndex];
-                }
+                if (index !== lastIndex) this.listeners[index] = this.listeners[lastIndex];
                 this.listeners.pop();
             }
         };
     }
 
-    /**
-     * Subscribes to high-frequency (120FPS) telemetry updates.
-     * ZERO-GC: Bypasses React and the browser event bus entirely.
-     */
     public subscribeFastUpdate(listener: HudFastUpdateListener): () => void {
         this.fastListeners.push(listener);
         return () => {
@@ -291,11 +415,6 @@ class HudStoreClass {
         };
     }
 
-    /**
-     * Emits a high-frequency telemetry update block to all subscribers.
-     * Called directly by HudSystem.emitFastUpdate.
-     * ZERO-GC: Transmits data as a reference without allocating Event objects.
-     */
     public emitFastUpdate(data: any): void {
         const len = this.fastListeners.length;
         for (let i = 0; i < len; i++) {
@@ -303,37 +422,13 @@ class HudStoreClass {
         }
     }
 
-    /**
-     * Performance-Hardened triggers for virtual inputs.
-     * Currently still uses window events for inter-system compatibility, 
-     * but could be migrated to a dedicated input registry if needed.
-     */
-    public triggerInteraction(pressed: boolean): void {
-        // Note: Interaction triggers are low-frequency compared to 120fps telemetry
-        window.dispatchEvent(new CustomEvent('hud-virtual-key', { 
-            detail: { key: 'e', pressed } 
-        }));
-    }
-
-    /**
-     * Trigger any virtual key pulse.
-     */
-    public triggerVirtualKey(key: string, pressed: boolean): void {
-        window.dispatchEvent(new CustomEvent('hud-virtual-key', { 
-            detail: { key, pressed } 
-        }));
-    }
-
-    /**
-     * Internal zero-GC loop to notify all subscribers.
-     */
     private notifyListeners(): void {
         const len = this.listeners.length;
         for (let i = 0; i < len; i++) {
-            this.listeners[i](this.state);
+            this.listeners[i](this.activeBuffer);
         }
     }
 }
 
 export const HudStore = new HudStoreClass();
-(window as any).HudStore = HudStore;
+(window as any).HudStore = HudStore;

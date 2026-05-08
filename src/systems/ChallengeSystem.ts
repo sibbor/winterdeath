@@ -5,7 +5,7 @@ import { PlayerStatID, StatWeaponIndex, StatEnemyIndex } from '../entities/playe
 import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 
 /**
- * VINTERDÖD: Challenge System Evaluator
+ * Challenge System Evaluator
  * 
  * Monitors persistent player stats and session metrics to track long-term goals.
  * Emits events to the UI bridge for real-time player feedback.
@@ -54,7 +54,7 @@ export class ChallengeSystem implements System {
             if (currentValue >= target) {
                 // MILESTONE REACHED!
                 tiers[i] = nextTier;
-                
+
                 // Award CP!
                 const cpReward = def.cpRewards[nextTier - 1] || 0;
                 stats.totalChallengePoints += cpReward;
@@ -63,10 +63,10 @@ export class ChallengeSystem implements System {
                 // Emit Zero-GC completion event to the HUD
                 // Data format: (ChallengeID << 8) | NewTier
                 UIEventRingBuffer.push(
-                    UIEventType.CHALLENGE_COMPLETE, 
+                    UIEventType.CHALLENGE_COMPLETE,
                     (def.id << 8) | nextTier
                 );
-                
+
                 // Console log for debugging the clean state
                 console.log(`[CHALLENGE] Completed ${def.titleKey} Tier ${nextTier}! Awarded ${cpReward} CP.`);
             }
@@ -111,11 +111,11 @@ export class ChallengeSystem implements System {
                 return ek[StatEnemyIndex.BOSS];
 
             // --- WEAPONS/TACTICS ---
-            case ChallengeID.MARKSMAN:
-                return buffer[PlayerStatID.TOTAL_HEADSHOTS];
+            case ChallengeID.GIBBER:
+                return buffer[PlayerStatID.TOTAL_GIBBED];
             case ChallengeID.PYROMANIAC:
-                return wk[StatWeaponIndex.FIRE] + wk[StatWeaponIndex.BURN] + 
-                       wk[StatWeaponIndex.MOLOTOV] + wk[StatWeaponIndex.FLAMETHROWER];
+                return wk[StatWeaponIndex.FIRE] + wk[StatWeaponIndex.BURN] +
+                    wk[StatWeaponIndex.MOLOTOV] + wk[StatWeaponIndex.FLAMETHROWER];
             case ChallengeID.SHOCK_THERAPY:
                 return wk[StatWeaponIndex.ELECTRIC] + wk[StatWeaponIndex.ARC_CANNON];
             case ChallengeID.DEMOLITION_EXPERT:

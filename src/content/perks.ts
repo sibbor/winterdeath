@@ -1,13 +1,17 @@
+import { StatusEffectID } from '../types/StatusEffects';
+import { ColorPair } from '../utils/ui/ColorUtils';
+export { StatusEffectID };
+
 export enum PerkCategory {
     BUFF = 0,
     DEBUFF = 1,
     PASSIVE = 2
 }
 
-export const PerkColors = [
-    '#22c55e', // BUFF
-    '#ff3333', // DEBUFF
-    '#a855f7'  // PASSIVE
+export const PerkColors: ColorPair[] = [
+    { num: 0x22c55e, str: '#22c55e' }, // BUFF
+    { num: 0xef4444, str: '#ef4444' }, // DEBUFF (Red-500)
+    { num: 0xa855f7, str: '#a855f7' }  // PASSIVE
 ];
 
 export const PerkColor = {
@@ -16,35 +20,10 @@ export const PerkColor = {
     PASSIVE: PerkColors[2]
 };
 
-
-export enum StatusEffectType {
-    // --- PASSIVES ---
-    TRICKSTERS_HASTE = 0,
-    EAGLES_SIGHT = 1,
-    LEAD_FEVER = 2,
-    WINTERS_BONE = 3,
-
-    // --- BUFFS ---
-    REFLEX_SHIELD = 4,
-    ADRENALINE_PATCH = 5,
-
-    // --- DEBUFFS ---
-    BLEEDING = 6,
-    SLOWED = 7,
-    STUNNED = 8,
-    BURNING = 9,
-    DISORIENTED = 10,
-    FREEZING = 11,
-    ELECTRIFIED = 12,
-    DROWNING = 13,
-
-    // --- NEW SYSTEM BUFFS (Phase 11) ---
-    GIB_MASTER = 14,
-    QUICK_FINGER = 15
-}
+// StatusEffectType has been moved to src/types/StatusEffects.ts as StatusEffectID
 
 export interface PerkStats {
-    id: StatusEffectType;
+    id: StatusEffectID;
     icon: string;
     displayName: string;
     description: string;
@@ -64,37 +43,37 @@ export interface PerkStats {
 
 /**
  * SOURCE OF TRUTH: Perks, Buffs, and Debuffs (Contiguous Array for O(1) Lookup)
- * VINTERDÖD: Indexed directly by StatusEffectType (SMI).
+ * Indexed directly by StatusEffectID (SMI).
  */
 export const PERKS: PerkStats[] = [];
 
 // --- PASSIVES ---
-PERKS[StatusEffectType.TRICKSTERS_HASTE] = {
-    id: StatusEffectType.TRICKSTERS_HASTE,
+PERKS[StatusEffectID.TRICKSTERS_HASTE] = {
+    id: StatusEffectID.TRICKSTERS_HASTE,
     icon: '🔁',
     displayName: 'perks.TRICKSTERS_HASTE.title',
     description: 'perks.TRICKSTERS_HASTE.description',
     category: PerkCategory.PASSIVE,
     reloadModifier: 20, // 20% faster reload
 };
-PERKS[StatusEffectType.EAGLES_SIGHT] = {
-    id: StatusEffectType.EAGLES_SIGHT,
+PERKS[StatusEffectID.EAGLES_SIGHT] = {
+    id: StatusEffectID.EAGLES_SIGHT,
     icon: '🎯',
     displayName: 'perks.EAGLES_SIGHT.title',
     description: 'perks.EAGLES_SIGHT.description',
     category: PerkCategory.PASSIVE,
     rangeModifier: 15, // 15% more range
 };
-PERKS[StatusEffectType.LEAD_FEVER] = {
-    id: StatusEffectType.LEAD_FEVER,
+PERKS[StatusEffectID.LEAD_FEVER] = {
+    id: StatusEffectID.LEAD_FEVER,
     icon: '🔫',
     displayName: 'perks.LEAD_FEVER.title',
     description: 'perks.LEAD_FEVER.description',
     category: PerkCategory.PASSIVE,
     fireRateModifier: 20, // 20% faster fire rate
 };
-PERKS[StatusEffectType.WINTERS_BONE] = {
-    id: StatusEffectType.WINTERS_BONE,
+PERKS[StatusEffectID.WINTERS_BONE] = {
+    id: StatusEffectID.WINTERS_BONE,
     icon: '🛡️',
     displayName: 'perks.WINTERS_BONE.title',
     description: 'perks.WINTERS_BONE.description',
@@ -103,8 +82,8 @@ PERKS[StatusEffectType.WINTERS_BONE] = {
 };
 
 // --- BUFFS ---
-PERKS[StatusEffectType.REFLEX_SHIELD] = {
-    id: StatusEffectType.REFLEX_SHIELD,
+PERKS[StatusEffectID.REFLEX_SHIELD] = {
+    id: StatusEffectID.REFLEX_SHIELD,
     icon: '🛡️',
     displayName: 'perks.REFLEX_SHIELD.title',
     description: 'perks.REFLEX_SHIELD.description',
@@ -113,8 +92,8 @@ PERKS[StatusEffectType.REFLEX_SHIELD] = {
     cooldown: 0,
     damageResistModifier: 50, // 50% damage resistance
 };
-PERKS[StatusEffectType.ADRENALINE_PATCH] = {
-    id: StatusEffectType.ADRENALINE_PATCH,
+PERKS[StatusEffectID.ADRENALINE_PATCH] = {
+    id: StatusEffectID.ADRENALINE_PATCH,
     icon: '💉',
     displayName: 'perks.ADRENALINE_PATCH.title',
     description: 'perks.ADRENALINE_PATCH.description',
@@ -124,8 +103,8 @@ PERKS[StatusEffectType.ADRENALINE_PATCH] = {
     speedModifier: 30,
     fireRateModifier: 20
 };
-PERKS[StatusEffectType.GIB_MASTER] = {
-    id: StatusEffectType.GIB_MASTER,
+PERKS[StatusEffectID.GIB_MASTER] = {
+    id: StatusEffectID.GIB_MASTER,
     icon: '🎯',
     displayName: 'perks.GIB_MASTER.title',
     description: 'perks.GIB_MASTER.description',
@@ -133,19 +112,20 @@ PERKS[StatusEffectType.GIB_MASTER] = {
     duration: 3000,
     cooldown: 30000
 };
-PERKS[StatusEffectType.QUICK_FINGER] = {
-    id: StatusEffectType.QUICK_FINGER,
+PERKS[StatusEffectID.QUICK_FINGER] = {
+    id: StatusEffectID.QUICK_FINGER,
     icon: '⏱️',
     displayName: 'perks.QUICK_FINGER.title',
     description: 'perks.QUICK_FINGER.description',
     category: PerkCategory.BUFF,
     duration: 5000,
-    cooldown: 30000
+    cooldown: 30000,
+    reloadModifier: 30
 };
 
 // --- DEBUFFS ---
-PERKS[StatusEffectType.BLEEDING] = {
-    id: StatusEffectType.BLEEDING,
+PERKS[StatusEffectID.BLEEDING] = {
+    id: StatusEffectID.BLEEDING,
     icon: '🩸',
     displayName: 'perks.BLEEDING.title',
     description: 'perks.BLEEDING.description',
@@ -153,8 +133,8 @@ PERKS[StatusEffectType.BLEEDING] = {
     duration: 3000,
     dotDamage: 5
 };
-PERKS[StatusEffectType.BURNING] = {
-    id: StatusEffectType.BURNING,
+PERKS[StatusEffectID.BURNING] = {
+    id: StatusEffectID.BURNING,
     icon: '🔥',
     displayName: 'perks.BURNING.title',
     description: 'perks.BURNING.description',
@@ -162,16 +142,16 @@ PERKS[StatusEffectType.BURNING] = {
     duration: 3000,
     dotDamage: 10
 };
-PERKS[StatusEffectType.STUNNED] = {
-    id: StatusEffectType.STUNNED,
+PERKS[StatusEffectID.STUNNED] = {
+    id: StatusEffectID.STUNNED,
     icon: '😵',
     displayName: 'perks.STUNNED.title',
     description: 'perks.STUNNED.description',
     category: PerkCategory.DEBUFF,
     duration: 3000,
 };
-PERKS[StatusEffectType.DISORIENTED] = {
-    id: StatusEffectType.DISORIENTED,
+PERKS[StatusEffectID.DISORIENTED] = {
+    id: StatusEffectID.DISORIENTED,
     icon: '😵‍💫',
     displayName: 'perks.DISORIENTED.title',
     description: 'perks.DISORIENTED.description',
@@ -179,8 +159,8 @@ PERKS[StatusEffectType.DISORIENTED] = {
     duration: 2000,
     speedModifier: -20,
 };
-PERKS[StatusEffectType.SLOWED] = {
-    id: StatusEffectType.SLOWED,
+PERKS[StatusEffectID.SLOWED] = {
+    id: StatusEffectID.SLOWED,
     icon: '🐌',
     displayName: 'perks.SLOWED.title',
     description: 'perks.SLOWED.description',
@@ -188,8 +168,8 @@ PERKS[StatusEffectType.SLOWED] = {
     duration: 2500,
     speedModifier: -40,
 };
-PERKS[StatusEffectType.FREEZING] = {
-    id: StatusEffectType.FREEZING,
+PERKS[StatusEffectID.FREEZING] = {
+    id: StatusEffectID.FREEZING,
     icon: '❄️',
     displayName: 'perks.FREEZING.title',
     description: 'perks.FREEZING.description',
@@ -198,8 +178,8 @@ PERKS[StatusEffectType.FREEZING] = {
     dotDamage: 10,
     speedModifier: -20,
 };
-PERKS[StatusEffectType.ELECTRIFIED] = {
-    id: StatusEffectType.ELECTRIFIED,
+PERKS[StatusEffectID.ELECTRIFIED] = {
+    id: StatusEffectID.ELECTRIFIED,
     icon: '⚡',
     displayName: 'perks.ELECTRIFIED.title',
     description: 'perks.ELECTRIFIED.description',
@@ -208,8 +188,8 @@ PERKS[StatusEffectType.ELECTRIFIED] = {
     dotDamage: 10,
     speedModifier: -20,
 };
-PERKS[StatusEffectType.DROWNING] = {
-    id: StatusEffectType.DROWNING,
+PERKS[StatusEffectID.DROWNING] = {
+    id: StatusEffectID.DROWNING,
     icon: '🫧',
     displayName: 'perks.DROWNING.title',
     description: 'perks.DROWNING.description',

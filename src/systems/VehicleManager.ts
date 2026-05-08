@@ -10,7 +10,7 @@ import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
 import { VehicleState, VehicleNodes, VehicleTypes, VehicleCategory, VehicleID, VehicleEngineState, VehicleImpactIntensity } from '../entities/vehicles/VehicleTypes';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { SystemID } from './SystemID';
-import { InputAction } from '../core/engine/InputTypes';
+import { InputAction } from '../core/engine/InputManager';
 
 const HIT_COOLDOWN_MS = 350;
 const SPEED_SQ_PUSH = 1.0;
@@ -60,14 +60,12 @@ export const VehicleManager = {
 
             if (engineState === VehicleEngineState.OFF) {
                 state.vehicle.engineState = VehicleEngineState.STARTING;
-            
+                state.vehicle.engineStartTime = simTime;
                 state.vehicle.engineVoiceIdx = VehicleSounds.startEngine(def.category);
-            
-                setTimeout(() => {
-                    if (state.vehicle.engineState === VehicleEngineState.STARTING) {
-                        state.vehicle.engineState = VehicleEngineState.RUNNING;
-                    }
-                }, 800);
+            }
+
+            if (engineState === VehicleEngineState.STARTING && simTime - state.vehicle.engineStartTime > 800) {
+                state.vehicle.engineState = VehicleEngineState.RUNNING;
             }
 
             if (input.actions[InputAction.INTERACT] && !state.eDepressed && engineState !== VehicleEngineState.OFF) {

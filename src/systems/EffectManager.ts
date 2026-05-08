@@ -15,69 +15,153 @@ export enum SubEffectType {
     EMITTER = 2
 }
 
-// --- PRE-ALLOCATED CONSTANTS ---
-const VEC_UP_05 = new THREE.Vector3(0, 0.5, 0);
-const VEC_UP_1 = new THREE.Vector3(0, 1, 0);
-const VEC_UP_15 = new THREE.Vector3(0, 1.5, 0);
-const VEC_UP_2 = new THREE.Vector3(0, 2, 0);
-const VEC_NEON = new THREE.Vector3(0, 0, 0.5);
-const VEC_ZERO = new THREE.Vector3(0, 0, 0);
+// --- ZERO-GC SOA POOL ---
+const MAX_SUB_EFFECTS = 8192;
 
-// --- PERFORMANCE SCRATCHPADS ---
-function createOffset(baseVec: THREE.Vector3, optOffset?: THREE.Vector3): THREE.Vector3 {
-    if (optOffset) {
-        return new THREE.Vector3(
-            optOffset.x + baseVec.x,
-            optOffset.y + baseVec.y,
-            optOffset.z + baseVec.z
-        );
+export const EffectPool = {
+    activeCount: 0,
+    // Store references to targets. MUST be cleared on sector change to avoid memory leaks
+    target: new Array<THREE.Object3D | null>(MAX_SUB_EFFECTS),
+
+    // Flat primitive buffers
+    type: new Uint8Array(MAX_SUB_EFFECTS),
+    color: new Uint32Array(MAX_SUB_EFFECTS),
+    intensity: new Float32Array(MAX_SUB_EFFECTS),
+    distance: new Float32Array(MAX_SUB_EFFECTS),
+
+    // Vector3 decomposed into floats
+    offsetX: new Float32Array(MAX_SUB_EFFECTS),
+    offsetY: new Float32Array(MAX_SUB_EFFECTS),
+    offsetZ: new Float32Array(MAX_SUB_EFFECTS),
+
+    particleType: new Uint8Array(MAX_SUB_EFFECTS),
+    interval: new Float32Array(MAX_SUB_EFFECTS),
+    count: new Uint8Array(MAX_SUB_EFFECTS),
+    spread: new Float32Array(MAX_SUB_EFFECTS),
+
+    // Vector2 area decomposed into floats
+    areaX: new Float32Array(MAX_SUB_EFFECTS),
+    areaZ: new Float32Array(MAX_SUB_EFFECTS),
+
+    flicker: new Uint8Array(MAX_SUB_EFFECTS) // 0 or 1
+};
+
+/**
+ * O(1) Pool Sanitization
+ * Clears the effect pool instantly. Nullifies object references to allow GC.
+ */
+export function clearEffects(): void {
+    const count = EffectPool.activeCount;
+    EffectPool.activeCount = 0;
+    for (let i = 0; i < count; i++) {
+        EffectPool.target[i] = null;
     }
-    return baseVec;
+}
+
+/**
+ * Zero-GC Allocation
+ * Writes primitive data directly to contiguous memory. No object instantiation.
+ */
+function allocateSubEffect(
+    target: THREE.Object3D,
+    type: SubEffectType,
+    color: number = 0,
+    intensity: number = 0,
+    distance: number = 0,
+    offsetX: number = 0,
+    offsetY: number = 0,
+    offsetZ: number = 0,
+    flicker: number = 0,
+    particleType: number = 0,
+    interval: number = 0,
+    count: number = 0,
+    spread: number = 0,
+    areaX: number = 0,
+    areaZ: number = 0
+): void {
+    if (EffectPool.activeCount >= MAX_SUB_EFFECTS) {
+        console.warn("[VFX] EffectPool capacity reached. Skipping effect allocation.");
+        return;
+    }
+
+    const i = EffectPool.activeCount;
+
+    EffectPool.target[i] = target;
+    EffectPool.type[i] = type;
+    EffectPool.color[i] = color;
+    EffectPool.intensity[i] = intensity;
+    EffectPool.distance[i] = distance;
+    EffectPool.offsetX[i] = offsetX;
+    EffectPool.offsetY[i] = offsetY;
+    EffectPool.offsetZ[i] = offsetZ;
+    EffectPool.flicker[i] = flicker;
+    EffectPool.particleType[i] = particleType;
+    EffectPool.interval[i] = interval;
+    EffectPool.count[i] = count;
+    EffectPool.spread[i] = spread;
+    EffectPool.areaX[i] = areaX;
+    EffectPool.areaZ[i] = areaZ;
+
+    EffectPool.activeCount++;
 }
 
 export class EffectManager {
-    static attachEffect(object: THREE.Object3D, type: EffectType, opts?: any) {
-        if (!object.userData.effects) object.userData.effects = [];
-        const effects = object.userData.effects;
+    /**
+     * Parses high-level effect requests and allocates DoD SubEffects.
+     * Guaranteed Zero-GC path. No array pushes or Vector allocations.
+     */
+    static attachEffect(object: THREE.Object3D, type: EffectType, opts?: any): void {
+        if (!object) return;
+
+        // Legacy compat: flag object if needed by other systems
+        if (type === EffectType.FIRE) object.userData.isFire = true;
+
+        // Extract primitives to avoid property lookups in switch
+        const optOffX = opts?.offset?.x || 0;
+        const optOffY = opts?.offset?.y || 0;
+        const optOffZ = opts?.offset?.z || 0;
+        const areaX = opts?.area?.x || 0;
+        const areaZ = opts?.area?.z || 0;
 
         switch (type) {
-            case EffectType.FIRE:
-                object.userData.isFire = true;
-
-                const offset05 = createOffset(VEC_UP_05, opts?.offset);
-                const offset1 = createOffset(VEC_UP_1, opts?.offset);
-
-                const isLarge = opts?.onRoof || (opts?.area && opts.area.x * opts.area.z > 20);
+            case EffectType.FIRE: {
+                const isLarge = opts?.onRoof || (areaX * areaZ > 20);
                 const firePart = isLarge ? FXParticleType.LARGE_FIRE : FXParticleType.FLAME;
                 const smokePart = isLarge ? FXParticleType.LARGE_SMOKE : FXParticleType.SMOKE;
 
-                // Scale spawn rates relative to massive roofs
-                const largeCount = isLarge ? (opts?.area ? Math.max(2, Math.floor((opts.area.x * opts.area.z) / 25)) : 3) : 1;
+                // Scale spawn rates relative to massive roofs using primitives
+                const largeCount = isLarge ? (opts?.area ? Math.max(2, Math.floor((areaX * areaZ) / 25)) : 3) : 1;
                 const fireInterval = isLarge ? 25 : 50;
                 const sparkInterval = isLarge ? 60 : 150;
                 const smokeInterval = isLarge ? 50 : 200;
 
-                effects.push(
-                    { type: SubEffectType.LIGHT, color: 0xff7722, intensity: opts?.intensity || 40, distance: opts?.distance || 50, offset: opts?.offset || VEC_UP_1, flicker: true },
-                    { type: SubEffectType.EMITTER, particle: firePart, interval: fireInterval, count: largeCount, offset: offset05, spread: 0.3, color: 0xffaa00, area: opts?.area },
-                    { type: SubEffectType.EMITTER, particle: FXParticleType.SPARK, interval: sparkInterval, count: largeCount, offset: offset1, spread: 0.4, color: 0xffdd00, area: opts?.area }
-                );
+                // Light: Base offset Y + 1.0
+                allocateSubEffect(object, SubEffectType.LIGHT, 0xff7722, opts?.intensity || 40, opts?.distance || 50, optOffX, optOffY + 1.0, optOffZ, 1);
+
+                // Fire Emitter: Base offset Y + 0.5
+                allocateSubEffect(object, SubEffectType.EMITTER, 0xffaa00, 0, 0, optOffX, optOffY + 0.5, optOffZ, 0, firePart, fireInterval, largeCount, 0.3, areaX, areaZ);
+
+                // Spark Emitter: Base offset Y + 1.0
+                allocateSubEffect(object, SubEffectType.EMITTER, 0xffdd00, 0, 0, optOffX, optOffY + 1.0, optOffZ, 0, FXParticleType.SPARK, sparkInterval, largeCount, 0.4, areaX, areaZ);
+
+                // Optional Smoke Emitter: Base offset Y + 1.5
                 if (opts?.smoke) {
-                    effects.push({ type: SubEffectType.EMITTER, particle: smokePart, interval: smokeInterval, count: largeCount, offset: VEC_UP_15, spread: 0.3, area: opts?.area });
+                    allocateSubEffect(object, SubEffectType.EMITTER, 0, 0, 0, optOffX, optOffY + 1.5, optOffZ, 0, smokePart, smokeInterval, largeCount, 0.3, areaX, areaZ);
                 }
                 break;
+            }
 
             case EffectType.FLICKER_LIGHT:
-                effects.push({ type: SubEffectType.LIGHT, color: opts?.color || 0xffffaa, intensity: opts?.intensity || 20, distance: opts?.distance || 30, flicker: true, offset: opts?.offset || VEC_UP_2 });
+                allocateSubEffect(object, SubEffectType.LIGHT, opts?.color || 0xffffaa, opts?.intensity || 20, opts?.distance || 30, optOffX, optOffY + 2.0, optOffZ, 1);
                 break;
 
             case EffectType.NEON_SIGN:
-                effects.push({ type: SubEffectType.LIGHT, color: opts?.color || 0x00ffff, intensity: opts?.intensity || 15, distance: opts?.distance || 20, flicker: false, offset: opts?.offset || VEC_NEON });
+                allocateSubEffect(object, SubEffectType.LIGHT, opts?.color || 0x00ffff, opts?.intensity || 15, opts?.distance || 20, optOffX, optOffY, optOffZ + 0.5, 0);
                 break;
 
             case EffectType.SMOKE_PLUME:
-                effects.push({ type: SubEffectType.EMITTER, particle: FXParticleType.BLACK_SMOKE, interval: opts?.interval || 100, count: 1, offset: opts?.offset || VEC_ZERO, spread: opts?.spread || 20 });
+                allocateSubEffect(object, SubEffectType.EMITTER, 0, 0, 0, optOffX, optOffY, optOffZ, 0, FXParticleType.BLACK_SMOKE, opts?.interval || 100, 1, opts?.spread || 20, areaX, areaZ);
                 break;
         }
     }
-}
+}

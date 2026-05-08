@@ -4,17 +4,20 @@ import { t } from '../../../utils/i18n';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { useOrientation } from '../../../hooks/useOrientation';
 import { HudStore } from '../../../store/HudStore';
-import { StatusEffectType, PerkColor, PerkCategory } from '../../../content/perks';
+import { PerkColor, PerkCategory } from '../../../content/perks';
 import { DataResolver } from '../../../utils/ui/DataResolver';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import DamageVignette from './DamageVignette';
 import DiscoveryPopup from './DiscoveryPopup';
 import InteractionPrompt from './InteractionPrompt';
 import ChallengePopup from './ChallengePopup';
-import { InteractionType } from '../../../systems/InteractionTypes';
-import ChatBubblesUI from './ChatBubblesUI';
+import { InteractionType, InteractionPromptId } from '../../../systems/ui/UIEventBridge';
+import ChatBubble from './ChatBubble';
 import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
 import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
+import { StatusEffect, StatusEffectID } from '../../../types/StatusEffects';
+import { useStatusStore } from '../../../store/StatusStore';
+import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
 
 interface GameHUDProps {
     loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
@@ -47,7 +50,7 @@ const getCachedArray = (length: number): number[] => {
     return _arrayCache[length];
 };
 
-const getStatusIcon = (type: StatusEffectType | string) => {
+const getStatusIcon = (type: StatusEffectID | string) => {
     // If it's a number (numeric SMI enum), direct index
     if (typeof type === 'number') return DataResolver.getPerks()[type]?.icon || '❓';
     // If it's a string (legacy or pet name), lookup by keys
@@ -57,7 +60,7 @@ const getStatusIcon = (type: StatusEffectType | string) => {
     return '❓';
 };
 
-const getPassiveIcon = (type: StatusEffectType | string) => {
+const getPassiveIcon = (type: StatusEffectID | string) => {
     // Special cases for pets (which might still be names or IDs)
     if (typeof type === 'string') {
         const n = type.toUpperCase();
@@ -91,9 +94,21 @@ const StatusEffectIcon = React.memo(({ type, isDebuff, isMobileDevice, isLandsca
             // OR use a specialized effect-update event.
             // For now, continue using the subscribe pattern but with a Ref bypass.
             const state = HudStore.getState();
-            const effect = state.statusEffects.find(e => e.type === type);
-            if (effect) {
-                const progress = effect.progress ?? 1;
+            let progress = 0;
+            let found = false;
+            const count = state.statusEffectsCount;
+            const types = state.StatusEffectIDs;
+            const progs = state.statusEffectProgress;
+
+            for (let i = 0; i < count; i++) {
+                if (types[i] === type) {
+                    progress = progs[i];
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found) {
                 barRef.current.style.transform = `scaleX(${progress})`;
                 barRef.current.parentElement!.parentElement!.style.display = 'flex';
             } else {
@@ -105,19 +120,19 @@ const StatusEffectIcon = React.memo(({ type, isDebuff, isMobileDevice, isLandsca
         return () => window.removeEventListener('hud-fast-update', handleUpdate);
     }, [type]);
 
-    const color = isDebuff ? PerkColor.DEBUFF : PerkColor.BUFF;
+    const colorPair = isDebuff ? COLORS.RED : COLORS.GREEN;
     const pulseClass = isDebuff ? 'hud-debuff-pulse' : 'hud-buff-pulse';
 
     const tooltip = DataResolver.getPerkName(type) ? `${t(DataResolver.getPerkName(type))}: ${t(DataResolver.getPerkDescription(type))}` : type.toString();
 
     return (
         <div className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-10 h-10 text-[14px]'} flex items-center justify-center bg-black/80 border-2 rounded-sm ${pulseClass} relative cursor-help`}
-            style={{ borderColor: color, display: 'none' }}
+            style={{ borderColor: colorPair.str, display: 'none' }}
             data-tooltip={tooltip}
             onTouchStart={isMobileDevice ? handleActionEnter : undefined}>
             <span>{getStatusIcon(type)}</span>
             <div className="absolute -bottom-2 left-0 w-full h-0.5 bg-black/40">
-                <div ref={barRef} className="w-full h-full origin-left will-change-transform" style={{ backgroundColor: color, transform: 'scaleX(1)' }} />
+                <div ref={barRef} className="w-full h-full origin-left will-change-transform" style={{ backgroundColor: colorPair.str, transform: 'scaleX(1)' }} />
             </div>
         </div>
     );
@@ -157,7 +172,7 @@ const VitalsPanel = React.memo(({ isMobileDevice, isBossIntro, hpBarRef, hpTextR
             <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-5' : 'h-10'} w-full border border-red-500/30 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)] bg-slate-950`}>
                 <div className="h-full bg-red-900/20 relative">
                     {/* ZERO-GC: No CSS transition on vital bars. JS handles 60fps frame-perfect scaling. */}
-                    <div ref={hpBarRef} className="w-full h-full bg-[#ff3333] origin-left will-change-transform hud-bar-glow" style={{ transform: 'scaleX(0)' }} />
+                    <div ref={hpBarRef} className="w-full h-full bg-red-600 origin-left will-change-transform hud-bar-glow" style={{ backgroundColor: COLORS.RED.str, transform: 'scaleX(0)' }} />
                     <div className="absolute inset-0 flex items-center justify-start px-3">
                         <span ref={hpTextRef} className={`${isMobileDevice ? 'text-[10px]' : 'text-[13px]'} text-white font-mono font-bold tracking-tighter drop-shadow-md`}>
                             0 / 100
@@ -168,10 +183,10 @@ const VitalsPanel = React.memo(({ isMobileDevice, isBossIntro, hpBarRef, hpTextR
 
             <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-2' : 'h-4'} w-full border border-purple-500/30 bg-slate-950`}>
                 <div className="h-full bg-purple-900/20 relative">
-                    <div ref={stBarRef} className="w-full h-full bg-[#a855f7] origin-left will-change-transform hud-bar-glow" style={{ transform: 'scaleX(0)' }} />
+                    <div ref={stBarRef} className="w-full h-full bg-purple-500 origin-left will-change-transform hud-bar-glow" style={{ backgroundColor: COLORS.PURPLE.str, transform: 'scaleX(0)' }} />
                     {/*
                     <div className="absolute inset-0 flex items-center justify-start px-2 opacity-40 pointer-events-none">
-                        <span ref={stTextRef} className="text-[8px] text-white font-mono font-bold uppercase">{t('ui.stamina')}</span>
+                        <span ref={stTextRef} className="text-[10px] text-white font-mono font-bold uppercase">{t('ui.stamina')}</span>
                     </div>
                     */}
                 </div>
@@ -179,7 +194,7 @@ const VitalsPanel = React.memo(({ isMobileDevice, isBossIntro, hpBarRef, hpTextR
 
             <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-1.5' : 'h-2.5'} w-full border border-cyan-500/30 bg-slate-950`}>
                 <div className="h-full bg-cyan-900/20 relative">
-                    <div ref={xpBarRef} className="w-full h-full bg-[#06b6d4] origin-left will-change-transform hud-bar-glow" style={{ transform: 'scaleX(0)' }} />
+                    <div ref={xpBarRef} className="w-full h-full bg-cyan-500 origin-left will-change-transform hud-bar-glow" style={{ backgroundColor: COLORS.CYAN.str, transform: 'scaleX(0)' }} />
                 </div>
             </div>
         </div>
@@ -201,7 +216,7 @@ const StatusEffectIconPooled = forwardRef(({ index, isMobileDevice, isLandscapeM
 
     // ZERO-GC: Internal update method targeted by parent Panel
     useImperativeHandle(ref, () => ({
-        update: (type: StatusEffectType | null, progress: number, color: string, pulseClass: string) => {
+        update: (type: StatusEffectID | null, progress: number, color: string, pulseClass: string) => {
             if (!containerRef.current || !iconRef.current || !barRef.current) return;
 
             if (type === null) {
@@ -244,7 +259,7 @@ const PassiveIconPooled = forwardRef(({ index, isMobileDevice, isLandscapeMode, 
     const iconRef = useRef<HTMLSpanElement>(null);
 
     useImperativeHandle(ref, () => ({
-        update: (id: StatusEffectType | null) => {
+        update: (id: StatusEffectID | null) => {
             if (!containerRef.current || !iconRef.current) return;
             if (id === null) {
                 containerRef.current.style.display = 'none';
@@ -270,57 +285,31 @@ const PassiveIconPooled = forwardRef(({ index, isMobileDevice, isLandscapeMode, 
     );
 });
 
-const StatusEffectsPanel = React.memo(({ isMobileDevice, isLandscapeMode, handleActionEnter, handleActionLeave, effectRefs, passiveRefs }: any) => {
-    // PRE-GENERATED LISTS: Avoid Array.from().map() in every render
-    const passives = [];
-    for (let i = 0; i < POOL_SIZE_PASSIVE; i++) {
-        passives.push(
-            <PassiveIconPooled
-                key={`p-${i}`}
-                index={i}
-                isMobileDevice={isMobileDevice}
-                isLandscapeMode={isLandscapeMode}
-                handleActionEnter={handleActionEnter}
-                ref={_setPassiveRef(passiveRefs, i)}
-            />
-        );
-    }
+const StatusBitmaskIcon = React.memo(({ bit, icon, color, label }: { bit: number, icon: string, color: string, label: string }) => {
+    const mask = useStatusStore(m => m);
+    const isVisible = (mask & bit) !== 0;
 
-    const buffs = [];
-    for (let i = 0; i < POOL_SIZE_BUFF; i++) {
-        buffs.push(
-            <StatusEffectIconPooled
-                key={`b-${i}`}
-                index={i}
-                groupPrefix="buff"
-                isMobileDevice={isMobileDevice}
-                isLandscapeMode={isLandscapeMode}
-                handleActionEnter={handleActionEnter}
-                ref={_setEffectRef(effectRefs, 'buffs', i)}
-            />
-        );
-    }
-
-    const debuffs = [];
-    for (let i = 0; i < POOL_SIZE_DEBUFF; i++) {
-        debuffs.push(
-            <StatusEffectIconPooled
-                key={`d-${i}`}
-                index={i}
-                groupPrefix="debuff"
-                isMobileDevice={isMobileDevice}
-                isLandscapeMode={isLandscapeMode}
-                handleActionEnter={handleActionEnter}
-                ref={_setEffectRef(effectRefs, 'debuffs', i)}
-            />
-        );
-    }
+    if (!isVisible) return null;
 
     return (
+        <div className="w-10 h-10 flex items-center justify-center bg-black/80 border-2 rounded-sm relative hud-buff-pulse"
+            style={{ borderColor: color }}
+            data-tooltip={t(label)}>
+            <span className="text-xl">{icon}</span>
+        </div>
+    );
+});
+
+const StatusBitmaskPanel = React.memo(({ isMobileDevice, isLandscapeMode }: any) => {
+    return (
         <div className={isMobileDevice && isLandscapeMode ? "absolute top-24 left-0 flex flex-col gap-2 pl-safe pointer-events-auto" : "flex flex-wrap gap-2 mt-1 ml-1 pointer-events-auto"}>
-            {passives}
-            {buffs}
-            {debuffs}
+            <StatusBitmaskIcon bit={StatusEffect.BLEEDING} icon="🩸" color={COLORS.RED.str} label="perks.BLEEDING.title" />
+            <StatusBitmaskIcon bit={StatusEffect.INFECTED} icon="☣️" color={COLORS.GREEN.str} label="perks.INFECTION.title" />
+            <StatusBitmaskIcon bit={StatusEffect.ADRENALINE} icon="💉" color={COLORS.YELLOW.str} label="perks.ADRENALINE_SHOT.title" />
+            <StatusBitmaskIcon bit={StatusEffect.LOW_HEALTH} icon="⚠️" color={COLORS.RED.str} label="ui.low_health" />
+            <StatusBitmaskIcon bit={StatusEffect.STUNNED} icon="💫" color={COLORS.INDIGO.str} label="perks.STUNNED.title" />
+            <StatusBitmaskIcon bit={StatusEffect.EXHAUSTED} icon="🔋" color={COLORS.PURPLE.str} label="ui.exhausted" />
+            <StatusBitmaskIcon bit={StatusEffect.INVULNERABLE} icon="🛡️" color={COLORS.CYAN.str} label="perks.INVULNERABLE.title" />
         </div>
     );
 });
@@ -339,7 +328,7 @@ const KillsPanel = React.memo(({ isMobileDevice, isBossIntro, handlePauseInterna
                 <span ref={killsTextRef} className={`${isMobileDevice ? 'text-3xl' : 'text-7xl'} font-thin text-white font-mono leading-none hud-kill-text`}>
                     0
                 </span>
-                <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-[#ff3333] tracking-widest uppercase opacity-80`}>
+                <span className={`${isMobileDevice ? 'text-[10px]' : 'text-sm'} font-bold tracking-widest uppercase opacity-80`} style={{ color: COLORS.RED.str }}>
                     {t('ui.kills')}
                 </span>
             </div>
@@ -355,14 +344,14 @@ const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro, scrapTextRef, s
             {/* SCRAP BOX (CampHUD Style) */}
             <div ref={scrapBoxRef}
                 className={`${size} aspect-square border bg-yellow-950/80 border-yellow-700 shadow-[0_0_15px_rgba(234,179,8,0.2)] flex flex-col items-center justify-center gap-0 transition-all pointer-events-auto`}>
-                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold text-yellow-500 leading-tight`}>{t('ui.scrap')}</span>
+                <span className={`${isMobileDevice ? 'text-[10px]' : 'text-[10px]'} block uppercase font-bold text-yellow-500 leading-tight`}>{t('ui.scrap')}</span>
                 <span ref={scrapTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-yellow-500 leading-none`}>0</span>
             </div>
 
             {/* SP BOX (CampHUD Style) */}
             <div ref={spBoxRef}
                 className={`${size} aspect-square border bg-purple-950/80 border-purple-700 shadow-[0_0_15px_rgba(168,85,247,0.2)] flex flex-col items-center justify-center gap-0 transition-all pointer-events-auto`}>
-                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold text-purple-500 leading-tight`}>{t('ui.sp')}</span>
+                <span className={`${isMobileDevice ? 'text-[10px]' : 'text-[10px]'} block uppercase font-bold text-purple-500 leading-tight`}>{t('ui.sp')}</span>
                 <span ref={spTextRef} className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono text-purple-500 leading-none`}>0</span>
             </div>
         </div>
@@ -372,9 +361,9 @@ const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro, scrapTextRef, s
 const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
     // IMPORTANT: We only listen to static/slow values (active, name, maxHp). 
     // We NEVER listen to current HP here. That is handled by the DOM ref.
-    const bossActive = useHudStore(s => (s.boss?.active || false) && !s.bossDefeated);
-    const bossName = useHudStore(s => s.boss?.active ? s.boss.name : '');
-    const waveActive = useHudStore(s => s.sectorStats?.waveActive || false);
+    const bossActive = useHudStore(s => s.bossActive && !s.bossDefeated);
+    const bossName = useHudStore(s => s.bossActive ? s.bossName : '');
+    const waveActive = useHudStore(s => s.waveActive);
 
     const isWave = !bossActive && waveActive;
 
@@ -384,15 +373,15 @@ const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
 
     return (
         <div className="w-full flex flex-col items-center animate-fadeIn pointer-events-none">
-            <h2 className={`${isMobileDevice ? 'text-sm mb-2 opacity-60' : 'text-5xl font-light mb-4 opacity-80'} text-white tracking-widest uppercase hud-text-glow ${isWave ? 'text-[#ff3333] italic font-semibold' : ''}`}>
+            <h2 className={`${isMobileDevice ? 'text-sm mb-2 opacity-60' : 'text-5xl font-light mb-4 opacity-80'} text-white tracking-widest uppercase hud-text-glow ${isWave ? 'italic font-semibold' : ''}`} style={{ color: isWave ? COLORS.RED.str : undefined }}>
                 {t(displayName)}
             </h2>
             <div className={`w-full bg-black/90 border border-red-900 shadow-2xl skew-x-[-10deg] ${isMobileDevice ? 'max-w-[250px] h-2' : 'max-w-[600px] h-4'}`}>
                 {/* HARDWARE ACCELERATED BOSS BAR */}
                 <div
                     ref={bossHpBarRef}
-                    className="h-full bg-[#ff3333] origin-left will-change-transform"
-                    style={{ transform: 'scaleX(1)' }}
+                    className="h-full origin-left will-change-transform"
+                    style={{ transform: 'scaleX(1)', backgroundColor: COLORS.RED.str }}
                 />
             </div>
         </div>
@@ -404,15 +393,15 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
     const activeWeapon = useHudStore(s => s.activeWeapon);
     const throwableAmmo = useHudStore(s => s.throwableAmmo);
     const familyFound = useHudStore(s => s.familyFound);
-    const unlimitedAmmo = useHudStore(s => s.sectorStats?.unlimitedAmmo || false);
+    const unlimitedAmmo = useHudStore(s => s.unlimitedAmmo);
 
     const wep = DataResolver.getWeapons()[activeWeapon];
 
-    const interactionActive = useHudStore(s => s.interactionPrompt.active);
-    const interactionType = useHudStore(s => interactionActive ? s.interactionPrompt.type : InteractionType.NONE);
-    const interactionLabel = useHudStore(s => interactionActive ? s.interactionPrompt.label : '');
+    const interactionActive = useHudStore(s => s.interactionActive);
+    const interactionType = useHudStore(s => interactionActive ? s.interactionType : InteractionType.NONE);
+    const interactionLabel = useHudStore(s => interactionActive ? s.interactionLabel : '');
 
-    // VINTERDÖD: Zero-GC Loop pre-calculation (Step 14)
+    // Zero-GC Loop pre-calculation (Step 14)
     const slots = [];
     if (!isDriving && weaponSlots) {
         for (let i = 0; i < weaponSlots.length; i++) {
@@ -424,7 +413,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
             const isThrowable = wData.category === WeaponCategory.THROWABLE;
             const isRadio = type === WeaponType.RADIO;
             const size = isMobileDevice ? "w-16 h-16" : "w-20 h-20";
-            const cColor = WeaponCategoryColors[wData.category] || 'white';
+            const cColor = WeaponCategoryColors[wData.category] || COLORS.WHITE;
 
             const dots = [];
             if (isThrowable) {
@@ -432,7 +421,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                 for (let j = 0; j < maxAmmo; j++) {
                     dots.push(
                         <div key={j} className={`h-1 flex-1 ${j < throwableAmmo ? 'shadow-sm' : 'bg-zinc-800 border border-zinc-700'}`}
-                            style={{ backgroundColor: j < throwableAmmo ? cColor : undefined }} />
+                            style={{ backgroundColor: j < throwableAmmo ? cColor.str : undefined }} />
                     );
                 }
             }
@@ -441,14 +430,14 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                 <button key={slot} data-slot={slot}
                     onClick={!isMobileDevice ? handleSelectWeaponInternal : undefined}
                     onTouchStart={isMobileDevice ? handleSelectWeaponInternal : undefined}
-                    className={`${SLOT_BASE} ${size} ${isActive ? 'scale-[1.15] z-20 border-[3px]' : 'opacity-80 border border-white/20 hover:opacity-80'} 
+                    className={`${SLOT_BASE} ${size} ${isActive ? 'scale-[1.15] z-20 border-[3px] hud-active-slot' : 'opacity-80 border border-white/20 hover:opacity-80'} 
                                    ${(isRadio && familyFound) || (isThrowable && throwableAmmo <= 0) ? 'grayscale' : ''}`}
-                    style={{
-                        borderColor: isActive ? cColor : undefined,
-                        boxShadow: isActive ? `0 0 20px -5px ${cColor}, inset 0 0 15px rgba(0,0,0,0.9)` : undefined
-                    }}>
+                    style={isActive ? {
+                        borderColor: cColor.str,
+                        '--slot-color': cColor.str
+                    } as any : undefined}>
 
-                    {isActive && <ReloadGrittyFill reloadBarRef={reloadBarRef} catColor={cColor} />}
+                    {isActive && <ReloadGrittyFill reloadBarRef={reloadBarRef} catColor={cColor.str} />}
 
                     <div className="absolute inset-0 hud-noise-overlay opacity-20 mix-blend-overlay z-0" />
 
@@ -465,7 +454,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                         </div>
                     )}
 
-                    {isRadio && familyFound && <span className="absolute bottom-1 w-full text-center text-[9px] font-black uppercase text-blue-300 drop-shadow-md z-10">{t('ui.located')}</span>}
+                    {isRadio && familyFound && <span className="absolute bottom-1 w-full text-center text-[10px] font-black uppercase text-blue-300 drop-shadow-md z-10">{t('ui.located')}</span>}
                 </button>
             );
         }
@@ -708,7 +697,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 if (data.interactionActive) {
                     interactionRef.current.style.display = 'block';
                     if (interactionComponentRef.current) {
-                        interactionComponentRef.current.update(data.interactionType, data.interactionLabel);
+                        interactionComponentRef.current.update(data.interactionType, data.interactionLabel, data.interactionId);
                     }
                 } else {
                     interactionRef.current.style.display = 'none';
@@ -720,32 +709,38 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
             // Passives
             const pPassives = hudState.activePassives;
+            const pCount = hudState.activePassivesCount;
             for (let i = 0; i < POOL_SIZE_PASSIVE; i++) {
                 const el = passiveRefs.current[i];
-                if (el) el.update(i < pPassives.length ? pPassives[i] : null);
+                if (el) el.update(i < pCount ? pPassives[i] : null);
             }
 
-            // Buffs/Debuffs (Extracted from statusEffects buffer)
-            const effects = hudState.statusEffects;
+            // Buffs/Debuffs (Extracted from SoA statusEffects buffers)
+            const effCount = hudState.statusEffectsCount;
+            const effTypes = hudState.StatusEffectIDs;
+            const effProgs = hudState.statusEffectProgress;
+
             let buffIdx = 0;
             let debuffIdx = 0;
 
-            for (let i = 0; i < effects.length; i++) {
-                const eff = effects[i];
-                const perk = DataResolver.getPerks()[eff.type];
+            for (let i = 0; i < effCount; i++) {
+                const type = effTypes[i];
+                const progress = effProgs[i];
+                const perk = DataResolver.getPerks()[type];
                 const isDebuff = perk?.category === PerkCategory.DEBUFF;
-                const progress = eff.progress;
+                const cPair = isDebuff ? COLORS.RED : COLORS.GREEN;
+                const pulseC = isDebuff ? 'hud-debuff-pulse' : 'hud-buff-pulse';
 
                 if (isDebuff) {
                     if (debuffIdx < POOL_SIZE_DEBUFF) {
                         const el = effectRefs.current.debuffs[debuffIdx];
-                        if (el) el.update(eff.type, progress, PerkColor.DEBUFF, 'hud-debuff-pulse');
+                        if (el) el.update(type, progress, cPair.str, pulseC);
                         debuffIdx++;
                     }
                 } else {
                     if (buffIdx < POOL_SIZE_BUFF) {
                         const el = effectRefs.current.buffs[buffIdx];
-                        if (el) el.update(eff.type, progress, PerkColor.BUFF, 'hud-buff-pulse');
+                        if (el) el.update(type, progress, cPair.str, pulseC);
                         buffIdx++;
                     }
                 }
@@ -802,7 +797,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     }, [onTogglePause]);
 
     const wep = DataResolver.getWeapons()[activeWeapon];
-    const catColor = wep ? WeaponCategoryColors[wep.category] || 'white' : 'white';
+    const catColor = wep ? (WeaponCategoryColors[wep.category] || COLORS.WHITE).str : COLORS.WHITE.str;
     const hudVisible = useHudStore(s => s.hudVisible);
 
     return (
@@ -816,7 +811,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 window.dispatchEvent(new CustomEvent('open-adventure-log', { detail: { tab, itemId } }));
             }} />
 
-            <ChatBubblesUI />
+            <ChatBubble />
 
             <ChallengePopup />
 
@@ -840,7 +835,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             xpBarRef={xpBarRef}
                         />
                         {(!isMobileDevice || !isLandscapeMode) && (
-                            <StatusEffectsPanel isMobileDevice={isMobileDevice} isLandscapeMode={false} handleActionEnter={handleActionEnter} handleActionLeave={handleActionLeave} effectRefs={effectRefs} passiveRefs={passiveRefs} />
+                            <StatusBitmaskPanel isMobileDevice={isMobileDevice} isLandscapeMode={false} />
                         )}
                     </div>
 
@@ -850,7 +845,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     </div>
 
                     {isMobileDevice && isLandscapeMode && (
-                        <StatusEffectsPanel isMobileDevice={isMobileDevice} isLandscapeMode={true} handleActionEnter={handleActionEnter} handleActionLeave={handleActionLeave} effectRefs={effectRefs} passiveRefs={passiveRefs} />
+                        <StatusBitmaskPanel isMobileDevice={isMobileDevice} isLandscapeMode={true} />
                     )}
                 </div>
 
@@ -978,6 +973,15 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     onInteract={(active) => HudStore.triggerInteraction(active)}
                 />
             </div>
+            <style>{`
+                .hud-passive-slot {
+                    border-color: #2dd4bf;
+                    box-shadow: 0 0 8px rgba(45, 212, 212, 0.4);
+                }
+                .hud-active-slot {
+                    box-shadow: 0 0 20px -5px var(--slot-color), inset 0 0 15px rgba(0,0,0,0.9);
+                }
+            `}</style>
         </div>
     );
 });

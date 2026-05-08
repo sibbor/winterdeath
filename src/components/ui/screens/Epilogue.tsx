@@ -29,7 +29,7 @@ const Epilogue: React.FC<EpilogueProps> = ({ onComplete, isMobileDevice }) => {
         };
     }, []);
 
-    // VINTERDÖD FIX: Funktionen som faktiskt byter språk
+    // Funktionen som faktiskt byter språk
     const toggleLanguage = () => {
         const current = getLocale();
         const next = current === 'en' ? 'sv' : 'en';
@@ -45,7 +45,7 @@ const Epilogue: React.FC<EpilogueProps> = ({ onComplete, isMobileDevice }) => {
         return (
             <div className="fixed inset-0 bg-black flex items-center justify-center text-white">
                 <button onClick={onComplete} className="p-4 bg-red-600 uppercase font-black tracking-widest">
-                    Skip Epilogue (Error Loading)
+                    {t('ui.skip_epilogue_error')}
                 </button>
             </div>
         );
@@ -171,7 +171,7 @@ const Epilogue: React.FC<EpilogueProps> = ({ onComplete, isMobileDevice }) => {
                                 setCurrentIndex(i);
                             }}
                             className={`h-2 transition-all duration-700 rounded-full cursor-pointer hover:bg-gray-400 ${i === currentPage ? 'w-12 bg-white' : 'w-4 bg-gray-800'}`}
-                            aria-label={`Go to story point ${i + 1}`}
+                            aria-label={t('ui.go_to_story_point', { num: i + 1 })}
                         />
                     ))}
                 </div>

@@ -53,6 +53,8 @@ export interface VehicleState {
     engineState: VehicleEngineState;
     _lastNoiseTime: number;
 
+    engineStartTime: number;
+
     // Voices
     engineVoiceIdx: number;
     skidVoiceIdx: number;
@@ -90,6 +92,7 @@ export const VehicleTypes = {
         type: VehicleID.STATION_WAGON,
         engineState: VehicleEngineState.OFF,
         _lastNoiseTime: 0,
+        engineStartTime: 0,
         engineVoiceIdx: -1,
         skidVoiceIdx: -1
     }),

@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { PlayerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex } from '../../../../entities/player/PlayerTypes';
+import { PlayerStats, StatEnemyIndex } from '../../../../entities/player/PlayerTypes';
 import { t } from '../../../../utils/i18n';
 import { useOrientation } from '../../../../hooks/useOrientation';
 import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalTab } from '../../layout/ScreenModalLayout';
 import CollectiblePreview from '../../core/CollectiblePreview';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DiscoveryType } from '../../hud/HudTypes';
-import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
-import { BossID } from '../../../../game/session/SectorTypes';
-import { GAME_CHALLENGES, ChallengeID, ChallengeCategory, ChallengeDef } from '../../../../content/ChallengeTypes';
-import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputTypes';
+import { SectorID } from '../../../../game/session/SectorTypes';
+import { GAME_CHALLENGES, ChallengeCategory, ChallengeDef } from '../../../../content/ChallengeTypes';
+import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputManager';
+import { ColorPair, COLORS, adjustColor } from '../../../../utils/ui/ColorUtils';
+import { StatsBridge } from '../../../../core/data/StatsBridge';
+import { FormatUtils } from '../../../../utils/ui/FormatUtils';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
@@ -33,36 +35,29 @@ const TABS: { id: DiscoveryType, label: string }[] = [
     { id: DiscoveryType.ZOMBIE, label: 'ui.log_zombies' },
     { id: DiscoveryType.BOSS, label: 'ui.log_bosses' },
 ];
-const SECTORS = [0, 1, 2, 3];
+const SECTORS = [SectorID.VILLAGE, SectorID.MOUNTAIN_VAULT, SectorID.THE_MAST, SectorID.SCRAPYARD];
 const THEME_COLOR = '#16a34a'; // green-600
 
-const darkenColor = (hex: string, percent: number) => {
-    const num = parseInt(hex.replace('#', ''), 16);
-    const amt = Math.round(2.55 * percent);
-    const R = (num >> 16) - amt;
-    const G = (num >> 8 & 0x00FF) - amt;
-    const B = (num & 0x0000FF) - amt;
-    return '#' + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
-};
 
 const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, onToggleChallengeTracking, isMobileDevice, debugMode, initialTab, initialItemId }) => {
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
     const [activeTab, setActiveTab] = useState<DiscoveryType>(initialTab ?? DiscoveryType.CHALLENGE);
+    const [showAllData, setShowAllData] = useState(false);
 
     const isDebugMode = (debugMode !== undefined ? debugMode : false) || (window as any).gameEngine?.sectorContext?.debugMode || (window as any).WD_DEBUG === true || localStorage.getItem('wd_debug') === 'true';
 
     // Sync tab when initialTab changes (e.g. when opened from Pause Menu)
     useEffect(() => {
-        if (initialTab !== undefined) {
+        if (initialTab !== undefined && initialTab !== null) {
             setActiveTab(initialTab);
         }
     }, [initialTab]);
 
     // Mark all found collectibles as viewed when the log is opened
     useEffect(() => {
-        const foundIds = stats.collectiblesDiscovered || EMPTY_ARRAY;
-        const viewedIds = stats.viewedCollectibles || EMPTY_ARRAY;
+        const foundIds = StatsBridge.getCollectiblesDiscovered(stats);
+        const viewedIds = StatsBridge.getViewedCollectibles(stats);
 
         let hasNew = false;
         const newIds: string[] = [];
@@ -77,7 +72,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
         if (hasNew && onMarkCollectiblesViewed) {
             onMarkCollectiblesViewed(newIds);
         }
-    }, [stats.collectiblesDiscovered, stats.viewedCollectibles, onMarkCollectiblesViewed]);
+    }, [stats, onMarkCollectiblesViewed]);
 
     // Scroll to item if provided
     useEffect(() => {
@@ -111,43 +106,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
         setActiveTab(tab);
     }, []);
 
-    const handleDebugShowAll = useCallback(() => {
-        switch (activeTab) {
-            case DiscoveryType.COLLECTIBLE: {
-                const allIds = Object.keys(DataResolver.getCollectibles());
-                stats.collectiblesDiscovered = [...new Set([...(stats.collectiblesDiscovered || []), ...allIds])];
-                if (onMarkCollectiblesViewed) onMarkCollectiblesViewed(allIds);
-                break;
-            }
-            case DiscoveryType.CLUE: {
-                const allClueIds = Object.keys(DataResolver.getClues());
-                stats.cluesFound = [...new Set([...(stats.cluesFound || []), ...allClueIds])];
-                break;
-            }
-            case DiscoveryType.POI: {
-                const allPois = DataResolver.getDiscoveryList(DiscoveryType.POI);
-                const allPoiIds = allPois.map(p => p.id);
-                stats.discoveredPOIs = [...new Set([...(stats.discoveredPOIs || []), ...allPoiIds])];
-                break;
-            }
-            case DiscoveryType.ZOMBIE: {
-                const allTypes = Object.values(EnemyType).filter(v => typeof v === 'number') as number[];
-                stats.seenEnemies = [...new Set([...(stats.seenEnemies || []), ...allTypes])];
-                break;
-            }
-            case DiscoveryType.BOSS: {
-                const allBossIds = [BossID.SECTOR_0, BossID.SECTOR_1, BossID.SECTOR_2, BossID.SECTOR_3];
-                stats.seenBosses = [...new Set([...(stats.seenBosses || []), ...allBossIds])];
-                stats.bossesDefeated = [...new Set([...(stats.bossesDefeated || []), ...allBossIds])];
-                break;
-            }
-        }
 
-        UiSounds.playConfirm();
-        const current = activeTab;
-        setActiveTab(current === DiscoveryType.POI ? DiscoveryType.ZOMBIE : DiscoveryType.POI);
-        setTimeout(() => setActiveTab(current), 50);
-    }, [activeTab, stats, onMarkCollectiblesViewed]);
 
     return (
         <ScreenModalLayout
@@ -157,11 +116,34 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
             onCancel={onClose}
             cancelLabel={t('ui.close')}
             titleColorClass="text-green-600"
-            debugAction={isDebugMode ? { label: t('ui.debug_show_all'), action: handleDebugShowAll } : undefined}
+            extraHeaderContent={isDebugMode ? (
+                <div className="flex items-center gap-3 bg-zinc-900/20 border border-zinc-800/50 px-4 py-2 rounded-sm cursor-pointer group/toggle hover:bg-zinc-800/40 transition-all"
+                    onClick={() => {
+                        UiSounds.playClick();
+                        setShowAllData(!showAllData);
+                    }}
+                >
+                    <div className={`w-5 h-5 border-2 flex items-center justify-center transition-all duration-300 relative ${showAllData ? 'border-green-500 bg-green-950/30' : 'border-zinc-700 bg-transparent'}`}>
+                        {showAllData && (
+                            <>
+                                <div className="absolute inset-0 bg-green-500/20 animate-pulse" />
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="text-green-400 relative z-10">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </>
+                        )}
+                    </div>
+                    <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${showAllData ? 'text-green-500' : 'text-zinc-500 group-hover/toggle:text-zinc-300'}`}>
+                        {t('ui.debug_show_all')}
+                    </span>
+                </div>
+            ) : undefined}
             tabs={TABS.map(t => t.id)}
             activeTab={activeTab}
             onTabChange={handleTabChange as any}
             tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
+            noScroll={true}
+            fullHeight={true}
         >
             <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8' : 'flex-col gap-4'}`}>
                 {/* Tabs Bar */}
@@ -173,6 +155,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                                 label={t(tab.label)}
                                 isActive={activeTab === tab.id}
                                 onClick={() => handleTabChange(tab.id)}
+                                color={THEME_COLOR}
                                 orientation={effectiveLandscape ? 'vertical' : 'horizontal'}
                             />
                         ))}
@@ -181,12 +164,12 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
 
                 {/* Content Area - DYNAMIC MOUNTING */}
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar relative">
-                    {activeTab === DiscoveryType.CHALLENGE && <ChallengesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={isDebugMode} onToggleTracking={onToggleChallengeTracking} />}
-                    {activeTab === DiscoveryType.ZOMBIE && <ZombiesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={isDebugMode} />}
-                    {activeTab === DiscoveryType.BOSS && <BossesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={isDebugMode} />}
-                    {activeTab === DiscoveryType.COLLECTIBLE && <CollectiblesTab stats={stats} isMobileDevice={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
-                    {activeTab === DiscoveryType.CLUE && <CluesTab stats={stats} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
-                    {activeTab === DiscoveryType.POI && <PoiTab stats={stats} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
+                    {activeTab === DiscoveryType.CHALLENGE && <ChallengesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={showAllData} onToggleTracking={onToggleChallengeTracking} />}
+                    {activeTab === DiscoveryType.ZOMBIE && <ZombiesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={showAllData} />}
+                    {activeTab === DiscoveryType.BOSS && <BossesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={showAllData} />}
+                    {activeTab === DiscoveryType.COLLECTIBLE && <CollectiblesTab stats={stats} isMobileDevice={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={showAllData} />}
+                    {activeTab === DiscoveryType.CLUE && <CluesTab stats={stats} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={showAllData} />}
+                    {activeTab === DiscoveryType.POI && <PoiTab stats={stats} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={showAllData} />}
                 </div>
             </div>
 
@@ -204,12 +187,12 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
     );
 };
 
-const CHALLENGE_CATEGORY_COLORS: Record<number, string> = {
-    [ChallengeCategory.WORLD]: '#22c55e',   // green-500
-    [ChallengeCategory.COMBAT]: '#ef4444',  // red-500
-    [ChallengeCategory.WEAPONS]: '#a855f7', // purple-500
-    [ChallengeCategory.TACTICS]: '#3b82f6', // blue-500
-    [ChallengeCategory.PLAYER]: '#eab308',  // yellow-500
+const CHALLENGE_CATEGORY_COLORS: Record<number, ColorPair> = {
+    [ChallengeCategory.WORLD]: COLORS.BLUE,
+    [ChallengeCategory.COMBAT]: COLORS.RED,
+    [ChallengeCategory.WEAPONS]: COLORS.YELLOW,
+    [ChallengeCategory.TACTICS]: COLORS.PURPLE,
+    [ChallengeCategory.PLAYER]: COLORS.GREEN,
 };
 
 const CHALLENGE_CATEGORIES = [
@@ -228,7 +211,7 @@ const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, is
         UiSounds.playClick();
     }, []);
 
-    const trackedIds = stats.trackedChallengeIds || [];
+    const trackedIds = StatsBridge.getTrackedChallengeIds(stats);
     const trackedChallenges = useMemo(() => {
         return GAME_CHALLENGES.filter(c => trackedIds.includes(c.id));
     }, [trackedIds]);
@@ -246,8 +229,8 @@ const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, is
             let currentPoints = 0;
 
             catChallenges.forEach(c => {
-                const tier = (stats.challengeTiers ? stats.challengeTiers[c.id] : 0) || 0;
-                const value = DataResolver.getChallengeValue(stats, c.id);
+                const tier = StatsBridge.getChallengeTier(stats, c.id);
+                const value = StatsBridge.getChallengeValue(stats, c.id);
 
                 currentPoints += tier;
                 if (tier < 3) {
@@ -266,7 +249,7 @@ const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, is
             progress[cat.id] = isNaN(rawProgress) || !isFinite(rawProgress) ? 0 : Math.round(rawProgress);
         });
         return progress;
-    }, [stats.challengeTiers, stats.totalEnemiesKilled, stats]);
+    }, [stats]);
 
     return (
         <div className="space-y-12 pb-24">
@@ -355,23 +338,23 @@ const ChallengeCard: React.FC<{
     isHero?: boolean;
     onToggleTracking?: (id: number) => void;
 }> = React.memo(({ challenge, stats, isMobileDevice, isTracked, isHero, onToggleTracking }) => {
-    const tier = stats.challengeTiers ? stats.challengeTiers[challenge.id] : 0;
-    const value = DataResolver.getChallengeValue(stats, challenge.id);
+    const tier = StatsBridge.getChallengeTier(stats, challenge.id);
+    const value = StatsBridge.getChallengeValue(stats, challenge.id);
     const nextTier = tier < 3 ? tier + 1 : 3;
     const target = challenge.targets[nextTier - 1] || 1;
     const progress = Math.min(100, (value / target) * 100) || 0;
     const isMaxed = tier >= 3;
-    const categoryColor = CHALLENGE_CATEGORY_COLORS[challenge.categoryId] || '#4b5563';
+    const categoryColor = CHALLENGE_CATEGORY_COLORS[challenge.categoryId] || COLORS.GRAY;
 
     return (
         <TacticalCard
             id={`log-item-${challenge.id}`}
             showHover={true}
-            color={isHero ? categoryColor : (isMaxed ? '#eab308' : (tier > 0 ? '#16a34a' : '#4b5563'))}
+            color={categoryColor}
             className={`p-4 transition-all duration-300 cursor-pointer relative overflow-hidden ${isHero ? 'bg-zinc-900/80 border-white/20' : 'bg-zinc-900/50 border-white/5'}`}
             onClick={() => onToggleTracking?.(challenge.id)}
         >
-            {isHero && (
+            {(isHero || isMaxed) && (
                 <div className="absolute inset-0 opacity-10 pointer-events-none" style={HORIZONTAL_HATCHING_STYLE} />
             )}
 
@@ -390,7 +373,7 @@ const ChallengeCard: React.FC<{
                     <div className={`absolute top-[-1rem] right-[-1rem] ${isMobileDevice ? 'w-8 h-8' : 'w-10 h-10'} bg-zinc-950 border-l border-b border-white/10 flex items-center justify-center`}>
                         <div
                             className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full shadow-[0_0_10px_currentColor]"
-                            style={{ backgroundColor: categoryColor, color: categoryColor }}
+                            style={{ backgroundColor: categoryColor.str, color: categoryColor.str }}
                         />
                     </div>
                 )}
@@ -417,10 +400,10 @@ const ChallengeCard: React.FC<{
                 </div>
                 <div className={`h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden ${isHero ? 'h-2 border border-white/10' : ''}`}>
                     <div
-                        className={`h-full transition-all duration-1000 ${isMaxed ? 'bg-yellow-500' : (isHero ? '' : 'bg-green-600')}`}
+                        className={`h-full transition-all duration-1000 ${isMaxed ? 'bg-yellow-500' : ''}`}
                         style={{
                             width: `${progress}%`,
-                            backgroundColor: !isMaxed && isHero ? categoryColor : undefined
+                            backgroundColor: !isMaxed ? categoryColor.str : undefined
                         }}
                     />
                 </div>
@@ -433,12 +416,13 @@ const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDeb
     const zombies = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.ZOMBIE), []);
 
     const filteredZombies = useMemo(() => {
+        const seenEnemies = StatsBridge.getSeenEnemies(stats);
         return zombies.filter(item => {
             const typeSmi = Number(item.id);
-            const kills = stats.enemyKills[typeSmi] || 0;
-            return isDebug || (stats.seenEnemies || EMPTY_ARRAY).includes(typeSmi) || kills > 0;
+            const kills = StatsBridge.getEnemyKillCount(stats, typeSmi);
+            return isDebug || seenEnemies.includes(typeSmi) || kills > 0;
         });
-    }, [zombies, stats.seenEnemies, stats.enemyKills, isDebug]);
+    }, [zombies, stats, isDebug]);
 
     if (filteredZombies.length === 0) {
         return <NoDataMessage />;
@@ -448,18 +432,18 @@ const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDeb
         <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'} pb-12`}>
             {filteredZombies.map(item => {
                 const typeSmi = Number(item.id);
-                const kills = stats.enemyKills[typeSmi] || 0;
-                const deaths = stats.deathsByEnemyType[typeSmi] || 0;
+                const kills = StatsBridge.getEnemyKillCount(stats, typeSmi);
+                const deaths = StatsBridge.getEnemyDeathCount(stats, typeSmi);
                 const key = `enemy-${typeSmi}`;
-                const itemColor = '#' + (item.color || 0xffffff).toString(16).padStart(6, '0');
+                const itemColor = item.color.str;
 
-                // Since we filtered, we can assume isSeen is true for rendered items
-                const isSeen = true;
+                // Determine discovery status. If isDebug is active (via 'Show All'), we treat as discovered.
+                const isSeen = isDebug || StatsBridge.getSeenEnemies(stats).includes(typeSmi) || kills > 0;
 
                 return (
-                    <TacticalCard key={key} id={`log-item-${key}`} isLocked={!isSeen} color={itemColor} showHatching={isSeen} showHover={true}>
+                    <TacticalCard key={key} id={`log-item-${key}`} isLocked={!isSeen} color={item.color} showHatching={isSeen} showHover={true}>
                         <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
-                            <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: isSeen ? itemColor : '#4b5563' }}>
+                            <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: isSeen ? itemColor : COLORS.GRAY.str }}>
                                 {isSeen ? t(DataResolver.getZombieName(typeSmi)) : '???'}
                             </h3>
                             {isSeen && (
@@ -483,7 +467,7 @@ const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDeb
                                 </div>
                                 <div className="text-center border-l border-gray-800 ">
                                     <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.speed')}</div>
-                                    <div className="text-2xl font-bold text-white font-mono">{isSeen ? item.speed.toFixed(1) : '???'}</div>
+                                    <div className="text-2xl font-bold text-white font-mono">{isSeen ? FormatUtils.formatDecimal(item.speed, 1) : '???'}</div>
                                 </div>
                             </div>
 
@@ -505,11 +489,11 @@ const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDeb
                                                             </span>
                                                             <div className="flex gap-2">
                                                                 <div className="flex items-center gap-1">
-                                                                    <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
+                                                                    <span className="text-[10px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
                                                                     <span className="text-xs font-mono text-red-400">{attack.damage}</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-1 pl-2 border-l border-gray-800">
-                                                                    <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
+                                                                    <span className="text-[10px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
                                                                     <span className="text-xs font-mono text-blue-400">{attack.range}</span>
                                                                 </div>
                                                             </div>
@@ -541,14 +525,14 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
     const bossesList = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.BOSS), []);
 
     const filteredSectors = useMemo(() => {
+        const seenBosses = StatsBridge.getSeenBosses(stats);
+        const defeatedBosses = StatsBridge.getDeadBossIndices(stats);
         return sectorsList.filter(sectorIndex => {
             const boss = bossesList.find((b: any) => b.id === sectorIndex);
-            const seenBosses = stats.seenBosses || EMPTY_ARRAY;
-            const defeatedBosses = stats.bossesDefeated || EMPTY_ARRAY;
             const isSeen = boss && (seenBosses.includes(sectorIndex) || defeatedBosses.includes(sectorIndex));
             return isDebug || isSeen;
         });
-    }, [sectorsList, bossesList, stats.seenBosses, stats.bossesDefeated, isDebug]);
+    }, [sectorsList, bossesList, stats, isDebug]);
 
     if (filteredSectors.length === 0) {
         return <NoDataMessage />;
@@ -559,12 +543,13 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
             {filteredSectors.map(sectorIndex => {
                 const boss = bossesList.find((b: any) => b.id === sectorIndex);
                 const theme = themesList[sectorIndex];
-                const isSectorUnlocked = isDebug || stats.sectorsCompleted >= sectorIndex;
+                const isSectorUnlocked = isDebug || StatsBridge.getSectorsCompleted(stats) >= sectorIndex;
                 const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorIndex)) : `${t('ui.sector')} ${sectorIndex}`) : '???';
 
-                const isSeen = true; // Since we filtered
-                const isDefeated = (stats.bossesDefeated || EMPTY_ARRAY).includes(sectorIndex);
-                const isBossUnlocked = true; // Since we filtered
+                const seenBosses = StatsBridge.getSeenBosses(stats);
+                const defeatedBosses = StatsBridge.getDeadBossIndices(stats);
+                const isBossUnlocked = isDebug || (boss && (seenBosses.includes(sectorIndex) || defeatedBosses.includes(sectorIndex)));
+                const isDefeated = defeatedBosses.includes(sectorIndex);
 
                 return (
                     <div key={sectorIndex} className="space-y-6">
@@ -577,33 +562,34 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
                         <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-1 gap-8'}`}>
                             <TacticalCard
                                 isLocked={!isBossUnlocked}
-                                color={boss ? `#${boss.color.toString(16).padStart(6, '0')}` : '#4b5563'}
+                                color={boss ? boss.color : COLORS.GRAY}
                                 id={boss ? `log-item-${boss.name}` : undefined}
-                                className={!isBossUnlocked ? "h-48 flex items-center justify-center grayscale opacity-50" : ""}
                                 showHatching={isBossUnlocked}
-                                showHover={isBossUnlocked}
+                                showHover={true}
                             >
                                 {isBossUnlocked ? (
                                     <div className="flex flex-col h-full w-full">
-                                        <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
-                                            <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: boss ? `#${boss.color.toString(16).padStart(6, '0')}` : 'white' }}>
-                                                {t(DataResolver.getBossName(sectorIndex))}
+                                        <div className={`flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3 ${!isBossUnlocked ? 'grayscale opacity-50' : ''}`}>
+                                            <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: boss ? boss.color.str : 'white' }}>
+                                                {isBossUnlocked ? t(DataResolver.getBossName(sectorIndex)) : '???'}
                                             </h3>
-                                            <div className="flex flex-col items-end">
-                                                <span className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest leading-tight text-right">{t('ui.killed_by_short')}</span>
-                                                <span className="text-xl font-semibold text-red-500">{stats.deathsByEnemyType[StatEnemyIndex.BOSS] || 0}</span>
-                                            </div>
+                                            {isBossUnlocked && (
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest leading-tight text-right">{t('ui.killed_by_short')}</span>
+                                                    <span className="text-xl font-semibold text-red-500">{StatsBridge.getEnemyDeathCount(stats, StatEnemyIndex.BOSS)}</span>
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="flex flex-col gap-6 flex-1">
-                                            <div className="grid grid-cols-2 gap-2 bg-black/40 p-4 rounded border border-gray-800">
+                                            <div className={`grid grid-cols-2 gap-2 bg-black/40 p-4 rounded border border-gray-800 ${!isBossUnlocked ? 'grayscale opacity-50' : ''}`}>
                                                 <div className="text-center">
                                                     <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.health')}</div>
-                                                    <div className="text-2xl font-bold text-white font-mono">{boss.hp}</div>
+                                                    <div className="text-2xl font-bold text-white font-mono">{isBossUnlocked ? boss.hp : '???'}</div>
                                                 </div>
                                                 <div className="text-center border-l border-gray-800">
                                                     <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.speed')}</div>
-                                                    <div className="text-2xl font-bold text-white font-mono">{boss.speed.toFixed(1)}</div>
+                                                    <div className="text-2xl font-bold text-white font-mono">{isBossUnlocked ? FormatUtils.formatDecimal(boss.speed, 1) : '???'}</div>
                                                 </div>
                                             </div>
 
@@ -627,11 +613,11 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
                                                                         </span>
                                                                         <div className="flex gap-4">
                                                                             <div className="flex items-center gap-1">
-                                                                                <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
+                                                                                <span className="text-[10px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
                                                                                 <span className="text-xs font-mono text-red-400">{attack.damage}</span>
                                                                             </div>
                                                                             <div className="flex items-center gap-1 pl-2 border-l border-gray-800">
-                                                                                <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
+                                                                                <span className="text-[10px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
                                                                                 <span className="text-xs font-mono text-blue-400">{attack.range}</span>
                                                                             </div>
                                                                         </div>
@@ -648,7 +634,9 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
                                         </div>
                                     </div>
                                 ) : (
-                                    <span className="text-gray-700 font-mono text-4xl tracking-[2rem] uppercase ml-8 mt-2">???</span>
+                                    <p className="text-sm text-zinc-700 italic leading-relaxed text-center py-8">
+                                        {t('ui.boss_undiscovered_hint')}
+                                    </p>
                                 )}
                             </TacticalCard>
                         </div>
@@ -660,25 +648,37 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
 });
 
 const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
-    const foundIds = stats.collectiblesDiscovered || EMPTY_ARRAY;
+    const foundIds = StatsBridge.getCollectiblesDiscovered(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.COLLECTIBLE), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
 
+    const sectorsCompleted = StatsBridge.getSectorsCompleted(stats);
     const hasAny = useMemo(() => SECTORS.some(sectorId => {
         const sectorItems = items.filter(c => c.sector === sectorId);
-        return sectorItems.length > 0 && (isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId);
-    }), [items, stats.sectorsCompleted, isDebug]);
+        return sectorItems.length > 0 && (isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId);
+    }), [items, sectorsCompleted, isDebug]);
 
     if (!hasAny) return <NoDataMessage />;
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
             {SECTORS.map(sectorId => {
-                const sectorItems = useMemo(() => items.filter(c => c.sector === sectorId), [items, sectorId]);
-                const isSectorUnlocked = isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId;
+                const sectorItems = items.filter(c => c.sector === sectorId);
+                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId;
+
+                // Accurate found count regardless of data pollution (strings vs objects)
+                const discoveredItems = sectorItems.filter(c => {
+                    return foundIds.some(fid => (typeof fid === 'string' ? fid : (fid as any).id) === c.id);
+                });
+
+                const itemsToShow = isDebug ? sectorItems : discoveredItems;
+
+                // If not debug, only show sector if it has at least one discovered item or is unlocked
+                if (!isDebug && discoveredItems.length === 0 && !isSectorUnlocked) return null;
                 if (sectorItems.length === 0) return null;
 
-                const foundCount = sectorItems.filter(c => foundIds.includes(c.id)).length;
+                // Enforce 0 count for locked sectors to avoid revealing progress early
+                const foundCount = isSectorUnlocked ? discoveredItems.length : 0;
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -691,16 +691,22 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
                             </span>
                         </div>
 
-                        <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                            {sectorItems.map(item => {
-                                const isFound = foundIds.includes(item.id);
-                                return (
-                                    <TacticalCard key={item.id} id={`log-item-${item.id}`} isLocked={!isFound} color="#eab308" className="p-0" showHover={isFound}>
-                                        <DescriptionExpansion item={item} isFound={isFound} isMobileDevice={isMobileDevice} />
-                                    </TacticalCard>
-                                );
-                            })}
-                        </div>
+                        {(isSectorUnlocked || isDebug) ? (
+                            <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
+                                {itemsToShow.map(item => {
+                                    const isFound = isDebug || foundIds.includes(item.id);
+                                    return (
+                                        <TacticalCard key={item.id} id={`log-item-${item.id}`} isLocked={!isFound} color={COLORS.YELLOW} className="p-0" showHover={isFound}>
+                                            <DescriptionExpansion item={item} isFound={isFound} isMobileDevice={isMobileDevice} />
+                                        </TacticalCard>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="py-8 flex flex-col items-center justify-center border border-dashed border-zinc-900 rounded-lg bg-zinc-900/10">
+                                <span className="text-zinc-700 italic text-[10px] uppercase tracking-widest">{t('ui.sector_undiscovered_hint')}</span>
+                            </div>
+                        )}
                     </div>
                 );
             })}
@@ -709,25 +715,37 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
 });
 
 const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
-    const foundIds = stats.cluesFound || EMPTY_ARRAY;
+    const foundIds = StatsBridge.getCluesFound(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.CLUE), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
 
+    const sectorsCompleted = StatsBridge.getSectorsCompleted(stats);
     const hasAny = useMemo(() => SECTORS.some(sectorId => {
         const sectorItems = items.filter(c => c.sector === sectorId);
-        return sectorItems.length > 0 && (isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId);
-    }), [items, stats.sectorsCompleted, isDebug]);
+        return sectorItems.length > 0 && (isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId);
+    }), [items, sectorsCompleted, isDebug]);
 
     if (!hasAny) return <NoDataMessage />;
 
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
-                const sectorItems = useMemo(() => items.filter(c => c.sector === sectorId), [items, sectorId]);
-                const isSectorUnlocked = isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId;
+                const sectorItems = items.filter(c => c.sector === sectorId);
+                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId;
+
+                // Accurate found count regardless of data pollution (strings vs objects)
+                const discoveredItems = sectorItems.filter(c => {
+                    return foundIds.some(fid => (typeof fid === 'string' ? fid : (fid as any).id) === c.id);
+                });
+
+                const itemsToShow = isDebug ? sectorItems : discoveredItems;
+
+                // If not debug, only show sector if it has at least one discovered item or is unlocked
+                if (!isDebug && discoveredItems.length === 0 && !isSectorUnlocked) return null;
                 if (sectorItems.length === 0) return null;
 
-                const foundCount = sectorItems.filter(c => foundIds.includes(c.id)).length;
+                // Enforce 0 count for locked sectors to avoid revealing progress early
+                const foundCount = isSectorUnlocked ? discoveredItems.length : 0;
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -742,27 +760,33 @@ const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effecti
                             )}
                         </div>
 
-                        <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                            {sectorItems.map((clue) => {
-                                const isFound = foundIds.includes(clue.id);
-                                const isThought = clue.type === 'THOUGHT';
-                                const typeColor = isThought ? '#3b82f6' : '#eab308';
-                                return (
-                                    <TacticalCard key={clue.id} id={`log-item-${clue.id}`} isLocked={!isFound} color={typeColor} showHover={isFound} className={`flex flex-col ${isMobileDevice ? 'p-4' : 'p-6'}`}>
-                                        <div className="flex flex-col gap-4 relative z-10 w-full">
-                                            <div className="flex justify-between items-center border-b border-zinc-800/50 pb-2">
-                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest" style={{ backgroundColor: isFound ? typeColor : '#333' }}>
-                                                    {isFound ? clue.type : '???'}
-                                                </span>
+                        {(isSectorUnlocked || isDebug) ? (
+                            <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
+                                {itemsToShow.map((clue) => {
+                                    const isFound = isDebug || foundIds.includes(clue.id);
+                                    const isThought = clue.type === 'THOUGHT';
+                                    const typeColor = isThought ? COLORS.BLUE : COLORS.YELLOW;
+                                    return (
+                                        <TacticalCard key={clue.id} id={`log-item-${clue.id}`} isLocked={!isFound} color={typeColor} showHover={isFound} className={`flex flex-col ${isMobileDevice ? 'p-4' : 'p-6'}`}>
+                                            <div className="flex flex-col gap-4 relative z-10 w-full">
+                                                <div className="flex justify-between items-center border-b border-zinc-800/50 pb-2">
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest" style={{ backgroundColor: isFound ? typeColor.str : '#333' }}>
+                                                        {isFound ? clue.type : '???'}
+                                                    </span>
+                                                </div>
+                                                <p className={`text-lg italic leading-relaxed border-l-4 pl-4 py-1 ${isFound ? 'text-gray-200' : 'text-zinc-800'}`} style={{ borderColor: isFound ? typeColor.str : '#333' }}>
+                                                    {isFound ? `"${t(DataResolver.getClueReaction(clue.id))}"` : '???'}
+                                                </p>
                                             </div>
-                                            <p className={`text-lg italic leading-relaxed border-l-4 pl-4 py-1 ${isFound ? 'text-gray-200' : 'text-zinc-800'}`} style={{ borderColor: isFound ? typeColor : '#333' }}>
-                                                {isFound ? `"${t(DataResolver.getClueReaction(clue.id))}"` : '???'}
-                                            </p>
-                                        </div>
-                                    </TacticalCard>
-                                );
-                            })}
-                        </div>
+                                        </TacticalCard>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="py-8 flex flex-col items-center justify-center border border-dashed border-zinc-900 rounded-lg bg-zinc-900/10">
+                                <span className="text-zinc-700 italic text-[10px] uppercase tracking-widest">{t('ui.clue_undiscovered_hint')}</span>
+                            </div>
+                        )}
                     </div>
                 );
             })}
@@ -771,25 +795,37 @@ const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effecti
 });
 
 const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
-    const visitedList = stats.discoveredPOIs || EMPTY_ARRAY;
+    const visitedList = StatsBridge.getDiscoveredPOIs(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.POI), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
 
+    const sectorsCompleted = StatsBridge.getSectorsCompleted(stats);
     const hasAny = useMemo(() => SECTORS.some(sectorId => {
         const sectorItems = items.filter(poi => poi.sector === sectorId);
-        return sectorItems.length > 0 && (isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId);
-    }), [items, stats.sectorsCompleted, isDebug]);
+        return sectorItems.length > 0 && (isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId);
+    }), [items, sectorsCompleted, isDebug]);
 
     if (!hasAny) return <NoDataMessage />;
 
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
-                const sectorItems = useMemo(() => items.filter(poi => poi.sector === sectorId), [items, sectorId]);
-                const isSectorUnlocked = isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId;
+                const sectorItems = items.filter(poi => poi.sector === sectorId);
+                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId;
+
+                // Normalize visitedList (POI IDs)
+                const discoveredItems = sectorItems.filter(poi => {
+                    return visitedList.some(fid => (typeof fid === 'string' ? fid : (fid as any).id) === poi.id);
+                });
+
+                const itemsToShow = isDebug ? sectorItems : discoveredItems;
+
+                // If not debug, only show sector if it has at least one discovered item or is unlocked
+                if (!isDebug && discoveredItems.length === 0 && !isSectorUnlocked) return null;
                 if (sectorItems.length === 0) return null;
 
-                const foundCount = sectorItems.filter(poi => visitedList.includes(poi.id)).length;
+                // Enforce 0 count for locked sectors
+                const foundCount = isSectorUnlocked ? discoveredItems.length : 0;
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -804,33 +840,39 @@ const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effective
                             )}
                         </div>
 
-                        <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                            {sectorItems.map((poi) => {
-                                const poiId = poi.id;
-                                const isFound = visitedList.includes(poiId);
-                                return (
-                                    <TacticalCard key={poiId} id={`log-item-${poiId}`} isLocked={!isFound} color="#eab308" showHover={isFound} className={isMobileDevice ? 'p-4' : 'p-6'}>
-                                        <div className="flex flex-col gap-4 relative z-10 w-full">
-                                            <div className="flex justify-between items-start border-b border-zinc-800/50 pb-3">
-                                                <h3 className={`text-2xl font-semibold uppercase tracking-tighter ${isFound ? 'text-white' : 'text-zinc-800'}`}>
-                                                    {isFound ? t(DataResolver.getPoiName(poiId)) : '???'}
-                                                </h3>
-                                            </div>
-                                            <div className="space-y-3">
-                                                <p className={`text-sm leading-relaxed ${isFound ? 'text-zinc-400' : 'text-zinc-800'}`}>
-                                                    {isFound ? t(DataResolver.getPoiDescription(poiId)) : '???'}
-                                                </p>
-                                                {isFound && DataResolver.getPoiReaction(poiId) && (
-                                                    <p className="text-lg italic leading-relaxed border-l-4 pl-4 py-1 border-blue-500 text-gray-200">
-                                                        "{t(DataResolver.getPoiReaction(poiId))}"
+                        {(isSectorUnlocked || isDebug) ? (
+                            <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
+                                {itemsToShow.map((poi) => {
+                                    const poiId = poi.id;
+                                    const isFound = isDebug || visitedList.includes(poiId);
+                                    return (
+                                        <TacticalCard key={poiId} id={`log-item-${poiId}`} isLocked={!isFound} color={COLORS.YELLOW} showHover={isFound} className={isMobileDevice ? 'p-4' : 'p-6'}>
+                                            <div className="flex flex-col gap-4 relative z-10 w-full">
+                                                <div className="flex justify-between items-start border-b border-zinc-800/50 pb-3">
+                                                    <h3 className={`text-2xl font-semibold uppercase tracking-tighter ${isFound ? 'text-white' : 'text-zinc-800'}`}>
+                                                        {isFound ? t(DataResolver.getPoiName(poiId)) : '???'}
+                                                    </h3>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <p className={`text-sm leading-relaxed ${isFound ? 'text-zinc-400' : 'text-zinc-800'}`}>
+                                                        {isFound ? t(DataResolver.getPoiDescription(poiId)) : '???'}
                                                     </p>
-                                                )}
+                                                    {isFound && DataResolver.getPoiReaction(poiId) && (
+                                                        <p className="text-lg italic leading-relaxed border-l-4 pl-4 py-1 border-blue-500 text-gray-200">
+                                                            "{t(DataResolver.getPoiReaction(poiId))}"
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    </TacticalCard>
-                                );
-                            })}
-                        </div>
+                                        </TacticalCard>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="py-8 flex flex-col items-center justify-center border border-dashed border-zinc-900 rounded-lg bg-zinc-900/10">
+                                <span className="text-zinc-700 italic text-[10px] uppercase tracking-widest">{t('ui.sector_undiscovered_hint')}</span>
+                            </div>
+                        )}
                     </div>
                 );
             })}
@@ -839,7 +881,6 @@ const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effective
 });
 
 // --- HELPER COMPONENTS ---
-
 const NoDataMessage: React.FC<{ message?: string }> = ({ message }) => (
     <div className="flex flex-col items-center justify-center py-24 opacity-30">
         <span className="text-zinc-500 italic tracking-widest uppercase text-sm">
@@ -873,3 +914,4 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevi
 
 
 export default ScreenAdventureLog;
+

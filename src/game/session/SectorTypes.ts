@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorTrigger } from '../../systems/TriggerTypes';
+import { TriggerSystem } from '../../systems/TriggerSystem';
 import { MapItem } from '../../components/ui/hud/HudTypes';
 import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
 import { WeatherType } from '../../core/engine/EngineTypes';
@@ -8,9 +8,18 @@ import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorEnvironment, EnvironmentalZone as AtmosphereZone } from '../../core/engine/EngineTypes';
-import { TriggerAction } from '../../systems/TriggerTypes';
+import { TriggerAction } from '../../types/TriggerTypes';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
+import { InteractionPromptId } from '../../systems/ui/UIEventBridge';
+
+export enum SectorID {
+    VILLAGE = 0,
+    MOUNTAIN_VAULT = 1,
+    THE_MAST = 2,
+    SCRAPYARD = 3,
+    PLAYGROUND = 4
+}
 
 export enum GroundType {
     SNOW = 0,
@@ -105,7 +114,7 @@ export interface SectorContext {
     chests: any[];
     flickeringLights: any[];
     burningObjects: any[];
-    triggers: SectorTrigger[];
+    triggers: TriggerSystem;
     mapItems: MapItem[]; // For the Map Screen
     interactables: THREE.Object3D[]; // Explicit list of interactive objects (Boats, Stations, etc)
     rng: () => number;
@@ -194,7 +203,7 @@ export interface SectorUpdateContext {
     spawnZombie: (type?: EnemyType, pos?: THREE.Vector3) => void;
     spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
     setNotification: (n: { text: string, duration?: number }) => void;
-    setInteraction: (interaction: { id: string, type: any, label: string, position?: THREE.Vector3 } | null) => void;
+    setInteraction: (interaction: { id: string, type: any, label: string, promptId?: InteractionPromptId, position?: THREE.Vector3 } | null) => void;
     setOverlay: (type: number | null) => void;
     playSound: (id: SoundID) => void;
     playTone: (freq: number, type: ToneType, duration: number, vol?: number) => void;

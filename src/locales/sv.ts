@@ -297,6 +297,8 @@ export const sv = {
         thrown: "KASTADE",
         total_damage: "TOTAL SKADA",
         enemy_undiscovered_hint: "Möt denna fiende i ödemarken för att låsa upp dess biologiska data och stridsstatistik.",
+        sector_undiscovered_hint: "Denna sektor har inte nåtts än. Slutför tidigare mål för att låsa upp lokal data.",
+        clue_undiscovered_hint: "Sök i miljön efter ledtrådar för att låsa upp detta inlägg.",
         perk_undiscovered_hint: "Dra nytta av denna perk under ett uppdrag för att låsa upp dess detaljerade prestandaanalys och taktiska beskrivning.",
         avg_distance: "SNITTAVSTÅND / SEKTOR",
         aggression_ratio: "AGGRESSIONSRATIO",
@@ -329,6 +331,8 @@ export const sv = {
         peak_aggression: "AGGRESSIONSTOPP",
         tactical_usage: "TAKTISK ANVÄNDNING",
         signature_weapon: "SIGNATURVAPEN",
+        time_played: "SPELTID",
+        distance_run: "SPRUNGEN DISTANS",
         comfort_weapon: "KOMFORTVAPEN",
         enhanced_state: "FÖRBÄTTRAT TILLSTÅND",
         resilience: "MOTSTÅNDSKRAFT",
@@ -392,6 +396,10 @@ export const sv = {
         challenge_tier: "NIVÅ {tier}",
         tracked_challenges: "SPÅRADE UTMANINGAR",
         active_perks: "AKTIVA FÖRMÅGOR",
+        unknown: "OKÄND",
+        skip_epilogue_error: "Hoppa över epilog (Fel vid laddning)",
+        skip_prologue_error: "Hoppa över prolog (Fel vid laddning)",
+        go_to_story_point: "Gå till storypunkt {num}",
     },
     challenges: {
         title: "Utmaningar",
@@ -405,7 +413,7 @@ export const sv = {
         knee_capper: { title: "Knäskålare", desc: "Eliminera {target} Runners" },
         tank_buster: { title: "Tank-knäckare", desc: "Eliminera {target} tunga Tanks" },
         boss_slayer: { title: "Boss-dräpare", desc: "Eliminera {target} legendariska bossar" },
-        marksman: { title: "Prickskytt", desc: "Eliminera {target} fiender med huvudskott" },
+        gibber: { title: "Sprängare", desc: "Eliminera {target} fiender genom att spränga dem i stycken" },
         pyromaniac: { title: "Pyroman", desc: "Eliminera {target} fiender med eld" },
         shock_therapy: { title: "Chockterapi", desc: "Eliminera {target} fiender med elektricitet" },
         demolition_expert: { title: "Sprängexpert", desc: "Eliminera {target} fiender med explosioner" },
@@ -442,7 +450,9 @@ export const sv = {
             shots: "SKOTT",
             accuracy: "PRICKSÄKERHET",
             kills: "DÖDADE",
+            gibbed: "SPRÄNGDA",
             throwables: "KASTVAPEN",
+            explosive_hits: "EXPLOSIONSTRÄFFAR",
             unit_kpm: "D/M"
         }
     },
@@ -521,7 +531,7 @@ export const sv = {
         adrenaline: "ADRENALIN",
         adrenaline_desc: "Ökar maximal uthållighet",
         reflex: "REFLEXER",
-        reflex_description: "Ökar maximal rörelsehastighet",
+        reflex_desc: "Ökar maximal rörelsehastighet",
     },
     perks: {
         // Passives

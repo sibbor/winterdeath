@@ -1,11 +1,11 @@
 import React, { useMemo } from 'react';
 import { t } from '../../../../utils/i18n';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import ScreenModalLayout, { TacticalButton, HORIZONTAL_HATCHING_STYLE, TacticalCard } from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { TacticalButton, HORIZONTAL_HATCHING_STYLE } from '../../layout/ScreenModalLayout';
 import { PlayerStats } from '../../../../entities/player/PlayerTypes';
-import { PERKS, PerkColor } from '../../../../content/perks';
+import { PERKS, PerkColors } from '../../../../content/perks';
 import { GAME_CHALLENGES } from '../../../../content/ChallengeTypes';
-import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { ColorPair, COLORS } from '../../../../utils/ui/ColorUtils';
+import { StatsBridge } from '../../../../core/data/StatsBridge';
 
 interface ScreenPauseProps {
     onResume: () => void;
@@ -18,12 +18,12 @@ interface ScreenPauseProps {
     isMobileDevice?: boolean;
 }
 
-const CHALLENGE_CATEGORY_COLORS: Record<number, string> = {
-    0: '#22c55e', // WORLD
-    1: '#ef4444', // COMBAT
-    2: '#a855f7', // WEAPONS
-    3: '#3b82f6', // TACTICS
-    4: '#eab308', // PLAYER
+const CHALLENGE_CATEGORY_COLORS: Record<number, ColorPair> = {
+    0: COLORS.GREEN,
+    1: COLORS.RED,
+    2: COLORS.PURPLE,
+    3: COLORS.BLUE,
+    4: COLORS.YELLOW,
 };
 
 const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap, onOpenSettings, onOpenAdventureLog, onOpenStatistics, stats, isMobileDevice }) => {
@@ -42,28 +42,34 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
     }, [showTooltip]);
 
     const handleActionLeave = React.useCallback(() => setTooltipContent(null), []);
-    
+
     const activePerks = useMemo(() => {
         const list = [];
+        // Add active passives
+        const passives = StatsBridge.getActivePassives(stats);
+        for (let i = 0; i < passives.length; i++) {
+            const perk = PERKS[passives[i]];
+            if (perk) list.push(perk);
+        }
         // Add active buffs
-        const buffs = stats.activeBuffs || [];
+        const buffs = StatsBridge.getActiveBuffs(stats);
         for (let i = 0; i < buffs.length; i++) {
             const perk = PERKS[buffs[i]];
             if (perk) list.push(perk);
         }
         // Add active debuffs
-        const debuffs = stats.activeDebuffs || [];
+        const debuffs = StatsBridge.getActiveDebuffs(stats);
         for (let i = 0; i < debuffs.length; i++) {
             const perk = PERKS[debuffs[i]];
             if (perk) list.push(perk);
         }
         return list;
-    }, [stats.activeBuffs, stats.activeDebuffs]);
+    }, [stats]);
 
     const trackedChallenges = useMemo(() => {
-        const trackedIds = stats.trackedChallengeIds || [];
+        const trackedIds = StatsBridge.getTrackedChallengeIds(stats);
         return GAME_CHALLENGES.filter(c => trackedIds.includes(c.id));
-    }, [stats.trackedChallengeIds]);
+    }, [stats]);
 
     return (
         <ScreenModalLayout
@@ -107,7 +113,7 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
 
                 {/* --- STATUS OVERVIEW --- */}
                 <div className="flex-1 flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2 min-h-0 pb-12">
-                    
+
                     {/* ACTIVE PERKS */}
                     {activePerks.length > 0 && (
                         <div className="space-y-3">
@@ -119,9 +125,9 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 {activePerks.map(perk => {
-                                    const color = perk.category === 0 ? '#22c55e' : (perk.category === 1 ? '#ef4444' : '#a855f7');
+                                    const colorPair = PerkColors[perk.category] || COLORS.GRAY;
                                     return (
-                                        <div 
+                                        <div
                                             key={perk.id}
                                             data-tooltip={t(perk.displayName)}
                                             onMouseEnter={handleActionEnter}
@@ -131,7 +137,7 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
                                             <div className="absolute inset-0 opacity-5" style={HORIZONTAL_HATCHING_STYLE} />
                                             <span className="text-lg relative z-10">{perk.icon}</span>
                                             <span className="text-[10px] font-bold text-zinc-200 uppercase tracking-tight relative z-10">{t(perk.displayName)}</span>
-                                            <div className="w-1.5 h-1.5 rounded-full relative z-10" style={{ backgroundColor: color, boxShadow: `0 0 5px ${color}` }} />
+                                            <div className="w-1.5 h-1.5 rounded-full relative z-10" style={{ backgroundColor: colorPair.str, boxShadow: `0 0 5px ${colorPair.str}` }} />
                                         </div>
                                     );
                                 })}
@@ -150,12 +156,12 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
                             </div>
                             <div className="space-y-2">
                                 {trackedChallenges.map(challenge => {
-                                    const tier = stats.challengeTiers ? stats.challengeTiers[challenge.id] : 0;
-                                    const value = DataResolver.getChallengeValue(stats, challenge.id);
+                                    const tier = StatsBridge.getChallengeTier(stats, challenge.id);
+                                    const value = StatsBridge.getChallengeValue(stats, challenge.id);
                                     const nextTier = tier < 3 ? tier + 1 : 3;
                                     const target = challenge.targets[nextTier - 1] || 1;
                                     const progress = Math.min(100, (value / target) * 100) || 0;
-                                    const categoryColor = CHALLENGE_CATEGORY_COLORS[challenge.categoryId] || '#4b5563';
+                                    const colorPair = CHALLENGE_CATEGORY_COLORS[challenge.categoryId] || COLORS.GRAY;
 
                                     return (
                                         <div key={challenge.id} className="bg-zinc-950/50 border border-zinc-800/50 p-3 flex flex-col gap-2 relative group overflow-hidden">
@@ -165,16 +171,16 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
                                                     {t(challenge.titleKey)}
                                                 </h4>
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-[9px] font-mono text-zinc-500">
+                                                    <span className="text-[10px] font-mono text-zinc-500">
                                                         {Math.floor(value).toLocaleString()} / {target.toLocaleString()}
                                                     </span>
-                                                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: categoryColor, boxShadow: `0 0 5px ${categoryColor}` }} />
+                                                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: colorPair.str, boxShadow: `0 0 5px ${colorPair.str}` }} />
                                                 </div>
                                             </div>
                                             <div className="h-1 w-full bg-zinc-900 rounded-full overflow-hidden relative z-10">
-                                                <div 
-                                                    className="h-full transition-all duration-1000" 
-                                                    style={{ width: `${progress}%`, backgroundColor: categoryColor }} 
+                                                <div
+                                                    className="h-full transition-all duration-1000"
+                                                    style={{ width: `${progress}%`, backgroundColor: colorPair.str }}
                                                 />
                                             </div>
                                         </div>
@@ -199,3 +205,4 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
 };
 
 export default ScreenPause;
+

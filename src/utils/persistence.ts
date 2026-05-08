@@ -121,14 +121,21 @@ export const loadGameState = (): GameState => {
                     perkDamageDealt: ensureBufferSize(loaded.stats?.perkDamageDealt, StatPerkIndex.COUNT),
                     perkDebuffsCleansed: ensureBufferSize(loaded.stats?.perkDebuffsCleansed, StatPerkIndex.COUNT),
                     enemyKills: ensureBufferSize(loaded.stats?.enemyKills, StatEnemyIndex.COUNT),
-                    challengeTiers: ensureBufferSize(loaded.stats?.challengeTiers, 32, Int32Array),
+                    challengeTiers: (function () {
+                        const expectedSize = 64;
+                        const buffer = ensureBufferSize(loaded.stats?.challengeTiers, expectedSize, Int32Array);
+                        if (process.env.NODE_ENV !== 'production' && buffer.length !== expectedSize) {
+                            console.warn(`[VINTERDÖD] Persistence Mismatch: challengeTiers buffer size is ${buffer.length}, expected ${expectedSize}.`);
+                        }
+                        return buffer;
+                    })(),
                     totalChallengePoints: loaded.stats?.totalChallengePoints || 0
                 },
-                loadout: (function() {
+                loadout: (function () {
                     const saved = loaded.loadout;
                     if (!saved) return { ...DEFAULT_STATE.loadout };
-                    
-                    // VINTERDÖD FIX: If even one weapon is changed, we want to store all four slots.
+
+                    // If even one weapon is changed, we want to store all four slots.
                     // We ensure this by merging the saved state over the default state.
                     return {
                         primary: saved.primary || DEFAULT_STATE.loadout.primary,
@@ -143,6 +150,10 @@ export const loadGameState = (): GameState => {
                 environmentOverrides: loaded.environmentOverrides || {},
                 sectorState: loaded.sectorState || DEFAULT_STATE.sectorState,
             };
+
+            // Sync story progression arrays into stats
+            state.stats.deadBossIndices = state.deadBossIndices || [];
+            state.stats.rescuedFamilyIndices = state.rescuedFamilyIndices || [];
 
             // --- VINTERDÖD FIX: Sanitize Legacy/Corrupted Data ---
             const sb = state.stats.statsBuffer;

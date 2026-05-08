@@ -5,7 +5,7 @@ import { GameSettings } from '../../../../core/engine/EngineTypes';
 import { SHADOW_PRESETS } from '../../../../content/constants';
 import { useOrientation } from '../../../../hooks/useOrientation';
 import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalButton, TacticalTab } from '../../layout/ScreenModalLayout';
-import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputTypes';
+import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputManager';
 
 interface ScreenSettingsProps {
     onClose: () => void;
@@ -16,17 +16,6 @@ interface ScreenSettingsProps {
     isMobileDevice?: boolean;
 }
 
-const darkenColor = (hex: string, percent: number) => {
-    try {
-        const h = hex.startsWith('#') ? hex : '#ffffff';
-        const num = parseInt(h.replace('#', ''), 16);
-        const amt = Math.round(2.55 * percent);
-        const R = (num >> 16) - amt;
-        const G = (num >> 8 & 0x00FF) - amt;
-        const B = (num & 0x0000FF) - amt;
-        return '#' + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
-    } catch (e) { return hex; }
-};
 
 const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, settings, onUpdateGraphics, showFps, onToggleShowFps, isMobileDevice }) => {
     const { isLandscapeMode } = useOrientation();
@@ -170,7 +159,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
 
     return (
         <div className="flex flex-col items-center justify-start h-full max-w-2xl mx-auto space-y-6 overflow-y-auto pr-4 custom-scrollbar py-4 px-2">
-            <TacticalCard color="#3b82f6" className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
+            <TacticalCard color={0x3b82f6} className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
                 <div className="flex-1">
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.resolution')}</h3>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.resolution_sub')}</p>
@@ -198,7 +187,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                 </div>
             </TacticalCard>
 
-            <TacticalCard color="#3b82f6" className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
+            <TacticalCard color={0x3b82f6} className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.shadow_quality')}</h3>
                     <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">{t('ui.needs_reload')}</p>
@@ -230,7 +219,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                 </div>
             </TacticalCard>
 
-            <TacticalCard color="#3b82f6" className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
+            <TacticalCard color={0x3b82f6} className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.texture_quality')}</h3>
                     <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">{t('ui.needs_reload')}</p>
@@ -256,7 +245,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
 
             <TacticalCard
                 onClick={toggleVolumetricFog}
-                color="#3b82f6"
+                color={0x3b82f6}
                 className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
             >
                 <div>
@@ -284,7 +273,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
 
             <TacticalCard
                 onClick={toggleAntialias}
-                color="#3b82f6"
+                color={0x3b82f6}
                 className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
             >
                 <div>
@@ -325,7 +314,7 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ showFps, onToggleSho
     <div className="flex flex-col items-center justify-start h-full max-w-2xl mx-auto space-y-6 overflow-y-auto pr-4 custom-scrollbar py-4 px-2">
         <TacticalCard
             onClick={() => { const current = getLocale(); setLocale(current === 'en' ? 'sv' : 'en'); setTick(t => t + 1); UiSounds.playClick(); }}
-            color="#3b82f6"
+            color={0x3b82f6}
             className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
         >
             <div>
@@ -340,7 +329,7 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ showFps, onToggleSho
 
         <TacticalCard
             onClick={onToggleShowFps}
-            color="#3b82f6"
+            color={0x3b82f6}
             className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
         >
             <div>
@@ -355,7 +344,7 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ showFps, onToggleSho
 
         <TacticalCard
             onClick={() => { setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: !prev.showDiscoveryPopups })); UiSounds.playClick(); }}
-            color="#3b82f6"
+            color={0x3b82f6}
             className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
         >
             <div>

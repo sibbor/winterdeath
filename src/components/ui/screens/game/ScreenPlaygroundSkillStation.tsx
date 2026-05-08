@@ -4,6 +4,7 @@ import { PlayerStats, SectorState } from '../../../../types/StateTypes';
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import ScreenModalLayout, { TacticalButton, TacticalCard } from '../../layout/ScreenModalLayout';
+import { StatsBridge } from '../../../../core/data/StatsBridge';
 
 const SKILLS_CONFIG = [
     { id: PlayerStatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', value: 20 },
@@ -20,19 +21,20 @@ interface ScreenPlaygroundSkillStationProps {
 }
 
 const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> = ({ stats, sectorState, onSave, onClose, isMobileDevice }) => {
-    const [tempStats, setTempStats] = useState({ ...stats });
+    const [tempStats, setTempStats] = useState(() => StatsBridge.deepCloneStats(stats));
     const [tempSectorState, setTempSectorState] = useState({ ...sectorState });
 
     const handleUpgradeSkill = (skillId: PlayerStatID, value: number) => {
         UiSounds.playClick();
         
-        // Zero-GC: Clone the buffer for the state update to trigger React re-render
-        const newStats = { ...tempStats };
-        const newBuffer = new Float32Array(tempStats.statsBuffer);
-        newBuffer[skillId] += value;
-        newStats.statsBuffer = newBuffer;
+        const nextStats = StatsBridge.deepCloneStats(tempStats);
+        if (skillId === PlayerStatID.SPEED) {
+            StatsBridge.addStatFloat(nextStats, skillId, value);
+        } else {
+            StatsBridge.addStatInt(nextStats, skillId, value);
+        }
         
-        setTempStats(newStats);
+        setTempStats(nextStats);
     };
 
     const handleConfirm = () => {
@@ -56,7 +58,7 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                     <label className="text-zinc-500 uppercase text-sm font-bold tracking-widest">{t('ui.stat_calibration')}</label>
                     <div className="flex flex-col gap-2">
                         {SKILLS_CONFIG.map(skill => {
-                            const val = tempStats.statsBuffer[skill.id];
+                            const val = StatsBridge.getCoreStat(tempStats, skill.id);
                             const displayVal = skill.id === PlayerStatID.SPEED ? val.toFixed(2) : Math.round(val);
 
                             return (
@@ -128,3 +130,4 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
 };
 
 export default ScreenPlaygroundSkillStation;
+

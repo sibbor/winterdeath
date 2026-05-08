@@ -5,7 +5,7 @@ export { SystemID };
  * Base interface for all game systems.
  * Systems are updated every frame within the main engine loop.
  * 
- * VINTERDÖD: Removed legacy 'id: string' in favor of numeric 'systemId' enum
+ * Removed legacy 'id: string' in favor of numeric 'systemId' enum
  * for O(1) dense array lookups in the WinterEngine.
  */
 export interface System {

@@ -22,7 +22,7 @@ const ScreenResetConfirm: React.FC<ScreenResetConfirmProps> = ({ onConfirm, onCa
             titleColorClass="text-red-600"
         >
             <div className="flex flex-col items-center justify-center py-4 max-w-xl mx-auto text-center space-y-8">
-                <TacticalCard color="#dc2626" className="p-6">
+                <TacticalCard color={0xdc2626} className="p-6">
                     <p className="text-red-100 text-lg font-semibold uppercase tracking-tight leading-tight">
                         {t('ui.reset_confirm_desc')}
                     </p>

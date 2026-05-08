@@ -3,7 +3,7 @@ import { SystemID } from '../../systems/System';
 import { SPATIAL_CONFIG } from '../../config/SpatialConfig';
 
 /**
- * VINTERDÖD: ChunkManager
+ * ChunkManager
  * 
  * Handles spatial subdivision of 2000x2000m sectors into chunks.
  * Uses SMI-based bitwise keys for O(1) lookups without GC pressure.

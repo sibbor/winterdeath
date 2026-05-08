@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RuntimeState } from '../../core/RuntimeState';
 import { useRef, useState, useEffect } from 'react';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { DeathPhase } from '../../types/SessionTypes';
@@ -6,7 +7,7 @@ import { SectorContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { CinematicBubbleHandle } from '../../components/ui/hud/CinematicBubble';
-import { InteractionType } from '../../systems/InteractionTypes';
+import { InteractionType } from '../../systems/ui/UIEventBridge';
 
 export interface UIState {
     isSectorLoading: boolean;
@@ -37,9 +38,10 @@ export const useGameSessionState = (props: GameCanvasProps) => {
     const sectorContextRef = useRef<SectorContext | null>(null);
 
     // Core State Ref
-    const stateRef = useRef<ReturnType<typeof GameSessionLogic.createInitialState>>(null!);
+    const stateRef = useRef<RuntimeState>(null!);
     if (!stateRef.current) {
-        stateRef.current = GameSessionLogic.createInitialState(props);
+        stateRef.current = GameSessionLogic.allocateState();
+        GameSessionLogic.resetState(stateRef.current, props);
     }
 
     // Modal / UI Sync Refs

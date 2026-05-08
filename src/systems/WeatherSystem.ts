@@ -29,7 +29,7 @@ export class WeatherSystem implements System {
     // Cached physics multiplier for shader uniforms
     private swayMult: number = 0.0;
 
-    // --- VINTERDÖD: WEATHER INERTIA SCRATCHPADS (Zero-GC) ---
+    // --- WEATHER INERTIA SCRATCHPADS (Zero-GC) ---
     private _windOffset = new THREE.Vector2(0, 0);
     private _smoothWind = new THREE.Vector2(0, 0);
 
@@ -66,13 +66,13 @@ export class WeatherSystem implements System {
         }
 
         if (!this.instancedMesh) {
-            // VINTERDÖD: Clone geometry once to add custom attributes without affecting shared assets.
+            // Clone geometry once to add custom attributes without affecting shared assets.
             // This happens only once during system initialization or first weather sync.
             const geo = GEOMETRY.weatherParticle.clone();
-            
+
             const posArr = new Float32Array(this.maxCount * 3);
             const velArr = new Float32Array(this.maxCount * 3);
-            
+
             geo.setAttribute('initialPos', new THREE.InstancedBufferAttribute(posArr, 3));
             geo.setAttribute('velocity', new THREE.InstancedBufferAttribute(velArr, 3));
 
@@ -145,11 +145,11 @@ export class WeatherSystem implements System {
 
         initialPosAttr.needsUpdate = true;
         velocityAttr.needsUpdate = true;
-        
+
         // Reset the instanceMatrix to Identity since we handle positioning in shader
         this.instancedMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
         const identity = new THREE.Matrix4();
-        for(let i=0; i<this.maxCount; i++) this.instancedMesh.setMatrixAt(i, identity);
+        for (let i = 0; i < this.maxCount; i++) this.instancedMesh.setMatrixAt(i, identity);
         this.instancedMesh.instanceMatrix.needsUpdate = true;
     }
 
@@ -164,7 +164,8 @@ export class WeatherSystem implements System {
 
         // Apply Weather Inertia (Smoothing)
         // delta is in seconds. lerp factor gives it "weight" compared to the global wind.
-        const lerpFactor = 1.0 - Math.exp(-0.8 * delta);
+        // Reduced factor from 0.8 to 0.2 for heavy inertia (prevents "snapping" wind).
+        const lerpFactor = 1.0 - Math.exp(-0.2 * delta);
         this._smoothWind.lerp(this.wind.current, lerpFactor);
 
         // Integrate wind into offset (Movement over time)

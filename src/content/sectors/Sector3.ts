@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, GroundType, ChestType } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, GroundType, ChestType, SectorID } from '../../game/session/SectorTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { VEGETATION_TYPE } from '../../content/environment';
 import { POI_TYPE } from '../../content/pois'
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
-import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
+import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
-import { InteractionType, InteractionShape } from '../../systems/InteractionTypes';
+import { InteractionType, InteractionShape } from '../../systems/ui/UIEventBridge';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { FamilyMemberID } from '../constants';
 import { WeatherType } from '../../core/engine/EngineTypes';

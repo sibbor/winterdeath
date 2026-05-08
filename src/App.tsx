@@ -3,8 +3,8 @@ import { GameState, SectorStats } from './types/StateTypes';
 import { GameScreen } from './types/SessionTypes';
 import { PlayerStats, PlayerStatID, StatEnemyIndex } from './entities/player/PlayerTypes';
 import { WeatherType } from './core/engine/EngineTypes';
-import { SectorTrigger } from './systems/TriggerTypes';
-import { BossID } from './game/session/SectorTypes';
+import { SectorTrigger } from './types/TriggerTypes';
+import { BossID, SectorID } from './game/session/SectorTypes';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';
 import { aggregateStats } from './game/progression/ProgressionManager';
 import GameSession, { GameSessionHandle } from './game/session/GameSession';
@@ -28,7 +28,7 @@ import ScreenPlaygroundSkillStation from './components/ui/screens/game/ScreenPla
 import { ScreenPlaygroundEnvironmentStation } from './components/ui/screens/game/ScreenPlaygroundEnvironmentStation';
 import ScreenPlayerDied from './components/ui/screens/game/ScreenPlayerDied';
 import ScreenArmory from './components/ui/screens/camp/ScreenArmory';
-import ScreenPlayerSkills from './components/ui/screens/camp/ScreenPlayerSkills';
+import ScreenSkills from './components/ui/screens/camp/ScreenSkills';
 import ScreenSectorOverview from './components/ui/screens/camp/ScreenSectorOverview';
 import ScreenResetConfirm from './components/ui/screens/camp/ScreenResetConfirm';
 import DebugDisplay from './components/ui/core/DebugDisplay';
@@ -41,6 +41,7 @@ import { WinterEngine, GameSettings } from './core/engine/WinterEngine';
 import { HudStore } from './store/HudStore';
 import { SectorSystem } from './systems/SectorSystem';
 import { OverlayType, DiscoveryType } from './components/ui/hud/HudTypes';
+import { StatsBridge } from './core/data/StatsBridge';
 
 // ============================================================================
 // ZERO-GC: Static Fallback Objects
@@ -75,9 +76,9 @@ const App: React.FC = () => {
     const [activeCollectible, setActiveCollectible] = useState<string | null>(null);
     const [deathDetails, setDeathDetails] = useState<{ killer: string } | null>(null);
     const [sectorStats, setSectorStats] = useState<SectorStats | null>(null);
-    const [initialAdventureLogTab, setInitialAdventureLogTab] = useState<any>(null);
+    const [initialAdventureLogTab, setInitialAdventureLogTab] = useState<DiscoveryType>(DiscoveryType.CHALLENGE);
     const [initialAdventureLogItem, setInitialAdventureLogItem] = useState<string | null>(null);
-    const [initialStatisticsTab, setInitialStatisticsTab] = useState<string | null>(null);
+    const [initialStatisticsTab, setInitialStatisticsTab] = useState<string>('overview');
     const [initialStatisticsItem, setInitialStatisticsItem] = useState<string | null>(null);
     const showFPS = !!gameState.showFps;
 
@@ -105,10 +106,7 @@ const App: React.FC = () => {
         const handleOpenAdventureLogEvent = (e: any) => {
             const tab = e.detail?.tab;
             const itemId = e.detail?.itemId;
-            setInitialAdventureLogTab(tab ?? null);
-            setInitialAdventureLogItem(itemId || null);
-            setActiveOverlay(OverlayType.ADVENTURE_LOG);
-            UiSounds.playConfirm();
+            handleOpenAdventureLogAction(tab, itemId);
         };
 
         window.addEventListener('resize', checkMobile);
@@ -141,7 +139,7 @@ const App: React.FC = () => {
             setIsLoadingCamp(false);
             setIsLoadingSector(false);
 
-            // VINTERDÖD FIX: Ensure the engine is unpaused once the transition completes
+            // Ensure the engine is unpaused once the transition completes
             const engine = WinterEngine.getInstance();
             engine.isRenderingPaused = false;
             engine.isSimulationPaused = false;
@@ -238,7 +236,7 @@ const App: React.FC = () => {
         setSectorStats(stats); // Store to be viewed in Recap, but DONT aggregate yet!
         setGameState(prev => ({
             ...prev,
-            screen: GameScreen.DEATH // VINTERDÖD FIX: Go to Death Screen first, not Recap
+            screen: GameScreen.DEATH // Go to Death Screen first, not Recap
         }));
     }, []);
 
@@ -253,18 +251,18 @@ const App: React.FC = () => {
         setActiveCollectible(id);
         setActiveOverlay(OverlayType.COLLECTIBLE);
         setGameState(prev => {
-            if (prev.stats.collectiblesDiscovered.includes(id)) return prev;
+            if (StatsBridge.getCollectiblesDiscovered(prev.stats).includes(id)) return prev;
 
-            const newStatsBuffer = new Float32Array(prev.stats.statsBuffer);
+            const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
             newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
 
             return {
                 ...prev,
                 stats: {
                     ...prev.stats,
-                    collectiblesDiscovered: [...prev.stats.collectiblesDiscovered, id],
                     statsBuffer: newStatsBuffer,
-                    totalSkillPointsEarned: prev.stats.totalSkillPointsEarned + 1
+                    collectiblesDiscovered: [...StatsBridge.getCollectiblesDiscovered(prev.stats), id],
+                    totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1
                 }
             };
         });
@@ -273,12 +271,12 @@ const App: React.FC = () => {
     const handleClueDiscoveredAction = useCallback((clue: SectorTrigger) => {
         if (!clue.id) return;
         setGameState(prev => {
-            if (prev.stats.cluesFound.includes(clue.id as string)) return prev;
+            if (StatsBridge.getCluesFound(prev.stats).includes(clue.id as string)) return prev;
             return {
                 ...prev,
                 stats: {
                     ...prev.stats,
-                    cluesFound: [...prev.stats.cluesFound, clue.id as string]
+                    cluesFound: [...StatsBridge.getCluesFound(prev.stats), clue.id as string]
                 }
             };
         });
@@ -287,12 +285,12 @@ const App: React.FC = () => {
     const handlePOIdiscoveredAction = useCallback((poi: SectorTrigger) => {
         if (!poi.id) return;
         setGameState(prev => {
-            if (prev.stats.discoveredPOIs.includes(poi.id as string)) return prev;
+            if (StatsBridge.getDiscoveredPOIs(prev.stats).includes(poi.id as string)) return prev;
             return {
                 ...prev,
                 stats: {
                     ...prev.stats,
-                    discoveredPOIs: [...prev.stats.discoveredPOIs, poi.id as string]
+                    discoveredPOIs: [...StatsBridge.getDiscoveredPOIs(prev.stats), poi.id as string]
                 }
             };
         });
@@ -301,16 +299,16 @@ const App: React.FC = () => {
     const handleEnemyDiscoveredAction = useCallback((type: number) => {
         if (!type && type !== 0) return;
         setGameState(prev => {
-            if (prev.stats.seenEnemies.includes(type)) return prev;
-            return { ...prev, stats: { ...prev.stats, seenEnemies: [...prev.stats.seenEnemies, type] } };
+            if (StatsBridge.getSeenEnemies(prev.stats).includes(type)) return prev;
+            return { ...prev, stats: { ...prev.stats, seenEnemies: [...StatsBridge.getSeenEnemies(prev.stats), type] } };
         });
     }, []);
 
     const handleBossDiscoveredAction = useCallback((id: number) => {
         if (!id && id !== 0) return;
         setGameState(prev => {
-            if (prev.stats.seenBosses.includes(id)) return prev;
-            return { ...prev, stats: { ...prev.stats, seenBosses: [...prev.stats.seenBosses, id] } };
+            if (StatsBridge.getSeenBosses(prev.stats).includes(id)) return prev;
+            return { ...prev, stats: { ...prev.stats, seenBosses: [...StatsBridge.getSeenBosses(prev.stats), id] } };
         });
     }, []);
 
@@ -322,7 +320,7 @@ const App: React.FC = () => {
         setGameState(prev => {
             if (prev.deadBossIndices.includes(prev.currentSector)) return prev;
 
-            const newStatsBuffer = new Float32Array(prev.stats.statsBuffer);
+            const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
             newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
 
             return {
@@ -331,7 +329,8 @@ const App: React.FC = () => {
                 stats: {
                     ...prev.stats,
                     statsBuffer: newStatsBuffer,
-                    totalSkillPointsEarned: prev.stats.totalSkillPointsEarned + 1
+                    totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1,
+                    deadBossIndices: [...StatsBridge.getDeadBossIndices(prev.stats), prev.currentSector]
                 }
             };
         });
@@ -341,7 +340,7 @@ const App: React.FC = () => {
         setGameState(prev => {
             if (prev.rescuedFamilyIndices.includes(prev.currentSector)) return prev;
 
-            const newStatsBuffer = new Float32Array(prev.stats.statsBuffer);
+            const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
             newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
 
             return {
@@ -350,7 +349,7 @@ const App: React.FC = () => {
                 stats: {
                     ...prev.stats,
                     statsBuffer: newStatsBuffer,
-                    totalSkillPointsEarned: prev.stats.totalSkillPointsEarned + 1
+                    totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1
                 }
             };
         });
@@ -388,10 +387,10 @@ const App: React.FC = () => {
 
     const handleResumeAction = useCallback(() => {
         const { gameState: currentGameState, isMobileDevice: isMobile } = latestStateRef.current;
-        
+
         setActiveOverlay(OverlayType.NONE);
-        
-        // VINTERDÖD: Immediate engine wake-up
+
+        // Immediate engine wake-up
         const engine = WinterEngine.getInstance();
         engine.isSimulationPaused = false;
         engine.input.enable();
@@ -427,7 +426,7 @@ const App: React.FC = () => {
 
     const handleMarkCollectiblesViewedAction = useCallback((ids: string[]) => {
         setGameState(prev => {
-            const currentViewed = prev.stats.viewedCollectibles || [];
+            const currentViewed = StatsBridge.getViewedCollectibles(prev.stats);
             const newViewed = [...currentViewed];
             let changed = false;
             for (let i = 0; i < ids.length; i++) {
@@ -442,7 +441,7 @@ const App: React.FC = () => {
     }, []);
 
     const handleContinueFromDeath = useCallback(() => {
-        // VINTERDÖD FIX: Extract stats BEFORE unmounting or navigating away
+        // Extract stats BEFORE unmounting or navigating away
         const stats = gameCanvasRef.current?.getSectorStats(false, true) || latestStateRef.current.gameState.stats;
         const finalHud = HudStore.getState();
 
@@ -528,7 +527,7 @@ const App: React.FC = () => {
         setSectorStats(stats); // DONT aggregate yet!
 
         setGameState(prev => {
-            const bossKilled = stats.enemyKills && stats.enemyKills[StatEnemyIndex.BOSS] > 0;
+            const bossKilled = StatsBridge.isSectorBossDefeated(stats);
             return {
                 ...prev,
                 screen: bossKilled ? GameScreen.BOSS_KILLED : GameScreen.RECAP,
@@ -543,12 +542,12 @@ const App: React.FC = () => {
 
     const handleToggleChallengeTrackingAction = useCallback((challengeId: number) => {
         setGameState(prev => {
-            const tracked = prev.stats.trackedChallengeIds || [];
+            const tracked = StatsBridge.getTrackedChallengeIds(prev.stats);
             const isTracked = tracked.includes(challengeId);
             const newTracked = isTracked
                 ? tracked.filter(id => id !== challengeId)
                 : [...tracked, challengeId];
-            
+
             return {
                 ...prev,
                 stats: {
@@ -576,9 +575,9 @@ const App: React.FC = () => {
     const aggregatePendingStats = useCallback(() => {
         if (!sectorStats) return;
         setGameState(prev => {
-            // VINTERDÖD FIX: Unique achievements (Boss/Family) are now awarded immediately during gameplay.
+            // Unique achievements (Boss/Family) are now awarded immediately during gameplay.
             // We pass 0 as newUniqueAchievements to aggregateStats to reflect this shift.
-            const newStats = aggregateStats(prev.stats, sectorStats, !!deathDetails, !!sectorStats.aborted, 0);
+            const newStats = aggregateStats(prev.stats, sectorStats, !!deathDetails, !!sectorStats.aborted, prev.currentSector, 0);
 
             return {
                 ...prev,
@@ -604,8 +603,8 @@ const App: React.FC = () => {
 
             setGameState(prev => {
                 const isCleared = prev.deadBossIndices.includes(prev.currentSector);
-                const nextSector = (isCleared && prev.currentSector < 3) ? prev.currentSector + 1 : prev.currentSector;
-                const isFinished = isCleared && prev.currentSector === 3;
+                const nextSector = (isCleared && prev.currentSector < SectorID.SCRAPYARD) ? prev.currentSector + 1 : prev.currentSector;
+                const isFinished = isCleared && prev.currentSector === SectorID.SCRAPYARD;
 
                 const finalStats = isFinished ? { ...prev.stats, gameIsFinished: true } : prev.stats;
                 return {
@@ -614,7 +613,7 @@ const App: React.FC = () => {
                     screen: GameScreen.CAMP,
                     currentSector: nextSector,
                     weather: WeatherType.SNOW,
-                    sectorState: nextSector === 4 ? prev.sectorState : undefined // Clear if leaving playground
+                    sectorState: nextSector === SectorID.PLAYGROUND ? prev.sectorState : undefined // Clear if leaving playground
                 };
             });
         });
@@ -627,11 +626,10 @@ const App: React.FC = () => {
         triggerLoadingTransition('SECTOR', async () => {
             const nextSector = latestStateRef.current.gameState.currentSector + 1;
 
-            // If it's the last sector (#4 = id 3), theoretically the handleNextSector button won't exist.
-            // But if it slips through, fallback to camp.
-            if (nextSector > 3) {
+            // If it's the last sector, stay at the last story sector.
+            if (nextSector > SectorID.SCRAPYARD) {
                 AssetPreloader.releaseSectorAssets(latestStateRef.current.gameState.currentSector);
-                setGameState(prev => ({ ...prev, screen: GameScreen.CAMP, currentSector: 3, weather: WeatherType.SNOW }));
+                setGameState(prev => ({ ...prev, screen: GameScreen.CAMP, currentSector: SectorID.SCRAPYARD, weather: WeatherType.SNOW }));
                 return;
             }
 
@@ -651,7 +649,7 @@ const App: React.FC = () => {
                 screen: GameScreen.SECTOR,
                 currentSector: nextSector,
                 sessionToken: (prev.sessionToken || 0) + 1,
-                sectorState: nextSector === 4 ? prev.sectorState : undefined // Only persist for playground
+                sectorState: nextSector === SectorID.PLAYGROUND ? prev.sectorState : undefined // Only persist for playground
             }));
             HudStore.update({ ...HudStore.getState(), hudVisible: false });
         });
@@ -677,7 +675,7 @@ const App: React.FC = () => {
                 ...prev,
                 screen: GameScreen.SECTOR,
                 sessionToken: (prev.sessionToken || 0) + 1,
-                sectorState: prev.currentSector === 4 ? prev.sectorState : undefined // Clear if not playground
+                sectorState: prev.currentSector === SectorID.PLAYGROUND ? prev.sectorState : undefined // Clear if not playground
             }));
             HudStore.update({ ...HudStore.getState(), hudVisible: false });
         });
@@ -686,14 +684,14 @@ const App: React.FC = () => {
     const handleRespawnSector = useCallback(() => {
         UiSounds.playConfirm();
 
-        // VINTERDÖD FIX: Keep gameCanvasRef alive and trigger resurrection
+        // Keep gameCanvasRef alive and trigger resurrection
         if (gameCanvasRef.current) {
             gameCanvasRef.current.respawnPlayer();
         } else {
             console.error("[App] VARNING: gameCanvasRef är null! GameSession har unmountats!");
         }
 
-        // VINTERDÖD FIX: Clear UI state instantly for "blixtsnabb" feedback
+        // Clear UI state instantly for "blixtsnabb" feedback
         setActiveOverlay(OverlayType.NONE);
         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         setSectorStats(null);
@@ -772,7 +770,7 @@ const App: React.FC = () => {
     const cursorHidden = isMobileDevice || isPointerLocked || (hasInteracted && gameState.screen === GameScreen.SECTOR && activeOverlay === OverlayType.NONE);
     const showHUD = hasInteracted && (activeOverlay === OverlayType.NONE || activeOverlay === OverlayType.INTRO) && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && gameState.screen !== GameScreen.PROLOGUE;
 
-    // VINTERDÖD FIX: Boolean to check if we should mount/keep GameSession alive
+    // Boolean to check if we should mount/keep GameSession alive
     const shouldKeepSessionAlive =
         (gameState.screen === GameScreen.SECTOR ||
             gameState.screen === GameScreen.PROLOGUE ||
@@ -782,7 +780,7 @@ const App: React.FC = () => {
     // Tog bort "&& !transitionTaskRef.current"
 
     return (
-        <div 
+        <div
             className="relative w-full h-full overflow-hidden bg-black select-none cursor-none"
             onPointerDown={() => {
                 if (!hasInteracted) setHasInteracted(true);
@@ -819,7 +817,7 @@ const App: React.FC = () => {
                             onCampLoaded={handleSceneReady}
                             isMobileDevice={isMobileDevice}
                             weather={gameState.weather}
-                            isGameRunning={!isInitialBoot}
+                            isGameRunning={!isInitialBoot && !isLoadingSector && !isLoadingCamp}
                             activeOverlay={activeOverlay}
                             setActiveOverlay={setActiveOverlay}
                             onPauseToggle={handlePauseToggle}
@@ -983,7 +981,7 @@ const App: React.FC = () => {
 
                     {activeOverlay === OverlayType.STATION_SKILLS && (
                         gameState.screen === GameScreen.CAMP ? (
-                            <ScreenPlayerSkills
+                            <ScreenSkills
                                 stats={gameState.stats}
                                 onSave={handleSaveStats}
                                 onClose={handleOverlayClose}

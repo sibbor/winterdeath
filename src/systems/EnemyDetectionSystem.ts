@@ -171,7 +171,7 @@ export class EnemyDetectionSystem implements System {
                     const isAggressive = e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING || e.state === AIState.GRAPPLE;
                     if (!isAggressive) e.state = AIState.CHASE;
 
-                    // --- VINTERDÖD: Discovery Logic ---
+                    // --- Discovery Logic ---
                     const stats = state.stats; // Use persistent stats for discovery
                     const discovery = state.discoverySets;
 

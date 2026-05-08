@@ -88,7 +88,7 @@ export const CharacterModels = {
 
         const body = new THREE.Mesh(
             GEOMETRY.human,
-            new THREE.MeshStandardMaterial({ color: PLAYER_CHARACTER.color })
+            new THREE.MeshStandardMaterial({ color: PLAYER_CHARACTER.color.num })
         );
         body.position.y = 1.0;
         body.castShadow = true;
@@ -124,7 +124,7 @@ export const CharacterModels = {
         const scale = (memberData.scale || 1.0) * (isAnimal ? 2.0 : 1.0);
 
         const geo = isAnimal ? GEOMETRY.petBody : GEOMETRY.human;
-        const mat = new THREE.MeshStandardMaterial({ color: memberData.color, roughness: 0.5 });
+        const mat = new THREE.MeshStandardMaterial({ color: memberData.color.num, roughness: 0.5 });
 
         const body = new THREE.Mesh(geo, mat);
         const geometryHeight = isAnimal ? 0.5 : 2.0;

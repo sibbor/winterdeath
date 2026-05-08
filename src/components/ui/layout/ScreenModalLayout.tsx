@@ -1,7 +1,9 @@
 import React, { useRef, useEffect, useCallback, useMemo } from 'react';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import { t } from '../../../utils/i18n';
-import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputTypes';
+import { DataResolver } from '../../../utils/ui/DataResolver';
+import { ColorPair, COLORS, colorToHex, adjustColor } from '../../../utils/ui/ColorUtils';
+import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputManager';
 
 // --- SHARED TACTICAL STYLE TOKENS (One Place to Rule Them All) ---
 export const BACKGROUND_PATTERN_STYLE: React.CSSProperties = {
@@ -44,6 +46,7 @@ interface ScreenModalLayoutProps {
     titleColorClass?: string;
     borderColorClass?: string;
     contentClass?: string;
+    noScroll?: boolean;
 
     // Actions
     onConfirm?: () => void;
@@ -124,7 +127,8 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
     tabs,
     activeTab,
     onTabChange,
-    tabOrientation = 'vertical'
+    tabOrientation = 'vertical',
+    noScroll = false
 }) => {
     // --- ZERO-GC EVENT LISTENER PATTERN ---
     // Using refs to hold the latest closures allows the event listener to remain 
@@ -237,6 +241,18 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
     return (
         <div className={`${OVERLAY_BASE} ${transparent ? '' : `bg-black/60 ${blurClass}`}`}>
             <div className={`${MODAL_BOX_BASE} ${borderColorClass} ${adaptiveWidth} ${adaptiveHeight} ${mobileScaling}`}>
+                <style>{`
+                    @keyframes shimmer {
+                        0% { transform: translateX(-150%) skewX(-15deg); }
+                        100% { transform: translateX(250%) skewX(-15deg); }
+                    }
+                    .shimmer-overlay {
+                        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+                        width: 70%;
+                        height: 100%;
+                        animation: shimmer 2s infinite linear;
+                    }
+                `}</style>
 
                 {/* Hardware Corners */}
                 <div className={`${HARDWARE_CORNER} top-0 left-0 border-t-4 border-l-4`} />
@@ -255,7 +271,7 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
                     <div className={HEADER_INNER}>
                         <div className="flex flex-col">
                             {typeof title === 'string' ? (
-                                <h1 
+                                <h1
                                     className={`text-2xl md:text-5xl font-black uppercase tracking-tighter transition-all duration-300 ${titleColorClass} relative`}
                                     style={GRITTY_HEADER_TITLE_STYLE}
                                 >
@@ -329,7 +345,7 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
                 </div>
 
                 {/* Main Content Area */}
-                <div className={`${CONTENT_AREA} ${contentClass}`}>
+                <div className={`${CONTENT_AREA} ${noScroll ? '!overflow-hidden' : ''} ${contentClass}`}>
                     {children}
                 </div>
 
@@ -356,29 +372,29 @@ export const TacticalButton: React.FC<{
     showHatching?: boolean;
 }> = React.memo(({ onClick, children, className = '', variant = 'primary', disabled = false, style, showHatching = true }) => {
     const baseStyle = "group/tbtn relative px-8 py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden";
-    
+
     let variantClasses = "";
     let hatchingStyle = HORIZONTAL_HATCHING_STYLE;
-    
+
     switch (variant) {
-        case 'primary': 
-            variantClasses = "bg-white text-black border-white hover:bg-zinc-200"; 
+        case 'primary':
+            variantClasses = "bg-white text-black border-white hover:bg-zinc-200";
             hatchingStyle = HORIZONTAL_HATCHING_STYLE_DARK;
             break;
-        case 'secondary': 
-            variantClasses = "bg-zinc-900 text-zinc-400 border-zinc-700 hover:text-white hover:border-white"; 
+        case 'secondary':
+            variantClasses = "bg-zinc-900 text-zinc-400 border-zinc-700 hover:text-white hover:border-white";
             break;
-        case 'danger': 
-            variantClasses = "bg-black text-red-600 border-red-800 hover:bg-red-900/10 shadow-[0_0_20px_rgba(220,38,38,0.2)]"; 
+        case 'danger':
+            variantClasses = "bg-black text-red-600 border-red-800 hover:bg-red-900/10 shadow-[0_0_20px_rgba(220,38,38,0.2)]";
             break;
-        case 'ghost': 
-            variantClasses = "bg-transparent text-zinc-500 border-transparent hover:text-zinc-300"; 
+        case 'ghost':
+            variantClasses = "bg-transparent text-zinc-500 border-transparent hover:text-zinc-300";
             break;
     }
 
     return (
-        <button 
-            onClick={onClick} 
+        <button
+            onClick={onClick}
             disabled={disabled}
             className={`${baseStyle} ${variantClasses} ${className}`}
             style={style}
@@ -391,61 +407,76 @@ export const TacticalButton: React.FC<{
     );
 });
 
-export const TacticalCard: React.FC<{ 
-    children: React.ReactNode, 
-    isLocked?: boolean, 
-    color?: string, 
-    id?: string, 
+export const TacticalCard: React.FC<{
+    children: React.ReactNode,
+    isLocked?: boolean,
+    color?: ColorPair | string,
+    id?: string,
     className?: string,
     showHatching?: boolean,
     showHover?: boolean,
     onClick?: () => void,
     style?: React.CSSProperties
-}> = React.memo(({ children, isLocked, color = '#3b82f6', id, className = '', showHatching = false, showHover = false, onClick, style }) => (
-    <div 
-        id={id} 
-        onClick={onClick}
-        className={`p-6 border-2 relative overflow-hidden transition-all duration-300 backdrop-blur-md shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800 bg-black/60' : ''} ${onClick ? 'cursor-pointer' : ''} group/tcard ${className}`}
-        style={{ 
-            borderColor: isLocked ? '#1f2937' : `${color}66`,
-            backgroundColor: isLocked ? undefined : `${color}0A`, // Very subtle themed background (approx 4% opacity)
-            ...style
-        }}
-    >
-        {showHover && !isLocked && (
-            <div 
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full scale-0 group-hover/tcard:scale-[6] transition-transform duration-700 pointer-events-none" 
-                style={{ backgroundColor: `${color}15` }}
-            />
-        )}
-        {showHatching && (
-            <div className="absolute inset-0 opacity-20 pointer-events-none" style={HORIZONTAL_HATCHING_STYLE} />
-        )}
-        <div className="relative z-10">
-            {children}
+}> = React.memo(({ children, isLocked, color = COLORS.BLUE, id, className = '', showHatching = false, showHover = false, onClick, style }) => {
+    const colorStr = typeof color === 'string' ? color : color.str;
+    return (
+        <div
+            id={id}
+            onClick={onClick}
+            className={`p-6 border-2 relative overflow-hidden transition-all duration-300 backdrop-blur-md shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800 bg-black/60' : ''} ${onClick ? 'cursor-pointer' : ''} group/tcard ${className}`}
+            style={{
+                borderColor: isLocked ? '#1f2937' : `${colorStr}66`,
+                backgroundColor: isLocked ? undefined : `${colorStr}0A`, // Very subtle themed background (approx 4% opacity)
+                ...style
+            }}
+        >
+            {showHover && !isLocked && (
+                <div
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full scale-0 group-hover/tcard:scale-[6] transition-transform duration-700 pointer-events-none"
+                    style={{ backgroundColor: `${colorStr}15` }}
+                />
+            )}
+            {showHatching && (
+                <div className="absolute inset-0 opacity-20 pointer-events-none" style={HORIZONTAL_HATCHING_STYLE} />
+            )}
+            <div className="relative z-10">
+                {children}
+            </div>
         </div>
-    </div>
-));
+    );
+});
+
 
 export const TacticalTab: React.FC<{
     label: string,
     isActive: boolean,
     onClick: () => void,
+    color?: ColorPair | string,
     orientation?: 'vertical' | 'horizontal',
     className?: string
-}> = React.memo(({ label, isActive, onClick, orientation = 'horizontal', className = '' }) => {
+}> = React.memo(({ label, isActive, onClick, color = COLORS.GREEN, orientation = 'horizontal', className = '' }) => {
     const baseStyle = "px-6 py-2 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700 relative overflow-hidden group/tab font-bold uppercase tracking-widest transition-all";
-    const activeStyle = isActive ? "text-white animate-tab-pulsate border-white" : "bg-transparent text-zinc-400 hover:bg-white/5 border-zinc-700";
+    const activeStyle = isActive ? "text-white animate-tab-pulsate" : "bg-transparent text-zinc-400 hover:bg-white/5 border-zinc-700";
     const orientationStyle = orientation === 'vertical' ? "w-full text-left p-4 md:p-6 text-xl tracking-wider mx-2" : "text-[10px] md:text-lg";
 
+    const colorStr = typeof color === 'string' ? color : color.str;
+    const colorNum = typeof color === 'string' ? 0 : color.num; // Fallback for adjustColor if string
+
     return (
-        <button 
+        <button
             onClick={onClick}
             className={`${baseStyle} ${activeStyle} ${orientationStyle} ${className}`}
-            style={isActive ? { backgroundColor: '#166534', '--pulse-color': '#22c55e' } as any : {}}
+            style={isActive ? {
+                backgroundColor: colorStr + '33',
+                borderColor: typeof color !== 'string' ? adjustColor(color.num, -60) : color, // Fallback for string
+                '--pulse-color': colorStr
+            } as any : {}}
         >
             {isActive && (
-                <div className="absolute inset-0 opacity-20 pointer-events-none" style={HORIZONTAL_HATCHING_STYLE} />
+                <>
+                    <div className="absolute inset-0 opacity-25 pointer-events-none" style={HORIZONTAL_HATCHING_STYLE} />
+                    <div className="absolute inset-0 pointer-events-none opacity-60 shimmer-overlay" />
+                </>
             )}
             <span className="relative z-10">{label}</span>
             {isActive && orientation === 'vertical' && <span className="text-white font-bold ml-2 relative z-10">→</span>}
@@ -456,24 +487,27 @@ export const TacticalTab: React.FC<{
 export const TacticalRow: React.FC<{
     children: React.ReactNode,
     onClick?: () => void,
-    color?: string,
+    color?: ColorPair | string,
     className?: string,
     showHover?: boolean
-}> = React.memo(({ children, onClick, color = '#3b82f6', className = '', showHover = true }) => (
-    <div 
-        onClick={onClick}
-        className={`relative overflow-hidden group/trow transition-colors ${onClick ? 'cursor-pointer' : ''} ${className}`}
-    >
-        {showHover && (
-            <div 
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full scale-0 group-hover/trow:scale-[10] transition-transform duration-700 pointer-events-none opacity-0 group-hover/trow:opacity-100" 
-                style={{ backgroundColor: `${color}0D` }} 
-            />
-        )}
-        <div className="relative z-10 w-full h-full">
-            {children}
+}> = React.memo(({ children, onClick, color = COLORS.BLUE, className = '', showHover = true }) => {
+    const colorStr = typeof color === 'string' ? color : color.str;
+    return (
+        <div
+            onClick={onClick}
+            className={`relative overflow-hidden group/trow transition-colors ${onClick ? 'cursor-pointer' : ''} ${className}`}
+        >
+            {showHover && (
+                <div
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full scale-0 group-hover/trow:scale-[10] transition-transform duration-700 pointer-events-none opacity-0 group-hover/trow:opacity-100"
+                    style={{ backgroundColor: `${colorStr}0D` }}
+                />
+            )}
+            <div className="relative z-10 w-full h-full">
+                {children}
+            </div>
         </div>
-    </div>
-));
+    );
+});
 
 export default ScreenModalLayout;

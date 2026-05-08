@@ -5,15 +5,17 @@ import { VoiceSounds } from '../utils/audio/AudioLib';
 import { audioEngine } from '../utils/audio/AudioEngine';
 import { FXSystem } from './FXSystem';
 import { PlayerDeathState, DamageID, EnemyAttackType } from '../entities/player/CombatTypes';
-import { PERKS, StatusEffectType, PerkCategory } from '../content/perks';
-import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
+import { PERKS, PerkCategory } from '../content/perks';
+import { PlayerStatID, PlayerStatusFlags, TelemetrySourceOffset } from '../entities/player/PlayerTypes';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { EnemyType, EnemyFlags } from '../entities/enemies/EnemyTypes';
 import { KMH_TO_MS, FamilyMemberID } from '../content/constants';
 import { DataResolver } from '../utils/ui/DataResolver';
 import { FXParticleType } from '../types/FXTypes';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
-import { InputAction } from '../core/engine/InputTypes';
+import { InputAction } from '../core/engine/InputManager';
+import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
+import { StatusEffect, StatusEffectID } from '../types/StatusEffects';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -25,7 +27,7 @@ export class PlayerStatsSystem implements System {
     persistent = false;
     isFixedStep = true;
 
-    private cachedPassives: StatusEffectType[] = [];
+    private cachedPassives: StatusEffectID[] = [];
 
     constructor(
         private playerGroup: THREE.Group,
@@ -49,6 +51,7 @@ export class PlayerStatsSystem implements System {
         this.checkAdrenalinePatch(session, simTime);
         currentMask = this.updateBuffsAndDebuffs(session, delta, simTime, currentMask);
         this.applyStatusTicks(session, delta, simTime);
+        this.updateStatusEffects(session);
 
         // --- STATUS TRANSITION SOUNDS (VINTERDÖD FIX: Debounced & Pulse-Protected) ---
         const startMask = state.previousPerkMask;
@@ -60,22 +63,21 @@ export class PlayerStatsSystem implements System {
                 if (isNew) {
                     const perk = PERKS[i];
                     if (perk) {
-                        // VINTERDÖD FIX: Double check that we aren't just refreshing an existing duration 
+                        // Double check that we aren't just refreshing an existing duration 
                         // by accident (though previousPerkMask should prevent this).
                         if (perk.category === PerkCategory.BUFF) audioEngine.playSound(SoundID.BUFF_GAINED);
                         else if (perk.category === PerkCategory.DEBUFF) audioEngine.playSound(SoundID.DEBUFF_GAINED);
                         else if (perk.category === PerkCategory.PASSIVE) audioEngine.playSound(SoundID.PASSIVE_GAINED);
 
-                        if (!state.discoveredPerks.includes(i)) {
-                            state.discoveredPerks.push(i);
-                            if (state.sessionStats.discoveredPerks && !state.sessionStats.discoveredPerks.includes(i)) {
-                                state.sessionStats.discoveredPerks.push(i);
-                            }
-                            session.triggerDiscovery(DiscoveryType.PERK, i, perk.displayName, perk.description);
+                        if (state.discoveredPerksMap[i] === 0) {
+                            state.discoveredPerksMap[i] = 1;
+                            UIEventRingBuffer.push(UIEventType.DISCOVERY, i, DiscoveryType.PERK);
                         }
 
                         // Increment activation count
-                        state.perkTimesGained[i]++;
+                        if (!state.isPlayground) {
+                            state.perkTimesGained[i]++;
+                        }
                     }
                 }
             }
@@ -92,9 +94,44 @@ export class PlayerStatsSystem implements System {
         stats[PlayerStatID.FINAL_SPEED] = stats[PlayerStatID.SPEED] * stats[PlayerStatID.MULTIPLIER_SPEED] * KMH_TO_MS;
     }
 
+    private updateStatusEffects(session: GameSessionLogic) {
+        const state = session.state;
+        const oldMask = state.statusMask;
+        let newMask = 0;
+
+        const hp = state.statsBuffer[PlayerStatID.HP];
+        const maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
+
+        // 1. Health-based statuses
+        if (hp < maxHp * 0.25) newMask |= StatusEffect.LOW_HEALTH;
+
+        // 2. Map PlayerStatusFlags to HUD StatusEffect bitmask
+        const flags = state.statusFlags;
+        if ((flags & PlayerStatusFlags.STUNNED) !== 0) newMask |= StatusEffect.STUNNED;
+        if ((flags & PlayerStatusFlags.INVULNERABLE) !== 0) newMask |= StatusEffect.INVULNERABLE;
+        if ((flags & PlayerStatusFlags.DISORIENTED) !== 0) newMask |= StatusEffect.DISORIENTED;
+        if ((flags & PlayerStatusFlags.REGENERATING) !== 0) newMask |= StatusEffect.REGENERATING;
+        if ((flags & PlayerStatusFlags.REFLEX_SHIELD) !== 0) newMask |= StatusEffect.REFLEX_SHIELD;
+        if ((flags & PlayerStatusFlags.ADRENALINE_SHOT) !== 0) newMask |= StatusEffect.ADRENALINE;
+        if ((flags & PlayerStatusFlags.GIB_MASTER) !== 0) newMask |= StatusEffect.GIB_MASTER;
+        if ((flags & PlayerStatusFlags.QUICK_FINGER) !== 0) newMask |= StatusEffect.QUICK_FINGER;
+
+        // 3. Map effect durations
+        if (state.effectDurations[StatusEffectID.BLEEDING] > 0) newMask |= StatusEffect.BLEEDING;
+
+        // 4. Energy-based statuses
+        if (state.statsBuffer[PlayerStatID.STAMINA] <= 0) newMask |= StatusEffect.EXHAUSTED;
+
+        // Only sync if changed to maintain Zero-GC bridge performance
+        if (newMask !== oldMask) {
+            state.statusMask = newMask;
+            UIEventRingBuffer.push(UIEventType.SYNC_STATUS, newMask, 0, session.engine.simTime);
+        }
+    }
+
     private checkAdrenalinePatch(session: GameSessionLogic, simTime: number) {
         const state = session.state;
-        const perkID = StatusEffectType.ADRENALINE_PATCH;
+        const perkID = StatusEffectID.ADRENALINE_PATCH;
         const perk = PERKS[perkID];
         if (!perk) return;
 
@@ -111,15 +148,12 @@ export class PlayerStatsSystem implements System {
                 state.effectDurations[perkID] = perk.duration ?? 3000;
                 state.effectMaxDurations[perkID] = perk.duration ?? 3000;
 
-                // VINTERDÖD: Removed legacy sound trigger. 
+                // Removed legacy sound trigger. 
                 // Detection now happens in the main update loop via bitmask.
 
-                if (!state.discoveredPerks.includes(perkID)) {
-                    state.discoveredPerks.push(perkID);
-                    if (state.sessionStats.discoveredPerks && !state.sessionStats.discoveredPerks.includes(perkID)) {
-                        state.sessionStats.discoveredPerks.push(perkID);
-                    }
-                    session.triggerDiscovery(DiscoveryType.PERK, perkID, perk.displayName, perk.description);
+                if (state.discoveredPerksMap[perkID] === 0) {
+                    state.discoveredPerksMap[perkID] = 1;
+                    UIEventRingBuffer.push(UIEventType.DISCOVERY, perkID, DiscoveryType.PERK);
                 }
 
                 // Increment Crisis Management tracking
@@ -144,24 +178,21 @@ export class PlayerStatsSystem implements System {
             if (!member.following) continue;
 
             const id = member.id;
-            let passiveId: StatusEffectType | null = null;
+            let passiveId: StatusEffectID | null = null;
 
-            if (id === FamilyMemberID.LOKE) passiveId = StatusEffectType.TRICKSTERS_HASTE;
-            else if (id === FamilyMemberID.JORDAN) passiveId = StatusEffectType.EAGLES_SIGHT;
-            else if (id === FamilyMemberID.ESMERALDA) passiveId = StatusEffectType.LEAD_FEVER;
-            else if (id === FamilyMemberID.NATHALIE) passiveId = StatusEffectType.WINTERS_BONE;
+            if (id === FamilyMemberID.LOKE) passiveId = StatusEffectID.TRICKSTERS_HASTE;
+            else if (id === FamilyMemberID.JORDAN) passiveId = StatusEffectID.EAGLES_SIGHT;
+            else if (id === FamilyMemberID.ESMERALDA) passiveId = StatusEffectID.LEAD_FEVER;
+            else if (id === FamilyMemberID.NATHALIE) passiveId = StatusEffectID.WINTERS_BONE;
 
             if (passiveId !== null) {
                 mask |= (1 << passiveId); // Set bit for mask
                 this.cachedPassives[pIdx++] = passiveId;
                 const perk = PERKS[passiveId];
 
-                if (perk && !state.discoveredPerks.includes(passiveId)) {
-                    state.discoveredPerks.push(passiveId);
-                    if (state.sessionStats.discoveredPerks && !state.sessionStats.discoveredPerks.includes(passiveId)) {
-                        state.sessionStats.discoveredPerks.push(passiveId);
-                    }
-                    session.triggerDiscovery(DiscoveryType.PERK, passiveId, perk.displayName, perk.description);
+                if (perk && state.discoveredPerksMap[passiveId] === 0) {
+                    state.discoveredPerksMap[passiveId] = 1;
+                    UIEventRingBuffer.push(UIEventType.DISCOVERY, passiveId, DiscoveryType.PERK);
                 }
             }
         }
@@ -204,7 +235,7 @@ export class PlayerStatsSystem implements System {
 
             if (state.effectDurations[i] <= 0) {
                 // Fade time back to normal when buff expires
-                if (i === StatusEffectType.QUICK_FINGER && state.globalTimeScale < 1.0) {
+                if (i === StatusEffectID.QUICK_FINGER && state.globalTimeScale < 1.0) {
                     state.globalTimeScale = Math.min(1.0, state.globalTimeScale + delta * 3.0);
                 }
                 continue;
@@ -215,11 +246,12 @@ export class PlayerStatsSystem implements System {
             const perk = PERKS[i];
             if (perk) {
                 // Sync Bitmask
-                if (i === StatusEffectType.REFLEX_SHIELD) state.statusFlags |= PlayerStatusFlags.REFLEX_SHIELD;
-                if (i === StatusEffectType.ADRENALINE_PATCH) state.statusFlags |= PlayerStatusFlags.ADRENALINE_SHOT;
-                if (i === StatusEffectType.GIB_MASTER) state.statusFlags |= PlayerStatusFlags.GIB_MASTER;
-                if (i === StatusEffectType.QUICK_FINGER) state.statusFlags |= PlayerStatusFlags.QUICK_FINGER;
-                if (i === StatusEffectType.STUNNED) state.statusFlags |= PlayerStatusFlags.STUNNED;
+                if (i === StatusEffectID.REFLEX_SHIELD) state.statusFlags |= PlayerStatusFlags.REFLEX_SHIELD;
+                if (i === StatusEffectID.ADRENALINE_PATCH) state.statusFlags |= PlayerStatusFlags.ADRENALINE_SHOT;
+                if (i === StatusEffectID.GIB_MASTER) state.statusFlags |= PlayerStatusFlags.GIB_MASTER;
+                if (i === StatusEffectID.QUICK_FINGER) state.statusFlags |= PlayerStatusFlags.QUICK_FINGER;
+                if (i === StatusEffectID.STUNNED) state.statusFlags |= PlayerStatusFlags.STUNNED;
+                if (i === StatusEffectID.DISORIENTED) state.statusFlags |= PlayerStatusFlags.DISORIENTED;
 
                 if (perk.speedModifier) speedMod += perk.speedModifier;
                 if (perk.reloadModifier) reloadMod += perk.reloadModifier;
@@ -227,7 +259,7 @@ export class PlayerStatsSystem implements System {
                 if (perk.damageResistModifier) resistMod += perk.damageResistModifier;
                 if (perk.rangeModifier) rangeMod += perk.rangeModifier;
 
-                if (i === StatusEffectType.DISORIENTED) {
+                if (i === StatusEffectID.DISORIENTED) {
                     state.statusFlags |= PlayerStatusFlags.DISORIENTED;
                     session.engine.camera.shake(0.05);
                 }
@@ -277,11 +309,11 @@ export class PlayerStatsSystem implements System {
                 if (!perk || perk.dotDamage === undefined || perk.dotDamage <= 0) continue;
 
                 let dmgID = DamageID.PHYSICAL;
-                if (i === StatusEffectType.BURNING) dmgID = DamageID.BURN;
-                else if (i === StatusEffectType.BLEEDING) dmgID = DamageID.BLEED;
-                else if (i === StatusEffectType.ELECTRIFIED) dmgID = DamageID.ELECTRIC;
-                else if (i === StatusEffectType.DROWNING) dmgID = DamageID.DROWNING;
-                else if (i === StatusEffectType.FREEZING) dmgID = DamageID.BURN;
+                if (i === StatusEffectID.BURNING) dmgID = DamageID.BURN;
+                else if (i === StatusEffectID.BLEEDING) dmgID = DamageID.BLEED;
+                else if (i === StatusEffectID.ELECTRIFIED) dmgID = DamageID.ELECTRIC;
+                else if (i === StatusEffectID.DROWNING) dmgID = DamageID.DROWNING;
+                else if (i === StatusEffectID.FREEZING) dmgID = DamageID.BURN;
 
                 this.handlePlayerHit(session, perk.dotDamage, null, dmgID, true);
 
@@ -289,9 +321,9 @@ export class PlayerStatsSystem implements System {
                 state.perkDamageDealt[i] += perk.dotDamage;
 
                 // Visuals
-                if (i === StatusEffectType.BLEEDING) {
+                if (i === StatusEffectID.BLEEDING) {
                     FXSystem.spawnParticle(session.engine.scene, state.particles, this.playerGroup.position.x, 1.5, this.playerGroup.position.z, FXParticleType.BLOOD_SPLATTER, 6);
-                } else if (i === StatusEffectType.BURNING) {
+                } else if (i === StatusEffectID.BURNING) {
                     _v1.set(this.playerGroup.position.x + (Math.random() - 0.5) * 0.5, this.playerGroup.position.y + 1.8, this.playerGroup.position.z + (Math.random() - 0.5) * 0.5);
                     FXSystem.spawnParticle(session.engine.scene, state.particles, _v1.x, _v1.y, _v1.z, FXParticleType.FLAME, 1);
                 }
@@ -305,7 +337,7 @@ export class PlayerStatsSystem implements System {
         attacker: any,
         type: DamageID,
         isDoT: boolean = false,
-        effectType?: StatusEffectType,
+        effectType?: StatusEffectID,
         effectDuration?: number,
         effectIntensity?: number,
         specificAttackType?: EnemyAttackType
@@ -315,7 +347,7 @@ export class PlayerStatsSystem implements System {
 
         if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0 || state.sectorState?.isInvincible) return;
 
-        if (state.effectDurations[StatusEffectType.REFLEX_SHIELD] > 0 || state.effectDurations[StatusEffectType.ADRENALINE_PATCH] > 0) {
+        if (state.effectDurations[StatusEffectID.REFLEX_SHIELD] > 0 || state.effectDurations[StatusEffectID.ADRENALINE_PATCH] > 0) {
             // Reflex shield reduces damage by 50% in the calculation below, 
             // but we allow the hit to "land" for feedback.
         }
@@ -323,9 +355,9 @@ export class PlayerStatsSystem implements System {
         let actualDmg = damage * state.statsBuffer[PlayerStatID.MULTIPLIER_DMG_RESIST];
 
         // Track Damage Absorbed specifically by Reflex Shield (vinterdöd Step 2)
-        if (state.effectDurations[StatusEffectType.REFLEX_SHIELD] > 0) {
+        if (state.effectDurations[StatusEffectID.REFLEX_SHIELD] > 0) {
             // Shield is 50% reduction.
-            state.perkDamageAbsorbed[StatusEffectType.REFLEX_SHIELD] += (damage * 0.5);
+            state.perkDamageAbsorbed[StatusEffectID.REFLEX_SHIELD] += (damage * 0.5);
         }
 
         const isBite = type === DamageID.BITE;
@@ -345,23 +377,26 @@ export class PlayerStatsSystem implements System {
         // Damage Telemetry
         const damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
         if (damageTracker) {
-            let sourceKey = type; // Use the direct DamageID (SMI)
+            let telemetrySourceKey = 0;
+            let telemetryAttackIndex = attackIndex;
 
             if (attacker) {
                 const isBossAttacker = (attacker.statusFlags & EnemyFlags.BOSS) !== 0;
                 if (isBossAttacker && attacker.bossId !== undefined) {
-                    sourceKey = DamageID.BOSS;
+                    // Bosses: TelemetrySourceOffset.BOSS + BossID
+                    telemetrySourceKey = TelemetrySourceOffset.BOSS + attacker.bossId;
+                    // For bosses, we use the actual attack type if provided, else HIT/BITE
+                    if (specificAttackType !== undefined) telemetryAttackIndex = specificAttackType;
                 } else {
-                    sourceKey = attacker.type; // WALKER, RUNNER, etc. (0-15 range)
+                    // Normal Enemies: TelemetrySourceOffset.ENEMY + EnemyType
+                    telemetrySourceKey = TelemetrySourceOffset.ENEMY + attacker.type;
                 }
+            } else {
+                // Environment / Pseudo-Weapons: TelemetrySourceOffset.ENVIRONMENT + DamageID
+                telemetrySourceKey = TelemetrySourceOffset.ENVIRONMENT + type;
             }
 
-            let telemetryAttackIndex = attackIndex;
-            if (attacker && (attacker.statusFlags & EnemyFlags.BOSS) !== 0 && attacker.bossId !== undefined) {
-                telemetryAttackIndex = attacker.bossId;
-            }
-
-            damageTracker.recordIncomingDamage(session, actualDmg, sourceKey, telemetryAttackIndex, (attacker?.statusFlags & EnemyFlags.BOSS) !== 0);
+            damageTracker.recordIncomingDamage(session, actualDmg, telemetrySourceKey as any, telemetryAttackIndex, (attacker?.statusFlags & EnemyFlags.BOSS) !== 0);
         }
 
         if (effectType !== undefined) {
@@ -382,13 +417,18 @@ export class PlayerStatsSystem implements System {
                 state.effectIntensities[effectType] = effectIntensity !== undefined ? effectIntensity : 1;
 
                 // --- SOURCE ATTRIBUTION (Zero-GC) ---
-                let sourceKey = type;
+                let effectSourceKey = type;
                 if (attacker) {
                     const isBossAttacker = (attacker.statusFlags & EnemyFlags.BOSS) !== 0;
-                    if (isBossAttacker && attacker.bossId !== undefined) sourceKey = DamageID.BOSS;
-                    else sourceKey = attacker.type;
+                    if (isBossAttacker && attacker.bossId !== undefined) {
+                        effectSourceKey = 16 + attacker.bossId;
+                    } else {
+                        effectSourceKey = attacker.type;
+                    }
+                } else {
+                    effectSourceKey = 24 + type;
                 }
-                state.effectSources[effectType] = sourceKey;
+                state.effectSources[effectType] = effectSourceKey;
             }
         }
 
@@ -415,7 +455,7 @@ export class PlayerStatsSystem implements System {
         }
     }
 
-    private executePlayerDeath(session: GameSessionLogic, attacker: any, type: DamageID, attackType: EnemyAttackType, attackIndex: number, now: number, lethalEffect?: StatusEffectType) {
+    private executePlayerDeath(session: GameSessionLogic, attacker: any, type: DamageID, attackType: EnemyAttackType, attackIndex: number, now: number, lethalEffect?: StatusEffectID) {
         const state = session.state;
 
         // Telemetry
@@ -439,8 +479,8 @@ export class PlayerStatsSystem implements System {
         if (attacker && (attacker.statusFlags & EnemyFlags.BOSS) !== 0 && attacker.bossId !== undefined) {
             state.killerName = DataResolver.getEnemyName(EnemyType.BOSS, attacker.bossId);
             state.killedByEnemy = true;
-            state.killerAttackName = DataResolver.getAttackName(attackType); 
-            state.lethalSourceId = attacker.bossId;
+            state.killerAttackName = DataResolver.getAttackName(attackType);
+            state.lethalSourceId = TelemetrySourceOffset.BOSS + attacker.bossId;
         } else if (attacker) {
             state.killerName = DataResolver.getEnemyName(attacker.type);
             state.killedByEnemy = true;
@@ -450,18 +490,22 @@ export class PlayerStatsSystem implements System {
             // Check if there's a lethal DoT source
             if (lethalEffect !== undefined && state.effectSources[lethalEffect] !== 0) {
                 const source = state.effectSources[lethalEffect];
-                if (source < 16) {
-                    state.killerName = DataResolver.getEnemyName(source);
+                // Resolve name based on mapping (0-15: Enemy, 16-23: Boss, 24+: DamageID)
+                if (source < TelemetrySourceOffset.BOSS) {
+                    state.killerName = DataResolver.getEnemyName(source as EnemyType);
+                    state.killedByEnemy = true;
+                } else if (source < TelemetrySourceOffset.ENVIRONMENT) {
+                    state.killerName = DataResolver.getEnemyName(EnemyType.BOSS, (source - TelemetrySourceOffset.BOSS) as any);
                     state.killedByEnemy = true;
                 } else {
-                    state.killerName = DataResolver.getDamageName(source);
+                    state.killerName = DataResolver.getDamageName((source - TelemetrySourceOffset.ENVIRONMENT) as DamageID);
                     state.killedByEnemy = false;
                 }
                 state.lethalSourceId = source;
             } else {
                 state.killerName = DataResolver.getDamageName(type);
                 state.killedByEnemy = false;
-                state.lethalSourceId = type;
+                state.lethalSourceId = TelemetrySourceOffset.ENVIRONMENT + type;
             }
             state.killerAttackName = 'HIDDEN';
         }
@@ -482,7 +526,7 @@ export class PlayerStatsSystem implements System {
         state.deathVel.y = 4;
     }
 
-    public onEnemyKilled(session: GameSessionLogic, enemy: any, now: number) {
+    public onEnemyKilled(session: GameSessionLogic, enemy: any, now: number, weaponId: DamageID, distSq?: number) {
         const state = session.state;
 
         // Rolling kill streak (last 5 kills)
@@ -492,32 +536,43 @@ export class PlayerStatsSystem implements System {
         // Check for 3-kill streak (Adrenaline)
         const kill3Time = state.killStreakBuffer[2]; // 3rd most recent
         if (kill3Time > 0 && (now - kill3Time) < 3000) {
-            const cooldown = PERKS[StatusEffectType.ADRENALINE_PATCH]?.cooldown || 15000;
+            const cooldown = PERKS[StatusEffectID.ADRENALINE_PATCH]?.cooldown || 15000;
             if (now - (state.lastAdrenalineTime || 0) > cooldown) {
                 state.lastAdrenalineTime = now;
-                this.triggerBuff(session, StatusEffectType.ADRENALINE_PATCH, now);
+                this.triggerBuff(session, StatusEffectID.ADRENALINE_PATCH, now);
             }
         }
 
         // Check for 5-kill streak (Gib Master)
         const kill5Time = state.killStreakBuffer[0]; // 5th most recent
         if (kill5Time > 0 && (now - kill5Time) < 5000) {
-            const cooldown = PERKS[StatusEffectType.GIB_MASTER]?.cooldown || 30000;
+            const cooldown = PERKS[StatusEffectID.GIB_MASTER]?.cooldown || 30000;
             if (now - (state.lastGibMasterTime || 0) > cooldown) {
                 state.lastGibMasterTime = now;
-                this.triggerBuff(session, StatusEffectType.GIB_MASTER, now);
+                this.triggerBuff(session, StatusEffectID.GIB_MASTER, now);
+            }
+        }
+
+        // Check for Quick Finger (Any kill)
+        const qfPerk = PERKS[StatusEffectID.QUICK_FINGER];
+        if (qfPerk) {
+            const cooldown = qfPerk.cooldown || 10000;
+            if (now - (state.lastQuickFingerTime || 0) > cooldown) {
+                state.lastQuickFingerTime = now;
+                this.triggerBuff(session, StatusEffectID.QUICK_FINGER, now);
             }
         }
 
         // --- OPTIMIZED KILL TRACKING (Zero-GC / Step 2) ---
-        if (enemy.type !== undefined) {
-            state.enemyKills[enemy.type]++;
+        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+        if (tracker) {
+            tracker.recordKill(session, enemy.type, (enemy.statusFlags & EnemyFlags.BOSS) !== 0, enemy.bossId, weaponId, distSq);
         }
     }
 
     public triggerReflexShield(session: GameSessionLogic, now: number) {
         const state = session.state;
-        const perkID = StatusEffectType.REFLEX_SHIELD;
+        const perkID = StatusEffectID.REFLEX_SHIELD;
         const perk = PERKS[perkID];
 
         let cleansedCount = 0;
@@ -543,7 +598,7 @@ export class PlayerStatsSystem implements System {
         state.perkTimesGained[perkID]++;
     }
 
-    private triggerBuff(session: GameSessionLogic, type: StatusEffectType, now: number) {
+    private triggerBuff(session: GameSessionLogic, type: StatusEffectID, now: number) {
         const state = session.state;
         const perk = PERKS[type];
         if (perk) {
@@ -558,19 +613,20 @@ export class PlayerStatsSystem implements System {
     public triggerPerfectDodge(session: GameSessionLogic) {
         const state = session.state;
         const now = state.simTime;
-        const cooldown = PERKS[StatusEffectType.QUICK_FINGER]?.cooldown || 30000;
+        const cooldown = PERKS[StatusEffectID.QUICK_FINGER]?.cooldown || 30000;
 
         if (now - state.lastPerfectDodgeTime > cooldown) {
             state.lastPerfectDodgeTime = now;
-            this.triggerBuff(session, StatusEffectType.QUICK_FINGER, now);
+            this.triggerBuff(session, StatusEffectID.QUICK_FINGER, now);
             state.globalTimeScale = 0.2; // ACTIVATE SLOWMO
             audioEngine.playSound(SoundID.BUFF_GAINED);
 
             // Notification for the player
             if (session.triggerDiscovery) {
-                const perk = PERKS[StatusEffectType.QUICK_FINGER];
-                if (perk) {
-                    session.triggerDiscovery(DiscoveryType.PERK, StatusEffectType.QUICK_FINGER, perk.displayName, perk.description);
+                const perk = PERKS[StatusEffectID.QUICK_FINGER];
+                if (perk && state.discoveredPerksMap[StatusEffectID.QUICK_FINGER] === 0) {
+                    state.discoveredPerksMap[StatusEffectID.QUICK_FINGER] = 1;
+                    UIEventRingBuffer.push(UIEventType.DISCOVERY, StatusEffectID.QUICK_FINGER, DiscoveryType.PERK);
                 }
             }
         }

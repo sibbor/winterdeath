@@ -48,7 +48,7 @@ export const EnemyAttackHandler = {
         playSound: (id: SoundID) => void
     }, delta: number, simTime: number, renderTime: number) => {
         const range = att.range || ENEMY_ATTACK_RANGE[e.type];
-        // VINTERDÖD: Add 10% tolerance buffer for "fairness"
+        // Add 10% tolerance buffer for "fairness"
         const bufferedRange = range * 1.1;
         const inRange = distSq < (bufferedRange * bufferedRange);
 
@@ -68,7 +68,7 @@ export const EnemyAttackHandler = {
     }, delta: number, simTime: number, renderTime: number) => {
         const pos = e.mesh.position;
         const effectiveRange = att.radius || att.range || ENEMY_ATTACK_RANGE[e.type];
-        // VINTERDÖD: 10% Tolerance Buffer
+        // 10% Tolerance Buffer
         const bufferedRange = effectiveRange * 1.1;
         const inRange = distSq < (bufferedRange * bufferedRange);
 
@@ -77,12 +77,12 @@ export const EnemyAttackHandler = {
                 if (inRange) {
                     callbacks.onPlayerHit(att.damage, e, DamageID.BITE, false, att.effect, att.effectDuration, att.effectDamage, att.type);
 
-                    // VINTERDÖD: Walker Grapple Mechanic
+                    // Walker Grapple Mechanic
                     if (e.type === EnemyType.WALKER) {
                         e.state = AIState.GRAPPLE;
                         e.statusFlags |= EnemyFlags.GRAPPLING;
                         e.grappleDuration = 2.0 + Math.random() * 1.0;
-                        e.attackTimer = -1; // VINTERDÖD: Yield control to Grapple system
+                        e.attackTimer = -1; // Yield control to Grapple system
                     }
 
                     if (callbacks.spawnParticle) {
@@ -97,12 +97,12 @@ export const EnemyAttackHandler = {
                 if (inRange) {
                     callbacks.onPlayerHit(att.damage, e, DamageID.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
 
-                    // VINTERDÖD: Runner Jump-to-Grapple Mechanic
+                    // Runner Jump-to-Grapple Mechanic
                     if (e.type === EnemyType.RUNNER) {
                         e.state = AIState.GRAPPLE;
                         e.statusFlags |= EnemyFlags.GRAPPLING;
                         e.grappleDuration = 1.5 + Math.random() * 0.5;
-                        e.attackTimer = -1; // VINTERDÖD: Yield control to Grapple system
+                        e.attackTimer = -1; // Yield control to Grapple system
                     }
                 }
                 callbacks.playSound(SoundID.ZOMBIE_ATTACK_SMASH);
@@ -190,7 +190,7 @@ export const EnemyAttackHandler = {
         const r = att.range || 10.0;
         const rangeSq = r * r;
 
-        // VINTERDÖD: Hoist distance calc if within potential range
+        // Hoist distance calc if within potential range
         let dist = -1;
         if (currentDistSq < rangeSq * 2.25) { // 1.5x range buffer
             dist = Math.sqrt(currentDistSq);

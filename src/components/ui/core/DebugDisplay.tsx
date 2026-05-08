@@ -147,7 +147,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
             const l = logs[i] as any;
             logElements.push(
                 <div key={i} className="border-b border-white/5 pb-1 last:border-0" style={{ color: l.color }}>
-                    <span className="opacity-50 mr-2 text-[9px]">[{new Date(l.time).toISOString().split('T')[1].split('Z')[0]}]</span>
+                    <span className="opacity-50 mr-2 text-[10px]">[{new Date(l.time).toISOString().split('T')[1].split('Z')[0]}]</span>
                     {l.msg}
                 </div>
             );
@@ -225,7 +225,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
                         <div>
                             <div onClick={(e) => { e.stopPropagation(); setSystemsExpanded(v => !v); }} className="flex items-center justify-between text-white/40 uppercase text-[10px] mb-0.5 cursor-pointer hover:text-white/70 select-none">
                                 <span>{t('ui.systems')}</span>
-                                <span className="text-[8px]">{systemsExpanded ? '▾' : '▸'}</span>
+                                <span className="text-[10px]">{systemsExpanded ? '▾' : '▸'}</span>
                             </div>
                             {systemsExpanded && (
                                 <div className="space-y-0.5">

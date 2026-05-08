@@ -62,8 +62,8 @@ export class DamageNumberSystem implements System {
             default: {
                 const weaponData = WEAPONS[type];
                 if (weaponData) {
-                    const colorStr = WeaponCategoryColors[weaponData.category] || '#ffffff';
-                    return parseInt(colorStr.replace('#', '0x'), 16);
+                    const colorPair = WeaponCategoryColors[weaponData.category];
+                    if (colorPair) return colorPair.num;
                 }
             }
         }

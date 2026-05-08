@@ -3,6 +3,7 @@ import { BossID } from '../../game/session/SectorTypes';
 import { AttackDefinition, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
+import { ENEMY_COLORS } from '../../utils/ui/ColorUtils';
 import {
     EnemyType, NoiseType, AIState, EnemyDeathState, EnemyEffectType, EnemyFlags, ZombieTypeData, EnemyDeathDecal, EnemyGrowlType
 } from './EnemyBase';
@@ -57,7 +58,7 @@ export const SEARCH_TIMERS = new Float32Array([
 
 
 // --- BASE STAT ARRAYS (O(1) Cache-Friendly) ---
-// VINTERDÖD: Flat arrays for direct indexing by EnemyType.
+// Flat arrays for direct indexing by EnemyType.
 // Initialized from ZOMBIE_TYPES registry. Pre-allocated to 32 bits for SMI safety.
 
 export const ENEMY_MAX_HP = new Float32Array(32);
@@ -83,7 +84,7 @@ Object.keys(ZOMBIE_TYPES).forEach(key => {
     ENEMY_MAX_HP[typeSMI] = data.hp;
     ENEMY_BASE_SPEED[typeSMI] = data.speed;
     ENEMY_SCORE[typeSMI] = data.score;
-    ENEMY_COLOR[typeSMI] = data.color;
+    ENEMY_COLOR[typeSMI] = data.color.num;
     ENEMY_SCALE[typeSMI] = data.scale;
     ENEMY_WIDTH_SCALE[typeSMI] = data.widthScale;
 
@@ -93,7 +94,7 @@ Object.keys(ZOMBIE_TYPES).forEach(key => {
     else if (typeSMI === EnemyType.TANK) ENEMY_ATTACK_RANGE[typeSMI] = 2.5;
     else if (typeSMI === EnemyType.BOMBER) ENEMY_ATTACK_RANGE[typeSMI] = 3.5;
 
-    // VINTERDÖD: Ensure all attacks have defined force (Zero-GC safety for Handler)
+    // Ensure all attacks have defined force (Zero-GC safety for Handler)
     if (data.attacks) {
         data.attacks.forEach((att: any) => {
             if (att.force === undefined) {
@@ -117,12 +118,12 @@ Object.keys(BOSSES).forEach(key => {
     ENEMY_MAX_HP[typeSMI] = data.hp;
     ENEMY_BASE_SPEED[typeSMI] = data.speed;
     ENEMY_SCORE[typeSMI] = 2000; // Standard Boss Score
-    ENEMY_COLOR[typeSMI] = data.color || 0x4a0404;
+    ENEMY_COLOR[typeSMI] = data.color?.num || ENEMY_COLORS.BOSS_0.num;
     ENEMY_SCALE[typeSMI] = data.scale || 3.0;
     ENEMY_WIDTH_SCALE[typeSMI] = data.widthScale || 1.0;
     ENEMY_ATTACK_RANGE[typeSMI] = 5.0;
 
-    // VINTERDÖD: Zero-GC force initialization for Boss attacks
+    // Zero-GC force initialization for Boss attacks
     if (data.attacks) {
         data.attacks.forEach((att: any) => {
             if (att.force === undefined) {
@@ -206,7 +207,7 @@ export interface Enemy {
     knockbackVel: THREE.Vector3;
     deathVel: THREE.Vector3;
 
-    // VINTERDÖD: Direct properties instead of userData indirection
+    // Direct properties instead of userData indirection
     targetPos: THREE.Vector3;
     spinVel: THREE.Vector3;
     hitDir: THREE.Vector3;

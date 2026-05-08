@@ -6,7 +6,7 @@ import ScreenModalLayout, { TacticalCard } from '../../layout/ScreenModalLayout'
 import { useHudStore } from '../../../../hooks/useHudStore';
 import { HudStore } from '../../../../store/HudStore';
 import { DamageID } from '../../../../entities/player/CombatTypes';
-
+import { colorToHex } from '../../../../utils/ui/ColorUtils';
 
 interface ScreenMapProps {
     onClose: () => void;
@@ -57,7 +57,7 @@ const getMapPercent = (x: number, z: number, bounds: any) => {
     };
 };
 
-const MapCanvas = React.memo(({ mapItems, bounds, groupedEntities, setTooltipData, onMouseMove, onInteractionStart, onInteractionEnd, onClickImmediate, isMobileDevice }: any) => {
+const MapCanvas = React.memo(({ mapItems, mapItemsCount, bounds, groupedEntities, setTooltipData, onMouseMove, onInteractionStart, onInteractionEnd, onClickImmediate, isMobileDevice }: any) => {
 
     // Zero-GC Input Handlers
     const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -100,7 +100,7 @@ const MapCanvas = React.memo(({ mapItems, bounds, groupedEntities, setTooltipDat
             const px = ((x - bounds.minX) / width) * 100;
             lines.push(
                 <div key={`v-${x}`} className="absolute top-0 bottom-0 border-l border-white/5" style={{ left: `${px}%` }}>
-                    <span className="absolute top-2 left-1 text-[8px] text-white/20 font-mono">{x}</span>
+                    <span className="absolute top-2 left-1 text-[10px] text-white/20 font-mono">{x}</span>
                 </div>
             );
         }
@@ -108,7 +108,7 @@ const MapCanvas = React.memo(({ mapItems, bounds, groupedEntities, setTooltipDat
             const py = ((z - bounds.minZ) / height) * 100;
             lines.push(
                 <div key={`h-${z}`} className="absolute left-0 right-0 border-t border-white/5" style={{ top: `${py}%` }}>
-                    <span className="absolute left-2 top-0 text-[8px] text-white/20 font-mono">{z}</span>
+                    <span className="absolute left-2 top-0 text-[10px] text-white/20 font-mono">{z}</span>
                 </div>
             );
         }
@@ -127,40 +127,47 @@ const MapCanvas = React.memo(({ mapItems, bounds, groupedEntities, setTooltipDat
 
             {/* Polygon Layer (Terrain/Buildings) */}
             <svg className="absolute inset-0 pointer-events-none w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                {mapItems.filter((item: MapItem) => item.points && item.points.length > 0).map((poly: MapItem) => (
-                    <polygon
-                        key={poly.id}
-                        points={poly.points!.map(p => {
-                            const pos = getMapPercent(p.x, p.z, bounds);
-                            return `${pos.x},${pos.y}`;
-                        }).join(' ')}
-                        fill={poly.color || 'gray'}
-                        fillOpacity={poly.type === MapItemType.BUILDING ? 0.8 : 0.4}
-                        stroke={poly.color || 'gray'}
-                        strokeOpacity={0.6}
-                        strokeWidth="0.2"
-                    />
-                ))}
-                {/* Circular Lakes (Fallback for radius without points) */}
-                {mapItems.filter((item: MapItem) => item.type === MapItemType.LAKE && !item.points).map((lake: MapItem) => {
-                    const pos = getMapPercent(lake.x, lake.z, bounds);
-                    const rx = (lake.radius! / (bounds.maxX - bounds.minX)) * 100;
-                    const ry = (lake.radius! / (bounds.maxZ - bounds.minZ)) * 100;
-                    return (
-                        <ellipse
-                            key={lake.id}
-                            cx={pos.x}
-                            cy={pos.y}
-                            rx={rx}
-                            ry={ry}
-                            fill={lake.color || '#3b82f6'}
-                            fillOpacity={0.4}
-                            stroke={lake.color || '#3b82f6'}
-                            strokeOpacity={0.6}
-                            strokeWidth="0.2"
-                        />
-                    );
-                })}
+                {(() => {
+                    const elements = [];
+                    for (let i = 0; i < mapItemsCount; i++) {
+                        const item = mapItems[i];
+                        if (item.points && item.points.length > 0) {
+                            elements.push(
+                                <polygon
+                                    key={item.id}
+                                    points={item.points.map((p: any) => {
+                                        const pos = getMapPercent(p.x, p.z, bounds);
+                                        return `${pos.x},${pos.y}`;
+                                    }).join(' ')}
+                                    fill={item.color || 'gray'}
+                                    fillOpacity={item.type === MapItemType.BUILDING ? 0.8 : 0.4}
+                                    stroke={item.color || 'gray'}
+                                    strokeOpacity={0.6}
+                                    strokeWidth="0.2"
+                                />
+                            );
+                        } else if (item.type === MapItemType.LAKE) {
+                            const pos = getMapPercent(item.x, item.z, bounds);
+                            const rx = (item.radius! / (bounds.maxX - bounds.minX)) * 100;
+                            const ry = (item.radius! / (bounds.maxZ - bounds.minZ)) * 100;
+                            elements.push(
+                                <ellipse
+                                    key={item.id}
+                                    cx={pos.x}
+                                    cy={pos.y}
+                                    rx={rx}
+                                    ry={ry}
+                                    fill={item.color || colorToHex(0x3b82f6)}
+                                    fillOpacity={0.4}
+                                    stroke={item.color || colorToHex(0x3b82f6)}
+                                    strokeOpacity={0.6}
+                                    strokeWidth="0.2"
+                                />
+                            );
+                        }
+                    }
+                    return elements;
+                })()}
             </svg>
 
             <div className="absolute left-1/2 top-0 bottom-0 border-l border-blue-500/10 pointer-events-none"></div>
@@ -204,16 +211,16 @@ const LiveEnemyDots = React.memo(({ bounds }: { bounds: any }) => {
             if (!containerRef.current) return;
             const state = HudStore.getState();
             const vecBuf = state.vectorBuffer; // 256 length (x, z pairs)
-            
+
             const pool = poolRef.current;
             for (let i = 0; i < 128; i++) {
                 const dot = pool[i];
                 if (!dot) continue;
-                
+
                 const idx = i * 2;
                 const ex = vecBuf[idx];
                 const ez = vecBuf[idx + 1];
-                
+
                 // -99999 is our sentinel value from HudSystem for inactive slots
                 if (ex < -90000) {
                     dot.style.display = 'none';
@@ -253,7 +260,7 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
     useEffect(() => {
         const handleUpdate = (data: any) => {
             const state = HudStore.getState();
-            
+
             // Update Player
             if (playerRef.current) {
                 const posP = getMapPercent(state.playerPos.x, state.playerPos.z, bounds);
@@ -263,7 +270,7 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
 
             // Update Boss
             if (bossRef.current) {
-                if (state.boss.active && !state.bossDefeated && state.bossPos) {
+                if (state.bossActive && !state.bossDefeated && state.bossPos) {
                     const posB = getMapPercent(state.bossPos.x, state.bossPos.z, bounds);
                     bossRef.current.style.display = 'block';
                     bossRef.current.style.left = `${posB.x}%`;
@@ -345,7 +352,7 @@ const LivePlayerCoordinates = React.memo(() => {
 const LONG_PRESS_DURATION = 600;
 
 export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, isMobileDevice }) => {
-    const mapItems = useHudStore(s => s.mapItems);
+    const { mapItems, mapItemsCount } = useHudStore(s => ({ mapItems: s.mapItems, mapItemsCount: s.mapItemsCount }), true);
     const sectorName = useHudStore(s => s.sectorName);
 
     const [mouseCoords, setMouseCoords] = useState<{ x: number, z: number } | null>(null);
@@ -354,9 +361,9 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
     const pressCoords = useRef<{ x: number, z: number } | null>(null);
 
     const bounds = useMemo(() => {
-        if (mapItems.length === 0) return { minX: -200, maxX: 200, minZ: -200, maxZ: 200 };
+        if (mapItemsCount === 0) return { minX: -200, maxX: 200, minZ: -200, maxZ: 200 };
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        for (let i = 0; i < mapItems.length; i++) {
+        for (let i = 0; i < mapItemsCount; i++) {
             const e = mapItems[i];
             minX = Math.min(minX, e.x); maxX = Math.max(maxX, e.x);
             minZ = Math.min(minZ, e.z); maxZ = Math.max(maxZ, e.z);
@@ -367,11 +374,11 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
 
         const pad = 100;
         return { minX: minX - pad, maxX: maxX + pad, minZ: minZ - pad, maxZ: maxZ + pad };
-    }, [mapItems]);
+    }, [mapItems, mapItemsCount]);
 
     const staticGroupedEntities = useMemo(() => {
         const groups: Record<string, MapItem[]> = {};
-        for (let i = 0; i < mapItems.length; i++) {
+        for (let i = 0; i < mapItemsCount; i++) {
             const item = mapItems[i];
             const key = `${Math.round(item.x / 10)}_${Math.round(item.z / 10)}`;
             if (!groups[key]) groups[key] = [];
@@ -384,7 +391,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
             result.push(sorted);
         }
         return result;
-    }, [mapItems]);
+    }, [mapItems, mapItemsCount]);
 
     const handleSetMouseCoords = useCallback((x: number, z: number) => {
         // Debounce or reduce resolution if needed, but standard mouse move is fine for occasional overlay
@@ -426,12 +433,12 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
                 <div className="flex items-center gap-2">🔍 {t('ui.clue')}</div>
             </div>
             <div className="flex gap-4 justify-center">
-                <TacticalCard color="#3b82f6" className="px-3 py-1 flex items-center gap-2">
+                <TacticalCard color={0x3b82f6} className="px-3 py-1 flex items-center gap-2">
                     <span className="text-[10px] text-blue-400 font-bold uppercase">{t('ui.player')}</span>
                     <LivePlayerCoordinates />
                 </TacticalCard>
                 {!isMobileDevice && mouseCoords && (
-                    <TacticalCard color="#94a3b8" className="px-3 py-1 flex items-center gap-2">
+                    <TacticalCard color={0x94a3b8} className="px-3 py-1 flex items-center gap-2">
                         <span className="text-[10px] text-gray-400 font-bold uppercase">{t('ui.coordinates')}</span>
                         <span className="text-sm font-mono text-white font-bold">
                             {`${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}`}
@@ -468,6 +475,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
                 >
                     <MapCanvas
                         mapItems={mapItems}
+                        mapItemsCount={mapItemsCount}
                         bounds={bounds}
                         groupedEntities={staticGroupedEntities}
                         setTooltipData={setTooltipData}

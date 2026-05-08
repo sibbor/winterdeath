@@ -1,4 +1,5 @@
 import { AttackDefinition } from '../../entities/player/CombatTypes';
+import { ColorPair } from '../../utils/ui/ColorUtils';
 
 /**
  * SMI ENUMS (Explicit values for Persistence)
@@ -107,7 +108,7 @@ export interface ZombieTypeData {
     hp: number;
     speed: number;
     score: number;
-    color: number;
+    color: ColorPair;
     scale: number;
     widthScale: number;
     attacks: AttackDefinition[];

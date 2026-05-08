@@ -1,6 +1,7 @@
 import { ZombieTypeData, EnemyType } from '../../entities/enemies/EnemyBase';
+import { ColorPair, ENEMY_COLORS } from '../../utils/ui/ColorUtils';
 import { EnemyAttackType } from '../../entities/player/CombatTypes';
-import { StatusEffectType } from '../perks';
+import { StatusEffectID } from '../perks';
 
 /*
 Zombie data:
@@ -27,7 +28,7 @@ Special attacks with status effects for the player:
 - range = numeric value set in meters; defines how far the attack reaches
 - radius = AoE attack radius set in meters (not set or numeric value if active)
 - chargeTime = time in ms it takes for the boss to activate the ability
-- effect = status the player gets (StatusEffectType) if hit by the attack
+- effect = status the player gets (StatusEffectID) if hit by the attack
 
 Status effects are defined in the PERKS database.
 */
@@ -39,7 +40,7 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         hp: 50,
         speed: 15,
         score: 20,
-        color: 0xc27ba0, // Pinkish
+        color: ENEMY_COLORS.WALKER, // Pinkish
         scale: 1.0,
         widthScale: 1.1,
         attacks: [
@@ -53,7 +54,7 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
                 damage: 5,
                 range: 3,
                 cooldown: 10000,
-                effect: StatusEffectType.BLEEDING,
+                effect: StatusEffectID.BLEEDING,
             }
         ]
     },
@@ -63,7 +64,7 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         hp: 30,
         speed: 20.0,
         score: 10,
-        color: 0x33a366, // Green
+        color: ENEMY_COLORS.RUNNER, // Green
         scale: 0.8,
         widthScale: 1.0,
         attacks: [
@@ -77,7 +78,7 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
                 damage: 5,
                 range: 5,
                 cooldown: 5000,
-                effect: StatusEffectType.SLOWED,
+                effect: StatusEffectID.SLOWED,
             }
         ]
     },
@@ -87,7 +88,7 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         hp: 175,
         speed: 13.0,
         score: 50,
-        color: 0x2b6599, // Blue
+        color: ENEMY_COLORS.TANK, // Blue
         scale: 1.5,
         widthScale: 1.2,
         attacks: [
@@ -101,7 +102,7 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
                 damage: 40,
                 chargeTime: 750,
                 cooldown: 10000,
-                effect: StatusEffectType.DISORIENTED,
+                effect: StatusEffectID.DISORIENTED,
             }
         ]
     },
@@ -111,7 +112,7 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         hp: 80,
         speed: 12,
         score: 30,
-        color: 0xcf6e36,
+        color: ENEMY_COLORS.BOMBER,
         scale: 1.25,
         widthScale: 1.4,
         attacks: [
@@ -123,7 +124,7 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
                 force: 25,
                 chargeTime: 2000,
                 cooldown: 0,
-                effect: StatusEffectType.DISORIENTED,
+                effect: StatusEffectID.DISORIENTED,
             }
         ]
     }

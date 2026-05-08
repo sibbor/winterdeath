@@ -215,7 +215,7 @@ export const EnemyAnimator = {
             }
         }
 
-        // VINTERDÖD: Physics Guard - Detect if we should let physics own the Y-axis
+        // Physics Guard - Detect if we should let physics own the Y-axis
         const isAirborne = (e.statusFlags & EnemyFlags.AIRBORNE) !== 0;
         const isKnockedBack = e.knockbackVel.lengthSq() > 0.01;
         const letPhysicsControlY = isAirborne || isKnockedBack;
@@ -329,11 +329,11 @@ export const EnemyAnimator = {
                 // Breathe radially to feel more organic
                 _animState.targetScaleX = _animState.baseScale * _animState.widthScale * (1.0 - sinIdle * 0.01);
                 _animState.targetScaleZ = _animState.baseScale * _animState.widthScale * (1.0 - sinIdle * 0.01);
-                
+
                 const s = e.originalScale;
                 e.baseY = THREE.MathUtils.lerp(e.baseY, 1.0 * s, 10 * simDelta);
-                
-                // VINTERDÖD: Only apply procedural Y if physics isn't controlling it
+
+                // Only apply procedural Y if physics isn't controlling it
                 if (!letPhysicsControlY) {
                     e.mesh.position.y = e.baseY;
                 }
@@ -374,13 +374,13 @@ export const EnemyAnimator = {
             if (forceYPos) {
                 mesh.position.y = _animState.targetPosY;
             } else {
-                // VINTERDÖD: Standard lerp-to-height only if not airborne
+                // Standard lerp-to-height only if not airborne
                 if (!letPhysicsControlY) {
                     mesh.position.y += (_animState.targetPosY - mesh.position.y) * 10 * simDelta;
                 }
             }
         } else {
-            // VINTERDÖD: Standard lerp-to-height only if not airborne
+            // Standard lerp-to-height only if not airborne
             if (!letPhysicsControlY) {
                 mesh.position.y += (_animState.targetPosY - mesh.position.y) * 15 * simDelta;
             }
@@ -397,7 +397,7 @@ export const EnemyAnimator = {
             const jitterTime = renderTime * 0.06;
             const jitterY = Math.sin(jitterTime) * 0.12;
             const jitterScale = 1.0 + Math.sin(jitterTime * 1.3) * 0.08;
-            
+
             mesh.position.y += jitterY;
             mesh.scale.set(
                 _animState.targetScaleX * jitterScale,

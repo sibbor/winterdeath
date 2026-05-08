@@ -70,10 +70,10 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
     useEffect(() => {
         return HudStore.subscribe(() => {
             const state = HudStore.getState();
-            const active = state.cinematicActive && state.currentLine.active && !!state.currentLine.text;
+            const active = state.cinematicActive && state.dialogueActive && !!state.dialogueText;
             
             if (active) {
-                const newText = t(state.currentLine.text);
+                const newText = t(state.dialogueText);
                 if (newText !== rawTextRef.current) {
                     rawTextRef.current = newText;
                     
@@ -88,8 +88,8 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
 
                     totalCharsRef.current = currentTokens.current.reduce((acc, t) => acc + t.cleanContent.length, 0);
                     
-                    setSpeakerName(state.currentLine.speaker || '');
-                    setBgColor(DataResolver.getSpeakerColor(state.currentLine.speaker));
+                    setSpeakerName(state.dialogueSpeaker || '');
+                    setBgColor(DataResolver.getSpeakerColor(state.dialogueSpeaker));
                     setIsVisible(true);
                     startTyping();
                 }
@@ -162,7 +162,7 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
                     </p>
                     {isFinished && isVisible && (
                         <div className="absolute bottom-4 right-6 flex items-center opacity-30 animate-pulse">
-                            <span className="text-white text-[9px] uppercase tracking-[0.3em] font-black mr-3">
+                            <span className="text-white text-[10px] uppercase tracking-[0.3em] font-black mr-3">
                                 {isMobileDevice ? t('ui.tap') : t('ui.continue')}
                             </span>
                             <div className="w-2 h-2 bg-white rotate-45" />

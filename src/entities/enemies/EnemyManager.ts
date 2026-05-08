@@ -1,7 +1,10 @@
 import * as THREE from 'three';
+import { SystemID } from '../../systems/System';
 import { MATERIALS } from '../../utils/assets';
-import { KMH_TO_MS, INITIAL_ENEMY_POOL } from '../../content/constants';
+import { KMH_TO_MS } from '../../content/constants';
+import { EnemyPoolState, ENEMY_POOL_SIZE } from '../../core/state/EnemyPool';
 import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_SCORE, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType, EnemyDeathDecal, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
+import { COLORS, ENEMY_COLORS } from '../../utils/ui/ColorUtils';
 import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
@@ -16,7 +19,6 @@ import { AshRenderer } from '../../core/renderers/AshRenderer';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { FXSystem } from '../../systems/FXSystem';
 import { SoundID } from '../../utils/audio/AudioTypes';
-import { SystemID } from '../../systems/System';
 import { GameSessionLogic } from '../../game/session/GameSessionLogic';
 import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 import { SPATIAL_CONFIG } from '../../config/SpatialConfig';
@@ -32,13 +34,16 @@ const _v4 = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 5, 0);
 
-const _white = new THREE.Color(0xffffff);
-const _cyan = new THREE.Color(0x00ffff);
+const _white = new THREE.Color(COLORS.WHITE.num);
+const _cyan = new THREE.Color(COLORS.ELECTRIC_FLASH.num);
 const _flashColor = new THREE.Color();
 const _color = new THREE.Color();
 
 const _syncList: Enemy[] = [];
-const enemyPool: Enemy[] = [];
+// CONTIGUOUS POOL: activeEnemies[0...activeCount-1] are active.
+const activeEnemies: Enemy[] = new Array(ENEMY_POOL_SIZE);
+const inactiveEnemies: Enemy[] = [];
+let activeCount = 0;
 
 // Shared iterative stack to avoid recursive stack frames and closures
 const _traverseStack: THREE.Object3D[] = [];
@@ -143,16 +148,15 @@ const _aiContext: AIContext = {
     _realOnPlayerHit: null
 };
 
-// Map SMI Key -> Enemy[]
-const buckets = new Map<number, Enemy[]>();
+// Removed buckets for flat pool optimization (Phase 6)
 
 export const EnemyManager = {
     systemId: SystemID.ENEMY_MANAGER,
     id: 'enemy_manager',
     enabled: true,
-    persistent: true,
+    persistent: false, // Must be false to prevent leaking into the Camp
 
-    init: (session: GameSessionLogic, initialPoolSize: number = INITIAL_ENEMY_POOL) => {
+    init: (session: GameSessionLogic, initialPoolSize: number = ENEMY_POOL_SIZE) => {
         const scene = session.engine.scene;
         if (!zombieRenderer) zombieRenderer = new ZombieRenderer(scene);
         else zombieRenderer.reAttach(scene);
@@ -163,20 +167,21 @@ export const EnemyManager = {
         if (!ashRenderer) ashRenderer = new AshRenderer(scene);
         else ashRenderer.reAttach(scene);
 
-        enemyPool.length = 0;
-        buckets.forEach(b => b.length = 0);
-        buckets.clear();
+        activeCount = 0;
+        inactiveEnemies.length = 0;
         _frameCount = 0;
+        EnemyPoolState.activeCount = 0;
 
-        // VINTERDÖD: Pool Inflation (Zero-GC Pre-allocation)
+        // Contiguous Pool Warmup
         const dummyScene = new THREE.Scene();
         const dummyPos = new THREE.Vector3();
-        for (let i = 0; i < initialPoolSize; i++) {
+        for (let i = 0; i < ENEMY_POOL_SIZE; i++) {
             const enemy = EnemySpawner.spawn(dummyScene, dummyPos, EnemyType.WALKER);
             if (enemy) {
                 enemy.mesh.visible = false;
                 enemy.mesh.removeFromParent();
-                enemyPool.push(enemy);
+                enemy.poolId = i;
+                inactiveEnemies.push(enemy);
             }
         }
     },
@@ -193,11 +198,11 @@ export const EnemyManager = {
         simTime: number,
         renderTime: number
     ) => {
-        if (!session || !session.engine || !session.state) return;
+        // Lifecycle Guard - Prevent AI updates during sector transitions or in the Camp
+        if (!session || !session.state || !session.state.collisionGrid) return;
 
         const state = session.state;
         const collisionGrid = state.collisionGrid;
-        if (!collisionGrid) return;
 
         const playerPos = session.playerPos || session.engine.camera?.lookAtTarget;
         if (!playerPos) return;
@@ -232,140 +237,117 @@ export const EnemyManager = {
         const cameraPos = camera.threeCamera.position;
         const cameraDir = _camDir.set(0, 0, -1).applyQuaternion(camera.threeCamera.quaternion);
 
-        // --- 3-TIER SPATIAL UPDATE LOOP ---
-        // We iterate over all buckets and perform frequency-gated updates.
-        for (const enemies of buckets.values()) {
-            const len = enemies.length;
-            if (len === 0) continue;
+        // --- PHASE 6: CONTIGUOUS POOL UPDATE ---
+        for (let i = 0; i < activeCount; i++) {
+            const e = activeEnemies[i];
+            if (!e) continue;
 
-            for (let i = len - 1; i >= 0; i--) {
-                const e = enemies[i];
-                // [VINTERDÖD FIX] Defensive null-guard for race conditions during iteration/recycling
-                if (!e || !e.mesh) {
-                    if (e && !e.mesh) console.warn('EnemyManager: Enemy found without mesh at index', i);
-                    continue;
+            // --- 1. SPATIAL GATING (Zero-GC) ---
+            const dx = e.mesh.position.x - pX;
+            const dz = e.mesh.position.z - pZ;
+            const distSq = dx * dx + dz * dz;
+
+            const isDying = e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD;
+
+            let updateFrequency = 0;
+            if (isDying || distSq < SPATIAL_CONFIG.AI_CORE_RADIUS_SQ) {
+                updateFrequency = 1;
+            } else if (distSq < SPATIAL_CONFIG.AI_THROTTLED_RADIUS_SQ) {
+                updateFrequency = 6;
+            }
+
+            const shouldUpdate = updateFrequency > 0 && (_frameCount % updateFrequency === 0);
+
+            if (shouldUpdate) {
+                // --- 2. LOGIC UPDATE ---
+                if (e.deathState === EnemyDeathState.ALIVE) {
+                    EnemyAI.updateEnemy(e, playerPos, playerStatusFlags, collisionGrid, isDead, _aiContext, water, scaledDelta * updateFrequency, simTime, renderTime);
+                } else if (isDying) {
+                    EnemyManager.processDeathAnimation(e, _aiContext, scaledDelta, simTime, renderTime);
                 }
 
-                // --- 1. SPATIAL GATING (Zero-GC) ---
-                const dx = e.mesh.position.x - pX;
-                const dz = e.mesh.position.z - pZ;
-                const distSq = dx * dx + dz * dz;
+                // SYNC TO TypedArray SoA (Source of Truth for other systems)
+                EnemyPoolState.posX[i] = e.mesh.position.x;
+                EnemyPoolState.posY[i] = e.mesh.position.y;
+                EnemyPoolState.posZ[i] = e.mesh.position.z;
+                EnemyPoolState.rotY[i] = e.mesh.rotation.y;
+                EnemyPoolState.hp[i] = e.hp;
+                EnemyPoolState.deathState[i] = e.deathState;
+                EnemyPoolState.statusFlags[i] = e.statusFlags;
+                EnemyPoolState.aiState[i] = e.state;
+                EnemyPoolState.velX[i] = e.velocity.x;
+                EnemyPoolState.velY[i] = e.velocity.y;
+                EnemyPoolState.velZ[i] = e.velocity.z;
+            }
 
-                const isDying = e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD;
-                
-                let updateFrequency = 0; // 0 = Hibernate, 1 = Core, 6 = Throttle
-                
-                if (isDying || distSq < SPATIAL_CONFIG.AI_CORE_RADIUS_SQ) {
-                    updateFrequency = 1;
-                } else if (distSq < SPATIAL_CONFIG.AI_THROTTLED_RADIUS_SQ) {
-                    updateFrequency = 6;
-                }
+            // --- 3. RENDER SYNC ---
+            if (updateFrequency > 0 || isDying) {
+                _syncList.push(e);
 
-                const shouldUpdate = updateFrequency > 0 && (_frameCount % updateFrequency === 0);
-
-                if (shouldUpdate) {
-                    // --- 2. LOGIC UPDATE ---
-                    if (e.deathState === EnemyDeathState.ALIVE) {
-                        EnemyAI.updateEnemy(e, playerPos, playerStatusFlags, collisionGrid, isDead, _aiContext, water, scaledDelta * updateFrequency, simTime, renderTime);
-                    } else if (isDying) {
-                        EnemyManager.processDeathAnimation(e, _aiContext, scaledDelta, simTime, renderTime);
-                    }
-
-                    // --- 3. BUCKET MIGRATION (Zero-GC Swap-and-Pop) ---
-                    const nx = ChunkManager.getCoordIndex(e.mesh.position.x);
-                    const nz = ChunkManager.getCoordIndex(e.mesh.position.z);
-                    const newKey = ChunkManager.getSmiKey(nx, nz);
-
-                    if (newKey !== e.currentChunkKey) {
-                        // Remove from current bucket (O(1) Swap-and-Pop)
-                        enemies[i] = enemies[enemies.length - 1];
-                        enemies.pop();
-
-                        // Add to new bucket
-                        e.currentChunkKey = newKey;
-                        let newBucket = buckets.get(newKey);
-                        if (!newBucket) {
-                            newBucket = [];
-                            buckets.set(newKey, newBucket);
-                        }
-                        newBucket.push(e);
-                        continue; // Enemy moved bucket, index i is now a different enemy (or end)
-                    }
-                }
-
-                // --- 4. RENDER SYNC FILTERING ---
-                // Only CORE, THROTTLED, and DYING enemies are synced to renderers and grid.
-                if (updateFrequency > 0 || isDying) {
-                    _syncList.push(e);
-
-                    // Standard Visibility Culling (Logic from original loop)
-                    const deathState = e.deathState;
-                    switch (deathState) {
-                        case EnemyDeathState.BURNED:
-                        case EnemyDeathState.ELECTROCUTED:
-                        case EnemyDeathState.DROWNED:
-                            e.mesh.visible = true;
-                            e.mesh.matrixAutoUpdate = true;
-                            break;
-                        case EnemyDeathState.DEAD:
-                            break;
-                        default:
-                            if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !(e.statusFlags & EnemyFlags.EXPLODED)) {
-                                let isVisible = true;
-                                if (cameraPos && cameraDir) {
-                                    _v2.subVectors(e.mesh.position, cameraPos);
-                                    const dot = cameraDir.dot(_v2);
-                                    const dSq = _v2.lengthSq();
-                                    if (dot < -2.0 && dSq > 625) isVisible = false;
-                                }
-                                const isTelegraphing = e.indicatorRing && e.indicatorRing.visible;
-                                if (isVisible && !isTelegraphing) {
-                                    e.mesh.visible = false;
-                                    e.mesh.matrixAutoUpdate = false;
-                                    e.mesh.updateMatrix();
-                                } else {
-                                    e.mesh.visible = isVisible;
-                                    e.mesh.matrixAutoUpdate = true;
-                                }
+                const deathState = e.deathState;
+                switch (deathState) {
+                    case EnemyDeathState.BURNED:
+                    case EnemyDeathState.ELECTROCUTED:
+                    case EnemyDeathState.DROWNED:
+                        e.mesh.visible = true;
+                        e.mesh.matrixAutoUpdate = true;
+                        break;
+                    case EnemyDeathState.DEAD:
+                        break;
+                    default:
+                        if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !(e.statusFlags & EnemyFlags.EXPLODED)) {
+                            let isVisible = true;
+                            if (cameraPos && cameraDir) {
+                                _v2.subVectors(e.mesh.position, cameraPos);
+                                const dot = cameraDir.dot(_v2);
+                                const dSq = _v2.lengthSq();
+                                if (dot < -2.0 && dSq > 625) isVisible = false;
+                            }
+                            const isTelegraphing = e.indicatorRing && e.indicatorRing.visible;
+                            if (isVisible && !isTelegraphing) {
+                                e.mesh.visible = false;
+                                e.mesh.matrixAutoUpdate = false;
+                                e.mesh.updateMatrix();
                             } else {
-                                e.mesh.visible = true;
+                                e.mesh.visible = isVisible;
                                 e.mesh.matrixAutoUpdate = true;
                             }
-                            break;
-                    }
-
-                    // Flash feedback (Logic from original loop)
-                    if (deathState === EnemyDeathState.ALIVE && e.color !== undefined) {
-                        const isBoss = (e.statusFlags & EnemyFlags.BOSS) !== 0;
-                        const timeSinceHit = simTime - e.hitTime;
-                        if (timeSinceHit < 100) {
-                            if (!(e.statusFlags & EnemyFlags.FLASH_ACTIVE)) {
-                                e.statusFlags |= EnemyFlags.FLASH_ACTIVE;
-                                e.originalColor = e.color;
-                                const isArc = e.lastDamageType === DamageID.ARC_CANNON;
-                                if (isBoss) {
-                                    if (isArc) _flashColor.setHex(0x00ffff).lerp(_white, 0.4);
-                                    else _flashColor.setHex(0xffffff);
-                                    applyElectrifiedGlow(e.mesh, _flashColor, isArc ? 2.0 : 1.0);
-                                } else {
-                                    e.color = isArc ? _flashColor.setHex(0x00ffff).lerp(_white, 0.4).getHex() : 0xffffff;
-                                }
-                            }
-                        } else if (e.statusFlags & EnemyFlags.FLASH_ACTIVE) {
-                            e.statusFlags &= ~EnemyFlags.FLASH_ACTIVE;
-                            if (isBoss) resetMaterialEmissive(e.mesh);
-                            else e.color = e.originalColor;
+                        } else {
+                            e.mesh.visible = true;
+                            e.mesh.matrixAutoUpdate = true;
                         }
-                    }
-                } else {
-                    // HIBERNATED: Hide and stop matrix updates
-                    e.mesh.visible = false;
-                    e.mesh.matrixAutoUpdate = false;
+                        break;
                 }
+
+                // Flash feedback
+                if (deathState === EnemyDeathState.ALIVE && e.color !== undefined) {
+                    const isBoss = (e.statusFlags & EnemyFlags.BOSS) !== 0;
+                    const timeSinceHit = simTime - e.hitTime;
+                    if (timeSinceHit < 100) {
+                        if (!(e.statusFlags & EnemyFlags.FLASH_ACTIVE)) {
+                            e.statusFlags |= EnemyFlags.FLASH_ACTIVE;
+                            e.originalColor = e.color;
+                            const isArc = e.lastDamageType === DamageID.ARC_CANNON;
+                            if (isArc) {
+                                e.color = ENEMY_COLORS.ELECTRIC_ARC_FLASH.num;
+                                if (isBoss) applyElectrifiedGlow(e.mesh, _cyan, 2.0); // Using scratchpad _cyan
+                            } else {
+                                e.color = ENEMY_COLORS.HIT_FLASH.num;
+                                if (isBoss) applyElectrifiedGlow(e.mesh, _white, 1.0); // Using scratchpad _white
+                            }
+                        }
+                    } else if (e.statusFlags & EnemyFlags.FLASH_ACTIVE) {
+                        e.statusFlags &= ~EnemyFlags.FLASH_ACTIVE;
+                        if (isBoss) resetMaterialEmissive(e.mesh);
+                        else e.color = e.originalColor;
+                    }
+                }
+            } else {
+                e.mesh.visible = false;
+                e.mesh.matrixAutoUpdate = false;
             }
         }
 
-        // Pass ONLY active/throttled/dying enemies to systems
         collisionGrid.updateEnemyGrid(_syncList);
         if (zombieRenderer) zombieRenderer.sync(_syncList, simTime);
         if (ashRenderer) ashRenderer.update(Math.max(simTime, 1), playerPos);
@@ -378,43 +360,84 @@ export const EnemyManager = {
         zombieRenderer = null;
         corpseRenderer = null;
         ashRenderer = null;
-        enemyPool.length = 0;
-        buckets.clear();
+        inactiveEnemies.length = 0;
+        activeCount = 0;
     },
 
     getAshRenderer: () => ashRenderer,
+    getActiveEnemies: () => activeEnemies,
+    getActiveCount: () => activeCount,
 
     spawn: (scene: THREE.Scene, playerPos: THREE.Vector3, forcedType?: EnemyType, forcedPos?: THREE.Vector3, bossSpawned: boolean = false, enemyCount: number = 0): Enemy | null => {
-        let enemy: Enemy | null = null;
-        const newType = (forcedType !== undefined) ? forcedType : EnemySpawner.determineType(bossSpawned);
+        if (activeCount >= ENEMY_POOL_SIZE) return null;
 
-        if (enemyPool.length > 0) {
-            enemy = enemyPool.pop()!;
+        const newType = (forcedType !== undefined) ? forcedType : EnemySpawner.determineType(bossSpawned);
+        let enemy: Enemy;
+
+        if (inactiveEnemies.length > 0) {
+            enemy = inactiveEnemies.pop()!;
             EnemyManager.resetEnemy(enemy, newType, playerPos, forcedPos);
             if (!enemy.mesh.parent) scene.add(enemy.mesh);
         } else {
-            enemy = EnemySpawner.spawn(scene, playerPos, newType, forcedPos, bossSpawned, enemyCount);
+            // Defensive: should ideally never happen with fixed pool
+            enemy = EnemySpawner.spawn(scene, playerPos, newType, forcedPos, bossSpawned, enemyCount)!;
         }
 
         if (enemy) {
             enemy.mesh.visible = (enemy.statusFlags & EnemyFlags.BOSS) !== 0;
-            
-            // Add to bucket
-            const nx = ChunkManager.getCoordIndex(enemy.mesh.position.x);
-            const nz = ChunkManager.getCoordIndex(enemy.mesh.position.z);
-            const key = ChunkManager.getSmiKey(nx, nz);
-            enemy.currentChunkKey = key;
-            
-            let bucket = buckets.get(key);
-            if (!bucket) {
-                bucket = [];
-                buckets.set(key, bucket);
-            }
-            enemy.bucketIndex = bucket.length;
-            bucket.push(enemy);
+
+            const index = activeCount;
+            activeEnemies[index] = enemy;
+
+            // Sync Initial State to SoA
+            EnemyPoolState.posX[index] = enemy.mesh.position.x;
+            EnemyPoolState.posY[index] = enemy.mesh.position.y;
+            EnemyPoolState.posZ[index] = enemy.mesh.position.z;
+            EnemyPoolState.hp[index] = enemy.hp;
+            EnemyPoolState.maxHp[index] = enemy.maxHp;
+            EnemyPoolState.types[index] = enemy.type;
+            EnemyPoolState.deathState[index] = enemy.deathState;
+            EnemyPoolState.statusFlags[index] = enemy.statusFlags;
+
+            activeCount++;
+            EnemyPoolState.activeCount = activeCount;
         }
 
         return enemy;
+    },
+
+    recycleEnemy: (index: number) => {
+        if (index < 0 || index >= activeCount) return;
+
+        const enemy = activeEnemies[index];
+        enemy.mesh.visible = false;
+        enemy.mesh.removeFromParent();
+        inactiveEnemies.push(enemy);
+
+        // SWAP-AND-GO: Move last active enemy to current slot
+        if (index < activeCount - 1) {
+            const lastIdx = activeCount - 1;
+            const lastEnemy = activeEnemies[lastIdx];
+            activeEnemies[index] = lastEnemy;
+
+            // Sync SoA: Move last to vacated slot
+            EnemyPoolState.posX[index] = EnemyPoolState.posX[lastIdx];
+            EnemyPoolState.posY[index] = EnemyPoolState.posY[lastIdx];
+            EnemyPoolState.posZ[index] = EnemyPoolState.posZ[lastIdx];
+            EnemyPoolState.rotY[index] = EnemyPoolState.rotY[lastIdx];
+            EnemyPoolState.hp[index] = EnemyPoolState.hp[lastIdx];
+            EnemyPoolState.maxHp[index] = EnemyPoolState.maxHp[lastIdx];
+            EnemyPoolState.types[index] = EnemyPoolState.types[lastIdx];
+            EnemyPoolState.deathState[index] = EnemyPoolState.deathState[lastIdx];
+            EnemyPoolState.statusFlags[index] = EnemyPoolState.statusFlags[lastIdx];
+            EnemyPoolState.aiState[index] = EnemyPoolState.aiState[lastIdx];
+            EnemyPoolState.velX[index] = EnemyPoolState.velX[lastIdx];
+            EnemyPoolState.velY[index] = EnemyPoolState.velY[lastIdx];
+            EnemyPoolState.velZ[index] = EnemyPoolState.velZ[lastIdx];
+        }
+
+        activeCount--;
+        EnemyPoolState.activeCount = activeCount;
     },
 
     resetEnemy: (e: Enemy, newType: EnemyType, playerPos: THREE.Vector3, forcedPos?: THREE.Vector3) => {
@@ -429,7 +452,7 @@ export const EnemyManager = {
         e.originalScale = ENEMY_SCALE[newType];
         e.widthScale = ENEMY_WIDTH_SCALE[newType];
 
-        // VINTERDÖD: Attack list initialization (Zero-GC pooling)
+        // Attack list initialization (Zero-GC pooling)
         const typeData = (newType === EnemyType.BOSS) ? BOSSES[0] : ((ZOMBIE_TYPES as any)[newType] || ZOMBIE_TYPES.WALKER);
         e.attacks = typeData.attacks || [];
         if (e.attackCooldowns) e.attackCooldowns.fill(0);
@@ -471,7 +494,7 @@ export const EnemyManager = {
         if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3();
         e.targetPos.set(0, 0, 0);
 
-        // VINTERDÖD: Advanced Physics Warmup
+        // Advanced Physics Warmup
         e.swingX = 0;
         e.swingZ = 0;
         e.swingVelX = 0;
@@ -497,7 +520,7 @@ export const EnemyManager = {
         e.slowDuration = 0;
         e.blindDuration = 0;
         e.burnDuration = 0;
-        e.grappleDuration = 0; // VINTERDÖD: Reset grapple
+        e.grappleDuration = 0; // Reset grapple
         e.burnTickTimer = 0;
         e.lastBurnTick = 0;
 
@@ -526,18 +549,18 @@ export const EnemyManager = {
         const boss = EnemySpawner.spawnBoss(scene, pos, bossData);
         if (boss) {
             boss.mesh.visible = true;
-            // Add to bucket
-            const nx = ChunkManager.getCoordIndex(boss.mesh.position.x);
-            const nz = ChunkManager.getCoordIndex(boss.mesh.position.z);
-            const key = ChunkManager.getSmiKey(nx, nz);
-            boss.currentChunkKey = key;
-            let bucket = buckets.get(key);
-            if (!bucket) {
-                bucket = [];
-                buckets.set(key, bucket);
-            }
-            boss.bucketIndex = bucket.length;
-            bucket.push(boss);
+
+            const index = activeCount;
+            activeEnemies[index] = boss;
+
+            // Sync SoA
+            EnemyPoolState.posX[index] = boss.mesh.position.x;
+            EnemyPoolState.posY[index] = boss.mesh.position.y;
+            EnemyPoolState.posZ[index] = boss.mesh.position.z;
+            EnemyPoolState.statusFlags[index] = boss.statusFlags;
+
+            activeCount++;
+            EnemyPoolState.activeCount = activeCount;
         }
         return boss;
     },
@@ -566,7 +589,7 @@ export const EnemyManager = {
     createCorpse: (enemy: Enemy, forcedColor?: number) => {
         if (corpseRenderer) {
             const isFloating = enemy.deathState === EnemyDeathState.DROWNED || (enemy.statusFlags & EnemyFlags.DROWNING) !== 0;
-            
+
             corpseRenderer.addCorpse(
                 enemy.mesh.position,
                 enemy.mesh.quaternion,
@@ -581,7 +604,13 @@ export const EnemyManager = {
     explodeEnemy: (enemy: Enemy, callbacks: any, velocity?: THREE.Vector3, isGibbed: boolean = false) => {
         if (enemy.statusFlags & EnemyFlags.EXPLODED) return;
         enemy.statusFlags |= EnemyFlags.EXPLODED;
-        if (isGibbed) enemy.statusFlags |= EnemyFlags.GIBBED;
+        if (isGibbed) {
+            enemy.statusFlags |= EnemyFlags.GIBBED;
+            if (callbacks.session) {
+                const tracker = callbacks.session.getSystem('damage_tracker_system');
+                if (tracker) tracker.recordGib(callbacks.session);
+            }
+        }
 
         const enemyScale = enemy.originalScale * enemy.widthScale;
         const pos = enemy.mesh.position;
@@ -699,7 +728,7 @@ export const EnemyManager = {
                     e.mesh.position.y = THREE.MathUtils.lerp(e.baseY, 0.2, fallProgress);
 
                     const pulse = Math.sin(renderTime * 0.05) * 0.5 + 0.5;
-                    _color.copy(_cyan).lerp(_white, Math.random() * 0.3);
+                    _color.setHex(ENEMY_COLORS.ELECTRIC_ARC_FLASH.num);
                     applyElectrifiedGlow(e.mesh, _color, 1.0 + pulse * 4.0);
 
                     const jitter = (1.0 - fallProgress * 0.5) * 0.2;
@@ -830,12 +859,12 @@ export const EnemyManager = {
 
             if (distSq < radiusSq) {
                 hitAnyone = true;
-                // VINTERDÖD: Sqrt Purge! 
+                // Sqrt Purge! 
                 // Using quadratic falloff for physics/damage (distSq / radiusSq). 
                 // APPROXIMATION: falloff = 1.0 - (distSq / radiusSq)
                 const falloff = 1.0 - (distSq / radiusSq);
 
-                // --- DAMAGE (VINTERDÖD: Rush/Dodge now deal 0 immediate damage, deferred to Fall Damage) ---
+                // --- DAMAGE (Rush/Dodge now deal 0 immediate damage, deferred to Fall Damage) ---
                 const damage = (damageType === DamageID.RUSH || damageType === DamageID.DODGE) ? 0 : Math.ceil(maxDamage * falloff);
                 if (damage > 0) {
                     const applyDamage = (ctx as any).applyDamage;
@@ -847,7 +876,7 @@ export const EnemyManager = {
                 const isDodge = damageType === DamageID.DODGE;
                 const isRush = damageType === DamageID.RUSH;
 
-                // VINTERDÖD: Dramatically increase RUSH lift and decrease DODGE lift for requested feedback
+                // Dramatically increase RUSH lift and decrease DODGE lift for requested feedback
                 const liftRatio = isDodge ? 0.05 : (isRush ? 1.6 : 0.45);
                 const spinScale = isRush ? 2.5 : 0.8;
                 const force = maxForce * falloff;
@@ -969,11 +998,23 @@ export const EnemyManager = {
         }
     },
 
-    cleanupDeadEnemies: (scene: THREE.Scene, enemies: Enemy[], state: any, callbacks: any, delta: number, simTime: number) => {
-        for (let i = enemies.length - 1; i >= 0; i--) {
-            const e = enemies[i];
+    cleanupDeadEnemies: (
+        scene: THREE.Scene,
+        enemies: Enemy[],
+        state: any,
+        callbacks: any,
+        delta: number,
+        simTime: number
+    ) => {
+        // --- PHASE 6: CONTIGUOUS CLEANUP ---
+        let i = 0;
+        while (i < activeCount) {
+            const e = activeEnemies[i];
 
-            if (e.deathState === EnemyDeathState.ALIVE) continue;
+            if (e.deathState === EnemyDeathState.ALIVE) {
+                i++;
+                continue;
+            }
 
             if (!e.deathTimer) {
                 e.deathTimer = simTime;
@@ -990,48 +1031,10 @@ export const EnemyManager = {
             const shouldCleanup = (e.deathState === EnemyDeathState.DEAD) || (e.statusFlags & (EnemyFlags.EXPLODED | EnemyFlags.GIBBED)) !== 0;
 
             if (shouldCleanup) {
-                let leaveCorpse = false;
-                let deathDecal = EnemyDeathDecal.NONE;
-
-                if (e.statusFlags & EnemyFlags.EXPLODED) {
-                    EnemyManager.explodeEnemy(e, callbacks, _up);
-                }
-                else if (e.statusFlags & EnemyFlags.GIBBED) {
-                    if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
-                }
-                else if (e.statusFlags & EnemyFlags.ASH_SPAWNED) {
-                    if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
-                }
-                else if (e.statusFlags & EnemyFlags.ELECTROCUTED) {
-                    leaveCorpse = true;
-                    deathDecal = EnemyDeathDecal.SCORCH;
-                }
-                else if (e.deathState === EnemyDeathState.DROWNED || e.lastDamageType === DamageID.DROWNING) {
-                    leaveCorpse = true;
-                }
-                else {
-                    leaveCorpse = true;
-                    deathDecal = EnemyDeathDecal.BLOOD;
-                }
-
-                if (e.mesh.parent) scene.remove(e.mesh);
-
-                if (leaveCorpse && (e.statusFlags & EnemyFlags.BOSS) === 0) {
-                    const corpseColor = deathDecal === EnemyDeathDecal.SCORCH ? _color.setHex(e.color || 0xffffff).multiplyScalar(0.4).getHex() : e.color;
-                    EnemyManager.createCorpse(e, corpseColor);
-                }
-
-                if (!e.bloodSpawned && deathDecal === EnemyDeathDecal.BLOOD) {
-                    if (callbacks.spawnDecal) callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, (1.5 + Math.random() * 2.5) * (e.originalScale || 1.0), MATERIALS.bloodDecal);
-                    e.bloodSpawned = true;
-                } else if (!e.bloodSpawned && deathDecal === EnemyDeathDecal.SCORCH) {
-                    if (callbacks.spawnDecal) callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, (1.2 + Math.random() * 0.5) * (e.originalScale || 1.0), MATERIALS.scorchDecal);
-                    e.bloodSpawned = true;
-                }
-
-                const session = callbacks.getSession ? callbacks.getSession() : null;
+                // --- TELEMETRY & PROGRESSION ---
+                const session = (callbacks as any).getSession ? (callbacks as any).getSession() : null;
                 if (session) {
-                    const tracker = session.getSystem('damage_tracker_system') as any;
+                    const tracker = session.getSystem(SystemID.DAMAGE_TRACKER);
                     if (tracker) {
                         _v1.copy(e.mesh.position).setY(0);
                         const pPos = session.playerPos;
@@ -1050,26 +1053,18 @@ export const EnemyManager = {
 
                 if (e.indicatorRing?.parent) e.indicatorRing.parent.remove(e.indicatorRing);
 
-                // --- O(1) REMOVAL FROM GLOBAL LIST ---
-                enemies[i] = enemies[enemies.length - 1];
-                enemies.pop();
-
-                // --- O(1) REMOVAL FROM BUCKET ---
-                const bucket = buckets.get(e.currentChunkKey);
-                if (bucket) {
-                    const bIdx = e.bucketIndex;
-                    const bLastIdx = bucket.length - 1;
-                    if (bIdx !== bLastIdx) {
-                        const bLastEnemy = bucket[bLastIdx];
-                        bucket[bIdx] = bLastEnemy;
-                        bLastEnemy.bucketIndex = bIdx;
-                    }
-                    bucket.pop();
+                // --- CORPSE HANDLING ---
+                const isExploded = (e.statusFlags & EnemyFlags.EXPLODED) !== 0;
+                const isAsh = (e.statusFlags & EnemyFlags.ASH_PERMANENT) !== 0;
+                if (!isExploded && !isAsh) {
+                    EnemyManager.createCorpse(e);
                 }
 
-                e.statusFlags |= EnemyFlags.DEAD;
-                e.deathState = EnemyDeathState.DEAD;
-                if ((e.statusFlags & EnemyFlags.BOSS) === 0) enemyPool.push(e);
+                // --- RECYCLE (Swap-and-Go) ---
+                EnemyManager.recycleEnemy(i);
+                // DO NOT increment i, check new occupant
+            } else {
+                i++;
             }
         }
     }

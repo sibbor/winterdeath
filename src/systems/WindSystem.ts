@@ -14,7 +14,7 @@ export class WindSystem implements System {
   public enabled = true;
   public persistent = true;
   public isFixedStep?: boolean;
-  
+
 
   public current = new THREE.Vector2(0, 0);
   public direction = new THREE.Vector3(0, 0, 0);
@@ -81,7 +81,7 @@ export class WindSystem implements System {
 
   public setInteractors(interactors: THREE.Vector4[]) {
     for (let i = 0; i < 8; i++) {
-        this.currentInteractors[i].copy(interactors[i]);
+      this.currentInteractors[i].copy(interactors[i]);
     }
   }
 
@@ -120,7 +120,8 @@ export class WindSystem implements System {
       this.nextChange = renderTime + 3000 + Math.random() * 5000;
     }
 
-    const lerpFactor = 1.0 - Math.exp(-0.6 * delta);
+    // Slowed down base wind transitions from 0.6 to 0.3 for weight.
+    const lerpFactor = 1.0 - Math.exp(-0.3 * delta);
     this.current.lerp(this.target, lerpFactor); this.direction.set(this.current.x, 0, this.current.y);
     this.strength = this.current.length();
 
@@ -136,7 +137,7 @@ export class WindSystem implements System {
       b.uTime.value = timeSec;
       b.uWind.value.x = windX;
       b.uWind.value.y = windY;
-      
+
       // Update interactors
       for (let j = 0; j < 8; j++) {
         b.uInteractors.value[j].copy(this.currentInteractors[j]);

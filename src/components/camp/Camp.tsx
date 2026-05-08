@@ -26,6 +26,7 @@ const weaponName = (id: number): string => DataResolver.getDamageName(id);
 // Import UI Components
 import CampHUD from '../ui/hud/CampHUD';
 import { OverlayType } from '../ui/hud/HudTypes';
+import { StatsBridge } from '../../core/data/StatsBridge';
 
 interface CampProps {
     stats: PlayerStats;
@@ -444,13 +445,19 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                             } else {
                                 toolTipText = t(`stations.${target.userData.name || newHover}`);
                                 if (newHover === 'armory') {
-                                    toolTipSubText = `${t(weaponName(currentLoadout.primary))} • ${t(weaponName(currentLoadout.secondary))} • ${t(weaponName(currentLoadout.throwable))} • ${t(weaponName(currentLoadout.special))}`;
+                                    toolTipSubText = `${t(weaponName(currentLoadout.primary))} • ${t(weaponName(currentLoadout.secondary))} • ${t(weaponName(currentLoadout.throwable))}${currentLoadout.special !== 'none' ? ` • ${t(weaponName(currentLoadout.special))}` : ''}`;
                                 } else if (newHover === 'adventure_log') {
-                                    toolTipSubText = `${t('camp_tooltips.collectibles')}: ${stats.collectiblesDiscovered?.length || 0} • ${t('camp_tooltips.clues')}: ${stats.cluesFound?.length || 0} • ${t('camp_tooltips.poi')}: ${stats.discoveredPOIs?.length || 0} • ${t('camp_tooltips.enemies')}: ${stats.seenEnemies?.length || 0} • ${t('camp_tooltips.bosses')}: ${stats.seenBosses?.length || 0}`;
+                                    const totalCollectibles = StatsBridge.getCollectiblesDiscoveredLength(stats);
+                                    const totalClues = StatsBridge.getCluesFound(stats).length;
+                                    const totalPois = StatsBridge.getDiscoveredPOIs(stats).length;
+                                    const totalEnemies = StatsBridge.getSeenEnemies(stats).length;
+                                    const totalBosses = StatsBridge.getSeenBosses(stats).length;
+                                    toolTipSubText = `${t('camp_tooltips.collectibles')}: ${totalCollectibles} • ${t('camp_tooltips.clues')}: ${totalClues} • ${t('camp_tooltips.poi')}: ${totalPois} • ${t('camp_tooltips.enemies')}: ${totalEnemies} • ${t('camp_tooltips.bosses')}: ${totalBosses}`;
                                 } else if (newHover === 'sectors') {
-                                    toolTipSubText = `${t('camp_tooltips.finished_sectors')}: ${stats.sectorsCompleted} • ${t('camp_tooltips.selected_sector')}: ${t(DataResolver.getSectorName(currentSector))}`;
+                                    const finishedSectors = StatsBridge.getSectorsCompleted(stats);
+                                    toolTipSubText = `${t('camp_tooltips.finished_sectors')}: ${finishedSectors} • ${t('camp_tooltips.selected_sector')}: ${t(DataResolver.getSectorName(currentSector))}`;
                                 } else if (newHover === 'skills') {
-                                    toolTipSubText = `${t('camp_tooltips.vitality')}: ${stats.statsBuffer[PlayerStatID.MAX_HP]} • ${t('camp_tooltips.adrenaline')}: ${stats.statsBuffer[PlayerStatID.MAX_STAMINA]} • ${t('camp_tooltips.reflexes')}: ${stats.statsBuffer[PlayerStatID.SPEED].toFixed(1)} ${t('ui.speed_unit')}`;
+                                    toolTipSubText = `${t('camp_tooltips.vitality')}: ${StatsBridge.getMaxHP(stats)} • ${t('camp_tooltips.adrenaline')}: ${StatsBridge.getMaxStamina(stats)} • ${t('camp_tooltips.reflexes')}: ${StatsBridge.getSpeed(stats).toFixed(1)} ${t('ui.speed_unit')}`;
                                 }
                             }
                             const vec = _v1; target.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
@@ -577,25 +584,19 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                     onStartSector={() => { }}
                     debugMode={debugMode} onToggleDebug={onToggleDebug} onResetGame={() => setActiveOverlay(OverlayType.RESET_CONFIRM)}
                     onDebugScrap={() => {
-                        const next = { ...stats };
-                        next.statsBuffer = new Float32Array(stats.statsBuffer);
-                        next.statsBuffer[PlayerStatID.SCRAP] += 100;
-                        (window as any).HudStore?.emitFastUpdate({ scrap: next.statsBuffer[PlayerStatID.SCRAP] });
+                        const next = StatsBridge.deepCloneStats(stats);
+                        StatsBridge.addStatInt(next, PlayerStatID.SCRAP, 100);
                         onSaveStats(next);
                     }}
                     onDebugSkill={() => {
-                        const next = { ...stats };
-                        next.statsBuffer = new Float32Array(stats.statsBuffer);
-                        next.statsBuffer[PlayerStatID.SKILL_POINTS] += 10;
-                        (window as any).HudStore?.emitFastUpdate({ sp: next.statsBuffer[PlayerStatID.SKILL_POINTS] });
+                        const next = StatsBridge.deepCloneStats(stats);
+                        StatsBridge.addStatInt(next, PlayerStatID.SKILL_POINTS, 10);
                         onSaveStats(next);
                     }}
                     onDebugCP={() => {
-                        const next = { ...stats };
-                        next.totalChallengePoints += 10;
-                        next.statsBuffer = new Float32Array(stats.statsBuffer);
-                        next.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] += 10;
-                        (window as any).HudStore?.emitFastUpdate({ cp: next.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] });
+                        const next = StatsBridge.deepCloneStats(stats);
+                        StatsBridge.addStatInt(next, PlayerStatID.CHALLENGE_POINTS, 10);
+                        StatsBridge.addStatInt(next, PlayerStatID.TOTAL_CHALLENGE_POINTS, 10);
                         onSaveStats(next);
                     }}
                     isMobileDevice={isMobileDevice}
@@ -607,3 +608,4 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 };
 
 export default React.memo(Camp, areEqual);
+

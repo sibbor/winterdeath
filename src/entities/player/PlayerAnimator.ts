@@ -25,11 +25,11 @@ export interface AnimState {
     simTime: number;
     seed: number;
 
-    // --- VINTERDÖD: CACHED LEANING FOR SMOOTHER MOTION ---
+    // --- CACHED LEANING FOR SMOOTHER MOTION ---
     leanX?: number;
     leanZ?: number;
 
-    // --- VINTERDÖD: CACHED ENTITY STATE (Phase 13) ---
+    // --- CACHED ENTITY STATE (Phase 13) ---
     nodes?: PlayerNodes;
     baseScale?: number;
     baseY?: number;
@@ -130,7 +130,7 @@ export const PlayerAnimator = {
             const cosWobble = Math.cos(moveTime);
             const rushFactor = animState.isRushing ? 2.0 : 1.0;
 
-            // --- VINTERDÖD: TARGET LEAN CALCULATION ---
+            // --- TARGET LEAN CALCULATION ---
             let targetLeanX = animState.isRushing ? 0.4 : (animState.isWading ? 0.3 : 0.2); // Default framåt
             let targetLeanZ = 0;
 
@@ -142,7 +142,7 @@ export const PlayerAnimator = {
                 targetLeanZ = (animState.strafeDirection || 0) * 0.25;
             }
 
-            // --- VINTERDÖD: SMOOTH LERPING (ZERO-GC) ---
+            // --- SMOOTH LERPING (ZERO-GC) ---
             // Detta skapar den "fjädrande", mjuka Game Feel-övergången
             animState.leanX = THREE.MathUtils.lerp(animState.leanX || 0, targetLeanX, 10 * delta);
             animState.leanZ = THREE.MathUtils.lerp(animState.leanZ || 0, targetLeanZ, 10 * delta);
@@ -170,7 +170,7 @@ export const PlayerAnimator = {
 
         // Stationary behaviors
         else {
-            // --- VINTERDÖD: Återgå mjukt till upprätt när man stannar ---
+            // --- Återgå mjukt till upprätt när man stannar ---
             animState.leanX = THREE.MathUtils.lerp(animState.leanX || 0, 0, 10 * delta);
             animState.leanZ = THREE.MathUtils.lerp(animState.leanZ || 0, 0, 10 * delta);
 

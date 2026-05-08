@@ -51,7 +51,7 @@ interface GameSessionUIProps {
 
 export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState, gameProps, callbacks }) => {
 
-    // VINTERDÖD FIX: Zero-GC callback that reads from refs instead of reactive state dependencies
+    // Zero-GC callback that reads from refs instead of reactive state dependencies
     // This function is only allocated ONCE during the component's lifetime.
     const handleContainerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         // Read directly from the mutable ref to avoid dependency re-renders
@@ -64,7 +64,7 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
             return;
         }
 
-        // VINTERDÖD FIX: Standardized click-to-lock logic.
+        // Standardized click-to-lock logic.
         if (gameProps.isGameRunning && !gameProps.isMobileDevice && input && !input.state.locked && !state?.isDead) {
             callbacks.requestPointerLock();
         }

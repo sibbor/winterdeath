@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /**
- * VINTERDÖD: FX System Types
+ * FX System Types
  * 
  * Strict numeric enums (SMI) for performance-critical FX hot-paths.
  * These replace string literals to eliminate GC pressure and hash lookups.

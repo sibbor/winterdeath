@@ -3,8 +3,8 @@ import * as THREE from 'three';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { SectorStats } from '../../types/StateTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
-import { InputAction } from '../../core/engine/InputTypes';
 import { GameSessionLogic } from './GameSessionLogic';
+import { InputAction, INPUT_KEY_MAP } from '../../core/engine/InputManager';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { UiSounds, WeaponSounds } from '../../utils/audio/AudioLib';
 import { SoundID, MusicID } from '../../utils/audio/AudioTypes';
@@ -23,15 +23,17 @@ import { PlayerStatsSystem } from '../../systems/PlayerStatsSystem';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { PlayerStatID } from '../../entities/player/PlayerTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
-import { TriggerType } from '../../systems/TriggerTypes';
-import { BossID } from './SectorTypes';
+import { TriggerType } from '../../types/TriggerTypes';
+import { BossID, SectorID } from './SectorTypes';
 import { OverlayType, DiscoveryType } from '../../components/ui/hud/HudTypes';
+import { PERKS } from '../../content/perks';
 import { DeathPhase } from '../../types/SessionTypes';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { SystemID } from '../../systems/SystemID';
 import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 import { useUIEventBridge } from '../../hooks/useUIEventBridge';
+import { InteractionPromptId, MetaActionId } from '../../systems/ui/UIEventBridge';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -126,8 +128,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         const statsBuffer = session.state.statsBuffer;
 
-        // --- VINTERDÖD FIX: Zero-GC DOD Progression ---
-        // We use the statsBuffer (Float32Array) directly for O(1) SMI access.
+        // --- DOD Progression Fix: Zero-GC ---
         statsBuffer[PlayerStatID.SCORE] += amount;
         statsBuffer[PlayerStatID.CURRENT_XP] += amount;
         statsBuffer[PlayerStatID.XP] += amount;
@@ -135,11 +136,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         let levelUps = 0;
         const maxLevel = LEVEL_CAP || 100;
 
-        // Process level-ups in a single pass to prevent sound spam and desync
+        // Process level-ups in a single pass
         while (statsBuffer[PlayerStatID.CURRENT_XP] >= statsBuffer[PlayerStatID.NEXT_LEVEL_XP] && statsBuffer[PlayerStatID.LEVEL] < maxLevel) {
             statsBuffer[PlayerStatID.CURRENT_XP] -= statsBuffer[PlayerStatID.NEXT_LEVEL_XP];
             statsBuffer[PlayerStatID.LEVEL]++;
-            // Ensure nextLevelXp doesn't become 0 to avoid infinite loops
             statsBuffer[PlayerStatID.NEXT_LEVEL_XP] = Math.max(100, Math.floor(statsBuffer[PlayerStatID.NEXT_LEVEL_XP] * 1.2));
             levelUps++;
         }
@@ -152,12 +152,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         UIEventRingBuffer.push(UIEventType.XP_GAIN, amount);
     }, [refs]);
 
-    // --- PAUSE SYNCHRONIZATION (VINTERDÖD FIX: Centralized Prop-to-Engine Bridge) ---
+    // --- PAUSE SYNCHRONIZATION ---
     useEffect(() => {
         const engine = refs.engineRef.current;
         if (engine) {
             engine.isSimulationPaused = props.isPaused;
-            // Also pause rendering if hard-paused (screens like recap/death)
             if (props.isPaused && (props.currentGameState?.screen === 5 || props.currentGameState?.screen === 2)) {
                 engine.isRenderingPaused = true;
             } else {
@@ -172,8 +171,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
         if (tracker) tracker.recordSp(session, amount);
-
-        // --- DOD: Atomic Increment in statsBuffer ---
         session.state.statsBuffer[PlayerStatID.SKILL_POINTS] += amount;
     }, [refs]);
 
@@ -181,12 +178,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const session = refs.gameSessionRef.current;
         if (!session) return;
 
-        // --- DOD: Atomic Increment in statsBuffer ---
         const statsBuffer = session.state.statsBuffer;
         statsBuffer[PlayerStatID.SCRAP] += amount;
         statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += amount;
 
-        // VINTERDÖD: Ensure sessionStats is also updated for aggregation
         if (session.state.sessionStats) {
             session.state.sessionStats.scrapLooted += amount;
         }
@@ -196,7 +191,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const { props: currentProps } = latestStateRef.current;
         if (currentProps.onInteractionStateChange) currentProps.onInteractionStateChange(OverlayType.NONE);
 
-        // Core UI State Cleanup (Fixes "Modal doesn't close" bugs)
         updateUiState({
             activeModal: null,
             collectibleId: null,
@@ -214,27 +208,20 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
     }, [refs, updateUiState]);
 
-    /**
-     * Central Action Handler - VINTERDÖD EDITION
-     * Processes game events triggered by AI, Triggers, or Cinematics.
-     * Fully supports arrays, generic bridging to sectorState, and backwards compatibility.
-     */
     const onAction = useCallback((action: any) => {
         const state = refs.stateRef.current;
 
-        // 1. Array-based triggers (from dialog scripts)
         if (Array.isArray(action)) {
-            for (let i = 0; i < action.length; i++) {
+            const aLen = action.length;
+            for (let i = 0; i < aLen; i++) {
                 onAction(action[i]);
             }
             return;
         }
 
-        // 2. Extract type and payload
         const actionType = typeof action === 'string' ? action : action.type;
         const payload = typeof action === 'object' ? (action.payload || action) : {};
 
-        // 3. Execution Switch
         switch (actionType) {
             case 'HEAL':
                 const hp = state.statsBuffer[PlayerStatID.HP];
@@ -285,12 +272,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
-                // Session-local state: Always set so the sector report reflects the rescue
                 state.familyFound = true;
                 state.sectorState.familyFound = true;
 
-                // [VINTERDÖD GUARDRAIL] Only dispatch global event and play chime if not already rescued
-                // This ensures rewards and permanent progression only happen once.
                 if (!props.familyAlreadyRescued) {
                     UIEventRingBuffer.push(UIEventType.FAMILY_FOUND, targetId || 0);
 
@@ -299,8 +283,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         audioEngine.playSound(SoundID.UI_CHIME);
                     }
                 } else {
-                    // On Replay: Still fire the event for internal GameSession follow logic
-                    UIEventRingBuffer.push(UIEventType.FAMILY_FOUND, targetId || 0, 1); // p2=1 means replay
+                    UIEventRingBuffer.push(UIEventType.FAMILY_FOUND, targetId || 0, 1);
                 }
                 break;
             }
@@ -310,11 +293,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 let target: THREE.Object3D | null = null;
                 const currentFMDef = refs.familyMemberRef.current;
 
-                // --- VINTERDÖD FIX: NEW GAME+ / REPLAY LOGIC ---
                 let isFollowing = false;
                 const activeMembers = refs.activeFamilyMembers.current;
                 if (activeMembers) {
-                    for (let i = 0; i < activeMembers.length; i++) {
+                    const mLen = activeMembers.length;
+                    for (let i = 0; i < mLen; i++) {
                         if (activeMembers[i].id === currentFMDef?.id && activeMembers[i].following) {
                             isFollowing = true;
                             break;
@@ -322,7 +305,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
-                // [VINTERDÖD FIX] Only skip if ALREADY following during the current session
                 if (isFollowing) {
                     const sectorData = props.currentSectorData || (window as any).SectorSystem?.getSector(props.currentSector || 0);
                     const bossPos = sectorData?.bossSpawn;
@@ -333,7 +315,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     return;
                 }
 
-                // If no specific target is specified, use the sector's current family member! (Zero-config)
                 if (payload.familyId === undefined && !payload.targetName && !payload.id) {
                     const currentFM = refs.familyMemberRef.current;
                     if (currentFM && currentFM.mesh) {
@@ -341,7 +322,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
-                // Priority 1: Specific Family ID
                 if (!target && payload.familyId !== undefined && refs.activeFamilyMembers.current) {
                     const members = refs.activeFamilyMembers.current;
                     const mLen = members.length;
@@ -353,13 +333,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
-                // Priority 2: Scene Object Name or UserData ID
                 if (!target && (payload.targetName || payload.id)) {
                     const scene = engine?.scene;
                     if (scene) {
                         target = scene.getObjectByName(payload.targetName || payload.id);
 
-                        // Priority 3: Deep search
                         if (!target && payload.id) {
                             const children = scene.children;
                             const cLen = children.length;
@@ -441,21 +419,18 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 break;
 
             case 'CONCLUDE_SECTOR':
-                // Called manually from sector scripts (e.g. Sector 3 epilogue drive)
                 concludeSector(payload?.isExtraction ?? false);
                 break;
 
             default:
-                // GENERIC BRIDGE: Pass unknown triggers directly to the sector's state memory
                 if (actionType) {
                     state.sectorState.pendingTrigger = actionType;
                 }
                 break;
         }
-    }, [concludeSector, gainXp, props.currentSectorData, props.familyAlreadyRescued, refs, spawnBubble]);
+    }, [concludeSector, gainXp, props.currentSectorData, props.familyAlreadyRescued, refs, spawnBubble, gainSp]);
 
-    // --- ZERO-GC DISCOVERY HANDLER ---
-    const handleDiscovery = useCallback((type: DiscoveryType, id: any, titleKey: string, detailsKey: string, payload?: any) => {
+    const handleDiscovery = useCallback((type: DiscoveryType, id: any, titleKey: string = '', detailsKey: string = '', payload?: any, fromBridge: boolean = false) => {
         const state = refs.stateRef.current;
         const currentProps = latestStateRef.current.props;
         if (!state || !state.sessionStats || !state.discoverySets) return;
@@ -468,81 +443,122 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         detailsKey = detailsKey || payload?.detailsKey || '';
 
         switch (type) {
-            case DiscoveryType.ZOMBIE:
+            case DiscoveryType.ZOMBIE: {
                 const enemyId = Number(id);
                 if (!sets.seenEnemies.has(enemyId)) {
                     sets.seenEnemies.add(enemyId);
-                    if (stats.seenEnemies.indexOf(enemyId) === -1) stats.seenEnemies.push(enemyId);
+
+                    let foundEnemy = false;
+                    for (let i = 0; i < stats.seenEnemies.length; i++) {
+                        if (stats.seenEnemies[i] === enemyId) { foundEnemy = true; break; }
+                    }
+                    if (!foundEnemy) stats.seenEnemies.push(enemyId);
+
                     isNew = true;
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.ZOMBIE);
                     detailsKey = DataResolver.getZombieName(enemyId);
                     if (currentProps.onEnemyDiscovered) currentProps.onEnemyDiscovered(enemyId);
                 }
                 break;
-            case DiscoveryType.BOSS:
+            }
+
+            case DiscoveryType.BOSS: {
                 const bossId = Number(id);
                 if (!sets.seenBosses.has(bossId)) {
                     sets.seenBosses.add(bossId);
-                    if (stats.seenBosses.indexOf(bossId) === -1) stats.seenBosses.push(bossId);
+
+                    let foundBoss = false;
+                    for (let i = 0; i < stats.seenBosses.length; i++) {
+                        if (stats.seenBosses[i] === bossId) { foundBoss = true; break; }
+                    }
+                    if (!foundBoss) stats.seenBosses.push(bossId);
+
                     isNew = true;
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.BOSS);
                     detailsKey = DataResolver.getBossName(bossId);
                     if (currentProps.onBossDiscovered) currentProps.onBossDiscovered(bossId);
                 }
                 break;
-            case DiscoveryType.COLLECTIBLE:
+            }
+
+            case DiscoveryType.COLLECTIBLE: {
                 titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.COLLECTIBLE);
                 detailsKey = detailsKey || payload?.detailsKey || DataResolver.getCollectibleName(id);
 
                 if (!sets.collectibles.has(id)) {
                     sets.collectibles.add(id);
-                    stats.collectiblesDiscovered.push(id);
+                    const strId = DataResolver.resolveCollectibleId(id);
+                    if (!stats.collectiblesDiscovered.includes(strId)) {
+                        stats.collectiblesDiscovered.push(strId);
+                        isNew = true;
+                    }
                     state.sessionCollectiblesDiscovered.push(id);
-                    isNew = true;
                 }
 
-                // [VINTERDÖD FIX] Collectibles are now managed purely via App.tsx props
-                // ALWAYS trigger the prop callback to ensure the modal opens (even on replays),
-                // but rely on App.tsx to deduplicate the permanent reward logic.
                 if (currentProps.onCollectibleDiscovered) currentProps.onCollectibleDiscovered(id);
                 break;
-            case DiscoveryType.POI:
+            }
+
+            case DiscoveryType.POI: {
                 titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.POI);
                 detailsKey = payload?.detailsKey || DataResolver.getPoiName(id);
                 if (!sets.pois.has(id)) {
                     sets.pois.add(id);
-                    if (!stats.discoveredPOIs.includes(id)) {
-                        stats.discoveredPOIs.push(id);
+
+                    const strId = DataResolver.resolvePoiId(id);
+                    if (!stats.discoveredPOIs.includes(strId)) {
+                        stats.discoveredPOIs.push(strId);
                         isNew = true;
                     }
+
                     if (currentProps.onPOIdiscovered) currentProps.onPOIdiscovered(payload || id);
                 }
                 break;
+            }
+
+            case DiscoveryType.PERK: {
+                const perkId = Number(id);
+                if (state.discoveredPerksMap[perkId] === 0) {
+                    state.discoveredPerksMap[perkId] = 1;
+                    isNew = true;
+                    titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.PERK);
+                    const perk = PERKS[perkId];
+                    detailsKey = perk ? perk.displayName : 'ui.perk_discovered';
+                    if (state.sessionStats.discoveredPerksMap) {
+                        state.sessionStats.discoveredPerksMap[perkId] = 1;
+                    }
+                }
+                break;
+            }
+
             case DiscoveryType.CLUE:
-            default:
+            default: {
                 titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.CLUE);
                 detailsKey = detailsKey || 'ui.clue_found';
                 if (!sets.clues.has(id)) {
                     sets.clues.add(id);
                     const cluePayload = payload || { id, content: detailsKey };
-                    // Deduplicate session stats logic
-                    const exists = stats.cluesFound.some((c: any) => c.id === id);
-                    if (!exists) {
-                        stats.cluesFound.push(cluePayload);
+
+                    const strId = DataResolver.resolveClueId(id);
+                    if (!stats.cluesFound.includes(strId)) {
+                        stats.cluesFound.push(strId);
                         isNew = true;
                     }
+
                     if (currentProps.onClueDiscovered) currentProps.onClueDiscovered(cluePayload);
                 }
                 break;
+            }
         }
 
         if (isNew && currentProps.settings?.showDiscoveryPopups !== false) {
             audioEngine.playSound(SoundID.PASSIVE_GAINED);
-            UIEventRingBuffer.pushString(UIEventType.DISCOVERY, id, type);
+            if (!fromBridge && typeof id === 'number') {
+                UIEventRingBuffer.push(UIEventType.DISCOVERY, id, type);
+            }
         }
     }, [refs, t]);
 
-    // --- ZERO-GC: uiCallbacks Object ---
     const uiCallbacks = React.useMemo(() => ({
         onContinue: () => {
             const { uiState: currentUi, props: currentProps } = latestStateRef.current;
@@ -587,7 +603,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         },
         closeModal,
         openMap: () => {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', code: 'KeyM', bubbles: true }));
+            HudStore.triggerMetaAction(MetaActionId.TOGGLE_MAP);
             return true;
         },
         onPauseToggle: (val: boolean) => latestStateRef.current.props.onPauseToggle(val),
@@ -648,14 +664,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         gainXp
     }), [closeModal, gainXp, onAction, refs, spawnBubble, updateUiState]);
 
-    // --- ZERO-GC: Ring Buffer Bridge Listener ---
     const handleUIEvent = useCallback((type: UIEventType, p1: any, p2: number) => {
         switch (type) {
             case UIEventType.BOSS_SPAWN: {
-                const bossType = p1 === 1 ? 'BOSS' : 'BOSS'; // Simplified for now
-                // VINTERDÖD: Boss spawning still needs a position, 
-                // but since we are polling, we might need to pass pos via buffer or find it.
-                // For now, use the sector's default spawn pos if not provided.
+                const bossType = p1 === 1 ? 'BOSS' : 'BOSS';
                 const sectorData = props.currentSectorData || SectorSystem.getSector(props.currentSector || 0);
                 const pos = sectorData?.bossSpawn || _spawnPosScratch.set(0, 0, 0);
 
@@ -673,7 +685,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         bossName: t(bossNameKey)
                     });
                     audioEngine.stopMusic();
-
                     audioEngine.playSound(SoundID.ZOMBIE_GROWL_TANK);
 
                     if (refs.bossIntroTimerRef.current) clearTimeout(refs.bossIntroTimerRef.current);
@@ -720,15 +731,27 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
                 break;
             }
+
+            case UIEventType.DISCOVERY: {
+                const dType = p2 as DiscoveryType;
+                handleDiscovery(dType, p1, '', '', undefined, true);
+                break;
+            }
+            case UIEventType.CHAT_BUBBLE:
+            case UIEventType.CHALLENGE_COMPLETE:
+                break;
         }
-    }, [props.currentSector, props.currentSectorData, refs, updateUiState]);
+    }, [handleDiscovery, props.currentSector, props.currentSectorData, refs, updateUiState]);
 
     useUIEventBridge(handleUIEvent);
 
-    // --- Legacy Listeners (Only for non-hotpath / external UI events) ---
     useEffect(() => {
         const handleKeepCamera = (e: any) => {
-            const { targetPos, lookAtPos, duration } = e.detail || {};
+            const detail = e.detail || {};
+            const targetPos = detail.targetPos;
+            const lookAtPos = detail.lookAtPos;
+            const duration = detail.duration;
+
             if (targetPos && lookAtPos && refs.engineRef.current) {
                 refs.cameraOverrideRef.current = {
                     active: true,
@@ -746,8 +769,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         };
 
         const handleOpenStation = (e: any) => {
-            const { id } = e.detail || {};
-            if (id) updateUiState({ stationOverlay: id });
+            const detail = e.detail || {};
+            if (detail.id) updateUiState({ stationOverlay: detail.id });
         };
 
         window.addEventListener('keep_camera', handleKeepCamera);
@@ -761,7 +784,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         };
     }, [refs, updateUiState]);
 
-    // --- Sector Intro Logic ---
     const hasPlayedIntroRef = React.useRef(false);
     useEffect(() => {
         hasPlayedIntroRef.current = false;
@@ -788,7 +810,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
     }, [props.isGameRunning, props.isPaused, uiState.isSectorLoading, props.currentSector]);
 
-    // Exposed API
     useImperativeHandle(ref, () => ({
         requestPointerLock: () => {
             if (refs.containerRef.current) refs.engineRef.current?.input.requestPointerLock(refs.containerRef.current);
@@ -796,11 +817,23 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         getSectorStats,
         getMergedSessionStats: () => {
             const sessionStats = getSectorStats(false, false);
-            return aggregateStats(latestStateRef.current.props.stats, sessionStats, false, false, 0);
+            return aggregateStats(latestStateRef.current.props.stats, sessionStats, false, false, latestStateRef.current.props.currentSector, 0);
         },
-        triggerInput: (key: string) => {
-            window.dispatchEvent(new KeyboardEvent('keydown', { key: key, bubbles: true }));
-            setTimeout(() => window.dispatchEvent(new KeyboardEvent('keyup', { key: key, bubbles: true })), 50);
+        triggerInput: (input: string | InputAction) => {
+            const action = typeof input === 'string' ? INPUT_KEY_MAP[input] : input;
+            if (action === undefined) return;
+
+            switch (action) {
+                case InputAction.INTERACT: HudStore.triggerMetaAction(MetaActionId.INTERACT_TAP); break;
+                case InputAction.RELOAD: HudStore.triggerMetaAction(MetaActionId.RELOAD_TAP); break;
+                case InputAction.SLOT_1: HudStore.triggerMetaAction(MetaActionId.WEAPON_SLOT_1); break;
+                case InputAction.SLOT_2: HudStore.triggerMetaAction(MetaActionId.WEAPON_SLOT_2); break;
+                case InputAction.SLOT_3: HudStore.triggerMetaAction(MetaActionId.WEAPON_SLOT_3); break;
+                case InputAction.SLOT_4: HudStore.triggerMetaAction(MetaActionId.WEAPON_SLOT_4); break;
+                case InputAction.SLOT_5: HudStore.triggerMetaAction(MetaActionId.WEAPON_SLOT_5); break;
+                case InputAction.MAP: HudStore.triggerMetaAction(MetaActionId.TOGGLE_MAP); break;
+                case InputAction.ESCAPE: HudStore.triggerMetaAction(MetaActionId.TOGGLE_PAUSE); break;
+            }
         },
         rotateCamera: (dir: number) => refs.engineRef.current?.camera.adjustAngle(dir * (Math.PI / 4)),
         adjustPitch: (dir: number) => refs.engineRef.current?.camera.adjustPitch(dir * 2.0),
@@ -830,7 +863,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         },
     }), [getSectorStats, props, refs, updateUiState]);
 
-    // Initialization and Teardown
     useEffect(() => {
         if (!refs.containerRef.current || refs.isMounted.current) return;
         refs.isMounted.current = true;
@@ -850,8 +882,34 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         engine.mount(refs.containerRef.current);
         refs.engineRef.current = engine;
         engine.input.enable();
+        engine.input.onMetaAction = (actionId: MetaActionId) => {
+            const currentOverlay = latestStateRef.current.props.activeOverlay;
+
+            switch (actionId) {
+                case MetaActionId.TOGGLE_PAUSE:
+                    if (currentOverlay === OverlayType.PAUSE) props.onInteractionStateChange?.(OverlayType.NONE);
+                    else if (currentOverlay === OverlayType.NONE) props.onInteractionStateChange?.(OverlayType.PAUSE);
+                    break;
+                case MetaActionId.TOGGLE_MAP:
+                    if (currentOverlay === OverlayType.MAP) props.onInteractionStateChange?.(OverlayType.NONE);
+                    else if (currentOverlay === OverlayType.NONE) props.onInteractionStateChange?.(OverlayType.MAP);
+                    break;
+                case MetaActionId.TOGGLE_ADVENTURE_LOG:
+                    if (currentOverlay === OverlayType.ADVENTURE_LOG) props.onInteractionStateChange?.(OverlayType.NONE);
+                    else props.onInteractionStateChange?.(OverlayType.ADVENTURE_LOG);
+                    break;
+                case MetaActionId.RESTART_SECTOR:
+                    (ref as any).current?.restartSector();
+                    break;
+                case MetaActionId.QUIT_TO_MENU:
+                    props.onSectorEnded({ aborted: true } as any);
+                    break;
+            }
+        };
 
         engine.onUpdate = null;
+        engine.onPreRender = null;
+        engine.onRenderOverride = null;
         engine.onRender = null;
 
         const session = new GameSessionLogic(engine);
@@ -886,8 +944,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         if (latestStateRef.current.props.onBossIntroStateChange) latestStateRef.current.props.onBossIntroStateChange(val);
                     },
                     setBubbleTailPosition: (val: any) => updateUiState({ bubbleTailPosition: val }),
-
-                    // VINTERDÖD FIX: Removed HudStore manual syncs!
                     setCurrentLine: (val: any) => {
                         updateUiState({ currentLine: val });
                         refs.stateRef.current.currentLine = val;
@@ -943,21 +999,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     endCinematic: () => {
                         const cinematicSystem = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
                         if (!cinematicSystem) return;
-
-                        const state = cinematicSystem.cinematicRef.current;
-                        if (!state.active) return;
-
-                        const script = cinematicSystem.getScript(state.scriptId);
-                        if (script && script[state.lineIndex]?.trigger) {
-                            onAction(script[state.lineIndex].trigger);
-                        }
                         cinematicSystem.stop();
-
-                        const { props: currentProps } = latestStateRef.current;
-                        if (!currentProps.isMobileDevice && refs.containerRef.current) {
-                            refs.engineRef.current?.input.requestPointerLock(refs.containerRef.current);
-                        }
-                        setUiState(prev => ({ ...prev, isInteractionOpen: false }));
                     },
                     spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => {
                         const sectorData = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
@@ -985,6 +1027,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             await GameSessionSetup.runSectorSetup(ctx, currentSetupId);
 
             if (refs.isMounted.current && refs.setupIdRef.current === currentSetupId) {
+                if (engine) {
+                    engine.isRenderingPaused = false;
+                    engine.isSimulationPaused = false;
+                }
                 updateUiState({ isSectorLoading: false });
             }
         };
@@ -1020,7 +1066,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, sourceAttack);
                     }
                 },
-                // --- VINTERDÖD FIX: NEW STABLE CALLBACKS FOR SECTOR LOGIC ---
                 spawnZombie: (type: any, pos: any) => refs.sectorContextRef.current?.spawnZombie(type, pos),
                 spawnHorde: (count: number, type: any, pos: any) => refs.sectorContextRef.current?.spawnHorde(count, type, pos),
                 setNotification: (n: any) => {
@@ -1030,12 +1075,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     const s = refs.stateRef.current;
                     if (interaction) {
                         s.interaction.active = true;
-                        s.interaction.id = interaction.id;
+                        s.interaction.targetId = interaction.id;
                         s.interaction.type = interaction.type;
                         s.interaction.label = interaction.label;
+                        s.interaction.promptId = interaction.promptId || InteractionPromptId.INTERACT;
                         if (interaction.position) s.interactionTargetPos.copy(interaction.position);
+                        s.hasInteractionTarget = true;
                     } else {
                         s.interaction.active = false;
+                        s.interaction.promptId = InteractionPromptId.NONE;
+                        s.hasInteractionTarget = false;
                     }
                 },
                 setOverlay: (type: number | null) => props.onInteractionStateChange?.(type),
@@ -1068,17 +1117,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
         };
     }, [props.currentSector]);
-
-
-    // VINTERDÖD: Activation Phase
-    // When isWarmup toggles to false, we trigger the "live" systems (Zombies, Triggers, etc.)
-    useEffect(() => {
-        if (!props.isWarmup && refs.sectorContextRef.current && refs.isMounted.current) {
-            const currentSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
-            GameSessionSetup.activateSector(refs.sectorContextRef.current, currentSector);
-        }
-    }, [props.isWarmup, props.currentSector]);
-
 
     // Environmental Sync 
     useEffect(() => {

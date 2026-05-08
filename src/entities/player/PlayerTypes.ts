@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { StatusEffectType } from '../../content/perks';
+import { StatusEffectID } from '../../content/perks';
 import { DamageID } from './CombatTypes';
 
 /**
- * VINTERDÖD: Player DOD & Zero-GC Refactor (Phase 9)
+ * Player DOD & Zero-GC Refactor (Phase 9)
  * * This file defines the core Data-Oriented structures for the player.
  * High-frequency stats are stored in contiguous Float32Arrays to ensure
  * L1/L2 cache locality and prevent V8 hidden-class deoptimizations.
@@ -24,56 +24,58 @@ export enum PlayerStatID {
     NEXT_LEVEL_XP = 7,
     SKILL_POINTS = 8,
     SCRAP = 9,
-    SPEED = 10,
-    TOTAL_SCRAP_COLLECTED = 11,
-    TOTAL_DAMAGE_DEALT = 12,
-    TOTAL_DAMAGE_TAKEN = 13,
-    TOTAL_DISTANCE_TRAVELED = 14,
-    TOTAL_KILLS = 15,
-    SCORE = 16,
+    CHALLENGE_POINTS = 10,
+    SPEED = 11,
+    TOTAL_SCRAP_COLLECTED = 12,
+    TOTAL_DAMAGE_DEALT = 13,
+    TOTAL_DAMAGE_TAKEN = 14,
+    TOTAL_DISTANCE_TRAVELED = 15,
+    TOTAL_KILLS = 16,
+    SCORE = 17,
 
     // --- NEW ANALYTICS (Phase 12) ---
-    TOTAL_SESSIONS_STARTED = 17,
-    TOTAL_GAME_TIME = 18,
-    LONGEST_KILLSTREAK = 19,
-    TOTAL_CHESTS_OPENED = 20,
-    TOTAL_BIG_CHESTS_OPENED = 21,
-    TOTAL_ENGAGEMENT_DISTANCE_SQ = 22,
+    TOTAL_SESSIONS_STARTED = 18,
+    TOTAL_GAME_TIME = 19,
+    LONGEST_KILLSTREAK = 20,
+    TOTAL_CHESTS_OPENED = 21,
+    TOTAL_BIG_CHESTS_OPENED = 22,
+    TOTAL_ENGAGEMENT_DISTANCE_SQ = 23,
 
     // --- NEW MOVEMENT ANALYTICS ---
-    TOTAL_DODGES = 23,
-    TOTAL_RUSHES = 24,
-    TOTAL_RUSH_DISTANCE = 25,
+    TOTAL_DODGES = 24,
+    TOTAL_RUSHES = 25,
+    TOTAL_RUSH_DISTANCE = 26,
 
     // --- NEW PERK ANALYTICS ---
-    TOTAL_BUFF_TIME = 26,
-    TOTAL_DEBUFFS_RESISTED = 27,
-    TOTAL_CRISIS_SAVES = 28,
-    TOTAL_DEATHS = 29,
-    TOTAL_SHOTS_FIRED = 30,
-    TOTAL_SHOTS_HIT = 31,
-    TOTAL_THROWABLES_THROWN = 32,
+    TOTAL_BUFF_TIME = 27,
+    TOTAL_DEBUFFS_RESISTED = 28,
+    TOTAL_CRISIS_SAVES = 29,
+    TOTAL_DEATHS = 30,
+    TOTAL_SHOTS_FIRED = 31,
+    TOTAL_SHOTS_HIT = 32,
+    TOTAL_THROWABLES_THROWN = 33,
 
-    // --- MULTIPLIERS (33+) ---
-    MULTIPLIER_SPEED = 33,
-    MULTIPLIER_RELOAD = 34,
-    MULTIPLIER_FIRERATE = 35,
-    MULTIPLIER_DMG_RESIST = 36,
-    MULTIPLIER_RANGE = 37,
+    // --- MULTIPLIERS (34+) ---
+    MULTIPLIER_SPEED = 34,
+    MULTIPLIER_RELOAD = 35,
+    MULTIPLIER_FIRERATE = 36,
+    MULTIPLIER_DMG_RESIST = 37,
+    MULTIPLIER_RANGE = 38,
 
     // Pre-calculated stats (Zero-GC / O(1))
-    FINAL_SPEED = 38,
+    FINAL_SPEED = 39,
 
     // --- CHALLENGE TRACKING ---
-    TOTAL_HEADSHOTS = 40,
-    TOTAL_ITEMS_COLLECTED = 41,
-    TOTAL_LONG_RANGE_KILLS = 42,
-    TOTAL_SECTORS_COMPLETED = 43,
-    TOTAL_CRITICAL_HITS = 44,
-    TOTAL_CHALLENGE_POINTS = 45,
+    TOTAL_ITEMS_COLLECTED = 40,
+    TOTAL_LONG_RANGE_KILLS = 41,
+    TOTAL_SECTORS_COMPLETED = 42,
+    TOTAL_CRITICAL_HITS = 43,
+    TOTAL_CHALLENGE_POINTS = 44,
+    TOTAL_GIBBED = 45,
+    TOTAL_UNIQUE_ENEMIES_HIT_BY_EXPLOSIVES = 46,
 
     // Buffer Size
-    COUNT = 48
+    COUNT = 50
 }
 
 /**
@@ -117,8 +119,23 @@ export enum StatWeaponIndex {
     OTHER = 35,
     BOSS_GENERIC = 36,
 
-    COUNT = 64 
+    COUNT = 64
 }
+
+/**
+ * Telemetry Source Mapping
+ * Defines the row offsets for the 2048-slot incomingDamageBuffer.
+ * This prevents ID collisions between EnemyType and DamageID.
+ */
+export enum TelemetrySourceOffset {
+    ENEMY = 0,       // 0 - 15: EnemyType
+    BOSS = 16,      // 16 - 23: BossID
+    ENVIRONMENT = 24 // 24 - 63: DamageID
+}
+
+export const TELEMETRY_SOURCES_COUNT = 64;
+export const TELEMETRY_ATTACKS_PER_SOURCE = 32;
+export const TELEMETRY_BUFFER_SIZE = TELEMETRY_SOURCES_COUNT * TELEMETRY_ATTACKS_PER_SOURCE; // 2048
 
 /**
  * SMI-indexed index for enemy-specific statistics.
@@ -135,7 +152,7 @@ export enum StatEnemyIndex {
 
 /**
  * SMI-indexed index for perk-specific performance metrics.
- * Sized to 32 to match StatusEffectType bitmasking capacity.
+ * Sized to 32 to match StatusEffectID bitmasking capacity.
  */
 export enum StatPerkIndex {
     COUNT = 32
@@ -187,7 +204,7 @@ export interface PlayerStats {
     baseY: number;                  // Cached from ModelFactory
     // --- DOD BUFFERS (Zero-GC / O(1)) ---
     statsBuffer: Float32Array;      // Sized by PlayerStatID.COUNT
-    effectDurations: Float32Array;  // Sized by StatusEffectType (e.g. 16/32)
+    effectDurations: Float32Array;  // Sized by StatusEffectID (e.g. 16/32)
     effectMaxDurations: Float32Array;
     effectIntensities: Float32Array;
 
@@ -201,7 +218,7 @@ export interface PlayerStats {
     weaponEngagementDistSq: Float64Array;
 
     // --- PERK PERFORMANCE BUFFERS (Zero-GC / Phase 12) ---
-    // All indexed by StatusEffectType (0-31)
+    // All indexed by StatusEffectID (0-31)
     perkTimesGained: Float64Array;
     perkDamageAbsorbed: Float64Array;
     perkDamageDealt: Float64Array;
@@ -219,9 +236,10 @@ export interface PlayerStats {
 
     // --- SMI STATE ---
     statusFlags: number;            // Bitmask (PlayerStatusFlags)
-    activePassives: StatusEffectType[];
-    activeBuffs: StatusEffectType[];
-    activeDebuffs: StatusEffectType[];
+    statusMask: number;             // SMI bitmask (StatusEffectID)
+    activePassives: StatusEffectID[];
+    activeBuffs: StatusEffectID[];
+    activeDebuffs: StatusEffectID[];
 
     // --- SECTOR PROGRESSION ---
     sectorsCompleted: number;
@@ -235,15 +253,16 @@ export interface PlayerStats {
     totalEnemiesKilled: number;
     seenEnemies: number[];
     seenBosses: number[];
-    discoveredPerks: StatusEffectType[];
+    discoveredPerksMap: Uint8Array;
     discoveredPOIs: string[];
 
     // --- STORY & PROGRESSION ---
     prologueSeen?: boolean;
     rescuedFamilyIndices: number[];
+    deadBossIndices: number[];
 
     familyFoundCount: number;
- 
+
     // --- CHALLENGE PROGRESSION ---
     // Stores current tier (0-3) for each ChallengeID
     challengeTiers: Int32Array;
@@ -266,6 +285,23 @@ export const PlayerStatsUtils = {
             arr[i] = buffer[i];
         }
         return arr;
+    },
+
+    /**
+     * Serializes a Uint8Array map to a standard array for persistence.
+     */
+    serializeMap8: (buffer: Uint8Array): number[] => {
+        const len = buffer.length;
+        const arr = new Array(len);
+        for (let i = 0; i < len; i++) arr[i] = buffer[i];
+        return arr;
+    },
+
+    /**
+     * Deserializes a standard array back into a Uint8Array map.
+     */
+    deserializeMap8: (data: number[]): Uint8Array => {
+        return new Uint8Array(data);
     },
 
     /**
@@ -307,7 +343,7 @@ export const PlayerStatsUtils = {
             effectDurations: new Float32Array(effectCount),
             effectMaxDurations: new Float32Array(effectCount),
             effectIntensities: new Float32Array(effectCount),
-            
+
             weaponKills: new Float64Array(StatWeaponIndex.COUNT),
             weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
             weaponShotsFired: new Float64Array(StatWeaponIndex.COUNT),
@@ -325,29 +361,46 @@ export const PlayerStatsUtils = {
             incomingDamageBuffer: new Float64Array(64 * 32),
             challengeTiers: new Int32Array(64),
 
-            activePassives: [] as StatusEffectType[],
-            activeBuffs: [] as StatusEffectType[],
-            activeDebuffs: [] as StatusEffectType[],
-            discoveredPerks: [] as StatusEffectType[],
+            activePassives: [] as StatusEffectID[],
+            activeBuffs: [] as StatusEffectID[],
+            activeDebuffs: [] as StatusEffectID[],
+            discoveredPerksMap: new Uint8Array(256),
             rescuedFamilyIndices: [] as number[],
-            trackedChallengeIds: [] as number[]
+            deadBossIndices: [] as number[],
+            trackedChallengeIds: [] as number[],
+
+            // Collection data
+            collectiblesDiscovered: [] as string[],
+            viewedCollectibles: [] as string[],
+            cluesFound: [] as string[],
+            discoveredPOIs: [] as string[],
+            seenEnemies: [] as number[],
+            seenBosses: [] as number[],
+
+            // Progression
+            sectorsCompleted: 0,
+            totalSkillPointsEarned: 0,
+            familyFoundCount: 0,
+            totalEnemiesKilled: 0,
+            totalChallengePoints: 0,
+            mostUsedWeapon: StatWeaponIndex.NONE as any
         };
     },
 
     // --- BITWISE HELPERS (O(1) Check & Mutate) ---
 
     /** Checks if a specific status flag is currently active */
-    hasFlag: (stats: PlayerStats, flag: PlayerStatusFlags): boolean => {
-        return (stats.statusFlags & flag) !== 0;
+    hasFlag: (playerStats: PlayerStats, flag: PlayerStatusFlags): boolean => {
+        return (playerStats.statusFlags & flag) !== 0;
     },
 
     /** Sets a specific status flag to active */
-    setFlag: (stats: PlayerStats, flag: PlayerStatusFlags) => {
-        stats.statusFlags |= flag;
+    setFlag: (playerStats: PlayerStats, flag: PlayerStatusFlags) => {
+        playerStats.statusFlags |= flag;
     },
 
     /** Removes a specific status flag */
-    clearFlag: (stats: PlayerStats, flag: PlayerStatusFlags) => {
-        stats.statusFlags &= ~flag;
+    clearFlag: (playerStats: PlayerStats, flag: PlayerStatusFlags) => {
+        playerStats.statusFlags &= ~flag;
     }
 };

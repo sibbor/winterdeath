@@ -4,7 +4,7 @@ import { GameCanvasProps } from '../../types/CanvasTypes';
 import { UiSounds } from '../../utils/audio/AudioLib';
 import { FLASHLIGHT } from '../../content/constants';
 import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
-import { InputAction, INPUT_KEY_MAP } from '../../core/engine/InputTypes';
+import { InputAction, INPUT_KEY_MAP } from '../../core/engine/InputManager';
 
 export const useGameInput = (
     refs: any,
@@ -108,7 +108,7 @@ export const useGameInput = (
         };
     }, [
         props.isPaused, props.isGameRunning, props.isCollectibleOpen, p.disableInput,
-        props.onPauseToggle, p.onClueClose, refs
+        props.onPauseToggle, p.onClueClose, refs, props.isMobileDevice, p.isClueOpen, refs.cinematicRef, refs.stateRef, refs.bossIntroTimerRef
     ]);
 
     // 3. Pointer Lock tracking (Zero-GC, auto-pause if focus lost)
@@ -126,21 +126,27 @@ export const useGameInput = (
         const handleLockChange = () => {
             if (!document.pointerLockElement && props.isGameRunning && !props.isPaused) {
 
-                // VINTERDÖD FIX: Slightly reduced safety window (500->300ms) for tighter responsiveness
+                // If an overlay is already active (Map, Adventure Log), ignore the lock loss.
+                // This prevents the Pause Menu from opening "behind" or "over" the Map.
+                if (p.activeOverlay && p.activeOverlay !== 0) {
+                    return;
+                }
+
+                // Slightly reduced safety window (500->300ms) for tighter responsiveness
                 if (performance.now() - unpauseTimeRef.current < 300) {
                     return;
                 }
 
-                // VINTERDÖD FIX: Ignore if CTRL is held (Quick Inspect)
+                // Ignore if CTRL is held (Quick Inspect)
                 if (refs.engineRef.current?.input.state.actions[InputAction.CTRL]) {
                     return;
                 }
 
-                // VINTERDÖD FIX: Only trigger pause if we are in a state that expects input focus
-                const isExpected = refs.cinematicRef.current.active || 
-                                 refs.bossIntroTimerRef.current || 
-                                 (refs.stateRef.current?.statusFlags & PlayerStatusFlags.DEAD);
-                                 
+                // Only trigger pause if we are in a state that expects input focus
+                const isExpected = refs.cinematicRef.current.active ||
+                    refs.bossIntroTimerRef.current ||
+                    (refs.stateRef.current?.statusFlags & PlayerStatusFlags.DEAD);
+
                 if (!isExpected && props.isGameRunning && !props.isPaused) {
                     props.onPauseToggle(true);
                 }
@@ -149,6 +155,6 @@ export const useGameInput = (
 
         document.addEventListener('pointerlockchange', handleLockChange);
         return () => document.removeEventListener('pointerlockchange', handleLockChange);
-    }, [props.isGameRunning, props.isPaused, props.onPauseToggle, refs]);
+    }, [props.isGameRunning, props.isPaused, props.onPauseToggle, refs, p.activeOverlay]);
 
 };

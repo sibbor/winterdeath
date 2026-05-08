@@ -1,5 +1,5 @@
 /**
- * VINTERDÖD: Challenge System Data Layer
+ * Challenge System Data Layer
  * 
  * This file defines the static registry for all game challenges.
  * Designed for O(1) lookups and zero heap allocations during runtime.
@@ -37,7 +37,7 @@ export enum ChallengeID {
     BOSS_SLAYER = 9,
 
     // WEAPONS/TACTICS
-    MARKSMAN = 10,
+    GIBBER = 10,
     PYROMANIAC = 11,
     SHOCK_THERAPY = 12,
     DEMOLITION_EXPERT = 13,
@@ -156,10 +156,10 @@ export const GAME_CHALLENGES: ReadonlyArray<ChallengeDef> = [
 
     // --- WEAPONS/TACTICS ---
     {
-        id: ChallengeID.MARKSMAN,
+        id: ChallengeID.GIBBER,
         categoryId: ChallengeCategory.WEAPONS,
-        titleKey: 'challenges.marksman.title',
-        descriptionKey: 'challenges.marksman.desc',
+        titleKey: 'challenges.gibber.title',
+        descriptionKey: 'challenges.gibber.desc',
         targets: [50, 500, 5000],
         cpRewards: [15, 40, 150]
     },

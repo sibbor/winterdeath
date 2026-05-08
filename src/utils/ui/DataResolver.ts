@@ -4,33 +4,28 @@ import { WEAPONS, WEAPON_CATEGORY_NAMES, WeaponCategory, WeaponType } from '../.
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
 import { POIS } from '../../content/pois';
-import { PERKS, PERK_CATALOG, PerkCategory, StatusEffectType } from '../../content/perks';
-import { FAMILY_MEMBERS, FamilyMemberID, PLAYER_CHARACTER, SPEAKER_ID_TO_KEY } from '../../content/constants';
+import { PERKS, PERK_CATALOG, PerkCategory } from '../../content/perks';
+import { FAMILY_MEMBERS, FamilyMemberID, PLAYER_CHARACTER, SPEAKER_ID_TO_KEY, VoiceParams, VOICE_PARAMS_MAP } from '../../content/constants';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { CLUES } from '../../content/clues';
 import { COLLECTIBLES } from '../../content/collectibles';
 import { ChallengeID } from '../../content/ChallengeTypes';
 import { WeaponStats } from '../../content/weapons';
-import { PlayerStatID, StatWeaponIndex, StatEnemyIndex, PlayerStats } from '../../entities/player/PlayerTypes';
-import { BossID } from '../../game/session/SectorTypes';
+import { PlayerStatID, StatWeaponIndex, StatEnemyIndex, PlayerStats, TelemetrySourceOffset, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE } from '../../entities/player/PlayerTypes';
+import { BossID, SectorID } from '../../game/session/SectorTypes';
 import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
 import { t } from '../i18n';
 import { en } from '../../locales/en';
+import { StatusEffectID } from '../../types/StatusEffects';
+import { ColorPair, COLORS } from './ColorUtils';
+
 
 /**
- * VINTERDÖD: Central Data Resolver (Facade Pattern)
+ * Central Data Resolver (Facade Pattern)
  * Decouples System/UI from raw data structures.
  * Provides O(1), Zero-GC access to entity localized names and metadata.
  */
 
-/**
- * Type-safe interface for voice parameters to enable Zero-GC audio synthesis.
- */
-export interface VoiceParams {
-    baseFreq: number;
-    oscType: OscillatorType;
-    pitchScale: number;
-}
 
 const DISCOVERY_BUCKETS: Record<number, any[]> = {
     [DiscoveryType.POI]: Object.values(POIS),
@@ -40,41 +35,53 @@ const DISCOVERY_BUCKETS: Record<number, any[]> = {
     [DiscoveryType.ZOMBIE]: Object.entries(ZOMBIE_TYPES).map(([type, data]) => ({ ...data, id: type, type: Number(type) }))
 };
 
-const SPEAKER_COLORS: Record<string, string> = {
-    'robert': '#3b82f6', // PLAYER_CHARACTER.color
-    'pappa': '#3b82f6',
-    'narrator': '#ef4444',
-    'unknown': '#9ca3af',
-    'radio': '#9ca3af'
+// --- SMI MAPPING (Zero-GC Transport) ---
+// Maps (sector << 8 | index) numeric IDs to string IDs for world content.
+const POI_SMI_MAP: Record<number, string> = {};
+const CLUE_SMI_MAP: Record<number, string> = {};
+const COLLECTIBLE_SMI_MAP: Record<number, string> = {};
+
+const poiValues = Object.values(POIS);
+for (let i = 0; i < poiValues.length; i++) {
+    const p = poiValues[i];
+    POI_SMI_MAP[(p.sector << 8) | p.index] = p.id;
+}
+
+const clueValues = Object.values(CLUES);
+for (let i = 0; i < clueValues.length; i++) {
+    const c = clueValues[i];
+    CLUE_SMI_MAP[(c.sector << 8) | c.index] = c.id;
+}
+
+const collValues = Object.values(COLLECTIBLES);
+for (let i = 0; i < collValues.length; i++) {
+    const c = collValues[i];
+    COLLECTIBLE_SMI_MAP[(c.sector << 8) | c.index] = c.id;
+}
+
+const SPEAKER_COLORS: Record<string | number, ColorPair> = {
+    [FamilyMemberID.ROBERT]: PLAYER_CHARACTER.color,
+    'robert': PLAYER_CHARACTER.color,
+    [FamilyMemberID.UNKNOWN]: COLORS.GRAY,
+    'unknown': COLORS.GRAY,
+    [FamilyMemberID.RADIO]: COLORS.GRAY,
+    'radio': COLORS.GRAY
 };
 
 // Pre-populate family member colors and IDs
-const VOICE_PARAMS_MAP: Record<number, VoiceParams> = {
-    [-1]: { baseFreq: 110, oscType: 'sawtooth', pitchScale: 1.0 } // Robert
-};
-
 const familyLen = FAMILY_MEMBERS.length;
 for (let i = 0; i < familyLen; i++) {
     const m = FAMILY_MEMBERS[i];
-    const colorHex = '#' + m.color.toString(16).padStart(6, '0');
-    SPEAKER_COLORS[m.id] = colorHex;
+    const cPair = m.color;
+    SPEAKER_COLORS[m.id] = cPair;
 
-    let baseFreq = 220;
-    const id = m.id;
-    if (id === FamilyMemberID.NATHALIE) baseFreq = 380;
-    else if (id === FamilyMemberID.ESMERALDA) baseFreq = 450;
-    else if (id === FamilyMemberID.LOKE) baseFreq = 420;
-    else if (id === FamilyMemberID.JORDAN) baseFreq = 500;
-    else if (m.race === 'animal') baseFreq = 700;
-
-    VOICE_PARAMS_MAP[m.id] = {
-        baseFreq,
-        oscType: id === FamilyMemberID.NATHALIE || m.race === 'animal' ? 'sine' : 'triangle',
-        pitchScale: 1.0 / (m.scale || 1.0)
-    };
+    // Also map the string key (e.g. 'loke') for UI string-based lookups
+    const key = SPEAKER_ID_TO_KEY[m.id];
+    if (key) SPEAKER_COLORS[key] = cPair;
 }
 
 export const DataResolver = {
+
     /**
      * Resolves the localized name key for any DamageID (Weapon or Environment).
      */
@@ -88,6 +95,21 @@ export const DataResolver = {
         if (envName) return envName;
 
         return 'ui.unknown';
+    },
+
+    /**
+     * Unified Source Resolver for Incoming Damage (Telemetry)
+     * Maps the 64 possible sources from the incomingDamageBuffer to localized names.
+     */
+    resolveIncomingSource(sourceId: number): { name: string, type: 'enemy' | 'boss' | 'environment' | 'unknown' } {
+        if (sourceId < TelemetrySourceOffset.BOSS) {
+            return { name: this.getZombieName(sourceId as EnemyType), type: 'enemy' };
+        } else if (sourceId < TelemetrySourceOffset.ENVIRONMENT) {
+            return { name: this.getBossName((sourceId - TelemetrySourceOffset.BOSS) as any), type: 'boss' };
+        } else if (sourceId < TELEMETRY_SOURCES_COUNT) {
+            return { name: this.getDamageName((sourceId - TelemetrySourceOffset.ENVIRONMENT) as DamageID), type: 'environment' };
+        }
+        return { name: 'ui.unknown', type: 'unknown' };
     },
 
     /**
@@ -190,7 +212,7 @@ export const DataResolver = {
         const id = Number(idOrIndex);
         if (id === FamilyMemberID.ROBERT) return PLAYER_CHARACTER.name;
         const member = typeof idOrIndex === 'number' ? FAMILY_MEMBERS[idOrIndex] : FAMILY_MEMBERS.find(m => m.id === id);
-        return member ? member.name : 'ui.unknown';
+        return member ? t(member.name) : 'ui.unknown';
     },
 
     /**
@@ -229,10 +251,15 @@ export const DataResolver = {
 
     /**
      * Internal helper to resolve a translation key to its localized value for logs.
-     * ZERO-GC: Direct traversal of the locale object.
+     * ZERO-GC: Direct traversal of the locale object with a memoization cache.
      */
+    _logNameCache: new Map<string, string>(),
     _resolveLogName(key: string): string {
         if (!key) return 'Unknown';
+
+        const cached = this._logNameCache.get(key);
+        if (cached) return cached;
+
         const parts = key.split('.');
 
         // 1. Attempt O(N) traversal of the 'en' locale object (Logs are always English)
@@ -242,44 +269,51 @@ export const DataResolver = {
             if (!current) break;
         }
 
-        if (typeof current === 'string') return current;
+        if (typeof current === 'string') {
+            this._logNameCache.set(key, current);
+            return current;
+        }
 
-        // 2. Fallback: Extract the most meaningful part (e.g. "perks.BLEEDING.title" -> "Bleeding")
-        // We take the penultimate part if it ends in .name or .title
         const raw = (parts.length > 1) ? parts[parts.length - 2] : parts[0];
-        return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+        const result = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+
+        this._logNameCache.set(key, result);
+        return result;
     },
 
     /**
      * Resolves the localized name key for a POI by its unique ID.
      */
-    getPoiName(id: string): string {
-        const poi = POIS[id];
+    getPoiName(id: string | number): string {
+        const strId = typeof id === 'number' ? POI_SMI_MAP[id] : id;
+        const poi = POIS[strId];
         return poi ? poi.displayNameKey : 'ui.poi';
     },
 
     /**
      * Resolves the localized name key for a Collectible.
      */
-    getCollectibleName(id: string): string {
-        const item = COLLECTIBLES[id];
-        if (!item) return `collectibles.${id}.title`;
+    getCollectibleName(id: string | number): string {
+        const strId = typeof id === 'number' ? COLLECTIBLE_SMI_MAP[id] : id;
+        const item = COLLECTIBLES[strId];
+        if (!item) return `collectibles.${strId}.title`;
         return `collectibles.${item.sector}.${item.index}.title`;
     },
 
     /**
      * Resolves the localized description for a Collectible.
      */
-    getCollectibleDescription(id: string): string {
-        const item = COLLECTIBLES[id];
-        if (!item) return `collectibles.${id}.description`;
+    getCollectibleDescription(id: string | number): string {
+        const strId = typeof id === 'number' ? COLLECTIBLE_SMI_MAP[id] : id;
+        const item = COLLECTIBLES[strId];
+        if (!item) return `collectibles.${strId}.description`;
         return `collectibles.${item.sector}.${item.index}.description`;
     },
 
     /**
      * Resolves the localized name key for a Perk or Status Effect.
      */
-    getPerkName(id: StatusEffectType, logFriendly: boolean = false): string {
+    getPerkName(id: StatusEffectID, logFriendly: boolean = false): string {
         const perk = PERKS[id];
         const key = perk ? perk.displayName : 'ui.unknown';
         if (logFriendly) return this._resolveLogName(key);
@@ -289,18 +323,20 @@ export const DataResolver = {
     /**
      * Resolves the localized reaction text for a Clue.
      */
-    getClueReaction(id: string): string {
-        const clue = CLUES[id];
-        if (!clue) return `clues.${id}.reaction`;
+    getClueReaction(id: string | number): string {
+        const strId = typeof id === 'number' ? CLUE_SMI_MAP[id] : id;
+        const clue = CLUES[strId];
+        if (!clue) return `clues.${strId}.reaction`;
         return `clues.${clue.sector}.${clue.index}.reaction`;
     },
 
     /**
      * Resolves the localized description/reaction for a Clue.
      */
-    getClueDescription(id: string): string {
-        const clue = CLUES[id];
-        if (!clue) return `clues.${id}.description`;
+    getClueDescription(id: string | number): string {
+        const strId = typeof id === 'number' ? CLUE_SMI_MAP[id] : id;
+        const clue = CLUES[strId];
+        if (!clue) return `clues.${strId}.description`;
         return `clues.${clue.sector}.${clue.index}.description`;
     },
 
@@ -344,7 +380,8 @@ export const DataResolver = {
      */
     getSpeakerColor(id: FamilyMemberID | string): string {
         const key = typeof id === 'string' ? id.toLowerCase() : id;
-        return SPEAKER_COLORS[key] || '#ffffff';
+        const color = SPEAKER_COLORS[key];
+        return color ? color.str : COLORS.WHITE.str;
     },
 
     /**
@@ -362,7 +399,7 @@ export const DataResolver = {
      * Used by SoundManager to bypass mid-frame logic branching.
      */
     getVoiceParams(id: number): VoiceParams {
-        return VOICE_PARAMS_MAP[id] || VOICE_PARAMS_MAP[-1];
+        return VOICE_PARAMS_MAP[id] || VOICE_PARAMS_MAP[FamilyMemberID.UNKNOWN];
     },
 
     /**
@@ -383,8 +420,9 @@ export const DataResolver = {
     /**
      * Resolves the localized description for a POI.
      */
-    getPoiDescription(id: string): string {
-        const poi = POIS[id];
+    getPoiDescription(id: string | number): string {
+        const strId = typeof id === 'number' ? POI_SMI_MAP[id] : id;
+        const poi = POIS[strId];
         if (!poi) return 'ui.description_missing';
         return poi.descriptionKey || `pois.${poi.sector}.${poi.index}.description`;
     },
@@ -392,8 +430,9 @@ export const DataResolver = {
     /**
      * Resolves the localized reaction text for a POI.
      */
-    getPoiReaction(id: string): string {
-        const poi = POIS[id];
+    getPoiReaction(id: string | number): string {
+        const strId = typeof id === 'number' ? POI_SMI_MAP[id] : id;
+        const poi = POIS[strId];
         if (!poi) return '';
         return poi.reactionKey || `pois.${poi.sector}.${poi.index}.reaction`;
     },
@@ -401,12 +440,10 @@ export const DataResolver = {
     /**
      * Resolves the localized description for a Perk.
      */
-    getPerkDescription(id: StatusEffectType): string {
+    getPerkDescription(id: StatusEffectID): string {
         const perk = PERKS[id];
         return perk ? perk.description : 'ui.description_missing';
     },
-
-
 
     /**
      * CONTENT ACCESSORS (Decoupling UI from raw imports)
@@ -418,9 +455,27 @@ export const DataResolver = {
     getClues(): typeof CLUES { return CLUES; },
     getPerks(): typeof PERKS { return PERKS; },
     getSectorThemes(): typeof SECTOR_THEMES { return SECTOR_THEMES; },
-    getSectors(): number[] { return [0, 1, 2, 3]; },
+    getSectors(): number[] { return [SectorID.VILLAGE, SectorID.MOUNTAIN_VAULT, SectorID.THE_MAST, SectorID.SCRAPYARD]; },
     getWeapons(): WeaponStats[] { return WEAPONS; },
     getFamilyMembers(): typeof FAMILY_MEMBERS { return FAMILY_MEMBERS; },
+
+    /**
+     * SMI TO STRING RESOLUTION (Zero-GC)
+     */
+    resolveClueId(smi: any): string { return CLUE_SMI_MAP[Number(smi)] || String(smi); },
+    resolvePoiId(smi: any): string { return POI_SMI_MAP[Number(smi)] || String(smi); },
+    resolveCollectibleId(smi: any): string { return COLLECTIBLE_SMI_MAP[Number(smi)] || String(smi); },
+
+    resolveDiscoveryId(type: DiscoveryType, id: any): string {
+        if (typeof id === 'string') return id;
+        const smi = Number(id);
+        switch (type) {
+            case DiscoveryType.CLUE: return this.resolveClueId(smi);
+            case DiscoveryType.POI: return this.resolvePoiId(smi);
+            case DiscoveryType.COLLECTIBLE: return this.resolveCollectibleId(smi);
+            default: return String(id);
+        }
+    },
 
     /**
      * Returns a pre-computed list of perks by category (O(1)).
@@ -454,36 +509,6 @@ export const DataResolver = {
         }
     },
 
-    /**
-     * Resolves the current numeric value for a specific challenge.
-     * ZERO-GC: Direct buffer access.
-     */
-    getChallengeValue(stats: PlayerStats, id: ChallengeID): number {
-        const buffer = stats.statsBuffer;
-        const wk = stats.weaponKills;
-        const ek = stats.enemyKills;
 
-        switch (id) {
-            case ChallengeID.MARATHON: return buffer[PlayerStatID.TOTAL_DISTANCE_TRAVELED];
-            case ChallengeID.SCRAPPER: return buffer[PlayerStatID.TOTAL_SCRAP_COLLECTED];
-            case ChallengeID.EXPLORER: return stats.discoveredPOIs.length;
-            case ChallengeID.TREASURE_HUNTER: return buffer[PlayerStatID.TOTAL_CHESTS_OPENED];
-            case ChallengeID.SCAVENGER: return buffer[PlayerStatID.TOTAL_ITEMS_COLLECTED];
-            case ChallengeID.ZOMBIE_HUNTER: return buffer[PlayerStatID.TOTAL_KILLS];
-            case ChallengeID.WALKER_EXTERMINATOR: return ek[StatEnemyIndex.WALKER];
-            case ChallengeID.KNEE_CAPPER: return ek[StatEnemyIndex.RUNNER];
-            case ChallengeID.TANK_BUSTER: return ek[StatEnemyIndex.TANK];
-            case ChallengeID.BOSS_SLAYER: return ek[StatEnemyIndex.BOSS];
-            case ChallengeID.MARKSMAN: return buffer[PlayerStatID.TOTAL_HEADSHOTS];
-            case ChallengeID.PYROMANIAC: return wk[StatWeaponIndex.FIRE] + wk[StatWeaponIndex.BURN] + wk[StatWeaponIndex.MOLOTOV] + wk[StatWeaponIndex.FLAMETHROWER];
-            case ChallengeID.SHOCK_THERAPY: return wk[StatWeaponIndex.ELECTRIC] + wk[StatWeaponIndex.ARC_CANNON];
-            case ChallengeID.DEMOLITION_EXPERT: return wk[StatWeaponIndex.EXPLOSION] + wk[StatWeaponIndex.GRENADE];
-            case ChallengeID.BRAWLER: return wk[StatWeaponIndex.RUSH] + wk[StatWeaponIndex.PHYSICAL] + wk[StatWeaponIndex.DODGE];
-            case ChallengeID.SHARPSHOOTER: return buffer[PlayerStatID.TOTAL_LONG_RANGE_KILLS];
-            case ChallengeID.SURVIVOR: return buffer[PlayerStatID.TOTAL_SECTORS_COMPLETED];
-            case ChallengeID.VETERAN: return buffer[PlayerStatID.LEVEL];
-            case ChallengeID.UNTOUCHABLE: return buffer[PlayerStatID.LONGEST_KILLSTREAK];
-            default: return 0;
-        }
-    }
+
 };

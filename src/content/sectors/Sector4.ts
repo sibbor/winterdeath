@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, AtmosphereZone, GroundType } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, AtmosphereZone, GroundType, SectorID } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
 import { t } from '../../utils/i18n';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
@@ -8,14 +8,14 @@ import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
 import { VehicleGenerator } from '../../core/world/generators/VehicleGenerator';
 import { GeneratorUtils } from '../../core/world/generators/GeneratorUtils';
-import { InteractionType, InteractionShape } from '../../systems/InteractionTypes';
+import { InteractionType, InteractionShape } from '../../systems/ui/UIEventBridge';
 import { ToneType, SoundID } from '../../utils/audio/AudioTypes';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { NoiseType } from '../../entities/enemies/EnemyBase';
 import { VEGETATION_TYPE } from '../../content/environment';
 import { WeatherType } from '../../core/engine/EngineTypes';
 import { CAMERA_HEIGHT } from '../constants';
-import { StatusEffectType } from '../../content/perks';
+import { StatusEffectID } from '../../content/perks';
 import { DamageID } from '../../entities/player/CombatTypes';
 import { FXParticleType } from '../../types/FXTypes';
 import { EnemyFlags } from '../../entities/enemies/EnemyTypes';
@@ -47,13 +47,13 @@ const _v2_pz = new THREE.Vector3();
 
 // --- PERK ZONE CONFIGURATION ---
 const PERK_ZONES = [
-    { id: 'pz_gib', x: -120, z: 0, radius: 15, effect: StatusEffectType.GIB_MASTER, type: 'buff', color: 0xaa55ff, particle: FXParticleType.GORE },
-    { id: 'pz_fire', x: -120, z: 40, radius: 15, effect: StatusEffectType.BURNING, type: 'debuff', color: 0xff3300, particle: FXParticleType.FIRE },
-    { id: 'pz_water', x: -85, z: 20, radius: 15, effect: StatusEffectType.DROWNING, type: 'debuff', color: 0x0066ff, particle: FXParticleType.SPLASH },
-    { id: 'pz_elec', x: -85, z: -20, radius: 15, effect: StatusEffectType.ELECTRIFIED, type: 'debuff', color: 0x00ffff, particle: FXParticleType.SPARK },
-    { id: 'pz_bleed', x: -120, z: -40, radius: 15, effect: StatusEffectType.BLEEDING, type: 'debuff', color: 0xcc0000, particle: FXParticleType.BLOOD_SPLATTER },
-    { id: 'pz_frost', x: -155, z: -20, radius: 15, effect: StatusEffectType.FREEZING, type: 'debuff', color: 0xffffff, particle: FXParticleType.FROST_NOVA },
-    { id: 'pz_quick', x: -155, z: 20, radius: 15, effect: StatusEffectType.QUICK_FINGER, type: 'buff', color: 0xffcc00, particle: FXParticleType.FLASH }
+    { id: 'pz_gib', x: -120, z: 0, radius: 15, effect: StatusEffectID.GIB_MASTER, type: 'buff', color: 0xaa55ff, particle: FXParticleType.GORE },
+    { id: 'pz_fire', x: -120, z: 40, radius: 15, effect: StatusEffectID.BURNING, type: 'debuff', color: 0xff3300, particle: FXParticleType.FIRE },
+    { id: 'pz_water', x: -85, z: 20, radius: 15, effect: StatusEffectID.DROWNING, type: 'debuff', color: 0x0066ff, particle: FXParticleType.SPLASH },
+    { id: 'pz_elec', x: -85, z: -20, radius: 15, effect: StatusEffectID.ELECTRIFIED, type: 'debuff', color: 0x00ffff, particle: FXParticleType.SPARK },
+    { id: 'pz_bleed', x: -120, z: -40, radius: 15, effect: StatusEffectID.BLEEDING, type: 'debuff', color: 0xcc0000, particle: FXParticleType.BLOOD_SPLATTER },
+    { id: 'pz_frost', x: -155, z: -20, radius: 15, effect: StatusEffectID.FREEZING, type: 'debuff', color: 0xffffff, particle: FXParticleType.FROST_NOVA },
+    { id: 'pz_quick', x: -155, z: 20, radius: 15, effect: StatusEffectID.QUICK_FINGER, type: 'buff', color: 0xffcc00, particle: FXParticleType.FLASH }
 ];
 
 function createPerkZone(ctx: SectorContext) {
@@ -537,7 +537,7 @@ export const Sector4: SectorDef = {
                 events.onPlayerHit(
                     zone.type === 'debuff' ? 1.0 * delta : 0, // Scale damage by delta for continuous tick
                     null,
-                    zone.type === 'debuff' ? (zone.effect === StatusEffectType.DROWNING ? DamageID.DROWNING : DamageID.BURN) : DamageID.NONE,
+                    zone.type === 'debuff' ? (zone.effect === StatusEffectID.DROWNING ? DamageID.DROWNING : DamageID.BURN) : DamageID.NONE,
                     true, // isDoT
                     zone.effect,
                     1500 // duration (refreshed every frame)
@@ -569,17 +569,17 @@ export const Sector4: SectorDef = {
 
                     if (eDistSq < zone.radius * zone.radius) {
                         // Apply effect to enemy based on zone type
-                        if (zone.effect === StatusEffectType.BURNING) {
+                        if (zone.effect === StatusEffectID.BURNING) {
                             e.statusFlags |= EnemyFlags.BURNING;
                             e.burnDuration = 1.0;
-                        } else if (zone.effect === StatusEffectType.DROWNING) {
+                        } else if (zone.effect === StatusEffectID.DROWNING) {
                             // Force drowning state
                             e.statusFlags |= EnemyFlags.DROWNING;
                             e.hp -= 20 * delta; // Faster drowning damage in test zone
-                        } else if (zone.effect === StatusEffectType.FREEZING || zone.effect === StatusEffectType.ELECTRIFIED) {
+                        } else if (zone.effect === StatusEffectID.FREEZING || zone.effect === StatusEffectID.ELECTRIFIED) {
                             e.statusFlags |= EnemyFlags.STUNNED;
                             e.stunDuration = Math.max(e.stunDuration, 0.5);
-                        } else if (zone.effect === StatusEffectType.BLEEDING) {
+                        } else if (zone.effect === StatusEffectID.BLEEDING) {
                             e.hp -= 15 * delta;
                             if ((simTime % 500) < delta * 1000) {
                                 events.spawnParticle(e.mesh.position.x, 1.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 2);

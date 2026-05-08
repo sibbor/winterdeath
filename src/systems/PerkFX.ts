@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
+import { COLORS } from '../utils/ui/ColorUtils';
 
 /**
- * VINTERDÖD: PerkFX
+ * PerkFX
  * 
  * Manages the 3D visual representations of active buffs and debuffs around the player.
  * Built to be Zero-GC and high-performance using single mesh visibility toggles.
@@ -16,13 +17,15 @@ let _shieldMesh: THREE.Mesh | null = null;
 let _shieldMaterial: THREE.MeshBasicMaterial | null = null;
 
 export const PerkFX = {
+
     init: (playerGroup: THREE.Group) => {
         // --- ARC GEOMETRY ---
         _shieldMaterial = MATERIALS.perkShield.clone();
         _shieldMesh = new THREE.Mesh(GEOMETRY.perkShield, _shieldMaterial);
 
-        // Position it slightly in front of the player and rotate to face forward
-        _shieldMesh.position.set(0, 0.9, 0.4);
+        // Position it decisively in front of the player and rotate to face forward (+Z)
+        // [VINTERDÖD FIX] Muzzle flashes are at Z=0.8, we place the shield slightly closer at Z=0.65
+        _shieldMesh.position.set(0, 0.85, 0.65); // -0.65
         _shieldMesh.rotation.set(0, 0, 0);
 
         _shieldMesh.visible = false;
@@ -45,13 +48,13 @@ export const PerkFX = {
 
             // Priority Color.
             if (hasShield) {
-                _shieldMaterial.color.setHex(0xffff00); // Yellow
+                _shieldMaterial.color.setHex(COLORS.YELLOW.num);
                 _shieldMaterial.opacity = THREE.MathUtils.lerp(_shieldMaterial.opacity, 0.4 + Math.sin(renderTime * 0.01) * 0.1, 10 * delta);
             } else if (hasGibMaster) {
-                _shieldMaterial.color.setHex(0xff00ff); // Purple
+                _shieldMaterial.color.setHex(COLORS.PURPLE.num);
                 _shieldMaterial.opacity = THREE.MathUtils.lerp(_shieldMaterial.opacity, 0.5 + Math.sin(renderTime * 0.02) * 0.15, 10 * delta);
             } else if (hasAdrenaline) {
-                _shieldMaterial.color.setHex(0x00ff00); // Green
+                _shieldMaterial.color.setHex(COLORS.GREEN.num);
                 _shieldMaterial.opacity = THREE.MathUtils.lerp(_shieldMaterial.opacity, 0.3 + Math.sin(renderTime * 0.008) * 0.05, 10 * delta);
             }
 

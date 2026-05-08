@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
 import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
+import { COLORS } from '../../../utils/ui/ColorUtils';
 
 const MAX_BUBBLES = 5;
 
@@ -15,14 +16,14 @@ const ChatBubblePooled = forwardRef((_, ref) => {
     useImperativeHandle(ref, () => ({
         spawn: (text: string, duration: number) => {
             if (!containerRef.current || !contentRef.current) return;
-            
+
             const v = ++versionRef.current;
             contentRef.current.innerText = text;
-            
+
             // Trigger animation and visibility (Direct CSS mutation)
             containerRef.current.style.display = 'block';
             containerRef.current.style.animation = `chat-bubble-anim ${duration}ms cubic-bezier(0.25, 1, 0.5, 1) forwards`;
-            
+
             // Use AnimationEnd to hide, but version check ensures we don't hide 
             // a bubble that was re-used during its exit animation.
             const onEnd = () => {
@@ -41,15 +42,15 @@ const ChatBubblePooled = forwardRef((_, ref) => {
     return (
         <div
             ref={containerRef}
-            className="mt-2 px-6 py-3 rounded-sm bg-black/90 border-l-4 border-teal-500 text-teal-400 font-black shadow-2xl text-center min-w-[250px] uppercase tracking-tighter"
-            style={{ display: 'none', willChange: 'transform, opacity' }}
+            className="mt-2 px-6 py-3 rounded-sm bg-black/90 font-black shadow-2xl text-center min-w-[250px] uppercase tracking-tighter"
+            style={{ display: 'none', willChange: 'transform, opacity', borderLeft: `4px solid ${COLORS.TEAL.str}`, color: COLORS.TEAL.str }}
         >
             <div ref={contentRef} />
         </div>
     );
 });
 
-const ChatBubblesUI: React.FC = () => {
+const ChatBubble: React.FC = () => {
     const bubbleRefs = useRef<any[]>([]);
     const nextIdx = useRef(0);
     const lastMessageRef = useRef<string | null>(null);
@@ -99,4 +100,4 @@ const ChatBubblesUI: React.FC = () => {
     );
 };
 
-export default ChatBubblesUI;
+export default ChatBubble;

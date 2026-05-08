@@ -161,7 +161,7 @@ class FootprintSystemClass implements System {
 
         GamePlaySounds.playFootstep(playMaterial, isRight, isRushing);
 
-        // VINTERDÖD: Layered vegetation rustle for immersive flora interaction
+        // Layered vegetation rustle for immersive flora interaction
         if (!inWater && !isSwimming) {
             const vegMat = grid.getVegetationAt(position.x, position.z);
             if (vegMat === MaterialType.PLANT) {

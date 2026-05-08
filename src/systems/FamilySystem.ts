@@ -183,7 +183,7 @@ export class FamilySystem implements System {
                 let localX = sideSign * sideDist;
                 let localZ = -backDist;
 
-                // --- VINTERDÖD: AIM-AVOIDANCE LOGIC ---
+                // --- AIM-AVOIDANCE LOGIC ---
                 const engine = WinterEngine.getInstance();
                 const input = engine?.input?.state;
                 if (input?.aimVector && input.aimVector.lengthSq() > 0.1) {
@@ -221,7 +221,7 @@ export class FamilySystem implements System {
 
                 const dist = Math.sqrt(distSq);
 
-                if (dist > 0.15) { // VINTERDÖD FIX: Tightened epsilon for near-instant reaction
+                if (dist > 0.15) { // Tightened epsilon for near-instant reaction
                     fmIsMoving = true;
 
                     // --- ELASTIC CATCH-UP BOOST ---
@@ -286,7 +286,7 @@ export class FamilySystem implements System {
 
                 _animState.isIdleLong = isIdleLong;
 
-                // VINTERDÖD FIX: Simulation clock bound state flags
+                // Simulation clock bound state flags
                 _animState.isSpeaking = simTime < (familyMember.speakingUntil || 0);
                 _animState.isThinking = simTime < (familyMember.thinkingUntil || 0);
 

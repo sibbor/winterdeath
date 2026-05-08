@@ -1,5 +1,5 @@
 /**
- * VINTERDÖD: Hot-Loop Performance Utility
+ * Hot-Loop Performance Utility
  * Pre-allocates strings for numbers 0-9999 to prevent GC during high-frequency UI updates.
  */
 

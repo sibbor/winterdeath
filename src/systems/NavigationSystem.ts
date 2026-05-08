@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { SystemID } from './SystemID';
 import { SectorContext } from '../game/session/SectorTypes';
 import { Obstacle } from '../core/world/CollisionResolution';
-import { InteractionShape } from './InteractionTypes';
+import { InteractionShape } from './ui/UIEventBridge';
 
 /**
  * Hardened Navigation System

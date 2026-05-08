@@ -239,7 +239,7 @@ export class DeathSystem implements System {
                     const shrink = 1.0 - progress;
                     playerMesh.scale.setScalar(shrink);
 
-                    // VINTERDÖD FIX: Zero-GC iterative traversal for material updates
+                    // Zero-GC iterative traversal for material updates
                     _traverseStack.length = 0;
                     _traverseStack.push(playerMesh);
 
@@ -296,7 +296,7 @@ export class DeathSystem implements System {
             const stopDistSq = stopDist * stopDist;
             let isWalking = false;
 
-            if (distSq > stopDistSq && distSq > 0.001) { // VINTERDÖD FIX: Protect against NaN!
+            if (distSq > stopDistSq && distSq > 0.001) { // Protect against NaN!
                 // Move towards player
                 _v1.subVectors(pgPos, fm.mesh.position).normalize();
                 fm.mesh.position.addScaledVector(_v1, 3.5 * delta); // Moderate walking speed
@@ -316,7 +316,7 @@ export class DeathSystem implements System {
                 VoiceSounds.playCrying(fm.mesh.position);
             }
 
-            // VINTERDÖD FIX: Cached body lookup (O(1) instead of O(N) array scan)
+            // Cached body lookup (O(1) instead of O(N) array scan)
             let body = fm.mesh.userData.cachedBody;
 
             if (!body) {

@@ -18,9 +18,10 @@ import { haptic } from '../../utils/HapticManager';
 import { WeaponSounds } from '../../utils/audio/AudioLib';
 import { WaterSystem, _buoyancyResult } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
+import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
+import { SoundID } from '../../utils/audio/AudioTypes';
 import { EnemyAnimator } from './EnemyAnimator';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
-import { SoundID } from '../../utils/audio/AudioTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
 import { NavigationSystem } from '../../systems/NavigationSystem';
 import { applyCollisionResolution } from '../../core/world/CollisionResolution';
@@ -122,7 +123,7 @@ export const EnemyAI = {
                 weaponImpact = weapon.impactType;
             }
 
-            // VINTERDÖD: Unified Death Dispatcher
+            // Unified Death Dispatcher
             let finalDeathState = EnemyDeathState.GENERIC;
 
             switch (dmgType) {
@@ -149,7 +150,15 @@ export const EnemyAI = {
                         finalDeathState = EnemyDeathState.BURNED;
                     } else if (e.type === EnemyType.BOMBER || (e.statusFlags & EnemyFlags.BOSS) !== 0) {
                         finalDeathState = EnemyDeathState.EXPLODED;
-                    } else if (weaponImpact === EnemyDeathState.GIBBED && (isHighImpact || (playerStatusFlags & (1 << 11)) !== 0)) {
+                    } else if (weaponImpact === EnemyDeathState.GIBBED) {
+                        // Weapons that NATIVELY GIB (Shotgun, Revolver)
+                        if (isHighImpact || (playerStatusFlags & PlayerStatusFlags.GIB_MASTER) !== 0) {
+                            finalDeathState = EnemyDeathState.GIBBED;
+                        } else {
+                            finalDeathState = EnemyDeathState.SHOT;
+                        }
+                    } else if ((playerStatusFlags & PlayerStatusFlags.GIB_MASTER) !== 0 && isHighImpact) {
+                        // GIB_MASTER Perk allows ANY weapon to GIB on High Impact hits
                         finalDeathState = EnemyDeathState.GIBBED;
                     } else if (weapon) {
                         finalDeathState = EnemyDeathState.SHOT;
@@ -232,7 +241,7 @@ export const EnemyAI = {
                     break;
             }
 
-            // VINTERDÖD: Heavy Kill Hit-stop for Tanks
+            // Heavy Kill Hit-stop for Tanks
             if (e.type === EnemyType.TANK) {
                 WinterEngine.getInstance()?.triggerHitStop(45);
                 haptic.impact(0.8);
@@ -265,12 +274,12 @@ export const EnemyAI = {
             // --- Apply pure velocity (EnemyManager already divided by mass!) ---
             e.mesh.position.addScaledVector(e.knockbackVel, delta);
 
-            // --- Snappy, heavy gravity (VINTERDÖD: Increased to 65 for grit) ---
+            // --- Snappy, heavy gravity (Increased to 65 for grit) ---
             e.knockbackVel.y -= 65 * delta;
 
             // --- Friction (Horizontal only) ---
             const mass = e.originalScale * e.widthScale;
-            // VINTERDÖD: Increase friction significantly if ragdolling on ground to prevent "ice-skating"
+            // Increase friction significantly if ragdolling on ground to prevent "ice-skating"
             const frictionMult = ((e.statusFlags & EnemyFlags.RAGDOLLING) || !(e.statusFlags & EnemyFlags.AIRBORNE)) ? 12.0 : 2.5;
             const friction = 1.0 + (mass * frictionMult);
             const drag = Math.max(0, 1 - friction * delta);
@@ -305,12 +314,12 @@ export const EnemyAI = {
                 // Apply fall damage if not in water
                 const fallHeight = peakY - floorY;
                 if ((!water || !_buoyancyResult.inWater) && fallHeight > 0.5) {
-                    // VINTERDÖD: Quadratic fall damage for high-impact RUSH feel
+                    // Quadratic fall damage for high-impact RUSH feel
                     const fallRatio = fallHeight;
                     const fallDamage = Math.min(e.maxHp * 0.95, fallRatio * fallRatio * 15);
 
                     e.hp -= fallDamage;
-                    // VINTERDÖD: Attribute damage to the source of the knockback (Rush/Dodge)
+                    // Attribute damage to the source of the knockback (Rush/Dodge)
                     const sourceId = e.lastKnockback || DamageID.FALL;
                     callbacks.applyDamage(e, fallDamage, sourceId, true);
 
@@ -329,7 +338,7 @@ export const EnemyAI = {
                     }
                 }
 
-                // --- VINTERDÖD: Stay Down Mechanic ---
+                // --- Stay Down Mechanic ---
                 e.knockbackVel.set(0, 0, 0);
             }
         } else {
@@ -417,7 +426,7 @@ export const EnemyAI = {
         if (e.slowDuration > 0) e.slowDuration -= delta;
         if (e.blindDuration > 0) e.blindDuration -= delta;
 
-        // VINTERDÖD FIX: Decoupled Attack & Ability timers (Standardized to seconds)
+        // Decoupled Attack & Ability timers (Standardized to seconds)
         if (e.attackTimer > 0) e.attackTimer = Math.max(0, e.attackTimer - delta);
         if (e.abilityCooldown > 0) e.abilityCooldown = Math.max(0, e.abilityCooldown - delta);
 
@@ -433,7 +442,7 @@ export const EnemyAI = {
         if (e.stunDuration > 0) {
             if (!(e.statusFlags & EnemyFlags.STUNNED)) {
                 e.statusFlags |= EnemyFlags.STUNNED;
-                // VINTERDÖD: Immediate interruption of all attacks on stun start
+                // Immediate interruption of all attacks on stun start
                 if (e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING) {
                     e.state = AIState.IDLE;
                     e.attackTimer = 0;
@@ -507,7 +516,7 @@ export const EnemyAI = {
                 const odSq = odx * odx + odz * odz;
 
                 if (odSq < SEPARATION_RADIUS_SQ && odSq > 0.001) {
-                    // VINTERDÖD: Sqrt Purge! 
+                    // Sqrt Purge! 
                     // Using squared falloff for push strength. No sqrt needed.
                     // (1.0 - (odSq / SEPARATION_RADIUS_SQ)) * 5.0 (tuning factor)
                     const pushFactor = (1.0 - (odSq / SEPARATION_RADIUS_SQ)) * 5.0;
@@ -663,7 +672,7 @@ export const EnemyAI = {
                                 e.state = AIState.ATTACK_CHARGE;
                                 e.attackTimer = att.chargeTime * 0.001;
                             } else {
-                                // VINTERDÖD: State-Guard to prevent GRAPPLE being overwritten
+                                // State-Guard to prevent GRAPPLE being overwritten
                                 const prevState = e.state;
                                 EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
 
@@ -688,7 +697,7 @@ export const EnemyAI = {
                     }
 
                     if (e.attackTimer <= 0) {
-                        // VINTERDÖD: State-Guard for charge-finish
+                        // State-Guard for charge-finish
                         const prevState = e.state;
                         EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
 
@@ -722,7 +731,7 @@ export const EnemyAI = {
                 break;
 
             case AIState.GRAPPLE:
-                // VINTERDÖD: Advanced attachment & Inertia-driven Pendulum
+                // Advanced attachment & Inertia-driven Pendulum
                 e.grappleDuration -= delta;
 
 
@@ -754,7 +763,7 @@ export const EnemyAI = {
                 // Track player displacement for inertia
                 const prevP = e.prevP;
 
-                // VINTERDÖD FIX: Check for reset marker (y = -1000) to prevent first-frame physics explosion
+                // Check for reset marker (y = -1000) to prevent first-frame physics explosion
                 if (prevP.y < -500) {
                     prevP.copy(playerPos);
                     _v1.set(0, 0, 0);
@@ -813,7 +822,7 @@ export const EnemyAI = {
                     callbacks.onPlayerHit(4, e, DamageID.BITE, true, undefined, undefined, undefined, EnemyAttackType.GRAPPLE_BITE);
 
                     if (callbacks.spawnParticle) {
-                        // VINTERDÖD: Improved blood feedback for grapple
+                        // Improved blood feedback for grapple
                         callbacks.spawnParticle(playerPos.x, 1.5, playerPos.z, FXParticleType.BLOOD_SPLATTER, 6);
                     }
                 }

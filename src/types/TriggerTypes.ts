@@ -1,7 +1,7 @@
 import { FamilyMemberID } from '../content/constants';
 
 /**
- * VINTERDÖD: Centralized Trigger Types & Statuses.
+ * Centralized Trigger Types & Statuses.
  * Numeric enums (SMI) are used for O(1) matching and to prevent heap allocations
  * during high-frequency trigger checking in TriggerHandler.
  */
@@ -40,6 +40,7 @@ export enum TriggerStatus {
   RESET_ON_EXIT = 1 << 2,
   ONCE = 1 << 3,
   HIDDEN = 1 << 4,
+  REPEATABLE = 1 << 5,
 }
 
 export interface TriggerAction {
@@ -56,7 +57,7 @@ export interface SectorTrigger {
   size?: { width: number; depth: number };
   type: TriggerType;
   statusFlags: number; // SMI bitmask (TriggerStatus)
-  
+
   label?: string;
   icon?: string;
   color?: string;

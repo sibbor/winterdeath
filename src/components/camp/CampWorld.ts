@@ -576,7 +576,7 @@ export const CampWorld = {
             deskGroup.add(l);
         }
         for (let i = 0; i < 3; i++) {
-            // VINTERDÖD: Återanvänd färgpalett för att undvika "new Material()"
+            // Återanvänd färgpalett för att undvika "new Material()"
             const b = new THREE.Mesh(GEOMETRY.box, CAMP_PROP_PALETTE[i % CAMP_PROP_PALETTE.length]);
             b.scale.set(0.7, 0.12, 0.9);
             b.position.set(-0.6, dH + 0.06 + (i * 0.13), -0.1);
@@ -625,7 +625,7 @@ export const CampWorld = {
             const shelf = new THREE.Mesh(GEOMETRY.box, darkerWoodMat); shelf.scale.set(cW - th * 2, th / 2, cD - th); shelf.position.set(0, yBase, 0); medGroup.add(shelf);
             for (let f = 0; f < 3; f++) {
                 const isRound = Math.random() > 0.5;
-                // VINTERDÖD: Återanvänd färgpalett för flaskor
+                // Återanvänd färgpalett för flaskor
                 const bMat = CAMP_PROP_PALETTE[(f + h) % CAMP_PROP_PALETTE.length];
                 const b = new THREE.Mesh(isRound ? new THREE.SphereGeometry(0.12, 8, 8) : new THREE.BoxGeometry(0.15, 0.4, 0.15), bMat);
                 b.position.set(-0.7 + f * 0.28, yBase + 0.25, 0);
@@ -753,7 +753,7 @@ export const CampWorld = {
 
         const { flames, sparkles, smokes, flameData, sparkleData, smokeData } = state.particles;
 
-        // VINTERDÖD FIX: Skapa en TimeScale (1.0 vid 60 FPS, 2.0 vid 30 FPS)
+        // Skapa en TimeScale (1.0 vid 60 FPS, 2.0 vid 30 FPS)
         const timeScale = delta * 60.0;
 
         // Uppdatera våra timers

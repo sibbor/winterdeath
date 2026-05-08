@@ -1,87 +1,24 @@
 import * as THREE from 'three';
-import { SystemID } from './System';
-import { Enemy } from '../entities/enemies/EnemyManager';
-import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
-import { GEOMETRY, MATERIALS } from '../utils/assets';
-import { WeaponSounds, GamePlaySounds } from '../utils/audio/AudioLib';
-import { audioEngine } from '../utils/audio/AudioEngine';
-import { haptic } from '../utils/HapticManager';
-import { WEAPONS } from '../content/weapons';
-import { DamageID, EnemyAttackType } from '../entities/player/CombatTypes';
-import { StatusEffectType } from '../content/perks';
-import { PhysicsGroup } from '../core/world/CollisionResolution';
-import { SpatialGrid } from '../core/world/SpatialGrid';
-import { WinterEngine } from '../core/engine/WinterEngine';
-import { _buoyancyResult } from '../systems/WaterSystem';
-import { NoiseType, NOISE_RADIUS, EnemyFlags, EnemyType } from '../entities/enemies/EnemyTypes';
+import { ProjectilePoolState, MAX_PROJECTILES } from '../core/state/ProjectilePool';
+import { getEnemyAt } from './EnemySystem';
+import { DamageID } from '../entities/player/CombatTypes';
+import { PlayerStatID } from '../entities/player/PlayerTypes';
+import { System, SystemID } from './System';
+import { ENTITY_STATUS } from '../content/constants';
+import { EnemyDeathState, EnemyFlags } from '../entities/enemies/EnemyTypes';
+import { EnemyPoolState } from '../core/state/EnemyPool';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
+import { EnemyManager } from '../entities/enemies/EnemyManager';
+import { ProjectileRenderer } from '../core/renderers/ProjectileRenderer';
 import { WeaponFX } from './WeaponFX';
+import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { MaterialType } from '../content/environment';
-import { MASSIVE_DAMAGE_THRESHOLD } from '../content/constants';
+import { ParticlePool } from '../core/state/ParticlePool';
+import { WEAPONS } from '../content/weapons';
 import { FXParticleType } from '../types/FXTypes';
+import { FXSystem } from './FXSystem';
 
-// --- INTERFACES ---
-
-export interface FireZone {
-    mesh: THREE.Mesh;
-    radius: number;
-    radiusSq: number;
-    life: number;
-    _lastDamageTime?: number;
-    audioPoolIdx: number;
-    sourceWeapon: DamageID;
-    sourceId: number; // EnemyType or DamageID.PLAYER
-}
-
-export interface GameContext {
-    scene: THREE.Scene;
-    enemies: Enemy[];
-    collisionGrid: SpatialGrid;
-    spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: any, vel?: any, color?: number, scale?: number, life?: number) => void;
-    explodeEnemy: (e: Enemy, force: THREE.Vector3) => void;
-    addScore: (amt: number) => void;
-    fireZones: FireZone[];
-    applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => boolean;
-
-    simTime: number;
-    renderTime: number;
-    playerPos: THREE.Vector3;
-    onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void;
-    makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => void;
-    weaponHandler: any;
-    session: any;
-}
-
-export enum ProjectileType {
-    BULLET = 0,
-    THROWABLE = 1
-}
-
-export interface Projectile {
-    mesh: THREE.Mesh;
-    type: ProjectileType;
-    weapon: DamageID;
-    sourceId: number; // EnemyType or DamageID.PLAYER
-
-    vel: THREE.Vector3;
-    origin: THREE.Vector3;
-    speed: number;
-    life: number;
-    active: boolean;
-    hitEntities: Set<string>;
-
-    damage: number;
-    baseDamage: number;
-    piercing: boolean;
-    pierceDecay: number;
-    impactType: EnemyDeathState;
-    highImpactDistSq: number;
-    highImpactDamageFactor: number;
-
-    maxRadius?: number;
-    marker?: THREE.Mesh;
-    _poolIdx: number;
-}
-
+// --- ZERO-GC SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -89,881 +26,471 @@ const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 const _v6 = new THREE.Vector3();
 
-const _arcCannonHitList: Enemy[] = [];
-const _arcCannonHitIds = new Set<string>();
-const _enemyDistBuffer = new Float32Array(512);
+/**
+ * Projectile System (Phase 8)
+ * 
+ * High-performance, Zero-GC projectile simulation.
+ * Replaces legacy ProjectileSystem.ts with a contiguous SoA pool.
+ * Uses Phase 7 Spatial Hash Grid for O(1) hit detection.
+ */
+export class ProjectileSystem implements System {
+    readonly systemId = SystemID.PROJECTILE;
+    id = 'projectile_system';
+    isFixedStep = true;
 
-function manualSortNearbyEnemies(projectilePos: THREE.Vector3, enemies: Enemy[]) {
-    const len = enemies.length;
-    if (len <= 1) return;
+    private session: GameSessionLogic | null = null;
+    private renderer: ProjectileRenderer | null = null;
 
-    for (let i = 0; i < len; i++) {
-        const ePos = enemies[i].mesh.position;
-        const dx = ePos.x - projectilePos.x;
-        const dy = ePos.y - projectilePos.y;
-        const dz = ePos.z - projectilePos.z;
-        _enemyDistBuffer[i] = dx * dx + dy * dy + dz * dz;
+    init(session: GameSessionLogic) {
+        this.session = session;
+        ProjectilePoolState.activeCount = 0;
+        this.renderer = new ProjectileRenderer(session.engine.scene);
     }
 
-    for (let i = 1; i < len; i++) {
-        const enemy = enemies[i];
-        const dist = _enemyDistBuffer[i];
-        let j = i - 1;
+    /**
+     * Main update loop for all active projectiles.
+     * ZERO-GC hot path.
+     */
+    update(session: GameSessionLogic, dt: number, simTime: number, renderTime: number) {
+        this.session = session;
+        // Lifecycle Guard - Ensure we don't run simulation in non-combat contexts (Camp/UI)
+        if (!session || !session.state) return;
 
-        while (j >= 0 && _enemyDistBuffer[j] > dist) {
-            enemies[j + 1] = enemies[j];
-            _enemyDistBuffer[j + 1] = _enemyDistBuffer[j];
-            j--;
+        // --- PHASE 1: CONTINUOUS FIRE (DoD Ray-free) ---
+        this.handleContinuousFire(dt, simTime);
+
+        const pool = ProjectilePoolState;
+        const state = session.state;
+        const enemies = EnemyManager.getActiveEnemies();
+
+        // --- PHASE 2: PERSISTENT FIRE ZONES (Audit Fix) ---
+        this.processFireZones(dt, simTime, state);
+
+        for (let i = 0; i < pool.activeCount; i++) {
+            // 1. Physics Update (SoA)
+            if (pool.hasGravity[i]) {
+                pool.velY[i] -= 30 * dt; // Gravity constant
+            }
+
+            pool.posX[i] += pool.velX[i] * dt;
+            pool.posY[i] += pool.velY[i] * dt;
+            pool.posZ[i] += pool.velZ[i] * dt;
+            pool.life[i] -= dt;
+
+            let despawn = pool.life[i] <= 0;
+
+            // 2. Environment Collision (O(1) Obstacle Check)
+            if (!despawn && state.collisionGrid) {
+                _v1.set(pool.posX[i], pool.posY[i], pool.posZ[i]);
+                _v2.set(pool.velX[i], pool.velY[i], pool.velZ[i]).multiplyScalar(dt);
+
+                const grid = state.collisionGrid;
+                const obstacles = grid.getNearbyObstacles(_v1, 2.0);
+                for (let o = 0; o < obstacles.length; o++) {
+                    const obs = obstacles[o];
+                    _v3.set(obs.position.x, 0, obs.position.z);
+                    _v4.subVectors(_v3, _v1);
+                    const t = Math.max(0, Math.min(1, _v4.dot(_v2) / _v2.lengthSq()));
+                    _v5.copy(_v1).addScaledVector(_v2, t);
+
+                    const rad = obs.radius || 1.0;
+                    if (_v5.distanceToSquared(_v3) < rad * rad) {
+                        despawn = true;
+                        GamePlaySounds.playImpact(obs.materialId || MaterialType.GENERIC);
+                        break;
+                    }
+                }
+            }
+
+            // 3. Enemy Hit Detection (Phase 7 Spatial Grid)
+            if (!despawn) {
+                // Ground / Water check for throwables
+                if (pool.hasGravity[i] && pool.posY[i] <= 0.1) {
+                    despawn = true;
+                    this.triggerExplosion(i);
+                } else {
+                    const enemyIdx = getEnemyAt(pool.posX[i], pool.posZ[i], 0.8);
+
+                    if (enemyIdx !== -1) {
+                        const enemy = enemies[enemyIdx];
+                        if (enemy && state.applyDamage) {
+                            const halfHeight = enemy.originalScale || 1.0;
+                            const enemyY = enemy.mesh.position.y;
+                            if (pool.posY[i] >= enemyY - halfHeight && pool.posY[i] <= enemyY + halfHeight) {
+                                // 1. Apply SoA Damage (Phase 9 Deferred Resolution)
+                                EnemyPoolState.hp[enemyIdx] -= pool.damage[i];
+                                if (EnemyPoolState.hp[enemyIdx] <= 0) {
+                                    EnemyPoolState.statusFlags[enemyIdx] |= ENTITY_STATUS.DEAD;
+                                }
+
+                                // 2. Trigger Legacy Callback (For FX and Telemetry)
+                                state.applyDamage(enemy, pool.damage[i], pool.weaponId[i]);
+
+                                if (this.session) {
+                                    this.session.spawnParticle(pool.posX[i], pool.posY[i], pool.posZ[i], FXParticleType.BLOOD_SPLATTER, 3);
+                                }
+                                GamePlaySounds.playImpact(MaterialType.FLESH);
+
+                                // --- PIERCING & HIT-STOP ---
+                                const wepStats = WEAPONS[pool.weaponId[i]];
+                                const canPierce = wepStats?.piercing && pool.pierceCount[i] < 3;
+
+                                // 1. Hit-Stop Logic (Tactile Feedback)
+                                const isKill = EnemyPoolState.hp[enemyIdx] <= 0;
+                                const isHighImpact = pool.damage[i] > 50 || isKill || (wepStats?.impactType === EnemyDeathState.GIBBED);
+
+                                // 2. Kinetic Feedback (Knockback)
+                                const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
+                                const force = (pool.damage[i] / 3) / Math.max(0.3, mass);
+                                _v1.set(pool.velX[i], 0, pool.velZ[i]).normalize().multiplyScalar(force);
+                                enemy.knockbackVel.add(_v1);
+
+                                if (isKill && isHighImpact) {
+                                    enemy.deathVel.set(pool.velX[i], pool.velY[i], pool.velZ[i]).normalize().multiplyScalar(force * 2.0).setY(4.0);
+                                }
+
+                                if (isHighImpact && session.state) {
+                                    const ms = isKill ? 45 : 35;
+                                    session.state.hitStopTime = Math.max(session.state.hitStopTime || 0, ms);
+                                }
+
+                                if (canPierce) {
+                                    pool.pierceCount[i]++;
+                                    pool.damage[i] *= (wepStats?.pierceDecay || 0.7);
+                                    despawn = false;
+                                } else {
+                                    despawn = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Swap-and-Go Recycling
+            if (despawn) {
+                this.despawnProjectile(i);
+                i--; // Strict Zero-GC: Check the swapped element in the next iteration
+            }
         }
-        enemies[j + 1] = enemy;
-        _enemyDistBuffer[j + 1] = dist;
+
+        // 4. Render Sync
+        if (this.renderer) {
+            this.renderer.syncTransforms();
+        }
     }
-}
 
-let _lastArcCannonSoundTime = 0;
-let _lastFlameSoundTime = 0;
+    private triggerExplosion(idx: number) {
+        const pool = ProjectilePoolState;
+        const radius = pool.weaponId[idx] === DamageID.GRENADE ? 8 : 5;
+        const damage = pool.damage[idx];
+        const px = pool.posX[idx];
+        const pz = pool.posZ[idx];
 
-const FLAMETHROWER_CONE_ANGLE = Math.cos(28 * Math.PI / 180);
+        let hitCount = 0;
 
-const PROJECTILE_POOL: Projectile[] = [];
-const FREE_PROJECTILE_INDICES: number[] = [];
-const FIREZONE_POOL: FireZone[] = [];
-
-// --- SYSTEM ---
-export const ProjectileSystem = {
-    systemId: SystemID.PROJECTILE,
-    id: 'projectile_system',
-    enabled: true,
-    persistent: true,
-
-    _getProjectile: (): Projectile => {
-        // O(1) Zero-GC Free List Lookup
-        if (FREE_PROJECTILE_INDICES.length > 0) {
-            const idx = FREE_PROJECTILE_INDICES.pop()!;
-            const p = PROJECTILE_POOL[idx];
-            p.active = true;
-            p.hitEntities.clear();
-            return p;
+        // DoD AoE Damage
+        for (let i = 0; i < EnemyPoolState.activeCount; i++) {
+            if ((EnemyPoolState.statusFlags[i] & ENTITY_STATUS.DEAD) !== 0) continue;
+            const dx = EnemyPoolState.posX[i] - px;
+            const dz = EnemyPoolState.posZ[i] - pz;
+            const distSq = dx * dx + dz * dz;
+            if (distSq < radius * radius) {
+                EnemyPoolState.hp[i] -= damage;
+                this.session?.state.applyDamage(EnemyManager.getActiveEnemies()[i], damage, pool.weaponId[idx], true);
+                hitCount++;
+            }
         }
 
-        // Fallback: Expand Pool
-        const idx = PROJECTILE_POOL.length;
-        const p: Projectile = {
-            mesh: new THREE.Mesh(),
-            type: ProjectileType.BULLET,
-            weapon: DamageID.NONE,
-            vel: new THREE.Vector3(),
-            origin: new THREE.Vector3(),
-            speed: 0,
-            damage: 0,
-            baseDamage: 0,
-            piercing: false,
-            pierceDecay: 1.0,
-            impactType: EnemyDeathState.SHOT,
-            highImpactDistSq: 0,
-            highImpactDamageFactor: 0,
-            life: 0,
-            hitEntities: new Set(),
-            active: true,
-            sourceId: 0,
-            _poolIdx: idx
-        };
-        PROJECTILE_POOL.push(p);
-        return p;
-    },
-
-    releaseProjectile: (p: Projectile) => {
-        if (!p.active) return;
-        p.active = false;
-        FREE_PROJECTILE_INDICES.push(p._poolIdx);
-    },
-
-    launchBullet: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, dir: THREE.Vector3, weapon: DamageID, damage?: number) => {
-        const data = WEAPONS[weapon];
-        if (!data) return;
-
-        const p = ProjectileSystem._getProjectile();
-        p.type = ProjectileType.BULLET;
-        p.weapon = weapon;
-        p.sourceId = 255; // 255 = PLAYER (Convention)
-
-        p.mesh.geometry = GEOMETRY.bullet;
-        p.mesh.material = MATERIALS.bullet;
-        p.mesh.position.copy(origin);
-
-        _v1.copy(dir);
-        if (data.spread && data.spread > 0) {
-            _v1.x += (Math.random() - 0.5) * data.spread;
-            _v1.z += (Math.random() - 0.5) * data.spread;
-            _v1.normalize();
+        if (hitCount > 0 && this.session) {
+            const tracker = this.session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+            if (tracker) {
+                tracker.recordHit(this.session, pool.weaponId[idx]);
+                tracker.recordUniqueEnemiesHitByExplosive(this.session, hitCount);
+            }
         }
 
-        _v2.copy(origin).add(_v1);
-        p.mesh.lookAt(_v2);
-        p.mesh.rotateX(Math.PI / 2);
+        // Trigger FX
+        _v1.set(px, 0.1, pz);
+        if (this.session) {
+            if (pool.weaponId[idx] === DamageID.GRENADE) {
+                WeaponFX.createGrenadeImpact(_v1, radius, false, this.session);
+            } else if (pool.weaponId[idx] === DamageID.MOLOTOV) {
+                WeaponFX.createMolotovImpact(_v1, radius, false, this.session);
 
-        if (p.mesh.parent !== scene) scene.add(p.mesh);
-        if (p.marker && p.marker.parent === scene) scene.remove(p.marker);
-
-        p.speed = data.bulletSpeed || 70;
-        p.vel.copy(_v1).multiplyScalar(p.speed);
-        p.origin.copy(origin);
-        p.life = 1.5;
-
-        p.baseDamage = data.damage;
-        p.damage = damage !== undefined ? damage : data.damage;
-        p.piercing = data.piercing || false;
-        p.pierceDecay = data.pierceDecay || 1.0;
-        p.impactType = data.impactType;
-
-        p.highImpactDistSq = (weapon === DamageID.SHOTGUN) ? 144.0 : 0;
-        p.highImpactDamageFactor = (weapon === DamageID.REVOLVER) ? 0.5 : 0;
-
-        // VINTERDÖD FIX: Inject engine-wide Muzzle FX for ballistic firearms
-        const isBallistic = weapon === DamageID.SMG || weapon === DamageID.SHOTGUN ||
-            weapon === DamageID.RIFLE || weapon === DamageID.PISTOL ||
-            weapon === DamageID.REVOLVER || weapon === DamageID.MINIGUN;
-
-        if (isBallistic) {
-            WeaponFX.createMuzzleFlash(origin, dir);
-            WeaponFX.createMuzzleFire(origin, dir);
-            // Quick punchy light centered on the muzzle
-            WeaponFX.spawnDynamicLight(scene, origin, 0xffaa44, 20.0, 25.0, 0.08, 'fire');
+                // --- CREATE PERSISTENT FIRE ZONE ---
+                this.session.state.fireZones.push({
+                    x: px,
+                    z: pz,
+                    radius: radius,
+                    life: 8.0, // 8 seconds of fire
+                    damage: damage * 0.2 // 20% of impact damage per second
+                });
+            } else if (pool.weaponId[idx] === DamageID.FLASHBANG) {
+                WeaponFX.createFlashbangImpact(_v1, false, this.session);
+            }
         }
+    }
 
-        projectiles.push(p);
-    },
+    private processFireZones(dt: number, simTime: number, state: any) {
+        const fireZones = state.fireZones;
+        if (!fireZones || fireZones.length === 0) return;
 
-    launchThrowable: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, target: THREE.Vector3, weapon: DamageID, time: number, damage: number) => {
-        const data = WEAPONS[weapon];
-        if (!data) return;
+        const enemies = EnemyManager.getActiveEnemies();
+        const ctx = this.session; // GameSessionLogic implements the necessary FX interface
 
-        const p = ProjectileSystem._getProjectile();
-        p.type = ProjectileType.THROWABLE;
-        p.weapon = weapon;
-        p.sourceId = 255; // PLAYER
-        p.mesh.position.copy(origin);
-        p.mesh.rotation.set(0, 0, 0);
+        for (let i = 0; i < fireZones.length; i++) {
+            const fz = fireZones[i];
+            fz.life -= dt;
 
-        switch (weapon) {
-            case DamageID.MOLOTOV:
-                p.mesh.geometry = GEOMETRY.molotov;
-                p.mesh.material = MATERIALS.molotov;
-                break;
-            case DamageID.FLASHBANG:
-                p.mesh.geometry = GEOMETRY.flashbang;
-                p.mesh.material = MATERIALS.flashbang;
-                break;
-            default:
-                p.mesh.geometry = GEOMETRY.grenade;
-                p.mesh.material = MATERIALS.grenade;
-                break;
+            if (fz.life <= 0) {
+                fireZones.splice(i, 1);
+                i--;
+                continue;
+            }
+
+            // Visuals (Throttled update)
+            _v1.set(fz.x, 0, fz.z);
+            if (ctx) {
+                WeaponFX.updateFireZoneVisuals(_v1, fz.radius, dt, ctx);
+            }
+
+            // Damage (Tick every 0.5s)
+            const tickRate = 0.5;
+            if (simTime % tickRate < dt) {
+                const dmg = fz.damage * tickRate;
+                const radSq = fz.radius * fz.radius;
+
+                for (let j = 0; j < EnemyPoolState.activeCount; j++) {
+                    if ((EnemyPoolState.statusFlags[j] & ENTITY_STATUS.DEAD) !== 0) continue;
+
+                    const dx = EnemyPoolState.posX[j] - fz.x;
+                    const dz = EnemyPoolState.posZ[j] - fz.z;
+                    const dSq = dx * dx + dz * dz;
+
+                    if (dSq < radSq) {
+                        EnemyPoolState.hp[j] -= dmg;
+                        EnemyPoolState.statusFlags[j] |= EnemyFlags.BURNING; // Apply status
+                        state.applyDamage(enemies[j], dmg, DamageID.BURN, false);
+                    }
+                }
+            }
         }
+    }
 
-        if (p.mesh.parent !== scene) scene.add(p.mesh);
+    /**
+     * Compatibility Bridge: launchBullet
+     */
+    static launchBullet(scene: THREE.Scene, projectiles: any, origin: THREE.Vector3, dir: THREE.Vector3, weapon: DamageID, damage?: number, life: number = 1.5) {
+        const speed = 70; // Standard bullet speed
+        const vx = dir.x * speed;
+        const vy = dir.y * speed;
+        const vz = dir.z * speed;
 
-        const g = 30.0;
-        p.vel.set(
-            (target.x - origin.x) / time,
-            (target.y - origin.y + 0.5 * g * time * time) / time,
-            (target.z - origin.z) / time
+        // Weapon Muzzle FX (Phase 13 optimized)
+        WeaponFX.createMuzzleFlash(origin, dir);
+        WeaponFX.createMuzzleFire(origin, dir);
+
+        this.spawnProjectile(
+            origin.x, origin.y, origin.z,
+            vx, vy, vz,
+            life, damage || 10, weapon, true, false, 0
         );
+    }
 
-        p.speed = p.vel.length();
-        p.origin.copy(origin);
+    /**
+     * Compatibility Bridge: launchThrowable
+     */
+    static launchThrowable(scene: THREE.Scene, projectiles: any, origin: THREE.Vector3, target: THREE.Vector3, weapon: DamageID, time: number, damage: number) {
+        const g = 30.0;
+        const vx = (target.x - origin.x) / time;
+        const vy = (target.y - origin.y + 0.5 * g * time * time) / time;
+        const vz = (target.z - origin.z) / time;
 
-        p.baseDamage = data.damage;
-        p.damage = damage !== undefined ? damage : data.damage;
-        p.life = time + 0.5;
-        p.maxRadius = data.radius || 10;
+        this.spawnProjectile(
+            origin.x, origin.y, origin.z,
+            vx, vy, vz,
+            time, damage, weapon, true, true, 1
+        );
+    }
 
-        p.highImpactDistSq = 0;
-        p.highImpactDamageFactor = 0;
+    /**
+     * Spawns a new projectile using the next available slot in the pool.
+     */
+    static spawnProjectile(
+        x: number, y: number, z: number,
+        vx: number, vy: number, vz: number,
+        life: number, damage: number,
+        weaponId: DamageID, isPlayer: boolean = true,
+        hasGravity: boolean = false, type: number = 0
+    ) {
+        if (ProjectilePoolState.activeCount >= MAX_PROJECTILES) return;
 
-        if (weapon !== DamageID.MOLOTOV) {
-            if (!p.marker) {
-                p.marker = new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker);
-                p.marker.rotation.x = -Math.PI / 2;
-            }
+        const idx = ProjectilePoolState.activeCount;
+        ProjectilePoolState.posX[idx] = x;
+        ProjectilePoolState.posY[idx] = y;
+        ProjectilePoolState.posZ[idx] = z;
+        ProjectilePoolState.velX[idx] = vx;
+        ProjectilePoolState.velY[idx] = vy;
+        ProjectilePoolState.velZ[idx] = vz;
+        ProjectilePoolState.life[idx] = life;
+        ProjectilePoolState.damage[idx] = damage;
+        ProjectilePoolState.weaponId[idx] = weaponId;
+        ProjectilePoolState.isPlayer[idx] = isPlayer ? 1 : 0;
+        ProjectilePoolState.hasGravity[idx] = hasGravity ? 1 : 0;
+        ProjectilePoolState.type[idx] = type;
+        ProjectilePoolState.pierceCount[idx] = 0;
 
-            p.marker.position.copy(target);
-            p.marker.scale.setScalar(data.radius || 10);
+        ProjectilePoolState.activeCount++;
+    }
 
-            if (p.marker.parent !== scene) scene.add(p.marker);
+    private despawnProjectile(index: number) {
+        const pool = ProjectilePoolState;
+        const lastIdx = pool.activeCount - 1;
+
+        if (index < lastIdx) {
+            pool.posX[index] = pool.posX[lastIdx];
+            pool.posY[index] = pool.posY[lastIdx];
+            pool.posZ[index] = pool.posZ[lastIdx];
+            pool.velX[index] = pool.velX[lastIdx];
+            pool.velY[index] = pool.velY[lastIdx];
+            pool.velZ[index] = pool.velZ[lastIdx];
+            pool.life[index] = pool.life[lastIdx];
+            pool.damage[index] = pool.damage[lastIdx];
+            pool.weaponId[index] = pool.weaponId[lastIdx];
+            pool.isPlayer[index] = pool.isPlayer[lastIdx];
+            pool.hasGravity[index] = pool.hasGravity[lastIdx];
+            pool.type[index] = pool.type[lastIdx];
         }
 
-        projectiles.push(p);
-    },
+        pool.activeCount--;
+    }
 
-    handleContinuousFire: (weapon: DamageID, origin: THREE.Vector3, direction: THREE.Vector3, ctx: GameContext, delta: number, simTime: number, renderTime: number, damageOverride?: number) => {
-        const data = WEAPONS[weapon];
-        if (!data) return;
+    private handleContinuousFire(dt: number, time: number) {
+        if (!this.session || !this.session.state) return;
+        const state = this.session.state;
+        const wepId = state.activeWeapon;
 
-        const damage = damageOverride !== undefined ? damageOverride : (data.damage || 0) * (60 * delta);
+        // Only process when firing continuous weapons
+        if (!state.inputState.fire || state.isReloading) return;
+        if (wepId !== DamageID.FLAMETHROWER && wepId !== DamageID.ARC_CANNON) return;
 
-        switch (weapon) {
-            case DamageID.FLAMETHROWER: {
-                if (Math.random() < 0.6) {
-                    // VINTERDÖD: Bluish/Cyan ignition flash for the flamer
-                    WeaponFX.createMuzzleFlash(origin, direction, true);
+        // Verify ammo (WeaponHandler handles consumption, we just gate damage here)
+        if (state.weaponAmmo[wepId] <= 0) return;
+
+        if (!this.session.playerPos) return;
+        const px = this.session.playerPos.x;
+        const pz = this.session.playerPos.z;
+
+        // Extract Aim Direction (SMI normalized Vector2)
+        const aimX = state.inputState.aimVector.x;
+        const aimZ = state.inputState.aimVector.y; // Map V2.y to V3.z
+
+        const isFlame = wepId === DamageID.FLAMETHROWER;
+        const baseRange = isFlame ? 10 : 14;
+        const range = baseRange * (state.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0);
+        const rangeSq = range * range;
+
+        // Base damage scaled by delta. 
+        // 60fps normalization (60 * dt)
+        const damage = (isFlame ? 0.8 : 1.2) * (60 * dt);
+        const cosHalfAngle = 0.94; // ~20 degrees
+        const beamWidth = 1.2;
+
+        const enemies = EnemyManager.getActiveEnemies();
+
+        for (let i = 0; i < EnemyPoolState.activeCount; i++) {
+            if ((EnemyPoolState.statusFlags[i] & ENTITY_STATUS.DEAD) !== 0) continue;
+
+            const ex = EnemyPoolState.posX[i] - px;
+            const ez = EnemyPoolState.posZ[i] - pz;
+            const dSq = ex * ex + ez * ez;
+
+            if (dSq > rangeSq) continue;
+
+            const dot = ex * aimX + ez * aimZ;
+            if (dot <= 0) continue;
+
+            let hit = false;
+            if (isFlame) {
+                const invDist = 1.0 / Math.sqrt(dSq);
+                if ((ex * invDist * aimX + ez * invDist * aimZ) > cosHalfAngle) {
+                    hit = true;
                 }
-
-                if (Math.random() < 0.8) {
-                    // VINTERDÖD: Pull light closer to muzzle (3.0 -> 1.5) for better barrel illumination
-                    _v4.copy(origin).addScaledVector(direction, 1.5);
-                    WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0xff6600, 25.0, 55.0, 0.15, 'fire');
-                }
-
-                const count = 4;
-                const range = data.range || 15;
-                for (let i = 0; i < count; i++) {
-                    _v1.copy(origin).addScaledVector(direction, 0.5 + Math.random() * 0.8);
-                    WeaponFX.createFlame(_v1, direction, range);
-                }
-
-                const rangeSq = range * range;
-
-                let maxReach = range;
-                const obstacles = ctx.collisionGrid.getNearbyObstacles(origin, range);
-                const obsLen = obstacles.length;
-                for (let i = 0; i < obsLen; i++) {
-                    const obs = obstacles[i];
-                    _v1.subVectors(obs.position, origin);
-                    const d = _v1.length();
-                    if (d < 0.5) continue;
-
-                    _v1.divideScalar(d);
-                    if (direction.dot(_v1) > 0.96) {
-                        const obsRad = obs.radius || 1.5;
-                        if (d - obsRad < maxReach) {
-                            maxReach = d - obsRad;
-                        }
-                    }
-                }
-
-                const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
-                const eneLen = enemies.length;
-                for (let _fi = 0; _fi < eneLen; _fi++) {
-                    const e = enemies[_fi];
-                    if (e.deathState !== EnemyDeathState.ALIVE) continue;
-
-                    _v1.subVectors(e.mesh.position, origin);
-                    const distSq = _v1.lengthSq();
-
-                    // VINTERDÖD: Sqrt Purge! 
-                    if (distSq > rangeSq) continue;
-
-                    // Optimization: Check dot product BEFORE reach to cull most targets
-                    _v2.copy(_v1).normalize();
-                    if (direction.dot(_v2) <= FLAMETHROWER_CONE_ANGLE) continue;
-
-                    const dist = Math.sqrt(distSq);
-                    if (dist > maxReach + 1.2) continue;
-
-                    if ((e.statusFlags & EnemyFlags.IN_WATER) !== 0) {
-                        if (Math.random() < 0.1) {
-                            ctx.spawnParticle(e.mesh.position.x, 0.5, e.mesh.position.z, FXParticleType.LARGE_SMOKE, 1);
-                        }
-                        continue;
-                    }
-
-                    e.statusFlags |= EnemyFlags.BURNING;
-                    e.burnTickTimer = 0.5;
-                    e.burnDuration = 5.0;
-                    e.burnSource = DamageID.FLAMETHROWER;
-
-                    const chance = (delta * 1000) / (data.fireRate || 35);
-                    if (Math.random() < chance) {
-                        const finalDmg = damageOverride !== undefined ? (damageOverride / (60 * delta)) : data.damage;
-                        ctx.applyDamage(e, finalDmg || 0, DamageID.FLAMETHROWER);
-                    }
-                }
-
-                if (simTime - _lastFlameSoundTime > 200) {
-                    WeaponSounds.startFlamethrowerLoop();
-                    _lastFlameSoundTime = simTime;
-                }
-                break;
-            }
-
-            case DamageID.ARC_CANNON: {
-                const range = data.range || 20.0;
-                const rangeSq = range * range;
-                const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
-                const eneLen = enemies.length;
-
-                let target = null;
-                let minDist = Infinity;
-                const aimThreshold = 0.90;
-
-                for (let _fi = 0; _fi < eneLen; _fi++) {
-                    const e = enemies[_fi];
-                    if (e.deathState !== EnemyDeathState.ALIVE) continue;
-
-                    _v1.subVectors(e.mesh.position, origin);
-                    const distSq = _v1.lengthSq();
-                    if (distSq > rangeSq) continue;
-
-                    // VINTERDÖD: Sqrt Purge! 
-                    const dot = direction.dot(_v1);
-                    if (dot > 0) {
-                        const threshold = aimThreshold * aimThreshold;
-                        const dotSq = dot * dot;
-                        if (dotSq > threshold * distSq) {
-                            if (distSq < minDist) {
-                                minDist = distSq;
-                                target = e;
-                            }
-                        }
-                    }
-                }
-
-                if (target) {
-                    const chainMax = 5;
-                    const chainRange = 8.0;
-
-                    _arcCannonHitList.length = 0;
-                    _arcCannonHitIds.clear();
-
-                    _arcCannonHitList.push(target);
-                    _arcCannonHitIds.add(target.id);
-
-                    let curr = target;
-                    while (_arcCannonHitList.length < chainMax) {
-                        const potential = ctx.collisionGrid.getNearbyEnemies(curr.mesh.position, chainRange);
-                        let next = null;
-                        let nextDist = Infinity;
-                        const potLen = potential.length;
-
-                        for (let _pi = 0; _pi < potLen; _pi++) {
-                            const p = potential[_pi];
-                            if (p.deathState !== EnemyDeathState.ALIVE || _arcCannonHitIds.has(p.id)) continue;
-                            const d = p.mesh.position.distanceToSquared(curr.mesh.position);
-                            if (d < nextDist) {
-                                nextDist = d;
-                                next = p;
-                            }
-                        }
-
-                        if (next) {
-                            _arcCannonHitList.push(next);
-                            _arcCannonHitIds.add(next.id);
-                            curr = next;
-                        } else {
-                            break;
-                        }
-                    }
-
-                    let currentDamage = damage;
-                    const damageDecay = 0.80;
-                    const stunDur = data.statusEffect?.duration || 2.5;
-
-                    _v3.copy(origin);
-                    const hitLen = _arcCannonHitList.length;
-
-                    // VINTERDÖD: Add local muzzle glow for the Arc-Cannon
-                    if (Math.random() < 0.5) {
-                        WeaponFX.spawnDynamicLight(ctx.scene, origin, 0x00ffff, 15.0, 20.0, 0.08, 'electric');
-                    }
-
-                    if (Math.random() > 0.4) {
-                        _v4.copy(target.mesh.position).addScaledVector(direction, -1.0);
-                        // Arc-Cannon Lightning Buff (2.0 -> 18.0, Radius 14 -> 35)
-                        WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0x00ffff, 18.0, 35.0, 0.12, 'electric');
-                    }
-
-                    for (let i = 0; i < hitLen; i++) {
-                        const e = _arcCannonHitList[i];
-                        _v1.copy(e.mesh.position);
-                        _v1.y += (e.originalScale || 1.0) * 1.0;
-
-                        const isMain = (i === 0);
-                        WeaponFX.drawArcLightning(ctx.scene, _v3, _v1, isMain);
-                        ctx.applyDamage(e, currentDamage, DamageID.ARC_CANNON);
-
-                        e.statusFlags |= EnemyFlags.STUNNED;
-                        e.stunDuration = stunDur;
-
-                        if (Math.random() < 0.7) {
-                            WeaponFX.createStunSparks(_v1);
-                            // Victim Glow
-                            WeaponFX.spawnDynamicLight(ctx.scene, _v1, 0x00ffff, 8.0, 15.0, 0.1, 'electric');
-                        }
-
-                        _v3.copy(_v1);
-                        currentDamage *= damageDecay;
-                    }
-
-                    if (simTime - _lastArcCannonSoundTime > 150) {
-                        WeaponSounds.playArcCannonZap();
-                        _lastArcCannonSoundTime = simTime;
-                    }
-                } else {
-                    _v1.copy(origin).addScaledVector(direction, range);
-                    WeaponFX.drawArcLightning(ctx.scene, origin, _v1, true);
-
-                    _v4.copy(origin).addScaledVector(direction, 5.0);
-                    WeaponFX.spawnDynamicLight(ctx.scene, _v4, 0x00ffff, 5.0, 30.0, 0.12, 'electric');
-
-                    if (simTime - _lastArcCannonSoundTime > 150) {
-                        WeaponSounds.playArcCannonZap();
-                        _lastArcCannonSoundTime = simTime;
-                    }
-                }
-                break;
-            }
-        }
-    },
-
-    update: (ctx: GameContext, projectiles: Projectile[], fireZones: FireZone[], delta: number, simTime: number, renderTime: number) => {
-        const globalTimeScale = ctx.session.state.globalTimeScale || 1.0;
-        const waterSystem = WinterEngine.getInstance()?.water;
-
-        for (let i = projectiles.length - 1; i >= 0; i--) {
-            const p = projectiles[i];
-
-            // VINTERDÖD SAFETY: Player projectiles (1-15) run at 100% speed.
-            // Everything else (Acid, Traps) runs at globalTimeScale.
-            const isPlayerProj = p.weapon <= 15;
-            const scaledDelta = isPlayerProj ? delta : delta * globalTimeScale;
-
-            if (p.type === ProjectileType.BULLET) {
-                updateBullet(p, i, scaledDelta, ctx, projectiles);
             } else {
-                updateThrowable(p, i, scaledDelta, ctx, simTime, renderTime, projectiles, waterSystem);
-            }
-        }
+                const cross = ex * aimZ - ez * aimX;
+                if (Math.abs(cross) < beamWidth) {
+                    hit = true;
 
-        if (fireZones.length > 0) {
-            let playerHitThisFrame = false;
-            const frameCounter = (simTime * 0.06) | 0;
+                    // --- ARC CHAINING ---
+                    // Chain up to 4 additional enemies if the primary hit landed
+                    let currentChain = enemies[i];
+                    let chainCount = 0;
+                    _v3.copy(currentChain.mesh.position);
 
-            for (let i = fireZones.length - 1; i >= 0; i--) {
-                const fz = fireZones[i];
-                fz.life -= delta;
+                    for (let j = 0; j < EnemyPoolState.activeCount && chainCount < 4; j++) {
+                        if (i === j) continue;
+                        if ((EnemyPoolState.statusFlags[j] & ENTITY_STATUS.DEAD) !== 0) continue;
 
-                if ((frameCounter + i) % 2 === 0) {
-                    WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, delta, ctx);
-                }
+                        const cx = EnemyPoolState.posX[j] - EnemyPoolState.posX[i];
+                        const cz = EnemyPoolState.posZ[j] - EnemyPoolState.posZ[i];
+                        const cDistSq = cx * cx + cz * cz;
 
-                if (fz.audioPoolIdx !== -1) {
-                    const dSq = fz.mesh.position.distanceToSquared(ctx.playerPos);
-                    // Approximation for volume falloff without sqrt: 1.0 - (dSq / 900)
-                    const vol = (1.0 - (dSq / 900)) * 0.4 * Math.min(1.0, (fz.life / 6.0) * 2.0);
-                    audioEngine.updateVoiceVolume(fz.audioPoolIdx, Math.max(0, vol));
-                }
-
-                if (simTime - (fz._lastDamageTime || 0) > 500) {
-                    fz._lastDamageTime = simTime;
-                    const nearby = ctx.collisionGrid.getNearbyEnemies(fz.mesh.position, fz.radius);
-                    const rSq = fz.radiusSq;
-                    const nearLen = nearby.length;
-
-                    for (let _ni = 0; _ni < nearLen; _ni++) {
-                        const e = nearby[_ni];
-                        if (e.deathState !== EnemyDeathState.ALIVE) continue;
-
-                        if (e.mesh.position.distanceToSquared(fz.mesh.position) < rSq) {
-                            e.statusFlags |= EnemyFlags.BURNING;
-                            e.burnDuration = 5.0;
-                            e.burnTickTimer = 0.5;
-                            e.burnSource = fz.sourceWeapon;
+                        if (cDistSq < 64) { // 8m chain range
+                            EnemyPoolState.hp[j] -= damage * 0.7;
+                            state.applyDamage(enemies[j], damage * 0.7, wepId, false);
+                            WeaponFX.drawArcLightning(this.session!.engine.scene, _v3, enemies[j].mesh.position, false);
+                            _v3.copy(enemies[j].mesh.position);
+                            chainCount++;
                         }
                     }
+                    WeaponFX.drawArcLightning(this.session!.engine.scene, this.session!.playerPos, enemies[i].mesh.position, true);
+                }
+            }
 
-                    if (!playerHitThisFrame && ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
-                        // Pass a proxy attacker if it was an enemy
-                        const attackerProxy = fz.sourceId < 16 ? { type: fz.sourceId } : null;
-                        ctx.onPlayerHit(3, attackerProxy, DamageID.BURN, true, StatusEffectType.BURNING, 3000, 5, EnemyAttackType.ENVIRONMENTAL);
-                        playerHitThisFrame = true;
+            if (hit) {
+                EnemyPoolState.hp[i] -= damage;
+
+                // Trigger legacy damage for telemetry/XP/Death handling
+                // We use a low-impact flag for continuous hits to prevent hit-stop spam
+                state.applyDamage(enemies[i], damage, wepId, false);
+
+                if (EnemyPoolState.hp[i] <= 0) {
+                    EnemyPoolState.statusFlags[i] |= ENTITY_STATUS.DEAD;
+                    // Hit-stop on finishing blows (Continuous)
+                    if (state) {
+                        state.hitStopTime = Math.max(state.hitStopTime || 0, 35);
+                    }
+                } else if (isFlame) {
+                    // Apply BURNING status effect to enemies hit by flamethrower
+                    EnemyPoolState.statusFlags[i] |= EnemyFlags.BURNING;
+
+                    // Also trigger burn visuals immediately
+                    const ctx = this.session;
+                    if (ctx && Math.random() < 0.3) {
+                        _v4.set(EnemyPoolState.posX[i], 1.0, EnemyPoolState.posZ[i]);
+                        WeaponFX.updateFireZoneVisuals(_v4, 0.5, dt, ctx);
                     }
                 }
 
-                if (fz.life <= 0) {
-                    if (fz.audioPoolIdx !== -1) {
-                        audioEngine.stopVoice(fz.audioPoolIdx);
-                        fz.audioPoolIdx = -1;
-                    }
-                    ctx.scene.remove(fz.mesh);
-                    fireZones[i] = fireZones[fireZones.length - 1];
-                    fireZones.pop();
-                }
-            }
-        }
-    },
-
-    clear: (scene: THREE.Scene, projectiles: Projectile[], fireZones: FireZone[]) => {
-        const pLen = projectiles.length;
-        for (let i = 0; i < pLen; i++) {
-            const p = projectiles[i];
-            if (p.mesh.parent) scene.remove(p.mesh);
-            if (p.marker && p.marker.parent) scene.remove(p.marker);
-            ProjectileSystem.releaseProjectile(p);
-        }
-
-        const fLen = fireZones.length;
-        for (let i = 0; i < fLen; i++) {
-            const f = fireZones[i];
-            if (f.mesh.parent) scene.remove(f.mesh);
-            f.life = 0;
-        }
-
-        projectiles.length = 0;
-        fireZones.length = 0;
-    }
-};
-
-function updateBullet(projectile: Projectile, index: number, delta: number, ctx: GameContext, projectiles: Projectile[]) {
-    _v3.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
-    projectile.mesh.position.addScaledVector(projectile.vel, delta);
-    _v4.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
-    projectile.life -= delta;
-
-    let destroyBullet = false;
-
-    _v2.subVectors(_v4, _v3);
-    const lineLenSq = _v2.lengthSq();
-
-    _v1.addVectors(_v3, _v4).multiplyScalar(0.5);
-    const bulletTravelDist = projectile.speed * delta;
-    const obsSearchRad = 2.0 + bulletTravelDist * 0.5;
-    const nearbyObs = ctx.collisionGrid.getNearbyObstacles(_v1, obsSearchRad);
-    const obsLen = nearbyObs.length;
-
-    for (let i = 0; i < obsLen; i++) {
-        const obs = nearbyObs[i];
-
-        if (Math.abs(obs.position.x - ctx.playerPos.x) < 0.5 && Math.abs(obs.position.z - ctx.playerPos.z) < 0.5) {
-            continue;
-        }
-
-        _v5.set(obs.position.x, 0, obs.position.z);
-        const rad = obs.radius || 2.0;
-
-        _v6.subVectors(_v5, _v3);
-        let t = lineLenSq > 0 ? Math.max(0, Math.min(1, _v6.dot(_v2) / lineLenSq)) : 0;
-        _v6.copy(_v3).addScaledVector(_v2, t);
-
-        if (_v6.distanceToSquared(_v5) < rad * rad) {
-            destroyBullet = true;
-
-            const isGround = obs.physicsGroup === PhysicsGroup.GROUND;
-            if (!isGround) {
-                const material = obs.materialId || (obs.mesh as any)?.userData?.materialId || MaterialType.GENERIC;
-                GamePlaySounds.playImpact(material);
-            }
-
-            ctx.makeNoise(_v6, NoiseType.BULLET_HIT, NOISE_RADIUS[NoiseType.BULLET_HIT]);
-            break;
-        }
-    }
-
-    if (!destroyBullet) {
-        _v1.set(0, 0, 0).addVectors(_v3, _v4).multiplyScalar(0.5);
-        const enemySearchRad = 5.0 + bulletTravelDist * 0.5;
-        const nearbyEnemies = ctx.collisionGrid.getNearbyEnemies(_v1, enemySearchRad);
-        const eneLen = nearbyEnemies.length;
-
-        if (eneLen > 1) {
-            manualSortNearbyEnemies(_v3, nearbyEnemies);
-        }
-
-        for (let i = 0; i < eneLen; i++) {
-            const enemy = nearbyEnemies[i];
-            if (enemy.deathState !== EnemyDeathState.ALIVE || projectile.hitEntities.has(enemy.id)) continue;
-
-            _v5.set(enemy.mesh.position.x, 0, enemy.mesh.position.z);
-            const hitRad = enemy.hitRadius;
-
-            _v6.subVectors(_v5, _v3);
-            let t = lineLenSq > 0 ? Math.max(0, Math.min(1, _v6.dot(_v2) / lineLenSq)) : 0;
-            _v6.copy(_v3).addScaledVector(_v2, t);
-
-            if (_v6.distanceToSquared(_v5) < hitRad * hitRad) {
-                // VINTERDÖD: 3D Hitbox Verification (Early-out after 2D check passes)
-                // Calculate the interpolated Y-position of the bullet at the closest point 't' on the segment
-                const startY = projectile.mesh.position.y - projectile.vel.y * delta;
-                const bulletY = startY + t * (projectile.vel.y * delta);
-                
-                const enemyCenterY = enemy.mesh.position.y;
-                const halfHeight = enemy.originalScale; 
-                
-                // VINTERDÖD: 3D Hitbox Correction (Center-Pivot Alignment)
-                // Standard human is ~2.0m tall, pivot is at center (1.0m height).
-                const enemyBottomY = enemyCenterY - halfHeight;
-                const enemyTopY = enemyCenterY + halfHeight;
-                const verticalMargin = 0.4; // Generosity margin for high-speed perspective shots
-
-                if (bulletY < enemyBottomY - verticalMargin || bulletY > enemyTopY + verticalMargin) {
-                    continue; // Bullet passed above or below the enemy visual model
-                }
-
-                let isHighImpact = false;
-                if (projectile.highImpactDistSq > 0) {
-                    const dx = _v6.x - projectile.origin.x;
-                    const dz = _v6.z - projectile.origin.z;
-                    const distFromOriginSq = dx * dx + dz * dz;
-                    if (distFromOriginSq < projectile.highImpactDistSq) isHighImpact = true;
-                } else if (projectile.highImpactDamageFactor > 0) {
-                    if (projectile.damage >= projectile.baseDamage * projectile.highImpactDamageFactor) isHighImpact = true;
-                }
-
-                const isMassiveDamage = projectile.damage >= MASSIVE_DAMAGE_THRESHOLD;
-
-                projectile.hitEntities.add(enemy.id);
-                enemy.slowDuration = 0.5;
-
-                const tracker = ctx.session.getSystem('damage_tracker_system');
-                if (tracker) tracker.recordHit(ctx.session, projectile.weapon);
-
-                const isKill = ctx.applyDamage(enemy, projectile.damage, projectile.weapon, isHighImpact);
-                const isHeavyKill = isKill && enemy.type === EnemyType.TANK;
-
-                // VINTERDÖD HIT-STOP: High Impact, Massive Damage, or Heavy Takedown
-                if (isHighImpact || isMassiveDamage || isHeavyKill) {
-                    const engine = WinterEngine.getInstance();
-                    if (engine) engine.triggerHitStop(isHeavyKill ? 45 : 35);
-                    if (isHeavyKill || isMassiveDamage) haptic.impact(0.8);
-                }
-
-                const mass = enemy.originalScale * enemy.widthScale;
-                const force = (projectile.damage / 3) / Math.max(0.3, mass);
-
-                if (isKill && isHighImpact) {
-                    enemy.deathVel.copy(projectile.vel).normalize().multiplyScalar(force * 2.0).setY(4.0);
-                }
-
-                _v5.copy(projectile.vel).setY(0).normalize().multiplyScalar(force);
-                enemy.knockbackVel.add(_v5);
-
-                ctx.spawnParticle(_v6.x, 1.5, _v6.z, FXParticleType.BLOOD_SPLATTER, 6);
-                GamePlaySounds.playImpact(MaterialType.FLESH);
-
-                if (projectile.piercing) {
-                    projectile.damage *= projectile.pierceDecay;
-                    if (projectile.damage < 15) { destroyBullet = true; break; }
-                } else {
-                    destroyBullet = true;
-                    break;
+                // Spawn hit particles (FXSystem Splatter)
+                if (Math.random() > 0.85 && this.session) {
+                    this.session.spawnParticle(EnemyPoolState.posX[i], 1.2, EnemyPoolState.posZ[i], FXParticleType.BLOOD_SPLATTER, 3);
                 }
             }
         }
     }
 
-    if (destroyBullet || projectile.life <= 0) {
-        ctx.scene.remove(projectile.mesh);
-        ProjectileSystem.releaseProjectile(projectile);
-
-        const pLen = projectiles.length;
-        projectiles[index] = projectiles[pLen - 1];
-        projectiles.pop();
-    }
-}
-
-function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameContext, simTime: number, renderTime: number, projectiles: Projectile[], waterSystem: any) {
-    p.vel.y -= 30 * delta;
-    p.mesh.position.addScaledVector(p.vel, delta);
-    p.mesh.rotation.x += 8 * delta;
-
-    if (p.marker) {
-        (p.marker.material as any).opacity = 0.4 + Math.abs(Math.sin(simTime * 0.01)) * 0.6;
+    static clear(scene?: THREE.Scene, projectiles?: any[], fireZones?: any[]) {
+        ProjectilePoolState.activeCount = 0;
     }
 
-    let destroyed = false;
-    let hitWater = false;
-    let hitY = 0;
-
-    if (p.mesh.position.y < 2.0 && waterSystem) {
-        waterSystem.checkBuoyancy(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z, renderTime);
-        if (_buoyancyResult.inWater && p.mesh.position.y <= _buoyancyResult.waterLevel) {
-            destroyed = true;
-            hitWater = true;
-            hitY = _buoyancyResult.waterLevel;
-        }
+    clear() {
+        ProjectilePoolState.activeCount = 0;
+        if (this.renderer) this.renderer.clear();
     }
 
-    if (!destroyed && (p.mesh.position.y <= 0.1 || p.life <= 0)) {
-        destroyed = true;
-        hitY = 0;
-    }
-
-    if (destroyed) {
-        ctx.scene.remove(p.mesh);
-        if (p.marker) {
-            ctx.scene.remove(p.marker);
-        }
-
-        _v1.copy(p.mesh.position).setY(hitY);
-
-        switch (p.weapon) {
-            case DamageID.GRENADE:
-                if (hitWater) {
-                    GamePlaySounds.playWaterExplosion();
-                    haptic.explosionWater();
-                    if (waterSystem) waterSystem.spawnExplosionRipple(_v1.x, _v1.z, ctx.session.state.renderTime, 2.5);
-                } else {
-                    WeaponSounds.playGrenadeImpact();
-                    WeaponSounds.playExplosion(_v1); // VINTERDÖD: Punchy synth explosion
-                    haptic.explosion();
-                }
-                const gnRadius = hitWater ? (NOISE_RADIUS[NoiseType.GRENADE] * 0.5) : NOISE_RADIUS[NoiseType.GRENADE];
-                ctx.makeNoise(_v1, NoiseType.GRENADE, gnRadius);
-                WeaponFX.createGrenadeImpact(_v1, p.maxRadius || 10, hitWater, ctx);
-
-                const effectiveRadius = hitWater ? (p.maxRadius || 10) * 0.5 : (p.maxRadius || 10);
-                const nearby = ctx.collisionGrid.getNearbyEnemies(_v1, effectiveRadius + 3.0);
-                const nLen = nearby.length;
-
-                for (let i = 0; i < nLen; i++) {
-                    const e = nearby[i];
-                    if (e.deathState !== EnemyDeathState.ALIVE) continue;
-
-                    _v2.subVectors(e.mesh.position, _v1);
-                    const distSq = _v2.lengthSq();
-                    const totalRad = effectiveRadius + e.hitRadius;
-
-                    if (distSq < totalRad * totalRad) {
-                        const isKill = ctx.applyDamage(e, p.damage, DamageID.GRENADE, true);
-
-                        // VINTERDÖD HIT-STOP: High-yield explosions (Grenades/Flashbangs) trigger engine freeze
-                        if (p.weapon === DamageID.GRENADE || p.weapon === DamageID.FLASHBANG) {
-                            WinterEngine.getInstance()?.triggerHitStop(40);
-                        }
-
-                        if (isKill) {
-                            const forceMultiplier = hitWater ? 5.0 : 15.0;
-                            // VINTERDÖD: Sqrt Purge!
-                            const radSq = effectiveRadius * effectiveRadius;
-                            const force = forceMultiplier * (1.0 - Math.min(1.0, distSq / radSq));
-                            _v4.copy(_v2).normalize().setY(hitWater ? 1.5 : 0.5).multiplyScalar(force);
-                            e.deathVel.copy(_v4);
-                        } else {
-                            const mass = e.originalScale * e.widthScale;
-                            const radSq = effectiveRadius * effectiveRadius;
-                            const kbForce = (hitWater ? 12 : 25) * (1.0 - Math.min(1.0, distSq / radSq));
-                            _v4.copy(_v2).normalize().multiplyScalar(kbForce / mass).setY(hitWater ? 1.0 : 2.0);
-                            e.knockbackVel.add(_v4);
-                        }
-                    }
-                }
-                break;
-
-            case DamageID.MOLOTOV:
-                if (hitWater) {
-                    ctx.makeNoise(_v1, NoiseType.MOLOTOV, NOISE_RADIUS[NoiseType.BULLET_HIT]);
-                    GamePlaySounds.playWaterSplash();
-                    haptic.explosionWater();
-                    if (waterSystem) waterSystem.spawnRipple(_v1.x, _v1.z, ctx.session.state.renderTime, 1.2);
-                } else {
-                    ctx.makeNoise(_v1, NoiseType.MOLOTOV, NOISE_RADIUS[NoiseType.MOLOTOV]);
-                    WeaponSounds.playMolotovImpact();
-                    haptic.explosion();
-                }
-
-                WeaponFX.createMolotovImpact(_v1, p.maxRadius || 10, hitWater, ctx);
-
-                if (!hitWater) {
-                    let fz: FireZone | null = null;
-                    const fLen = FIREZONE_POOL.length;
-                    for (let i = 0; i < fLen; i++) {
-                        if (FIREZONE_POOL[i].life <= 0) {
-                            fz = FIREZONE_POOL[i];
-                            break;
-                        }
-                    }
-
-                    const mRad = p.maxRadius || 10;
-                    if (!fz) {
-                        fz = {
-                            mesh: new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone),
-                            radius: mRad,
-                            radiusSq: mRad * mRad,
-                            life: 6.0,
-                            audioPoolIdx: -1,
-                            sourceWeapon: p.weapon,
-                            sourceId: p.sourceId
-                        };
-                        FIREZONE_POOL.push(fz);
-                    } else {
-                        fz.radius = mRad;
-                        fz.radiusSq = mRad * mRad;
-                        fz.life = 6.0;
-                        fz.sourceWeapon = p.weapon;
-                        fz.sourceId = p.sourceId;
-                    }
-
-                    fz.radius = mRad;
-                    fz.radiusSq = mRad * mRad;
-                    fz.life = 6.0;
-                    fz._lastDamageTime = 0;
-                    fz.mesh.rotation.x = -Math.PI / 2;
-                    fz.mesh.position.set(_v1.x, 0.24, _v1.z);
-                    fz.mesh.scale.setScalar(fz.radius / 3.5);
-
-                    if (fz.mesh.parent !== ctx.scene) ctx.scene.add(fz.mesh);
-
-                    fz.audioPoolIdx = WeaponSounds.startFireLoop();
-
-                    ctx.fireZones.push(fz);
-
-                    const direct = ctx.collisionGrid.getNearbyEnemies(_v1, mRad);
-                    const rSq = fz.radiusSq;
-                    const dLen = direct.length;
-                    for (let i = 0; i < dLen; i++) {
-                        const e = direct[i];
-                        if (e.deathState !== EnemyDeathState.ALIVE) continue;
-
-                        if (e.mesh.position.distanceToSquared(_v1) < rSq) {
-                            ctx.applyDamage(e, 0, DamageID.MOLOTOV);
-
-                            e.statusFlags |= EnemyFlags.BURNING;
-                            e.burnDuration = 5.0;
-                            e.burnTickTimer = 0.5;
-                            e.burnSource = p.weapon;
-                        }
-                    }
-                }
-                break;
-
-            case DamageID.FLASHBANG:
-                if (hitWater) {
-                    ctx.makeNoise(_v1, NoiseType.FLASHBANG, NOISE_RADIUS[NoiseType.BULLET_HIT]);
-                    GamePlaySounds.playWaterSplash();
-                    haptic.explosionWater();
-                    if (waterSystem) waterSystem.spawnRipple(_v1.x, _v1.z, ctx.session.state.renderTime, 1.2);
-                } else {
-                    ctx.makeNoise(_v1, NoiseType.FLASHBANG, NOISE_RADIUS[NoiseType.FLASHBANG]);
-                    WeaponSounds.playFlashbangImpact();
-                    haptic.explosion();
-                }
-
-                WeaponFX.createFlashbangImpact(_v1, hitWater, ctx);
-
-                const fbRad = p.maxRadius || 10;
-                const nearbyFb = ctx.collisionGrid.getNearbyEnemies(_v1, fbRad);
-                const fbRSq = fbRad * fbRad;
-                const fLen = nearbyFb.length;
-
-                for (let i = 0; i < fLen; i++) {
-                    const e = nearbyFb[i];
-                    if (e.deathState !== EnemyDeathState.ALIVE) continue;
-
-                    if (e.mesh.position.distanceToSquared(_v1) < fbRSq) {
-                        e.statusFlags |= EnemyFlags.BLINDED | EnemyFlags.STUNNED;
-                        e.blindDuration = 4.0;
-                        e.stunDuration = 1.5;
-                        WeaponFX.createStunSparks(e.mesh.position);
-                    }
-                }
-                break;
-        }
-
-        ProjectileSystem.releaseProjectile(p);
-
-        const pLen = projectiles.length;
-        projectiles[index] = projectiles[pLen - 1];
-        projectiles.pop();
-    } else {
-        p.life -= delta;
+    reAttach(newScene: THREE.Scene) {
+        if (this.renderer) this.renderer.reAttach(newScene);
     }
 }

@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
-import { SectorDef, SectorContext, GroundType, ChestType } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, GroundType, ChestType, SectorID } from '../../game/session/SectorTypes';
 import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
-import { InteractionType, InteractionShape } from '../../systems/InteractionTypes';
+import { InteractionType, InteractionShape } from '../../systems/ui/UIEventBridge';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
 import { VehicleGenerator } from '../../core/world/generators/VehicleGenerator';
@@ -17,7 +17,7 @@ import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
 import { WeatherType } from '../../core/engine/EngineTypes';
 import { FXParticleType } from '../../types/FXTypes';
 import { POI_TYPE } from '../../content/pois';
-import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
+import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 
 const LOCATIONS = {
     SPAWN: {
@@ -71,10 +71,13 @@ const EXPLODING_BUS_ID = 'tunnel_bus';
 const EXPLODING_BUS_POS = LOCATIONS.TRIGGERS.BUS;
 
 const _v1 = new THREE.Vector3();
+const _forestHomeSMU = new THREE.Vector3(70, 0, 50);
+const _townCenterWoods = new THREE.Vector3(145, 0, 240);
 
 // Zero-GC Pre-allocated Vectors for the Update Loop
 const _trainYardPos = new THREE.Vector3(LOCATIONS.POIS.TRAIN_YARD.x, 0, LOCATIONS.POIS.TRAIN_YARD.z);
 const _viewPos = new THREE.Vector3();
+const _spawnScratch = new THREE.Vector3();
 const _camOverrideTarget = new THREE.Vector3();
 const _camOverrideLookAt = new THREE.Vector3();
 
@@ -92,7 +95,7 @@ const _zoomOffsetTarget = new THREE.Vector3(22, 10, 0);
 const _zoomOffsetLook = new THREE.Vector3(0, 2, 0);
 
 /**
- * VINTERDÖD: Unified Bus Explosion Handler
+ * Unified Bus Explosion Handler
  * Reuses the optimized physics and FX logic from Sector 4.
  */
 function explodeBus(dt: number, renderTime: number, gameState: any, sectorState: any, events: any) {
@@ -113,7 +116,7 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
 
         // Make noise to attract enemies
         if (events.makeNoise) {
-            events.makeNoise(_busOriginalPos.clone(), NoiseType.OTHER, 100);
+            events.makeNoise(_busOriginalPos, NoiseType.OTHER, 100);
         }
 
         // Clear bus
@@ -301,7 +304,7 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
 }
 
 export const Sector0: SectorDef = {
-    id: 0,
+    id: SectorID.VILLAGE,
     environment: {
         bgColor: 0x020208,
         ambientIntensity: 0.4,
@@ -1002,14 +1005,15 @@ export const Sector0: SectorDef = {
             }
         }
 
-        const forestHomeSMU = new THREE.Vector3(70, 0, 50);
-        if (playerPos.distanceTo(forestHomeSMU) < 40 && !sectorState.spawns.forest_home_smu) {
+        _v1.set(_forestHomeSMU.x, 0, _forestHomeSMU.z);
+        if (playerPos.distanceToSquared(_v1) < 1600 && !sectorState.spawns.forest_home_smu) {
             sectorState.spawns.forest_home_smu = true;
             for (let i = 0; i < 6; i++) {
                 const type = Math.random() > 0.7 ? EnemyType.RUNNER : EnemyType.WALKER;
                 const offX = (Math.random() - 0.5) * 30;
                 const offZ = (Math.random() - 0.5) * 30;
-                if (events.spawnZombie) events.spawnZombie(type, new THREE.Vector3(forestHomeSMU.x + offX, 0, forestHomeSMU.z + offZ));
+                _spawnScratch.set(_forestHomeSMU.x + offX, 0, _forestHomeSMU.z + offZ);
+                if (events.spawnZombie) events.spawnZombie(type, _spawnScratch);
             }
         }
 
@@ -1022,9 +1026,10 @@ export const Sector0: SectorDef = {
         ];
 
         buildingPOIs.forEach(poi => {
-            const dist = playerPos.distanceTo(new THREE.Vector3(poi.pos.x, 0, poi.pos.z));
-            // VINTERDÖD: Increased trigger distance to 75 to match new spawner logic
-            if (dist < 75 && !sectorState.spawns[poi.name]) {
+            _v1.set(poi.pos.x, 0, poi.pos.z);
+            const distSq = playerPos.distanceToSquared(_v1);
+            // Increased trigger distance to 75 (5625 sq) to match new spawner logic
+            if (distSq < 5625 && !sectorState.spawns[poi.name]) {
                 sectorState.spawns[poi.name] = true;
                 for (let i = 0; i < poi.count; i++) {
                     let type: EnemyType = EnemyType.WALKER;
@@ -1034,14 +1039,15 @@ export const Sector0: SectorDef = {
 
                     const offX = (Math.random() - 0.5) * 20;
                     const offZ = (Math.random() - 0.5) * 20;
-                    if (events.spawnZombie) events.spawnZombie(type, new THREE.Vector3(poi.pos.x + offX, 0, poi.pos.z + offZ));
+                    _spawnScratch.set(poi.pos.x + offX, 0, poi.pos.z + offZ);
+                    if (events.spawnZombie) events.spawnZombie(type, _spawnScratch);
                 }
             }
         });
 
-        const townCenterWoods = new THREE.Vector3(145, 0, 240);
-        // VINTERDÖD: Increased trigger distance to 75 to match new spawner logic
-        if (playerPos.distanceTo(townCenterWoods) < 75 && !sectorState.spawns.town_forest) {
+        _v1.set(_townCenterWoods.x, 0, _townCenterWoods.z);
+        // Increased trigger distance to 75 (5625 sq) to match new spawner logic
+        if (playerPos.distanceToSquared(_v1) < 5625 && !sectorState.spawns.town_forest) {
             sectorState.spawns.town_forest = true;
             for (let i = 0; i < 8; i++) {
                 let type = EnemyType.WALKER;
@@ -1052,7 +1058,8 @@ export const Sector0: SectorDef = {
 
                 const offX = (Math.random() - 0.5) * 40;
                 const offZ = (Math.random() - 0.5) * 40;
-                if (events.spawnZombie) events.spawnZombie(type, new THREE.Vector3(townCenterWoods.x + offX, 0, townCenterWoods.z + offZ));
+                _spawnScratch.set(_townCenterWoods.x + offX, 0, _townCenterWoods.z + offZ);
+                if (events.spawnZombie) events.spawnZombie(type, _spawnScratch);
             }
         }
 
@@ -1080,8 +1087,8 @@ export const Sector0: SectorDef = {
 
         // State 0: Wait for player to approach the bus
         if (sectorState.busEventState === 0) {
-            const busTrigger = gameState.triggers?.find((t: any) => t.id === 's0_event_tunnel_blocked');
-            if (busTrigger && busTrigger.triggered) {
+            const busTrigIdx = gameState.triggers.getTriggerById('s0_event_tunnel_blocked');
+            if (gameState.triggers.isTriggered(busTrigIdx)) {
                 sectorState.busEventState = 1;
                 sectorState.busEventTimer = simTime;
             }
@@ -1095,15 +1102,13 @@ export const Sector0: SectorDef = {
             if (events.playSound) events.playSound(SoundID.EXPLOSION);
             if (events.cameraShake) events.cameraShake(1.0);
 
-            gameState.triggers.push({
-                id: 'dyn_speak_' + Date.now(),
-                position: playerPos.clone(),
+            gameState.triggers.addTrigger({
+                id: 'dyn_speak_1',
+                x: playerPos.x, y: 0, z: playerPos.z,
                 radius: 100,
                 type: TriggerType.SPEAK,
                 content: "clues.0.6.reaction",
-                statusFlags: TriggerStatus.ACTIVE,
-                triggered: false,
-                actions: []
+                statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE
             });
         }
 
@@ -1133,7 +1138,7 @@ export const Sector0: SectorDef = {
             if (events.cameraShake) events.cameraShake(5.0);
 
             if (events.makeNoise) {
-                events.makeNoise(_trainYardPos.clone(), NoiseType.OTHER, 100);
+                events.makeNoise(_trainYardPos, NoiseType.OTHER, 100);
             }
         }
 
@@ -1144,15 +1149,13 @@ export const Sector0: SectorDef = {
 
             if (events.setCameraOverride) events.setCameraOverride(null);
 
-            gameState.triggers.push({
-                id: 'dyn_speak_' + Date.now(),
-                position: playerPos.clone(),
+            gameState.triggers.addTrigger({
+                id: 'dyn_speak_2',
+                x: playerPos.x, y: 0, z: playerPos.z,
                 radius: 100,
                 type: TriggerType.SPEAK,
                 content: "clues.0.9.reaction",
-                statusFlags: TriggerStatus.ACTIVE,
-                triggered: false,
-                actions: []
+                statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE
             });
 
             // ZOMBIE WAVE
@@ -1166,8 +1169,7 @@ export const Sector0: SectorDef = {
             for (let i = 0; i < SPOTS.length; i++) {
                 _viewPos.set(SPOTS[i].x, 0, SPOTS[i].z);
                 if (events.spawnHorde) {
-                    // undefined type = engine randomizes (Walkers, Runners, etc.)
-                    events.spawnHorde(6, undefined, _viewPos.clone());
+                    events.spawnHorde(6, undefined, _viewPos);
                 }
             }
 
@@ -1185,15 +1187,13 @@ export const Sector0: SectorDef = {
                 sectorState.busEventState = 6;
                 sectorState.busEventTimer = simTime;
 
-                gameState.triggers.push({
-                    id: 'dyn_speak_' + Date.now(),
-                    position: playerPos.clone(),
+                gameState.triggers.addTrigger({
+                    id: 'dyn_speak_3',
+                    x: playerPos.x, y: 0, z: playerPos.z,
                     radius: 100,
                     type: TriggerType.SPEAK,
                     content: "clues.0.7.reaction",
-                    statusFlags: TriggerStatus.ACTIVE,
-                    triggered: false,
-                    actions: []
+                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE
                 });
 
                 // Flag interaction for PlayerInteractionSystem
@@ -1214,7 +1214,8 @@ export const Sector0: SectorDef = {
 
             const busObj = (sectorState.ctx as any).busObject;
             if (busObj) {
-                sectorState.originalBusPos = busObj.position.clone();
+                if (!sectorState.originalBusPos) sectorState.originalBusPos = new THREE.Vector3();
+                sectorState.originalBusPos.copy(busObj.position);
                 const busPos = busObj.position;
 
                 // Cinematic Camera
@@ -1292,15 +1293,13 @@ export const Sector0: SectorDef = {
 
                 if (events.setCameraOverride) events.setCameraOverride(null);
 
-                gameState.triggers.push({
-                    id: 'dyn_speak_' + Date.now(),
-                    position: playerPos.clone(),
+                gameState.triggers.addTrigger({
+                    id: 'dyn_speak_4',
+                    x: playerPos.x, y: 0, z: playerPos.z,
                     radius: 100,
                     type: TriggerType.SPEAK,
                     content: "clues.0.8.reaction",
-                    statusFlags: TriggerStatus.ACTIVE,
-                    triggered: false,
-                    actions: []
+                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE
                 });
             }
         }
@@ -1313,10 +1312,10 @@ export const Sector0: SectorDef = {
                 sectorState.lokeUnlocked = true;
 
                 // Activate the found_loke trigger
-                const lokeTrigger = gameState.triggers?.find((t: any) => t.id === 'found_loke');
-                if (lokeTrigger) {
-                    lokeTrigger.statusFlags |= TriggerStatus.ACTIVE;
-                    lokeTrigger.triggered = false; // Maintain boolean compatibility
+                const idx = gameState.triggers.getTriggerById('found_loke');
+                if (idx !== -1) {
+                    gameState.triggers.setStatusFlag(idx, TriggerStatus.ACTIVE, true);
+                    gameState.triggers.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);
                 }
             }
         }

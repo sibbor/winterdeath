@@ -3,6 +3,9 @@ import { FXSystem } from './FXSystem';
 import { MATERIALS } from '../utils/assets';
 import { LogicalLight } from './LightSystem';
 import { FXParticleType, FXDecalType } from '../types/FXTypes';
+import { COLORS } from '../utils/ui/ColorUtils';
+import { DamageID } from '../entities/player/CombatTypes';
+import { ParticlePool } from '../core/state/ParticlePool';
 
 export enum WeaponLightType {
     ELECTRIC = 0,
@@ -48,8 +51,8 @@ const initPools = (scene: THREE.Scene) => {
     if (_poolsInitialized) return;
 
     // [VINTERDÖD FIX] Rock-solid dual-material setup that works perfectly for lightning
-    const matMain = new THREE.LineBasicMaterial({ color: 0x00ffff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 });
-    const matCore = new THREE.LineBasicMaterial({ color: 0xffffff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.9 });
+    const matMain = new THREE.LineBasicMaterial({ color: COLORS.ELECTRIC_FLASH.num, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 });
+    const matCore = new THREE.LineBasicMaterial({ color: COLORS.WHITE.num, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.9 });
 
     for (let i = 0; i < LIGHTNING_POOL_SIZE; i++) {
         const geoMain = new THREE.BufferGeometry();
@@ -77,7 +80,7 @@ const initPools = (scene: THREE.Scene) => {
         _lightPool.push({
             isLogicalLight: true,
             position: new THREE.Vector3(0, -1000, 0),
-            color: 0xffffff,
+            color: COLORS.WHITE.num,
             intensity: 0,
             distance: 10,
             castShadow: false,
@@ -239,28 +242,33 @@ export const WeaponFX = {
     },
 
     spawnVisualSpark: (pos: THREE.Vector3) => {
-        const req = FXSystem._getSpawnRequest();
-        req.scene = null as any;
-        req.x = pos.x; req.y = pos.y; req.z = pos.z;
-        req.type = FXParticleType.ENEMY_EFFECT_STUN;
-        req.customVel.set((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
-        req.hasCustomVel = true;
-        req.scale = 0.1 + Math.random() * 0.2;
-        FXSystem.essentialQueue.push(req);
+        // Ported to Zero-GC ParticlePool
+        const vx = (Math.random() - 0.5) * 8;
+        const vy = (Math.random() - 0.5) * 8;
+        const vz = (Math.random() - 0.5) * 8;
+        const scale = 0.1 + Math.random() * 0.2;
+        const life = 0.2 + Math.random() * 0.3;
+
+        // Bright Yellow/White Spark
+        ParticlePool.spawnParticle(pos.x, pos.y, pos.z, vx, vy, vz, scale, life, 1.0, 1.0, 0.5);
     },
 
     createStunSparks: (pos: THREE.Vector3) => {
+        // Ported to Zero-GC ParticlePool
         for (let i = 0; i < 5; i++) {
-            const req = FXSystem._getSpawnRequest();
-            req.scene = null as any;
-            req.x = pos.x + (Math.random() - 0.5);
-            req.y = pos.y + 1.0 + (Math.random() - 0.5);
-            req.z = pos.z + (Math.random() - 0.5);
-            req.type = FXParticleType.ENEMY_EFFECT_STUN;
-            req.customVel.set((Math.random() - 0.5) * 6, Math.random() * 5, (Math.random() - 0.5) * 6);
-            req.hasCustomVel = true;
-            req.scale = 0.2 + Math.random() * 0.2;
-            FXSystem.essentialQueue.push(req);
+            const vx = (Math.random() - 0.5) * 6;
+            const vy = Math.random() * 5;
+            const vz = (Math.random() - 0.5) * 6;
+            const scale = 0.2 + Math.random() * 0.2;
+            const life = 0.3 + Math.random() * 0.4;
+
+            // Electric Yellow/White
+            ParticlePool.spawnParticle(
+                pos.x + (Math.random() - 0.5),
+                pos.y + 1.0 + (Math.random() - 0.5),
+                pos.z + (Math.random() - 0.5),
+                vx, vy, vz, scale, life, 1.0, 1.0, 0.8
+            );
         }
     },
 
@@ -269,13 +277,18 @@ export const WeaponFX = {
             ctx.spawnParticle(pos.x, pos.y, pos.z, FXParticleType.SPLASH, 85);
             return;
         }
-        // VINTERDÖD FIX: Standardized to seconds-based life (0.1s flash, 0.4s shockwave, 1.2s blast)
+        // Standardized to seconds-based life (0.1s flash, 0.4s shockwave, 1.2s blast)
         ctx.spawnParticle(pos.x, pos.y + 0.5, pos.z, FXParticleType.FLASH, 1, undefined, _v2.set(0, 0, 0), undefined, 1.5, 0.1);
         ctx.spawnParticle(pos.x, pos.y + 0.1, pos.z, FXParticleType.SHOCKWAVE, 2, undefined, _v2, undefined, radius * 0.2, 0.4);
         ctx.spawnParticle(pos.x, pos.y + 0.05, pos.z, FXParticleType.BLAST_RADIUS, 1, undefined, _v2, undefined, radius, 1.2);
 
+        // --- RESTORED VISUALS (Audit Fix) ---
+        ctx.spawnParticle(pos.x, pos.y + 1.0, pos.z, FXParticleType.SMOKE, 12, undefined, undefined, undefined, 2.5);
+        ctx.spawnParticle(pos.x, pos.y + 0.5, pos.z, FXParticleType.DEBRIS, 15);
+        ctx.spawnDecal(pos.x, pos.z, radius * 1.5, MATERIALS.scorchDecal, FXDecalType.SCORCH);
+
         // Massive Intensity Buff (5.0 -> 25.0)
-        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xffaa00, 25.0, radius * 6, 0.5, WeaponLightType.FIRE);
+        WeaponFX.spawnDynamicLight(ctx.scene, pos, COLORS.FIRE_ORANGE.num, 25.0, radius * 6, 0.5, WeaponLightType.FIRE);
     },
 
     createMolotovImpact: (pos: THREE.Vector3, radius: number, hitWater: boolean, ctx: any) => {
@@ -284,11 +297,12 @@ export const WeaponFX = {
             return;
         }
         ctx.spawnParticle(pos.x, pos.y + 0.5, pos.z, FXParticleType.GLASS, 15);
-        ctx.spawnParticle(pos.x, pos.y + 0.5, pos.z, FXParticleType.FLASH, 1, undefined, _v2.set(0, 0, 0), 0xff8800, 1.0, 0.15);
+        ctx.spawnParticle(pos.x, pos.y + 0.5, pos.z, FXParticleType.FLASH, 1, undefined, _v2.set(0, 0, 0), COLORS.FIRE_ORANGE.num, 1.0, 0.15);
         ctx.spawnParticle(pos.x, pos.y + 0.5, pos.z, FXParticleType.LARGE_FIRE, 8, undefined, undefined, undefined, 1.8);
+        ctx.spawnParticle(pos.x, pos.y + 1.0, pos.z, FXParticleType.BLACK_SMOKE, 6, undefined, undefined, undefined, 2.0);
 
         // Intensity Buff (3.0 -> 15.0)
-        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xff6600, 15.0, radius * 5, 0.4, WeaponLightType.FIRE);
+        WeaponFX.spawnDynamicLight(ctx.scene, pos, COLORS.FIRE_RED.num, 15.0, radius * 5, 0.4, WeaponLightType.FIRE);
         ctx.spawnDecal(pos.x, pos.z, radius * 2.0, MATERIALS.scorchDecal, FXDecalType.SCORCH);
     },
 
@@ -299,7 +313,7 @@ export const WeaponFX = {
         if (Math.random() < (targetFlameCount - flameCount)) flameCount++;
 
         for (let j = 0; j < flameCount; j++) {
-            // VINTERDÖD: Sqrt Purge! 
+            // Sqrt Purge! 
             // Using Math.max(rand, rand) as a fast approximation for uniform circular distribution.
             const r = Math.max(Math.random(), Math.random()) * radius;
             const theta = Math.random() * Math.PI * 2;
@@ -309,15 +323,15 @@ export const WeaponFX = {
             const core = (1.0 - norm) * (1.0 - norm);
             const scale = 0.8 + (core * 3.7);
             const y = 0.3 + (core * 2.2);
-            const color = Math.random() > 0.6 ? 0xffcc00 : (Math.random() > 0.3 ? 0xff8800 : 0xff4400);
-
+            const color = Math.random() > 0.6 ? COLORS.YELLOW.num : (Math.random() > 0.3 ? COLORS.FIRE_ORANGE.num : COLORS.FIRE_RED.num);
             ctx.spawnParticle(fx, y, fzZ, FXParticleType.FIRE, 1, undefined, undefined, color, scale);
+
         }
 
         if (Math.random() < 0.1) {
-            _v1.copy(pos); // Changed _v4 to _v1 to prevent ReferenceError
+            _v1.copy(pos);
             _v1.y += 1.0;
-            WeaponFX.spawnDynamicLight(ctx.scene, _v1, 0xff8800, 2.5 + Math.random() * 2.0, radius * 3.5, 0.15, WeaponLightType.FIRE);
+            WeaponFX.spawnDynamicLight(ctx.scene, _v1, COLORS.FIRE_ORANGE.num, 2.5 + Math.random() * 2.0, radius * 3.5, 0.15, WeaponLightType.FIRE);
         }
     },
 
@@ -326,45 +340,53 @@ export const WeaponFX = {
             ctx.spawnParticle(pos.x, pos.y, pos.z, FXParticleType.SPLASH, 8);
             return;
         }
-        ctx.spawnParticle(pos.x, pos.y + 2, pos.z, FXParticleType.FLASH, 1, undefined, _v2.set(0, 0, 0), undefined, 8.0, 0.5);
+
+        // --- REPEATED QUICK FLASH (Audit Fix) ---
+        for (let i = 0; i < 3; i++) {
+            const delay = i * 0.08;
+            ctx.spawnParticle(pos.x, pos.y + 2, pos.z, FXParticleType.FLASH, 1, undefined, _v2.set(0, 0, 0), undefined, 6.0 + i * 2, 0.1, delay);
+        }
+
         // Blinding Intensity (10.0 -> 45.0)
-        WeaponFX.spawnDynamicLight(ctx.scene, pos, 0xffffff, 45.0, 60.0, 1.5);
-        ctx.spawnDecal(pos.x, pos.z, 2.0, MATERIALS.scorchDecal, FXDecalType.SCORCH);
+        WeaponFX.spawnDynamicLight(ctx.scene, pos, COLORS.WHITE.num, 45.0, 60.0, 1.5);
+        ctx.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.scorchDecal, FXDecalType.SCORCH);
     },
 
     createFlame: (start: THREE.Vector3, direction: THREE.Vector3, range: number = 10) => {
+        // Ported to Zero-GC ParticlePool
         const spread = 0.30;
-        _v1.copy(direction).add(_v2.set((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread)).normalize();
-
         const speed = 35 + Math.random() * 15;
-        // VINTERDÖD FIX: Dynamic Life based on Speed vs Range to ensure full reach
         const life = (range / speed) * (1.1 + Math.random() * 0.2);
 
-        const req = FXSystem._getSpawnRequest();
-        req.scene = null as any;
-        req.x = start.x; req.y = start.y; req.z = start.z;
-        req.type = FXParticleType.FLAMETHROWER_FIRE;
-        req.customVel.copy(_v1).multiplyScalar(speed);
-        req.hasCustomVel = true;
-        req.scale = 0.15 + Math.random() * 0.25;
-        req.color = Math.random() > 0.8 ? 0xffcc00 : (Math.random() > 0.4 ? 0xff4400 : 0xaa1100);
-        req.life = life;
-        FXSystem.essentialQueue.push(req);
+        const vx = direction.x * speed + (Math.random() - 0.5) * spread * speed;
+        const vy = direction.y * speed + (Math.random() - 0.5) * spread * speed;
+        const vz = direction.z * speed + (Math.random() - 0.5) * spread * speed;
+
+        const scale = 0.15 + Math.random() * 0.25;
+
+        // Dynamic fire colors
+        let r = 1.0, g = 0.4, b = 0.0;
+        const rand = Math.random();
+        if (rand > 0.8) { r = 1.0; g = 0.8; b = 0.0; } // Yellow
+        else if (rand > 0.4) { r = 1.0; g = 0.26; b = 0.0; } // Orange
+        else { r = 0.66; g = 0.06; b = 0.0; } // Dark Red
+
+        ParticlePool.spawnParticle(start.x, start.y, start.z, vx, vy, vz, scale, life, r, g, b);
     },
 
     createMuzzleFire: (start: THREE.Vector3, direction: THREE.Vector3, scale: number = 1.0) => {
         // High-density, short-lived muzzle fire
         for (let i = 0; i < 3; i++) {
-            const req = FXSystem._getSpawnRequest();
-            req.scene = null as any;
-            req.x = start.x; req.y = start.y; req.z = start.z;
-            req.type = FXParticleType.FIRE;
-            _v1.copy(direction).add(_v2.set((Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4)).normalize();
-            req.customVel.copy(_v1).multiplyScalar(4 + Math.random() * 3);
-            req.hasCustomVel = true;
-            req.scale = (0.2 + Math.random() * 0.3) * scale;
-            req.life = 0.08 + Math.random() * 0.08;
-            FXSystem.essentialQueue.push(req);
+            const spread = 0.4;
+            const vx = direction.x * (4 + Math.random() * 3) + (Math.random() - 0.5) * spread * 10;
+            const vy = direction.y * (4 + Math.random() * 3) + (Math.random() - 0.5) * spread * 10;
+            const vz = direction.z * (4 + Math.random() * 3) + (Math.random() - 0.5) * spread * 10;
+
+            const s = (0.2 + Math.random() * 0.3) * scale;
+            const life = 0.08 + Math.random() * 0.08;
+
+            // Orange/Red Fire
+            ParticlePool.spawnParticle(start.x, start.y, start.z, vx, vy, vz, s, life, 1.0, 0.4, 0.1);
         }
     },
 
@@ -384,15 +406,27 @@ export const WeaponFX = {
     },
 
     createMuzzleFlash: (start: THREE.Vector3, direction: THREE.Vector3, isCyan: boolean = false) => {
-        const req = FXSystem._getSpawnRequest();
-        req.scene = null as any;
-        req.x = start.x; req.y = start.y; req.z = start.z;
-        req.type = FXParticleType.FIRE;
-        req.customVel.copy(direction).multiplyScalar(3 + Math.random() * 2);
-        req.hasCustomVel = true;
-        req.scale = 0.8 + Math.random() * 0.5;
-        req.color = isCyan ? 0x00ffff : 0xffcc00;
-        req.life = 0.05 + Math.random() * 0.05;
-        FXSystem.essentialQueue.push(req);
+        const speed = 3 + Math.random() * 2;
+        const vx = direction.x * speed;
+        const vy = direction.y * speed;
+        const vz = direction.z * speed;
+        const scale = 0.8 + Math.random() * 0.5;
+        const life = 0.05 + Math.random() * 0.05;
+
+        if (isCyan) {
+            ParticlePool.spawnParticle(start.x, start.y, start.z, vx, vy, vz, scale, life, 0.0, 1.0, 1.0);
+        } else {
+            ParticlePool.spawnParticle(start.x, start.y, start.z, vx, vy, vz, scale, life, 1.0, 0.8, 0.0);
+        }
+    },
+
+    handleContinuousFire: (weapon: DamageID, origin: THREE.Vector3, direction: THREE.Vector3, ctx: any, delta: number) => {
+        if (weapon === DamageID.FLAMETHROWER) {
+            WeaponFX.createFlame(origin, direction, 10);
+        } else if (weapon === DamageID.ARC_CANNON) {
+            _v1.copy(origin).addScaledVector(direction, 14);
+            WeaponFX.drawArcLightning(ctx.scene, origin, _v1, true);
+        }
     }
+
 };

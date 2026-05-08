@@ -1,7 +1,14 @@
 import React, { useRef, useCallback } from 'react';
-import { InputAction, InputState } from '../../../core/engine/InputTypes';
+import { InputAction, InputState } from '../../../core/engine/InputManager';
 import { useOrientation } from '../../../hooks/useOrientation';
 import { useHudStore } from '../../../hooks/useHudStore';
+
+/**
+ * ZERO-GC PIXEL POOL
+ * Pre-allocated strings for -100px to 100px to avoid string building in joystick loops.
+ * Access via: PIXEL_STRINGS[Math.round(val) + 100]
+ */
+const PIXEL_STRINGS = Array.from({ length: 201 }, (_, i) => (i - 100).toString() + 'px');
 
 interface TouchControllerProps {
     inputState: InputState;
@@ -11,7 +18,7 @@ interface TouchControllerProps {
 
 const STICK_RADIUS = 60;
 const MAX_DIST = 50;
-const HUD_GUTTER = '12%'; // VINTERDÖD: Safe zone for Pause/HUD buttons
+const HUD_GUTTER = '12%'; // Safe zone for Pause/HUD buttons
 
 const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState, onPause, onOpenMap }) => {
     const { isLandscapeMode } = useOrientation();
@@ -36,7 +43,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
     };
 
     /**
-     * VINTERDÖD: SMI-Hardened action handler.
+     * SMI-Hardened action handler.
      * Updates the shared input buffer directly.
      */
     const handleAction = useCallback((action: InputAction, pressed: boolean) => {
@@ -113,7 +120,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 let dy = t.clientY - leftCenter.current.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
-                // --- VINTERDÖD: ABSOLUTE NORMALIZATION ---
+                // --- ABSOLUTE NORMALIZATION ---
                 if (dist > 0.001) {
                     const normMag = Math.min(1.0, dist / MAX_DIST);
                     const angle = Math.atan2(dy, dx);
@@ -125,7 +132,10 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 const visualDist = Math.min(dist, MAX_DIST);
                 const visualAngle = Math.atan2(dy, dx);
                 if (leftStickKnobRef.current) {
-                    leftStickKnobRef.current.style.transform = `translate3d(${Math.cos(visualAngle) * visualDist}px, ${Math.sin(visualAngle) * visualDist}px, 0)`;
+                    const tx = Math.max(0, Math.min(200, Math.round(Math.cos(visualAngle) * visualDist) + 100));
+                    const ty = Math.max(0, Math.min(200, Math.round(Math.sin(visualAngle) * visualDist) + 100));
+                    leftStickKnobRef.current.style.setProperty('--tx', PIXEL_STRINGS[tx]);
+                    leftStickKnobRef.current.style.setProperty('--ty', PIXEL_STRINGS[ty]);
                 }
             }
 
@@ -148,7 +158,10 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 const visualDist = Math.min(dist, MAX_DIST);
                 const visualAngle = Math.atan2(dy, dx);
                 if (rightStickKnobRef.current) {
-                    rightStickKnobRef.current.style.transform = `translate3d(${Math.cos(visualAngle) * visualDist}px, ${Math.sin(visualAngle) * visualDist}px, 0)`;
+                    const tx = Math.max(0, Math.min(200, Math.round(Math.cos(visualAngle) * visualDist) + 100));
+                    const ty = Math.max(0, Math.min(200, Math.round(Math.sin(visualAngle) * visualDist) + 100));
+                    rightStickKnobRef.current.style.setProperty('--tx', PIXEL_STRINGS[tx]);
+                    rightStickKnobRef.current.style.setProperty('--ty', PIXEL_STRINGS[ty]);
                 }
             }
         }
@@ -199,16 +212,17 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
 
             {/* LEFT JOYSTICK VISUAL */}
             <div
-                ref={leftStickContainerRef}
-                className="absolute rounded-full border-2 border-white/20 bg-white/5 pointer-events-none animate-in fade-in zoom-in duration-200"
-                style={{ width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, display: 'none' }}
-            >
-                <div
-                    ref={leftStickKnobRef}
-                    className="absolute rounded-full bg-white/40 shadow-[0_0_15px_rgba(255,255,255,0.3)]"
-                    style={{ left: STICK_RADIUS - 25, top: STICK_RADIUS - 25, width: 50, height: 50 }}
-                />
-            </div>
+                ref={leftStickKnobRef}
+                className="absolute rounded-full bg-white/40 shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+                style={{
+                    left: STICK_RADIUS - 25,
+                    top: STICK_RADIUS - 25,
+                    width: 50,
+                    height: 50,
+                    // Zero-GC: Static string, values updated via CSS vars
+                    transform: 'translate3d(var(--tx, 0px), var(--ty, 0px), 0)'
+                }}
+            />
 
             {/* RIGHT JOYSTICK VISUAL */}
             <div
@@ -219,7 +233,14 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 <div
                     ref={rightStickKnobRef}
                     className="absolute rounded-full bg-red-500/40 shadow-[0_0_15px_rgba(220,38,38,0.3)]"
-                    style={{ left: STICK_RADIUS - 25, top: STICK_RADIUS - 25, width: 50, height: 50 }}
+                    style={{
+                        left: STICK_RADIUS - 25,
+                        top: STICK_RADIUS - 25,
+                        width: 50,
+                        height: 50,
+                        // LÄGG TILL: Statisk sträng för Zero-GC
+                        transform: 'translate3d(var(--tx, 0px), var(--ty, 0px), 0)'
+                    }}
                 />
             </div>
 

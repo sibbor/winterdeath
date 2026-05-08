@@ -1,5 +1,5 @@
-import { AttackDefinition, EnemyAttackType } from '../../entities/player/CombatTypes';
-import { StatusEffectType } from '../perks';
+import { StatusEffectID } from '../perks';
+import { ColorPair, ENEMY_COLORS } from '../../utils/ui/ColorUtils';
 
 /*
 Boss data:
@@ -19,12 +19,14 @@ Special attacks with status effects for the player:
 - range = numeric value set in meters; defines how far the attack reaches
 - radius = AoE attack radius set in meters (not set or numeric value if active)
 - chargeTime = time in ms it takes for the boss to activate the ability
-- effect = status the player gets (StatusEffectType) if hit by the attack
+- effect = status the player gets (StatusEffectID) if hit by the attack
 
 Status effects are defined in the PERKS database.
 */
 
-export const BOSSES: Record<number, { id: number; name: string; story: string; deathStory: string; hp: number; speed: number; color: number; scale: number; widthScale?: number; attacks?: AttackDefinition[] }> = {
+import { AttackDefinition, EnemyAttackType } from '../../entities/player/CombatTypes';
+
+export const BOSSES: Record<number, { id: number; name: string; story: string; deathStory: string; hp: number; speed: number; color: ColorPair; scale: number; widthScale?: number; attacks?: AttackDefinition[] }> = {
     0: {
         id: 0,
         name: 'enemies.bosses.0.name',
@@ -32,7 +34,7 @@ export const BOSSES: Record<number, { id: number; name: string; story: string; d
         deathStory: 'enemies.bosses.0.deathStory',
         hp: 500,
         speed: 15.0,
-        color: 0x4a0404,
+        color: ENEMY_COLORS.BOSS_0,
         scale: 3.0,
         widthScale: 3.5,
         attacks: [
@@ -49,7 +51,7 @@ export const BOSSES: Record<number, { id: number; name: string; story: string; d
                 activeTime: 3000,
                 chargeTime: 250,
                 cooldown: 10000,
-                effect: StatusEffectType.FREEZING,
+                effect: StatusEffectID.FREEZING,
             },
         ]
     },
@@ -60,7 +62,7 @@ export const BOSSES: Record<number, { id: number; name: string; story: string; d
         deathStory: 'enemies.bosses.1.deathStory',
         hp: 800,
         speed: 20.0,
-        color: 0x2c3e50,
+        color: ENEMY_COLORS.BOSS_1,
         scale: 3.0,
         widthScale: 1.5,
         attacks: [
@@ -76,7 +78,7 @@ export const BOSSES: Record<number, { id: number; name: string; story: string; d
                 chargeTime: 500,
                 activeTime: 3000,
                 cooldown: 15000,
-                effect: StatusEffectType.DISORIENTED,
+                effect: StatusEffectID.DISORIENTED,
             },
         ]
     },
@@ -87,7 +89,7 @@ export const BOSSES: Record<number, { id: number; name: string; story: string; d
         deathStory: 'enemies.bosses.2.deathStory',
         hp: 600,
         speed: 15.0,
-        color: 0x8e44ad,
+        color: ENEMY_COLORS.BOSS_2,
         scale: 3.0,
         widthScale: 1.0,
         attacks: [
@@ -103,7 +105,7 @@ export const BOSSES: Record<number, { id: number; name: string; story: string; d
                 chargeTime: 1200,
                 activeTime: 3000,
                 cooldown: 15000,
-                effect: StatusEffectType.ELECTRIFIED,
+                effect: StatusEffectID.ELECTRIFIED,
             }
         ]
     },
@@ -114,7 +116,7 @@ export const BOSSES: Record<number, { id: number; name: string; story: string; d
         deathStory: 'enemies.bosses.3.deathStory',
         hp: 1200,
         speed: 15.0,
-        color: 0xc0392b,
+        color: ENEMY_COLORS.BOSS_3,
         scale: 3.5,
         widthScale: 1.8,
         attacks: [
@@ -129,7 +131,7 @@ export const BOSSES: Record<number, { id: number; name: string; story: string; d
                 range: 20.0,
                 activeTime: 2500,
                 cooldown: 15000,
-                effect: StatusEffectType.SLOWED,
+                effect: StatusEffectID.SLOWED,
             }
         ]
     }

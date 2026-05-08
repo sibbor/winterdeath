@@ -1,17 +1,23 @@
 import * as THREE from 'three';
 import { SystemID } from './System';
 import { PerformanceMonitor } from './PerformanceMonitor';
-import { StatusEffectType } from '../content/perks';
-import { InteractionType } from './InteractionTypes';
-import { HudStore } from '../store/HudStore';
-import { DiscoveryType, MapItemType } from '../components/ui/hud/HudTypes';
+import { InteractionType, MetaActionId } from './ui/UIEventBridge';
+import { HudStore, HudStateSoA } from '../store/HudStore';
+import {
+    MAX_STATUS_EFFECTS,
+    MAX_PASSIVES,
+    MAX_BUFFS,
+    MAX_DEBUFFS,
+    MAX_MAP_ITEMS
+} from '../components/ui/hud/HudTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { DataResolver } from '../utils/ui/DataResolver';
 import { WeaponType } from '../content/weapons';
-import { InputAction } from '../core/engine/InputTypes';
+import { InputAction } from '../core/engine/InputManager';
 import { CLUES } from '../content/clues';
 import { POIS } from '../content/pois';
 import { COLLECTIBLES } from '../content/collectibles';
+import { UIEventBridge } from './ui/UIEventBridge';
 
 // Performance Scratchpads (Zero-GC)
 const _v1 = new THREE.Vector3();
@@ -24,125 +30,10 @@ const _v1 = new THREE.Vector3();
 // to detect a change and re-render, without ever allocating new objects.
 // ============================================================================
 
-const createStatusPool = () => Array.from({ length: 16 }, () => ({ type: 0 as StatusEffectType, duration: 0, maxDuration: 0, intensity: 0, progress: 0 }));
-
-
-const createDebugInfo = () => ({
-    aim: { x: 0, y: 0 },
-    input: { w: 0, a: 0, s: 0, d: 0, fire: 0, reload: 0 },
-    cam: { x: 0, y: 0, z: 0 },
-    camera: { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, fov: 0 },
-    modes: 'Standard',
-    enemies: 0,
-    objects: 0,
-    drawCalls: 0,
-    coords: { x: 0, z: 0 },
-    performance: {
-        cpu: null as any,
-        memory: { heapLimit: 0, heapTotal: 0, heapUsed: 0 },
-        renderer: null as any
-    }
-});
-
-const createHudBuffer = () => ({
-    statsBuffer: new Float32Array(64),
-    vectorBuffer: new Float32Array(256), // 128 (x, z) entity pairs
-    statusFlags: 0,
-    isDisoriented: false,
-    statusEffects: [] as any[],
-    _statusPool: createStatusPool(), // Internal pool to avoid inline {} allocs
-    activePassives: [] as StatusEffectType[],
-    activeBuffs: [] as StatusEffectType[],
-    activeDebuffs: [] as StatusEffectType[],
-
-    hp: 0,
-    maxHp: 0,
-    stamina: 0,
-    maxStamina: 0,
-    ammo: 0,
-    magSize: 0,
-    score: 0,
-    scrap: 0,
-    challengePoints: 0,
-    multiplier: 1,
-    activeWeapon: WeaponType.PISTOL,
-    isReloading: false,
-
-    // Internal mutable structs linked dynamically to avoid allocations
-    boss: { active: false, name: '', hp: 0, maxHp: 0 },
-    _bossInfo: { active: false, name: '', hp: 0, maxHp: 0 },
-
-    bossSpawned: false,
-    bossDefeated: false,
-    familyFound: false,
-    familySignal: 0,
-    level: 1,
-    currentXp: 0,
-    nextLevelXp: 0,
-    throwableAmmo: 0,
-    reloadProgress: 0,
-
-    playerPos: { x: 0, z: 0 },
-
-    familyPos: { x: 0, z: 0 },
-    bossPos: { x: 0, z: 0 },
-
-    distanceTraveled: 0,
-    kills: 0,
-
-    sectorStats: { unlimitedAmmo: false, unlimitedThrowables: false, isInvincible: false, waveActive: false, waveKills: 0, waveTarget: 0, currentWave: 0, totalWaves: 0 },
-
-    isDriving: false,
-    vehicleSpeed: 0,
-    throttleState: 0,
-    spEarned: 0,
-    skillPoints: 0,
-    isDead: false,
-    killerName: '',
-    killerAttackName: '',
-    killedByEnemy: false,
-    lethalSourceId: -1,
-    lethalStatusEffect: -1,
-    currentSector: 0,
-    cluesFoundCount: 0,
-    poisFoundCount: 0,
-    collectiblesFoundCount: 0,
-
-    // --- COMBAT FEEL & VIGNETTE ---
-    isCritical: false,
-    isGibMaster: false,
-    isQuickFinger: false,
-
-    debugInfo: createDebugInfo(),
-    mapItems: [] as any[],
-    fps: 0,
-
-    enemyKills: new Float64Array(8), // StatEnemyIndex.COUNT
-    seenEnemies: [] as number[],
-    seenBosses: [] as number[],
-
-    // --- ZERO-GC FIX: Pre-allocate missing properties to lock V8 Hidden Class ---
-    debugMode: false,
-    systems: [] as any[],
-    currentLine: { active: false, speaker: '', text: '' },
-    cinematicActive: false,
-    interactionPrompt: { active: false, type: InteractionType.NONE, label: '', targetId: '', x: 0, y: 0 },
-    hudVisible: true,
-
-    sectorName: '',
-    isMobileDevice: false,
-    discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 },
-    challengeTiers: new Int32Array(64)
-});
-
 // Double-buffering
-const _bufferA = createHudBuffer();
-const _bufferB = createHudBuffer();
+const _bufferA = new HudStateSoA();
+const _bufferB = new HudStateSoA();
 let _useBufferA = true;
-
-// PERFORMANCE: Versioning for smart-cloning in HudStore
-let _effVersion = 0;
-let _mapVersion = 0;
 
 const truncate1 = (val: number) => Math.round(val * 10) / 10;
 const truncate2 = (val: number) => Math.round(val * 100) / 100;
@@ -166,6 +57,7 @@ const _fastUpdateDetail = {
     // Phase 12 Expansion
     isCritical: false,
     interactionActive: false,
+    interactionId: 0,
     interactionType: 0,
     interactionLabel: '',
     interactionX: 0,
@@ -228,15 +120,19 @@ export const HudSystem = {
 
         if (state.hasInteractionTarget && state.interactionTargetPos) {
             _fastUpdateDetail.interactionActive = true;
+            _fastUpdateDetail.interactionId = state.interaction.promptId;
             _fastUpdateDetail.interactionType = state.interaction.type;
             _fastUpdateDetail.interactionLabel = state.interaction.label;
 
-            // Interaction screen projection (usually needs camera, but we can emit raw and let hud calc or pass projected)
-            // For now, emit availability so HUD can toggle visibility via refs
-            _fastUpdateDetail.interactionX = 0; // Handled in getHudData projection or passed if pre-calced
+            _fastUpdateDetail.interactionX = 0;
             _fastUpdateDetail.interactionY = 0;
+
+            // Zero-GC Interaction Bridge
+            UIEventBridge.setInteractionPrompt(state.interaction.promptId);
         } else {
             _fastUpdateDetail.interactionActive = false;
+            _fastUpdateDetail.interactionId = 0;
+            UIEventBridge.setInteractionPrompt(0); // InteractionPromptId.NONE
         }
 
         // ZERO-GC: Replaced CustomEvent with direct callback registry
@@ -280,19 +176,19 @@ export const HudSystem = {
 
         // --- 2. REST OF DATA SYNC ---
         if (activeBossObj) {
-            _current.boss.active = true;
-            _current.boss.name = activeBossObj.bossId !== undefined ? DataResolver.getBossName(activeBossObj.bossId) : 'ui.boss';
-            _current.boss.hp = activeBossObj.hp;
-            _current.boss.maxHp = activeBossObj.maxHp;
-            _current.bossPos.x = activeBossObj.mesh.position.x;
-            _current.bossPos.z = activeBossObj.mesh.position.z;
+            _current.bossActive = true;
+            _current.bossName = activeBossObj.bossId !== undefined ? DataResolver.getBossName(activeBossObj.bossId) : 'ui.boss';
+            _current.bossHp = activeBossObj.hp;
+            _current.bossMaxHp = activeBossObj.maxHp;
+            _current.bossPos!.x = activeBossObj.mesh.position.x;
+            _current.bossPos!.z = activeBossObj.mesh.position.z;
         } else if (state.sectorState && state.sectorState.waveActive && (state.sectorState.waveKills || 0) < (state.sectorState.waveTarget || 0)) {
-            _current.boss.active = true;
-            _current.boss.name = 'ui.zombie_wave';
-            _current.boss.hp = Math.max(0, (state.sectorState.waveTarget || 0) - (state.sectorState.waveKills || 0));
-            _current.boss.maxHp = state.sectorState.waveTarget || 0;
+            _current.bossActive = true;
+            _current.bossName = 'ui.zombie_wave';
+            _current.bossHp = Math.max(0, (state.sectorState.waveTarget || 0) - (state.sectorState.waveKills || 0));
+            _current.bossMaxHp = state.sectorState.waveTarget || 0;
         } else {
-            _current.boss.active = false;
+            _current.bossActive = false;
         }
 
         let famSignal = 0;
@@ -303,7 +199,7 @@ export const HudSystem = {
             }
         }
 
-        if (familyMemberMesh) {
+        if (familyMemberMesh && _current.familyPos) {
             _current.familyPos.x = familyMemberMesh.position.x;
             _current.familyPos.z = familyMemberMesh.position.z;
         }
@@ -315,56 +211,59 @@ export const HudSystem = {
 
         const spGained = state.sessionStats.spGained;
 
-        // Status Effects (Zero-GC Pool Extraction)
-        const prevCount = _current.statusEffects.length;
-        let changed = false;
-
-        _current.statusEffects.length = 0;
+        // Status Effects (Zero-GC SoA Mutation)
         const effectDurations = state.effectDurations;
         const effectIntensities = state.effectIntensities;
-        let effectIndex = 0;
+        let effectCount = 0;
 
-        const totalEffects = 32; // Buffer size
-        for (let i = 0; i < totalEffects; i++) {
+        for (let i = 0; i < 32; i++) { // Engine supports 32, we display up to 16
             const duration = effectDurations[i];
-            if (duration > 0) {
-                const poolItem = _current._statusPool[effectIndex];
-                if (poolItem) {
-                    const type = i as StatusEffectType;
-                    if (poolItem.type !== type) changed = true;
+            if (duration > 0 && effectCount < MAX_STATUS_EFFECTS) {
+                const maxDur = state.effectMaxDurations[i] || 1;
 
-                    poolItem.type = type;
-                    poolItem.duration = duration;
-                    const maxDur = state.effectMaxDurations[i] || 1;
-                    poolItem.maxDuration = maxDur;
-                    poolItem.intensity = effectIntensities[i];
-                    poolItem.progress = Math.max(0, Math.min(1, duration / maxDur));
-                    _current.statusEffects.push(poolItem);
-                    if (effectIndex < 15) effectIndex++; // Pool safety
-                }
+                _current.StatusEffectIDs[effectCount] = i;
+                _current.statusEffectDurations[effectCount] = duration;
+                _current.statusEffectMaxDurations[effectCount] = maxDur;
+                _current.statusEffectIntensities[effectCount] = effectIntensities[i];
+                _current.statusEffectProgress[effectCount] = Math.max(0, Math.min(1, duration / maxDur));
+
+                effectCount++;
             }
         }
-        
-        if (changed || _current.statusEffects.length !== prevCount) {
-            _effVersion++;
-        }
-        (_current as any)._effVersion = _effVersion;
+
+        _current.statusEffectsCount = effectCount;
 
         _current.playerPos.x = playerPos.x;
         _current.playerPos.z = playerPos.z;
 
         _current.isDisoriented = (state.statusFlags & PlayerStatusFlags.DISORIENTED) !== 0;
 
-        // Zero-GC Buffer Copy
+        // Zero-GC Buffer Copy for Passives/Buffs/Debuffs
         _current.statusFlags = state.statusFlags;
-        _current.activePassives.length = 0;
-        for (let i = 0; i < (state.activePassives?.length || 0); i++) if (i < 16) _current.activePassives.push(state.activePassives[i]);
 
-        _current.activeBuffs.length = 0;
-        for (let i = 0; i < (state.activeBuffs?.length || 0); i++) if (i < 16) _current.activeBuffs.push(state.activeBuffs[i]);
+        let pCount = 0;
+        const passives = state.activePassives;
+        if (passives) {
+            const len = Math.min(passives.length, MAX_PASSIVES);
+            for (let i = 0; i < len; i++) _current.activePassives[pCount++] = passives[i];
+        }
+        _current.activePassivesCount = pCount;
 
-        _current.activeDebuffs.length = 0;
-        for (let i = 0; i < (state.activeDebuffs?.length || 0); i++) if (i < 16) _current.activeDebuffs.push(state.activeDebuffs[i]);
+        let bCount = 0;
+        const buffs = state.activeBuffs;
+        if (buffs) {
+            const len = Math.min(buffs.length, MAX_BUFFS);
+            for (let i = 0; i < len; i++) _current.activeBuffs[bCount++] = buffs[i];
+        }
+        _current.activeBuffsCount = bCount;
+
+        let dCount = 0;
+        const debuffs = state.activeDebuffs;
+        if (debuffs) {
+            const len = Math.min(debuffs.length, MAX_DEBUFFS);
+            for (let i = 0; i < len; i++) _current.activeDebuffs[dCount++] = debuffs[i];
+        }
+        _current.activeDebuffsCount = dCount;
 
         _current.statsBuffer.set(state.statsBuffer);
 
@@ -390,14 +289,11 @@ export const HudSystem = {
         _current.throwableAmmo = state.weaponAmmo[props.loadout?.throwable] || 0;
         _current.distanceTraveled = Math.floor(distanceTraveled);
         _current.kills = state.sessionStats.kills;
-        _current.discovery.active = false;
 
         // Sync persistent telemetry
         if (state.stats) {
             _current.enemyKills.set(state.enemyKills);
-            
-            // Note: We use reference copy for arrays since they are mostly static 
-            // For now, stable arrays in stats are fine.
+
             _current.seenEnemies = state.stats.seenEnemies;
             _current.seenBosses = state.stats.seenBosses;
 
@@ -408,14 +304,14 @@ export const HudSystem = {
         }
 
         if (state.sectorState) {
-            _current.sectorStats.unlimitedAmmo = !!state.sectorState.unlimitedAmmo;
-            _current.sectorStats.unlimitedThrowables = !!state.sectorState.unlimitedThrowables;
-            _current.sectorStats.isInvincible = !!state.sectorState.isInvincible;
-            _current.sectorStats.waveActive = !!state.sectorState.waveActive;
-            _current.sectorStats.waveKills = state.sectorState.waveKills || 0;
-            _current.sectorStats.waveTarget = state.sectorState.waveTarget || 0;
-            _current.sectorStats.currentWave = state.sectorState.currentWave || 0;
-            _current.sectorStats.totalWaves = state.sectorState.totalWaves || 0;
+            _current.unlimitedAmmo = !!state.sectorState.unlimitedAmmo;
+            _current.unlimitedThrowables = !!state.sectorState.unlimitedThrowables;
+            _current.isInvincible = !!state.sectorState.isInvincible;
+            _current.waveActive = !!state.sectorState.waveActive;
+            _current.waveKills = state.sectorState.waveKills || 0;
+            _current.waveTarget = state.sectorState.waveTarget || 0;
+            _current.currentWave = state.sectorState.currentWave || 0;
+            _current.totalWaves = state.sectorState.totalWaves || 0;
         }
 
         _current.isDriving = !!state.vehicle.active;
@@ -429,7 +325,27 @@ export const HudSystem = {
         _current.killedByEnemy = state.killedByEnemy;
         _current.lethalSourceId = state.lethalSourceId ?? -1;
         _current.lethalStatusEffect = state.lethalStatusEffect ?? -1;
-        _current.mapItems = state.mapItems || [];
+
+        // Map Items Sync (Zero-GC Mutation)
+        let mCount = 0;
+        const mapItems = state.mapItems;
+        if (mapItems) {
+            const len = Math.min(mapItems.length, MAX_MAP_ITEMS);
+            for (let i = 0; i < len; i++) {
+                const s = mapItems[i];
+                const d = _current.mapItems[mCount++];
+                d.id = s.id;
+                d.x = s.x;
+                d.z = s.z;
+                d.type = s.type;
+                d.label = s.label;
+                d.icon = s.icon;
+                d.color = s.color;
+                d.radius = s.radius;
+                d.points = s.points;
+            }
+        }
+        _current.mapItemsCount = mCount;
         _current.fps = PerformanceMonitor.getInstance().getFps();
         _current.hudVisible = state.hudVisible ?? _current.hudVisible;
         _current.sectorName = state.sectorName || '';
@@ -444,13 +360,13 @@ export const HudSystem = {
         }
         _current.cluesFoundCount = cCount;
 
-        let pCount = 0;
+        let poiCount = 0;
         if (state.discoverySets?.pois) {
             for (const id of state.discoverySets.pois) {
-                if (POIS[id]?.sector === _current.currentSector) pCount++;
+                if (POIS[id]?.sector === _current.currentSector) poiCount++;
             }
         }
-        _current.poisFoundCount = pCount;
+        _current.poisFoundCount = poiCount;
 
         let colCount = 0;
         if (state.discoverySets?.collectibles) {
@@ -475,34 +391,46 @@ export const HudSystem = {
             const screenX = (0.5 + _v1.x * 0.5) * window.innerWidth;
             const screenY = (0.5 - _v1.y * 0.5) * window.innerHeight;
 
-            _bufferA.interactionPrompt.active = true;
-            _bufferA.interactionPrompt.type = state.interaction.type;
-            _bufferA.interactionPrompt.label = state.interaction.label;
-            _bufferA.interactionPrompt.targetId = state.interaction.targetId;
-            _bufferA.interactionPrompt.x = screenX;
-            _bufferA.interactionPrompt.y = screenY;
+            _bufferA.interactionActive = true;
+            _bufferA.interactionType = state.interaction.type;
+            _bufferA.interactionLabel = state.interaction.label;
+            _bufferA.interactionTargetId = state.interaction.targetId;
+            _bufferA.interactionX = screenX;
+            _bufferA.interactionY = screenY;
 
-            _bufferB.interactionPrompt.active = true;
-            _bufferB.interactionPrompt.type = state.interaction.type;
-            _bufferB.interactionPrompt.label = state.interaction.label;
-            _bufferB.interactionPrompt.targetId = state.interaction.targetId;
-            _bufferB.interactionPrompt.x = screenX;
-            _bufferB.interactionPrompt.y = screenY;
+            _bufferB.interactionActive = true;
+            _bufferB.interactionType = state.interaction.type;
+            _bufferB.interactionLabel = state.interaction.label;
+            _bufferB.interactionTargetId = state.interaction.targetId;
+            _bufferB.interactionX = screenX;
+            _bufferB.interactionY = screenY;
+
+            UIEventBridge.setInteractionPrompt(state.interaction.promptId);
         } else {
-            _bufferA.interactionPrompt.active = false;
-            _bufferB.interactionPrompt.active = false;
+            _bufferA.interactionActive = false;
+            _bufferB.interactionActive = false;
+            UIEventBridge.setInteractionPrompt(0); // InteractionPromptId.NONE
         }
 
         _bufferA.cinematicActive = !!state.cinematicActive;
-        _bufferA.currentLine.active = !!state.cinematicActive;
-        _bufferA.currentLine.speaker = state.cinematicLine.speaker || '';
-        _bufferA.currentLine.text = state.cinematicLine.text || '';
+        _bufferA.dialogueActive = !!state.cinematicActive;
+        _bufferA.dialogueSpeaker = state.cinematicLine.speaker || '';
+        _bufferA.dialogueText = state.cinematicLine.text || '';
         _bufferB.cinematicActive = !!state.cinematicActive;
-        _bufferB.currentLine.active = !!state.cinematicActive;
-        _bufferB.currentLine.speaker = state.cinematicLine.speaker || '';
-        _bufferB.currentLine.text = state.cinematicLine.text || '';
+        _bufferB.dialogueActive = !!state.cinematicActive;
+        _bufferB.dialogueSpeaker = state.cinematicLine.speaker || '';
+        _bufferB.dialogueText = state.cinematicLine.text || '';
 
-        _current.discovery.active = false;
+        // --- ZERO-GC NAVIGATION SIGNAL SYNC ---
+        const engineSignal = UIEventBridge.consumeEngineSignal();
+        if (engineSignal !== MetaActionId.NONE) {
+            _bufferA.lastMetaSignal = engineSignal;
+            _bufferA.metaSignalTimestamp = now;
+            _bufferB.lastMetaSignal = engineSignal;
+            _bufferB.metaSignalTimestamp = now;
+        }
+
+        _current.discoveryActive = false;
 
         // Debug mapping
         if (input.aimVector) {
@@ -548,11 +476,11 @@ export const HudSystem = {
     /** Explicitly clears cinematic and sector data from both buffers to prevent leakage */
     reset: () => {
         _bufferA.cinematicActive = false;
-        _bufferA.currentLine.active = false;
+        _bufferA.dialogueActive = false;
         _bufferB.cinematicActive = false;
-        _bufferB.currentLine.active = false;
-        _bufferA.discovery.active = false;
-        _bufferB.discovery.active = false;
+        _bufferB.dialogueActive = false;
+        _bufferA.discoveryActive = false;
+        _bufferB.discoveryActive = false;
     }
 
 };

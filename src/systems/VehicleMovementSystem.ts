@@ -10,7 +10,7 @@ import { VehicleManager } from './VehicleManager';
 import { _buoyancyResult } from './WaterSystem';
 import { KMH_TO_MS } from '../content/constants';
 import { VehicleState, VehicleNodes, VehicleTypes, VehicleDrivetrain, VehicleCategory, VehicleEngineState, VehicleID } from '../entities/vehicles/VehicleTypes';
-import { InputAction } from '../core/engine/InputTypes';
+import { InputAction } from '../core/engine/InputManager';
 
 // --- PERFORMANCE SCRATCHPADS ---
 const _v1 = new THREE.Vector3();

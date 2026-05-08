@@ -7,7 +7,7 @@ import { SectorContext, GroundType } from '../../../game/session/SectorTypes';
 import { GeneratorUtils } from './GeneratorUtils';
 import { WinterEngine } from '../../engine/WinterEngine';
 import { PhysicsGroup } from '../CollisionResolution';
-import { WaterShape } from '../../../systems/WaterSystem';
+import { WaterShape } from '../../../types/WaterTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -36,7 +36,7 @@ export const TerrainGenerator = {
         else if (type === GroundType.DIRT) mat = MATERIALS.dirtCutout;
         else mat = MATERIALS.snowCutout;
 
-        // VINTERDÖD FIX: Ensure terrain material is fully initialized if textures were skipped during warmup
+        // Ensure terrain material is fully initialized if textures were skipped during warmup
         const mMat = mat as THREE.MeshStandardMaterial;
         if (!mMat.map) {
             const procedural = createProceduralDiffuse();
@@ -57,7 +57,7 @@ export const TerrainGenerator = {
         const mesh = new THREE.Mesh(geo, mat);
         mesh.name = `Ground_Surface`;
         mesh.userData.materialId = type === GroundType.SNOW ? MaterialType.SNOW : (type === GroundType.GRAVEL ? MaterialType.GRAVEL : MaterialType.DIRT);
-        mesh.userData.physicsGroup = PhysicsGroup.GROUND; // VINTERDÖD
+        mesh.userData.physicsGroup = PhysicsGroup.GROUND; // 
         mesh.rotation.x = -Math.PI / 2;
         mesh.position.y = -0.05;
         mesh.receiveShadow = true;
@@ -65,7 +65,7 @@ export const TerrainGenerator = {
         // Zero-GC: Static plane
         GeneratorUtils.freezeStatic(mesh);
 
-        // VINTERDÖD: Register with water system to enable cutouts
+        // Register with water system to enable cutouts
         const engine = WinterEngine.getInstance();
         if (engine && engine.water) {
             engine.water.registerGround(mesh);
@@ -121,11 +121,11 @@ export const TerrainGenerator = {
         geo.computeVertexNormals();
 
         const mesh = new THREE.Mesh(geo, mat);
-        mesh.name = `Ground_LakeBed`; // VINTERDÖD
+        mesh.name = `Ground_LakeBed`; // 
         mesh.rotation.x = -Math.PI / 2;
         mesh.receiveShadow = true;
-        mesh.userData.materialId = MaterialType.DIRT; // VINTERDÖD
-        mesh.userData.physicsGroup = PhysicsGroup.GROUND; // VINTERDÖD
+        mesh.userData.materialId = MaterialType.DIRT; // 
+        mesh.userData.physicsGroup = PhysicsGroup.GROUND; // 
 
         GeneratorUtils.freezeStatic(mesh);
 

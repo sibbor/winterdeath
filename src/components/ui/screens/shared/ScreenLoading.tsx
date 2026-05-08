@@ -6,7 +6,7 @@ interface ScreenLoadingProps {
     sectorIndex: number;
     isCamp?: boolean;
     isInitialBoot?: boolean;
-    isPrologue?: boolean; // VINTERDÖD FIX: Ny prop!
+    isPrologue?: boolean; // Ny prop!
     isMobileDevice?: boolean;
     isDone?: boolean;
     debugInfo?: any;

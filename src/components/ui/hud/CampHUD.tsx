@@ -3,6 +3,7 @@ import { PlayerStats, PlayerStatID } from '../../../entities/player/PlayerTypes'
 import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import { DiscoveryType } from '../hud/HudTypes';
+import { StatsBridge } from '../../../core/data/StatsBridge';
 
 interface CampHUDProps {
     stats: PlayerStats;
@@ -39,7 +40,7 @@ const areEqual = (prevProps: CampHUDProps, nextProps: CampHUDProps) => {
     if (prevProps.currentSectorName !== nextProps.currentSectorName) return false;
     if (prevProps.hoveredStation !== nextProps.hoveredStation) return false;
 
-    // VINTERDÖD PERFORMANCE FIX: Stats and DebugMode are now handled via useRef bypass.
+    //  PERFORMANCE FIX: Stats and DebugMode are now handled via useRef bypass.
     return prevProps.stats === nextProps.stats;
 };
 
@@ -58,20 +59,17 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
     // Sync ref with prop for click handlers
     React.useEffect(() => { debugModeRef.current = debugMode; }, [debugMode]);
 
-    // VINTERDÖD: Direct DOM Injection (Phase 13)
+    // Direct DOM Injection (Phase 13)
     React.useEffect(() => {
         const unsubscribe = (window as any).HudStore?.subscribeFastUpdate((data: any) => {
             if (data.sp !== undefined && spRef.current) spRef.current.innerText = Math.floor(data.sp).toString();
             if (data.scrap !== undefined && scrapRef.current) scrapRef.current.innerText = Math.floor(data.scrap).toString();
             if (data.cp !== undefined && cpRef.current) cpRef.current.innerText = Math.floor(data.cp).toString();
-            
+
             if (data.debugMode !== undefined) {
                 debugModeRef.current = data.debugMode;
                 if (debugBtnRef.current) {
-                    debugBtnRef.current.className = `flex items-center gap-2 cursor-pointer px-4 py-2 border transition-colors ${data.debugMode ? 'bg-green-900/50 border-green-500' : 'bg-black border-gray-500 hover:border-white'}`;
-                }
-                if (debugTextRef.current) {
-                    debugTextRef.current.className = `text-xs uppercase font-bold tracking-widest ${data.debugMode ? 'text-green-400' : 'text-gray-300'}`;
+                    debugBtnRef.current.classList.toggle('debug-active', data.debugMode);
                 }
             }
         });
@@ -80,17 +78,13 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
 
     // Sync initial state and prop changes
     React.useEffect(() => {
-        const b = stats.statsBuffer;
-        if (spRef.current) spRef.current.innerText = Math.floor(b[PlayerStatID.SKILL_POINTS] || 0).toString();
-        if (scrapRef.current) scrapRef.current.innerText = Math.floor(b[PlayerStatID.SCRAP] || 0).toString();
-        if (cpRef.current) cpRef.current.innerText = Math.floor(b[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0).toString();
-        
+        if (spRef.current) spRef.current.innerText = StatsBridge.getSkillPoints(stats).toString();
+        if (scrapRef.current) scrapRef.current.innerText = StatsBridge.getScrap(stats).toString();
+        if (cpRef.current) cpRef.current.innerText = StatsBridge.getTotalChallengePoints(stats).toString();
+
         // Initial debug state sync
         if (debugBtnRef.current) {
-            debugBtnRef.current.className = `flex items-center gap-2 cursor-pointer px-4 py-2 border transition-colors ${debugMode ? 'bg-green-900/50 border-green-500' : 'bg-black border-gray-500 hover:border-white'}`;
-        }
-        if (debugTextRef.current) {
-            debugTextRef.current.className = `text-xs uppercase font-bold tracking-widest ${debugMode ? 'text-green-400' : 'text-gray-300'}`;
+            debugBtnRef.current.classList.toggle('debug-active', debugMode);
         }
     }, [stats, debugMode]);
 
@@ -101,51 +95,83 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
         return t(`ranks.${rankKey}`);
     };
 
+    const [isHovered, setIsHovered] = React.useState(false);
+
+    const statsSummary = useMemo(() => {
+        const time = StatsBridge.getTotalGameTime(stats);
+        const kills = StatsBridge.getTotalKills(stats);
+
+        return {
+            kills: kills.toLocaleString(),
+            time: (time / 3600).toFixed(1) + ' h',
+        };
+    }, [stats]);
+
     return (
         <>
             {/* Top Left Stats / Buttons */}
             <div
                 className={`absolute top-0 left-0 p-8 z-30 flex flex-col gap-4 items-start pointer-events-none ${uiFadeClass} ${isMobileDevice ? 'camp-hud-mobile-scale' : ''}`}
             >
-                {/* Level / Dossier */}
+                {/* Level / Dossier (Player Card) */}
                 <div
-                    className={`bg-slate-900/95 p-4 border-l-4 border-blue-500 shadow-2xl cursor-pointer pointer-events-auto hover:bg-slate-800 transition-colors w-[320px]`}
+                    className={`bg-slate-900/95 p-4 border-l-4 border-blue-500 shadow-2xl cursor-pointer pointer-events-auto hover:bg-slate-800 transition-all duration-300 w-[320px] relative overflow-hidden group ${isHovered ? 'scale-[1.02] border-l-blue-400' : ''}`}
                     onClick={onOpenStats}
+                    onMouseEnter={() => { setIsHovered(true); UiSounds.playHover(); }}
+                    onMouseLeave={() => setIsHovered(false)}
                 >
-                    <h1 className="text-4xl font-semibold text-white tracking-tighter leading-none uppercase" style={{ fontSize: '2.25rem' }}>
-                        {getRank(stats.statsBuffer[PlayerStatID.LEVEL])}
+                    {/* Shimmer Effect (Always visible, intensifies on hover) */}
+                    <div className="absolute inset-0 pointer-events-none opacity-40 group-hover:opacity-100 transition-opacity duration-700 shimmer-overlay" />
+
+                    <h1 className="text-4xl font-semibold text-white tracking-tighter leading-none uppercase relative z-10" style={{ fontSize: '2.25rem' }}>
+                        {getRank(StatsBridge.getLevel(stats))}
                     </h1>
-                    <div className="flex items-center gap-4 mt-2">
-                        <span className="text-blue-400 font-bold text-sm">{t('ui.lvl')} {stats.statsBuffer[PlayerStatID.LEVEL]}</span>
+                    <div className="flex items-center gap-4 mt-2 relative z-10">
+                        <span className="text-blue-400 font-bold text-sm">{t('ui.lvl')} {StatsBridge.getLevel(stats)}</span>
                         <div className="flex-1 h-1.5 bg-blue-900">
-                            <div className="h-full bg-blue-400" style={{ width: `${(stats.statsBuffer[PlayerStatID.CURRENT_XP] / Math.max(1, stats.statsBuffer[PlayerStatID.NEXT_LEVEL_XP])) * 100}%` }} />
+                            <div className="h-full bg-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.5)]" style={{ width: `${(StatsBridge.getExperience(stats) / Math.max(1, StatsBridge.getNextLevelExperience(stats))) * 100}%` }} />
                         </div>
                     </div>
-                    <div className="text-[10px] text-blue-400/40 font-bold uppercase tracking-[0.2em] mt-1.5 text-center w-full">
-                        {t('ui.show_stats_hint')}
+
+                    {/* Statistics Tooltip (Integrated - Always Visible) */}
+                    <div className="mt-3 pt-3 border-t border-blue-500/20 transition-all duration-500">
+                        <div className="flex flex-col gap-1">
+                            <span className="text-[12px] font-black text-gray-500 uppercase tracking-widest">{t('ui.statistics')}</span>
+                            <div className="flex font-mono items-center gap-2 text-[12px] uppercase tracking-tighter whitespace-nowrap overflow-hidden font-bold">
+                                <span><span className="text-gray-400">{t('ui.kills')}:</span> <span className="ml-1 text-white">{statsSummary.kills}</span></span>
+                                <span className="text-gray-500/60">|</span>
+                                <span><span className="text-gray-400">{t('ui.time_played')}:</span> <span className="ml-1 text-white">{statsSummary.time}</span></span>
+                            </div>
+                        </div>
                     </div>
+
+                    {/* Subtle Pulse Animation when Idle */}
+                    {!isHovered && <div className="absolute right-4 top-4 w-2 h-2 rounded-full bg-blue-500/40 animate-ping" />}
                 </div>
 
                 <div className="flex gap-4 pointer-events-auto">
                     {/* Skill Points */}
                     <div onClick={() => { if (debugMode) onDebugSkill(); else onOpenSkills(); }}
-                        className={`w-20 h-20 aspect-square border-2 backdrop-blur-sm cursor-pointer transition-all hover:scale-105 flex flex-col items-center justify-center bg-purple-950/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.2)]`}>
-                        <span className={`text-[10px] block uppercase font-bold text-purple-400 opacity-70`}>{t('ui.sp')}</span>
-                        <span ref={spRef} className={`text-2xl font-bold font-mono text-purple-500`}>{stats.statsBuffer[PlayerStatID.SKILL_POINTS]}</span>
+                        className={`w-20 h-20 aspect-square border-2 backdrop-blur-sm cursor-pointer transition-all hover:scale-110 flex flex-col items-center justify-center bg-purple-950/40 hover:bg-purple-900/60 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.2)] relative overflow-hidden group`}>
+                        <div className="absolute inset-0 pointer-events-none opacity-20 group-hover:opacity-100 transition-opacity duration-700 shimmer-overlay" />
+                        <span className={`text-[10px] block uppercase font-bold text-purple-400 opacity-70 relative z-10`}>{t('ui.sp')}</span>
+                        <span ref={spRef} className={`text-2xl font-bold font-mono text-purple-500 relative z-10`}>{StatsBridge.getSkillPoints(stats)}</span>
                     </div>
 
                     {/* Scrap */}
                     <div onClick={() => { if (debugMode) onDebugScrap(); else onOpenArmory(); }}
-                        className={`w-20 h-20 aspect-square border-2 backdrop-blur-sm cursor-pointer transition-all hover:scale-105 flex flex-col items-center justify-center bg-yellow-950/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.2)]`}>
-                        <span className={`text-[10px] block uppercase font-bold text-yellow-500 opacity-70`}>{t('ui.scrap')}</span>
-                        <span ref={scrapRef} className={`text-2xl font-bold font-mono text-yellow-500`}>{stats.statsBuffer[PlayerStatID.SCRAP]}</span>
+                        className={`w-20 h-20 aspect-square border-2 backdrop-blur-sm cursor-pointer transition-all hover:scale-110 flex flex-col items-center justify-center bg-yellow-950/40 hover:bg-yellow-900/60 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.2)] relative overflow-hidden group`}>
+                        <div className="absolute inset-0 pointer-events-none opacity-20 group-hover:opacity-100 transition-opacity duration-700 shimmer-overlay" />
+                        <span className={`text-[10px] block uppercase font-bold text-yellow-500 opacity-70 relative z-10`}>{t('ui.scrap')}</span>
+                        <span ref={scrapRef} className={`text-2xl font-bold font-mono text-yellow-500 relative z-10`}>{StatsBridge.getScrap(stats)}</span>
                     </div>
 
                     {/* Challenge Points (CP) */}
                     <div onClick={() => { if (debugMode) onDebugCP(); else onOpenAdventureLog(DiscoveryType.CHALLENGE); }}
-                        className={`w-20 h-20 aspect-square border-2 backdrop-blur-sm cursor-pointer transition-all hover:scale-105 flex flex-col items-center justify-center bg-red-950/20 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)]`}>
-                        <span className={`text-[10px] block uppercase font-bold text-red-500 opacity-70`}>CP</span>
-                        <span ref={cpRef} className={`text-2xl font-bold font-mono text-red-500`}>{stats.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0}</span>
+                        className={`w-20 h-20 aspect-square border-2 backdrop-blur-sm cursor-pointer transition-all hover:scale-110 flex flex-col items-center justify-center bg-red-950/40 hover:bg-red-900/60 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)] relative overflow-hidden group`}>
+                        <div className="absolute inset-0 pointer-events-none opacity-20 group-hover:opacity-100 transition-opacity duration-700 shimmer-overlay" />
+                        <span className={`text-[10px] block uppercase font-bold text-red-500 opacity-70 relative z-10`}>CP</span>
+                        <span ref={cpRef} className={`text-2xl font-bold font-mono text-red-500 relative z-10`}>{StatsBridge.getTotalChallengePoints(stats)}</span>
                     </div>
                 </div>
             </div>
@@ -157,14 +183,14 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
                         <span className="text-xs uppercase text-gray-300 font-bold tracking-widest">{t('ui.settings')}</span>
                     </div>
 
-                    <div ref={debugBtnRef} onClick={() => { 
-                        UiSounds.playClick(); 
+                    <div ref={debugBtnRef} onClick={() => {
+                        UiSounds.playClick();
                         const cur = (window as any).HudStore?.getState().debugMode ?? debugModeRef.current;
-                        const next = !cur; 
+                        const next = !cur;
                         (window as any).HudStore?.patch({ debugMode: next }); // Use patch to notify everyone
-                        onToggleDebug(next); 
-                    }} className={`flex items-center gap-2 cursor-pointer px-4 py-2 border transition-colors ${debugMode ? 'bg-green-900/50 border-green-500' : 'bg-black border-gray-500 hover:border-white'}`}>
-                        <span ref={debugTextRef} className={`text-xs uppercase font-bold tracking-widest ${debugMode ? 'text-green-400' : 'text-gray-300'}`}>{t('ui.debug_mode')}</span>
+                        onToggleDebug(next);
+                    }} className="flex items-center gap-2 cursor-pointer px-4 py-2 border border-gray-500 hover:border-white bg-black transition-colors debug-btn">
+                        <span ref={debugTextRef} className="text-xs uppercase font-bold tracking-widest text-gray-300 debug-text">{t('ui.debug_mode')}</span>
                     </div>
 
                     <div onClick={() => { UiSounds.playClick(); onResetGame(); }} className="flex items-center gap-2 cursor-pointer bg-black px-4 py-2 border border-red-900 hover:border-red-500 hover:bg-red-900/20 transition-colors">
@@ -182,6 +208,16 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
             </div>
 
             <style>{`
+                @keyframes shimmer {
+                    0% { transform: translateX(-100%) skewX(-15deg); }
+                    100% { transform: translateX(200%) skewX(-15deg); }
+                }
+                .shimmer-overlay {
+                    background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent);
+                    width: 50%;
+                    height: 100%;
+                    animation: shimmer 3s infinite;
+                }
                 .camp-hud-mobile-scale {
                     transform: scale(0.65);
                     transform-origin: top left;
@@ -190,9 +226,17 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
                     transform: translateX(-50%) scale(0.8);
                     transform-origin: bottom center;
                 }
+                .debug-btn.debug-active {
+                    background-color: rgba(20, 83, 45, 0.5); /* bg-green-900/50 */
+                    border-color: #22c55e; /* border-green-500 */
+                }
+                .debug-btn.debug-active .debug-text {
+                    color: #4ade80; /* text-green-400 */
+                }
             `}</style>
         </>
     );
 }, areEqual);
 
 export default CampHUD;
+

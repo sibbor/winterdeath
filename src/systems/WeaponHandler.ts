@@ -11,7 +11,7 @@ import { DamageID } from '../entities/player/CombatTypes';
 import { WeaponFX } from './WeaponFX';
 import { SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { InputAction } from '../core/engine/InputTypes';
+import { InputAction } from '../core/engine/InputManager';
 import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -93,7 +93,7 @@ function _executeThrow(
     const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
     if (tracker) tracker.recordThrowable(session, state.activeWeapon);
 
-    // VINTERDÖD FIX: Use the locked CHARGE rotation, not the current character rotation
+    // Use the locked CHARGE rotation, not the current character rotation
     // which may have snapped towards the move direction during release.
     _v1.set(0, 0, 1).applyQuaternion(state.throwChargeRotation).normalize();
 
@@ -256,6 +256,13 @@ export const WeaponHandler = {
         }
     },
 
+    // --- AMMO UTILITIES ---
+    consumeAmmo: (state: any, weapon: DamageID) => {
+        // Consumption is primarily handled in handleFiring/ProjectileSystem.
+        // This bridge ensures we have enough to trigger visuals/SFX.
+        return (state.weaponAmmo[weapon] || 0) > 0 || !!state.sectorState?.unlimitedAmmo;
+    },
+
     // --- DAMAGE SCALING ---
     getScaledDamage: (weaponType: WeaponType, level: number = 0) => {
         const damage = ((WEAPONS as any)[weaponType] as WeaponStats)?.damage || 0;
@@ -312,7 +319,7 @@ export const WeaponHandler = {
                             state.weaponAmmo[state.activeWeapon] -= 20 * delta;
                             if (state.weaponAmmo[state.activeWeapon] < 0) state.weaponAmmo[state.activeWeapon] = 0;
                         } else if (!isUnlimited) {
-                            const actualFireRate = (wep.fireRate || 0) / (state.statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] || 1.0);
+                            const actualFireRate = (wep.fireRate || 0) * (state.statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] || 1.0);
                             if (simTime > state.lastShotTime + actualFireRate) {
                                 state.weaponAmmo[state.activeWeapon]--;
                                 state.lastShotTime = simTime;
@@ -352,16 +359,18 @@ export const WeaponHandler = {
                         _continuousCtx.onPlayerHit = cb?.onPlayerHit;
                         _continuousCtx.weaponHandler = WeaponHandler;
 
-                        ProjectileSystem.handleContinuousFire(
-                            state.activeWeapon as unknown as DamageID,
-                            _v2,
-                            _v3,
-                            _continuousCtx as any, // Castar säkert här nu när vi uppfyller gränssnittet
-                            delta,
-                            simTime,
-                            renderTime,
-                            WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]) * (60 * delta)
-                        );
+                        if (WeaponHandler.consumeAmmo(state, state.activeWeapon)) {
+                            // Continuous logic moved to ProjectileSystem.update() (DoD)
+                            // This avoids redundant raycasting and object allocations.
+                            WeaponFX.handleContinuousFire(state.activeWeapon, _v2, _v3, session, delta);
+
+                            // --- MUZZLE FX (Audit Fix) ---
+                            if (state.activeWeapon === DamageID.FLAMETHROWER) {
+                                WeaponFX.createMuzzleFire(_v2, _v3, 0.8);
+                            } else {
+                                WeaponFX.createMuzzleFlash(_v2, _v3, true); // Cyan flash for Arc-Cannon
+                            }
+                        }
                     } else {
                         if (state.activeWeapon === WeaponType.FLAMETHROWER && (state as any).lastFireState) {
                             WeaponSounds.playFlamethrowerEnd();
@@ -376,7 +385,7 @@ export const WeaponHandler = {
                     if (state.activeWeapon === WeaponType.FLAMETHROWER && (state as any).lastFireState) {
                         WeaponSounds.playFlamethrowerEnd();
 
-                        // VINTERDÖD: O(1) Node Lookup (Phase 13)
+                        // O(1) Node Lookup (Phase 13)
                         const gun = state.nodes.gun;
                         const tip = state.nodes.barrelTip;
                         if (gun && tip) {
@@ -398,7 +407,7 @@ export const WeaponHandler = {
                 if (input.actions[InputAction.FIRE]) {
                     const isUnlimited = !!state.sectorState?.unlimitedAmmo;
                     const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
-                    const actualFireRate = (wep.fireRate || 0) / (state.statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] || 1.0);
+                    const actualFireRate = (wep.fireRate || 0) * (state.statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] || 1.0);
 
                     if (simTime > state.lastShotTime + actualFireRate && hasAmmo) {
                         state.lastShotTime = simTime;
@@ -407,7 +416,7 @@ export const WeaponHandler = {
                         const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                         if (tracker) tracker.recordShot(session, state.activeWeapon);
 
-                        // VINTERDÖD: O(1) Node Lookup (Phase 13)
+                        // O(1) Node Lookup (Phase 13)
                         const gun = state.nodes.gun;
                         const tip = state.nodes.barrelTip;
                         if (gun && tip) {
@@ -442,7 +451,10 @@ export const WeaponHandler = {
                             }
                             _v3.normalize();
 
-                            ProjectileSystem.launchBullet(scene, state.projectiles, _v2, _v3, wep.name as unknown as DamageID, damagePerPellet);
+                            const rangeMult = state.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0;
+                            const bulletLife = ((wep.range || 15) / (wep.bulletSpeed || 70)) * rangeMult;
+
+                            ProjectileSystem.launchBullet(scene, state.projectiles, _v2, _v3, wep.name as unknown as DamageID, damagePerPellet, bulletLife);
                         }
                     } else if (input.actions[InputAction.FIRE] && (state.weaponAmmo[state.activeWeapon] || 0) <= 0 && simTime > state.lastShotTime + (wep.fireRate || 0)) {
                         state.lastShotTime = simTime;
@@ -469,7 +481,7 @@ export const WeaponHandler = {
                         state.throwChargeRotation.copy(playerGroup.quaternion);
                     }
 
-                    // VINTERDÖD: Update the cached rotation ONLY while the player is actively providing aim input.
+                    // Update the cached rotation ONLY while the player is actively providing aim input.
                     // This allows them to let go of the stick and keep the trajectory locked.
                     const isAiming = (input.joystickAim && input.joystickAim.lengthSq() > 0.1) || (input.aimVector && input.aimVector.lengthSq() > 1);
                     if (isAiming) {
@@ -484,7 +496,7 @@ export const WeaponHandler = {
                     const cycleElapsed = elapsed % totalCycle;
                     const ratio = cycleElapsed < chargeTime ? (cycleElapsed / chargeTime) : 1.0;
 
-                    // VINTERDÖD: Use the LOCKED rotation for trajectory line/visuals
+                    // Use the LOCKED rotation for trajectory line/visuals
                     _v1.set(0, 0, 1).applyQuaternion(state.throwChargeRotation).normalize();
 
                     const maxDist = (wep.range || 25.0) * (state.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0);

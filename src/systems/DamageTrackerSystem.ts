@@ -1,8 +1,7 @@
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System, SystemID } from './System';
-import { EnemyType } from '../entities/enemies/EnemyTypes';
 import { DamageID } from '../entities/player/CombatTypes';
-import { StatWeaponIndex, PlayerStatID, StatEnemyIndex } from '../entities/player/PlayerTypes';
+import { StatWeaponIndex, PlayerStatID, StatEnemyIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE, TELEMETRY_BUFFER_SIZE } from '../entities/player/PlayerTypes';
 import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 
 // Zero-GC: Pre-allocate boss keys to prevent template literal string allocations during runtime
@@ -31,7 +30,7 @@ export class DamageTrackerSystem implements System {
         const activeWeapon = state.activeWeapon;
         if (activeWeapon !== DamageID.NONE) {
             const idx = activeWeapon as number;
-            // VINTERDÖD HARDENING: Strict bounds check (64 slots)
+            //  HARDENING: Strict bounds check (64 slots)
             if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
                 state.sessionStats.weaponTimeActive[idx] += delta;
             }
@@ -68,23 +67,17 @@ export class DamageTrackerSystem implements System {
 
         // --- NEW BUFFERED TELEMETRY (Zero-GC) ---
         // Mapping: 
-        // Sources 0-15: EnemyType (Reserved)
-        // Sources 16-63: DamageID 
-        // Attacks 0-31: EnemyAttackType or Boss Attack ID
+        // Sources (TelemetrySourceOffset.ENEMY): EnemyType (0-15)
+        // Sources (TelemetrySourceOffset.BOSS): BossID (16-23)
+        // Sources (TelemetrySourceOffset.ENVIRONMENT): DamageID (24-63)
 
-        // We use DamageID as the primary source ID for environment damage,
-        // and DamageID.BOSS (29) for boss attacks.
-        // If we want per-enemy-type breakdown, we should pass the enemy type as sourceId 
-        // but offset it to avoid collision with DamageID.
-        // For now, let's keep it simple: index = (sourceId * 32) + attackId
-        // VINTERDÖD HARDENING: Strict clamping for SourceID (0-63) and AttackID (0-31)
-        // This ensures bufferIdx (source * 32 + attack) is mathematically bounded to [0, 2047]
-        const sIdx = sourceId < 0 ? 0 : (sourceId > 63 ? 63 : sourceId);
-        const aIdx = attackId < 0 ? 0 : (attackId > 31 ? 31 : attackId);
-        const bufferIdx = (sIdx * 32) + aIdx;
+        //  HARDENING: Strict clamping for SourceID and AttackID
+        const sIdx = sourceId < 0 ? 0 : (sourceId >= TELEMETRY_SOURCES_COUNT ? TELEMETRY_SOURCES_COUNT - 1 : sourceId);
+        const aIdx = attackId < 0 ? 0 : (attackId >= TELEMETRY_ATTACKS_PER_SOURCE ? TELEMETRY_ATTACKS_PER_SOURCE - 1 : attackId);
+        const bufferIdx = (sIdx * TELEMETRY_ATTACKS_PER_SOURCE) + aIdx;
 
         // Final sanity check before write
-        if (bufferIdx >= 0 && bufferIdx < 2048) {
+        if (bufferIdx >= 0 && bufferIdx < TELEMETRY_BUFFER_SIZE) {
             stats.incomingDamageBuffer[bufferIdx] += amount;
             state.incomingDamageBuffer[bufferIdx] += amount;
         }
@@ -156,7 +149,7 @@ export class DamageTrackerSystem implements System {
      */
     recordKill(
         session: GameSessionLogic,
-        enemyType: number | string,
+        enemyType: number,
         isBoss: boolean = false,
         bossId?: number,
         weaponId?: DamageID,
@@ -167,6 +160,11 @@ export class DamageTrackerSystem implements System {
 
         stats.kills++;
         playerStats[PlayerStatID.TOTAL_KILLS]++;
+
+        // Long Range Kill: > 25m (625 units squared)
+        if (distSq !== undefined && distSq > 625) {
+            playerStats[PlayerStatID.TOTAL_LONG_RANGE_KILLS]++;
+        }
 
         // Killstreak handling
         this.currentKillstreak++;
@@ -192,7 +190,7 @@ export class DamageTrackerSystem implements System {
             }
         }
 
-        if (typeof enemyType === 'number' && enemyType >= 0 && enemyType < StatEnemyIndex.COUNT) {
+        if (enemyType >= 0 && enemyType < StatEnemyIndex.COUNT) {
             stats.enemyKills[enemyType]++;
             session.state.enemyKills[enemyType]++;
         }
@@ -203,6 +201,9 @@ export class DamageTrackerSystem implements System {
                 stats.enemyKills[StatEnemyIndex.BOSS]++;
                 session.state.enemyKills[StatEnemyIndex.BOSS]++;
             }
+            // Record killing blow details for the victory screen
+            stats.killingBlowWeapon = weaponId;
+            stats.killingBlowSource = enemyType as number;
         }
 
         // --- VINTERDÖD CHALLENGES (Zero-GC) ---
@@ -225,7 +226,7 @@ export class DamageTrackerSystem implements System {
 
         playerStats[PlayerStatID.TOTAL_DEATHS]++;
 
-        // VINTERDÖD FIX: sourceId < 16 usually indicates an enemy type (EnemyType enum)
+        // sourceId < 16 usually indicates an enemy type (EnemyType enum)
         const enemyType = sourceId < 16 ? sourceId : undefined;
 
         if (enemyType !== undefined && enemyType >= 0 && enemyType < StatEnemyIndex.COUNT) {
@@ -273,6 +274,22 @@ export class DamageTrackerSystem implements System {
         if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
             stats.weaponShotsFired[idx]++; // For throwables, fired = hit attempt
         }
+    }
+
+    /**
+     * Records how many unique enemies were hit by a single explosive.
+     */
+    recordUniqueEnemiesHitByExplosive(session: GameSessionLogic, count: number) {
+        session.state.sessionStats.uniqueEnemiesHitByExplosives += count;
+        session.state.statsBuffer[PlayerStatID.TOTAL_UNIQUE_ENEMIES_HIT_BY_EXPLOSIVES] += count;
+    }
+
+    /**
+     * Records an enemy being gibbed.
+     */
+    recordGib(session: GameSessionLogic) {
+        session.state.sessionStats.gibbedEnemies++;
+        session.state.statsBuffer[PlayerStatID.TOTAL_GIBBED]++;
     }
 
     /**

@@ -3,6 +3,7 @@ import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { ZOMBIE_TYPES } from '../../content/constants';
 import { Enemy, EnemyDeathState, EnemyType } from '../../entities/enemies/EnemyTypes';
 import { WeaponType } from '../../content/weapons';
+import { COLORS, ENEMY_COLORS } from '../../utils/ui/ColorUtils';
 
 export class ZombieRenderer {
     private meshes: Record<string, THREE.InstancedMesh> = {};
@@ -12,7 +13,6 @@ export class ZombieRenderer {
 
     // --- PERFORMANCE SCRATCHPADS ---
     private _tempColor = new THREE.Color();
-    private _white = new THREE.Color(0xffffff);
 
     // En enorm bounding sphere som säkerställer att horden inte pop:ar, 
     // men tillåter THREE att ignorera hela gruppen om du tittar bort.
@@ -23,10 +23,10 @@ export class ZombieRenderer {
         this.maxInstances = maxInstances;
 
         // Initialize InstancedMeshes for each type
-        this.createInstances(EnemyType.WALKER, this.getMat(ZOMBIE_TYPES[EnemyType.WALKER].color));
-        this.createInstances(EnemyType.RUNNER, this.getMat(ZOMBIE_TYPES[EnemyType.RUNNER].color));
-        this.createInstances(EnemyType.TANK, this.getMat(ZOMBIE_TYPES[EnemyType.TANK].color));
-        this.createInstances(EnemyType.BOMBER, this.getMat(ZOMBIE_TYPES[EnemyType.BOMBER].color));
+        this.createInstances(EnemyType.WALKER, this.getMat(ZOMBIE_TYPES[EnemyType.WALKER].color.num));
+        this.createInstances(EnemyType.RUNNER, this.getMat(ZOMBIE_TYPES[EnemyType.RUNNER].color.num));
+        this.createInstances(EnemyType.TANK, this.getMat(ZOMBIE_TYPES[EnemyType.TANK].color.num));
+        this.createInstances(EnemyType.BOMBER, this.getMat(ZOMBIE_TYPES[EnemyType.BOMBER].color.num));
 
         this._updateMeshList();
     }
@@ -112,15 +112,14 @@ export class ZombieRenderer {
             const timeSinceHit = time - e.hitTime;
             if (timeSinceHit < 100) {
                 if (e.lastDamageType === WeaponType.ARC_CANNON) {
-                    // Lerp between White and Cyan for the electric look
-                    this._tempColor.set(0x00ffff).lerp(this._white, 0.4);
+                    this._tempColor.setHex(ENEMY_COLORS.ELECTRIC_ARC_FLASH.num);
                 } else {
-                    this._tempColor.set(0xffffff); // Standard white flash
+                    this._tempColor.setHex(ENEMY_COLORS.HIT_FLASH.num);
                 }
                 instMesh.setColorAt(idx, this._tempColor);
             } else {
                 // If not flashing, reset to white (which allows the material base color to show)
-                this._tempColor.setHex(0xffffff);
+                this._tempColor.setHex(COLORS.WHITE.num);
                 instMesh.setColorAt(idx, this._tempColor);
             }
 

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MATERIAL_TYPE } from '../../content/environment';
-import { InteractionShape } from '../../systems/InteractionTypes';
+import { InteractionShape } from '../../systems/ui/UIEventBridge';
 
 export enum PhysicsGroup {
     NONE = 0,
@@ -31,7 +31,7 @@ export interface Obstacle {
     collider?: ColliderData;
     id?: string;
     type?: string;
-    physicsGroup?: PhysicsGroup; // VINTERDÖD: Numeric collision group for Zero-GC hot-paths
+    physicsGroup?: PhysicsGroup; // Numeric collision group for Zero-GC hot-paths
     materialId?: MATERIAL_TYPE; // High-performance lookup for impact sounds/FX
 }
 

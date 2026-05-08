@@ -6,6 +6,7 @@ import { SCRAP_COST_BASE } from '../../../../content/constants';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
 import ScreenModalLayout, { TacticalTab } from '../../layout/ScreenModalLayout';
+import { StatsBridge } from '../../../../core/data/StatsBridge';
 
 interface ScreenPlaygroundArmoryStationProps {
     stats: PlayerStats;
@@ -24,7 +25,7 @@ interface ScreenPlaygroundArmoryStationProps {
 
 const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps> = ({ stats, sectorState, currentLoadout, weaponLevels, onSave, onClose, isMobileDevice }) => {
     const [activeTab, setActiveTab] = useState<WeaponCategory>(WeaponCategory.PRIMARY);
-    const [tempStats, setTempStats] = useState({ ...stats });
+    const [tempStats, setTempStats] = useState(() => StatsBridge.deepCloneStats(stats));
     const [tempLoadout, setTempLoadout] = useState({ ...currentLoadout });
     const [tempWeaponLevels, setTempWeaponLevels] = useState({ ...weaponLevels });
     const [tempSectorState, setTempSectorState] = useState({ ...sectorState });
@@ -34,13 +35,10 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
         UiSounds.playClick();
         const level = tempWeaponLevels[weapon] || 1;
         const cost = SCRAP_COST_BASE * level;
-        const currentScrap = (tempStats as any).collectedScrap !== undefined ? (tempStats as any).collectedScrap : tempStats.scrap;
-        if (currentScrap >= cost) {
-            if ((tempStats as any).collectedScrap !== undefined) {
-                setTempStats({ ...tempStats, collectedScrap: (tempStats as any).collectedScrap - cost });
-            } else {
-                setTempStats({ ...tempStats, scrap: tempStats.scrap - cost });
-            }
+        
+        const nextStats = StatsBridge.deepCloneStats(tempStats);
+        if (StatsBridge.consumeScrap(nextStats, cost)) {
+            setTempStats(nextStats);
             setTempWeaponLevels({ ...tempWeaponLevels, [weapon]: level + 1 });
         }
     };
@@ -56,8 +54,8 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
     };
 
     const hasChanges = useMemo(() => {
-        const currentScrap = (tempStats as any).collectedScrap !== undefined ? (tempStats as any).collectedScrap : tempStats.scrap;
-        const originalScrap = (stats as any).collectedScrap !== undefined ? (stats as any).collectedScrap : stats.scrap;
+        const currentScrap = StatsBridge.getScrap(tempStats);
+        const originalScrap = StatsBridge.getScrap(stats);
         if (currentScrap !== originalScrap) return true;
         if (tempLoadout.primary !== currentLoadout.primary) return true;
         if (tempLoadout.secondary !== currentLoadout.secondary) return true;
@@ -83,8 +81,8 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
 
     const scrapHeader = (
         <div className={`px-4 py-1.5 border bg-black border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] flex flex-col items-start gap-0`}>
-            <span className={`text-[9px] block uppercase font-bold text-yellow-500 leading-tight opacity-70`}>{t('ui.scrap')}</span>
-            <span className={`text-xl md:text-2xl font-bold font-mono text-yellow-400 leading-none`}>{(tempStats as any).collectedScrap !== undefined ? (tempStats as any).collectedScrap : tempStats.scrap}</span>
+            <span className={`text-[10px] block uppercase font-bold text-yellow-500 leading-tight opacity-70`}>{t('ui.scrap')}</span>
+            <span className={`text-xl md:text-2xl font-bold font-mono text-yellow-400 leading-none`}>{StatsBridge.getScrap(tempStats)}</span>
         </div>
     );
 
@@ -152,7 +150,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                         const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;
                         const categoryColor = WeaponCategoryColors[weapon.category as keyof typeof WeaponCategoryColors];
                         const isEquippable = weapon.category !== WeaponCategory.TOOL;
-                        const currentScrap = (tempStats as any).collectedScrap !== undefined ? (tempStats as any).collectedScrap : tempStats.scrap;
+                        const currentScrap = StatsBridge.getScrap(tempStats);
                         const canAfford = currentScrap >= cost;
 
                         return (
@@ -184,7 +182,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                                             {t('ui.upgrade')} ({cost})
                                         </button>
                                     )}
-                                    <div className={`absolute top-0 left-0 bg-gray-900/80 ${isMobileDevice ? 'text-[9px] px-1.5 py-0.5' : 'text-sm px-3 py-1'} font-bold text-gray-400 border-r border-b border-gray-700`}>
+                                    <div className={`absolute top-0 left-0 bg-gray-900/80 ${isMobileDevice ? 'text-[10px] px-1.5 py-0.5' : 'text-sm px-3 py-1'} font-bold text-gray-400 border-r border-b border-gray-700`}>
                                         {t('ui.lvl')} {level}
                                     </div>
                                     {isEquipped && (
@@ -199,7 +197,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                                         <h3 className={`${isMobileDevice ? 'text-lg leading-tight' : 'text-2xl'} font-semibold uppercase tracking-tighter truncate mb-1`} style={{ color: isEquipped ? categoryColor : 'white' }}>
                                             {t(weapon.displayName)}
                                         </h3>
-                                        <div className={`flex flex-col gap-y-1 ${isMobileDevice ? 'text-[9px]' : 'text-xs'} font-mono text-gray-400`}>
+                                        <div className={`flex flex-col gap-y-1 ${isMobileDevice ? 'text-[10px]' : 'text-xs'} font-mono text-gray-400`}>
                                             <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
                                                 <span className="opacity-60">{t('ui.damage')}</span>
                                                 <span className="text-white font-bold">{Math.floor(weapon.damage * (1 + (level - 1) * 0.1))}</span>
@@ -227,3 +225,4 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
 };
 
 export default ScreenPlaygroundArmoryStation;
+

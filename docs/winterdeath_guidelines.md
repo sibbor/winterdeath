@@ -1,4 +1,4 @@
-# Vinterdöd: Technical Guidelines & Architecture
+# Technical Guidelines & Architecture
 
 ## 🧠 System Architecture: Strict Separation of Concerns
 The engine relies on modular systems (`src/core/systems/`) inheriting from a base `System.ts` or acting as singletons.
@@ -35,4 +35,4 @@ The engine relies on modular systems (`src/core/systems/`) inheriting from a bas
 To support cinematic pauses and smooth procedural animations, the engine maintains two distinct clocks in the `RuntimeState`:
 - **`simTime`**: The simulation clock. Used for physics, AI, cooldowns, and gameplay logic. This clock **freezes** during cinematic soft pauses or hard pauses.
 - **`renderTime`**: The visual clock. Used for breathing, swaying, wind, and HUD effects. This clock **never stops**, ensuring the world remains "alive" even when gameplay is suspended.
-- **System Rule**: Environmental systems (Wind, Water, Weather) and Animators must use `renderTime`. Physics and Combat systems must use `simTime`.
+- **System Rule**: Environmental systems (Wind, Water, Weather) and Animators must use `renderTime`. Physics and Combat systems must use `simTime`.

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Obstacle } from './CollisionResolution';
 import { Enemy, EnemyDeathState, EnemyFlags } from '../../entities/enemies/EnemyTypes';
 import { MaterialType } from '../../content/environment';
-import { InteractionShape } from '../../systems/InteractionTypes';
+import { InteractionShape } from '../../systems/ui/UIEventBridge';
 import { System, SystemID } from '../../systems/System';
 
 // Prime number for optimal spatial hash distribution without collisions

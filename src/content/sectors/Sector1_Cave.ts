@@ -3,7 +3,7 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 import { SectorDef, SectorContext, GroundType, ChestType } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
-import { InteractionShape } from '../../systems/InteractionTypes';
+import { InteractionShape } from '../../systems/ui/UIEventBridge';
 
 export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Group) => {
     const { scene, obstacles, flickeringLights, triggers } = ctx;
@@ -345,7 +345,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
         if (r.type === 'ShelterRoom') {
             // ========================================================
-            // VINTERDÖD FIX: Logiskt varningsljus
+            // Logiskt varningsljus
             // ========================================================
             if (ctx.dynamicLights) {
                 // Vi sätter positionen. Om 'innerCave' har en egen offset 

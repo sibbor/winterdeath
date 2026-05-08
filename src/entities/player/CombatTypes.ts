@@ -1,4 +1,4 @@
-import { StatusEffectType } from "../../content/perks";
+import { StatusEffectID } from "../../content/perks";
 
 export enum EnemyAttackType {
     HIT = 0,
@@ -39,7 +39,7 @@ export enum PlayerDeathState {
 }
 
 /**
- * VINTERDÖD: Unified DamageID (Step 3: Phase 7)
+ * Unified DamageID (Step 3: Phase 7)
  * Consolidates WeaponType and the previous DamageType into a single SMI enum.
  * This eliminates polymorphism (was WeaponType | DamageType) and optimizes
  * the hot-path in ProjectileSystem and EnemyAI.
@@ -113,7 +113,7 @@ export interface AttackDefinition {
     force?: number;
     chargeTime?: number;
     activeTime?: number;
-    effect?: StatusEffectType;
+    effect?: StatusEffectID;
     effectDuration?: number;
     effectDamage?: number;
 }

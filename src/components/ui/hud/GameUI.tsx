@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
-import ChatBubblesUI from './ChatBubblesUI';
-import { InteractionType } from '../../../systems/InteractionTypes';
+import ChatBubble from './ChatBubble';
+import { InteractionType } from '../../../systems/ui/UIEventBridge';
 
 interface GameUIProps {
     onCloseClue: () => void;
@@ -16,7 +16,7 @@ const GameUI: React.FC<GameUIProps> = React.memo(({
 }) => {
     return (
         <>
-            <ChatBubblesUI />
+            <ChatBubble />
         </>
     );
 });

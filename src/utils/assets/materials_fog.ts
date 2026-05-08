@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /**
- * VINTERDÖD: Volumetric Smoke/Fog Material
+ * Volumetric Smoke/Fog Material
  * Renders horizontal ground-hugging planes with soft-depth clipping and wind drift.
  */
 export function createFogMaterial(initialColor: THREE.Color): THREE.ShaderMaterial {
@@ -106,4 +106,4 @@ export function createFogMaterial(initialColor: THREE.Color): THREE.ShaderMateri
         depthTest: false, // Occlusion is handled manually via uDepthTexture in fragment shader
         blending: THREE.NormalBlending
     });
-}
+}

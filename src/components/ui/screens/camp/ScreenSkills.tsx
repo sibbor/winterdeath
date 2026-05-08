@@ -1,9 +1,11 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
+import { StatsBridge } from '../../../../core/data/StatsBridge';
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { LEVEL_CAP, PLAYER_BASE_SPEED } from '../../../../content/constants';
 import { useOrientation } from '../../../../hooks/useOrientation';
+import { ColorPair, COLORS, colorToHex } from '../../../../utils/ui/ColorUtils';
 import ScreenModalLayout, { TacticalCard, TacticalButton, HORIZONTAL_HATCHING_STYLE } from '../../layout/ScreenModalLayout';
 
 const SKILLS_CONFIG = [
@@ -12,29 +14,38 @@ const SKILLS_CONFIG = [
     { statId: PlayerStatID.SPEED, labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', cost: 2, value: 0.5, base: PLAYER_BASE_SPEED }
 ];
 
-interface ScreenPlayerSkillsProps {
+interface ScreenSkillsProps {
     stats: PlayerStats;
     onSave: (newStats: PlayerStats) => void;
     onClose: () => void;
     isMobileDevice?: boolean;
 }
 
-const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = React.memo(({ stats, onSave, onClose, isMobileDevice }) => {
+const ScreenSkills: React.FC<ScreenSkillsProps> = React.memo(({ stats, onSave, onClose, isMobileDevice }) => {
     const { isLandscapeMode } = useOrientation();
-    const [tempStats, setTempStats] = useState({ ...stats });
+    const [tempStats, setTempStats] = useState(() => StatsBridge.deepCloneStats(stats));
 
-    // PERFORMANCE FIX: useCallback prevents re-rendering all SkillCards when one is clicked
+    // Upgrade Skill
     const handleUpgradeSkill = useCallback((statId: PlayerStatID, cost: number, value: number) => {
         UiSounds.playUpgrade();
 
         setTempStats(prevStats => {
-            const sp = prevStats.statsBuffer[PlayerStatID.SKILL_POINTS];
-            if (sp >= cost) {
-                const newBuffer = new Float32Array(prevStats.statsBuffer);
-                newBuffer[PlayerStatID.SKILL_POINTS] -= cost;
-                newBuffer[statId] += value;
-                return { ...prevStats, statsBuffer: newBuffer };
+            // Transactional boundary: Check and consume SP (Zero-GC)
+            if (StatsBridge.consumeSkillPoints(prevStats, cost)) {
+
+                // Fast modulo check to route to the correct V8-optimized mutator
+                if (value % 1 === 0) {
+                    StatsBridge.addStatInt(prevStats, statId, value);
+                } else {
+                    StatsBridge.addStatFloat(prevStats, statId, value);
+                }
+
+                // Shallow clone to trigger React UI re-render. 
+                // GC allocation is acceptable here as it only triggers on explicit user click, not in the render loop.
+                return { ...prevStats };
             }
+
+            // Insufficient funds, return original reference (no re-render)
             return prevStats;
         });
     }, []);
@@ -44,20 +55,21 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = React.memo(({ stat
         onClose();
     }, [onSave, onClose, tempStats]);
 
-    const xpNeeded = stats.statsBuffer[PlayerStatID.NEXT_LEVEL_XP] - stats.statsBuffer[PlayerStatID.CURRENT_XP];
-    const isMaxRank = stats.statsBuffer[PlayerStatID.LEVEL] >= LEVEL_CAP;
-    const hasChanges = tempStats.statsBuffer[PlayerStatID.SKILL_POINTS] !== stats.statsBuffer[PlayerStatID.SKILL_POINTS];
+    const xpNeeded = StatsBridge.getStatInt(stats, PlayerStatID.NEXT_LEVEL_XP) - StatsBridge.getStatInt(stats, PlayerStatID.CURRENT_XP);
+    const isMaxRank = StatsBridge.getStatInt(stats, PlayerStatID.LEVEL) >= LEVEL_CAP;
+    const hasChanges = StatsBridge.getStatInt(tempStats, PlayerStatID.SKILL_POINTS) !== StatsBridge.getStatInt(stats, PlayerStatID.SKILL_POINTS);
 
     const spSubtitle = useMemo(() => (
         <div className="flex flex-col gap-1 mt-2">
             <div className="flex items-center gap-4">
-                <div className="px-3 py-1 bg-purple-950/40 border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.2)] flex items-center gap-3">
-                    <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">{t('ui.sp')}</span>
-                    <span className="text-xl font-mono font-black text-white">{tempStats.statsBuffer[PlayerStatID.SKILL_POINTS]}</span>
+                <div className="px-3 py-1 bg-purple-950/40 border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.2)] flex items-center gap-3 relative overflow-hidden">
+                    <div className="absolute inset-0 pointer-events-none opacity-40 shimmer-overlay" />
+                    <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest relative z-10">{t('ui.sp')}</span>
+                    <span className="text-xl font-mono font-black text-white relative z-10">{StatsBridge.getStatInt(tempStats, PlayerStatID.SKILL_POINTS)}</span>
                 </div>
             </div>
         </div>
-    ), [tempStats.statsBuffer[PlayerStatID.SKILL_POINTS], isMaxRank, xpNeeded]);
+    ), [StatsBridge.getStatInt(tempStats, PlayerStatID.SKILL_POINTS), isMaxRank, xpNeeded]);
 
     return (
         <ScreenModalLayout
@@ -85,8 +97,8 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = React.memo(({ stat
                     <SkillCard
                         key={skill.statId}
                         skill={skill}
-                        currentVal={tempStats.statsBuffer[skill.statId]}
-                        availableSP={tempStats.statsBuffer[PlayerStatID.SKILL_POINTS]}
+                        currentVal={StatsBridge.getStatFloat(tempStats, skill.statId)}
+                        availableSP={StatsBridge.getStatInt(tempStats, PlayerStatID.SKILL_POINTS)}
                         isMobileDevice={isMobileDevice}
                         onUpgrade={handleUpgradeSkill}
                     />
@@ -120,11 +132,11 @@ const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, ava
 
     return (
         <TacticalCard
-            color="#a855f7"
+            color={COLORS.PURPLE}
             showHover={true}
             className={`flex flex-col p-0 border-white/5 bg-transparent transition-all duration-300 ${isUpgraded ? 'bg-purple-500/5' : ''}`}
             style={{
-                borderColor: isUpgraded ? '#a855f744' : 'rgba(63, 63, 70, 0.3)',
+                borderColor: isUpgraded ? `${COLORS.PURPLE.str}44` : 'rgba(63, 63, 70, 0.3)',
                 boxShadow: isUpgraded ? '0 0 20px rgba(168,85,247,0.1)' : 'none'
             }}
         >
@@ -165,7 +177,7 @@ const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, ava
                     disabled={!canAfford}
                     variant={canAfford ? 'primary' : 'ghost'}
                     className="w-full h-12 text-xs border-none font-black"
-                    style={canAfford ? { backgroundColor: 'rgba(168, 85, 247, 0.1)', color: '#a855f7' } : { opacity: 0.3 }}
+                    style={canAfford ? { backgroundColor: 'rgba(168, 85, 247, 0.1)', color: COLORS.PURPLE.str } : { opacity: 0.3 }}
                 >
                     <span className="opacity-60 mr-2">{t('ui.upgrade')}</span>
                     <span className="font-mono">[{cost} SP]</span>
@@ -175,4 +187,4 @@ const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, ava
     );
 });
 
-export default ScreenPlayerSkills;
+export default ScreenSkills;

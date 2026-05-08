@@ -1,16 +1,17 @@
 import * as THREE from 'three';
-import { SectorTrigger } from '../systems/TriggerTypes';
+import { SectorTrigger } from '../types/TriggerTypes';
+import { TriggerSystem } from '../systems/TriggerSystem';
 import { SectorState, SectorStats } from '../types/StateTypes';
 import { PlayerStats } from '../entities/player/PlayerTypes';
 import { PlayerDeathState, DamageID } from '../entities/player/CombatTypes';
-import { StatusEffectType } from '../content/perks';
+import { StatusEffectID } from '../content/perks';
 import { WeaponType } from '../content/weapons';
 import { Obstacle } from './world/CollisionResolution';
 import { Enemy } from '../entities/enemies/EnemyManager';
 import { ScrapItem } from '../systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';
 import { ParticleState } from '../types/FXTypes';
-import { InteractionType } from '../systems/InteractionTypes';
+import { InteractionType, InteractionPromptId } from '../systems/ui/UIEventBridge';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
 
 export interface PreallocatedInitialAim {
@@ -22,7 +23,7 @@ export interface PreallocatedInitialAim {
 export interface PreallocatedDiscoveryState {
     active: boolean;
     id: string | number;
-    type: DiscoveryType; // VINTERDÖD: Numeric SMI instead of string
+    type: DiscoveryType; // Numeric SMI instead of string
     title: string;
     details: string;
     timestamp: number;
@@ -41,7 +42,7 @@ export interface PreallocatedInteractionRequest {
     targetId: string;
 }
 
-import { VehicleState, VehicleNodes } from '../entities/vehicles/VehicleTypes';
+import { VehicleState, VehicleNodes, VehicleID, VehicleEngineState } from '../entities/vehicles/VehicleTypes';
 
 export interface PreallocatedVehicleState extends VehicleState {
     active: boolean;
@@ -63,13 +64,72 @@ export interface RuntimeState {
     movement: PreallocatedMovementState; // distanceSinceLastStep, isRushing, isWading
     enemies: PreallocatedEnemyManager;   // enemies array, bossSpawned, killerType
     world: PreallocatedWorldState;       // sectorState, obstacles, collisionGrid, triggers
+    isPlayground: boolean;
     discovery: PreallocatedDiscoveryState; // pois, clues, collectibles
     vehicle: PreallocatedVehicleState;
     metrics: PreallocatedTelemetryState; // fps, drawCalls, triangles
 }
 */
 
-export interface RuntimeState extends PlayerStats {
+export interface RuntimeState {
+    // --- PLAYER STATS (Flattened from PlayerStats for Zero-GC) ---
+    velocity: THREE.Vector3;
+    nodes: {
+        gun: THREE.Object3D | null;
+        laserSight: THREE.Mesh | null;
+        barrelTip: THREE.Object3D | null;
+    };
+    baseScale: number;
+    baseY: number;
+    statsBuffer: Float32Array;
+    effectDurations: Float32Array;
+    effectMaxDurations: Float32Array;
+    effectIntensities: Float32Array;
+
+    weaponKills: Float64Array;
+    weaponDamageDealt: Float64Array;
+    weaponShotsFired: Float64Array;
+    weaponShotsHit: Float64Array;
+    weaponTimeActive: Float64Array;
+    weaponEngagementDistSq: Float64Array;
+
+    perkTimesGained: Float64Array;
+    perkDamageAbsorbed: Float64Array;
+    perkDamageDealt: Float64Array;
+    perkDebuffsCleansed: Float64Array;
+
+    enemyKills: Float64Array;
+    deathsByEnemyType: Float64Array;
+    incomingDamageBuffer: Float64Array;
+
+    statusFlags: number;
+    statusMask: number;
+    activePassives: StatusEffectID[];
+    activeBuffs: StatusEffectID[];
+    activeDebuffs: StatusEffectID[];
+
+    sectorsCompleted: number;
+    totalSkillPointsEarned: number;
+
+    collectiblesDiscovered: string[];
+    viewedCollectibles: string[];
+    cluesFound: string[];
+    mostUsedWeapon: DamageID;
+    totalEnemiesKilled: number;
+    seenEnemies: number[];
+    seenBosses: number[];
+    discoveredPerksMap: Uint8Array;
+    discoveredPOIs: string[];
+
+    prologueSeen: boolean;
+    rescuedFamilyIndices: number[];
+    familyFoundCount: number;
+
+    challengeTiers: Int32Array;
+    totalChallengePoints: number;
+    trackedChallengeIds: number[];
+
+    // --- SESSION STATE ---
     startTime: number;
     activeWeapon: WeaponType;
     loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
@@ -99,7 +159,7 @@ export interface RuntimeState extends PlayerStats {
     lastDodgeEndTime: number;
     lastReflexShieldTime: number;
     lastAdrenalinePatchTime: number;
-    lastPerfectDodgeTime: number; // VINTERDÖD: Required for Bullet Time cooldowns
+    lastPerfectDodgeTime: number; // Required for Bullet Time cooldowns
     lastHeartbeat: number;
     rushFactor: number; // 0.0 to 1.0 interpolation for Rush ability (2.0s ramp)
     currentSpeedRatio: number; // Current speed relative to base speed (for animations)
@@ -143,12 +203,12 @@ export interface RuntimeState extends PlayerStats {
     speakBounce: number;
     cameraShake: number;
     hurtShake: number;
-    discoveredPerks: StatusEffectType[];
     playerDeathState: PlayerDeathState;
 
     // --- SECTOR & WORLD ---
     sectorState: SectorState;
-    triggers: SectorTrigger[];
+    isPlayground: boolean;
+    triggers: TriggerSystem;
     obstacles: Obstacle[];
     collisionGrid: SpatialGrid;
     busUnlocked: boolean;
@@ -170,7 +230,7 @@ export interface RuntimeState extends PlayerStats {
     playerBloodSpawned: boolean;
     playerAshSpawned: boolean;
     lastDrownTick: number;
-    lastStepRight: boolean;  // VINTERDÖD: Vilken fot som sattes ner sist
+    lastStepRight: boolean;  // Vilken fot som sattes ner sist
     distanceSinceLastStep: number;
     minStepDistance: number;
 
@@ -194,6 +254,7 @@ export interface RuntimeState extends PlayerStats {
     interaction: {
         active: boolean;
         type: InteractionType;
+        promptId: InteractionPromptId;
         label: string;
         targetId: string;
     };
@@ -216,7 +277,6 @@ export interface RuntimeState extends PlayerStats {
 
     bossIntroActive: boolean;
     sessionCollectiblesDiscovered: string[];
-    collectiblesDiscovered: string[];
     mapItems: any[];
 
     // --- VEHICLES ---
@@ -253,8 +313,401 @@ export interface RuntimeState extends PlayerStats {
     killStreakBuffer: Float32Array;
     lastAdrenalineTime: number;
     lastGibMasterTime: number;
+    lastQuickFingerTime: number;
 
     // --- TELEMETRY & ATTRIBUTION (Zero-GC) ---
-    // Maps StatusEffectType -> SourceID (EnemyType/HazardID)
+    // Maps StatusEffectID -> SourceID (EnemyType/HazardID)
     effectSources: Uint8Array;
+}
+
+/**
+ * Zero-GC Allocation Logic
+ * * Allocates the massive RuntimeState object and all its sub-objects EXACTLY ONCE.
+ */
+export function allocateRuntimeState(): RuntimeState {
+    const effectCount = 32;
+    return {
+        velocity: new THREE.Vector3(),
+        nodes: { gun: null, laserSight: null, barrelTip: null },
+        baseScale: 1.0,
+        baseY: 0,
+        statsBuffer: new Float32Array(48), // PlayerStatID.COUNT
+        effectDurations: new Float32Array(effectCount),
+        effectMaxDurations: new Float32Array(effectCount),
+        effectIntensities: new Float32Array(effectCount),
+
+        weaponKills: new Float64Array(64), // StatWeaponIndex.COUNT
+        weaponDamageDealt: new Float64Array(64),
+        weaponShotsFired: new Float64Array(64),
+        weaponShotsHit: new Float64Array(64),
+        weaponTimeActive: new Float64Array(64),
+        weaponEngagementDistSq: new Float64Array(64),
+
+        perkTimesGained: new Float64Array(32), // StatPerkIndex.COUNT
+        perkDamageAbsorbed: new Float64Array(32),
+        perkDamageDealt: new Float64Array(32),
+        perkDebuffsCleansed: new Float64Array(32),
+
+        enemyKills: new Float64Array(8), // StatEnemyIndex.COUNT
+        deathsByEnemyType: new Float64Array(8),
+        incomingDamageBuffer: new Float64Array(64 * 32),
+
+        statusFlags: 0,
+        statusMask: 0,
+        activePassives: [],
+        activeBuffs: [],
+        activeDebuffs: [],
+
+        sectorsCompleted: 0,
+        totalSkillPointsEarned: 0,
+
+        collectiblesDiscovered: [],
+        viewedCollectibles: [],
+        cluesFound: [],
+        mostUsedWeapon: DamageID.NONE,
+        totalEnemiesKilled: 0,
+        seenEnemies: [],
+        seenBosses: [],
+        discoveredPerksMap: new Uint8Array(256),
+        discoveredPOIs: [],
+
+        prologueSeen: false,
+        rescuedFamilyIndices: [],
+        familyFoundCount: 0,
+
+        challengeTiers: new Int32Array(64),
+        totalChallengePoints: 0,
+        trackedChallengeIds: [],
+
+        startTime: 0,
+        activeWeapon: WeaponType.SMG,
+        loadout: { primary: WeaponType.SMG, secondary: WeaponType.PISTOL, throwable: WeaponType.GRENADE, special: WeaponType.RADIO },
+        weaponLevels: {},
+        weaponAmmo: {} as any,
+        isReloading: false,
+        reloadEndTime: 0,
+
+        dodgeStartTime: 0,
+        dodgeDir: new THREE.Vector3(),
+        isDodging: false,
+        dodgeSmokeSpawned: false,
+
+        invulnerableUntil: 0,
+        spacePressTime: 0,
+        spaceDepressed: false,
+        eDepressed: false,
+        isRushing: false,
+        rushCostPaid: false,
+        wasFiring: false,
+        throwChargeStart: 0,
+        throwChargeRotation: new THREE.Quaternion(),
+        lastShotTime: 0,
+        lastRushEndTime: 0,
+        lastDodgeEndTime: 0,
+        lastReflexShieldTime: -100000,
+        lastAdrenalinePatchTime: -100000,
+        lastPerfectDodgeTime: -100000,
+        lastHeartbeat: 0,
+        rushFactor: 0,
+        currentSpeedRatio: 1.0,
+
+        enemies: [],
+        particles: [],
+        activeEffects: [],
+        projectiles: [],
+        fireZones: [],
+        scrapItems: [],
+        chests: [],
+        bloodDecals: [],
+
+        sessionStats: null as any,
+        discoverySets: {
+            clues: new Set(),
+            pois: new Set(),
+            collectibles: new Set(),
+            seenEnemies: new Set(),
+            seenBosses: new Set()
+        },
+
+        applyDamage: () => false,
+
+        bossesDefeated: [],
+        familyFound: false,
+        familyAlreadyRescued: false,
+        familyExtracted: false,
+        bossPermanentlyDefeated: false,
+        isInteractionOpen: false,
+        bossSpawned: false,
+        lastDamageTime: 0,
+        lastBiteTime: 0,
+        lastStaminaUseTime: 0,
+        noiseLevel: 0,
+        speakBounce: 0,
+        cameraShake: 0,
+        hurtShake: 0,
+        playerDeathState: PlayerDeathState.ALIVE,
+        sectorState: { envOverride: undefined } as any,
+        isPlayground: false,
+        triggers: new TriggerSystem(256),
+        obstacles: [],
+        collisionGrid: new SpatialGrid(),
+        busUnlocked: false,
+        clueActive: false,
+        bossDefeatedTime: 0,
+        lastActionTime: 0,
+        thinkingUntil: 0,
+        speakingUntil: 0,
+        sectorName: '',
+        initialAim: { active: false, x: 0, y: 0 },
+        deathStartTime: 0,
+        killerType: DamageID.NONE,
+        killerName: '',
+        killerAttackName: '',
+        killedByEnemy: false,
+        lethalSourceId: -1,
+        lethalStatusEffect: -1,
+        playerBloodSpawned: false,
+        playerAshSpawned: false,
+        lastDrownTick: 0,
+        lastStepRight: false,
+        distanceSinceLastStep: 1.5,
+        minStepDistance: 1.7,
+        deathVel: new THREE.Vector3(),
+        hasLastTrailPos: false,
+        lastTrailPos: new THREE.Vector3(),
+
+        framesSinceHudUpdate: 0,
+        lastFpsUpdate: 0,
+        isMoving: false,
+        isWading: false,
+        isSwimming: false,
+
+        renderCpuTime: 0,
+        drawCalls: 0,
+        triangles: 0,
+
+        interaction: { active: false, type: InteractionType.NONE, promptId: InteractionPromptId.NONE, label: '', targetId: '' },
+        interactionRequest: { active: false, type: InteractionType.NONE, id: '', object: null },
+        hasInteractionTarget: false,
+        interactionTargetPos: new THREE.Vector3(),
+        hasNearestCollectible: false,
+        nearestCollectibleId: '',
+
+        bossIntroActive: false,
+        sessionCollectiblesDiscovered: [],
+        mapItems: [],
+
+        vehicle: {
+            active: false,
+            mesh: null,
+            nodes: null,
+            type: VehicleID.NONE,
+            speed: 0,
+            throttle: 0,
+            engineState: VehicleEngineState.OFF,
+            velocity: new THREE.Vector3(),
+            angularVelocity: new THREE.Vector3(),
+            suspY: 0,
+            suspVelY: 0,
+            prevFwdSpeed: 0,
+            _lastNoiseTime: 0,
+            engineVoiceIdx: -1,
+            skidVoiceIdx: -1,
+            engineStartTime: 0
+        },
+
+        flashlightOn: false,
+        hasCurrentInteraction: false,
+        currentInteractionPayload: {},
+        discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 },
+        cinematicActive: false,
+        cinematicLine: { active: false, speaker: '', text: '' },
+        callbacks: null,
+        stats: null as any,
+
+        simTime: 0,
+        renderTime: 0,
+        lastSimDelta: 0.016,
+        lastRenderDelta: 0.016,
+
+        hudVisible: true,
+        previousPerkMask: 0,
+        inputState: {
+            w: false, a: false, s: false, d: false, space: false, fire: false, r: false, e: false, f: false,
+            joystickMove: new THREE.Vector2(),
+            joystickAim: new THREE.Vector2(),
+            aimVector: new THREE.Vector2(1, 0),
+            mouse: new THREE.Vector2()
+        },
+
+        hitStopTime: 0,
+        globalTimeScale: 1.0,
+        killStreakBuffer: new Float32Array(5),
+        lastAdrenalineTime: 0,
+        lastGibMasterTime: 0,
+        lastQuickFingerTime: 0,
+        effectSources: new Uint8Array(32)
+    };
+}
+
+/**
+ * Zero-GC Reset Pattern
+ * Mutates an existing RuntimeState to its initial session values.
+ * NO `new` keywords. NO object literals `{}`.
+ */
+export function resetRuntimeState(state: RuntimeState, props: any): void {
+    // 1. Core Simulation Time
+    state.simTime = 0;
+    state.renderTime = 0;
+    state.startTime = performance.now();
+    state.lastSimDelta = 0.016;
+    state.lastRenderDelta = 0.016;
+    state.globalTimeScale = 1.0;
+    state.hitStopTime = 0;
+
+    // 2. Player Permanent Stats Copy
+    const pStats = props.stats;
+    state.stats = pStats;
+    state.velocity.set(0, 0, 0);
+    state.baseScale = pStats.baseScale || 1.0;
+    state.baseY = pStats.baseY || 0;
+
+    // Contiguous Buffer Sync - using safeCopyBuffer to prevent out-of-bounds crashes
+    safeCopyBuffer(state.statsBuffer, pStats.statsBuffer);
+
+    state.effectDurations.fill(0);
+    state.effectMaxDurations.fill(0);
+    state.effectIntensities.fill(0);
+
+    safeCopyBuffer(state.weaponKills, pStats.weaponKills);
+    safeCopyBuffer(state.weaponDamageDealt, pStats.weaponDamageDealt);
+    safeCopyBuffer(state.weaponShotsFired, pStats.weaponShotsFired);
+    safeCopyBuffer(state.weaponShotsHit, pStats.weaponShotsHit);
+    safeCopyBuffer(state.weaponTimeActive, pStats.weaponTimeActive);
+    safeCopyBuffer(state.weaponEngagementDistSq, pStats.weaponEngagementDistSq);
+
+    safeCopyBuffer(state.perkTimesGained, pStats.perkTimesGained);
+    safeCopyBuffer(state.perkDamageAbsorbed, pStats.perkDamageAbsorbed);
+    safeCopyBuffer(state.perkDamageDealt, pStats.perkDamageDealt);
+    safeCopyBuffer(state.perkDebuffsCleansed, pStats.perkDebuffsCleansed);
+
+    safeCopyBuffer(state.enemyKills, pStats.enemyKills);
+    safeCopyBuffer(state.deathsByEnemyType, pStats.deathsByEnemyType);
+    safeCopyBuffer(state.incomingDamageBuffer, pStats.incomingDamageBuffer);
+
+    safeCopyBuffer(state.challengeTiers, pStats.challengeTiers);
+    state.totalChallengePoints = pStats.totalChallengePoints;
+
+    // 3. State Flags & Lists
+    state.statusFlags = 0;
+    state.statusMask = 0;
+    state.activePassives.length = 0;
+    state.activeBuffs.length = 0;
+    state.activeDebuffs.length = 0;
+
+    safeCopyBuffer(state.discoveredPerksMap, pStats.discoveredPerksMap);
+
+    state.sectorsCompleted = pStats.sectorsCompleted;
+    state.totalSkillPointsEarned = pStats.totalSkillPointsEarned;
+
+    state.collectiblesDiscovered.length = 0;
+    state.collectiblesDiscovered.push(...pStats.collectiblesDiscovered);
+    state.viewedCollectibles.length = 0;
+    if (pStats.viewedCollectibles) state.viewedCollectibles.push(...pStats.viewedCollectibles);
+
+    state.cluesFound.length = 0;
+    state.cluesFound.push(...pStats.cluesFound);
+
+    state.discoveredPOIs.length = 0;
+    state.discoveredPOIs.push(...pStats.discoveredPOIs);
+
+    state.seenEnemies.length = 0;
+    state.seenEnemies.push(...pStats.seenEnemies);
+    state.seenBosses.length = 0;
+    state.seenBosses.push(...pStats.seenBosses);
+
+    state.rescuedFamilyIndices.length = 0;
+    state.rescuedFamilyIndices.push(...pStats.rescuedFamilyIndices);
+    state.familyFoundCount = pStats.familyFoundCount;
+    state.trackedChallengeIds.length = 0;
+    state.trackedChallengeIds.push(...pStats.trackedChallengeIds);
+
+    // 4. Session Progression
+    state.activeWeapon = props.loadout.primary;
+    state.loadout.primary = props.loadout.primary;
+    state.loadout.secondary = props.loadout.secondary;
+    state.loadout.throwable = props.loadout.throwable;
+    state.loadout.special = props.loadout.special;
+
+    // Zero-GC Ammo Reset
+    (state.weaponAmmo as any)[props.loadout.primary] = 100; // Placeholder until sector init
+
+    state.isReloading = false;
+    state.reloadEndTime = 0;
+    state.dodgeStartTime = 0;
+    state.dodgeDir.set(0, 0, 0);
+    state.isDodging = false;
+    state.isRushing = false;
+    state.rushFactor = 0;
+    state.currentSpeedRatio = 1.0;
+    state.lastShotTime = 0;
+    state.lastRushEndTime = 0;
+    state.lastDodgeEndTime = 0;
+    state.lastReflexShieldTime = -100000;
+    state.lastAdrenalinePatchTime = -100000;
+    state.lastPerfectDodgeTime = -100000;
+    state.playerDeathState = PlayerDeathState.ALIVE;
+
+    // 5. Object Pool Reset
+    state.enemies.length = 0;
+    state.particles.length = 0;
+    state.activeEffects.length = 0;
+    state.projectiles.length = 0;
+    state.fireZones.length = 0;
+    state.scrapItems.length = 0;
+    state.chests.length = 0;
+    state.bloodDecals.length = 0;
+
+    // 6. Discovery & Interaction
+    state.discovery.active = false;
+    state.cinematicActive = false;
+    state.interaction.active = false;
+    state.interactionRequest.active = false;
+    state.hasInteractionTarget = false;
+    state.hasNearestCollectible = false;
+    state.bossSpawned = false;
+
+    // 7. World & Collision
+    state.sectorState = props.sectorState || { envOverride: undefined } as any;
+    state.triggers.reset();
+    state.obstacles.length = 0;
+    state.collisionGrid.clear();
+
+    // 8. Input State
+    state.inputState.w = false;
+    state.inputState.a = false;
+    state.inputState.s = false;
+    state.inputState.d = false;
+    state.inputState.space = false;
+    state.inputState.fire = false;
+    state.inputState.joystickMove.set(0, 0);
+    state.inputState.joystickAim.set(0, 0);
+    state.inputState.aimVector.set(1, 0);
+
+    state.hudVisible = true;
+}
+
+
+/**
+ * Zero-GC Buffer Copy
+ * Safely copies data from a source array (like saved data) into a preallocated target buffer.
+ * Uses a primitive loop to avoid allocating ArrayBufferView objects (which .subarray() does)
+ * and handles size mismatches gracefully, preventing RangeErrors.
+ */
+function safeCopyBuffer(target: Float32Array | Float64Array | Int32Array | Uint8Array, source: any): void {
+    if (!source || typeof source.length !== 'number') return;
+    const len = Math.min(target.length, source.length);
+    for (let i = 0; i < len; i++) {
+        target[i] = source[i];
+    }
 }

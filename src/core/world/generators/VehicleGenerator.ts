@@ -54,7 +54,7 @@ export const createSignMesh = (text: string, width: number, height: number, text
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
     const tex = new THREE.CanvasTexture(canvas);
-    // VINTERDÖD: Återanvänd basmaterialet för skyltar för att minimera shader-program
+    // Återanvänd basmaterialet för skyltar för att minimera shader-program
     const mat = MATERIALS.vehicleSign.clone();
     mat.map = tex;
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);

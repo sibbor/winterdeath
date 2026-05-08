@@ -1,12 +1,14 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
+import { StatsBridge } from '../../../../core/data/StatsBridge';
 import { WeaponType, WeaponCategory, WeaponCategoryColors, WeaponStats } from '../../../../content/weapons';
 import { t } from '../../../../utils/i18n';
 import { SCRAP_COST_BASE } from '../../../../content/constants';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { ColorPair, COLORS, darkenColor, colorToHex } from '../../../../utils/ui/ColorUtils';
 import { useOrientation } from '../../../../hooks/useOrientation';
-import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalButton } from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalButton, TacticalTab } from '../../layout/ScreenModalLayout';
 
 interface ScreenArmoryProps {
     stats: PlayerStats;
@@ -21,18 +23,6 @@ interface ScreenArmoryProps {
     isMobileDevice?: boolean;
 }
 
-// PRESTANDA-OPTIMERING: Denna logik låg i loopen förut.
-const darkenColor = (hex: string, percent: number) => {
-    try {
-        const h = hex.startsWith('#') ? hex : '#ffffff';
-        const num = parseInt(h.replace('#', ''), 16);
-        const amt = Math.round(2.55 * percent);
-        const R = (num >> 16) - amt;
-        const G = (num >> 8 & 0x00FF) - amt;
-        const B = (num & 0x0000FF) - amt;
-        return '#' + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
-    } catch (e) { return hex; }
-};
 
 const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLoadout, weaponLevels, onSave, onClose, isMobileDevice }) => {
     const { isLandscapeMode } = useOrientation();
@@ -40,36 +30,39 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
     const [activeTab, setActiveTab] = useState<WeaponCategory>(WeaponCategory.PRIMARY);
 
     // Vi behåller lokalt state så man kan ångra ("Cancel") innan man sparar.
-    const [tempStats, setTempStats] = useState({ ...stats });
+    const [tempStats, setTempStats] = useState(() => StatsBridge.deepCloneStats(stats));
     const [tempLoadout, setTempLoadout] = useState({ ...currentLoadout });
     const [tempWeaponLevels, setTempWeaponLevels] = useState({ ...weaponLevels });
 
-    // PERFORMANCE FIX: useCallback förhindrar att barn-komponenter renderas om i onödan.
+    // Upgrade Weapon
     const handleUpgradeWeapon = useCallback((e: React.MouseEvent, weapon: WeaponType) => {
         e.stopPropagation();
-        UiSounds.playUpgrade();
 
-        // Use a functional state update to ensure we have the latest levels without needing it in the dependency array
-        setTempWeaponLevels(prevLevels => {
-            const level = prevLevels[weapon] || 1;
-            const cost = SCRAP_COST_BASE * level;
+        // Calculate cost based on current level in the render scope
+        const level = tempWeaponLevels[weapon] || 1;
+        const cost = SCRAP_COST_BASE * level;
 
-            // Check scrap dynamically
-            setTempStats(prevStats => {
-                const scrap = prevStats.statsBuffer[PlayerStatID.SCRAP];
-                if (scrap >= cost) {
-                    const newStats = { ...prevStats };
-                    newStats.statsBuffer = new Float32Array(prevStats.statsBuffer);
-                    newStats.statsBuffer[PlayerStatID.SCRAP] -= cost;
-                    return newStats;
-                }
-                return prevStats;
-            });
+        setTempStats(prevStats => {
+            // Transactional boundary: Check and consume Scrap (Zero-GC check)
+            if (StatsBridge.consumeScrap(prevStats, cost)) {
+                // Success: Play audio feedback
+                UiSounds.playUpgrade();
 
-            // Return updated or old levels based on scrap check (we rely on the component re-render to reflect the actual success)
-            return { ...prevLevels, [weapon]: level + 1 };
+                // Success: Safely increment the weapon level since the transaction cleared
+                setTempWeaponLevels(prevLevels => ({
+                    ...prevLevels,
+                    [weapon]: (prevLevels[weapon] || 1) + 1
+                }));
+
+                // Shallow clone to trigger React UI re-render. 
+                // GC allocation is acceptable here as it only triggers on explicit user click.
+                return { ...prevStats };
+            }
+
+            // Insufficient scrap: Return original reference (no re-render, no level up, no sound)
+            return prevStats;
         });
-    }, []);
+    }, [tempWeaponLevels]); // Dependency required to calculate accurate current cost
 
     const handleEquip = useCallback((weapon: WeaponType, category: WeaponCategory) => {
         if (category === WeaponCategory.TOOL) return;
@@ -85,7 +78,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
     }, []);
 
     const hasChanges = useMemo(() => {
-        if (tempStats.statsBuffer[PlayerStatID.SCRAP] !== stats.statsBuffer[PlayerStatID.SCRAP]) return true;
+        if (StatsBridge.getStatInt(tempStats, PlayerStatID.SCRAP) !== StatsBridge.getStatInt(stats, PlayerStatID.SCRAP)) return true;
         if (tempLoadout.primary !== currentLoadout.primary) return true;
         if (tempLoadout.secondary !== currentLoadout.secondary) return true;
         if (tempLoadout.throwable !== currentLoadout.throwable) return true;
@@ -108,12 +101,13 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
 
     const scrapSubtitle = useMemo(() => (
         <div className="flex flex-col gap-1 mt-2">
-            <div className="px-3 py-1 bg-yellow-950/40 border border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.2)] flex items-center gap-3 w-fit">
-                <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">{t('ui.scrap')}</span>
-                <span className="text-xl font-mono font-black text-white">{tempStats.statsBuffer[PlayerStatID.SCRAP]}</span>
+            <div className="px-3 py-1 bg-yellow-950/40 border border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.2)] flex items-center gap-3 w-fit relative overflow-hidden">
+                <div className="absolute inset-0 pointer-events-none opacity-40 shimmer-overlay" />
+                <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest relative z-10">{t('ui.scrap')}</span>
+                <span className="text-xl font-mono font-black text-white relative z-10">{StatsBridge.getStatInt(tempStats, PlayerStatID.SCRAP)}</span>
             </div>
         </div>
-    ), [tempStats.statsBuffer[PlayerStatID.SCRAP]]);
+    ), [StatsBridge.getStatInt(tempStats, PlayerStatID.SCRAP)]);
 
     const TABS = [WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL];
 
@@ -138,31 +132,17 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
                 <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
                     <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide'}`}>
                         {TABS.map(cat => {
-                            const isActive = activeTab === cat;
-                            const catColor = WeaponCategoryColors[cat as keyof typeof WeaponCategoryColors] || '#ffffff';
                             const catName = DataResolver.getWeaponCategoryName(cat);
-
+                            const catColor = WeaponCategoryColors[cat] || COLORS.YELLOW;
                             return (
-                                <button
+                                <TacticalTab
                                     key={cat}
+                                    label={t(catName)}
+                                    isActive={activeTab === cat}
                                     onClick={() => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
-                                    className={`relative px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
-                                        ${isActive
-                                            ? 'text-white animate-tab-pulsate'
-                                            : 'bg-transparent text-zinc-400 hover:bg-white/5 shadow-none'
-                                        } 
-                                        ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
-                                    `}
-                                    style={isActive ? { backgroundColor: catColor + '33', '--pulse-color': catColor } as any : {}}
-                                >
-                                    {isActive && (
-                                        <div className="absolute inset-0 opacity-20 transition-opacity"
-                                            style={HORIZONTAL_HATCHING_STYLE}
-                                        />
-                                    )}
-                                    <span className="relative z-10">{t(catName)}</span>
-                                    {isActive && effectiveLandscape && <span className="text-white font-bold ml-2 relative z-10">→</span>}
-                                </button>
+                                    color={catColor}
+                                    orientation={effectiveLandscape ? 'vertical' : 'horizontal'}
+                                />
                             );
                         })}
                     </div>
@@ -173,7 +153,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
                         activeTab={activeTab}
                         tempWeaponLevels={tempWeaponLevels}
                         tempLoadout={tempLoadout}
-                        scrapAmount={tempStats.statsBuffer[PlayerStatID.SCRAP]}
+                        scrapAmount={StatsBridge.getStatInt(tempStats, PlayerStatID.SCRAP)}
                         isMobileDevice={isMobileDevice}
                         isLandscapeMode={isLandscapeMode}
                         onEquip={handleEquip}
@@ -211,7 +191,7 @@ const WeaponList: React.FC<WeaponListProps> = React.memo(({ activeTab, tempWeapo
                 const cost = SCRAP_COST_BASE * level;
                 const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;
                 const canAfford = scrapAmount >= cost;
-                const categoryColor = WeaponCategoryColors[weapon.category as keyof typeof WeaponCategoryColors];
+                const categoryColor = WeaponCategoryColors[weapon.category] || COLORS.YELLOW;
                 const isEquippable = weapon.category !== WeaponCategory.TOOL;
                 const isUpgradeable = isEquippable;
 
@@ -223,7 +203,7 @@ const WeaponList: React.FC<WeaponListProps> = React.memo(({ activeTab, tempWeapo
                         cost={cost}
                         isEquipped={isEquipped}
                         canAfford={canAfford}
-                        categoryColor={categoryColor as string}
+                        categoryColor={categoryColor}
                         isEquippable={isEquippable}
                         isUpgradeable={isUpgradeable}
                         isMobileDevice={isMobileDevice}
@@ -242,7 +222,7 @@ interface WeaponCardProps {
     cost: number;
     isEquipped: boolean;
     canAfford: boolean;
-    categoryColor: string;
+    categoryColor: ColorPair;
     isEquippable: boolean;
     isUpgradeable: boolean;
     isMobileDevice?: boolean;
@@ -254,8 +234,6 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
     weapon, level, cost, isEquipped, canAfford, categoryColor,
     isEquippable, isUpgradeable, isMobileDevice, onEquip, onUpgrade
 }) => {
-    const isPrimaryColor = categoryColor.toLowerCase() === '#ff3333' || categoryColor.toLowerCase() === 'red';
-
     return (
         <TacticalCard
             onClick={() => !isEquipped && isEquippable && onEquip(weapon.name, weapon.category)}
@@ -264,11 +242,11 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
             showHover={!isEquipped}
             className={`flex flex-col p-0 transition-all duration-300 ${isEquipped ? 'cursor-default' : (isEquippable ? 'hover:bg-gray-800/40 cursor-pointer' : 'cursor-default')}`}
             style={{
-                borderColor: isEquipped ? categoryColor : 'rgba(63, 63, 70, 0.5)',
+                borderColor: isEquipped ? categoryColor.str : `${categoryColor.str}44`,
                 borderWidth: '2px',
-                boxShadow: isEquipped ? `0 0 30px ${categoryColor}22, inset 0 0 20px ${categoryColor}11` : 'none',
+                boxShadow: isEquipped ? `0 0 30px ${categoryColor.str}22, inset 0 0 20px ${categoryColor.str}11` : 'none',
                 minHeight: isMobileDevice ? 'auto' : '300px',
-                backgroundColor: isEquipped ? `${categoryColor}15` : 'transparent'
+                backgroundColor: isEquipped ? `${categoryColor.str}15` : 'transparent'
             }}
         >
             {isEquipped && (
@@ -278,7 +256,7 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
             {/* Top Side (Image & Level) */}
             <div
                 className={`w-full flex flex-col border-b relative shrink-0 transition-colors duration-300`}
-                style={{ borderColor: isEquipped ? `${categoryColor}44` : 'rgba(63, 63, 70, 0.5)' }}
+                style={{ borderColor: isEquipped ? `${categoryColor.str}44` : 'rgba(63, 63, 70, 0.5)' }}
             >
                 <div className={`${isMobileDevice ? 'h-32 min-h-[128px]' : 'h-40'} border-b border-white/5 w-full flex items-center justify-center relative overflow-hidden`}>
                     {isEquipped && (
@@ -286,9 +264,9 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
                     )}
                     <div className="transition-transform group-hover:scale-110 duration-700 relative z-10">
                         {weapon.iconIsPng ? (
-                            <img src={weapon.icon} alt="" className={`w-full h-full object-contain filter brightness-0 invert ${isEquipped ? 'opacity-100' : 'opacity-60'}`} />
+                            <img src={weapon.icon} className={`w-full h-full object-contain filter brightness-0 invert ${isEquipped ? 'opacity-100' : 'opacity-60'}`} />
                         ) : (
-                            <div className={`w-16 h-16 md:w-24 md:h-24 ${isEquipped ? 'opacity-100' : 'opacity-60'}`} dangerouslySetInnerHTML={{ __html: weapon.icon }} style={{ color: categoryColor }} />
+                            <div className={`w-16 h-16 md:w-24 md:h-24 ${isEquipped ? 'opacity-100' : 'opacity-60'}`} dangerouslySetInnerHTML={{ __html: weapon.icon }} style={{ color: categoryColor.str }} />
                         )}
                     </div>
                 </div>
@@ -299,14 +277,14 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
                         disabled={!canAfford}
                         variant={canAfford ? 'primary' : 'ghost'}
                         className="w-full h-10 text-[10px] border-none font-mono"
-                        style={canAfford ? { backgroundColor: 'rgba(234, 179, 8, 0.1)', color: '#eab308' } : { opacity: 0.4 }}
+                        style={canAfford ? { backgroundColor: 'rgba(234, 179, 8, 0.1)', color: COLORS.YELLOW.str } : { opacity: 0.4 }}
                     >
                         <span className="opacity-60 mr-1.5">{t('ui.upgrade')}</span>
                         <span className="font-bold">[{cost}]</span>
                     </TacticalButton>
                 )}
 
-                <div className={`absolute top-0 left-0 ${isMobileDevice ? 'text-[9px] px-2 py-1' : 'text-[11px] px-3 py-1.5'} font-mono font-bold bg-zinc-950 border-r border-b border-white/10 text-zinc-400 tracking-tighter uppercase`}>
+                <div className={`absolute top-0 left-0 ${isMobileDevice ? 'text-[10px] px-2 py-1' : 'text-[11px] px-3 py-1.5'} font-mono font-bold bg-zinc-950 border-r border-b border-white/10 text-zinc-400 tracking-tighter uppercase`}>
                     {t('ui.lvl')} {level}
                 </div>
 
@@ -314,7 +292,7 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
                     <div className={`absolute top-0 right-0 ${isMobileDevice ? 'w-6 h-6' : 'w-8 h-8'} bg-zinc-950 border-l border-b border-white/10 flex items-center justify-center`}>
                         <div
                             className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full shadow-[0_0_10px_currentColor]"
-                            style={{ backgroundColor: categoryColor, color: categoryColor }}
+                            style={{ backgroundColor: categoryColor.str, color: categoryColor.str }}
                         />
                     </div>
                 )}
@@ -337,7 +315,7 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
                                 <span className="text-yellow-500 font-bold">
                                     {Math.floor(weapon.damage + (weapon.damage * (level - 1) * 0.1))}
                                 </span>
-                                <span className="text-[9px] text-zinc-600 font-bold italic">
+                                <span className="text-[10px] text-zinc-600 font-bold italic">
                                     +{Math.floor(weapon.damage * (level - 1) * 0.1)}
                                 </span>
                             </div>
@@ -372,3 +350,4 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
 });
 
 export default ScreenArmory;
+

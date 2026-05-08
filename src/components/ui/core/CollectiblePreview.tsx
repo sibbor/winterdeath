@@ -262,7 +262,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
             cameraRef.current = null;
             groupRef.current = null;
         };
-        // VINTERDÖD FIX: 'size' borttagen från deps. Vi återskapar INTE hela scenen vid resize.
+        // 'size' borttagen från deps. Vi återskapar INTE hela scenen vid resize.
     }, [type, isLocked, isReady]);
 
     // --- ZERO-GC RESIZE HANDLER ---

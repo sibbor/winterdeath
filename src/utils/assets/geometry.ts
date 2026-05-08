@@ -119,13 +119,13 @@ const createSplatterGeo = () => {
 };
 
 const createBloodSplatterGeo = () => {
-    // VINTERDÖD: High-fidelity blood droplet (crossed planes)
+    // High-fidelity blood droplet (crossed planes)
     // Larger and more elongated than standard splash to feel heavier/visceral
     const w = 0.35;
     const h = 0.6;
 
     const plane1 = new THREE.PlaneGeometry(w, h);
-    plane1.translate(0, h / 2, 0); 
+    plane1.translate(0, h / 2, 0);
 
     const plane2 = plane1.clone();
     plane2.rotateY(Math.PI / 2);
@@ -136,14 +136,14 @@ const createBloodSplatterGeo = () => {
     const count = geo.attributes.position.count;
     const colors = new Float32Array(count * 3);
     const pos = geo.attributes.position;
-    
+
     // Blood Red Gradient
-    const topColor = new THREE.Color(0x880000); 
-    const bottomColor = new THREE.Color(0x330000); 
+    const topColor = new THREE.Color(0x880000);
+    const bottomColor = new THREE.Color(0x330000);
 
     for (let i = 0; i < count; i++) {
-        const y = pos.getY(i); 
-        const t = (y / h); 
+        const y = pos.getY(i);
+        const t = (y / h);
         const c = topColor.clone().lerp(bottomColor, 1.0 - t);
         colors[i * 3] = c.r;
         colors[i * 3 + 1] = c.g;

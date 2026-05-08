@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TEXTURES } from './AssetLoader';
 import { WATER_SYSTEM } from '../../content/constants';
-import { WaterShape } from '../../systems/WaterSystem';
+import { WaterShape } from '../../types/WaterTypes';
 
 // Safe fallback texture to satisfy WebGL samplers before the image loads
 const dummyNoise = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1, THREE.RGBAFormat);

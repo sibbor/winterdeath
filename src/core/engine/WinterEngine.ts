@@ -20,6 +20,10 @@ const _c2 = new THREE.Color();
 const _v1 = new THREE.Vector3();
 const _traverseStack: THREE.Object3D[] = [];
 
+// Pre-allocated instances for Zero-GC render loop
+const _fallbackContext = { scene: null as any, state: {} };
+const _screenQuadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
 export type { GameSettings };
 
 /**
@@ -78,7 +82,9 @@ export class WinterEngine {
 
     // Callbacks
     public onUpdate: ((dt: number, simTime: number, renderTime: number) => void) | null = null;
-    public onRender: (() => void) | null = null;
+    public onPreRender: (() => void) | null = null;
+    public onRenderOverride: (() => void) | null = null;
+    public onRender: (() => void) | null = null; // Legacy alias for onPreRender
 
     /**
      * Resets the engine context and timing to prevent 'state leakage' between the Camp
@@ -86,6 +92,9 @@ export class WinterEngine {
      */
     public clearUpdateContext() {
         this.onUpdateContext = null;
+        this.onPreRender = null;
+        this.onRenderOverride = null;
+        this.onRender = null;
         this.lastTime = performance.now();
         this._accumulator = 0;
         this.renderTime = 0;
@@ -94,7 +103,7 @@ export class WinterEngine {
         this.isRenderingPaused = false;
     }
 
-    // VINTERDÖD FIX: Hard Paused stänger av allt (även miljö).
+    // Hard Paused stänger av allt (även miljö).
     public isRenderingPaused: boolean = false;
     public isSimulationPaused: boolean = false;
 
@@ -111,7 +120,7 @@ export class WinterEngine {
     private _systems: (System | any)[] = new Array(SystemID.COUNT).fill(null);
     private _tickableSystems: System[] = []; // Sub-list of systems that implement update()
 
-    // VINTERDÖD FIX: Fast lookup for environment systems that must run during cinematics
+    // Fast lookup for environment systems that must run during cinematics
     private _envSystemIds: Set<SystemID> = new Set([
         SystemID.WIND,
         SystemID.WEATHER,
@@ -208,21 +217,21 @@ export class WinterEngine {
         this.renderer.shadowMap.type = this.settings.shadowMapType as THREE.ShadowMapType;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-        // VINTERDÖD: Depth Texture Support for Soft Fog/Particles
+        // Depth Texture Support for Soft Fog/Particles
         if (this.settings.volumetricFog) {
             this.depthTexture = new THREE.DepthTexture(window.innerWidth, window.innerHeight);
             this.renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
                 depthTexture: this.depthTexture,
                 depthBuffer: true
             });
-            
+
             // Fullscreen quad for blitting the result back to the screen
             const quadGeo = new THREE.PlaneGeometry(2, 2);
             const quadMat = new THREE.MeshBasicMaterial({ map: this.renderTarget.texture });
             this.screenQuad = new THREE.Mesh(quadGeo, quadMat);
         }
 
-        // VINTERDÖD: The canvas never needs pointer events on any device.
+        // The canvas never needs pointer events on any device.
         // All interactions are captured by the GameSessionUI click-catcher overlay,
         // ensuring the HUD and custom cursors remain reachable.
         this.renderer.domElement.style.pointerEvents = 'none';
@@ -243,6 +252,22 @@ export class WinterEngine {
     private recreateRenderer() {
         const oldDom = this.renderer.domElement;
         const parent = oldDom.parentNode;
+
+        // Prevent GPU memory leaks (VRAM bloat) when changing graphics settings.
+        // WebGLRenderer.dispose() does not automatically free manually created FBOs or Geometries.
+        if (this.renderTarget) {
+            this.renderTarget.dispose();
+            this.renderTarget = null;
+        }
+        if (this.depthTexture) {
+            this.depthTexture.dispose();
+            this.depthTexture = null;
+        }
+        if (this.screenQuad) {
+            this.screenQuad.geometry.dispose();
+            (this.screenQuad.material as THREE.Material).dispose();
+            this.screenQuad = null;
+        }
 
         this.renderer.dispose();
         if (parent) parent.removeChild(oldDom);
@@ -322,11 +347,21 @@ export class WinterEngine {
             this.container.removeChild(this.renderer.domElement);
         }
 
+        // Hard cleanup of GPU buffers
+        if (this.renderTarget) this.renderTarget.dispose();
+        if (this.depthTexture) this.depthTexture.dispose();
+        if (this.screenQuad) {
+            this.screenQuad.geometry.dispose();
+            (this.screenQuad.material as THREE.Material).dispose();
+        }
+
         this.clearActiveScene(true);
         this.renderer.dispose();
 
         this.sceneStack.length = 0;
         this.onUpdate = null;
+        this.onPreRender = null;
+        this.onRenderOverride = null;
         this.onRender = null;
         this.sharedGeoSet = null;
         this.sharedMatSet = null;
@@ -487,7 +522,7 @@ export class WinterEngine {
 
         this.camera.set('aspect', width / height);
         this.renderer.setSize(width, height);
-        
+
         if (this.renderTarget) {
             this.renderTarget.setSize(width, height);
             if (this.depthTexture) {
@@ -512,11 +547,15 @@ export class WinterEngine {
         const realDelta = Math.min(0.25, (now - this.lastTime) / 1000);
         this.lastTime = now;
 
-        const context = this.onUpdateContext || { scene: this.scene, state: {} };
+        // Zero-GC Fallback Context
+        if (!this.onUpdateContext) {
+            _fallbackContext.scene = this.scene;
+        }
+        const context = this.onUpdateContext || _fallbackContext;
         const state = context.state;
 
         // --- ENGINE HIT-STOP (Micro-Freeze) ---
-        // VINTERDÖD SAFETY: Decrement hit-stop using raw realDelta (wall-clock) 
+        //  SAFETY: Decrement hit-stop using raw realDelta (wall-clock) 
         // to prevent slow-mo logic causing elongated freezes (The "Matrix Lag" fix).
         const hitStop = (state && state.hitStopTime) ? state.hitStopTime : 0;
         if (hitStop > 0) {
@@ -580,42 +619,62 @@ export class WinterEngine {
         // --- 5. RENDER PASS ---
         monitor.begin('render');
         if (!this.isRenderingPaused) {
-            if (this.onRender) {
-                this.onRender();
+            // A. TRIGGER PRE-RENDER HOOKS (Buffer updates, logic that needs to run right before draw)
+            if (this.onPreRender) this.onPreRender();
+            if (this.onRender) this.onRender(); // Legacy support
+
+            // B. MAIN RENDER PASS
+            if (this.onRenderOverride) {
+                this.onRenderOverride();
             } else if (this.renderTarget && this.settings.volumetricFog) {
-                // VINTERDÖD FIX: Prevent Feedback Loop (Feedback loop formed between Framebuffer and active Texture)
-                // We must render the scene WITHOUT the depth-reading volumetric fog mesh first,
-                // then render the fog mesh in a second pass once the depth texture is populated.
+                // Prevent Feedback Loop
                 const fogMesh = this.fog?.fogMesh;
                 const fogWasVisible = fogMesh ? fogMesh.visible : false;
-                
+
                 if (fogMesh && fogWasVisible) {
                     fogMesh.visible = false;
                 }
 
                 // 1. Render Scene to Target (Captures Depth from opaque geometry)
                 this.renderer.setRenderTarget(this.renderTarget);
-                this.renderer.render(this.scene, this.camera.threeCamera);
-                
+                try {
+                    this.renderer.render(this.scene, this.camera.threeCamera);
+                } catch (e) {
+                    console.error("[WebGL Render Crash - Pass 1]", e);
+                }
+
                 // 2. Render Target Texture to Screen (Blit)
                 this.renderer.setRenderTarget(null);
                 if (this.screenQuad) {
                     const oldAutoClear = this.renderer.autoClear;
                     this.renderer.autoClear = false;
-                    // Render the quad with a simple internal orthographic projection
-                    this.renderer.render(this.screenQuad as any, new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1));
 
-                    // 3. Render Volumetric Fog (Now that we are on the screen buffer, no feedback loop with depth texture!)
+                    // Render the quad using the pre-allocated OrthographicCamera
+                    try {
+                        this.renderer.render(this.screenQuad as any, _screenQuadCamera);
+                    } catch (e) {
+                        console.error("[WebGL Render Crash - Blit Pass]", e);
+                    }
+
+                    // 3. Render Volumetric Fog
                     if (fogMesh && fogWasVisible) {
                         fogMesh.visible = true;
-                        this.renderer.render(fogMesh, this.camera.threeCamera);
+                        try {
+                            this.renderer.render(fogMesh, this.camera.threeCamera);
+                        } catch (e) {
+                            console.error("[WebGL Render Crash - Fog Pass]", e);
+                        }
                     }
 
                     this.renderer.autoClear = oldAutoClear;
                 }
             } else {
                 monitor.begin('render_draw');
-                this.renderer.render(this.scene, this.camera.threeCamera);
+                try {
+                    this.renderer.render(this.scene, this.camera.threeCamera);
+                } catch (e) {
+                    console.error("[WebGL Render Crash]", e);
+                }
                 monitor.end('render_draw');
             }
         }
@@ -641,11 +700,10 @@ export class WinterEngine {
     public registerSystem(id: SystemID, sys: any) {
         if (!sys) return;
 
-        // --- VINTERDÖD: STRICT MISMATCH VALIDATION ---
+        // --- STRICT MISMATCH VALIDATION ---
         if (sys.systemId !== undefined && sys.systemId !== id) {
             const errorMsg = `[WinterEngine] Kritiskt fel: System ID mismatch! Försöker registrera ${sys.id || 'okänt system'} (ID: ${sys.systemId}) som ID ${id}. Detta förhindrar cross-wiring buggar.`;
             console.error(errorMsg);
-            // In development, we want this to be loud.
             if (process.env.NODE_ENV === 'development') {
                 throw new Error(errorMsg);
             }
@@ -654,9 +712,6 @@ export class WinterEngine {
         if (!this._systems[id]) {
             this._systems[id] = sys;
 
-            // ARCHITECTURAL CORRECTION: Dense Tickable list 
-            // We only add to the hot-loop array if the system actually has an update() method.
-            // This maintains O(1) lookup in the registry while preserving Zero-GC performance.
             if (typeof sys.update === 'function') {
                 this._tickableSystems.push(sys);
             }
@@ -717,6 +772,12 @@ export class WinterEngine {
      */
     private updateSystems(context: any, delta: number, fixedOnly?: boolean): void {
         const monitor = PerformanceMonitor.getInstance();
+
+        // Hard-gate systems during loading/paused rendering
+        // Prevents systems like CampChatter or Weather from running and playing sounds 
+        // during full-screen transitions.
+        if (this.isRenderingPaused) return;
+
         const systems = this._tickableSystems;
         const len = systems.length;
 
@@ -726,7 +787,7 @@ export class WinterEngine {
 
             const systemId = sys.systemId;
 
-            // --- VINTERDÖD: FIXED-STEP & CLOCK GATING ---
+            // --- FIXED-STEP & CLOCK GATING ---
             const isFixed = sys.isFixedStep || false;
 
             // Skip systems that don't match the current loop cycle

@@ -81,7 +81,7 @@ export const getSharedGlowTexture = (): THREE.CanvasTexture => {
         canvas.height = 64;
         const ctx = canvas.getContext('2d')!;
 
-        // VINTERDÖD: Perfect radial gradient for Additive Blending
+        // Perfect radial gradient for Additive Blending
         const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
         gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
         gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.4)');
@@ -821,7 +821,7 @@ export const MATERIALS = {
 };
 
 /**
- * VINTERDÖD: Singleton-cache för trädskuggor (Alpha-tested Depth Materials).
+ * Singleton-cache för trädskuggor (Alpha-tested Depth Materials).
  * Förhindrar shader-recompiles vid shadow pass.
  */
 export const TREE_DEPTH_MATS: Record<string, THREE.MeshDepthMaterial> = {};
@@ -840,7 +840,7 @@ export const getTreeDepthMaterial = (baseMat: THREE.Material): THREE.MeshDepthMa
 };
 
 /**
- * VINTERDÖD: Färgpalett för rekvisita i Camp (Böcker, Flaskor etc).
+ * Färgpalett för rekvisita i Camp (Böcker, Flaskor etc).
  * Förhindrar "new Material()" anrop vid körning.
  */
 export const CAMP_PROP_PALETTE = [

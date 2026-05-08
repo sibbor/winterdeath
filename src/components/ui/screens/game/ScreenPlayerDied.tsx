@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
+import { HudStore } from '../../../../store/HudStore';
 import { useHudStore } from '../../../../hooks/useHudStore';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
 import { HORIZONTAL_HATCHING_STYLE_DARK } from '../../layout/ScreenModalLayout';
-import { StatusEffectType } from '../../../../content/perks';
-import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputTypes';
+import { StatusEffectID } from '../../../../types/StatusEffects';
+import { MetaActionId } from '../../../../systems/ui/UIEventBridge';
 
 interface ScreenPlayerDiedProps {
     onContinue: () => void;
@@ -17,7 +18,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
     const [isVisible, setIsVisible] = useState(false);
 
     // Fetch data using optimized selectors
-    const killerName = useHudStore(s => s.killerName || 'UNKNOWN');
+    const killerName = useHudStore(s => s.killerName || t('ui.unknown'));
     const deathReason = useHudStore(s => s.killerAttackName || '');
     const killedByEnemy = useHudStore(s => s.killedByEnemy || false);
     const lethalSourceId = useHudStore(s => s.lethalSourceId ?? -1);
@@ -31,11 +32,16 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
 
     // Allow pressing Enter to continue
     useEffect(() => {
-        const onKey = (e: KeyboardEvent) => { 
-            if (INPUT_KEY_MAP[e.key] === InputAction.ENTER) onContinue(); 
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
+        let lastProcessedTimestamp = 0;
+        const unsubscribe = HudStore.subscribe((state) => {
+            if (state.metaSignalTimestamp > lastProcessedTimestamp) {
+                lastProcessedTimestamp = state.metaSignalTimestamp;
+                if (state.lastMetaSignal === MetaActionId.NAV_CONFIRM) {
+                    onContinue();
+                }
+            }
+        });
+        return unsubscribe;
     }, [onContinue]);
 
     // Zero-GC: Memoize death details
@@ -53,7 +59,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
             if (lethalStatusEffect !== -1) {
                 // Killed by Enemy via DoT (e.g. Walker (Bite [Bleeding]))
                 const effectName = t(DataResolver.getPerkName(lethalStatusEffect));
-                const attackType = lethalStatusEffect === StatusEffectType.BLEEDING ? 'BITE' : 'HIT'; // Improved mapping
+                const attackType = lethalStatusEffect === StatusEffectID.BLEEDING ? 'BITE' : 'HIT'; // Improved mapping
                 const attackName = t(DataResolver.getAttackName(attackType as any));
                 displayName = `${nameResolved.toUpperCase()} (${attackName} [${effectName}])`;
             } else if (deathReason && deathReason !== 'HIT' && deathReason !== 'HIDDEN') {

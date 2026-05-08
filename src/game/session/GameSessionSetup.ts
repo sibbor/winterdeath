@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { MapItem, DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { DeathPhase } from '../../types/SessionTypes';
-import { SectorContext, BossID } from '../../game/session/SectorTypes';
+import { SectorContext, BossID, SectorID } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
@@ -10,6 +10,8 @@ import { VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
+import { ParticleSystem } from '../../systems/ParticleSystem';
+import { ParticleRenderer } from '../../core/renderers/ParticleRenderer';
 import { SystemID } from '../../systems/System';
 import { FXSystem } from '../../systems/FXSystem';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
@@ -22,7 +24,7 @@ import { SubEffectType } from '../../systems/EffectManager';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 import { PlayerDeathState, DamageID } from '../../entities/player/CombatTypes';
 import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
-import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
+import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { UiSounds } from '../../utils/audio/AudioLib';
 import { WEAPONS } from '../../content/weapons';
@@ -42,12 +44,11 @@ import { HudStore } from '../../store/HudStore';
 import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { ChallengeSystem } from '../../systems/ChallengeSystem';
-import { TriggerHandler } from '../../systems/TriggerHandler';
 import { HudSystem } from '../../systems/HudSystem';
 import { RuntimeState } from '../../core/RuntimeState';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { PerkFX } from '../../systems/PerkFX';
-import { InteractionType } from '../../systems/InteractionTypes';
+import { InteractionType } from '../../systems/ui/UIEventBridge';
 
 const seededRandom = (seed: number) => {
     let s = seed % 2147483647;
@@ -114,16 +115,10 @@ export class GameSessionSetup {
 
         refs.isBuildingSectorRef.current = true;
         refs.deathPhaseRef.current = DeathPhase.NONE;
-        state.statusFlags = PlayerStatusFlags.NONE;
-        state.hudVisible = true;
 
-        // VINTERDÖD FIX: Robust telemetry recovery
-        if (!state.sessionStats) {
-            console.warn('[GameSessionSetup] state.sessionStats was null. Re-initializing.');
-            state.sessionStats = GameSessionLogic.createDefaultSessionStats(props);
-        }
+        // Centralized Zero-GC Reset
+        GameSessionLogic.resetState(state, props);
 
-        state.sessionStats.timePlayed = 0; // Reset session timer
         let sectorLoaded = false;
 
         try {
@@ -145,7 +140,6 @@ export class GameSessionSetup {
 
             const rng = seededRandom(props.currentSector + 4242);
 
-
             // 1. Prepare Scene
             this.prepareScene(engine, props.isWarmup, refs, currentSector.environment);
 
@@ -155,7 +149,7 @@ export class GameSessionSetup {
                     (err as any).isAbort = true;
                     throw err;
                 }
-                // VINTERDÖD: Mandatory yield to allow the UI to breathe and catch aborts
+                // Mandatory yield to allow the UI to breathe and catch aborts
                 await new Promise<void>(resolve => setTimeout(resolve, 0));
             };
 
@@ -206,20 +200,36 @@ export class GameSessionSetup {
             // If the sector is already cleared, mark the intro triggers as completed
             if (state.familyAlreadyRescued || state.bossPermanentlyDefeated) {
                 const triggers = state.triggers;
-                for (let i = 0; i < triggers.length; i++) {
-                    const trig = triggers[i];
-                    // Intro triggers usually carry a scriptId or are of type SPEAK/INTERACTION at the family spawn
-                    if (trig.type === TriggerType.SPEAK || (trig.actions && trig.actions.some((a: any) => a.type === TriggerActionType.START_CINEMATIC))) {
-                        trig.statusFlags |= TriggerStatus.TRIGGERED;
+                const activeFlags = triggers.getActiveFlags();
+                const types = triggers.getTriggerTypes();
+                const metadata = triggers.metadata;
+
+                for (let i = 0; i < triggers.capacity; i++) {
+                    if (activeFlags[i] === 0) continue;
+
+                    const type = types[i];
+                    const meta = metadata[i];
+
+                    let hasCinematic = false;
+                    if (meta.actions) {
+                        for (let j = 0; j < meta.actions.length; j++) {
+                            if (meta.actions[j].type === TriggerActionType.START_CINEMATIC) {
+                                hasCinematic = true;
+                                break;
+                            }
+                        }
                     }
 
+                    if (type === TriggerType.SPEAK || hasCinematic) {
+                        triggers.setStatusFlag(i, TriggerStatus.TRIGGERED, true);
+                    }
                 }
             }
 
             FXSystem.preload(scene);
             await yielder();
 
-            // VINTERDÖD: If we are building LIVE (not warmup), activate systems immediately.
+            // If we are building LIVE (not warmup), activate systems immediately.
             if (!props.isWarmup) {
                 await this.activateSector(sectorCtx, currentSector);
             }
@@ -239,6 +249,12 @@ export class GameSessionSetup {
             return;
         } finally {
             refs.isBuildingSectorRef.current = false;
+
+            // HARD UNPAUSE. Guarantee that the engine resumes drawing and logic 
+            // even if setup fails mid-way or if it succeeded. This prevents the "frozen screen" bug.
+            engine.isRenderingPaused = false;
+            engine.isSimulationPaused = false;
+
             // Fallback to ensure loading screen drops
             if (!sectorLoaded && isMounted.current && setupIdRef.current === currentSetupId) {
                 if (callbacks.onSectorLoaded) callbacks.onSectorLoaded();
@@ -247,7 +263,7 @@ export class GameSessionSetup {
     }
 
     /**
-     * VINTERDÖD: Activates the live portions of a sector (Zombies, Triggers, etc.)
+     * Activates the live portions of a sector (Zombies, Triggers, etc.)
      * This is called either at the end of runSectorSetup (if not warmup) 
      * or manually when isWarmup toggles to false.
      */
@@ -261,11 +277,11 @@ export class GameSessionSetup {
             await def.setupZombies(ctx);
         }
 
-        // VINTERDÖD: Final world discovery - find all Ground_* meshes for the footprint system
+        // Final world discovery - find all Ground_* meshes for the footprint system
         const { FootprintSystem } = await import('../../systems/FootprintSystem');
         FootprintSystem.init(ctx.scene);
 
-        // VINTERDÖD: Final block - initialize the Navigation FlowField grid
+        // Final block - initialize the Navigation FlowField grid
         const { NavigationSystem } = await import('../../systems/NavigationSystem');
         NavigationSystem.init(ctx);
 
@@ -310,7 +326,7 @@ export class GameSessionSetup {
         const playerGroup = ModelFactory.createPlayer();
         refs.playerGroupRef.current = playerGroup;
 
-        // --- VINTERDÖD: PERFORMANCE CACHE (Phase 13) ---
+        // --- PERFORMANCE CACHE (Phase 13) ---
         // Purging getObjectByName from hot-paths by caching nodes during setup
         state.baseScale = playerGroup.userData.baseScale || 1.0;
         state.baseY = playerGroup.userData.baseY || 0;
@@ -347,9 +363,9 @@ export class GameSessionSetup {
             engine.input.state.aimVector.y = state.initialAim.y;
         }
 
-
-        const spawn = currentSector.playerSpawn;
-        playerGroup.position.set(spawn.x, spawn.y || 0, spawn.z);
+        // Prevent NaN poisoning if sector data is missing spawn coordinates
+        const spawn = currentSector.playerSpawn || { x: 0, y: 0, z: 0 };
+        playerGroup.position.set(spawn.x || 0, spawn.y || 0, spawn.z || 0);
         if (spawn.rot) playerGroup.rotation.y = spawn.rot;
 
         const flashlight = ModelFactory.createFlashlight();
@@ -365,7 +381,7 @@ export class GameSessionSetup {
         const envCameraY = env?.cameraHeight || CAMERA_HEIGHT;
         const envCameraAngle = env?.cameraAngle || 0;
 
-        engine.camera.setPosition(spawn.x, envCameraY, spawn.z + envCameraZ, true);
+        engine.camera.setPosition(playerGroup.position.x, envCameraY, playerGroup.position.z + envCameraZ, true);
 
         if (currentSector.cinematic) {
             const c = currentSector.cinematic;
@@ -406,7 +422,7 @@ export class GameSessionSetup {
 
         const spawnBoss = (bossId: BossID, pos?: THREE.Vector3) => {
             const pSpawn = currentSector.playerSpawn;
-            const bossPos = pos || (currentSector.bossSpawn ? new THREE.Vector3(currentSector.bossSpawn.x, 0, currentSector.bossSpawn.z) : new THREE.Vector3(pSpawn.x, 0, pSpawn.z));
+            const bossPos = pos || (currentSector.bossSpawn ? new THREE.Vector3(currentSector.bossSpawn.x, 0, currentSector.bossSpawn.z) : new THREE.Vector3(pSpawn.x || 0, 0, pSpawn.z || 0));
             const bossData = (BOSSES as any)[bossId];
 
             const boss = EnemyManager.spawnBoss(engine.scene, bossPos, bossData);
@@ -424,7 +440,7 @@ export class GameSessionSetup {
                 }
 
                 if (!seen && callbacks.onDiscovery) {
-                    callbacks.onDiscovery(DiscoveryType.BOSS as any, String(bossId), 'ui.boss_encountered', DataResolver.getBossName(bossId));
+                    callbacks.onDiscovery(DiscoveryType.BOSS as any, bossId as any, 'ui.boss_encountered', DataResolver.getBossName(bossId));
                 }
             }
             return boss;
@@ -506,30 +522,53 @@ export class GameSessionSetup {
                 const stats = state.sessionStats;
                 let alreadyFound = false;
 
-                if (type === DiscoveryType.CLUE) {
-                    alreadyFound = sets.clues.has(id);
-                    if (!alreadyFound) {
-                        if (!isRespawnable) sets.clues.add(id);
-                        if (!isRespawnable && !stats.cluesFound.some((c: any) => c.id === id)) {
-                            stats.cluesFound.push(payload || { id });
+                // Replaced .some() and .includes() with Zero-GC for-loops
+                switch (type) {
+                    case DiscoveryType.CLUE:
+                        alreadyFound = sets.clues.has(id);
+                        if (!alreadyFound) {
+                            if (!isRespawnable) sets.clues.add(id);
+
+                            let foundClue = false;
+                            for (let i = 0; i < stats.cluesFound.length; i++) {
+                                const c = stats.cluesFound[i];
+                                if ((typeof c === 'string' ? c : c.id) === id) { foundClue = true; break; }
+                            }
+                            if (!isRespawnable && !foundClue) {
+                                stats.cluesFound.push(id as string);
+                            }
                         }
-                    }
-                } else if (type === DiscoveryType.POI) {
-                    alreadyFound = sets.pois.has(id);
-                    if (!alreadyFound) {
-                        if (!isRespawnable) sets.pois.add(id);
-                        if (!isRespawnable && !stats.discoveredPOIs.includes(id)) {
-                            stats.discoveredPOIs.push(id);
+                        break;
+
+                    case DiscoveryType.POI:
+                        alreadyFound = sets.pois.has(id);
+                        if (!alreadyFound) {
+                            if (!isRespawnable) sets.pois.add(id);
+
+                            let foundPOI = false;
+                            for (let i = 0; i < stats.discoveredPOIs.length; i++) {
+                                if (stats.discoveredPOIs[i] === id) { foundPOI = true; break; }
+                            }
+                            if (!isRespawnable && !foundPOI) {
+                                stats.discoveredPOIs.push(id);
+                            }
                         }
-                    }
-                } else if (type === DiscoveryType.COLLECTIBLE) {
-                    alreadyFound = sets.collectibles.has(id);
-                    if (!alreadyFound) {
-                        if (!isRespawnable) sets.collectibles.add(id);
-                        if (!isRespawnable && !stats.collectiblesDiscovered.includes(id)) {
-                            stats.collectiblesDiscovered.push(id);
+                        break;
+
+                    case DiscoveryType.COLLECTIBLE:
+                        alreadyFound = sets.collectibles.has(id);
+                        if (!alreadyFound) {
+                            if (!isRespawnable) sets.collectibles.add(id);
+
+                            let foundCol = false;
+                            for (let i = 0; i < stats.collectiblesDiscovered.length; i++) {
+                                if (stats.collectiblesDiscovered[i] === id) { foundCol = true; break; }
+                            }
+                            if (!isRespawnable && !foundCol) {
+                                stats.collectiblesDiscovered.push(id);
+                            }
                         }
-                    }
+                        break;
                 }
 
                 // First time discovery awards SP (Plan overhaul)
@@ -573,7 +612,7 @@ export class GameSessionSetup {
 
                     const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                     if (tracker) {
-                        tracker.recordKill(session, idStr, true);
+                        tracker.recordKill(session, id, true);
                         tracker.recordSp(session, 2); // Boss Kill = +2 SP
                     }
 
@@ -629,17 +668,26 @@ export class GameSessionSetup {
     private static setupFamily(currentSector: any, props: GameCanvasProps, refs: any, scene: THREE.Scene) {
         // DO NOT wipe refs.activeFamilyMembers.current here! It was cleared at line 154
         // and may contain sector-specific family members added by SectorBuilder.
-        const playerSpawn = currentSector.playerSpawn;
+        const playerSpawn = currentSector.playerSpawn || { x: 0, y: 0, z: 0 };
         const fSpawn = currentSector.familySpawn;
 
-        // VINTERDÖD FIX: Only spawn family members from PREVIOUS sectors that have been rescued.
-        // This prevents the current sector's member (e.g. Loke) from spawning at the player start.
-        const rescuedIndices = (props.rescuedFamilyIndices || []).filter((idx: number) => idx < props.currentSector);
+        // Zero-GC arrays (replaced .filter)
+        const rescuedIndices: number[] = [];
+        const propIndices = props.rescuedFamilyIndices || [];
+        for (let i = 0; i < propIndices.length; i++) {
+            if (propIndices[i] < props.currentSector) {
+                rescuedIndices.push(propIndices[i]);
+            }
+        }
 
         // Developer override
-        if (props.debugMode && props.currentSector >= 1 && rescuedIndices.length === 0) {
+        if (props.debugMode && props.currentSector >= SectorID.MOUNTAIN_VAULT && rescuedIndices.length === 0) {
             for (let i = 0; i < props.currentSector; i++) {
-                if (rescuedIndices.indexOf(i) === -1) rescuedIndices.push(i);
+                let found = false;
+                for (let j = 0; j < rescuedIndices.length; j++) {
+                    if (rescuedIndices[j] === i) { found = true; break; }
+                }
+                if (!found) rescuedIndices.push(i);
             }
         }
 
@@ -659,13 +707,18 @@ export class GameSessionSetup {
                         for (let c = 0; c < mesh.children.length; c++) {
                             if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
                         }
-                        refs.activeFamilyMembers.current.push({ mesh, found: true, following: true, rescued: true, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring, spawnPos: mesh.position.clone() });
+
+                        // Removed .clone() on position.
+                        refs.activeFamilyMembers.current.push({ mesh, found: true, following: true, rescued: true, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring, spawnPos: new THREE.Vector3(mesh.position.x, mesh.position.y, mesh.position.z) });
                     }
                 }
             }
         }
 
-        let hasRescuedCurrent = rescuedIndices.indexOf(props.currentSector) !== -1;
+        let hasRescuedCurrent = false;
+        for (let i = 0; i < rescuedIndices.length; i++) {
+            if (rescuedIndices[i] === props.currentSector) { hasRescuedCurrent = true; break; }
+        }
 
         if (!props.familyAlreadyRescued) {
             const fmId = DataResolver.getSectorFamilyMemberId(props.currentSector);
@@ -673,7 +726,12 @@ export class GameSessionSetup {
                 const fmData = FAMILY_MEMBERS[fmId];
                 if (fmData) {
                     // Check if SectorBuilder already added them
-                    let existingFM = refs.activeFamilyMembers.current.find((fm: any) => fm.id === fmId);
+                    let existingFM = null;
+                    const fmArr = refs.activeFamilyMembers.current;
+                    for (let i = 0; i < fmArr.length; i++) {
+                        if (fmArr[i].id === fmId) { existingFM = fmArr[i]; break; }
+                    }
+
                     if (existingFM) {
                         refs.familyMemberRef.current = existingFM;
                     } else {
@@ -691,7 +749,9 @@ export class GameSessionSetup {
                         for (let c = 0; c < mesh.children.length; c++) {
                             if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
                         }
-                        const currentFM = { mesh, found: false, following: false, rescued: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring, spawnPos: mesh.position.clone() };
+
+                        // Removed .clone() on position.
+                        const currentFM = { mesh, found: false, following: false, rescued: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring, spawnPos: new THREE.Vector3(mesh.position.x, mesh.position.y, mesh.position.z) };
                         refs.activeFamilyMembers.current.push(currentFM);
                         refs.familyMemberRef.current = currentFM;
                     }
@@ -714,13 +774,23 @@ export class GameSessionSetup {
         session.addSystem(new DamageNumberSystem(engine.scene));
         session.addSystem(new DamageTrackerSystem());
         session.addSystem(new ChallengeSystem());
+        session.addSystem(new ProjectileSystem());
+        session.addSystem(new ParticleSystem());
+
+        // --- PHASE 10: ZERO-GC PARTICLE RENDERER ---
+        const particleRenderer = new ParticleRenderer(engine.scene);
+        engine.onPreRender = () => {
+            particleRenderer.render();
+        };
 
         const detectionSys = new EnemyDetectionSystem();
         session.addSystem(detectionSys);
         session.detectionSystem = detectionSys;
 
+        // Register the SoA TriggerSystem
+        session.addSystem(state.triggers);
+
         // Register passive global managers in the system registry
-        engine.registerSystem(SystemID.TRIGGER_HANDLER, TriggerHandler);
         engine.registerSystem(SystemID.ENEMY_MANAGER, EnemyManager);
         engine.registerSystem(SystemID.HUD, HudSystem);
 
@@ -729,7 +799,14 @@ export class GameSessionSetup {
         session.addSystem(new PlayerCombatSystem(playerGroup));
         session.addSystem(new PlayerInteractionSystem(
             playerGroup, callbacks.concludeSector, sectorCtx.collectibles, refs.activeFamilyMembers, engine.scene,
-            (id, respawnable) => callbacks.onDiscovery && callbacks.onDiscovery(DiscoveryType.COLLECTIBLE, id, 'ui.discovered_collectible', `collectibles.${id}.title`, { respawnable })
+            (id, respawnable) => {
+                if (callbacks.onDiscovery) {
+                    const col = DataResolver.getCollectibles()[id];
+                    if (col) {
+                        callbacks.onDiscovery(DiscoveryType.COLLECTIBLE, col.id, 'ui.discovered_collectible', `collectibles.${col.id}.title`, { respawnable });
+                    }
+                }
+            }
         ));
 
         const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
@@ -755,7 +832,7 @@ export class GameSessionSetup {
                 if (props.onBossKilled) props.onBossKilled(id);
 
                 const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                if (tracker) tracker.recordKill(session, String(id), true);
+                if (tracker) tracker.recordKill(session, id, true);
 
                 const currentFM = refs.familyMemberRef.current;
                 if (currentFM && !currentFM.rescued) {
@@ -915,7 +992,7 @@ export class GameSessionSetup {
             playerMesh.rotation.set(0, 0, 0);
 
             // Reset material colors (Reversing the "Burned" look)
-            this.resetPlayerVisuals(playerMesh, PLAYER_CHARACTER.color);
+            this.resetPlayerVisuals(playerMesh, PLAYER_CHARACTER.color.num);
         }
 
         if (playerGroup) {
@@ -1011,8 +1088,8 @@ export class GameSessionSetup {
 
         // 6.2 PLAYER & FAMILY MEMBER POSITIONING
         if (refs.playerGroupRef.current) {
-            const spawn = currentSectorData.playerSpawn;
-            refs.playerGroupRef.current.position.set(spawn.x, spawn.y || 0, spawn.z);
+            const spawn = currentSectorData.playerSpawn || { x: 0, y: 0, z: 0 };
+            refs.playerGroupRef.current.position.set(spawn.x || 0, spawn.y || 0, spawn.z || 0);
             engine.camera.snapToTarget();
 
             // Family members:  
@@ -1074,21 +1151,25 @@ export class GameSessionSetup {
                 toRemove.push(obj);
             }
         });
-        toRemove.forEach(obj => { if (obj.parent) obj.parent.remove(obj); });
+
+        // Zero-GC Loop instead of forEach
+        for (let i = 0; i < toRemove.length; i++) {
+            const obj = toRemove[i];
+            if (obj.parent) obj.parent.remove(obj);
+        }
 
         // Zero-GC Arrays reset
         state.enemies.length = 0;
         state.obstacles.length = 0;
         state.chests.length = 0;
-        state.triggers.length = 0;
+        state.triggers.reset();
         state.bloodDecals.length = 0;
 
         state.statusFlags &= ~PlayerStatusFlags.DEAD;
         state.statsBuffer[PlayerStatID.HP] = state.statsBuffer[PlayerStatID.MAX_HP];
         state.statsBuffer[PlayerStatID.STAMINA] = state.statsBuffer[PlayerStatID.MAX_STAMINA];
 
-
-        // VINTERDÖD FIX: Reset simulation timers to prevent lockout
+        // Reset simulation timers to prevent lockout
         state.simTime = 0;
         state.lastShotTime = 0;
         state.reloadEndTime = 0;
@@ -1110,7 +1191,7 @@ export class GameSessionSetup {
         AssetLoader.getInstance().clearCache();
 
         const engine = WinterEngine.getInstance();
-        // VINTERDÖD FIX: Idempotent disablement.
+        // Idempotent disablement.
         // Only disable input if this session is the one currently driving the engine.
         // This prevents a "late" cleanup from disabling input for a newly mounted sector.
         if (engine.onUpdateContext === session) {

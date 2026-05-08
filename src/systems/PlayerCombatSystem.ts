@@ -4,7 +4,8 @@ import { WeaponHandler } from './WeaponHandler';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { System, SystemID } from './System';
-import { InputAction } from '../core/engine/InputTypes';
+import { InputAction } from '../core/engine/InputManager';
+import { WinterEngine } from '../core/engine/WinterEngine';
 
 export class PlayerCombatSystem implements System {
     readonly systemId = SystemID.PLAYER_COMBAT;
@@ -127,7 +128,7 @@ export class PlayerCombatSystem implements System {
     }
 
     clear() {
-        const engine = (window as any).WinterEngineInstance;
+        const engine = WinterEngine.getInstance();
         const scene = engine?.scene;
         if (!scene) return;
 

@@ -1,6 +1,12 @@
 import { WeaponType } from '../../../content/weapons';
-import { InteractionType } from '../../../systems/InteractionTypes';
-import { StatusEffectType } from '../../../content/perks';
+import { InteractionType, InteractionPromptId, MetaActionId } from '../../../systems/ui/UIEventBridge';
+import { StatusEffectID } from '../../../content/perks';
+
+export const MAX_STATUS_EFFECTS = 16;
+export const MAX_PASSIVES = 16;
+export const MAX_BUFFS = 16;
+export const MAX_DEBUFFS = 16;
+export const MAX_MAP_ITEMS = 128;
 
 // ============================================================================
 // HUD & ZERO-GC TYPES
@@ -16,12 +22,6 @@ export interface HudVector2 {
   z: number;
 }
 
-export interface HudBossInfo {
-  active: boolean;
-  name: string;
-  hp: number;
-  maxHp: number;
-}
 
 export enum MapItemType {
   POI = 0,
@@ -55,7 +55,7 @@ export interface MapItem {
 }
 
 export interface StatusEffectData {
-  type: StatusEffectType;
+  type: StatusEffectID;
   duration: number;
   maxDuration: number;
   intensity: number;
@@ -79,21 +79,8 @@ export interface DebugInfoData {
   };
 }
 
-export interface InteractionPromptData {
-  active: boolean;
-  type: InteractionType;
-  label: string;
-  targetId: string;
-  x: number;
-  y: number;
-}
 
 
-export interface DialogueLineData {
-  active: boolean;
-  text: string;
-  speaker: string;
-}
 
 export enum DiscoveryType {
   CLUE = 0,
@@ -126,26 +113,9 @@ export enum OverlayType {
   RESET_CONFIRM = 17
 }
 
-export interface DiscoveryEvent {
-  active: boolean;
-  id: string;
-  type: DiscoveryType;
-  title: string;
-  details: string;
-  timestamp: number;
-}
-
-export interface SectorStatsData {
-  unlimitedAmmo: boolean;
-  unlimitedThrowables: boolean;
-  isInvincible: boolean;
-  waveActive: boolean;
-  waveKills: number;
-  waveTarget: number;
-  currentWave: number;
-  totalWaves: number;
-}
-
+/**
+ * HUD STATE (SMI-Hardened & Zero-GC)
+ */
 export interface HudState {
   // --- DOD BUFFERS (Zero-GC / O(1)) ---
   statsBuffer: Float32Array;
@@ -165,8 +135,12 @@ export interface HudState {
   activeWeapon: WeaponType;
   isReloading: boolean;
 
-  // Complex state slices
-  boss: HudBossInfo;
+  // Complex state slices (FLATTENED for Zero-GC)
+  bossActive: boolean;
+  bossName: string;
+  bossHp: number;
+  bossMaxHp: number;
+
   bossSpawned: boolean;
   bossDefeated: boolean;
   familyFound: boolean;
@@ -196,40 +170,82 @@ export interface HudState {
   poisFoundCount: number;
   collectiblesFoundCount: number;
   fps: number;
-  sectorStats: SectorStatsData;
+
+  // Sector Stats (FLATTENED)
+  unlimitedAmmo: boolean;
+  unlimitedThrowables: boolean;
+  isInvincible: boolean;
+  waveActive: boolean;
+  waveKills: number;
+  waveTarget: number;
+  currentWave: number;
+  totalWaves: number;
 
   // Real-time telemetry (Synced from persistent stats + session)
   enemyKills: Float64Array;
   seenEnemies: number[];
   seenBosses: number[];
 
-  // Status & Buffs
-  statusEffects: StatusEffectData[];
+  // Status & Buffs (SoA Pattern)
+  StatusEffectIDs: Int32Array;
+  statusEffectDurations: Float32Array;
+  statusEffectMaxDurations: Float32Array;
+  statusEffectIntensities: Float32Array;
+  statusEffectProgress: Float32Array;
+  statusEffectsCount: number;
+
   isDisoriented: boolean;
-  activePassives: StatusEffectType[];
-  activeBuffs: StatusEffectType[];
-  activeDebuffs: StatusEffectType[];
+  activePassives: Int32Array;
+  activePassivesCount: number;
+  activeBuffs: Int32Array;
+  activeBuffsCount: number;
+  activeDebuffs: Int32Array;
+  activeDebuffsCount: number;
 
   // Death details
   killerName: string;
   killerAttackName: string;
   killedByEnemy: boolean;
   lethalSourceId: number;      // Specific ID (EnemyType or Boss ID)
-  lethalStatusEffect: number;  // StatusEffectType that caused the final tick (if any)
+  lethalStatusEffect: number;  // StatusEffectID that caused the final tick (if any)
 
   // Exploration & Environment
   mapItems: MapItem[];
+  mapItemsCount: number;
   debugMode: boolean;
   debugInfo: DebugInfoData;
   systems: any[]; // Consider typing if you pass specific System data to UI
 
-  // Cinematics & Interactions
-  currentLine: DialogueLineData;
+  // Cinematics & Interactions (FLATTENED)
+  dialogueActive: boolean;
+  dialogueText: string;
+  dialogueSpeaker: string;
   cinematicActive: boolean;
-  interactionPrompt: InteractionPromptData;
+
+  interactionActive: boolean;
+  interactionType: InteractionType;
+  interactionLabel: string;
+  interactionTargetId: string;
+  interactionX: number;
+  interactionY: number;
+  interactionId: InteractionPromptId;
+
   hudVisible: boolean;
   sectorName: string;
   isMobileDevice: boolean;
-  discovery: DiscoveryEvent;
+
+  discoveryActive: boolean;
+  discoveryId: string;
+  discoveryType: DiscoveryType;
+  discoveryTitle: string;
+  discoveryDetails: string;
+  discoveryTimestamp: number;
+
   challengeTiers: Int32Array;
+  lastMetaSignal: MetaActionId;
+  metaSignalTimestamp: number;
+
+  isCritical: boolean;
+  isGibMaster: boolean;
+  isQuickFinger: boolean;
 }

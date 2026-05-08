@@ -125,6 +125,8 @@ export const en = {
         peak_aggression: "PEAK AGGRESSION",
         tactical_usage: "TACTICAL USAGE",
         signature_weapon: "SIGNATURE WEAPON",
+        time_played: "TIME PLAYED",
+        distance_run: "DISTANCE RUN",
         comfort_weapon: "COMFORT WEAPON",
         enhanced_state: "ENHANCED STATE",
         resilience: "RESILIENCE",
@@ -324,6 +326,8 @@ export const en = {
         thrown: "THROWN",
         total_damage: "TOTAL DAMAGE",
         enemy_undiscovered_hint: "Face this enemy in the wasteland to unlock its biological data and combat statistics.",
+        sector_undiscovered_hint: "This sector has not been reached yet. Complete previous objectives to unlock local data.",
+        clue_undiscovered_hint: "Search the environment for clues to unlock this entry.",
         perk_undiscovered_hint: "Acquire this perk during a mission to unlock its detailed performance analytics and tactical description.",
         avg_distance: "AVG DISTANCE / SECTOR",
         aggression_ratio: "AGGRESSION RATIO",
@@ -401,6 +405,10 @@ export const en = {
         challenge_tier: "TIER {tier}",
         tracked_challenges: "TRACKED CHALLENGES",
         active_perks: "ACTIVE PERKS",
+        unknown: "UNKNOWN",
+        skip_epilogue_error: "Skip Epilogue (Error Loading)",
+        skip_prologue_error: "Skip Prologue (Error Loading)",
+        go_to_story_point: "Go to story point {num}",
     },
     challenges: {
         title: "Challenges",
@@ -414,7 +422,7 @@ export const en = {
         knee_capper: { title: "Knee Capper", desc: "Eliminate {target} Runners" },
         tank_buster: { title: "Tank Buster", desc: "Eliminate {target} heavy Tanks" },
         boss_slayer: { title: "Boss Slayer", desc: "Eliminate {target} legendary Bosses" },
-        marksman: { title: "Marksman", desc: "Eliminate {target} enemies with headshots" },
+        gibber: { title: "Gibber", desc: "Eliminate {target} enemies by blowing them apart" },
         pyromaniac: { title: "Pyromaniac", desc: "Eliminate {target} enemies with fire" },
         shock_therapy: { title: "Shock Therapy", desc: "Eliminate {target} enemies with electricity" },
         demolition_expert: { title: "Demolition Expert", desc: "Eliminate {target} enemies with explosions" },
@@ -541,7 +549,7 @@ export const en = {
         adrenaline: "ADRENALINE",
         adrenaline_desc: "Increase maximum stamina",
         reflex: "REFLEXES",
-        reflex_description: "Increased maximum movement speed",
+        reflex_desc: "Increased maximum movement speed",
     },
     perks: {
         // Passives
@@ -1005,7 +1013,9 @@ export const en = {
             shots: "SHOTS",
             accuracy: "ACCURACY",
             kills: "KILLS",
+            gibbed: "GIBBED",
             throwables: "THROWABLES",
+            explosive_hits: "EXPLOSIVE HITS",
             unit_kpm: "K/M"
         }
     }

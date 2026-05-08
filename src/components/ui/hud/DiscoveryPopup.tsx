@@ -10,7 +10,7 @@ import { PERKS, PerkCategory } from '../../../content/perks';
 import { CLUES } from '../../../content/clues';
 import { POIS } from '../../../content/pois';
 import { COLLECTIBLES } from '../../../content/collectibles';
-import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputTypes';
+import { MetaActionId } from '../../../systems/ui/UIEventBridge';
 
 interface DiscoveryPopupProps {
   onOpenAdventureLog: (tab?: DiscoveryType, itemId?: string) => void;
@@ -63,10 +63,9 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
     const closeDiscovery = () => {
       setVisible(false);
       const state = HudStore.getState();
-      if (state.discovery.active) {
-        HudStore.update({
-          ...state,
-          discovery: { ...state.discovery, active: false }
+      if (state.discoveryActive) {
+        HudStore.patch({
+          discoveryActive: false
         });
       }
     };
@@ -77,25 +76,25 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
   useEffect(() => {
     if (!visible) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const action = INPUT_KEY_MAP[e.key];
-      if (action === InputAction.ENTER) {
-        e.preventDefault();
-        e.stopPropagation();
-        handleInteraction();
+    let lastProcessedTimestamp = 0;
+    const unsubscribe = HudStore.subscribe((state) => {
+      if (state.metaSignalTimestamp > lastProcessedTimestamp) {
+        lastProcessedTimestamp = state.metaSignalTimestamp;
+        if (state.lastMetaSignal === MetaActionId.NAV_CONFIRM) {
+          handleInteraction();
+        }
       }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
+    });
+
+    return unsubscribe;
   }, [visible, handleInteraction]);
 
   const handleAnimationEnd = () => {
     setVisible(false);
     const state = HudStore.getState();
-    if (state.discovery.active) {
-      HudStore.update({
-        ...state,
-        discovery: { ...state.discovery, active: false }
+    if (state.discoveryActive) {
+      HudStore.patch({
+        discoveryActive: false
       });
     }
   };
@@ -140,10 +139,16 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
 
       case DiscoveryType.PERK:
         title = t('ui.discovered_perk');
-        const perk = PERKS[Number(id)];
-        icon = perk?.icon || '✨';
-        const catKey = perk?.category === PerkCategory.PASSIVE ? 'categories.passive' : (perk?.category === PerkCategory.BUFF ? 'categories.buff' : 'categories.debuff');
-        subtitle = `${t(catKey)}: ${t(perk?.displayName || '')}`;
+        const perkId = Number(id);
+        const perk = PERKS[perkId];
+        if (perk) {
+          icon = perk.icon || '✨';
+          const catKey = DataResolver.getPerkCategoryKey(perk.category);
+          subtitle = `${t(catKey)}: ${t(perk.displayName)}`;
+        } else {
+          icon = '✨';
+          subtitle = t('ui.unknown_perk');
+        }
         break;
 
       default:
@@ -161,7 +166,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
     <div
       key={activeDiscovery.timestamp}
       onAnimationEnd={handleAnimationEnd}
-      className="fixed top-12 left-1/2 -translate-x-1/2 z-[200] pointer-events-auto"
+      className="fixed top-12 left-1/2 -translate-x-1/2 z-[10000] pointer-events-auto"
       style={{
         display: visible ? 'block' : 'none',
         animation: visible ? `discovery-pop 4500ms cubic-bezier(0.25, 1, 0.5, 1) forwards` : 'none'
@@ -196,8 +201,8 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         @keyframes discovery-pop {
           0% { opacity: 0; transform: translateX(-50%) translateY(40px) scale(0.85); filter: blur(10px); }
           10% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.05); filter: blur(0px); }
-          15% { transform: translateX(-50%) scale(1); }
-          85% { opacity: 1; transform: translateX(-50%) translateY(-5px) scale(1); }
+          15% { transform: translateX(-50%) scale(1); filter: blur(0px); }
+          85% { opacity: 1; transform: translateX(-50%) translateY(-5px) scale(1); filter: blur(0px); }
           100% { opacity: 0; transform: translateX(-50%) translateY(-25px) scale(0.95); }
         }
       `}</style>

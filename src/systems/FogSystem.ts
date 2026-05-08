@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { WinterEngine } from '../core/engine/WinterEngine';
 import { WindSystem } from './WindSystem';
 import { createFogMaterial } from '../utils/assets/materials_fog';
 import { System, SystemID } from './System';
@@ -25,6 +26,7 @@ export class FogSystem implements System {
 
     private targetColor: THREE.Color = new THREE.Color(0.7, 0.75, 0.8);
     private fogCount: number = 0;
+    private _smoothWind = new THREE.Vector2(0, 0);
 
     constructor(scene: THREE.Scene, wind: WindSystem, camera: THREE.Camera) {
         this.scene = scene;
@@ -105,7 +107,7 @@ export class FogSystem implements System {
     }
 
     public update(ctx: any, delta: number, simTime: number, renderTime: number): void {
-        const engine = (window as any).WinterEngineInstance;
+        const engine = WinterEngine.getInstance();
         if (!engine?.settings?.volumetricFog) {
             if (this.fogMesh && this.fogMesh.visible) this.fogMesh.visible = false;
             if (this.scene.fog) (this.scene.fog as THREE.FogExp2).density = 0;
@@ -114,8 +116,13 @@ export class FogSystem implements System {
 
         if (!this.fogMesh || !this.fogMesh.visible || this.fogCount === 0) return;
 
-        const wx = this.wind.current.x * 2.5;
-        const wz = this.wind.current.y * 2.5;
+        // Apply smoothing to the wind force for volumetric fog planes
+        // This prevents the "fast reaction" artifacts in the atmosphere.
+        const lerpFactor = 1.0 - Math.exp(-0.25 * delta);
+        this._smoothWind.lerp(this.wind.current, lerpFactor);
+
+        const wx = this._smoothWind.x * 2.5;
+        const wz = this._smoothWind.y * 2.5;
 
         const centerX = this.camera.position?.x || 0;
         const centerZ = this.camera.position?.z || 0;
@@ -129,7 +136,7 @@ export class FogSystem implements System {
             const uniforms = this.fogMaterial.uniforms;
             uniforms.uTime.value = renderTime * 0.001;
             uniforms.uWind.value.set(this.wind.current.x, this.wind.current.y);
-            
+
             // Resolve Depth Texture and Resolution from Engine Instance
             if (engine.depthTexture) uniforms.uDepthTexture.value = engine.depthTexture;
             if (engine.renderer) {

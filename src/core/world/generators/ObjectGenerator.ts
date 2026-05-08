@@ -4,7 +4,7 @@ import { MATERIALS, GEOMETRY, ModelFactory } from '../../../utils/assets';
 import { EffectManager, EffectType, SubEffectType } from '../../../systems/EffectManager';
 import { FXParticleType } from '../../../types/FXTypes';
 import { SectorContext, ChestType, TerminalType } from '../../../game/session/SectorTypes';
-import { InteractionShape } from '../../../systems/InteractionTypes';
+import { InteractionShape } from '../../../systems/ui/UIEventBridge';
 import { ZOMBIE_TYPES } from '../../../content/enemies/zombies';
 import { EnemyType } from '../../../entities/enemies/EnemyTypes';
 import { MaterialType } from '../../../content/environment';
@@ -615,7 +615,7 @@ export const ObjectGenerator = {
         lowerMesh.castShadow = true; lowerMesh.receiveShadow = true;
         group.add(lowerMesh);
 
-        // VINTERDÖD: Add interior walkable floor
+        // Add interior walkable floor
         const floor = new THREE.Mesh(SHARED_GEO.plane, MATERIALS.concrete);
         floor.scale.set(width - 0.2, depth - 0.2, 1);
         floor.rotation.x = -Math.PI / 2;

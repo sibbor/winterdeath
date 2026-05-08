@@ -7,19 +7,15 @@ import { System, SystemID } from './System';
 import { FXParticleType } from '../types/FXTypes';
 import { ChunkManager } from '../core/world/ChunkManager';
 import { SPATIAL_CONFIG } from '../config/SpatialConfig';
+import { WinterEngine } from '../core/engine/WinterEngine';
 
+import { WaterFloraType, WaterBodyType, WaterShape, WaterBodyDef } from '../types/WaterTypes';
 interface WaterBind {
     uTime: { value: number };
     uWaterDirection?: { value: THREE.Vector2 };
     uWaveStrength?: { value: number };
     uClarity?: { value: number };
 }
-
-export enum WaterFloraType {
-    LILY = 0,
-    SEAWEED = 1
-}
-
 export interface LakeFloraInstance {
     type: WaterFloraType;
     position: THREE.Vector3;
@@ -34,26 +30,6 @@ export const _buoyancyResult = { inWater: false, waterLevel: 0, depth: 0, maxDep
 const _sharedDummy = new THREE.Object3D();
 const _sharedDummyFlower = new THREE.Object3D();
 const _sharedWhiteColor = new THREE.Color(0xffffff);
-
-export enum WaterBodyType {
-    LAKE = 0,
-    POND = 1,
-    POOL = 2,
-    STREAM = 3,
-    WATERFALL = 4
-}
-
-export enum WaterShape {
-    RECT = 0,
-    CIRCLE = 1
-}
-
-export interface WaterBodyDef {
-    shape: WaterShape;
-    buoyancyForce: number;
-    ambientRippleChance: number;
-    maxDepth: number; // Vertical distance to the bottom
-}
 
 const WATER_BODY_PRESETS: Record<WaterBodyType, WaterBodyDef> = {
     [WaterBodyType.LAKE]: { shape: WaterShape.CIRCLE, buoyancyForce: 10, ambientRippleChance: 0.0, maxDepth: 8.0 },
@@ -200,7 +176,7 @@ export class WaterSystem implements System {
 
             const chunkBuckets = new Map<number, THREE.Matrix4[]>();
             const seaweedLen = seaweed.length;
-            
+
             for (let i = 0; i < seaweedLen; i++) {
                 const s = seaweed[i];
                 const strands = 3 + Math.floor(Math.random() * 3);
@@ -211,7 +187,7 @@ export class WaterSystem implements System {
                     _sharedDummy.scale.set(s.scale.x, s.scale.y, s.scale.x);
                     _sharedDummy.rotation.y = s.rotationY + Math.random() * Math.PI;
                     _sharedDummy.updateMatrix();
-                    
+
                     const key = ChunkManager.getSmiKey(ChunkManager.getCoordIndex(_sharedDummy.position.x), ChunkManager.getCoordIndex(_sharedDummy.position.z));
                     let bucket = chunkBuckets.get(key);
                     if (!bucket) {
@@ -244,7 +220,7 @@ export class WaterSystem implements System {
 
             const chunkBuckets = new Map<number, { matrices: THREE.Matrix4[], flowerMatrices: THREE.Matrix4[] }>();
             const liliesLen = lilies.length;
-            
+
             for (let i = 0; i < liliesLen; i++) {
                 const l = lilies[i];
                 const key = ChunkManager.getSmiKey(ChunkManager.getCoordIndex(l.position.x), ChunkManager.getCoordIndex(l.position.z));
@@ -275,7 +251,7 @@ export class WaterSystem implements System {
             chunkBuckets.forEach((data, key) => {
                 const ix = key >> 8;
                 const iz = key & 0xFF;
-                
+
                 const pads = new THREE.InstancedMesh(padGeo, MATERIALS.waterLily, data.matrices.length);
                 pads.frustumCulled = true;
                 pads.userData.material = 'PLANT';
@@ -426,7 +402,7 @@ export class WaterSystem implements System {
     public update(ctx: any, delta: number, simTime: number, renderTime: number): void {
 
         // Auto-sync with Engine Wind
-        const engine = (window as any).WinterEngineInstance;
+        const engine = WinterEngine.getInstance();
         if (engine && engine.wind) {
             this.setWaterDynamics(engine.wind.strength, engine.wind.current);
         }
@@ -439,8 +415,9 @@ export class WaterSystem implements System {
         }
 
         // Apply water inertia (mass) - water reacts much slower than leaves
-        this.waterStrength += (this.targetWaterStrength - this.waterStrength) * (delta * 0.2);
-        this.waterDirection.lerp(this.targetWaterDirection, delta * 0.1);
+        // Significant mass increase (0.2 -> 0.05, 0.1 -> 0.02)
+        this.waterStrength += (this.targetWaterStrength - this.waterStrength) * (delta * 0.05);
+        this.waterDirection.lerp(this.targetWaterDirection, delta * 0.02);
 
         // Animate aquatic shaders
         for (let i = 0; i < this.boundUniforms.length; i++) {

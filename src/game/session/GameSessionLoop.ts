@@ -8,8 +8,6 @@ import { HudSystem } from '../../systems/HudSystem';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { FootprintSystem } from '../../systems/FootprintSystem';
 import { FXSystem } from '../../systems/FXSystem';
-import { ProjectileSystem } from '../../systems/ProjectileSystem';
-import { TriggerHandler } from '../../systems/TriggerHandler';
 import { CAMERA_HEIGHT, HEALTH_CRITICAL_THRESHOLD } from '../../content/constants';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
@@ -22,7 +20,7 @@ import { HudStore } from '../../store/HudStore';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
 import { VehicleManager } from '../../systems/VehicleManager';
-import { InteractionType } from '../../systems/InteractionTypes';
+import { InteractionType } from '../../systems/ui/UIEventBridge';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { NavigationSystem } from '../../systems/NavigationSystem';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
@@ -112,7 +110,7 @@ function getCachedNumberString(num: number): string {
     return _numberStringCache[rounded];
 }
 
-// --- VINTERDÖD: PRE-ALLOCATED SECTOR UPDATE CONTEXT (ZERO-GC) ---
+// --- PRE-ALLOCATED SECTOR UPDATE CONTEXT (ZERO-GC) ---
 const _sectorUpdateContext: SectorUpdateContext = {
     delta: 0,
     simTime: 0,
@@ -157,7 +155,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         }
     };
 
-    // --- VINTERDÖD: BIND STABLE CALLBACKS TO SECTOR CONTEXT ---
+    // --- BIND STABLE CALLBACKS TO SECTOR CONTEXT ---
     _sectorUpdateContext.onAction = callbacks.onAction;
     _sectorUpdateContext.spawnZombie = callbacks.spawnZombie;
     _sectorUpdateContext.spawnHorde = callbacks.spawnHorde;
@@ -266,7 +264,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 if (!isBoss && callbacks.onDiscovery) {
                     callbacks.onDiscovery(
                         DiscoveryType.ZOMBIE,
-                        String(enemy.type),
+                        enemy.type as any, // SMI ID
                         'ui.enemy_encountered',
                         DataResolver.getZombieName(enemy.type)
                     );
@@ -415,7 +413,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
         if (isInteractionPaused) {
             refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
-            // VINTERDÖD: Vi behåller renderingen igång även under station-interaktioner
+            // Vi behåller renderingen igång även under station-interaktioner
             // för att se bakgrunden (snö, vind, etc).
             engine.isRenderingPaused = false;
             return;
@@ -598,21 +596,21 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         if (playerGroup) {
             session.playerPos = playerGroup.position;
 
-            // VINTERDÖD: Update the hardened navigation grid
+            // Update the hardened navigation grid
             NavigationSystem.tick(playerGroup.position, simTime);
         }
 
         session.update(delta, propsRef.current.mapId || 0);
         monitor.end('session_update');
 
-        // VINTERDÖD: Chunk-based spatial mounting
+        // Chunk-based spatial mounting
         monitor.begin('chunk_mounting');
         if (playerGroup) {
             ChunkManager.update(playerGroup.position, engine.scene);
         }
         monitor.end('chunk_mounting');
 
-        // VINTERDÖD: Sector Specific Logic Updates
+        // Sector Specific Logic Updates
         monitor.begin('sector_update');
         _sectorUpdateContext.delta = delta;
         _sectorUpdateContext.simTime = simTime;
@@ -681,7 +679,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 _animStateScratch.simTime = state.simTime;
                 _animStateScratch.currentSpeedRatio = state.currentSpeedRatio;
                 _animStateScratch.seed = 0;
-                // VINTERDÖD: CACHED ENTITY STATE (Phase 13)
+                // CACHED ENTITY STATE (Phase 13)
                 _animStateScratch.nodes = state.nodes;
                 _animStateScratch.baseScale = state.baseScale;
                 _animStateScratch.baseY = state.baseY;
@@ -793,12 +791,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                     (state as any).lastInteractionLabel = currentLabel;
 
                     const hData = HudStore.getState();
-                    hData.interactionPrompt.active = true;
-                    hData.interactionPrompt.type = currentInter;
-                    hData.interactionPrompt.label = currentLabel;
-                    hData.interactionPrompt.targetId = state.interaction.targetId;
-                    hData.interactionPrompt.x = screenX;
-                    hData.interactionPrompt.y = screenY;
+                    hData.interactionActive = true;
+                    hData.interactionType = currentInter;
+                    hData.interactionLabel = currentLabel;
+                    hData.interactionTargetId = state.interaction.targetId;
+                    hData.interactionX = screenX;
+                    hData.interactionY = screenY;
 
                     HudStore.update(hData);
                 }
@@ -806,7 +804,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 if (refs.interactionTypeRef.current !== InteractionType.NONE) {
                     refs.interactionTypeRef.current = InteractionType.NONE;
                     const hData = HudStore.getState();
-                    hData.interactionPrompt.active = false;
+                    hData.interactionActive = false;
                     HudStore.update(hData);
                 }
             }
@@ -817,7 +815,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 (state as any).lastInteractionLabel = null;
 
                 const hData = HudStore.getState();
-                hData.interactionPrompt.active = false;
+                hData.interactionActive = false;
                 HudStore.update(hData);
             }
         }
@@ -846,30 +844,11 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
         // Only run these if not cinematic or boss intro
         if (!isCinematic && !isBossIntro) {
-            // 15. EnemyManager is now handled by the engine's system registry (fixed-step)
-
-            // 16. ProjectileSystem
-            monitor.begin('ProjectileSystem');
-            ProjectileSystem.update(_gameContext, state.projectiles, state.fireZones, delta, simTime, renderTime);
-            monitor.end('ProjectileSystem');
-
             if (movementSystem) movementSystem.update(session, delta, simTime, renderTime);
             if (combatSystem) combatSystem.update(session, delta, simTime, renderTime);
             if (lootSystem) lootSystem.update(session, delta, simTime, renderTime);
             if (familySystem) familySystem.update(session, delta, simTime, renderTime);
         }
-
-        // 17. TriggerSystem
-        monitor.begin('triggers');
-        _triggerOptionsScratch.t = activeCallbacks.t || callbacks.t;
-        _triggerOptionsScratch.spawnBubble = activeCallbacks.spawnBubble;
-        _triggerOptionsScratch.onTrigger = activeCallbacks.onTrigger;
-        _triggerOptionsScratch.onAction = activeCallbacks.onAction;
-        _triggerOptionsScratch.onDiscovery = activeCallbacks.onDiscovery || callbacks.onDiscovery;
-        _triggerOptionsScratch.playSound = (id: SoundID) => audioEngine.playSound(id);
-        _triggerOptionsScratch.activeFamilyMembers = refs.activeFamilyMembers.current;
-        TriggerHandler.checkTriggers(playerGroup.position, state, _triggerOptionsScratch, simTime);
-        monitor.end('triggers');
 
         // 17.5 Orchestration Fix: Finalize Stats & Sync HUD (ZERO-LATENCY)
         // Only run if not cinematic/boss intro (matching simulation block)
@@ -878,7 +857,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 const oldMask = state.previousPerkMask;
                 statsSystem.update(session, delta, simTime, renderTime);
 
-                // VINTERDÖD FIX: If any effect was added OR expired, bypass 15fps sync for instant HUD update
+                // If any effect was added OR expired, bypass 15fps sync for instant HUD update
                 // This now catches everything from Enemies, Projectiles, Movement, and Triggers!
                 if (state.previousPerkMask !== oldMask) {
                     const hudMesh = refs.playerMeshRef.current;
@@ -892,7 +871,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         // 18. Emitters Update
         monitor.begin('active_effects');
 
-        // VINTERDÖD: FXSystem update must run at render rate for visual smoothness.
+        // FXSystem update must run at render rate for visual smoothness.
         FXSystem.updateFX(engine.scene, state.particles, state.bloodDecals, _fxCallbacks, delta, simTime, renderTime, state);
         WeaponFX.updateFX(delta, session);
         PerkFX.updateFX(session, delta, simTime, renderTime);
@@ -916,7 +895,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                         if (isBacklogged && !eff.essential) continue;
 
                         if (!eff.lastEmit) eff.lastEmit = 0;
-                        if (simTime - eff.lastEmit > eff.interval) { // VINTERDÖD FIX: simTime istället för now
+                        if (simTime - eff.lastEmit > eff.interval) { // simTime istället för now
                             eff.lastEmit = simTime;
                             if (eff.offset) {
                                 _vInteraction.copy(eff.offset);
@@ -1038,7 +1017,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
             (hudData as any).debugMode = propsRef.current.debugMode;
             (hudData as any).systems = session.getSystems();
-            (hudData as any).interactionPrompt = HudStore.getState().interactionPrompt;
+            (hudData as any).interactionActive = HudStore.getState().interactionActive;
 
             HudStore.update(hudData);
         }

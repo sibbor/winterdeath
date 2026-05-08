@@ -1,5 +1,6 @@
 import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
-import { StatusEffectType } from './perks';
+import { StatusEffectID } from './perks';
+import { ColorPair } from '../utils/ui/ColorUtils';
 import { DamageID } from '../entities/player/CombatTypes';
 
 // --- ENUMS (SMI Optimized) ---
@@ -12,20 +13,20 @@ export enum WeaponCategory {
   TOOL = 4
 }
 
-export const WeaponCategoryColors = [
-  '#ef4444', // PRIMARY (Red-500)
-  '#fbbf24', // SECONDARY (Yellow-400)
-  '#10b981', // THROWABLE (Emerald-500)
-  '#a855f7', // SPECIAL (Purple-500)
-  '#3b82f6'  // TOOL (Blue-500)
+export const WeaponCategoryColors: ColorPair[] = [
+  { num: 0xef4444, str: '#ef4444' }, // PRIMARY (Red-500)
+  { num: 0xfbbf24, str: '#fbbf24' }, // SECONDARY (Yellow-400)
+  { num: 0x10b981, str: '#10b981' }, // THROWABLE (Emerald-500)
+  { num: 0xa855f7, str: '#a855f7' }, // SPECIAL (Purple-500)
+  { num: 0x3b82f6, str: '#3b82f6' }  // TOOL (Blue-500)
 ];
 
 export const WEAPON_CATEGORY_NAMES: Record<WeaponCategory, string> = {
-    [WeaponCategory.PRIMARY]: 'categories.primary',
-    [WeaponCategory.SECONDARY]: 'categories.secondary',
-    [WeaponCategory.THROWABLE]: 'categories.throwable',
-    [WeaponCategory.SPECIAL]: 'categories.special',
-    [WeaponCategory.TOOL]: 'categories.tool',
+  [WeaponCategory.PRIMARY]: 'categories.primary',
+  [WeaponCategory.SECONDARY]: 'categories.secondary',
+  [WeaponCategory.THROWABLE]: 'categories.throwable',
+  [WeaponCategory.SPECIAL]: 'categories.special',
+  [WeaponCategory.TOOL]: 'categories.tool',
 };
 
 /**
@@ -42,7 +43,7 @@ export enum WeaponBehavior {
 export { DamageID as WeaponType };
 
 export interface StatusEffect {
-  type: StatusEffectType;
+  type: StatusEffectID;
   duration: number;       // Seconds the effect lasts
   damagePerTick?: number; // Optional DOT (Damage Over Time)
 }
@@ -85,7 +86,7 @@ const PNG_PATH = '/assets/icons/weapons/';
 
 /**
  * DATABASE (Contiguous Array for O(1) Lookup)
- * VINTERDÖD: This array is indexed directly by DamageID (SMI).
+ * This array is indexed directly by DamageID (SMI).
  * No string-hashing or Map overhead during high-frequency combat updates.
  */
 export const WEAPONS: WeaponStats[] = [];
@@ -135,13 +136,13 @@ WEAPONS[DamageID.MOLOTOV] = {
   name: DamageID.MOLOTOV, displayName: 'weapons.molotov', category: WeaponCategory.THROWABLE, behavior: WeaponBehavior.THROWABLE,
   damage: 15, range: 20, radius: 5, reloadTime: 1500, magSize: 5,
   icon: PNG_PATH + 'molotov.png', iconIsPng: true,
-  impactType: EnemyDeathState.BURNED, statusEffect: { type: StatusEffectType.BURNING, duration: 5.0, damagePerTick: 5 }
+  impactType: EnemyDeathState.BURNED, statusEffect: { type: StatusEffectID.BURNING, duration: 5.0, damagePerTick: 5 }
 };
 WEAPONS[DamageID.FLASHBANG] = {
   name: DamageID.FLASHBANG, displayName: 'weapons.flashbang', category: WeaponCategory.THROWABLE, behavior: WeaponBehavior.THROWABLE,
   damage: 0, range: 20, radius: 10, reloadTime: 1500, magSize: 5,
   icon: PNG_PATH + 'flashbang.png', iconIsPng: true,
-  impactType: EnemyDeathState.SHOT, statusEffect: { type: StatusEffectType.STUNNED, duration: 3.5 }
+  impactType: EnemyDeathState.SHOT, statusEffect: { type: StatusEffectID.STUNNED, duration: 3.5 }
 };
 
 // --- SPECIAL ---
@@ -155,13 +156,13 @@ WEAPONS[DamageID.FLAMETHROWER] = {
   name: DamageID.FLAMETHROWER, displayName: 'weapons.flamethrower', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.CONTINUOUS,
   damage: 6, fireRate: 35, range: 10, spread: 0.25, magSize: 100, isEnergy: true,
   icon: PNG_PATH + 'flamethrower.png', iconIsPng: true,
-  impactType: EnemyDeathState.BURNED, statusEffect: { type: StatusEffectType.BURNING, duration: 4.5, damagePerTick: 10 }
+  impactType: EnemyDeathState.BURNED, statusEffect: { type: StatusEffectID.BURNING, duration: 4.5, damagePerTick: 10 }
 };
 WEAPONS[DamageID.ARC_CANNON] = {
   name: DamageID.ARC_CANNON, displayName: 'weapons.arc_cannon', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.CONTINUOUS,
   damage: 14, fireRate: 90, range: 15, spread: 0.05, magSize: 100, isEnergy: true,
   icon: PNG_PATH + 'arc_cannon.png', iconIsPng: true,
-  piercing: true, pierceDecay: 0.5, impactType: EnemyDeathState.ELECTROCUTED, statusEffect: { type: StatusEffectType.ELECTRIFIED, duration: 2.5 }
+  piercing: true, pierceDecay: 0.5, impactType: EnemyDeathState.ELECTROCUTED, statusEffect: { type: StatusEffectID.ELECTRIFIED, duration: 2.5 }
 };
 
 // --- TOOL ---

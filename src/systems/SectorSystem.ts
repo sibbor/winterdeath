@@ -5,12 +5,12 @@ import { SectorDef } from '../game/session/SectorTypes';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { EnemyType, NoiseType } from '../entities/enemies/EnemyTypes';
 import { LIGHT_SYSTEM } from '../content/constants';
-import { InteractionType } from './InteractionTypes';
+import { InteractionType } from './ui/UIEventBridge';
 import { FXParticleType, FXDecalType } from '../types/FXTypes';
 import { ToneType, SoundID } from '../utils/audio/AudioTypes';
 
 /**
- * VINTERDÖD: Dynamic Sector Registry
+ * Dynamic Sector Registry
  * Prevents all sectors from being initialized at startup.
  */
 const SECTOR_LOADERS: Record<number, () => Promise<any>> = {
@@ -30,7 +30,7 @@ const OSC_MAP: Record<ToneType, OscillatorType> = {
 
 const SECTOR_CACHE: Record<number, SectorDef> = {};
 
-// VINTERDÖD: Fallback for components that still expect a synchronous SECTORS object.
+// Fallback for components that still expect a synchronous SECTORS object.
 // These will return undefined if not pre-loaded via SectorSystem.loadSector().
 export const SECTORS: Record<number, SectorDef> = new Proxy({}, {
     get: (_, property) => SECTOR_CACHE[Number(property)]
@@ -73,7 +73,7 @@ export class SectorSystem implements System {
     }
 
     /**
-     * VINTERDÖD: Asynchronously loads a sector definition into the cache.
+     * Asynchronously loads a sector definition into the cache.
      * Must be called before creating the SectorSystem or accessing SECTORS[id].
      */
     static async loadSector(mapId: number): Promise<SectorDef> {

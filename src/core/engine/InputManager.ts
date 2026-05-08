@@ -1,6 +1,93 @@
 import * as THREE from 'three';
-import { InputAction, InputState, INPUT_KEY_MAP } from './InputTypes';
 import { System, SystemID } from '../../systems/System';
+import { UIEventBridge, MetaActionId } from '../../systems/ui/UIEventBridge';
+import { GameSessionLogic } from '../../game/session/GameSessionLogic';
+
+/**
+ * Strictly typed numeric enum for engine input actions.
+ * Use explicit integers to ensure dense array allocation in the InputState buffer.
+ * SMI-Hardened to avoid string-based lookups in the engine hot-path.
+ */
+export enum InputAction {
+    UP = 0,
+    LEFT = 1,
+    DOWN = 2,
+    RIGHT = 3,
+    DODGE = 4,      // Usually Space
+    FIRE = 5,       // Mouse Left / Right Stick Trigger
+    RELOAD = 6,     // Usually R
+    INTERACT = 7,   // Usually E
+    FLASHLIGHT = 8, // Usually F
+    MAP = 9,        // Usually M
+    SLOT_1 = 10,
+    SLOT_2 = 11,
+    SLOT_3 = 12,
+    SLOT_4 = 13,
+    SLOT_5 = 14,
+    SCROLL_UP = 15,
+    SCROLL_DOWN = 16,
+    ENTER = 17,
+    ESCAPE = 18,
+    SHIFT = 19,
+    CTRL = 20,
+
+    ARROW_UP = 21,
+    ARROW_DOWN = 22,
+    ARROW_LEFT = 23,
+    ARROW_RIGHT = 24,
+
+    COUNT = 25
+}
+
+/**
+ * Mapping keyboard event keys to SMI-hardened InputActions.
+ * Zero-GC: Using a Record for O(1) lookup during key events.
+ */
+export const INPUT_KEY_MAP: Record<string, InputAction> = {
+    'w': InputAction.UP, 'W': InputAction.UP,
+    'a': InputAction.LEFT, 'A': InputAction.LEFT,
+    's': InputAction.DOWN, 'S': InputAction.DOWN,
+    'd': InputAction.RIGHT, 'D': InputAction.RIGHT,
+    ' ': InputAction.DODGE,
+    'r': InputAction.RELOAD, 'R': InputAction.RELOAD,
+    'e': InputAction.INTERACT, 'E': InputAction.INTERACT,
+    'f': InputAction.FLASHLIGHT, 'F': InputAction.FLASHLIGHT,
+    'm': InputAction.MAP, 'M': InputAction.MAP,
+    'Enter': InputAction.ENTER,
+    'Escape': InputAction.ESCAPE,
+    'Shift': InputAction.SHIFT,
+    'Control': InputAction.CTRL,
+    'ArrowUp': InputAction.ARROW_UP,
+    'ArrowDown': InputAction.ARROW_DOWN,
+    'ArrowLeft': InputAction.ARROW_LEFT,
+    'ArrowRight': InputAction.ARROW_RIGHT,
+    '1': InputAction.SLOT_1, '2': InputAction.SLOT_2, '3': InputAction.SLOT_3, '4': InputAction.SLOT_4, '5': InputAction.SLOT_5
+};
+
+/**
+ * Optimized InputState for Zero-GC performance.
+ */
+export interface InputState {
+    /**
+     * Binary action flags stored in a typed array.
+     * Use InputAction enum as the index.
+     * Guaranteed SMI (Small Integer) values for V8 JIT performance.
+     */
+    actions: Uint8Array;
+
+    /** Analog mouse position (-1 to 1) */
+    mouse: THREE.Vector2;
+    /** Raw direction vector for aiming */
+    aimVector: THREE.Vector2;
+    /** Current screen space cursor position */
+    cursorPos: { x: number, y: number };
+    /** Mobile/Touch joystick movement vector */
+    joystickMove: THREE.Vector2;
+    /** Mobile/Touch joystick aiming/firing vector */
+    joystickAim: THREE.Vector2;
+    /** Whether the pointer is currently locked by the browser */
+    locked: boolean;
+}
 
 // Pre-calculated math constants
 const MAX_AIM_RADIUS = 300;
@@ -15,6 +102,7 @@ export class InputManager implements System {
     enabled = true;
     persistent = true;
     public state: InputState;
+    private physicalActions: Uint8Array;
     private isEnabled: boolean = false;
     private virtualAimPos: THREE.Vector2 = new THREE.Vector2(0, -200);
 
@@ -30,6 +118,7 @@ export class InputManager implements System {
 
     public onKeyDown?: (key: string) => void;
     public onKeyUp?: (key: string) => void;
+    public onMetaAction?: (actionId: MetaActionId) => void;
 
     constructor() {
         this.screenWidth = window.innerWidth;
@@ -49,7 +138,9 @@ export class InputManager implements System {
             locked: false
         };
 
-        // --- VINTERDÖD: ZERO-GC PRE-BINDING ---
+        this.physicalActions = new Uint8Array(InputAction.COUNT);
+
+        // --- ZERO-GC PRE-BINDING ---
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handleKeyUp = this.handleKeyUp.bind(this);
         this.handleMouseMove = this.handleMouseMove.bind(this);
@@ -57,7 +148,6 @@ export class InputManager implements System {
         this.handleMouseUp = this.handleMouseUp.bind(this);
         this.handleWheel = this.handleWheel.bind(this);
         this.handleResize = this.handleResize.bind(this);
-        this.handleVirtualKey = this.handleVirtualKey.bind(this);
         this.handleLockChange = this.handleLockChange.bind(this);
         this.handleFocus = this.handleFocus.bind(this);
         this.handleBlur = this.handleBlur.bind(this);
@@ -79,12 +169,13 @@ export class InputManager implements System {
      */
     private resetState() {
         this.state.actions.fill(0);
+        this.physicalActions.fill(0);
         this.state.joystickMove.set(0, 0);
         this.state.joystickAim.set(0, 0);
     }
 
     /**
-     * VINTERDÖD: Direct buffer check.
+     * Direct buffer check.
      * High-frequency systems should use state.actions[InputAction.X] directly.
      */
     public isPressed(action: InputAction): boolean {
@@ -101,7 +192,6 @@ export class InputManager implements System {
         window.addEventListener('resize', this.handleResize);
         window.addEventListener('focus', this.handleFocus);
         window.addEventListener('blur', this.handleBlur);
-        window.addEventListener('hud-virtual-key', this.handleVirtualKey as any);
         document.addEventListener('pointerlockchange', this.handleLockChange);
     }
 
@@ -115,7 +205,6 @@ export class InputManager implements System {
         window.removeEventListener('resize', this.handleResize);
         window.removeEventListener('focus', this.handleFocus);
         window.removeEventListener('blur', this.handleBlur);
-        window.removeEventListener('hud-virtual-key', this.handleVirtualKey as any);
         document.removeEventListener('pointerlockchange', this.handleLockChange);
     }
 
@@ -128,6 +217,61 @@ export class InputManager implements System {
         this.screenHalfHeight = this.screenHeight * 0.5;
     }
 
+    public update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
+        if (!this.isEnabled) return;
+
+        // Sync physical actions to state first
+        this.state.actions.set(this.physicalActions);
+
+        // High-frequency polling from SMI scratchpad (Zero-GC)
+        const isInteracting = UIEventBridge.getInteractionTrigger();
+        if (isInteracting) {
+            this.state.actions[InputAction.INTERACT] = 1;
+        }
+
+        // Consume and handle UI Meta Actions
+        const uiAction = UIEventBridge.consumeUiAction();
+        if (uiAction !== MetaActionId.NONE) {
+            this.handleMetaAction(uiAction);
+        }
+    }
+
+    /**
+     * Translates high-level UI commands into engine states or triggers.
+     */
+    private handleMetaAction(actionId: MetaActionId) {
+        // 1. Direct Action Mapping (Simulation Flags)
+        switch (actionId) {
+            case MetaActionId.INTERACT_TAP:
+                // Set flag for one frame (will be cleared by reset/update or handled in same tick)
+                this.state.actions[InputAction.INTERACT] = 1;
+                break;
+            case MetaActionId.RELOAD_TAP:
+                this.state.actions[InputAction.RELOAD] = 1;
+                break;
+            case MetaActionId.WEAPON_SLOT_1:
+                this.state.actions[InputAction.SLOT_1] = 1;
+                break;
+            case MetaActionId.WEAPON_SLOT_2:
+                this.state.actions[InputAction.SLOT_2] = 1;
+                break;
+            case MetaActionId.WEAPON_SLOT_3:
+                this.state.actions[InputAction.SLOT_3] = 1;
+                break;
+            case MetaActionId.WEAPON_SLOT_4:
+                this.state.actions[InputAction.SLOT_4] = 1;
+                break;
+            case MetaActionId.WEAPON_SLOT_5:
+                this.state.actions[InputAction.SLOT_5] = 1;
+                break;
+        }
+
+        // 2. Callback for high-level logic (Menus, Screen Toggles)
+        if (this.onMetaAction) {
+            this.onMetaAction(actionId);
+        }
+    }
+
     private handleKeyDown(e: KeyboardEvent) {
         if (!this.isEnabled) return;
 
@@ -137,7 +281,16 @@ export class InputManager implements System {
 
         const action = INPUT_KEY_MAP[e.key];
         if (action !== undefined) {
-            this.state.actions[action] = 1;
+            this.physicalActions[action] = 1;
+
+            // Signal navigation events to the UI via Zero-GC SMI bridge
+            if (action === InputAction.ESCAPE) {
+                UIEventBridge.signalEngineEvent(MetaActionId.NAV_BACK);
+            } else if (action === InputAction.ENTER) {
+                UIEventBridge.signalEngineEvent(MetaActionId.NAV_CONFIRM);
+            } else if (action === InputAction.MAP) {
+                UIEventBridge.signalEngineEvent(MetaActionId.NAV_MAP);
+            }
         }
     }
 
@@ -148,24 +301,7 @@ export class InputManager implements System {
 
         const action = INPUT_KEY_MAP[e.key];
         if (action !== undefined) {
-            this.state.actions[action] = 0;
-        }
-    }
-    
-    private handleVirtualKey(e: CustomEvent) {
-        if (!this.isEnabled) return;
-        const { key, pressed } = e.detail;
-        
-        // Try mapping from key string first
-        let action = INPUT_KEY_MAP[key];
-        
-        // If not found, it might be a direct enum index passed as a string or number
-        if (action === undefined && !isNaN(key)) {
-            action = Number(key);
-        }
-
-        if (action !== undefined && action < InputAction.COUNT) {
-            this.state.actions[action] = pressed ? 1 : 0;
+            this.physicalActions[action] = 0;
         }
     }
 
@@ -206,12 +342,12 @@ export class InputManager implements System {
 
     private handleMouseDown(e: MouseEvent) {
         if (!this.isEnabled) return;
-        this.state.actions[InputAction.FIRE] = 1;
+        this.physicalActions[InputAction.FIRE] = 1;
     }
 
     private handleMouseUp(e: MouseEvent) {
         if (!this.isEnabled) return;
-        this.state.actions[InputAction.FIRE] = 0;
+        this.physicalActions[InputAction.FIRE] = 0;
     }
 
     private handleWheel(e: WheelEvent) {
@@ -234,7 +370,7 @@ export class InputManager implements System {
         // Ensure the locked flag is synchronized with the actual document state
         // and re-enable input if it was supposed to be enabled.
         this.state.locked = !!document.pointerLockElement;
-        
+
         // We don't automatically .enable() here because some overlays might want it disabled,
         // but we ensure that if we ARE enabled, we are truly capturing.
     }
@@ -270,4 +406,4 @@ export class InputManager implements System {
     public setJoystickAim(x: number, y: number) {
         this.state.joystickAim.set(x, y);
     }
-}
+}

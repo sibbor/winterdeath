@@ -48,7 +48,7 @@ export const patchTreeWindMaterial = <T extends THREE.Material>(material: T): T 
             // Calculate height-based bend factor (h=0 at base, h=1 for grass, h=4-7 for trees)
             float h = abs(position.y);
             
-            // VINTERDÖD: Non-linear curve (Square Root) gives small objects a "head start" 
+            // Non-linear curve (Square Root) gives small objects a "head start" 
             // while tapering off for tall objects.
             // Grass (h=1) -> ~0.8 (Very reactive)
             // Trees (h=5) -> ~1.5 (Tapered, stable)
@@ -63,18 +63,18 @@ export const patchTreeWindMaterial = <T extends THREE.Material>(material: T): T 
                 vec2 diff = wPos.xz - interactor.xz;
                 float d = length(diff);
                 if (d < interactor.w) {
-                    float push = (1.0 - (d / interactor.w)) * 0.35; // VINTERDÖD: Reduced push for stiff trees
+                    float push = (1.0 - (d / interactor.w)) * 0.35; // Reduced push for stiff trees
                     bendVec += normalize(diff) * push;
                 }
             }
 
             // Combine Wind + Interaction
-            // VINTERDÖD: Global wind boost for better visibility on small tufts
+            // Global wind boost for better visibility on small tufts
             vec3 vWind = vec3(uWind.x, 0.0, uWind.y) * 2.2; 
             vec3 vBend = vec3(bendVec.x, 0.0, bendVec.y);
 
             // Transform vectors from World Space to the Instance's Local Space
-            // VINTERDÖD: Normalize basis vectors to ignore instance scale (prevents squashed bending)
+            // Normalize basis vectors to ignore instance scale (prevents squashed bending)
             mat3 basis = mat3(iMat);
             mat3 normalMatrix = mat3(normalize(basis[0]), normalize(basis[1]), normalize(basis[2]));
             mat3 invRot = transpose(normalMatrix);
@@ -135,7 +135,7 @@ export const patchGrassWindMaterial = <T extends THREE.Material>(material: T): T
 
             vec4 wPos = iMat * vec4(position, 1.0);
             
-            // VINTERDÖD: Exponential Grass Bend.
+            // Exponential Grass Bend.
             // Anchored at base (y=0), highly reactive at tips.
             float h = max(0.0, position.y);
             float bendFactor = pow(h, 1.5) * 1.2;
@@ -219,7 +219,7 @@ export const patchHedgeWindMaterial = <T extends THREE.Material>(material: T): T
 
             vec4 wPos = iMat * vec4(position, 1.0);
             
-            // VINTERDÖD: Hedge Stiffness logic.
+            // Hedge Stiffness logic.
             // Hedges are dense; they should only sway subtly.
             // position.y is 0..1 (from SHARED_GEO.hedgeBox)
             float stiffness = 0.05;

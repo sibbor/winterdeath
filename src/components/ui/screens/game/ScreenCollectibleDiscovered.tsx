@@ -45,7 +45,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
                 {/* Collector Icon/Preview */}
                 <div className="w-48 h-48 sm:w-64 sm:h-64 my-6 relative flex items-center justify-center">
                     <div className="absolute inset-0 bg-yellow-500/5 rounded-full blur-3xl animate-pulse"></div>
-                    <TacticalCard color="#eab308" className="relative w-full h-full p-4">
+                    <TacticalCard color={0xeab308} className="relative w-full h-full p-4">
                         <CollectiblePreview type={def.modelType} autoReady />
                     </TacticalCard>
                 </div>

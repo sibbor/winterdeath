@@ -2,10 +2,20 @@ import * as THREE from 'three';
 import { SectorContext } from '../game/session/SectorTypes';
 import { ObjectGenerator } from '../core/world/generators/ObjectGenerator';
 import { GEOMETRY, MATERIALS } from './assets';
+import { MapItemType } from '../components/ui/hud/HudTypes';
 
 // --- ZERO-GC SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
 const _pointsScratch: THREE.Vector3[] = [];
+const _materialCache = new Map<number, THREE.LineBasicMaterial>();
+
+// Hex Constants
+const DEBUG_COLORS = {
+    RED: 0xff0000,
+    GREEN: 0x00ff00,
+    BLUE: 0x0000ff,
+    YELLOW: 0xffff00
+};
 
 /**
  * DebugVisualizer
@@ -21,11 +31,11 @@ export const DebugVisualizer = {
     visualizeSector: (ctx: SectorContext, sectorDef?: any) => {
         if (!ctx.debugMode) return;
 
-        // VINTERDÖD FIX: Clear old debug objects to prevent geometry leaks and FPS drops
+        // Clear old debug objects to prevent geometry leaks and FPS drops
         const existing = ctx.scene.getObjectByName('DEBUG_GROUP');
         if (existing) {
             ctx.scene.remove(existing);
-            
+
             // Traverse and dispose to free VRAM (Geometries, Materials, and Textures)
             existing.traverse((child: any) => {
                 if (child.userData.isSharedAsset) return; // Skip shared engine assets
@@ -57,14 +67,14 @@ export const DebugVisualizer = {
         if (sectorDef?.bounds) {
             const w = sectorDef.bounds.width;
             const d = sectorDef.bounds.depth;
-            
+
             _pointsScratch.length = 0;
             _pointsScratch.push(new THREE.Vector3(-w / 2, 0.5, -d / 2));
             _pointsScratch.push(new THREE.Vector3(w / 2, 0.5, -d / 2));
             _pointsScratch.push(new THREE.Vector3(w / 2, 0.5, d / 2));
             _pointsScratch.push(new THREE.Vector3(-w / 2, 0.5, d / 2));
-            
-            DebugVisualizer.drawPolygon(ctx, _pointsScratch, 'red', 1, debugGroup);
+
+            DebugVisualizer.drawPolygon(ctx, _pointsScratch, DEBUG_COLORS.RED, 1, debugGroup);
         }
 
         // 2. Visualize Triggers
@@ -77,7 +87,7 @@ export const DebugVisualizer = {
                 if (item.points && item.points.length > 0) {
                     const pLen = item.points.length;
                     _pointsScratch.length = 0;
-                    
+
                     for (let j = 0; j < pLen; j++) {
                         const pt = item.points[j];
                         // Using individual components to avoid per-point object creation where possible
@@ -85,10 +95,10 @@ export const DebugVisualizer = {
                         _pointsScratch.push(new THREE.Vector3(pt.x, 1, pt.z));
                     }
 
-                    let color: 'red' | 'green' | 'blue' | 'yellow' = 'yellow';
-                    if (item.type === 'FOREST') color = 'green';
-                    else if (item.type === 'LAKE') color = 'blue';
-                    else if (item.type === 'MOUNTAIN') color = 'red';
+                    let color = DEBUG_COLORS.YELLOW;
+                    if (item.type === MapItemType.FOREST) color = DEBUG_COLORS.GREEN;
+                    else if (item.type === MapItemType.LAKE) color = DEBUG_COLORS.BLUE;
+                    else if (item.type === MapItemType.MOUNTAIN) color = DEBUG_COLORS.RED;
 
                     DebugVisualizer.drawPolygon(ctx, _pointsScratch, color, 1, debugGroup);
                 }
@@ -96,17 +106,20 @@ export const DebugVisualizer = {
         }
     },
 
-    drawPolygon: (ctx: SectorContext, points: THREE.Vector3[], color: 'red' | 'green' | 'blue' | 'yellow' = 'green', yOffset: number = 1, parent?: THREE.Object3D) => {
+    drawPolygon: (ctx: SectorContext, points: THREE.Vector3[], color: number = 0x00ff00, yOffset: number = 1, parent?: THREE.Object3D) => {
         if (!ctx.debugMode || !points || points.length === 0) return;
 
         // Optimization: Use a temporary array for the closed loop to avoid spreading
         const closedPoints = points.slice();
         closedPoints.push(points[0]);
-        
+
         const geo = new THREE.BufferGeometry().setFromPoints(closedPoints);
-        const mat = color === 'red' ? MATERIALS.debugRed :
-            color === 'green' ? MATERIALS.debugGreen :
-                color === 'blue' ? MATERIALS.debugBlue : MATERIALS.debugYellow;
+
+        let mat = _materialCache.get(color);
+        if (!mat) {
+            mat = new THREE.LineBasicMaterial({ color, userData: { isSharedAsset: true } });
+            _materialCache.set(color, mat);
+        }
 
         const line = new THREE.Line(geo, mat);
         line.position.y = yOffset;
@@ -115,13 +128,16 @@ export const DebugVisualizer = {
         else ctx.scene.add(line);
     },
 
-    drawPath: (ctx: SectorContext, points: THREE.Vector3[], color: 'red' | 'green' | 'blue' | 'yellow' = 'blue', yOffset: number = 0, parent?: THREE.Object3D) => {
+    drawPath: (ctx: SectorContext, points: THREE.Vector3[], color: number = 0x0000ff, yOffset: number = 0, parent?: THREE.Object3D) => {
         if (!ctx.debugMode || !points || points.length === 0) return;
 
         const geo = new THREE.BufferGeometry().setFromPoints(points);
-        const mat = color === 'red' ? MATERIALS.debugRed :
-            color === 'green' ? MATERIALS.debugGreen :
-                color === 'blue' ? MATERIALS.debugBlue : MATERIALS.debugYellow;
+
+        let mat = _materialCache.get(color);
+        if (!mat) {
+            mat = new THREE.LineBasicMaterial({ color, userData: { isSharedAsset: true } });
+            _materialCache.set(color, mat);
+        }
 
         const line = new THREE.Line(geo, mat);
         line.position.y = yOffset;
@@ -136,14 +152,14 @@ export const DebugVisualizer = {
         const beam = new THREE.Mesh(GEOMETRY.debugMarker, MATERIALS.debugBeam);
         beam.position.set(x, 0, z);
         beam.userData.isSharedAsset = true; // Protect from disposal
-        
+
         if (parent) parent.add(beam);
         else ctx.scene.add(beam);
 
         const sprite = ObjectGenerator.createTextSprite(label);
         sprite.scale.set(12, 3, 1);
         sprite.position.set(x, height + 4, z);
-        
+
         if (parent) parent.add(sprite);
         else ctx.scene.add(sprite);
     },
@@ -151,16 +167,28 @@ export const DebugVisualizer = {
     visualizeTriggers: (ctx: SectorContext, parent?: THREE.Object3D) => {
         if (!ctx.debugMode || !ctx.triggers) return;
 
-        for (let i = 0; i < ctx.triggers.length; i++) {
-            const trig = ctx.triggers[i];
+        const triggers = ctx.triggers;
+        const activeFlags = triggers.getActiveFlags();
+        const posX = triggers.getPositionsX();
+        const posZ = triggers.getPositionsZ();
+        const radiiSq = triggers.getRadiiSq();
+        const halfWidths = triggers.getHalfWidths();
+        const halfDepths = triggers.getHalfDepths();
+        const metadata = triggers.metadata;
 
-            DebugVisualizer.spawnMarker(ctx, trig.position.x, trig.position.z, 2, trig.id.toUpperCase(), parent);
+        for (let i = 0; i < triggers.capacity; i++) {
+            if (activeFlags[i] === 0) continue;
 
-            let drawRadius = trig.radius;
-            if (!drawRadius && trig.size) {
-                drawRadius = Math.max(trig.size.width, trig.size.depth);
+            const tx = posX[i];
+            const tz = posZ[i];
+            const id = metadata[i].id;
+
+            DebugVisualizer.spawnMarker(ctx, tx, tz, 2, id.toUpperCase(), parent);
+
+            let drawRadius = Math.sqrt(radiiSq[i]);
+            if (halfWidths[i] > 0) {
+                drawRadius = Math.max(halfWidths[i], halfDepths[i]);
             }
-            if (!drawRadius) drawRadius = 2.0;
 
             // PERFORMANCE FIX: Reuse shared ring geometry and scale it
             const ring = new THREE.Mesh(GEOMETRY.debugRing, MATERIALS.debugTriggerRing);
@@ -168,11 +196,11 @@ export const DebugVisualizer = {
             ring.scale.set(drawRadius, drawRadius, 1);
 
             ring.rotation.x = -Math.PI / 2;
-            ring.position.set(trig.position.x, 0.1, trig.position.z);
+            ring.position.set(tx, 0.1, tz);
 
             if (parent) parent.add(ring);
             else ctx.scene.add(ring);
         }
     }
 };
-
+

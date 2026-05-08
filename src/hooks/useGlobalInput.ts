@@ -3,7 +3,7 @@ import { UiSounds } from '../utils/audio/AudioLib';
 import { OverlayType } from '../components/ui/hud/HudTypes';
 import { GameScreen } from '../types/SessionTypes';
 import { HudStore } from '../store/HudStore';
-import { InputAction, INPUT_KEY_MAP } from '../core/engine/InputTypes';
+import { MetaActionId } from '../systems/ui/UIEventBridge';
 
 interface UIActions {
     setActiveOverlay: (val: OverlayType | null) => void;
@@ -38,29 +38,17 @@ export const useGlobalInput = (
     }, [state.screen, activeOverlay, actions]);
 
     useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // high-resolution monotonic timer for input throttling
-            const now = performance.now();
+        let lastProcessedTimestamp = 0;
+
+        const handleSignal = (signal: MetaActionId) => {
             const current = overlayRef.current;
             const screen = stateRef.current;
             const acts = actionsRef.current;
+            const isDead = HudStore.getState().isDead;
 
-            const action = INPUT_KEY_MAP[e.key];
-
-            // ESC Logic
-            if (action === InputAction.ESCAPE) {
-                // Throttle ESC to prevent double-toggle on rapid presses
-                if (now - lastEscTimeRef.current < 150) return;
-                lastEscTimeRef.current = now;
-
-                // Disable ESC during critical cutscenes
+            // 1. BACK / ESCAPE Signal
+            if (signal === MetaActionId.NAV_BACK) {
                 if (current === 'DIALOGUE' || current === 'INTRO') return;
-
-                e.preventDefault();
-                e.stopPropagation();
-
-                // Read death state synchronously from the store to bypass React cycle
-                const isDead = HudStore.getState().isDead;
 
                 if (current === OverlayType.TELEPORT) {
                     acts.setTeleportInitialCoords(null);
@@ -77,9 +65,9 @@ export const useGlobalInput = (
                     }
                     UiSounds.playClick();
                 } else if (
-                    current === OverlayType.PAUSE || 
-                    current === OverlayType.MAP || 
-                    current === OverlayType.COLLECTIBLE || 
+                    current === OverlayType.PAUSE ||
+                    current === OverlayType.MAP ||
+                    current === OverlayType.COLLECTIBLE ||
                     (current && current >= OverlayType.STATION_ARMORY && current <= OverlayType.STATION_STATISTICS)
                 ) {
                     if (current === OverlayType.COLLECTIBLE && acts.onCollectibleClose) {
@@ -94,15 +82,13 @@ export const useGlobalInput = (
                         acts.setActiveOverlay(OverlayType.SETTINGS);
                     } else {
                         acts.setActiveOverlay(OverlayType.PAUSE);
-                        // Always release pointer lock when entering menu
                         if (document.pointerLockElement) document.exitPointerLock();
                     }
                     UiSounds.playClick();
                 }
             }
-            // Map Logic (M)
-            else if (action === InputAction.MAP) {
-                const isDead = HudStore.getState().isDead;
+            // 2. MAP Signal
+            else if (signal === MetaActionId.NAV_MAP) {
                 if (!current && !isDead) {
                     acts.setActiveOverlay(OverlayType.MAP);
                     if (document.pointerLockElement) document.exitPointerLock();
@@ -113,13 +99,26 @@ export const useGlobalInput = (
                     UiSounds.playClick();
                 }
             }
+            // 3. LOG Signal
+            else if (signal === MetaActionId.NAV_LOG) {
+                if (!current && !isDead) {
+                    acts.setActiveOverlay(OverlayType.ADVENTURE_LOG);
+                    if (document.pointerLockElement) document.exitPointerLock();
+                    UiSounds.playConfirm();
+                }
+            }
         };
 
-        // Standard capture: true ensures we catch input before other UI elements consume it.
-        window.addEventListener('keydown', handleKeyDown, { capture: true });
+        // --- SMI SIGNAL POLLING ---
+        // We subscribe to the HudStore which is updated by the Engine.
+        // This eliminates the need for 'keydown' listeners on the window.
+        const unsubscribe = HudStore.subscribe((state) => {
+            if (state.metaSignalTimestamp > lastProcessedTimestamp) {
+                lastProcessedTimestamp = state.metaSignalTimestamp;
+                handleSignal(state.lastMetaSignal);
+            }
+        });
 
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown, { capture: true });
-        };
-    }, []); // Bound exactly once on mount
+        return unsubscribe;
+    }, []);
 };

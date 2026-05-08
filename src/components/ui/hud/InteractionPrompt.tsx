@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { t } from '../../../utils/i18n';
-import { InteractionType } from '../../../systems/InteractionTypes';
+import { InteractionType, InteractionPromptId } from '../../../systems/ui/UIEventBridge';
 
 interface InteractionPromptProps {
     type: InteractionType;
@@ -12,7 +12,7 @@ interface InteractionPromptProps {
 // ============================================================================
 // PERFORMANCE: Static Configuration Array (O(1) SMI Lookup)
 // Replaced the Record/Map with a contiguous array for optimized memory access.
-// VINTERDÖD: Ensures Zero-GC and prevents hidden-class deoptimization.
+// Ensures Zero-GC and prevents hidden-class deoptimization.
 // ============================================================================
 const TYPE_CONFIG = [
     { key: 'ui.interact', color: 'border-gray-400 text-white' }, // NONE (0)
@@ -24,6 +24,20 @@ const TYPE_CONFIG = [
     { key: 'ui.interact', color: 'border-gray-400 text-white' }  // KNOCK_ON_PORT (6)
 ];
 
+/**
+ * SMI-to-String key mapping for Zero-GC UI updates.
+ */
+const PROMPT_ID_MAP: Record<number, string> = {
+    [InteractionPromptId.NONE]: 'ui.interact',
+    [InteractionPromptId.ENTER_VEHICLE]: 'ui.enter_vehicle',
+    [InteractionPromptId.EXIT_VEHICLE]: 'ui.exit_vehicle',
+    [InteractionPromptId.PICKUP_COLLECTIBLE]: 'ui.interact_pickup_collectible',
+    [InteractionPromptId.OPEN_CHEST]: 'ui.interact_open_chest',
+    [InteractionPromptId.INTERACT]: 'ui.interact',
+    [InteractionPromptId.PLANT_EXPLOSIVE]: 'ui.interact_blow_up_bus',
+    [InteractionPromptId.KNOCK_ON_PORT]: 'ui.interact_knock_on_port'
+};
+
 const DEFAULT_CONFIG = TYPE_CONFIG[0];
 
 const InteractionPrompt = React.forwardRef<any, InteractionPromptProps>(({
@@ -34,17 +48,24 @@ const InteractionPrompt = React.forwardRef<any, InteractionPromptProps>(({
     const containerRef = React.useRef<HTMLDivElement>(null);
 
     React.useImperativeHandle(ref, () => ({
-        update: (type: InteractionType, label: string) => {
+        update: (type: InteractionType, label: string, promptId?: InteractionPromptId) => {
             if (!labelRef.current || !containerRef.current) return;
-            
+
             const config = TYPE_CONFIG[type] || DEFAULT_CONFIG;
-            const textKey = label ? label : config.key;
-            
+
+            // Priority: PromptId SMI -> Dynamic Label -> Config Default
+            let textKey = config.key;
+            if (promptId && PROMPT_ID_MAP[promptId]) {
+                textKey = PROMPT_ID_MAP[promptId];
+            } else if (label) {
+                textKey = label;
+            }
+
             let translatedText = t(textKey);
             if (!translatedText || translatedText.trim() === '') {
                 translatedText = textKey;
             }
-            
+
             if (labelRef.current.innerText !== translatedText) {
                 labelRef.current.innerText = translatedText;
             }

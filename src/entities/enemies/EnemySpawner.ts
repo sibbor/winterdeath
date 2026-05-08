@@ -47,7 +47,7 @@ export const EnemySpawner = {
         e.hp = e.maxHp;
         e.speed = ENEMY_SPEED[typeKey] * KMH_TO_MS;
         e.score = ENEMY_SCORE[typeKey];
-        e.color = typeData.color;
+        e.color = typeData.color.num;
         e.attacks = typeData.attacks || [];
 
         // Zero-GC: Clear Float32Array
@@ -56,7 +56,7 @@ export const EnemySpawner = {
         // Visual Transformation Data
         e.originalScale = typeData.scale || 1.0;
         e.widthScale = typeData.widthScale || 1.0;
-        // VINTERDÖD: Normalize hitbox to prevent extremely thin hitboxes on high-widthScale variants
+        // Normalize hitbox to prevent extremely thin hitboxes on high-widthScale variants
         e.hitRadius = 0.5 * e.originalScale * Math.max(0.7, e.widthScale);
         e.statusFlags = isBoss ? EnemyFlags.BOSS : 0;
 
@@ -91,7 +91,7 @@ export const EnemySpawner = {
             z = forcedPos.z + (Math.random() - 0.5) * 8;
         } else {
             const angle = Math.random() * Math.PI * 2;
-            // VINTERDÖD: Increased distance to ensure spawns happen outside the camera frustum (~70-80 units)
+            // Increased distance to ensure spawns happen outside the camera frustum (~70-80 units)
             const dist = 75 + Math.random() * 35;
             x = playerPos.x + Math.cos(angle) * dist;
             z = playerPos.z + Math.sin(angle) * dist;
@@ -123,7 +123,7 @@ export const EnemySpawner = {
             hp: ENEMY_HP[typeKey],
             speed: ENEMY_SPEED[typeKey] * KMH_TO_MS,
             score: ENEMY_SCORE[typeKey],
-            color: typeData.color,
+            color: typeData.color.num,
             attacks: typeData.attacks || [],
             attackCooldowns: new Float32Array(32),
             abilityCooldown: 0,
@@ -173,7 +173,7 @@ export const EnemySpawner = {
             animRotX: 0,
             animRotZ: 0,
             baseY: 0,
-            originalColor: typeData.color,
+            originalColor: typeData.color.num,
             lastAIState: AIState.IDLE,
             lastGrappleDmg: 0,
             lastDamageType: DamageID.NONE,
@@ -193,7 +193,9 @@ export const EnemySpawner = {
             fallStartY: 0,
             _accumulatedDamage: 0,
             _lastDamageTextTime: 0,
-            attackOffset: 0
+            attackOffset: 0,
+            currentChunkKey: 0,
+            bucketIndex: -1
         };
 
         const s = enemy.originalScale;
@@ -203,7 +205,7 @@ export const EnemySpawner = {
 
         const enemyIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
         enemyIndicatorRing.rotation.x = -Math.PI / 2;
-        enemyIndicatorRing.position.y = 0.2; // VINTERDÖD: Match family ring height
+        enemyIndicatorRing.position.y = 0.2; // Match family ring height
         enemyIndicatorRing.visible = false;
         g.add(enemyIndicatorRing);
         enemy.indicatorRing = enemyIndicatorRing;
@@ -243,7 +245,7 @@ export const EnemySpawner = {
             maxHp: bossData.hp,
             speed: bossData.speed * KMH_TO_MS,
             score: 3000,
-            color: bossData.color,
+            color: bossData.color.num,
             originalScale: scale,
             widthScale: widthMod,
             hitRadius: 0.5 * scale * Math.max(0.8, widthMod), // Bosses have slightly wider hitboxes
@@ -292,7 +294,7 @@ export const EnemySpawner = {
             animRotX: 0,
             animRotZ: 0,
             baseY: 0,
-            originalColor: bossData.color,
+            originalColor: bossData.color.num,
             lastAIState: AIState.IDLE,
             lastGrappleDmg: 0,
             lastDamageType: DamageID.NONE,
@@ -311,7 +313,9 @@ export const EnemySpawner = {
             fallStartY: 0,
             _accumulatedDamage: 0,
             _lastDamageTextTime: 0,
-            attackOffset: 0
+            attackOffset: 0,
+            currentChunkKey: 0,
+            bucketIndex: -1
         };
 
         boss.userData.entity = enemy;
@@ -319,7 +323,7 @@ export const EnemySpawner = {
         // Ensure boss has an indicator ring for its special attacks
         const bossIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
         bossIndicatorRing.rotation.x = -Math.PI / 2;
-        bossIndicatorRing.position.y = 0.2; // VINTERDÖD: Match family ring height
+        bossIndicatorRing.position.y = 0.2; // Match family ring height
         bossIndicatorRing.visible = false;
         boss.add(bossIndicatorRing);
         enemy.indicatorRing = bossIndicatorRing;

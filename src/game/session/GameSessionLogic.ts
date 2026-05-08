@@ -4,20 +4,17 @@ import { GameCanvasProps } from '../../types/CanvasTypes';
 import { SectorStats } from '../../types/StateTypes';
 import { Enemy, NoiseType, EnemyDeathState, EnemyFlags } from '../../entities/enemies/EnemyTypes';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
-import { SectorTrigger } from '../../systems/TriggerTypes';
 import { RuntimeState } from '../../core/RuntimeState';
 import { System, SystemID } from '../../systems/System';
-import { PlayerDeathState, DamageID } from '../../entities/player/CombatTypes';
-import { KMH_TO_MS } from '../../content/constants';
-import { WEAPONS, PLAYER_BASE_SPEED } from '../../content/constants';
-import { ScrapItem } from '../../systems/WorldLootSystem';
-import { SpatialGrid } from '../../core/world/SpatialGrid';
-import { Obstacle } from '../../core/world/CollisionResolution';
-import { ParticleState } from '../../types/FXTypes';
-import { PlayerStatID, PlayerStatusFlags, PlayerStatsUtils, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
-import { VehicleID, VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
-import { InteractionType } from '../../systems/InteractionTypes';
+import { DamageID } from '../../entities/player/CombatTypes';
+import { WEAPONS } from '../../content/constants';
+import { PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
+import { VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
+import { allocateRuntimeState, resetRuntimeState } from '../../core/RuntimeState';
+import { FXSystem } from '../../systems/FXSystem';
+import { SectorID } from './SectorTypes';
+import { FXParticleType } from '../../types/FXTypes';
 
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
@@ -25,14 +22,123 @@ export class GameSessionLogic {
     public debugMode: boolean = false;
     public cameraAngle: number = 0;
     public mapId: number = 0;
-
-
+    public cinematicActive: boolean = false;
     public engine: WinterEngine;
     public state!: RuntimeState;
     public playerPos: THREE.Vector3 | null = null;
     public detectionSystem!: EnemyDetectionSystem;
 
-    static createDefaultSessionStats(props: GameCanvasProps): SectorStats {
+    /**
+     * Zero-GC Reset Logic
+     * * Reuses an existing RuntimeState object to avoid massive re-allocations.
+     */
+    static resetState(state: RuntimeState, props: GameCanvasProps): void {
+        resetRuntimeState(state, props);
+
+        // Update Discovery Sets (Zero-GC: reuse Sets)
+        state.discoverySets.clues.clear();
+        (props.stats.cluesFound || []).forEach((c: any) => state.discoverySets.clues.add(typeof c === 'string' ? c : (c.id || '')));
+
+        state.discoverySets.pois.clear();
+        (props.stats.discoveredPOIs || []).forEach((p: any) => state.discoverySets.pois.add(typeof p === 'string' ? p : (p.id || '')));
+
+        state.discoverySets.collectibles.clear();
+        (props.stats.collectiblesDiscovered || []).forEach((c: any) => state.discoverySets.collectibles.add(typeof c === 'string' ? c : (c.id || '')));
+
+        state.discoverySets.seenEnemies.clear();
+        (props.stats.seenEnemies || []).forEach(e => state.discoverySets.seenEnemies.add(e));
+
+        state.discoverySets.seenBosses.clear();
+        (props.stats.seenBosses || []).forEach(b => state.discoverySets.seenBosses.add(b));
+
+        // Re-calculate Session Stats
+        this.resetSessionStats(state.sessionStats, props);
+
+        // Handle loadout ammo
+        state.weaponAmmo[props.loadout.primary] = WEAPONS[props.loadout.primary]?.magSize || 0;
+        state.weaponAmmo[props.loadout.secondary] = WEAPONS[props.loadout.secondary]?.magSize || 0;
+        state.weaponAmmo[props.loadout.throwable] = WEAPONS[props.loadout.throwable]?.magSize || 0;
+        state.weaponAmmo[props.loadout.special] = WEAPONS[props.loadout.special]?.magSize || 0;
+
+        state.isPlayground = props.currentSector === SectorID.PLAYGROUND;
+
+        // Register callbacks
+        state.callbacks = {
+            onEnemyDiscovered: props.onEnemyDiscovered,
+            onBossDiscovered: props.onBossDiscovered,
+            onCollectibleDiscovered: props.onCollectibleDiscovered,
+            onClueDiscovered: props.onClueDiscovered,
+            onPOIdiscovered: props.onPOIdiscovered,
+            onUpdateLoadout: props.onUpdateLoadout,
+            onInteractionStateChange: props.onInteractionStateChange
+        };
+    }
+
+    static resetSessionStats(stats: SectorStats, props: GameCanvasProps): void {
+        stats.kills = 0;
+        stats.damageDealt = 0;
+        stats.damageTaken = 0;
+        stats.timePlayed = 0;
+        stats.timeElapsed = 0;
+        stats.accuracy = 100;
+        stats.itemsCollected = 0;
+        stats.scrapLooted = 0;
+        stats.shotsFired = 0;
+        stats.shotsHit = 0;
+        stats.throwablesThrown = 0;
+        stats.distanceTraveled = 0;
+        stats.score = 0;
+        stats.chestsOpened = 0;
+        stats.bigChestsOpened = 0;
+        stats.cluesFound.length = 0;
+        stats.maxKillstreak = 0;
+        stats.engagementDistSqKills = 0;
+        stats.spGained = 0;
+        stats.xpGained = 0;
+        stats.dodges = 0;
+        stats.rushes = 0;
+        stats.rushDistance = 0;
+        stats.buffTime = 0;
+        stats.debuffsResisted = 0;
+        stats.crisisSaves = 0;
+        stats.deaths = 0;
+
+        stats.weaponKills.fill(0);
+        stats.weaponDamageDealt.fill(0);
+        stats.weaponShotsFired.fill(0);
+        stats.weaponShotsHit.fill(0);
+        stats.weaponTimeActive.fill(0);
+        stats.weaponEngagementDistSq.fill(0);
+
+        stats.perkTimesGained.fill(0);
+        stats.perkDamageAbsorbed.fill(0);
+        stats.perkDamageDealt.fill(0);
+        stats.perkDebuffsCleansed.fill(0);
+
+        stats.enemyKills.fill(0);
+        stats.enemyDeaths.fill(0);
+        stats.incomingDamageBuffer.fill(0);
+
+        stats.discoveredPOIs.length = 0;
+        stats.seenEnemies.length = 0;
+        stats.seenBosses.length = 0;
+        stats.collectiblesDiscovered.length = 0;
+        stats.aborted = false;
+        stats.familyFound = !!props.familyAlreadyRescued;
+        stats.familyExtracted = false;
+        stats.isExtraction = false;
+        stats.bossDamageDealt = 0;
+        stats.bossDamageTaken = 0;
+        stats.discoveredPerksMap.fill(0);
+    }
+
+    static allocateState(): RuntimeState {
+        const state = allocateRuntimeState();
+        state.sessionStats = this.allocateSessionStats();
+        return state;
+    }
+
+    static allocateSessionStats(): SectorStats {
         return {
             kills: 0,
             damageDealt: 0,
@@ -50,10 +156,8 @@ export class GameSessionLogic {
             chestsOpened: 0,
             bigChestsOpened: 0,
             cluesFound: [],
-
             maxKillstreak: 0,
             engagementDistSqKills: 0,
-
             spGained: 0,
             xpGained: 0,
             dodges: 0,
@@ -63,300 +167,39 @@ export class GameSessionLogic {
             debuffsResisted: 0,
             crisisSaves: 0,
             deaths: 0,
-
-            // --- ZERO-GC WEAPON BUFFERS (Phase 12) ---
             weaponKills: new Float64Array(StatWeaponIndex.COUNT),
             weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
             weaponShotsFired: new Float64Array(StatWeaponIndex.COUNT),
             weaponShotsHit: new Float64Array(StatWeaponIndex.COUNT),
             weaponTimeActive: new Float64Array(StatWeaponIndex.COUNT),
             weaponEngagementDistSq: new Float64Array(StatWeaponIndex.COUNT),
-
-            // --- ZERO-GC PERK BUFFERS (Step 2) ---
             perkTimesGained: new Float64Array(StatPerkIndex.COUNT),
             perkDamageAbsorbed: new Float64Array(StatPerkIndex.COUNT),
             perkDamageDealt: new Float64Array(StatPerkIndex.COUNT),
             perkDebuffsCleansed: new Float64Array(StatPerkIndex.COUNT),
-
             enemyKills: new Float64Array(StatEnemyIndex.COUNT),
             enemyDeaths: new Float64Array(StatEnemyIndex.COUNT),
             incomingDamageBuffer: new Float64Array(64 * 32),
-
             discoveredPOIs: [],
             seenEnemies: [],
             seenBosses: [],
             collectiblesDiscovered: [],
             aborted: false,
-            familyFound: !!props.familyAlreadyRescued,
+            familyFound: false,
             familyExtracted: false,
             isExtraction: false,
             bossDamageDealt: 0,
             bossDamageTaken: 0,
-            discoveredPerks: []
+            discoveredPerksMap: new Uint8Array(256),
+            gibbedEnemies: 0,
+            uniqueEnemiesHitByExplosives: 0,
         };
     }
 
     static createInitialState(props: GameCanvasProps): RuntimeState {
-        const now = performance.now();
-
-        if (!props.stats) {
-            console.error("[GameSessionLogic] CRITICAL: props.stats is undefined!");
-        }
-
-        const sessionStats = this.createDefaultSessionStats(props);
-
-        // --- O(1) DISCOVERY OPTIMIZATION: Build sets from permanent stats ---
-        const discoverySets = {
-            clues: new Set<string>((props.stats.cluesFound || []).map((c: any) => typeof c === 'string' ? c : (c.id || ''))),
-            pois: new Set<string>((props.stats.discoveredPOIs || []).map((p: any) => typeof p === 'string' ? p : (p.id || ''))),
-            collectibles: new Set<string>((props.stats.collectiblesDiscovered || []).map((c: any) => typeof c === 'string' ? c : (c.id || ''))),
-            seenEnemies: new Set<number>(props.stats.seenEnemies || []),
-            seenBosses: new Set<number>(props.stats.seenBosses || [])
-        };
-
-        const buffers = PlayerStatsUtils.initBuffers();
-        const statsBuffer = buffers.statsBuffer;
-
-        // --- O(1) DOD STAT INITIALIZATION ---
-        statsBuffer[PlayerStatID.HP] = props.stats.statsBuffer[PlayerStatID.MAX_HP];
-        statsBuffer[PlayerStatID.MAX_HP] = props.stats.statsBuffer[PlayerStatID.MAX_HP];
-        statsBuffer[PlayerStatID.STAMINA] = props.stats.statsBuffer[PlayerStatID.MAX_STAMINA];
-        statsBuffer[PlayerStatID.MAX_STAMINA] = props.stats.statsBuffer[PlayerStatID.MAX_STAMINA];
-        statsBuffer[PlayerStatID.SPEED] = props.stats.statsBuffer[PlayerStatID.SPEED] || PLAYER_BASE_SPEED;
-        statsBuffer[PlayerStatID.LEVEL] = props.stats.statsBuffer[PlayerStatID.LEVEL];
-        statsBuffer[PlayerStatID.XP] = props.stats.statsBuffer[PlayerStatID.XP];
-        statsBuffer[PlayerStatID.CURRENT_XP] = props.stats.statsBuffer[PlayerStatID.CURRENT_XP];
-        statsBuffer[PlayerStatID.NEXT_LEVEL_XP] = props.stats.statsBuffer[PlayerStatID.NEXT_LEVEL_XP];
-        statsBuffer[PlayerStatID.SKILL_POINTS] = props.stats.statsBuffer[PlayerStatID.SKILL_POINTS];
-        statsBuffer[PlayerStatID.SCRAP] = props.stats.statsBuffer[PlayerStatID.SCRAP];
-
-        // --- INITIALIZE PERSISTENT SESSION TRACKING ---
-        statsBuffer[PlayerStatID.TOTAL_SESSIONS_STARTED]++;
-
-        // --- INITIALIZE MULTIPLIERS (1.0) ---
-        statsBuffer[PlayerStatID.MULTIPLIER_SPEED] = 1.0;
-        statsBuffer[PlayerStatID.MULTIPLIER_RELOAD] = 1.0;
-        statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] = 1.0;
-        statsBuffer[PlayerStatID.MULTIPLIER_DMG_RESIST] = 1.0;
-        statsBuffer[PlayerStatID.MULTIPLIER_RANGE] = 1.0;
-
-        // --- BAKE INITIAL PRE-CALCULATED STATS (Zero-GC) ---
-        statsBuffer[PlayerStatID.FINAL_SPEED] = statsBuffer[PlayerStatID.SPEED] * statsBuffer[PlayerStatID.MULTIPLIER_SPEED] * KMH_TO_MS;
-
-        return {
-            // --- PERSISTENT DATA (DOD & Legacy) ---
-            ...props.stats,
-
-            // --- DOD BUFFER OVERRIDES (Phase 9) ---
-            ...buffers,
-            statusFlags: PlayerStatusFlags.NONE,
-
-            // --- ENEMY STATS BUFFER RESET ---
-            enemyKills: new Float64Array(StatEnemyIndex.COUNT),
-            deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
-            incomingDamageBuffer: new Float64Array(64 * 32),
-
-            // --- PERK STATS BUFFER RESET ---
-            perkTimesGained: new Float64Array(StatPerkIndex.COUNT),
-            perkDamageAbsorbed: new Float64Array(StatPerkIndex.COUNT),
-            perkDamageDealt: new Float64Array(StatPerkIndex.COUNT),
-            perkDebuffsCleansed: new Float64Array(StatPerkIndex.COUNT),
-
-            // --- SESSION STATE ---
-            startTime: performance.now(),
-            activeWeapon: props.loadout.primary,
-            loadout: props.loadout,
-            weaponLevels: props.weaponLevels,
-            weaponAmmo: {
-                [props.loadout.primary]: WEAPONS[props.loadout.primary]?.magSize || 0,
-                [props.loadout.secondary]: WEAPONS[props.loadout.secondary]?.magSize || 0,
-                [props.loadout.throwable]: WEAPONS[props.loadout.throwable]?.magSize || 0,
-                [props.loadout.special]: WEAPONS[props.loadout.special]?.magSize || 0
-            } as any,
-            isReloading: false,
-            reloadEndTime: 0,
-
-            // --- ZERO-GC VECTORS & STATE ---
-            previousPerkMask: 0,
-            dodgeStartTime: 0,
-            dodgeDir: new THREE.Vector3(),
-            isDodging: false,
-            dodgeSmokeSpawned: false,
-
-            invulnerableUntil: 0,
-            spacePressTime: 0,
-            spaceDepressed: false,
-            eDepressed: false,
-            isRushing: false,
-            rushCostPaid: false,
-            wasFiring: false,
-            throwChargeStart: 0,
-            throwChargeRotation: new THREE.Quaternion(),
-            lastShotTime: 0,
-            lastRushEndTime: 0,
-            lastDodgeEndTime: 0,
-            lastReflexShieldTime: 0,
-            lastAdrenalinePatchTime: 0,
-            lastPerfectDodgeTime: 0,
-            lastHeartbeat: 0,
-            rushFactor: 0,
-            currentSpeedRatio: 1.0,
-
-            // --- GAME FEEL & TIME DILATION ---
-            hitStopTime: 0,
-            globalTimeScale: 1.0,
-            killStreakBuffer: new Float32Array(5), // Rolling timestamps for GIB_MASTER
-            lastAdrenalineTime: 0,
-            lastGibMasterTime: 0,
-
-            // --- OBJECT POOLS ---
-            enemies: [] as Enemy[],
-            particles: [] as ParticleState[],
-            activeEffects: [] as any[],
-            projectiles: [] as any[],
-            fireZones: [] as any[],
-            scrapItems: [] as ScrapItem[],
-            chests: [] as any[],
-            bloodDecals: [] as any[],
-
-            // --- TELEMETRY & PROGRESSION ---
-            sessionStats,
-            discoverySets,
-
-            applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => false,
-
-            bossesDefeated: [],
-            familyFound: !!props.familyAlreadyRescued,
-            familyAlreadyRescued: !!props.familyAlreadyRescued,
-            familyExtracted: false,
-            bossPermanentlyDefeated: !!props.bossPermanentlyDefeated,
-            isInteractionOpen: false,
-            bossSpawned: false,
-            lastDamageTime: 0,
-            lastBiteTime: 0,
-            lastStaminaUseTime: 0,
-            noiseLevel: 0,
-            speakBounce: 0,
-            cameraShake: 0,
-            hurtShake: 0,
-            playerDeathState: PlayerDeathState.ALIVE,
-
-            // --- SECTOR & WORLD ---
-            sectorState: {
-                ...(props.sectorState || {}),
-                envOverride: props.environmentOverrides ? props.environmentOverrides[props.currentSector] : (props.sectorState?.envOverride || undefined)
-            },
-            triggers: [] as SectorTrigger[],
-            obstacles: [] as Obstacle[],
-            collisionGrid: new SpatialGrid(),
-            busUnlocked: false,
-            clueActive: false,
-            bossDefeatedTime: 0,
-            lastActionTime: 0,
-            thinkingUntil: 0,
-            speakingUntil: 0,
-            sectorName: '',
-            initialAim: { active: false, x: 0, y: 0 },
-            deathStartTime: 0,
-            killerType: DamageID.NONE,
-            killerName: '',
-            killerAttackName: '',
-            killedByEnemy: false,
-            lethalSourceId: -1,
-            lethalStatusEffect: -1,
-            effectSources: new Uint8Array(32),
-            playerBloodSpawned: false,
-            playerAshSpawned: false,
-            lastDrownTick: 0,
-            lastStepRight: false,
-            distanceSinceLastStep: 1.5,
-            minStepDistance: 1.7,
-            deathVel: new THREE.Vector3(),
-            hasLastTrailPos: false,
-            lastTrailPos: new THREE.Vector3(),
-
-            framesSinceHudUpdate: 0,
-            lastFpsUpdate: 0,
-            isMoving: false,
-            isWading: false,
-            isSwimming: false,
-
-            // --- PERFORMANCE MONITORING ---
-            renderCpuTime: 0,
-            drawCalls: 0,
-            triangles: 0,
-
-            // --- INTERACTION & DISCOVERY ---
-            interaction: {
-                active: false,
-                type: InteractionType.NONE,
-                label: '',
-                targetId: ''
-            },
-            interactionRequest: {
-                active: false,
-                type: InteractionType.NONE,
-                id: '',
-                object: null
-            },
-            hasInteractionTarget: false,
-            interactionTargetPos: new THREE.Vector3(),
-            hasNearestCollectible: false,
-            nearestCollectibleId: '',
-            bossIntroActive: false,
-            sessionCollectiblesDiscovered: [],
-            mapItems: [],
-            vehicle: {
-                active: false,
-                mesh: null,
-                nodes: null,
-                type: VehicleID.NONE,
-                speed: 0,
-                throttle: 0,
-                engineState: VehicleEngineState.OFF,
-                velocity: new THREE.Vector3(),
-                angularVelocity: new THREE.Vector3(),
-                suspY: 0,
-                suspVelY: 0,
-                prevFwdSpeed: 0,
-                _lastNoiseTime: 0,
-                engineVoiceIdx: -1,
-                skidVoiceIdx: -1
-            },
-            flashlightOn: false,
-            hasCurrentInteraction: false,
-            currentInteractionPayload: {},
-            discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 },
-            cinematicActive: false,
-            cinematicLine: { active: false, speaker: '', text: '' },
-            callbacks: {
-                onEnemyDiscovered: props.onEnemyDiscovered,
-                onBossDiscovered: props.onBossDiscovered,
-                onCollectibleDiscovered: props.onCollectibleDiscovered,
-                onClueDiscovered: props.onClueDiscovered,
-                onPOIdiscovered: props.onPOIdiscovered,
-                onUpdateLoadout: props.onUpdateLoadout,
-                onInteractionStateChange: props.onInteractionStateChange
-            },
-            stats: props.stats,
-
-            // --- TIME & SIMULATION ---
-            simTime: 0,
-            renderTime: 0,
-            lastSimDelta: 0.016,
-            lastRenderDelta: 0.016,
-
-            hudVisible: true,
-
-            // --- VINTERDÖD FIX: Pre-allocate input proxy for Mobile UI ---
-            inputState: {
-                w: false, a: false, s: false, d: false, space: false, fire: false, r: false, e: false, f: false,
-                joystickMove: new THREE.Vector2(),
-                joystickAim: new THREE.Vector2(),
-                aimVector: new THREE.Vector2(1, 0),
-                mouse: new THREE.Vector2()
-            }
-        };
+        const state = this.allocateState();
+        this.resetState(state, props);
+        return state;
     }
 
     constructor(engine: WinterEngine) {
@@ -380,7 +223,12 @@ export class GameSessionLogic {
 
             if (result && enemy.hp <= 0) {
                 const statsSys = this.getSystem<any>(SystemID.PLAYER_STATS);
-                if (statsSys) statsSys.onEnemyKilled(this, enemy, this.engine.simTime, attributionOverride || type);
+                if (statsSys) {
+                    const dx = enemy.mesh.position.x - this.playerPos.x;
+                    const dz = enemy.mesh.position.z - this.playerPos.z;
+                    const distSq = dx * dx + dz * dz;
+                    statsSys.onEnemyKilled(this, enemy, this.engine.simTime, attributionOverride || type, distSq);
+                }
             }
 
             return result;
@@ -397,8 +245,15 @@ export class GameSessionLogic {
         if (!this.state) return;
 
         // --- TRACK PERSISTENT GAME TIME (Zero-GC) ---
-        this.state.statsBuffer[PlayerStatID.TOTAL_GAME_TIME] += dt;
+        if (!this.state.isPlayground) {
+            this.state.statsBuffer[PlayerStatID.TOTAL_GAME_TIME] += dt;
+        }
         this.state.sessionStats.timePlayed += dt;
+
+        // Sync player position for systems (TriggerSystem, EnemySystem, etc.)
+        if (this.state.nodes.gun) {
+            this.playerPos = this.state.nodes.gun.position;
+        }
     }
 
     /**
@@ -445,6 +300,21 @@ export class GameSessionLogic {
         return (this.engine.getSystem(id) as T) || undefined;
     }
 
+    /** Convenience methods for FX spawning (delegates to FXSystem) */
+    spawnParticle(x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) {
+        if (!this.state) return;
+        FXSystem.spawnParticle(this.engine.scene, this.state.particles, x, y, z, type, count, customMesh, customVel, color, scale, life);
+    }
+
+    spawnDecal(x: number, z: number, scale: number, material?: THREE.Material, type?: any) {
+        if (!this.state) return;
+        FXSystem.spawnDecal(this.engine.scene, this.state.bloodDecals, x, z, scale, material, type);
+    }
+
+    get scene() {
+        return this.engine.scene;
+    }
+
     removeSystem(id: SystemID) {
         this.engine.unregisterSystem(id);
     }
@@ -467,18 +337,21 @@ export class GameSessionLogic {
             this.state.bloodDecals.length = 0;
 
             this.state.bossesDefeated.length = 0;
-            this.state.triggers.length = 0;
+            this.state.triggers.reset();
             this.state.obstacles.length = 0;
             this.state.sessionCollectiblesDiscovered.length = 0;
             this.state.collectiblesDiscovered.length = 0;
             this.state.mapItems.length = 0;
             this.state.mapItems.length = 0;
 
-            // Clean up sessionStats breakdowns (Zero-GC: keep object shape but nullify keys if needed, 
-            // though usually we just let the whole sessionStats be replaced on next sector)
-            // For now, just ensure the root references are cleared.
-            (this.state as any).sessionStats = null;
-            (this.state as any).discoverySets = null;
+            // Clean up sessionStats breakdowns (Zero-GC: keep object shape but reset values)
+            GameSessionLogic.resetSessionStats(this.state.sessionStats, this.state.stats as any);
+
+            this.state.discoverySets.clues.clear();
+            this.state.discoverySets.pois.clear();
+            this.state.discoverySets.collectibles.clear();
+            this.state.discoverySets.seenEnemies.clear();
+            this.state.discoverySets.seenBosses.clear();
 
             this.state.vehicle.active = false;
             this.state.vehicle.mesh = null;

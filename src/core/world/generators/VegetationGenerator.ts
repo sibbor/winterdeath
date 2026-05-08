@@ -7,7 +7,7 @@ import { VEGETATION_TYPE } from '../../../content/environment';
 import { MaterialType } from '../../../content/environment';
 import { GeneratorUtils } from './GeneratorUtils';
 import { PhysicsGroup } from '../CollisionResolution';
-import { InteractionShape } from '../../../systems/InteractionTypes';
+import { InteractionShape } from '../../../systems/ui/UIEventBridge';
 import { ChunkManager } from '../ChunkManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -68,7 +68,7 @@ const _createGrassTuftGeo = () => {
 
 const SHARED_GEO = {
     box: new THREE.BoxGeometry(1, 1, 1), // Standard centered box for general props
-    hedgeBox: new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), // VINTERDÖD: Bottom-anchored pivot for wind-sway hedges
+    hedgeBox: new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), // Bottom-anchored pivot for wind-sway hedges
     cylinder: new THREE.CylinderGeometry(1, 1, 2, 8),
     plane: new THREE.PlaneGeometry(1, 1),
     grass: _createCrossGeo(),
@@ -521,7 +521,7 @@ const _placeGroundCover = async (
         const iz = key & 0xFF;
 
         const mesh = new THREE.InstancedMesh(geo, mat, bucket.length);
-        mesh.frustumCulled = true; // VINTERDÖD: Restored culling!
+        mesh.frustumCulled = true; // Restored culling!
         mesh.receiveShadow = true;
 
         for (let i = 0; i < bucket.length; i++) {
@@ -672,7 +672,7 @@ export const VegetationGenerator = {
     createHedge: (length: number = 2.0, height: number = 1.2, thickness: number = 0.8) => {
         const geometries = [];
 
-        // VINTERDÖD: Use the shifted hedgeBox to ensure position.y=0 is the base for the wind shader.
+        // Use the shifted hedgeBox to ensure position.y=0 is the base for the wind shader.
         const mainGeo = SHARED_GEO.hedgeBox.clone();
         _matrix.makeScale(thickness, height, length);
         mainGeo.applyMatrix4(_matrix);
@@ -721,7 +721,7 @@ export const VegetationGenerator = {
             _v2.subVectors(p2, p1).normalize();
             _quat.setFromUnitVectors(_axisX, _v2);
 
-            // VINTERDÖD: Use shifted box so we don't need manual Y-offsetting for the pivot.
+            // Use shifted box so we don't need manual Y-offsetting for the pivot.
             const hedge = new THREE.Mesh(SHARED_GEO.hedgeBox, MATERIALS.hedge);
             hedge.position.copy(_v1);
             hedge.quaternion.copy(_quat);
@@ -874,7 +874,7 @@ export const VegetationGenerator = {
             const iz = key & 0xFF;
 
             const trunkMesh = new THREE.InstancedMesh(proto.trunkGeo, trunkMat, chunkMatrices.length);
-            trunkMesh.frustumCulled = true; // VINTERDÖD: Restored culling!
+            trunkMesh.frustumCulled = true; // Restored culling!
             trunkMesh.castShadow = !materialOverride;
             trunkMesh.receiveShadow = !materialOverride;
             trunkMesh.userData.windAffected = true;
@@ -884,7 +884,7 @@ export const VegetationGenerator = {
             let leavesMesh: THREE.InstancedMesh | undefined;
             if (proto.leavesGeo) {
                 leavesMesh = new THREE.InstancedMesh(proto.leavesGeo, leavesMat, chunkMatrices.length);
-                leavesMesh.frustumCulled = true; // VINTERDÖD: Restored culling!
+                leavesMesh.frustumCulled = true; // Restored culling!
                 leavesMesh.castShadow = !materialOverride;
                 leavesMesh.receiveShadow = !materialOverride;
                 leavesMesh.userData.windAffected = true;

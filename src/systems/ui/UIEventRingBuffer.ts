@@ -1,5 +1,5 @@
 /**
- * VINTERDÖD: UI Event Ring Buffer
+ * UI Event Ring Buffer
  * 
  * An asynchronous, Zero-GC communication bridge between the simulation loop
  * and the React UI. Uses a fixed-size circular buffer to store event packets.
@@ -21,6 +21,7 @@ export enum UIEventType {
     RELOAD_START = 9,   // P1: Duration (ms)
     AMMO_LOW = 10,      // P1: Remaining Ammo
     CHALLENGE_COMPLETE = 11, // P1: Challenge ID
+    SYNC_STATUS = 12,        // P1: Status Bitmask (StatusEffect SMI)
 }
 
 const BUFFER_SIZE = 1024; // 256 events total (4 ints each)

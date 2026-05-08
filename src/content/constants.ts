@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PlayerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../entities/player/PlayerTypes';
 import { DamageID } from '../entities/player/CombatTypes';
 import { GameSettings } from '../core/engine/EngineTypes';
+import { ColorPair } from '../utils/ui/ColorUtils';
 
 // Re-export Data
 export { ZOMBIE_TYPES } from './enemies/zombies';
@@ -10,6 +11,22 @@ export { WEAPONS } from './weapons';
 
 // Sector constants
 export const OVERRIDE_DEFAULT_SECTOR = -1;       // Set to -1 to disable override
+
+// PHASE 7: SPATIAL GRID CONFIG (DOD Optimized)
+export const WORLD_CHUNK_SIZE = 256;             // 256m x 256m active simulation area
+export const POOL_PARTICLE_MAX = 5000;          // Max hardware-accelerated particles
+export const GRID_CELL_POWER = 2;               // 4m cells (1 << 2)
+export const GRID_RESOLUTION = 64;              // 256 / 4
+export const GRID_CELL_COUNT = 4096;            // 64 * 64 (Fits in 16KB L1 cache)
+export const GRID_OFFSET = 128;                 // Centering offset (WORLD_CHUNK_SIZE / 2)
+export const POOL_ENEMY_MAX = 120;              // Current contiguous enemy pool limit
+
+// PHASE 9: ENTITY STATE MASKING
+export const ENTITY_STATUS = {
+    NONE: 0,
+    ALIVE: 1 << 0,
+    DEAD: 1 << 1
+} as const;
 
 // Player constants
 export const PLAYER_DEATH_TIMER = 3000;         // ms
@@ -156,9 +173,10 @@ export const INITIAL_STATS: PlayerStats = {
 
     enemyKills: new Float64Array(StatEnemyIndex.COUNT),
     deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
-    incomingDamageBuffer: new Float64Array(StatEnemyIndex.COUNT * 32 + 64),
+    incomingDamageBuffer: new Float64Array(64 * 32),
 
     statusFlags: 0,
+    statusMask: 0,
     activePassives: [],
     activeBuffs: [],
     activeDebuffs: [],
@@ -172,7 +190,8 @@ export const INITIAL_STATS: PlayerStats = {
     discoveredPOIs: [],
     seenEnemies: [],
     seenBosses: [],
-    discoveredPerks: [],
+    deadBossIndices: [],
+    discoveredPerksMap: new Uint8Array(256),
 
     prologueSeen: false,
     rescuedFamilyIndices: [],
@@ -181,8 +200,9 @@ export const INITIAL_STATS: PlayerStats = {
     challengeTiers: new Int32Array(32),
     totalEnemiesKilled: 0,
     totalChallengePoints: 0,
+    trackedChallengeIds: [],
 
-    // --- VINTERDÖD: CACHED ENTITY STATE (Phase 13) ---
+    // --- CACHED ENTITY STATE (Phase 13) ---
     velocity: new THREE.Vector3(),
     nodes: { gun: null, barrelTip: null, laserSight: null },
     baseScale: 1.0,
@@ -207,7 +227,7 @@ export const PLAYER_CHARACTER = {
     race: 'human',
     gender: 'male',
     title: 'family.dad',
-    color: 0x3b82f6,
+    color: { num: 0x3b82f6, str: '#3b82f6' } as const,
     scale: 1.0
 };
 
@@ -243,10 +263,33 @@ export const SPEAKER_ID_TO_KEY: Record<FamilyMemberID, string> = {
 };
 
 export const FAMILY_MEMBERS = [
-    { id: FamilyMemberID.LOKE, name: 'Loke', race: 'human', gender: 'male', title: 'family.son', color: 0xfacc15, scale: 0.7 },
-    { id: FamilyMemberID.JORDAN, name: 'Jordan', race: 'human', gender: 'male', title: 'family.son', color: 0x4ade80, scale: 0.5 },
-    { id: FamilyMemberID.ESMERALDA, name: 'Esmeralda', race: 'human', gender: 'female', title: 'family.daughter', color: 0xe879f9, scale: 0.8 },
-    { id: FamilyMemberID.NATHALIE, name: 'Nathalie', race: 'human', gender: 'female', title: 'family.wife', color: 0xf43f5e, scale: 0.95 },
-    { id: FamilyMemberID.SOTIS, name: 'Sotis', race: 'animal', gender: 'female', title: 'family.cat', color: 0xcccccc, scale: 0.6 },
-    { id: FamilyMemberID.PANTER, name: 'Panter', race: 'animal', gender: 'male', title: 'family.cat', color: 0x222222, scale: 0.6 }
+    { id: FamilyMemberID.LOKE, name: 'family.loke', race: 'human', gender: 'male', title: 'family.son', color: { num: 0xfacc15, str: '#facc15' } as const, scale: 0.7 },
+    { id: FamilyMemberID.JORDAN, name: 'family.jordan', race: 'human', gender: 'male', title: 'family.son', color: { num: 0x4ade80, str: '#4ade80' } as const, scale: 0.5 },
+    { id: FamilyMemberID.ESMERALDA, name: 'family.esmeralda', race: 'human', gender: 'female', title: 'family.daughter', color: { num: 0xe879f9, str: '#e879f9' } as const, scale: 0.8 },
+    { id: FamilyMemberID.NATHALIE, name: 'family.nathalie', race: 'human', gender: 'female', title: 'family.wife', color: { num: 0xf43f5e, str: '#f43f5e' } as const, scale: 0.95 },
+    { id: FamilyMemberID.SOTIS, name: 'family.sotis', race: 'animal', gender: 'female', title: 'family.cat', color: { num: 0xcccccc, str: '#cccccc' } as const, scale: 0.6 },
+    { id: FamilyMemberID.PANTER, name: 'family.panter', race: 'animal', gender: 'male', title: 'family.cat', color: { num: 0x222222, str: '#222222' } as const, scale: 0.6 }
 ];
+/**
+ * Type-safe interface for voice parameters to enable Zero-GC audio synthesis.
+ */
+export interface VoiceParams {
+    baseFreq: number;
+    oscType: OscillatorType;
+    pitchScale: number;
+}
+
+/**
+ * Central voice profiles for all speakers.
+ */
+export const VOICE_PARAMS_MAP: Record<number, VoiceParams> = {
+    [FamilyMemberID.ROBERT]: { baseFreq: 220, oscType: 'triangle', pitchScale: 1.0 },
+    [FamilyMemberID.LOKE]: { baseFreq: 420, oscType: 'triangle', pitchScale: 1.42 },
+    [FamilyMemberID.JORDAN]: { baseFreq: 500, oscType: 'triangle', pitchScale: 2.0 },
+    [FamilyMemberID.ESMERALDA]: { baseFreq: 450, oscType: 'sine', pitchScale: 1.25 },
+    [FamilyMemberID.NATHALIE]: { baseFreq: 380, oscType: 'sine', pitchScale: 1.05 },
+    [FamilyMemberID.SOTIS]: { baseFreq: 700, oscType: 'sine', pitchScale: 1.66 },
+    [FamilyMemberID.PANTER]: { baseFreq: 700, oscType: 'sine', pitchScale: 1.66 },
+    [FamilyMemberID.UNKNOWN]: { baseFreq: 200, oscType: 'triangle', pitchScale: 1.0 },
+    [FamilyMemberID.RADIO]: { baseFreq: 150, oscType: 'sawtooth', pitchScale: 1.0 },
+};

@@ -5,7 +5,7 @@ import { SectorBuilder } from '../SectorBuilder';
 import { GeneratorUtils } from './GeneratorUtils';
 import { PhysicsGroup } from '../CollisionResolution';
 import { MaterialType } from '../../../content/environment';
-import { InteractionShape } from '../../../systems/InteractionTypes';
+import { InteractionShape } from '../../../systems/ui/UIEventBridge';
 import { MapItemType } from '../../../components/ui/hud/HudTypes';
 import { ChunkManager } from '../ChunkManager';
 
@@ -21,7 +21,7 @@ const _matrix = new THREE.Matrix4();
 const _axisY = new THREE.Vector3(0, 1, 0);
 const _axisX = new THREE.Vector3(1, 0, 0);
 
-// --- VINTERDÖD: SHARED CACHED GEOMETRIES (Zero-GC / Snap-to-Base) ---
+// --- SHARED CACHED GEOMETRIES (Zero-GC / Snap-to-Base) ---
 // Translation is performed ONCE at initialization to ensure abs(pos.y) in wind shader is 0 at ground.
 const _PLANE_GEO = new THREE.PlaneGeometry(1, 1);
 
@@ -259,7 +259,7 @@ export const PathGenerator = {
             _pos.setY(0.08); // Elevate sleeper slightly
             _scale.set(1, 1, 1);
             _matrix.compose(_pos, _quat, _scale);
-            
+
             const key = ChunkManager.getSmiKey(ChunkManager.getCoordIndex(_pos.x), ChunkManager.getCoordIndex(_pos.z));
             let bucket = chunkBuckets.get(key);
             if (!bucket) {
@@ -302,6 +302,8 @@ export const PathGenerator = {
         for (let i = 0; i < pts.length; i++) {
             ctx.collisionGrid.registerGroundMaterial(pts[i].x, pts[i].z, 2.0, MaterialType.METAL);
         }
+
+        return curve;
     },
 
     createDecalPath: async (ctx: SectorContext, points: THREE.Vector3[], options: { spacing: number, size: number, material: THREE.Material, variance?: number, color?: number, randomRotation?: boolean, yOffset?: number }) => {
@@ -336,13 +338,13 @@ export const PathGenerator = {
                 _v2.subVectors(pt.clone().add(_v1), pt).normalize();
                 _quat.setFromUnitVectors(_axisX, _v1);
                 _quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
-                
+
                 if (i % 2 === 0) _pos.addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(_quat), 0.2);
                 else _pos.addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(_quat), -0.2);
             }
 
             _matrix.compose(_pos, _quat, _scale.set(options.size, options.size * 1.5, 1));
-            
+
             const key = ChunkManager.getSmiKey(ChunkManager.getCoordIndex(_pos.x), ChunkManager.getCoordIndex(_pos.z));
             let bucket = chunkBuckets.get(key);
             if (!bucket) {
@@ -384,7 +386,7 @@ export const PathGenerator = {
 
         const postGeo = new THREE.BoxGeometry(0.15, height, 0.15);
         const railGeo = new THREE.BoxGeometry(0.1, 0.15, 1.0);
-        
+
         const chunkBuckets = new Map<number, { posts: THREE.Matrix4[], rails: THREE.Matrix4[] }>();
         const count = points.length;
         let startTime = performance.now();
@@ -443,7 +445,7 @@ export const PathGenerator = {
         chunkBuckets.forEach((data, key) => {
             const ix = key >> 8;
             const iz = key & 0xFF;
-            
+
             if (data.posts.length > 0) {
                 const posts = new THREE.InstancedMesh(postGeo, mat, data.posts.length);
                 posts.frustumCulled = true;
@@ -453,7 +455,7 @@ export const PathGenerator = {
                 GeneratorUtils.freezeStatic(posts);
                 ChunkManager.registerMesh(ix, iz, posts);
             }
-            
+
             if (data.rails.length > 0) {
                 const rails = new THREE.InstancedMesh(railGeo, mat, data.rails.length);
                 rails.frustumCulled = true;

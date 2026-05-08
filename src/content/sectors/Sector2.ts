@@ -1,17 +1,17 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, GroundType, ChestType } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, GroundType, ChestType, SectorID } from '../../game/session/SectorTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { VEGETATION_TYPE } from '../../content/environment';
 import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
-import { InteractionType, InteractionShape } from '../../systems/InteractionTypes';
+import { InteractionType, InteractionShape } from '../../systems/ui/UIEventBridge';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { FamilyMemberID } from '../constants';
 import { POI_TYPE } from '../../content/pois';
-import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
+import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { WeatherType } from '../../core/engine/EngineTypes';
 
 const LOCATIONS = {

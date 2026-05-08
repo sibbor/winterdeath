@@ -4,7 +4,7 @@ import { SectorContext, NatureFillType } from '../../../game/session/SectorTypes
 import { SectorBuilder } from '../SectorBuilder';
 import { VegetationGenerator } from './VegetationGenerator';
 import { MaterialType } from '../../../content/environment';
-import { InteractionShape } from '../../../systems/InteractionTypes';
+import { InteractionShape } from '../../../systems/ui/UIEventBridge';
 import { ChunkManager } from '../ChunkManager';
 import { GeneratorUtils } from './GeneratorUtils';
 
@@ -41,7 +41,7 @@ export const NaturePropGenerator = {
         mesh.receiveShadow = true;
         mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
 
-        // VINTERDÖD OPTIMIZATION: Freeze static mesh matrices
+        //  OPTIMIZATION: Freeze static mesh matrices
         mesh.matrixAutoUpdate = false;
         mesh.updateMatrix();
 
@@ -179,7 +179,7 @@ export const NaturePropGenerator = {
 
             _quat.setFromEuler(_euler);
             _matrix.compose(_position, _quat, _scale);
-            
+
             const key = ChunkManager.getSmiKey(ChunkManager.getCoordIndex(x), ChunkManager.getCoordIndex(z));
             let bucket = chunkBuckets.get(key);
             if (!bucket) {

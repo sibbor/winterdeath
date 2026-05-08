@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, GroundType, ChestType } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, GroundType, ChestType, SectorID } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
-import { InteractionType, InteractionShape } from '../../systems/InteractionTypes';
+import { InteractionType, InteractionShape } from '../../systems/ui/UIEventBridge';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
@@ -15,7 +15,7 @@ import { CAMERA_HEIGHT } from '../constants';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { FamilyMemberID } from '../constants';
-import { TriggerType, TriggerActionType, TriggerStatus } from '../../systems/TriggerTypes';
+import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { WeatherType } from '../../core/engine/EngineTypes';
 import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 
@@ -325,7 +325,7 @@ export const Sector1: SectorDef = {
         if (id === 'cave_door') {
             if (!state.sectorState.jordanEventState) {
                 state.sectorState.jordanEventState = 1; // KNOCKING
-                // VINTERDÖD FIX: Unified with Simulation Clock
+                // Unified with Simulation Clock
                 state.sectorState.jordanEventTimer = state.simTime;
                 object.userData.isInteractable = false;
                 events.setNotification({ text: events.t('ui.knocking'), duration: 2000 });

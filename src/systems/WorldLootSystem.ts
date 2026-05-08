@@ -158,11 +158,11 @@ export class WorldLootSystem implements System {
             // 2. Magnetize (physics)
             if (item.magnetized) {
                 const dist = Math.max(0.1, Math.sqrt(distSq));
-                
-                // VINTERDÖD: Magnetic Suck-up (Smoother acceleration)
+
+                // Magnetic Suck-up (Smoother acceleration)
                 const pullPercent = Math.max(0.01, Math.min(1.0, 1.0 - (dist / 10.0)));
                 const speed = (magnetSpeed + (pullPercent * 40.0)) * delta;
-                
+
                 // Smooth LERP towards player center (slightly above ground)
                 const targetY = py + 0.8;
                 const factor = Math.min(0.9, speed); // Prevent snapping

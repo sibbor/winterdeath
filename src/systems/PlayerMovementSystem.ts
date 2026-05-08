@@ -4,7 +4,7 @@ import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
 import { FXParticleType } from '../types/FXTypes';
 import { DamageID } from '../entities/player/CombatTypes';
-import { PERKS, StatusEffectType } from '../content/perks';
+import { PERKS, StatusEffectID } from '../content/perks';
 import { applyCollisionResolution } from '../core/world/CollisionResolution';
 import { audioEngine } from '../utils/audio/AudioEngine';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
@@ -15,7 +15,7 @@ import { FootprintSystem } from './FootprintSystem';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { PlayerStatsSystem } from './PlayerStatsSystem';
-import { InputAction } from '../core/engine/InputTypes';
+import { InputAction } from '../core/engine/InputManager';
 
 // --- SPEED AUDIT TELEMETRY (ZERO-GC) ---
 let _auditSimDist = 0;
@@ -58,7 +58,7 @@ export class PlayerMovementSystem implements System {
 
 
     constructor(private playerGroup: THREE.Group) {
-        // VINTERDÖD: 100% Zero-GC Mesh Pre-allocation
+        // 100% Zero-GC Mesh Pre-allocation
         this._invincibilityMesh = new THREE.Mesh(GEOMETRY.reflexShield, MATERIALS.reflexShield);
         this._invincibilityMesh.position.y = 1.0;
         this._invincibilityMesh.visible = false;
@@ -71,7 +71,7 @@ export class PlayerMovementSystem implements System {
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         if (!session || !session.engine || !session.state) return;
-        
+
         const state = session.state;
         const stats = state.statsBuffer;
         if (!stats) return;
@@ -162,7 +162,7 @@ export class PlayerMovementSystem implements System {
 
     private checkReflexShield(session: GameSessionLogic, simTime: number) {
         const state = session.state;
-        const perkID = StatusEffectType.REFLEX_SHIELD;
+        const perkID = StatusEffectID.REFLEX_SHIELD;
         const perk = PERKS[perkID];
         if (!perk) return;
 
@@ -211,13 +211,13 @@ export class PlayerMovementSystem implements System {
             if (state.spaceDepressed) {
                 const pressDuration = simTime - state.spacePressTime;
 
-                // VINTERDÖD FIX: Increased window (150->200ms) and added '!state.isDodging' check
+                // Increased window (150->200ms) and added '!state.isDodging' check
                 if (!state.isRushing && !state.isDodging && pressDuration < 200) {
                     if (stats[PlayerStatID.STAMINA] >= 15) {
                         stats[PlayerStatID.STAMINA] -= 15;
                         state.lastStaminaUseTime = simTime;
                         state.isDodging = true;
-                        state.dodgeStartTime = simTime; // VINTERDÖD FIX: Logic MUST use simTime for parity
+                        state.dodgeStartTime = simTime; // Logic MUST use simTime for parity
                         state.dodgeDir.set(0, 0, 0); // Reset to recalc next frame
 
                         // --- TRACK NEW METRIC (UNIFIED) ---
@@ -230,7 +230,7 @@ export class PlayerMovementSystem implements System {
             if (state.isRushing) {
                 state.isRushing = false;
                 state.lastRushEndTime = simTime;
-                // VINTERDÖD FIX: Clear flag immediately for responsive animation
+                // Clear flag immediately for responsive animation
                 state.statusFlags &= ~PlayerStatusFlags.RUSHING;
             }
 
@@ -245,18 +245,24 @@ export class PlayerMovementSystem implements System {
             }
 
             // Handle Rush Elevation (Hold Space)
-            if (state.spaceDepressed && !state.isDodging && !state.isRushing) {
-                if (simTime - state.spacePressTime >= 250) { // VINTERDÖD FIX: Increased threshold to avoid accidental dodge blocking
-                    if (stats[PlayerStatID.STAMINA] >= 10) {
-                        state.isRushing = true;
-                        state.rushCostPaid = true;
-                        state.lastStaminaUseTime = simTime;
-                        state.statusFlags |= PlayerStatusFlags.RUSHING; // Set immediately
-                        this.checkReflexShield(session, simTime);
+            if (state.spaceDepressed && !state.isDodging) {
+                if (simTime - state.spacePressTime >= 250) { // Increased threshold to avoid accidental dodge blocking
+                    if (stats[PlayerStatID.STAMINA] >= 1.0) { // Check for minimal stamina to CONTINUE rushing
+                        if (!state.isRushing) {
+                            state.isRushing = true;
+                            state.rushCostPaid = true;
+                            state.statusFlags |= PlayerStatusFlags.RUSHING;
 
-                        // --- TRACK NEW METRIC (UNIFIED) ---
-                        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                        if (tracker) tracker.recordRush(session);
+                            // --- TRACK NEW METRIC (UNIFIED) ---
+                            const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+                            if (tracker) tracker.recordRush(session);
+                        }
+
+                        state.lastStaminaUseTime = simTime;
+                        this.checkReflexShield(session, simTime);
+                    } else {
+                        state.isRushing = false;
+                        state.statusFlags &= ~PlayerStatusFlags.RUSHING;
                     }
                 }
             }
@@ -278,14 +284,14 @@ export class PlayerMovementSystem implements System {
 
                 if (flatDepth > 1.25) {
                     isSwimming = true;
-                    speed *= 0.525; // VINTERDÖD: 50% faster (0.35 * 1.5)
+                    speed *= 0.525; // 50% faster (0.35 * 1.5)
                 } else if (flatDepth > 0.95 && isSwimming) {
                     isSwimming = true;
                     speed *= 0.525;
                 } else if (flatDepth > 0.4) {
                     isSwimming = false;
                     isWading = true;
-                    speed *= 0.9; // VINTERDÖD: 50% faster (0.6 * 1.5)
+                    speed *= 0.9; // 50% faster (0.6 * 1.5)
                 } else {
                     isSwimming = false;
                     speed *= 0.85;
@@ -308,8 +314,8 @@ export class PlayerMovementSystem implements System {
         state.isWading = isWading;
 
         // --- 3. EXTINGUISH BURNING IN WATER ---
-        if (inWater && state.effectDurations[StatusEffectType.BURNING] > 0) {
-            state.effectDurations[StatusEffectType.BURNING] = 0;
+        if (inWater && state.effectDurations[StatusEffectID.BURNING] > 0) {
+            state.effectDurations[StatusEffectID.BURNING] = 0;
             audioEngine.playSound(SoundID.STEAM_HISS);
         }
 
@@ -325,7 +331,7 @@ export class PlayerMovementSystem implements System {
                 // --- Unified Drowning Logic ---
                 // We only apply the status effect here. The PlayerStatsSystem handles the damage tick.
                 if (state.callbacks && state.callbacks.onPlayerHit) {
-                    state.callbacks.onPlayerHit(0, null, DamageID.DROWNING, true, StatusEffectType.DROWNING, 1500);
+                    state.callbacks.onPlayerHit(0, null, DamageID.DROWNING, true, StatusEffectID.DROWNING, 1500);
                 }
             }
         }
@@ -403,7 +409,7 @@ export class PlayerMovementSystem implements System {
                 audioEngine.playSound(SoundID.DASH);
                 session.makeNoise(playerGroup.position, NoiseType.PLAYER_DODGING, NOISE_RADIUS[NoiseType.PLAYER_DODGING]);
 
-                // VINTERDÖD: Proximity-Based Quick Finger (Witch Time)
+                // Proximity-Based Quick Finger (Witch Time)
                 if (session.state.collisionGrid) {
                     const nearby = session.state.collisionGrid.getNearbyEnemies(playerGroup.position, 1.0);
                     if (nearby.length > 0) {
@@ -445,7 +451,7 @@ export class PlayerMovementSystem implements System {
                 _v6.z += input.joystickMove.y;
             }
 
-            const disorientedDuration = state.effectDurations[StatusEffectType.DISORIENTED];
+            const disorientedDuration = state.effectDurations[StatusEffectID.DISORIENTED];
             const isDisoriented = disorientedDuration > 0;
 
             if (isDisoriented) {
@@ -461,7 +467,7 @@ export class PlayerMovementSystem implements System {
                 isMovingVal = true;
                 const camAngle = session.cameraAngle || 0;
 
-                // VINTERDÖD FIX: If it's a joystick, we DON'T necessarily want to normalize to 1.0 
+                // If it's a joystick, we DON'T necessarily want to normalize to 1.0 
                 // if we want analog walking, BUT the game design specifies digital-like speed.
                 // However, we MUST ensure the magnitude never exceeds 1.0.
                 const mag = _v6.length();
@@ -470,7 +476,7 @@ export class PlayerMovementSystem implements System {
                 _v1.copy(_v6);
                 if (camAngle !== 0) _v1.applyAxisAngle(_UP, camAngle);
 
-                // VINTERDÖD FIX: Zero-GC, Branchless & Normalize-free dot product
+                // Zero-GC, Branchless & Normalize-free dot product
                 _forward.set(0, 0, 1).applyQuaternion(playerGroup.quaternion);
                 const dot = _forward.dot(_v1);
 
@@ -478,7 +484,7 @@ export class PlayerMovementSystem implements System {
                 state.isStrafing = Math.abs(dot) < 0.4;
 
                 if (state.isStrafing) {
-                    // VINTERDÖD FIX: Bypass heavy crossVectors and Math.sqrt. 
+                    // Bypass heavy crossVectors and Math.sqrt. 
                     // An orthogonal vector to (x, 0, z) on the Y-plane is simply (-z, 0, x).
                     _right.set(-_forward.z, 0, _forward.x);
                     state.strafeDirection = Math.sign(_right.dot(_v1));
@@ -576,7 +582,7 @@ export class PlayerMovementSystem implements System {
                 playerGroup.position,
                 searchRadius,
                 state.isDodging ? 15 : 50, // Max Force
-                0,                         // Max Damage (VINTERDÖD: Damage only applied on landing!)
+                0,                         // Max Damage (Damage only applied on landing!)
                 state.isDodging ? DamageID.DODGE : DamageID.RUSH
             );
         }
@@ -605,7 +611,7 @@ export class PlayerMovementSystem implements System {
                     const enemy = nearbyEnemies[j];
                     const distSq = _v3.distanceToSquared(enemy.mesh.position);
                     if (distSq < 0.6) {
-                        // VINTERDÖD: Sqrt Purge! 
+                        // Sqrt Purge! 
                         // Using squared approximation for soft shove (0.6 - distSq) * factor
                         const overlap = (0.6 - distSq) * 1.2;
                         _v1.subVectors(_v3, enemy.mesh.position).normalize().multiplyScalar(overlap);
@@ -651,7 +657,7 @@ export class PlayerMovementSystem implements System {
             const isAiming = joystickAim && joystickAim.lengthSq() > 0.25;
             const stick = isAiming ? joystickAim : (input.joystickMove?.lengthSq() > 0.1 ? input.joystickMove : null);
 
-            // VINTERDÖD: If we are charging a throwable, we only rotate to the stick IF it's an aim stick.
+            // If we are charging a throwable, we only rotate to the stick IF it's an aim stick.
             // If the aim stick is released while charging, we remain facing the locked throw rotation
             // and IGNORE the movement stick for rotation.
             if (state.throwChargeStart > 0) {

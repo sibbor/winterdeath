@@ -1,20 +1,25 @@
 import { PlayerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
 import { SectorStats } from '../../types/StateTypes';
 import { LEVEL_CAP } from '../../content/constants';
+import { SectorID } from '../session/SectorTypes';
 
 /**
  * Aggregates sector performance into overall player statistics.
  * Handles XP leveling, scrap collection, and UNIQUE map-based SP rewards.
  * Optimized for minimal GC allocation during level transitions.
- * VINTERDÖD: 100% Zero-GC standard with classic for-loops and Typed Arrays.
+ * 100% Zero-GC standard with classic for-loops and Typed Arrays.
  */
 export const aggregateStats = (
     prevStats: PlayerStats,
     sectorStats: SectorStats,
     died: boolean,
     aborted: boolean,
+    currentSector: number = 0,
     newUniqueAchievements: number = 0
-): PlayerStats => {    // VINTERDÖD FIX: Clone BOTH the object and the statsBuffer to ensure React immutability
+): PlayerStats => {
+    if (currentSector === SectorID.PLAYGROUND) return prevStats;
+
+    // Clone BOTH the object and the statsBuffer to ensure React immutability
     const s = {
         ...prevStats,
         statsBuffer: new Float32Array(prevStats.statsBuffer),
@@ -36,7 +41,8 @@ export const aggregateStats = (
         // --- ENEMY STATS BUFFERS (Step 2 Clone) ---
         enemyKills: new Float64Array(prevStats.enemyKills),
         deathsByEnemyType: new Float64Array(prevStats.deathsByEnemyType),
-        incomingDamageBuffer: new Float64Array(prevStats.incomingDamageBuffer)
+        incomingDamageBuffer: new Float64Array(prevStats.incomingDamageBuffer),
+        discoveredPerksMap: new Uint8Array(prevStats.discoveredPerksMap)
     };
 
     const sb = s.statsBuffer;
@@ -47,10 +53,13 @@ export const aggregateStats = (
     s.discoveredPOIs = s.discoveredPOIs ? s.discoveredPOIs.slice() : [];
     s.seenBosses = s.seenBosses ? s.seenBosses.slice() : [];
     s.seenEnemies = s.seenEnemies ? s.seenEnemies.slice() : [];
+    s.deadBossIndices = s.deadBossIndices ? s.deadBossIndices.slice() : [];
+    s.rescuedFamilyIndices = s.rescuedFamilyIndices ? s.rescuedFamilyIndices.slice() : [];
 
     // 1. Sector Completion Progress
     if (!died && !aborted) {
-        s.sectorsCompleted = (s.sectorsCompleted || 0) + 1;
+        s.sectorsCompleted = Math.max(s.sectorsCompleted || 0, currentSector + 1);
+        sb[PlayerStatID.TOTAL_SECTORS_COMPLETED] = s.sectorsCompleted | 0;
     }
 
     // 2. Resource Collection
@@ -106,6 +115,11 @@ export const aggregateStats = (
         s.perkDamageAbsorbed[i] += sectorStats.perkDamageAbsorbed[i];
         s.perkDamageDealt[i] += sectorStats.perkDamageDealt[i];
         s.perkDebuffsCleansed[i] += sectorStats.perkDebuffsCleansed[i];
+
+        // Merge discovery map to ensure UI visibility of newly found perks
+        if (sectorStats.discoveredPerksMap && sectorStats.discoveredPerksMap[i] > 0) {
+            s.discoveredPerksMap[i] = 1;
+        }
     }
 
     // --- INCOMING DAMAGE AGGREGATION (Zero-GC) ---
@@ -117,6 +131,9 @@ export const aggregateStats = (
     // 4. Scavenging Objectives
     sb[PlayerStatID.TOTAL_CHESTS_OPENED] += (sectorStats.chestsOpened || 0);
     sb[PlayerStatID.TOTAL_BIG_CHESTS_OPENED] += (sectorStats.bigChestsOpened || 0);
+    sb[PlayerStatID.TOTAL_GIBBED] += (sectorStats.gibbedEnemies || 0);
+    sb[PlayerStatID.TOTAL_UNIQUE_ENEMIES_HIT_BY_EXPLOSIVES] += (sectorStats.uniqueEnemiesHitByExplosives || 0);
+    sb[PlayerStatID.TOTAL_LONG_RANGE_KILLS] += (sectorStats.engagementDistSqKills > 1000 ? 1 : 0); // Example threshold
 
     // 5. Discovery & Unique Items
     if (sectorStats.cluesFound) {
@@ -160,11 +177,9 @@ export const aggregateStats = (
         }
     }
 
-    if (sectorStats.discoveredPerks) {
-        if (!s.discoveredPerks) s.discoveredPerks = [];
-        for (let i = 0; i < sectorStats.discoveredPerks.length; i++) {
-            const perkId = sectorStats.discoveredPerks[i];
-            if (!s.discoveredPerks.includes(perkId)) s.discoveredPerks.push(perkId);
+    if (sectorStats.discoveredPerksMap) {
+        for (let i = 0; i < 256; i++) {
+            if (sectorStats.discoveredPerksMap[i] === 1) s.discoveredPerksMap[i] = 1;
         }
     }
 

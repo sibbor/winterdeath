@@ -6,7 +6,7 @@ import { MaterialType } from '../../../content/environment';
 import { EffectType, SubEffectType } from '../../../systems/EffectManager';
 import { FXParticleType } from '../../../types/FXTypes';
 import { GeneratorUtils } from './GeneratorUtils';
-import { InteractionShape } from '../../../systems/InteractionTypes';
+import { InteractionShape } from '../../../systems/ui/UIEventBridge';
 
 const _v1 = new THREE.Vector3();
 

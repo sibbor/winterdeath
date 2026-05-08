@@ -70,7 +70,7 @@ export class CinematicSystem implements System {
         this.state = opts.state;
     }
 
-    // VINTERDÖD FIX: Tar nu emot både sectorId och dialogueId för att matcha den nästlade arrayen
+    // Tar nu emot både sectorId och dialogueId för att matcha den nästlade arrayen
     public startCinematic(target: THREE.Object3D, sectorId: number, dialogueId: number, params: any = {}) {
         const sectorScripts = STORY_SCRIPTS[sectorId];
 
@@ -145,7 +145,7 @@ export class CinematicSystem implements System {
         if (cinematic.lineIndex === index && (currentNow - cinematic.lineStartTime) < 50) return;
 
         // 2. TRIGGERS: Kör eventuella händelser på den FÖRRA raden (som vi nu lämnar)
-        // VINTERDÖD FIX: Detta måste ske innan vi kollar script.length så att sista raden triggar!
+        // Detta måste ske innan vi kollar script.length så att sista raden triggar!
         if (cinematic.lineIndex >= 0 && cinematic.lineIndex < cinematic.script.length) {
             const prevLine = cinematic.script[cinematic.lineIndex];
             if (prevLine.trigger && !cinematic.fadingOut) {
@@ -166,7 +166,7 @@ export class CinematicSystem implements System {
         cinematic.lineStartTime = currentNow;
         cinematic.fadingOut = false;
 
-        // VINTERDÖD FIX: Fast tidslängd. Längden på översättningsnyckeln fungerar inte för matte.
+        // Fast tidslängd. Längden på översättningsnyckeln fungerar inte för matte.
         cinematic.typingDuration = line.typingDuration || 2500;
         cinematic.lineDuration = line.duration || Math.max(4000, cinematic.typingDuration + 1500);
 
@@ -209,7 +209,7 @@ export class CinematicSystem implements System {
     }
 
     public endCinematic() {
-        // VINTERDÖD FIX: Ingen this.stop() här. GameSession hanterar nedstängningen!
+        // Ingen this.stop() här. GameSession hanterar nedstängningen!
         this.callbacks.endCinematic();
     }
 

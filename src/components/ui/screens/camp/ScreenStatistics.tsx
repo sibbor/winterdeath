@@ -7,14 +7,18 @@ import ScreenModalLayout, {
     HORIZONTAL_HATCHING_STYLE,
     TacticalCard,
     TacticalButton,
+    TacticalTab,
     GRITTY_HEADER_TITLE_STYLE
 } from '../../layout/ScreenModalLayout';
 import CollectiblePreview from '../../core/CollectiblePreview';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { ColorPair, COLORS, colorToHex, adjustColor } from '../../../../utils/ui/ColorUtils';
 import { PERKS, PerkCategory } from '../../../../content/perks';
 import { WEAPONS, WeaponCategory } from '../../../../content/weapons';
-import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputTypes';
+import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputManager';
+import { StatsBridge } from '../../../../core/data/StatsBridge';
+import { FormatUtils } from '../../../../utils/ui/FormatUtils';
 
 interface ScreenStatisticsProps {
     stats: PlayerStats;
@@ -40,53 +44,6 @@ const TABS: { id: Tab, label: string }[] = [
 
 const THEME_COLOR = '#3b82f6'; // blue-500
 
-const darkenColor = (hex: string, percent: number) => {
-    const num = parseInt(hex.replace('#', ''), 16);
-    const amt = Math.round(2.55 * percent);
-    const R = (num >> 16) - amt;
-    const G = (num >> 8 & 0x00FF) - amt;
-    const B = (num & 0x0000FF) - amt;
-    return '#' + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
-};
-
-// --- ANALYTICAL HELPERS (Zero-GC / DPI-Safe) ---
-const findSignatureWeapon = (killsBuffer: Float64Array) => {
-    let maxKills = -1;
-    let signatureIdx = -1;
-    for (let i = 0; i < killsBuffer.length; i++) {
-        if (killsBuffer[i] > maxKills) {
-            maxKills = killsBuffer[i];
-            signatureIdx = i;
-        }
-    }
-    return { id: signatureIdx, count: maxKills };
-};
-
-const findComfortWeapon = (timeBuffer: Float64Array) => {
-    let maxTime = -1;
-    let comfortIdx = -1;
-    for (let i = 0; i < timeBuffer.length; i++) {
-        if (timeBuffer[i] > maxTime) {
-            maxTime = timeBuffer[i];
-            comfortIdx = i;
-        }
-    }
-    return { id: comfortIdx, time: maxTime };
-};
-
-const findNemesis = (deathsBuffer: Float64Array) => {
-    let maxDeaths = -1;
-    let nemesisIdx = -1;
-    // VINTERDÖD HARDENING: Standard for-loop over TypedArray length
-    for (let i = 0; i < deathsBuffer.length; i++) {
-        const count = deathsBuffer[i];
-        if (count > maxDeaths) {
-            maxDeaths = count;
-            nemesisIdx = i;
-        }
-    }
-    return { id: nemesisIdx, count: Math.max(0, maxDeaths) };
-};
 
 const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onOpenDiscovery, isMobileDevice, debugMode, initialTab, initialItemId }) => {
     const { isLandscapeMode } = useOrientation();
@@ -94,10 +51,10 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
     const [activeTab, setActiveTab] = useState<Tab>(initialTab || 'overview');
 
     const { level, currentXp, nextLevelXp } = useMemo(() => ({
-        level: Math.floor(stats.statsBuffer[PlayerStatID.LEVEL]),
-        currentXp: Math.floor(stats.statsBuffer[PlayerStatID.CURRENT_XP]),
-        nextLevelXp: Math.floor(stats.statsBuffer[PlayerStatID.NEXT_LEVEL_XP])
-    }), [stats.statsBuffer]);
+        level: StatsBridge.getLevel(stats),
+        currentXp: StatsBridge.getExperience(stats),
+        nextLevelXp: StatsBridge.getNextLevelExperience(stats)
+    }), [stats]);
 
     // Sync tab when initialTab changes (e.g. when opened from Pause Menu)
     useEffect(() => {
@@ -153,26 +110,16 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
             <div className={`flex h-full dossier-bg p-4 rounded-lg overflow-hidden ${effectiveLandscape ? 'flex-row gap-8' : 'flex-col gap-4'}`}>
                 <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
                     <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-zinc-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide'}`}>
-                        {TABS.map(tab => {
-                            const isActive = activeTab === tab.id;
-                            return (
-                                <button key={tab.id} onClick={() => handleTabChange(tab.id as Tab)}
-                                    className={`px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 relative overflow-hidden group/tab
-                                        ${isActive ? 'text-white animate-tab-pulsate border-white' : 'bg-transparent text-zinc-400 hover:bg-white/5 border-zinc-700'} 
-                                        ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
-                                    `}
-                                    style={isActive ? { backgroundColor: darkenColor(THEME_COLOR, 20), '--pulse-color': THEME_COLOR } as any : {}}
-                                >
-                                    {isActive && (
-                                        <div className="absolute inset-0 opacity-20 transition-opacity"
-                                            style={HORIZONTAL_HATCHING_STYLE}
-                                        />
-                                    )}
-                                    <span className="relative z-10">{t(tab.label)}</span>
-                                    {isActive && effectiveLandscape && <span className="text-white font-bold ml-2 relative z-10">→</span>}
-                                </button>
-                            );
-                        })}
+                        {TABS.map(tab => (
+                            <TacticalTab
+                                key={tab.id}
+                                label={t(tab.label)}
+                                isActive={activeTab === tab.id}
+                                onClick={() => handleTabChange(tab.id as Tab)}
+                                color={THEME_COLOR}
+                                orientation={effectiveLandscape ? 'vertical' : 'horizontal'}
+                            />
+                        ))}
                     </div>
                 </div>
 
@@ -252,28 +199,27 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
 };
 
 const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: number, nextLevelXp: number, isMobileDevice?: boolean, onOpenDiscovery?: () => void }> = React.memo(({ stats, level, currentXp, nextLevelXp, isMobileDevice, onOpenDiscovery }) => {
-    const sb = stats.statsBuffer;
 
     const {
         scrapTotal, avgDistance, avgTime,
         totalDistanceKm, totalTimeH, discoveryPoints, marathonProgress
     } = useMemo(() => {
-        const ST = Math.floor(sb[PlayerStatID.TOTAL_SCRAP_COLLECTED]);
-        const SESS = Math.max(1, sb[PlayerStatID.TOTAL_SESSIONS_STARTED]);
-        const totalDist = sb[PlayerStatID.TOTAL_DISTANCE_TRAVELED] || 0;
-        const totalTime = sb[PlayerStatID.TOTAL_GAME_TIME] || 0;
-        const discPoints = (stats.discoveredPOIs?.length || 0) + (stats.collectiblesDiscovered?.length || 0) + (stats.cluesFound?.length || 0);
+        const ST = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SCRAP_COLLECTED);
+        const SESS = Math.max(1, StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SESSIONS_STARTED));
+        const totalDist = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_DISTANCE_TRAVELED);
+        const totalTime = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME);
+        const discPoints = (StatsBridge.getDiscoveredPOIs(stats).length) + (StatsBridge.getCollectiblesDiscovered(stats).length) + (StatsBridge.getCluesFound(stats).length);
 
         return {
             scrapTotal: ST,
-            avgDistance: (totalDist / SESS / 1000).toFixed(2),
-            avgTime: (totalTime / SESS / 60).toFixed(1),
-            totalDistanceKm: (totalDist / 1000).toFixed(2),
-            totalTimeH: (totalTime / 3600).toFixed(1),
+            avgDistance: FormatUtils.formatDistance(totalDist / SESS),
+            avgTime: FormatUtils.formatTimeMinutes(totalTime / SESS),
+            totalDistanceKm: FormatUtils.formatDistance(totalDist),
+            totalTimeH: FormatUtils.formatTimeHours(totalTime),
             discoveryPoints: discPoints,
-            marathonProgress: (totalDist > 0) ? Math.min(100, ((totalDist / 1000) / 42.195) * 100).toFixed(1) : "0.0"
+            marathonProgress: (totalDist > 0) ? FormatUtils.formatDecimal(Math.min(100, ((totalDist / 1000) / 42.195) * 100), 1) : "0.0"
         };
-    }, [sb, stats.discoveredPOIs, stats.collectiblesDiscovered, stats.cluesFound]);
+    }, [stats]);
 
     const getRank = (lvl: number) => t(DataResolver.getRankName(lvl));
     const FAMILY_MEMBERS = DataResolver.getFamilyMembers();
@@ -281,18 +227,18 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
     // Build a Set of rescued FamilyMemberIDs from the sector-index array
     const rescuedMemberIds = useMemo(() => {
         const set = new Set<number>();
-        const indices = stats.rescuedFamilyIndices || [];
+        const indices = StatsBridge.getRescuedFamilyIndices(stats);
         for (let i = 0; i < indices.length; i++) {
             const fmId = DataResolver.getSectorFamilyMemberId(indices[i]);
             if (fmId !== undefined) set.add(fmId);
         }
         return set;
-    }, [stats.rescuedFamilyIndices]);
+    }, [stats]);
 
     return (
         <div className="flex flex-col h-full gap-6 pb-12 overflow-y-auto pr-2 custom-scrollbar bg-zinc-950/20 backdrop-blur-sm rounded-lg p-1">
             <div className={`grid ${isMobileDevice ? 'grid-cols-1' : 'grid-cols-2'} gap-6`}>
-                <TacticalCard color="#3b82f6" showHover={true} className="flex flex-col items-center text-center shadow-[inset_0_0_50px_rgba(59,130,246,0.1)]">
+                <TacticalCard color={0x3b82f6} showHover={true} className="flex flex-col items-center text-center shadow-[inset_0_0_50px_rgba(59,130,246,0.1)]" style={{ borderColor: 'transparent' }}>
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent opacity-50 relative z-10" />
                     <span className="text-blue-500/60 text-[10px] font-black uppercase tracking-[0.3em] mb-3">{t('ui.current_rank')}</span>
                     <h1 className="text-4xl font-light text-white uppercase tracking-tighter mb-4 leading-none">{getRank(level)}</h1>
@@ -311,19 +257,19 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
                         <span className="text-white uppercase tracking-tighter">{getRank(level + 1)}</span>
                     </div>
                 </TacticalCard>
-                <TacticalCard color="#3b82f6" showHover={true} className="group shadow-inner">
+                <TacticalCard color={0x3b82f6} showHover={true} className="group shadow-inner">
                     <h3 className="text-xl font-light text-white uppercase tracking-wider mb-6 border-b border-zinc-800 pb-3 relative z-10">{t('ui.family_header')}</h3>
                     <div className="flex flex-col gap-4 relative z-10">
                         <div className="flex flex-wrap items-baseline gap-2">
                             <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest shrink-0">{t('ui.rescued')}:</span>
                             <span className="text-sm font-bold tracking-tight text-white/90">
-                                {FAMILY_MEMBERS.filter(m => rescuedMemberIds.has(m.id)).map(m => m.name).join(', ') || t('ui.none')}
+                                {FAMILY_MEMBERS.filter(m => rescuedMemberIds.has(m.id)).map(m => t(m.name)).join(', ') || t('ui.none')}
                             </span>
                         </div>
                         <div className="flex flex-wrap items-baseline gap-2 pt-2 border-t border-zinc-800/50">
                             <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest shrink-0">{t('ui.missing')}:</span>
                             <span className="text-sm font-medium text-zinc-500 italic">
-                                {FAMILY_MEMBERS.filter(m => !rescuedMemberIds.has(m.id)).map(m => m.name).join(', ') || t('ui.none')}
+                                {FAMILY_MEMBERS.filter(m => !rescuedMemberIds.has(m.id)).map(m => t(m.name)).join(', ') || t('ui.none')}
                             </span>
                         </div>
                     </div>
@@ -334,38 +280,38 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
             <div className={`grid ${isMobileDevice ? 'grid-cols-2' : 'grid-cols-4'} gap-4`}>
                 <div className="bg-blue-900/10 border-2 border-blue-500/20 p-4 flex flex-col relative group/hvr overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
-                    <span className="text-blue-500/60 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.global_explorer')}</span>
+                    <span className="text-blue-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.global_explorer')}</span>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{totalDistanceKm} <span className="text-xs">{t('ui.km')}</span></span>
 
                     <div className="mt-auto pt-2 relative z-10">
                         <div className="w-full bg-blue-950/40 h-1 rounded-full overflow-hidden">
                             <div className="h-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,1)]" style={{ width: `${marathonProgress}%` }}></div>
                         </div>
-                        <span className="text-[8px] font-bold text-blue-400/50 uppercase mt-1 block">
-                            {t('ui.marathon_progress')}: {totalDistanceKm} / 42.2 {t('ui.km')} ({marathonProgress}%)
+                        <span className="text-[10px] font-bold text-blue-400/50 uppercase mt-1 block">
+                            {t('ui.marathon_progress')}:<br />{totalDistanceKm} / 42.2 {t('ui.km')} ({marathonProgress}%)
                         </span>
                     </div>
                 </div>
 
                 <div className="bg-blue-950/10 border-2 border-blue-500/20 p-4 flex flex-col relative group overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
-                    <span className="text-blue-500/60 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.survival_legacy')}</span>
+                    <span className="text-blue-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.survival_legacy')}</span>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{totalTimeH} <span className="text-xs">{t('ui.hrs')}</span></span>
-                    <span className="mt-auto text-[9px] font-black text-blue-500/30 uppercase tracking-widest relative z-10">{t('ui.on_field_time')}</span>
+                    <span className="mt-auto text-[10px] font-black text-blue-500/30 uppercase tracking-widest relative z-10">{t('ui.on_field_time')}</span>
                 </div>
 
                 <div className="bg-blue-950/10 border-2 border-blue-500/20 p-4 flex flex-col relative group overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
-                    <span className="text-blue-500/60 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.world_discovery')}</span>
+                    <span className="text-blue-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.world_discovery')}</span>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{discoveryPoints}</span>
-                    <span className="mt-auto text-[9px] font-black text-blue-500/30 uppercase tracking-widest relative z-10">{t('ui.total_intel_found')}</span>
+                    <span className="mt-auto text-[10px] font-black text-blue-500/30 uppercase tracking-widest relative z-10">{t('ui.total_intel_found')}</span>
                 </div>
 
                 <div className="bg-blue-950/10 border-2 border-blue-500/20 p-4 flex flex-col relative group overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
-                    <span className="text-blue-500/60 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.family_savior')}</span>
-                    <span className="text-3xl font-light text-white font-mono relative z-10">{stats.familyFoundCount}</span>
-                    <span className="mt-auto text-[9px] font-black text-blue-500/30 uppercase tracking-widest relative z-10">{t('ui.members_protected')}</span>
+                    <span className="text-blue-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.family_savior')}</span>
+                    <span className="text-3xl font-light text-white font-mono relative z-10">{StatsBridge.getFamilyFoundCount(stats)}</span>
+                    <span className="mt-auto text-[10px] font-black text-blue-500/30 uppercase tracking-widest relative z-10">{t('ui.members_protected')}</span>
                 </div>
             </div>
         </div>
@@ -373,11 +319,10 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
 });
 
 const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: number, onOpenDiscovery?: () => void, isMobileDevice?: boolean }> = React.memo(({ stats, level, currentXp, onOpenDiscovery, isMobileDevice }) => {
-    const sb = stats.statsBuffer;
-    const totalDodges = Math.floor(sb[PlayerStatID.TOTAL_DODGES] || 0);
-    const totalRushes = Math.floor(sb[PlayerStatID.TOTAL_RUSHES] || 0);
-    const totalRushDistance = (sb[PlayerStatID.TOTAL_RUSH_DISTANCE] || 0).toFixed(1);
-    const hasData = stats.sectorsCompleted > 0 || stats.totalSkillPointsEarned > 0 || sb[PlayerStatID.TOTAL_GAME_TIME] > 10;
+    const totalDodges = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_DODGES);
+    const totalRushes = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_RUSHES);
+    const totalRushDistance = FormatUtils.formatDistance(StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_RUSH_DISTANCE));
+    const hasData = StatsBridge.getSectorsCompleted(stats) > 0 || StatsBridge.getTotalSkillPointsEarned(stats) > 0 || StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME) > 10;
 
     if (!hasData) {
         return (
@@ -401,32 +346,32 @@ const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: n
                     <div className="bg-purple-900/10 border-2 border-purple-500/20 p-6 flex flex-col items-center justify-center relative group/hvr overflow-hidden shadow-inner">
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-purple-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                         <span className="text-purple-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 relative z-10">{t('ui.sp_earned')}</span>
-                        <span className="text-2xl font-light text-white font-mono relative z-10">{stats.totalSkillPointsEarned}</span>
+                        <span className="text-2xl font-light text-white font-mono relative z-10">{StatsBridge.getTotalSkillPointsEarned(stats)}</span>
                     </div>
                     <div className="bg-yellow-900/10 border-2 border-yellow-500/20 p-6 flex flex-col items-center justify-center relative group/hvr overflow-hidden shadow-inner">
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-yellow-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                         <span className="text-yellow-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 relative z-10">{t('ui.scrap_scavenged')}</span>
-                        <span className="text-2xl font-light text-white font-mono relative z-10">{Math.floor(sb[PlayerStatID.TOTAL_SCRAP_COLLECTED] || 0).toLocaleString()}</span>
+                        <span className="text-2xl font-light text-white font-mono relative z-10">{StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SCRAP_COLLECTED).toLocaleString()}</span>
                     </div>
                     <div className="bg-red-900/10 border-2 border-red-500/20 p-6 flex flex-col items-center justify-center relative group/hvr overflow-hidden shadow-inner">
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-red-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                         <span className="text-red-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 relative z-10">{t('ui.cp_earned')}</span>
-                        <span className="text-2xl font-light text-white font-mono relative z-10">{Math.floor(sb[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0).toLocaleString()}</span>
+                        <span className="text-2xl font-light text-white font-mono relative z-10">{StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_CHALLENGE_POINTS).toLocaleString()}</span>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-6 bg-black/20 p-6 border border-zinc-800/50">
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.sectors_completed')}</span>
-                        <span className="text-white font-mono text-lg">{stats.sectorsCompleted}</span>
+                        <span className="text-white font-mono text-lg">{StatsBridge.getSectorsCompleted(stats)}</span>
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.chests_opened')}</span>
-                        <span className="text-white font-mono text-lg">{Math.floor(sb[PlayerStatID.TOTAL_CHESTS_OPENED] + sb[PlayerStatID.TOTAL_BIG_CHESTS_OPENED])}</span>
+                        <span className="text-white font-mono text-lg">{StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_CHESTS_OPENED) + StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_BIG_CHESTS_OPENED)}</span>
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.total_game_time')}</span>
-                        <span className="text-white font-mono text-lg">{(sb[PlayerStatID.TOTAL_GAME_TIME] / 3600).toFixed(1)} {t('ui.h')}</span>
+                        <span className="text-white font-mono text-lg">{FormatUtils.formatTimeHours(StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME))} {t('ui.h')}</span>
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.times_dodged')}</span>
@@ -438,7 +383,7 @@ const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: n
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.rushed_distance')}</span>
-                        <span className="text-white font-mono text-lg">{totalRushDistance} {t('report.distance.unit_m')}</span>
+                        <span className="text-white font-mono text-lg">{totalRushDistance}</span>
                     </div>
                 </div>
             </div>
@@ -447,52 +392,52 @@ const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: n
 });
 
 const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
-    const sb = stats.statsBuffer;
 
     const { efficiency, kdRatio, lethality, longestKillstreak, crisisSaves, nemesis, peakAggression, time } = useMemo(() => {
-        const kills = Math.floor(sb[PlayerStatID.TOTAL_KILLS] || 0);
-        const deaths = Math.max(1, sb[PlayerStatID.TOTAL_DEATHS] || 0);
-        const time = sb[PlayerStatID.TOTAL_GAME_TIME] || 1;
-        const shots = Math.max(1, sb[PlayerStatID.TOTAL_SHOTS_FIRED] || 0);
-        const hits = sb[PlayerStatID.TOTAL_SHOTS_HIT] || 0;
+        const kills = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_KILLS);
+        const deaths = Math.max(1, StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_DEATHS));
+        const time = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME) || 1;
+        const shots = Math.max(1, StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SHOTS_FIRED));
+        const hits = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SHOTS_HIT);
 
-        const accuracy = (hits / shots) * 100;
-        const efficiency = (kills / (time / 60));
-        const crisisSaves = Math.floor(sb[PlayerStatID.TOTAL_CRISIS_SAVES] || 0);
-        const peakAggression = Math.floor(sb[PlayerStatID.LONGEST_KILLSTREAK] || 0);
+        const peakAggression = StatsBridge.getStatInt(stats, PlayerStatID.LONGEST_KILLSTREAK);
+        const crisisSaves = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_CRISIS_SAVES);
 
-        const nemesisData = findNemesis(stats.deathsByEnemyType);
-        // Use getEnemyName which handles both bosses and zombies
-        const nemesisName = nemesisData.id !== -1 ? t(DataResolver.getEnemyName(nemesisData.id)) : t('ui.none');
+        const nemesisRes = StatsBridge.getNemesis(stats);
+        const nemesisId = nemesisRes[0];
+        const nemesisCount = nemesisRes[1];
+        const nemesisName = nemesisId !== -1 ? t(DataResolver.getEnemyName(nemesisId)) : t('ui.none');
 
         return {
-            efficiency: efficiency.toFixed(1),
-            kdRatio: (kills / deaths).toFixed(2),
-            lethality: `${accuracy.toFixed(1)}%`,
+            efficiency: FormatUtils.formatDecimal(StatsBridge.getCombatEfficiency(stats), 1),
+            kdRatio: FormatUtils.formatDecimal(kills / deaths, 2),
+            lethality: FormatUtils.formatAccuracy(shots, hits),
             longestKillstreak: peakAggression.toString(),
             crisisSaves: crisisSaves.toLocaleString(),
-            nemesis: { name: nemesisName, count: nemesisData.count },
+            nemesis: { name: nemesisName, count: nemesisCount },
             peakAggression: peakAggression.toLocaleString(),
             time
         };
-    }, [sb, stats.deathsByEnemyType?.length]);
+    }, [stats]);
 
     const killLogData = useMemo(() => {
         const result = [];
         for (let i = 0; i < StatEnemyIndex.COUNT; i++) {
-            const count = stats.enemyKills ? stats.enemyKills[i] : 0;
-            if (count > 0) {
+            const kills = StatsBridge.getEnemyKillCount(stats, i);
+            const deaths = StatsBridge.getEnemyDeathCount(stats, i);
+
+            if (kills > 0 || deaths > 0) {
                 let label = '';
                 if (i === StatEnemyIndex.BOSS) {
                     label = t('ui.bosses');
                 } else {
                     label = t(DataResolver.getEnemyName(i));
                 }
-                result.push({ type: i, count, label });
+                result.push({ type: i, kills, deaths, label });
             }
         }
         return result;
-    }, [stats.enemyKills?.length]);
+    }, [stats]);
 
     return (
         <div className={`flex flex-col h-full gap-8 pb-12 ${isMobileDevice ? 'overflow-y-auto' : ''} custom-scrollbar`}>
@@ -502,7 +447,7 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1 relative z-10">{t('ui.crisis_averted')}</h4>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{crisisSaves}</span>
-                    <span className="block text-[9px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.adrenaline_mgmt')}</span>
+                    <span className="block text-[10px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.adrenaline_mgmt')}</span>
                 </div>
                 <div className="group/hvr relative p-6 border-2 border-red-900/20 bg-red-950/5 overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-red-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
@@ -516,30 +461,30 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1 relative z-10">{t('ui.peak_aggression')}</h4>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{peakAggression}</span>
-                    <span className="block text-[9px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.longest_killstreak')}</span>
+                    <span className="block text-[10px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.longest_killstreak')}</span>
                 </div>
             </div>
 
             <div className={`grid ${isMobileDevice ? 'grid-cols-2' : 'grid-cols-4'} gap-4`}>
                 <div className="bg-zinc-900/20 border border-zinc-800 p-4 flex flex-col items-center justify-center relative group/hvr overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
-                    <span className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.combat_efficiency')}</span>
+                    <span className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.combat_efficiency')}</span>
                     <span className="text-2xl font-light text-white font-mono relative z-10">{efficiency}</span>
                 </div>
                 <div className="bg-zinc-900/20 border border-zinc-800 p-4 flex flex-col items-center justify-center relative group/hvr overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
-                    <span className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.kd_ratio')}</span>
+                    <span className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.kd_ratio')}</span>
                     <span className="text-2xl font-light text-white font-mono relative z-10">{kdRatio}</span>
                 </div>
                 <div className="bg-zinc-900/20 border border-zinc-800 p-4 flex flex-col items-center justify-center relative group/hvr overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
-                    <span className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.lethality')}</span>
+                    <span className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.lethality')}</span>
                     <span className="text-2xl font-light text-white font-mono relative z-10">{lethality}</span>
                 </div>
                 <div className="bg-zinc-900/20 border border-zinc-800 p-4 flex flex-col items-center justify-center relative group/hvr overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
-                    <span className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.on_field_time')}</span>
-                    <span className="text-2xl font-light text-white font-mono relative z-10">{(time / 3600).toFixed(1)}H</span>
+                    <span className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.on_field_time')}</span>
+                    <span className="text-2xl font-light text-white font-mono relative z-10">{FormatUtils.formatTimeHours(time)}H</span>
                 </div>
             </div>
 
@@ -549,13 +494,26 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
                     <span className="text-zinc-400 font-light text-sm text-center uppercase tracking-widest">{t('ui.continue_to_play_combat')}</span>
                 </div>
             ) : (
-                <div className="bg-zinc-900/10 border border-zinc-800 p-6">
-                    <h3 className="text-[10px] font-black text-blue-500/40 uppercase tracking-[0.5em] mb-6">{t('ui.kill_log')}</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <div className="bg-zinc-900/20 border border-zinc-800 p-8 w-full">
+                    <h3 className="text-xl font-light text-white uppercase tracking-tighter mb-8 border-b-2 border-zinc-800 pb-4">{t('ui.kill_log')}</h3>
+
+                    <div className="flex flex-col gap-2">
+                        {/* Table Header */}
+                        <div className="flex justify-between items-center px-4 py-2 border-b border-zinc-800 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                            <span className="flex-1">{t('ui.enemy')}</span>
+                            <span className="w-32 text-right">{t('ui.kills')}</span>
+                            <span className="w-32 text-right">{t('ui.died_from')}</span>
+                        </div>
+
+                        {/* Table Body */}
                         {killLogData.map(entry => (
-                            <div key={entry.type} className="flex flex-col p-3 bg-zinc-950/40 border border-zinc-900/80">
-                                <span className="text-zinc-600 text-[9px] font-black uppercase tracking-widest mb-1">{entry.label}</span>
-                                <span className="text-white font-mono text-xl">{entry.count.toLocaleString()}</span>
+                            <div key={entry.type} className="flex justify-between items-center px-4 py-3 bg-zinc-950/20 border border-transparent hover:border-red-500/20 transition-all group/hvr">
+                                <div className="flex-1 flex items-center gap-3">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-red-500/40" />
+                                    <span className="text-sm font-bold text-zinc-200 uppercase tracking-tighter">{entry.label}</span>
+                                </div>
+                                <span className="w-32 text-right font-mono text-zinc-300 text-lg">{entry.kills.toLocaleString()}</span>
+                                <span className="w-32 text-right font-mono text-red-400 font-bold text-lg">{entry.deaths > 0 ? entry.deaths.toLocaleString() : '—'}</span>
                             </div>
                         ))}
                     </div>
@@ -566,21 +524,25 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
 });
 
 const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
-    const weaponItems = useMemo(() => Object.values(DataResolver.getWeapons()).filter(w => !w.isPseudoWeapon), []);
+    const weaponItems = useMemo(() => Object.values(DataResolver.getWeapons()).filter(w => w && !w.isPseudoWeapon && w.category !== WeaponCategory.TOOL), []);
 
     const { signature, comfort, throwables } = useMemo(() => {
-        const sig = findSignatureWeapon(stats.weaponKills);
-        const com = findComfortWeapon(stats.weaponTimeActive);
+        const sigRes = StatsBridge.getSignatureWeapon(stats);
+        const sigId = sigRes[0];
+        const sigCount = sigRes[1];
 
-        const sigData = sig.id !== -1 ? WEAPONS[sig.id] : null;
-        const comData = com.id !== -1 ? WEAPONS[com.id] : null;
+        const comRes = StatsBridge.getComfortWeapon(stats);
+        const comId = comRes[0];
+
+        const sigData = sigId !== -1 ? WEAPONS[sigId] : null;
+        const comData = comId !== -1 ? WEAPONS[comId] : null;
 
         return {
-            signature: sigData ? { name: t(sigData.displayName), icon: sigData.icon, isPng: sigData.iconIsPng, count: sig.count } : null,
+            signature: sigData ? { name: t(sigData.displayName), icon: sigData.icon, isPng: sigData.iconIsPng, count: sigCount } : null,
             comfort: comData ? { name: t(comData.displayName), icon: comData.icon, isPng: comData.iconIsPng } : null,
-            throwables: (stats.totalThrowablesThrown || 0).toLocaleString()
+            throwables: StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_THROWABLES_THROWN).toLocaleString()
         };
-    }, [stats.weaponKills, stats.weaponTimeActive, stats.totalThrowablesThrown]);
+    }, [stats]);
 
     return (
         <div className="space-y-8 pb-12">
@@ -597,7 +559,7 @@ const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?:
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                             <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 relative z-10">{t('ui.tactical_usage')}</h4>
                             <span className="text-3xl font-light text-white font-mono relative z-10">{throwables}</span>
-                            <span className="block text-[9px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.throwables_thrown')}</span>
+                            <span className="block text-[10px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.throwables_thrown')}</span>
                         </div>
                         <div className="group/hvr relative p-6 border-2 border-blue-900/20 bg-blue-950/10 overflow-hidden">
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
@@ -608,7 +570,7 @@ const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?:
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="text-lg font-bold text-white uppercase tracking-tighter leading-none">{signature?.name || t('ui.none')}</span>
-                                    {signature && <span className="text-[9px] text-blue-400/60 font-mono mt-1 uppercase">{signature.count.toLocaleString()} {t('ui.kills')}</span>}
+                                    {signature && <span className="text-[10px] text-blue-400/60 font-mono mt-1 uppercase">{signature.count.toLocaleString()} {t('ui.kills')}</span>}
                                 </div>
                             </div>
                         </div>
@@ -621,35 +583,50 @@ const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?:
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="text-lg font-bold text-white uppercase tracking-tighter leading-none">{comfort?.name || t('ui.none')}</span>
-                                    <span className="text-[9px] text-zinc-500 font-mono mt-1 uppercase">{t('ui.on_field_choice')}</span>
+                                    <span className="text-[10px] text-zinc-500 font-mono mt-1 uppercase">{t('ui.on_field_choice')}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div className="bg-zinc-900/20 border border-zinc-800 p-8 w-full">
-                        <h3 className="text-xl font-light text-white uppercase tracking-tighter mb-8 border-b-2 border-zinc-800 pb-4">{t('ui.weapon_performance_log')}</h3>
+                        <h3 className="text-xl font-light text-white uppercase tracking-tighter mb-8 border-b-2 border-zinc-800 pb-4">{t('ui.weapon_log')}</h3>
+
                         <div className="flex flex-col gap-2">
+                            {/* Table Header */}
+                            <div className="flex justify-between items-center px-4 py-2 border-b border-zinc-800 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                                <span className="flex-1">{t('ui.weapon')}</span>
+                                <span className="w-32 text-right">{t('ui.shots')}</span>
+                                <span className="w-32 text-right">{t('ui.accuracy')}</span>
+                                <span className="w-32 text-right">{t('ui.kills')}</span>
+                            </div>
+
+                            {/* Table Body */}
                             {weaponItems.map(wep => {
                                 const idx = wep.name;
-                                const fired = stats.weaponShotsFired[idx] || 0;
-                                const hit = stats.weaponShotsHit[idx] || 0;
-                                const dmg = stats.weaponDamageDealt[idx] || 0;
-                                const accuracy = fired > 0 ? ((hit / fired) * 100).toFixed(1) : '0.0';
+                                const fired = StatsBridge.getWeaponShotsFired(stats, idx);
+                                const hit = StatsBridge.getWeaponShotsHit(stats, idx);
+                                const kills = StatsBridge.getWeaponKillCount(stats, idx);
+                                const dmg = StatsBridge.getWeaponDamageDealt(stats, idx);
+
+                                // Only list weapons that have been used (fired or dealt damage)
+                                if (fired === 0 && dmg === 0 && kills === 0) return null;
+
+                                const accuracy = FormatUtils.formatAccuracy(fired, hit);
                                 return (
-                                    <div key={wep.name} className="flex justify-between items-center px-4 py-3 bg-zinc-950/20 border border-transparent hover:border-blue-500/20 transition-all relative group/hvr overflow-hidden">
-                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[8] transition-transform duration-700 pointer-events-none" />
-                                        <div className="flex-1 flex items-center gap-4 relative z-10">
+                                    <div key={wep.name} className="flex justify-between items-center px-4 py-3 bg-zinc-950/20 border border-transparent hover:border-blue-500/20 transition-all group/hvr">
+                                        <div className="flex-1 flex items-center gap-4">
                                             <div className="w-10 h-10 bg-black/50 border border-zinc-800 flex items-center justify-center p-1">
                                                 {wep.iconIsPng ? <img src={wep.icon} alt={t(wep.displayName)} className="w-full h-full object-contain" /> : <span className="text-xl">{wep.icon}</span>}
                                             </div>
-                                            <span className="text-sm font-bold text-zinc-200 uppercase">{t(wep.displayName)}</span>
+                                            <span className="text-sm font-bold text-zinc-200 uppercase tracking-tighter">{t(wep.displayName)}</span>
                                         </div>
-                                        <span className="w-48 text-right font-mono text-zinc-300 text-lg">{Math.floor(dmg).toLocaleString()}</span>
-                                        <span className="w-32 text-right font-mono text-blue-400 font-bold text-lg">{wep.category === WeaponCategory.THROWABLE ? `${fired} ${t('ui.thrown')}` : `${accuracy}%`}</span>
+                                        <span className="w-32 text-right font-mono text-zinc-300 text-lg">{fired.toLocaleString()}</span>
+                                        <span className="w-32 text-right font-mono text-blue-400 font-bold text-lg">{wep.category === WeaponCategory.THROWABLE ? `${hit} ${t('ui.hits')}` : `${accuracy}%`}</span>
+                                        <span className="w-32 text-right font-mono text-white text-lg">{kills.toLocaleString()}</span>
                                     </div>
                                 );
-                            })}
+                            }).filter(Boolean)}
                         </div>
                     </div>
                 </>
@@ -659,33 +636,67 @@ const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?:
 });
 
 const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effectiveLandscape: boolean }> = React.memo(({ stats, t, effectiveLandscape }) => {
-    const sb = stats.statsBuffer;
 
     const { uptime, resilience, roiDealt, roiAbsorb, totalROI } = useMemo(() => {
-        const time = sb[PlayerStatID.TOTAL_GAME_TIME] || 1;
-        const uptime = Math.min(100, ((sb[PlayerStatID.TOTAL_BUFF_TIME] || 0) / time) * 100);
-        const resisted = Math.floor(sb[PlayerStatID.TOTAL_DEBUFFS_RESISTED] || 0);
+        const time = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME) || 1;
+        const buffTime = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_BUFF_TIME);
+        const uptimePercent = Math.min(100, (buffTime / time) * 100);
+        const resisted = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_DEBUFFS_RESISTED);
 
         // Sum total perk ROI
         let dealt = 0;
         let absorb = 0;
         for (let i = 0; i < 32; i++) {
-            dealt += stats.perkDamageDealt[i] || 0;
-            absorb += stats.perkDamageAbsorbed[i] || 0;
+            dealt += StatsBridge.getPerkDamageDealt(stats, i);
+            absorb += StatsBridge.getPerkDamageAbsorbed(stats, i);
         }
 
         return {
-            uptime: uptime.toFixed(1),
+            uptime: FormatUtils.formatAccuracy(time, StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_BUFF_TIME)).replace('%', ''),
             resilience: resisted.toLocaleString(),
             roiDealt: Math.floor(dealt).toLocaleString(),
             roiAbsorb: Math.floor(absorb).toLocaleString(),
             totalROI: Math.floor(dealt + absorb).toLocaleString()
         };
-    }, [sb, stats.perkDamageDealt, stats.perkDamageAbsorbed]);
+    }, [stats]);
 
-    const buffs = useMemo(() => PERKS.filter(p => p.category === PerkCategory.BUFF && (stats.discoveredPerks.includes(p.id) || stats.perkTimesGained[p.id] > 0)), [stats.discoveredPerks, stats.perkTimesGained]);
-    const debuffs = useMemo(() => PERKS.filter(p => p.category === PerkCategory.DEBUFF && (stats.discoveredPerks.includes(p.id) || stats.perkTimesGained[p.id] > 0)), [stats.discoveredPerks, stats.perkTimesGained]);
-    const passives = useMemo(() => PERKS.filter(p => p.category === PerkCategory.PASSIVE && (stats.discoveredPerks.includes(p.id) || stats.perkTimesGained[p.id] > 0)), [stats.discoveredPerks, stats.perkTimesGained]);
+    const buffs = useMemo(() => {
+        const discovered = StatsBridge.getPerkDiscoveredMap(stats);
+        const gained = StatsBridge.getPerkTimesGainedMap(stats);
+        if (!discovered) return [];
+
+        return (DataResolver.getPerksByCategory(PerkCategory.BUFF)).filter(p => {
+            if (!p) return false;
+            return (discovered[p.id] > 0) ||
+                (gained && gained[p.id] > 0) ||
+                (StatsBridge.getPerkDamageDealt(stats, p.id) > 0) ||
+                (StatsBridge.getPerkDamageAbsorbed(stats, p.id) > 0);
+        });
+    }, [stats]);
+
+    const debuffs = useMemo(() => {
+        const discovered = StatsBridge.getPerkDiscoveredMap(stats);
+        const gained = StatsBridge.getPerkTimesGainedMap(stats);
+        if (!discovered) return [];
+
+        return (DataResolver.getPerksByCategory(PerkCategory.DEBUFF)).filter(p => {
+            if (!p) return false;
+            return (discovered[p.id] > 0) ||
+                (gained && gained[p.id] > 0) ||
+                (StatsBridge.getPerkDamageDealt(stats, p.id) > 0);
+        });
+    }, [stats]);
+
+    const passives = useMemo(() => {
+        const discovered = StatsBridge.getPerkDiscoveredMap(stats);
+        const gained = StatsBridge.getPerkTimesGainedMap(stats);
+        if (!discovered) return [];
+
+        return (DataResolver.getPerksByCategory(PerkCategory.PASSIVE)).filter(p => {
+            if (!p) return false;
+            return (discovered[p.id] > 0) || (gained && gained[p.id] > 0);
+        });
+    }, [stats]);
 
     const renderPerk = (perk: any) => {
         return (
@@ -695,34 +706,34 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
                     <div className="flex justify-between items-start mb-4 border-b border-zinc-800 pb-2">
                         <div className="flex flex-col">
                             <span className="text-blue-500/80 text-[10px] font-black uppercase tracking-widest mb-1">{t(perk.displayName)}</span>
-                            <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-tighter">
+                            <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">
                                 {t(perk.category === PerkCategory.PASSIVE ? 'ui.passive' : (perk.category === PerkCategory.BUFF ? 'ui.buff' : 'ui.debuff'))}
                             </span>
                         </div>
                         <div className="flex flex-col items-end">
-                            <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">{t('ui.activations')}</span>
-                            <span className="text-lg font-mono text-white">{stats.perkTimesGained[perk.id]}</span>
+                            <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{t('ui.activations')}</span>
+                            <span className="text-lg font-mono text-white">{StatsBridge.getPerkTimesGained(stats, perk.id)}</span>
                         </div>
                     </div>
                     <p className="text-sm text-zinc-400 italic mb-6">"{t(perk.description)}"</p>
-                    {(stats.perkDamageAbsorbed[perk.id] > 0 || stats.perkDamageDealt[perk.id] > 0 || stats.perkDebuffsCleansed[perk.id] > 0) && (
+                    {(StatsBridge.getPerkDamageAbsorbed(stats, perk.id) > 0 || StatsBridge.getPerkDamageDealt(stats, perk.id) > 0 || StatsBridge.getPerkDebuffsCleansed(stats, perk.id) > 0) && (
                         <div className="grid grid-cols-3 gap-4 border-t border-zinc-800 pt-4">
-                            {stats.perkDamageAbsorbed[perk.id] > 0 && (
+                            {StatsBridge.getPerkDamageAbsorbed(stats, perk.id) > 0 && (
                                 <div className="flex flex-col">
-                                    <span className="text-[9px] font-black text-blue-500/70 uppercase tracking-wider">{t('ui.damage_absorbed')}</span>
-                                    <span className="text-sm font-mono text-blue-400">{Math.floor(stats.perkDamageAbsorbed[perk.id]).toLocaleString()}</span>
+                                    <span className="text-[10px] font-black text-blue-500/70 uppercase tracking-wider">{t('ui.damage_absorbed')}</span>
+                                    <span className="text-sm font-mono text-blue-400">{Math.floor(StatsBridge.getPerkDamageAbsorbed(stats, perk.id)).toLocaleString()}</span>
                                 </div>
                             )}
-                            {stats.perkDamageDealt[perk.id] > 0 && (
+                            {StatsBridge.getPerkDamageDealt(stats, perk.id) > 0 && (
                                 <div className="flex flex-col">
-                                    <span className="text-[9px] font-black text-red-500/70 uppercase tracking-wider">{t('ui.damage_dealt')}</span>
-                                    <span className="text-sm font-mono text-red-400">{Math.floor(stats.perkDamageDealt[perk.id]).toLocaleString()}</span>
+                                    <span className="text-[10px] font-black text-red-500/70 uppercase tracking-wider">{t('ui.damage_dealt')}</span>
+                                    <span className="text-sm font-mono text-red-400">{Math.floor(StatsBridge.getPerkDamageDealt(stats, perk.id)).toLocaleString()}</span>
                                 </div>
                             )}
-                            {stats.perkDebuffsCleansed[perk.id] > 0 && (
+                            {StatsBridge.getPerkDebuffsCleansed(stats, perk.id) > 0 && (
                                 <div className="flex flex-col">
-                                    <span className="text-[9px] font-black text-green-500/70 uppercase tracking-wider">{t('ui.debuffs_cleansed')}</span>
-                                    <span className="text-sm font-mono text-green-400">{stats.perkDebuffsCleansed[perk.id]}</span>
+                                    <span className="text-[10px] font-black text-green-500/70 uppercase tracking-wider">{t('ui.debuffs_cleansed')}</span>
+                                    <span className="text-sm font-mono text-green-400">{StatsBridge.getPerkDebuffsCleansed(stats, perk.id)}</span>
                                 </div>
                             )}
                         </div>
@@ -751,21 +762,21 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 relative z-10">{t('ui.enhanced_state')}</h4>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{uptime}%</span>
-                    <span className="block text-[9px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.buff_uptime')}</span>
+                    <span className="block text-[10px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.buff_uptime')}</span>
                 </div>
                 <div className="group/hvr relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 relative z-10">{t('ui.resilience')}</h4>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{resilience}</span>
-                    <span className="block text-[9px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.debuffs_neutralized')}</span>
+                    <span className="block text-[10px] text-zinc-600 uppercase font-black tracking-tighter mt-1 relative z-10">{t('ui.debuffs_neutralized')}</span>
                 </div>
                 <div className="group relative p-6 border-2 border-blue-900/20 bg-blue-950/10 overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/10 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <h4 className="text-[10px] font-black text-blue-500/40 uppercase tracking-widest mb-2 relative z-10">{t('ui.perk_roi')}</h4>
                     <span className="text-3xl font-light text-white font-mono relative z-10">{totalROI}</span>
                     <div className="flex gap-3 relative z-10 mt-1">
-                        <span className="text-[9px] text-red-400 uppercase font-black tracking-tighter">{t('ui.perk_damage_dealt_short')}: {roiDealt}</span>
-                        <span className="text-[9px] text-blue-400 uppercase font-black tracking-tighter">{t('ui.perk_damage_absorbed_short')}: {roiAbsorb}</span>
+                        <span className="text-[10px] text-red-400 uppercase font-black tracking-tighter">{t('ui.perk_damage_dealt_short')}: {roiDealt}</span>
+                        <span className="text-[10px] text-blue-400 uppercase font-black tracking-tighter">{t('ui.perk_damage_absorbed_short')}: {roiAbsorb}</span>
                     </div>
                 </div>
             </div>
@@ -806,7 +817,7 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
     );
 });
 
-const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: string, id?: string, className?: string }> = React.memo(({ children, isLocked, color = '#6b7280', id, className = '' }) => (
+const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: string, id?: string, className?: string }> = React.memo(({ children, isLocked, color = COLORS.GRAY.str, id, className = '' }) => (
     <div id={id} className={`p-6 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 backdrop-blur-md shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800' : ''} ${className}`}
         style={{ borderColor: isLocked ? '#1f2937' : `${color}66` }}
     >
@@ -839,3 +850,4 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevi
 };
 
 export default ScreenStatistics;
+

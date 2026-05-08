@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { t } from '../../../../utils/i18n';
 import { useOrientation } from '../../../../hooks/useOrientation';
-import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard } from '../../layout/ScreenModalLayout';
+import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalTab } from '../../layout/ScreenModalLayout';
 import { PlayerStats } from '../../../../entities/player/PlayerTypes';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { ColorPair, COLORS, colorToHex } from '../../../../utils/ui/ColorUtils';
+import { SectorID } from '../../../../game/session/SectorTypes';
+import { StatsBridge } from '../../../../core/data/StatsBridge';
 
 interface ScreenSectorOverviewProps {
     currentSector: number;
@@ -59,7 +62,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
         // Accurate Collectible Count
         const allCollectibles = Object.values(DataResolver.getCollectibles());
         const sectorCollectibles = allCollectibles.filter(c => c.sector === selectedSectorIndex);
-        const foundCollectiblesCount = (stats.collectiblesDiscovered || []).filter(id =>
+        const foundCollectiblesCount = StatsBridge.getCollectiblesDiscovered(stats).filter(id =>
             sectorCollectibles.some(c => c.id === id)
         ).length;
 
@@ -67,7 +70,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
         const sectorClueIds = Object.values(DataResolver.getClues())
             .filter(c => c.sector === selectedSectorIndex)
             .map(c => c.id);
-        const foundCluesCount = (stats.cluesFound || []).filter(clueObj => {
+        const foundCluesCount = StatsBridge.getCluesFound(stats).filter(clueObj => {
             const id = typeof clueObj === 'string' ? clueObj : (clueObj as any).id;
             return sectorClueIds.includes(id);
         }).length;
@@ -76,7 +79,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
         const sectorPoiIds = Object.values(DataResolver.getPois())
             .filter(p => p.sector === selectedSectorIndex)
             .map(p => p.id);
-        const foundPoisCount = (stats.discoveredPOIs || []).filter(id => sectorPoiIds.includes(id)).length;
+        const foundPoisCount = StatsBridge.getDiscoveredPOIs(stats).filter(id => sectorPoiIds.includes(id)).length;
 
         return {
             collectibles: { found: foundCollectiblesCount, total: sectorCollectibles.length },
@@ -87,7 +90,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
 
     const handleSelect = (index: number) => {
-        if (!debugMode && (index > 0 && index !== 4 && !deadBossIndices.includes(index - 1))) return;
+        if (!debugMode && (index > SectorID.VILLAGE && index !== SectorID.PLAYGROUND && !deadBossIndices.includes(index - 1))) return;
         UiSounds.playClick();
         setSelectedSectorIndex(index);
         onSelectSector(index);
@@ -104,14 +107,6 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
     const familyStatusKey = isRescued ? 'ui.family_member_rescued' : 'ui.family_member_missing';
     const familyStatusColor = isRescued ? 'text-green-500 border-green-600 bg-green-900/20' : 'text-red-500 border-red-600 bg-red-900/20';
 
-    const darkenColor = (hex: string, percent: number) => {
-        const num = parseInt(hex.replace('#', ''), 16);
-        const amt = Math.round(2.55 * percent);
-        const R = (num >> 16) - amt;
-        const G = (num >> 8 & 0x00FF) - amt;
-        const B = (num & 0x0000FF) - amt;
-        return '#' + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
-    };
 
     return (
         <ScreenModalLayout
@@ -120,7 +115,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
             onClose={onClose}
             onConfirm={handleDeploy}
             confirmLabel={t('ui.deploy_sector')}
-            canConfirm={!(!debugMode && (selectedSectorIndex > 0 && selectedSectorIndex !== 4 && !deadBossIndices.includes(selectedSectorIndex - 1)))}
+            canConfirm={!(!debugMode && (selectedSectorIndex > SectorID.VILLAGE && selectedSectorIndex !== SectorID.PLAYGROUND && !deadBossIndices.includes(selectedSectorIndex - 1)))}
             showCancel={true}
             titleColorClass="text-red-600"
             tabs={DataResolver.getSectorThemes().map((_, i) => i)}
@@ -133,64 +128,30 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                 <div className={`${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : 'w-full shrink-0 relative'}`}>
                     <div className={`${!effectiveLandscape ? 'flex gap-2 overflow-x-auto pb-4 px-10 snap-x snap-mandatory pt-2 scrollbar-hide' : 'flex flex-col gap-4 pt-4 pr-10'}`}>
                         {DataResolver.getSectorThemes().map((map, i) => {
-                            const isSel = selectedSectorIndex === i;
-                            const locked = !debugMode && (i > 0 && i !== 4 && !deadBossIndices.includes(i - 1));
-                            const pulseColor = '#ef4444';
-
+                            const locked = !debugMode && (i > SectorID.VILLAGE && i !== SectorID.PLAYGROUND && !deadBossIndices.includes(i - 1));
                             return (
-                                <button
+                                <TacticalTab
                                     key={i}
+                                    label={locked ? '???' : t(DataResolver.getSectorName(i))}
+                                    isActive={selectedSectorIndex === i}
                                     onClick={() => handleSelect(i)}
-                                    disabled={locked}
-                                    className={`
-                                        text-left p-4 md:p-6 group relative shrink-0 
-                                        whitespace-nowrap md:whitespace-normal snap-center 
-                                        flex flex-col justify-center items-start 
-                                        border-2 border-zinc-700 transition-all duration-200
-                                        ${locked ? 'opacity-50 cursor-not-allowed bg-transparent text-zinc-600' : 'cursor-pointer hover:bg-white/5 hover:scale-[1.02] active:scale-95'}
-                                        ${isSel && !locked ? 'text-white animate-tab-pulsate' : (locked ? '' : 'bg-transparent text-zinc-400')}
-                                        ${!effectiveLandscape ? 'min-w-[120px] py-3 px-4' : 'mx-2'}
-    `}
-                                    style={isSel && !locked ? {
-                                        backgroundColor: darkenColor(pulseColor, 20),
-                                        '--pulse-color': pulseColor
-                                    } as any : {}}
-                                >
-                                    {isSel && !locked && (
-                                        <div className="absolute inset-0 opacity-20 transition-opacity" 
-                                            style={HORIZONTAL_HATCHING_STYLE} 
-                                        />
-                                    )}
-                                    {/* Sector Number (placed above name) */}
-                                    <h2 className={`${isMobileDevice ? 'text-[8px]' : 'text-xs'} font-light uppercase tracking-tighter opacity-80 mb-1`}>
-                                        {t('ui.sector')} 00{i}
-                                    </h2>
-
-                                    {/* Sector Name */}
-                                    <h3 className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-semibold uppercase tracking-wider`}>
-                                        {locked ? '???' : t(DataResolver.getSectorName(i))}
-                                    </h3>
-
-                                    {/* Selection Indicator Arrow */}
-                                    {isSel && !locked && effectiveLandscape && (
-                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white font-bold">
-                                            →
-                                        </span>
-                                    )}
-                                </button>
+                                    color={COLORS.RED}
+                                    orientation={effectiveLandscape ? 'vertical' : 'horizontal'}
+                                    className={locked ? 'opacity-50 cursor-not-allowed' : ''}
+                                />
                             );
                         })}
                     </div>
                 </div>
 
                 {/* RIGHT: Detail View */}
-                <TacticalCard color="#ef4444" className={`flex-1 flex flex-col p-4 md:p-8 relative pr-safe ${!effectiveLandscape ? 'min-h-[300px]' : ''}`}>
+                <TacticalCard color={COLORS.RED} className={`flex-1 flex flex-col p-4 md:p-8 relative pr-safe ${!effectiveLandscape ? 'min-h-[300px]' : ''}`}>
                     {/* Header */}
                     <div className="flex flex-col gap-4 mb-6 border-b border-gray-800 pb-4">
                         <div>
-                             <h2 className={`${isMobileDevice ? 'text-xl' : 'text-5xl'} font-light uppercase tracking-tighter text-white mb-2`}>
-                                 {t(DataResolver.getSectorName(selectedSectorIndex))}
-                             </h2>
+                            <h2 className={`${isMobileDevice ? 'text-xl' : 'text-5xl'} font-light uppercase tracking-tighter text-white mb-2`}>
+                                {t(DataResolver.getSectorName(selectedSectorIndex))}
+                            </h2>
                             {/* Stats Row */}
                             {(collectibles.total > 0 || clues.total > 0 || pois.total > 0) && (
                                 <div className={`flex flex-wrap gap-2 md:gap-4 ${isMobileDevice ? 'text-xs' : 'text-lg'} font-bold font-mono text-gray-400 mt-1`}>
@@ -241,3 +202,4 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 };
 
 export default ScreenSectorOverview;
+

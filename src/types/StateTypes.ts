@@ -35,6 +35,8 @@ export interface SectorStats {
   debuffsResisted: number;
   crisisSaves: number;
   deaths: number;
+  gibbedEnemies: number;
+  uniqueEnemiesHitByExplosives: number;
 
   // --- WEAPON PERFORMANCE BUFFERS (Zero-GC / Phase 12) ---
   weaponKills: Float64Array;
@@ -55,7 +57,7 @@ export interface SectorStats {
   enemyDeaths: Float64Array;
   incomingDamageBuffer: Float64Array;
 
-  // VINTERDÖD FIX: cluesFound is an array of objects {id, content}, not strings
+  // cluesFound is an array of objects {id, content}, not strings
   cluesFound: any[];
 
   discoveredPOIs: string[];
@@ -64,14 +66,16 @@ export interface SectorStats {
   xpGained: number;
   spGained: number;
   killerType?: number;
+  killingBlowWeapon?: number;
+  killingBlowSource?: number;
   collectiblesDiscovered: string[];
   aborted: boolean;
   familyFound: boolean;
   familyExtracted: boolean;
   isExtraction: boolean;
-  discoveredPerks: number[];
+  discoveredPerksMap: Uint8Array;
 
-  // VINTERDÖD FIX: Standardized wave naming
+  // Standardized wave naming
   waveActive?: boolean;
   waveKills?: number;
   waveTarget?: number;
@@ -87,14 +91,14 @@ export interface SectorState {
   envOverride?: EnvironmentOverride;
   ctx?: any;
 
-  // VINTERDÖD FIX: Standardized wave naming
+  // Standardized wave naming
   waveActive?: boolean;
   waveKills?: number;
   waveTarget?: number;
   currentWave?: number;
   totalWaves?: number;
 
-  // VINTERDÖD FIX: The Generic Bridge API
+  // The Generic Bridge API
   pendingTrigger?: string | null;
   keepCamera?: boolean;
 

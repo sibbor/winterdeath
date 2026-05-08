@@ -3,6 +3,7 @@ import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { MaterialType } from '../content/environment';
 import { FXParticleType, FXDecalType, ParticleState, FXSpawnRequest } from '../types/FXTypes';
+import { COLORS } from '../utils/ui/ColorUtils';
 import { SystemID } from './SystemID';
 
 type FXMaterial = THREE.Material & {
@@ -31,7 +32,7 @@ const REQUEST_POOL: FXSpawnRequest[] = [];
 const DECAL_REQUEST_POOL: FXSpawnRequest[] = [];
 
 /**
- * VINTERDÖD: FX System Initialization
+ * FX System Initialization
  * Populates TypedArrays strictly indexed by the FXParticleType enum.
  * Ensures O(1) jump lookups without hidden allocation overhead.
  */
@@ -71,35 +72,35 @@ const initTypedArrays = () => {
     ].forEach(t => ESSENTIAL_FLAGS[t] = 1);
 
     // --- COLORS ---
-    PARTICLE_COLORS[FXParticleType.FLAME] = 0xff7700;
-    PARTICLE_COLORS[FXParticleType.FIRE] = 0xff7700;
-    PARTICLE_COLORS[FXParticleType.LARGE_FIRE] = 0xff7700;
-    PARTICLE_COLORS[FXParticleType.CAMPFIRE_FLAME] = 0xff7700;
-    PARTICLE_COLORS[FXParticleType.ENEMY_EFFECT_FLAME] = 0xff7700;
-    PARTICLE_COLORS[FXParticleType.FLAMETHROWER_FIRE] = 0xff7700;
-    PARTICLE_COLORS[FXParticleType.ENEMY_EFFECT_STUN] = 0x00ffff;
-    PARTICLE_COLORS[FXParticleType.CAMPFIRE_SPARK] = 0x00ffff;
-    PARTICLE_COLORS[FXParticleType.ENEMY_EFFECT_SPARK] = 0x00ffff;
-    PARTICLE_COLORS[FXParticleType.MAGNETIC_SPARKS] = 0x00ffff;
-    PARTICLE_COLORS[FXParticleType.SPARK] = 0xffcc00;
-    PARTICLE_COLORS[FXParticleType.IMPACT] = 0xffcc00;
-    PARTICLE_COLORS[FXParticleType.SMOKE] = 0x555555;
-    PARTICLE_COLORS[FXParticleType.LARGE_SMOKE] = 0x555555;
-    PARTICLE_COLORS[FXParticleType.CAMPFIRE_SMOKE] = 0x555555;
-    PARTICLE_COLORS[FXParticleType.BLACK_SMOKE] = 0x000000;
-    PARTICLE_COLORS[FXParticleType.BLOOD_SPLATTER] = 0x880000;
-    PARTICLE_COLORS[FXParticleType.GORE] = 0x880000;
-    PARTICLE_COLORS[FXParticleType.GLASS] = 0xffffff;
-    PARTICLE_COLORS[FXParticleType.FLASH] = 0xffffff;
-    PARTICLE_COLORS[FXParticleType.ELECTRIC_FLASH] = 0xffffff;
-    PARTICLE_COLORS[FXParticleType.SHOCKWAVE] = 0xffffff;
-    PARTICLE_COLORS[FXParticleType.FROST_NOVA] = 0xffffff;
-    PARTICLE_COLORS[FXParticleType.SCREECH_WAVE] = 0xffffff;
-    PARTICLE_COLORS[FXParticleType.SPLASH] = 0x77bbcc;
-    PARTICLE_COLORS[FXParticleType.BLAST_RADIUS] = 0xff0000;
-    PARTICLE_COLORS[FXParticleType.DEBRIS_TRAIL] = 0x888888;
-    PARTICLE_COLORS[FXParticleType.SCRAP] = 0x999999;
-    PARTICLE_COLORS[FXParticleType.MEAT] = 0x660000;
+    PARTICLE_COLORS[FXParticleType.FLAME] = COLORS.FIRE_ORANGE.num;
+    PARTICLE_COLORS[FXParticleType.FIRE] = COLORS.FIRE_ORANGE.num;
+    PARTICLE_COLORS[FXParticleType.LARGE_FIRE] = COLORS.FIRE_ORANGE.num;
+    PARTICLE_COLORS[FXParticleType.CAMPFIRE_FLAME] = COLORS.FIRE_ORANGE.num;
+    PARTICLE_COLORS[FXParticleType.ENEMY_EFFECT_FLAME] = COLORS.FIRE_ORANGE.num;
+    PARTICLE_COLORS[FXParticleType.FLAMETHROWER_FIRE] = COLORS.FIRE_ORANGE.num;
+    PARTICLE_COLORS[FXParticleType.ENEMY_EFFECT_STUN] = COLORS.ELECTRIC_FLASH.num;
+    PARTICLE_COLORS[FXParticleType.CAMPFIRE_SPARK] = COLORS.ELECTRIC_FLASH.num;
+    PARTICLE_COLORS[FXParticleType.ENEMY_EFFECT_SPARK] = COLORS.ELECTRIC_FLASH.num;
+    PARTICLE_COLORS[FXParticleType.MAGNETIC_SPARKS] = COLORS.ELECTRIC_FLASH.num;
+    PARTICLE_COLORS[FXParticleType.SPARK] = COLORS.YELLOW.num;
+    PARTICLE_COLORS[FXParticleType.IMPACT] = COLORS.YELLOW.num;
+    PARTICLE_COLORS[FXParticleType.SMOKE] = COLORS.GRAY.num;
+    PARTICLE_COLORS[FXParticleType.LARGE_SMOKE] = COLORS.GRAY.num;
+    PARTICLE_COLORS[FXParticleType.CAMPFIRE_SMOKE] = COLORS.GRAY.num;
+    PARTICLE_COLORS[FXParticleType.BLACK_SMOKE] = COLORS.BLACK.num;
+    PARTICLE_COLORS[FXParticleType.BLOOD_SPLATTER] = COLORS.RED_DIM.num;
+    PARTICLE_COLORS[FXParticleType.GORE] = COLORS.RED_DIM.num;
+    PARTICLE_COLORS[FXParticleType.GLASS] = COLORS.WHITE.num;
+    PARTICLE_COLORS[FXParticleType.FLASH] = COLORS.WHITE.num;
+    PARTICLE_COLORS[FXParticleType.ELECTRIC_FLASH] = COLORS.WHITE.num;
+    PARTICLE_COLORS[FXParticleType.SHOCKWAVE] = COLORS.WHITE.num;
+    PARTICLE_COLORS[FXParticleType.FROST_NOVA] = COLORS.WHITE.num;
+    PARTICLE_COLORS[FXParticleType.SCREECH_WAVE] = COLORS.WHITE.num;
+    PARTICLE_COLORS[FXParticleType.SPLASH] = COLORS.CYAN.num;
+    PARTICLE_COLORS[FXParticleType.BLAST_RADIUS] = COLORS.RED.num;
+    PARTICLE_COLORS[FXParticleType.DEBRIS_TRAIL] = COLORS.GRAY.num;
+    PARTICLE_COLORS[FXParticleType.SCRAP] = COLORS.GRAY.num;
+    PARTICLE_COLORS[FXParticleType.MEAT] = COLORS.RED_DIM.num;
 
     // --- TTL (Seconds) ---
     PARTICLE_TTL[FXParticleType.BLOOD_SPLATTER] = 1.8;
@@ -308,7 +309,7 @@ export const FXSystem = {
     },
 
     _spawnParticleImmediate: (req: FXSpawnRequest, particlesList: ParticleState[]) => {
-        if (isNaN(req.x)) return;
+        if (isNaN(req.x) || isNaN(req.y) || isNaN(req.z)) return;
 
         if (particlesList.length >= 6000) {
             FXSystem._killParticle(0, particlesList);
@@ -435,13 +436,13 @@ export const FXSystem = {
     // --- INTERFACE ---
 
     preload: (scene: THREE.Scene) => {
-        if (!MATERIALS['_blackSmoke']) MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
-        if (!MATERIALS['flame']) MATERIALS['flame'] = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.9, depthWrite: false });
-        if (!MATERIALS['large_fire']) MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.9, depthWrite: false });
+        if (!MATERIALS['_blackSmoke']) MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: COLORS.BLACK.num, transparent: true, opacity: 0.6, depthWrite: false });
+        if (!MATERIALS['flame']) MATERIALS['flame'] = new THREE.MeshBasicMaterial({ color: COLORS.FIRE_ORANGE.num, transparent: true, opacity: 0.9, depthWrite: false });
+        if (!MATERIALS['large_fire']) MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: COLORS.FIRE_RED.num, transparent: true, opacity: 0.9, depthWrite: false });
 
         if (!_whiteGoreMaterial) {
             _whiteGoreMaterial = (MATERIALS.gore as THREE.MeshStandardMaterial).clone();
-            (_whiteGoreMaterial as any).color.setHex(0xffffff);
+            (_whiteGoreMaterial as any).color.setHex(COLORS.WHITE.num);
             _whiteGoreMaterial.userData = { isSharedAsset: true };
         }
 
@@ -591,6 +592,10 @@ export const FXSystem = {
                 const imesh = FXSystem._instancedMeshes[p.type];
                 const idx = FXSystem._instancedCounts[p.type];
                 if (imesh && idx < MAX_INSTANCES_PER_MESH) {
+                    if (isNaN(p.pos.x) || isNaN(p.scaleVec.x)) {
+                        FXSystem._killParticle(i, particlesList);
+                        continue;
+                    }
                     _dummyQuat.setFromEuler(p.rot);
                     _dummyMatrix.compose(p.pos, _dummyQuat, p.scaleVec);
                     imesh.setMatrixAt(idx, _dummyMatrix);

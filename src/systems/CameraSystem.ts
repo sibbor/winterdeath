@@ -192,12 +192,12 @@ export class CameraSystem implements System {
             const targetZ = this._followTarget.z + offsetZRotated;
 
             if (this.instantReact.follow) {
-                // VINTERDÖD: During gameplay, camera uses 'follow' (no lerp) for position
+                // During gameplay, camera uses 'follow' (no lerp) for position
                 this._idealPos.x = targetX;
                 this._idealPos.y = targetY;
                 this._idealPos.z = targetZ;
 
-                // VINTERDÖD: During gameplay, camera also uses 'follow' (no lerp) for lookAt
+                // During gameplay, camera also uses 'follow' (no lerp) for lookAt
                 this._currentLookAt.x = this._followTarget.x;
                 this._currentLookAt.y = this._followTarget.y;
                 this._currentLookAt.z = this._followTarget.z;
@@ -220,7 +220,7 @@ export class CameraSystem implements System {
         if (this._isCinematic || !this._followTarget || !this.instantReact.follow) {
             // FPS-Independent Smooth Lerp for panning
             const lookLerpFactor = 1.0 - Math.exp(-this._lookSpeed * delta);
-            
+
             // Manual lerp for Zero-GC and performance
             this._currentLookAt.x += (this._idealLookAt.x - this._currentLookAt.x) * lookLerpFactor;
             this._currentLookAt.y += (this._idealLookAt.y - this._currentLookAt.y) * lookLerpFactor;

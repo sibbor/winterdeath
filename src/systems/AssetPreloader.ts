@@ -16,7 +16,7 @@ import { PoiGenerator } from '../core/world/generators/PoiGenerator';
 import { CampWorld, CAMP_SCENE } from '../components/camp/CampWorld';
 import { SectorSystem } from './SectorSystem';
 import { SectorBuilder } from '../core/world/SectorBuilder';
-import { WaterShape } from './WaterSystem';
+import { WaterShape } from '../types/WaterTypes';
 import { ChestType } from '../game/session/SectorTypes';
 import { registerSoundGenerators } from '../utils/audio/AudioLib';
 import { audioEngine } from '../utils/audio/AudioEngine';
@@ -31,7 +31,7 @@ const warmedModules = new Set<string>();
 const activePromises = new Map<string, Promise<void>>();
 let lastSectorIndex = -1;
 
-// VINTERDÖD: Global asynkron kö för att skydda Zero-GC scratchpads från Race Conditions
+// Global asynkron kö för att skydda Zero-GC scratchpads från Race Conditions
 let _globalWarmupQueue: Promise<void> = Promise.resolve();
 
 // --- PERSISTENT SHARED MODEL POOL ---
@@ -71,7 +71,14 @@ const FX_GAS = [
 const ALL_FX = [...FX_SOLID, ...FX_GAS];
 const DEAD_BODY_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, EnemyType.BOMBER];
 const TREE_TYPES = [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.OAK, VEGETATION_TYPE.BIRCH, VEGETATION_TYPE.DEAD_TREE];
-const WEATHER_MATS = [MATERIALS.particle_snow, MATERIALS.particle_rain, MATERIALS.particle_ash, MATERIALS.particle_ember];
+// Lazy getter for weather materials to prevent circular dependency ReferenceError
+let _WEATHER_MATS: THREE.MeshBasicMaterial[] | null = null;
+const getWeatherMats = () => {
+    if (!_WEATHER_MATS) {
+        _WEATHER_MATS = [MATERIALS.particle_snow, MATERIALS.particle_rain, MATERIALS.particle_ash, MATERIALS.particle_ember];
+    }
+    return _WEATHER_MATS;
+};
 
 // Reusable dummy scene for compilation
 const _dummyScene = new THREE.Scene();
@@ -87,7 +94,7 @@ export const AssetPreloader = {
     warmupAsync: async (target: 'CORE' | 'CAMP' | 'SECTOR', yieldToMain?: () => Promise<void>, sectorId?: number) => {
         const moduleKey = target === 'SECTOR' ? `SECTOR_${sectorId ?? 0}` : target;
 
-        // VINTERDÖD: Kapsla in hela uppvärmningen i en task för att läggas i Promise-kön
+        // Kapsla in hela uppvärmningen i en task för att läggas i Promise-kön
         const warmupTask = async () => {
             // Swap-and-go 1-Slot Cache for Sectors
             if (target === 'SECTOR') {
@@ -203,7 +210,7 @@ export const AssetPreloader = {
             }
 
             // Populate with proxy lights - LightSystem will handle it
-            // VINTERDÖD: Only add up to 5 lights for warmup. 
+            // Only add up to 5 lights for warmup. 
             // Most shaders only care about 1-4 lights; adding 100+ is pure overhead.
             const ENGINE_MAX_VISIBLE = Math.min(engine.maxVisibleLights || 3, 5);
             const SHADOW_BUDGET = engine.maxSafeShadows || 1;
@@ -299,7 +306,7 @@ export const AssetPreloader = {
             // iOS WATCHDOG BYPASS (Time-Slicer)
             // =========================================================
             const safeCompileAsync = async (rootNode: THREE.Object3D, logName: string) => {
-                // VINTERDÖD: Calculate size of compilation batch
+                // Calculate size of compilation batch
                 let objCount = 0;
                 _traverseStack.length = 0;
                 _traverseStack.push(rootNode);
@@ -324,7 +331,7 @@ export const AssetPreloader = {
 
                 while (_traverseStack.length > 0) {
                     const obj = _traverseStack.pop() as THREE.Object3D;
-                    // VINTERDÖD FIX: Fast array approach instead of Map. We only push visible objects!
+                    // Fast array approach instead of Map. We only push visible objects!
                     if (((obj as any).isMesh || (obj as any).isSkinnedMesh) && obj.visible) {
                         obj.visible = false;
                         _compileTargets.push(obj);
@@ -348,7 +355,7 @@ export const AssetPreloader = {
                     }
                 }
 
-                // VINTERDÖD FIX: Fast restore. We know all objects in _compileTargets started as visible=true.
+                // Fast restore. We know all objects in _compileTargets started as visible=true.
                 for (let i = 0; i < _compileTargets.length; i++) {
                     _compileTargets[i].visible = true;
                 }
@@ -417,7 +424,7 @@ export const AssetPreloader = {
 
             // 4. COMPILE SCENE SPECIFICS & WARMUP FRAME
             if (isSector) {
-                // --- VINTERDÖD: FULL SECTOR POPULATION [WARMUP] ---
+                // --- FULL SECTOR POPULATION [WARMUP] ---
                 // We build the full world here so all meshes are present during the final compile call
                 beginInternal('sector_build');
                 const sectorDef = SectorSystem.getSector(sectorId ?? 0);
@@ -460,7 +467,7 @@ export const AssetPreloader = {
             engine.renderer.getViewport(originalVp);
             engine.renderer.setViewport(0, 0, 1, 1);
 
-            // VINTERDÖD: Forced GPU Processing (Zero-GC Array implementation)
+            // Forced GPU Processing (Zero-GC Array implementation)
             _cullStatusObjs.length = 0;
             _cullStatusBools.length = 0;
 
@@ -535,7 +542,7 @@ export const AssetPreloader = {
         const matSignatureSet = new Set<string>();
 
         const add = (obj: THREE.Object3D, createInstanced: boolean = true, forceShadow: boolean = false) => {
-            // VINTERDÖD: Fast signature check to prevent adding 100 versions of the same material mesh
+            // Fast signature check to prevent adding 100 versions of the same material mesh
             let hasUniqueMat = false;
             _traverseStack.length = 0;
             _traverseStack.push(obj);
@@ -593,7 +600,7 @@ export const AssetPreloader = {
             sharedPool.push(obj);
         };
 
-        // --- VINTERDÖD: PRUNED SHARED POOL (CORE ONLY) ---
+        // --- PRUNED SHARED POOL (CORE ONLY) ---
         // We only add the absolutely essential base geometries and materials here.
         // Everything else is warmed up via Sector skeletons.
         add(new THREE.Mesh(GEOMETRY.box, MATERIALS.zombie), false);
@@ -630,8 +637,9 @@ export const AssetPreloader = {
         }
 
         // Weather materials (instanced)
-        for (let i = 0; i < WEATHER_MATS.length; i++) {
-            const iMesh = new THREE.InstancedMesh(GEOMETRY.weatherParticle, WEATHER_MATS[i], 1);
+        const weatherMats = getWeatherMats();
+        for (let i = 0; i < weatherMats.length; i++) {
+            const iMesh = new THREE.InstancedMesh(GEOMETRY.weatherParticle, weatherMats[i], 1);
             iMesh.matrixAutoUpdate = false;
             iMesh.updateMatrix();
             iMesh.setMatrixAt(0, _dummyMatrix);
@@ -644,7 +652,7 @@ export const AssetPreloader = {
         add(ObjectGenerator.createBarrel(false), true, true);
         add(ObjectGenerator.createStreetLamp(), true, true);
         add(ObjectGenerator.createFence(), true, true);
-        
+
         // POI - Only Church as a representative complex building
         add(PoiGenerator.createChurch(), true, true);
         add(PoiGenerator.createCampfire(), true, true);

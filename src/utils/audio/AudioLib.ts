@@ -6,6 +6,7 @@ import { EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { VehicleCategory, VehicleImpactIntensity } from '../../entities/vehicles/VehicleTypes';
 import { FamilyMemberID } from '../../content/constants';
 import { audioEngine } from './AudioEngine';
+import { DataResolver } from '../ui/DataResolver';
 
 /**
  * GENERATORS
@@ -155,7 +156,7 @@ export const Generators = {
         const d = buf.getChannelData(0);
         for (let i = 0; i < d.length; i++) {
             const t = i / sr;
-            // VINTERDÖD: Aggressive electric transients
+            // Aggressive electric transients
             const f1 = 1200 + Math.random() * 800;
             const f2 = 50 + Math.random() * 30;
             const zap = Math.sin(2 * Math.PI * f1 * t) * 0.4;
@@ -287,7 +288,7 @@ export const Generators = {
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
             const noise = (Math.random() * 2 - 1);
-            // VINTERDÖD: Reduced crunch (0.12 -> 0.04) for a duller, heavier snow sound
+            // Reduced crunch (0.12 -> 0.04) for a duller, heavier snow sound
             const crunch = (noise - lp) * 0.04 * Math.exp(-25 * t);
             lp = lp + 0.1 * (noise - lp);
             const thud = lp * 0.15 * Math.exp(-15 * t); // Increased thud mass
@@ -349,7 +350,7 @@ export const Generators = {
             const t = i / ctx.sampleRate;
             const noise = (Math.random() * 2 - 1);
             const crunch = noise * 0.06 * Math.exp(-40 * t);
-            // VINTERDÖD: Thick thud (lower cutoff, higher gain)
+            // Thick thud (lower cutoff, higher gain)
             lp = lp + 0.08 * (noise - lp);
             const thud = lp * 0.25 * Math.exp(-12 * t);
             data[i] = crunch + thud;
@@ -364,7 +365,7 @@ export const Generators = {
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
             const noise = (Math.random() * 2 - 1);
-            // VINTERDÖD: Gravel should sound like stone (sharp clicks, less crunch)
+            // Gravel should sound like stone (sharp clicks, less crunch)
             const click = Math.sin(2 * Math.PI * 1200 * t) * 0.15 * Math.exp(-60 * t);
             const stone = (noise * 0.1) * Math.exp(-45 * t);
             lp = lp + 0.4 * (noise - lp);
@@ -686,7 +687,7 @@ export const Generators = {
             let crackle = 0;
             if (Math.random() > 0.9992) crackle = (Math.random() * 2 - 1) * 0.7;
 
-            // VINTERDÖD FIX: Reduced harsh 100ms fade to 10ms to prevent noticeable pulsing in the loop
+            // Reduced harsh 100ms fade to 10ms to prevent noticeable pulsing in the loop
             const fade = Math.min(1, Math.min(t / 0.01, (dur - t) / 0.01));
             d[i] = (rumble + hiss + crackle) * fade * 0.5;
         }
@@ -841,12 +842,12 @@ export const GamePlaySounds = {
     playFootstep: (material: MATERIAL_TYPE, isRight: boolean, isRushing: boolean = false) => {
         const id = FOOTSTEP_MAP[material] || SoundID.FOOTSTEP_SNOW;
         const pitch = (isRushing ? 0.8 : 1.0) + (isRight ? 0.03 : -0.03) + (Math.random() - 0.5) * 0.1;
-        // VINTERDÖD: ~40% volume reduction globally (0.15 -> 0.09)
+        // ~40% volume reduction globally (0.15 -> 0.09)
         audioEngine.playSound(id, isRushing ? 0.12 : 0.09, pitch);
     },
     playVegetationStep: (isRight: boolean, velocityScale: number = 1.0) => {
         const pitch = 0.9 + (isRight ? 0.05 : 0.0) + (Math.random() * 0.1);
-        // VINTERDÖD: Increased volume for better feedback (0.07 -> 0.15)
+        // Increased volume for better feedback (0.07 -> 0.15)
         const volume = 0.15 * velocityScale;
         audioEngine.playSound(SoundID.FOOTSTEP_VEGETATION, volume, pitch);
     },
@@ -881,7 +882,7 @@ export const WeaponSounds = {
     playEmptyClick: () => audioEngine.playSound(SoundID.WEAPON_EMPTY, 0.4),
     playWeaponSwap: () => audioEngine.playSound(SoundID.WEAPON_SWITCH, 0.3),
     playFlamethrowerEnd: () => audioEngine.playSound(SoundID.STEAM_HISS, 0.3),
-    playExplosion: (pos: THREE.Vector3) => audioEngine.playSpatialSound(SoundID.EXPLOSION, pos, 1.0, 120.0), // VINTERDÖD FIX: Extended spatial range to hit the high camera
+    playExplosion: (pos: THREE.Vector3) => audioEngine.playSpatialSound(SoundID.EXPLOSION, pos, 1.0, 120.0), // Extended spatial range to hit the high camera
     playGrenadeImpact: () => audioEngine.playSound(SoundID.GRENADE_IMPACT, 0.7),
     playMolotovImpact: () => audioEngine.playSound(SoundID.MOLOTOV_IMPACT, 0.7),
     playFlashbangImpact: () => audioEngine.playSound(SoundID.FLASHBANG_IMPACT, 0.7),
@@ -923,41 +924,11 @@ export const VoiceSounds = {
         else audioEngine.playSound(SoundID.VO_FAMILY_CRY, vol, pitch);
     },
     playDialogueBeep: (id: FamilyMemberID) => {
-        // Map speaker IDs to distinct pitches (Zero-GC mapping)
-        let pitch = 1.0;
+        const params = DataResolver.getVoiceParams(id);
+        const pitch = params.pitchScale * (0.95 + Math.random() * 0.1); // Small randomized jitter for natural feel
+        const freq = params.baseFreq * pitch;
 
-        switch (id) {
-            case FamilyMemberID.ROBERT:
-                pitch = 0.8;
-                break;
-            case FamilyMemberID.JORDAN:
-                pitch = 1.6;
-                break;
-            case FamilyMemberID.LOKE:
-                pitch = 1.3;
-                break;
-            case FamilyMemberID.ESMERALDA:
-                pitch = 1.1;
-                break;
-            case FamilyMemberID.NATHALIE:
-                pitch = 1.0;
-                break;
-            case FamilyMemberID.SOTIS:
-            case FamilyMemberID.PANTER:
-                pitch = 1.8;
-                break;
-            case FamilyMemberID.UNKNOWN:
-                pitch = 0.6;
-                break;
-            case FamilyMemberID.RADIO:
-                pitch = 0.7;
-                break;
-            default:
-                pitch = 0.9 + (Math.random() * 0.2);
-                break;
-        }
-
-        audioEngine.playSound(SoundID.UI_CHIME, 0.15, pitch);
+        audioEngine.playTone(freq, params.oscType, 0.08, 0.15);
     }
 };
 
