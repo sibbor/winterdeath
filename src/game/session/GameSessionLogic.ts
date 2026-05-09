@@ -15,6 +15,7 @@ import { allocateRuntimeState, resetRuntimeState } from '../../core/RuntimeState
 import { FXSystem } from '../../systems/FXSystem';
 import { SectorID } from './SectorTypes';
 import { FXParticleType } from '../../types/FXTypes';
+import { EffectPool, clearEffects } from '../../systems/EffectManager';
 
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
@@ -34,6 +35,9 @@ export class GameSessionLogic {
      */
     static resetState(state: RuntimeState, props: GameCanvasProps): void {
         resetRuntimeState(state, props);
+
+        // --- VINTERDÖD FIX: PURGE VFX POOLS ---
+        clearEffects();
 
         // Update Discovery Sets (Zero-GC: reuse Sets)
         state.discoverySets.clues.clear();
@@ -218,7 +222,6 @@ export class GameSessionLogic {
             // Set the visual hit timestamp so EnemyAnimator knows to shake the mesh 
             // even if the simulation clock (now) is paused or slowed.
             enemy.hitRenderTime = this.state.renderTime;
-
             const result = originalApplyDamage(enemy, amount, type, isHighImpact, attributionOverride);
 
             if (result && enemy.hp <= 0) {

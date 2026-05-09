@@ -224,7 +224,8 @@ export class ProjectileSystem implements System {
                     z: pz,
                     radius: radius,
                     life: 8.0, // 8 seconds of fire
-                    damage: damage * 0.2 // 20% of impact damage per second
+                    damage: damage * 0.2, // 20% of impact damage per second
+                    sourceId: pool.weaponId[idx] // Track lethal attribution (Molotov)
                 });
             } else if (pool.weaponId[idx] === DamageID.FLASHBANG) {
                 WeaponFX.createFlashbangImpact(_v1, false, this.session);
@@ -271,7 +272,11 @@ export class ProjectileSystem implements System {
                     if (dSq < radSq) {
                         EnemyPoolState.hp[j] -= dmg;
                         EnemyPoolState.statusFlags[j] |= EnemyFlags.BURNING; // Apply status
-                        state.applyDamage(enemies[j], dmg, DamageID.BURN, false);
+                        
+                        // Sync burn source for lethal attribution
+                        if (enemies[j]) enemies[j].burnSource = fz.sourceId || DamageID.BURN;
+
+                        state.applyDamage(enemies[j], dmg, DamageID.BURN, false, fz.sourceId);
                     }
                 }
             }
@@ -464,6 +469,9 @@ export class ProjectileSystem implements System {
                 } else if (isFlame) {
                     // Apply BURNING status effect to enemies hit by flamethrower
                     EnemyPoolState.statusFlags[i] |= EnemyFlags.BURNING;
+                    
+                    // Sync burn source for lethal attribution
+                    if (enemies[i]) enemies[i].burnSource = wepId;
 
                     // Also trigger burn visuals immediately
                     const ctx = this.session;

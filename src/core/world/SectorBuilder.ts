@@ -533,6 +533,10 @@ export const SectorBuilder = {
                 const fl = ctx.flickeringLights[i];
                 const distSq = fl.light.position.distanceToSquared(object.position);
                 if (distSq < 400) {
+                    // [VINTERDÖD] Dispose shadow map to prevent memory creep during long sessions
+                    if (fl.light.shadow && (fl.light.shadow as any).map) {
+                        (fl.light.shadow as any).map.dispose();
+                    }
                     ctx.scene.remove(fl.light);
                     ctx.flickeringLights.splice(i, 1);
                 }

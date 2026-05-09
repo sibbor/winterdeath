@@ -50,7 +50,7 @@ export class PlayerStatsSystem implements System {
         let currentMask = this.updatePassives(session);
         this.checkAdrenalinePatch(session, simTime);
         currentMask = this.updateBuffsAndDebuffs(session, delta, simTime, currentMask);
-        this.applyStatusTicks(session, delta, simTime);
+        this.applyStatusTicks(session, simTime);
         this.updateStatusEffects(session);
 
         // --- STATUS TRANSITION SOUNDS (VINTERDÖD FIX: Debounced & Pulse-Protected) ---
@@ -127,6 +127,61 @@ export class PlayerStatsSystem implements System {
             state.statusMask = newMask;
             UIEventRingBuffer.push(UIEventType.SYNC_STATUS, newMask, 0, session.engine.simTime);
         }
+    }
+
+    private applyStatusTicks(session: GameSessionLogic, simTime: number) {
+        const state = session.state;
+        const durations = state.effectDurations;
+        const tickRate = 1.0; // 1 tick per second
+
+        for (let i = 0; i < durations.length; i++) {
+            if (durations[i] <= 0) continue;
+
+            const isTick = (simTime % tickRate) < (state.lastSimDelta || 0.016);
+            if (isTick) {
+                const intensity = state.effectIntensities[i] || 1.0;
+                const baseDamage = this.getStatusBaseDamage(i);
+
+                if (baseDamage > 0) {
+                    const totalDamage = baseDamage * intensity;
+                    const dmgType = this.getStatusDamageID(i);
+                    // Pass effect index (i) to handlePlayerHit for proper attribution
+                    this.handlePlayerHit(session, totalDamage, null, dmgType, true, i);
+
+                    // Track Perk Damage Dealt (DoT) for telemetry
+                    state.perkDamageDealt[i] += totalDamage;
+
+                    // --- STATUS VISUALS (Zero-GC) ---
+                    const pos = this.playerGroup.position;
+                    if (i === StatusEffectID.BLEEDING) {
+                        FXSystem.spawnParticle(session.engine.scene, state.particles, pos.x, 1.5, pos.z, FXParticleType.BLOOD_SPLATTER, 3);
+                    } else if (i === StatusEffectID.BURNING) {
+                        _v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.2, pos.z + (Math.random() - 0.5) * 0.5);
+                        FXSystem.spawnParticle(session.engine.scene, state.particles, _v1.x, _v1.y, _v1.z, FXParticleType.FLAME, 1);
+                    } else if (i === StatusEffectID.ELECTRIFIED) {
+                        _v1.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 1.2, pos.z + (Math.random() - 0.5) * 0.4);
+                        FXSystem.spawnParticle(session.engine.scene, state.particles, _v1.x, _v1.y, _v1.z, FXParticleType.SPARK, 2);
+                    } else if (i === StatusEffectID.DROWNING) {
+                        FXSystem.spawnParticle(session.engine.scene, state.particles, pos.x, 0.2, pos.z, FXParticleType.SPLASH, 3);
+                    }
+                }
+            }
+        }
+    }
+
+    private getStatusDamageID(effectId: number): DamageID {
+        switch (effectId) {
+            case StatusEffectID.BURNING: return DamageID.BURN;
+            case StatusEffectID.BLEEDING: return DamageID.BLEED;
+            case StatusEffectID.ELECTRIFIED: return DamageID.ELECTRIC;
+            case StatusEffectID.DROWNING: return DamageID.DROWNING;
+            default: return DamageID.OTHER;
+        }
+    }
+
+    private getStatusBaseDamage(effectId: number): number {
+        const perk = PERKS[effectId];
+        return perk ? (perk.dotDamage || 0) : 0;
     }
 
     private checkAdrenalinePatch(session: GameSessionLogic, simTime: number) {
@@ -297,78 +352,31 @@ export class PlayerStatsSystem implements System {
         return currentPerkMask;
     }
 
-    private applyStatusTicks(session: GameSessionLogic, delta: number, simTime: number) {
-        const state = session.state;
-
-        // Tick DoT every 1 second
-        if (Math.floor(simTime / 1000) !== Math.floor((simTime - delta * 1000) / 1000)) {
-            for (let i = 0; i < 32; i++) {
-                if (state.effectDurations[i] <= 0) continue;
-
-                const perk = PERKS[i];
-                if (!perk || perk.dotDamage === undefined || perk.dotDamage <= 0) continue;
-
-                let dmgID = DamageID.PHYSICAL;
-                if (i === StatusEffectID.BURNING) dmgID = DamageID.BURN;
-                else if (i === StatusEffectID.BLEEDING) dmgID = DamageID.BLEED;
-                else if (i === StatusEffectID.ELECTRIFIED) dmgID = DamageID.ELECTRIC;
-                else if (i === StatusEffectID.DROWNING) dmgID = DamageID.DROWNING;
-                else if (i === StatusEffectID.FREEZING) dmgID = DamageID.BURN;
-
-                this.handlePlayerHit(session, perk.dotDamage, null, dmgID, true);
-
-                // Track Perk Damage Dealt (DoT)
-                state.perkDamageDealt[i] += perk.dotDamage;
-
-                // Visuals
-                if (i === StatusEffectID.BLEEDING) {
-                    FXSystem.spawnParticle(session.engine.scene, state.particles, this.playerGroup.position.x, 1.5, this.playerGroup.position.z, FXParticleType.BLOOD_SPLATTER, 6);
-                } else if (i === StatusEffectID.BURNING) {
-                    _v1.set(this.playerGroup.position.x + (Math.random() - 0.5) * 0.5, this.playerGroup.position.y + 1.8, this.playerGroup.position.z + (Math.random() - 0.5) * 0.5);
-                    FXSystem.spawnParticle(session.engine.scene, state.particles, _v1.x, _v1.y, _v1.z, FXParticleType.FLAME, 1);
-                }
-            }
-        }
-    }
-
     public handlePlayerHit(
         session: GameSessionLogic,
         damage: number,
         attacker: any,
         type: DamageID,
         isDoT: boolean = false,
-        effectType?: StatusEffectID,
+        effectType?: number,
         effectDuration?: number,
         effectIntensity?: number,
         specificAttackType?: EnemyAttackType
     ) {
+        if (!session || !session.state) return;
         const state = session.state;
-        const now = state.simTime;
+        const now = session.engine.simTime;
 
-        if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0 || state.sectorState?.isInvincible) return;
+        if (state.statusFlags & PlayerStatusFlags.DEAD) return;
 
-        if (state.effectDurations[StatusEffectID.REFLEX_SHIELD] > 0 || state.effectDurations[StatusEffectID.ADRENALINE_PATCH] > 0) {
-            // Reflex shield reduces damage by 50% in the calculation below, 
-            // but we allow the hit to "land" for feedback.
-        }
+        // Invulnerability Guard (Skip for DoTs/Hazards)
+        if (!isDoT && state.simTime < state.invulnerableUntil) return;
 
-        let actualDmg = damage * state.statsBuffer[PlayerStatID.MULTIPLIER_DMG_RESIST];
-
-        // Track Damage Absorbed specifically by Reflex Shield (vinterdöd Step 2)
-        if (state.effectDurations[StatusEffectID.REFLEX_SHIELD] > 0) {
-            // Shield is 50% reduction.
-            state.perkDamageAbsorbed[StatusEffectID.REFLEX_SHIELD] += (damage * 0.5);
-        }
-
-        const isBite = type === DamageID.BITE;
-
-        if (!isDoT) {
-            if (!isBite && now < (state.invulnerableUntil || 0)) return;
-            if (isBite && now < (state.lastBiteTime || 0) + 50) return;
-        }
-
+        // Hardening: Defensive Damage Clamping
+        const actualDmg = Math.max(0, damage);
         state.statsBuffer[PlayerStatID.HP] -= actualDmg;
 
+        const isBite = type === DamageID.BITE;
         let attackIndex = isBite ? EnemyAttackType.BITE : EnemyAttackType.HIT;
         if (isDoT && effectType !== undefined) {
             attackIndex = effectType as any;
@@ -385,7 +393,6 @@ export class PlayerStatsSystem implements System {
                 if (isBossAttacker && attacker.bossId !== undefined) {
                     // Bosses: TelemetrySourceOffset.BOSS + BossID
                     telemetrySourceKey = TelemetrySourceOffset.BOSS + attacker.bossId;
-                    // For bosses, we use the actual attack type if provided, else HIT/BITE
                     if (specificAttackType !== undefined) telemetryAttackIndex = specificAttackType;
                 } else {
                     // Normal Enemies: TelemetrySourceOffset.ENEMY + EnemyType
@@ -403,32 +410,26 @@ export class PlayerStatsSystem implements System {
             const perk = PERKS[effectType];
             if (perk) {
                 const duration = perk.duration || effectDuration || 0;
-
-                // --- TIMER AUDIT (VINTERDÖD FIX) ---
-                const simDelta = session.state.lastSimDelta;
-                if (simDelta > 0.5) {
-                    console.warn(`[PlayerStatsSystem] CRITICAL: Delta looks like milliseconds (${simDelta.toFixed(4)}). Expected seconds (0.016).`);
-                }
-
-                const localizedPerk = DataResolver.getPerkName(effectType, true);
-                console.log(`[PlayerStatsSystem] APPLY: ${localizedPerk} for ${duration}ms (ID: ${effectType}, Delta: ${simDelta.toFixed(4)})`);
                 state.effectDurations[effectType] = duration;
-                state.effectMaxDurations[effectType] = duration; // Sync Max Duration for UI
+                state.effectMaxDurations[effectType] = duration;
                 state.effectIntensities[effectType] = effectIntensity !== undefined ? effectIntensity : 1;
 
                 // --- SOURCE ATTRIBUTION (Zero-GC) ---
-                let effectSourceKey = type;
-                if (attacker) {
-                    const isBossAttacker = (attacker.statusFlags & EnemyFlags.BOSS) !== 0;
-                    if (isBossAttacker && attacker.bossId !== undefined) {
-                        effectSourceKey = 16 + attacker.bossId;
+                // Only update source map for NEW hits, don't overwrite during DoT ticks
+                if (!isDoT) {
+                    let effectSourceKey = type;
+                    if (attacker) {
+                        const isBossAttacker = (attacker.statusFlags & EnemyFlags.BOSS) !== 0;
+                        if (isBossAttacker && attacker.bossId !== undefined) {
+                            effectSourceKey = 16 + attacker.bossId;
+                        } else {
+                            effectSourceKey = attacker.type;
+                        }
                     } else {
-                        effectSourceKey = attacker.type;
+                        effectSourceKey = 24 + type;
                     }
-                } else {
-                    effectSourceKey = 24 + type;
+                    state.effectSources[effectType] = effectSourceKey;
                 }
-                state.effectSources[effectType] = effectSourceKey;
             }
         }
 
@@ -446,9 +447,9 @@ export class PlayerStatsSystem implements System {
         }
 
         if (state.statsBuffer[PlayerStatID.HP] <= 0) {
+            state.statsBuffer[PlayerStatID.HP] = 0;
             let finalAttackType = specificAttackType !== undefined ? specificAttackType : EnemyAttackType.HIT;
             if (isDoT && effectType !== undefined) {
-                // If it's a DoT, we can use a special logic or just pass ENVIRONMENTAL/HIT
                 finalAttackType = EnemyAttackType.ENVIRONMENTAL;
             }
             this.executePlayerDeath(session, attacker, type, finalAttackType, attackIndex, now, isDoT ? effectType : undefined);

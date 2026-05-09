@@ -607,7 +607,7 @@ export const EnemyManager = {
         if (isGibbed) {
             enemy.statusFlags |= EnemyFlags.GIBBED;
             if (callbacks.session) {
-                const tracker = callbacks.session.getSystem('damage_tracker_system');
+                const tracker = (callbacks.session as GameSessionLogic).getSystem<any>(SystemID.DAMAGE_TRACKER);
                 if (tracker) tracker.recordGib(callbacks.session);
             }
         }
@@ -624,7 +624,7 @@ export const EnemyManager = {
 
         const decalScale = ((enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 6.0 : enemyScale * burstScale);
 
-        // Null-safety check for callbacks since _aiContext can be cleared/nullified
+        // null-safety check for callbacks since _aiContext can be cleared/nullified
         if (callbacks.spawnDecal) {
             callbacks.spawnDecal(pos.x, pos.z, decalScale, MATERIALS.bloodDecal, FXDecalType.SPLATTER);
         }
@@ -926,23 +926,27 @@ export const EnemyManager = {
 
         const baseDamage = speedKmh * massRatio * vehicleDef.collisionDamageMultiplier * 2.0;
 
-        e.hp -= baseDamage;
         e.hitTime = simTime;
         e.hitRenderTime = renderTime;
 
         const scene = session.engine.scene;
 
-        const tracker = (session as any).getSystem('damage_tracker_system') as any;
-        if (tracker) tracker.recordOutgoingDamage(session, baseDamage, DamageID.VEHICLE, (e.statusFlags & EnemyFlags.BOSS) !== 0);
+        // Redirect damage through the centralized system to ensure proper telemetry and XP attribution
+        const tracker = (session as GameSessionLogic).getSystem<any>(SystemID.DAMAGE_TRACKER);
+        if (tracker) {
+            tracker.recordOutgoingDamage(session, baseDamage, DamageID.VEHICLE, (e.statusFlags & EnemyFlags.BOSS) !== 0);
+        }
+
+        // Call applyDamage instead of direct HP mutation to trigger centralized onEnemyKilled
+        const applyDamage = session.state.applyDamage;
+        if (applyDamage) {
+            applyDamage(e, baseDamage, DamageID.VEHICLE);
+        } else {
+            e.hp -= baseDamage;
+        }
 
         if (e.hp <= 0) {
             e.statusFlags |= EnemyFlags.DEAD;
-            if (tracker) {
-                _v1.copy(e.mesh.position).setY(0);
-                const pPos = session.playerPos;
-                const dSq = pPos ? _v1.distanceToSquared(pPos) : 0;
-                tracker.recordKill(session, DamageID.VEHICLE, (e.statusFlags & EnemyFlags.BOSS) !== 0, -1, DamageID.VEHICLE, dSq);
-            }
 
             if (speedKmh >= 80) {
                 e.deathState = EnemyDeathState.GIBBED;
@@ -1031,17 +1035,8 @@ export const EnemyManager = {
             const shouldCleanup = (e.deathState === EnemyDeathState.DEAD) || (e.statusFlags & (EnemyFlags.EXPLODED | EnemyFlags.GIBBED)) !== 0;
 
             if (shouldCleanup) {
-                // --- TELEMETRY & PROGRESSION ---
-                const session = (callbacks as any).getSession ? (callbacks as any).getSession() : null;
-                if (session) {
-                    const tracker = session.getSystem(SystemID.DAMAGE_TRACKER);
-                    if (tracker) {
-                        _v1.copy(e.mesh.position).setY(0);
-                        const pPos = session.playerPos;
-                        const dSq = pPos ? _v1.distanceToSquared(pPos) : 0;
-                        tracker.recordKill(session, e.type, (e.statusFlags & EnemyFlags.BOSS) !== 0, e.bossId, e.lastDamageType as any, dSq);
-                    }
-                }
+                // [VINTERDÖD FIX] Telemetry is now handled centrally by GameSessionLogic/PlayerStatsSystem 
+                // during the applyDamage tick. recordKill here was causing double-counting.
                 if (callbacks.gainXp) callbacks.gainXp(e.score || 10);
 
                 if ((e.statusFlags & EnemyFlags.BOSS) !== 0 && e.bossId !== undefined && e.bossId !== -1) {
@@ -1081,11 +1076,11 @@ _aiContext.onEffectTick = (enemy: Enemy, type: EnemyEffectType) => {
             _aiContext.spawnParticle(pos.x, pos.y + 1.8, pos.z, FXParticleType.ENEMY_EFFECT_STUN, 1, undefined, undefined, 0xffff00, 0.3);
             break;
         case EnemyEffectType.FLAME:
-            _v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.0, pos.z + (Math.random() - 0.5) * 0.5);
+            _v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.8, pos.z + (Math.random() - 0.5) * 0.5);
             _aiContext.spawnParticle(_v1.x, _v1.y, _v1.z, FXParticleType.ENEMY_EFFECT_FLAME, 1);
             break;
         case EnemyEffectType.SPARK:
-            _v1.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 0.8 + Math.random() * 0.4, pos.z + (Math.random() - 0.5) * 0.4);
+            _v1.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 1.8 + Math.random() * 0.4, pos.z + (Math.random() - 0.5) * 0.4);
             _aiContext.spawnParticle(_v1.x, _v1.y, _v1.z, FXParticleType.ENEMY_EFFECT_SPARK, 1);
             break;
     }

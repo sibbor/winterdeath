@@ -43,11 +43,11 @@ export class EnemySystem implements System {
             spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type: FXDecalType = FXDecalType.DECAL) => {
                 if (this.currentSession) this.spawnDecal(this.currentSession, x, z, s, mat, type);
             },
-            applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact: boolean = false) => {
+            applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact: boolean = false, attributionOverride?: DamageID) => {
                 if (!this.currentSession) return;
                 const state = this.currentSession.state;
                 if (state.applyDamage) {
-                    state.applyDamage(enemy, amount, type, isHighImpact);
+                    state.applyDamage(enemy, amount, type, isHighImpact, attributionOverride);
                 }
             },
             spawnBubble: (text: string, duration?: number) => {

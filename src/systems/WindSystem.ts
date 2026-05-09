@@ -99,6 +99,7 @@ export class WindSystem implements System {
       this.bindMaterial(MATERIALS.treeLeavesOak);
       this.bindMaterial(MATERIALS.treeLeavesBirch);
       this.bindMaterial(MATERIALS.treeTrunk);
+      this.bindMaterial(MATERIALS.treeTrunkOak);
       this.bindMaterial(MATERIALS.treeTrunkBirch);
       this.bindMaterial(MATERIALS.deadWood);
       this.bindMaterial(MATERIALS.treeSilhouette);

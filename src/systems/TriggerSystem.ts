@@ -6,6 +6,7 @@ import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
 import { InteractionPromptId } from './ui/UIEventBridge';
 import { t } from '../utils/i18n';
+import { SpatialGrid } from '../core/world/SpatialGrid';
 
 /**
  * Data-Oriented Trigger System using Struct of Arrays (SoA).
@@ -20,6 +21,7 @@ export class TriggerSystem implements System {
 
     private readonly maxTriggers: number;
     private activeCount: number = 0;
+    private grid: SpatialGrid | null = null;
 
     // --- Struct of Arrays (SoA) ---
     private readonly activeFlags: Uint8Array;
@@ -82,6 +84,10 @@ export class TriggerSystem implements System {
         for (let i = 0; i < maxCapacity; i++) {
             this.metadata[i] = { id: '', content: '', contentId: 0, actions: [] };
         }
+    }
+
+    public setGrid(grid: SpatialGrid): void {
+        this.grid = grid;
     }
 
     public reset(): void {
@@ -166,7 +172,7 @@ export class TriggerSystem implements System {
                 m.interactionPromptId = config.interactionPromptId;
                 m.label = config.label;
 
-                // Pre-resolve numeric IDs for discovery types to avoid hot-path lookups
+                // --- VINTERDÖD RESTORATION: DISCOVERY SMI RESOLUTION ---
                 m.contentId = 0;
                 if (config.type === TriggerType.POI) {
                     const poi = DataResolver.getPois()[m.id];
@@ -177,6 +183,15 @@ export class TriggerSystem implements System {
                 } else if (config.type === TriggerType.COLLECTIBLE) {
                     const col = DataResolver.getCollectibles()[m.id];
                     if (col) m.contentId = (col.sector << 8) | col.index;
+                }
+
+                // Register in SpatialGrid if provided
+                if (this.grid) {
+                    this.grid.addTrigger({
+                        index: i,
+                        position: { x: config.x, z: config.z },
+                        radius: config.size ? Math.sqrt((config.size.width/2)**2 + (config.size.depth/2)**2) : (config.radius || 5)
+                    });
                 }
 
                 return i;
@@ -273,36 +288,53 @@ export class TriggerSystem implements System {
         const playerPos = session.playerPos;
         if (!playerPos) return;
 
-        for (let i = 0; i < this.maxTriggers; i++) {
-            if (this.activeFlags[i] === 0) continue;
+        // --- SPATIAL GRID OPTIMIZATION ---
+        // Instead of O(N) over 256 triggers, we query the grid for triggers within 15m.
+        if (this.grid) {
+            const nearby = this.grid.getNearbyTriggers(playerPos, 15);
+            for (let j = 0; j < nearby.length; j++) {
+                const tObj = nearby[j];
+                const i = typeof tObj === 'number' ? tObj : tObj.index;
+                if (i === undefined || this.activeFlags[i] === 0) continue;
 
-            const status = this.statusFlags[i];
-            if (!(status & TriggerStatus.ACTIVE)) continue;
-            if (status & TriggerStatus.TRIGGERED && !(status & TriggerStatus.REPEATABLE)) continue;
+                const status = this.statusFlags[i];
+                if (!(status & TriggerStatus.ACTIVE)) continue;
+                if (status & TriggerStatus.TRIGGERED && !(status & TriggerStatus.REPEATABLE)) continue;
 
-            // Check repeat interval
-            if (status & TriggerStatus.REPEATABLE && this.repeatIntervals[i] > 0) {
-                if (simTime - this.lastTriggerTimes[i] < this.repeatIntervals[i]) continue;
+                if (status & TriggerStatus.REPEATABLE && this.repeatIntervals[i] > 0) {
+                    if (simTime - this.lastTriggerTimes[i] < this.repeatIntervals[i]) continue;
+                }
+
+                let isInside = false;
+                const tx = this.positionsX[i];
+                const tz = this.positionsZ[i];
+
+                if (this.shapeTypes[i] === 0) { // Circle
+                    const dx = playerPos.x - tx;
+                    const dz = playerPos.z - tz;
+                    const distSq = dx * dx + dz * dz;
+                    isInside = distSq < this.radiiSq[i];
+                } else { // Box
+                    const dx = Math.abs(playerPos.x - tx);
+                    const dz = Math.abs(playerPos.z - tz);
+                    isInside = dx < this.halfWidths[i] && dz < this.halfDepths[i];
+                }
+
+                if (isInside) {
+                    this.trigger(i, session);
+                }
             }
+        } else {
+            // Fallback for warmup/no-grid contexts
+            for (let i = 0; i < this.maxTriggers; i++) {
+                if (this.activeFlags[i] === 0) continue;
+                const status = this.statusFlags[i];
+                if (!(status & TriggerStatus.ACTIVE)) continue;
+                if (status & TriggerStatus.TRIGGERED && !(status & TriggerStatus.REPEATABLE)) continue;
 
-            let isInside = false;
-            const tx = this.positionsX[i];
-            const ty = this.positionsY[i];
-            const tz = this.positionsZ[i];
-
-            if (this.shapeTypes[i] === 0) { // Circle
-                const dx = playerPos.x - tx;
-                const dz = playerPos.z - tz;
-                const distSq = dx * dx + dz * dz;
-                isInside = distSq < this.radiiSq[i];
-            } else { // Box
-                const dx = Math.abs(playerPos.x - tx);
-                const dz = Math.abs(playerPos.z - tz);
-                isInside = dx < this.halfWidths[i] && dz < this.halfDepths[i];
-            }
-
-            if (isInside) {
-                this.trigger(i, session);
+                const dx = playerPos.x - this.positionsX[i];
+                const dz = playerPos.z - this.positionsZ[i];
+                if (dx*dx + dz*dz < this.radiiSq[i]) this.trigger(i, session);
             }
         }
     }

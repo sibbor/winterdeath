@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { LIGHT_SYSTEM, LIGHT_SETTINGS } from '../content/constants';
 import { ChunkManager } from '../core/world/ChunkManager';
+import { EffectPool, SubEffectType } from './EffectManager';
 
 export interface LogicalLight {
     isLogicalLight: boolean;
@@ -152,8 +153,11 @@ export class LightSystem implements System {
         });
 
         // Map logiska ljus till fysiska Proxies
-        for (let i = 0; i < this.maxProxies; i++) {
-            const proxy = this.proxyPool[i];
+        let proxyIdx = 0;
+        
+        // Phase 5: Map LogicalLights
+        for (let i = 0; i < _tempLights.length && proxyIdx < this.maxProxies; i++) {
+            const proxy = this.proxyPool[proxyIdx];
             const logicLight = _tempLights[i];
 
             if (logicLight && logicLight._worldPos) {
@@ -164,35 +168,64 @@ export class LightSystem implements System {
                 let currentIntensity = logicLight.intensity;
 
                 // --- VINTERDÖD FLICKER LOGIC ---
-                // Low-cost sine-based flicker for fires and damaged lights
                 if (logicLight.flickerSpeed !== undefined) {
                     const speed = logicLight.flickerSpeed;
                     const spread = logicLight.flickerSpread || 0;
                     const rate = logicLight.flickerRate || 1;
-
-                    // Simple pulse + optional noise jump
                     currentIntensity += Math.sin(renderTime * speed) * spread;
-
-                    if (Math.random() < rate) {
-                        currentIntensity += (Math.random() - 0.5) * spread * 0.5;
-                    }
-                }
-
-                // --- VINTERDÖD SHADOW CONFIG ---
-                if (proxy.castShadow) {
-                    if (logicLight.shadowBias !== undefined) proxy.shadow.bias = logicLight.shadowBias;
-                    if (logicLight.shadowNormalBias !== undefined) proxy.shadow.normalBias = logicLight.shadowNormalBias;
-                    if (logicLight.shadowMapSize !== undefined) {
-                        proxy.shadow.mapSize.set(logicLight.shadowMapSize, logicLight.shadowMapSize);
-                    }
+                    if (Math.random() < rate) currentIntensity += (Math.random() - 0.5) * spread * 0.5;
                 }
 
                 proxy.intensity = Math.max(0, currentIntensity);
-            } else {
-                proxy.intensity = 0;
-                proxy.position.set(0, -1000, 0);
-                proxy.distance = 0.01;
+                proxyIdx++;
             }
+        }
+
+        // Phase 6: Map EffectPool Lights
+        // These are handled separately to avoid object allocation in Phase 5
+        const effectCount = EffectPool.activeCount;
+        for (let i = 0; i < effectCount && proxyIdx < this.maxProxies; i++) {
+            if (EffectPool.type[i] !== SubEffectType.LIGHT) continue;
+            
+            const target = EffectPool.target[i];
+            if (!target || !target.visible) continue;
+
+            const offX = EffectPool.offsetX[i];
+            const offY = EffectPool.offsetY[i];
+            const offZ = EffectPool.offsetZ[i];
+
+            // LOD Check
+            const tx = target.position.x + offX;
+            const ty = target.position.y + offY;
+            const tz = target.position.z + offZ;
+            
+            const dx = tx - playerPos.x;
+            const dz = tz - playerPos.z;
+            const distSq = dx*dx + dz*dz;
+
+            if (distSq > 3600) continue;
+
+            const proxy = this.proxyPool[proxyIdx];
+            proxy.position.set(tx, ty, tz);
+            proxy.color.setHex(EffectPool.color[i]);
+            proxy.distance = EffectPool.distance[i];
+            
+            let intensity = EffectPool.intensity[i];
+            
+            // EffectPool Flicker Logic (Simplified for fire/muzzle flashes)
+            if (EffectPool.flicker[i] > 0) {
+                intensity *= (0.8 + Math.random() * 0.4);
+                if (Math.random() > 0.9) intensity *= 0.5; // Random dip
+            }
+
+            proxy.intensity = intensity;
+            proxyIdx++;
+        }
+
+        // Clean up remaining proxies
+        for (let i = proxyIdx; i < this.maxProxies; i++) {
+            this.proxyPool[i].intensity = 0;
+            this.proxyPool[i].position.set(0, -1000, 0);
         }
     }
 

@@ -9,6 +9,7 @@ import { NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
 import { VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
+import { ChunkManager } from '../../core/world/ChunkManager';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { ParticleSystem } from '../../systems/ParticleSystem';
 import { ParticleRenderer } from '../../core/renderers/ParticleRenderer';
@@ -194,6 +195,10 @@ export class GameSessionSetup {
 
             // 7. Initialize Systems
             this.setupSystems(ctx, playerGroup, sectorCtx);
+            
+            // Link TriggerSystem to SpatialGrid for O(1) proximity checks
+            state.triggers.setGrid(state.collisionGrid);
+            
             await yielder();
 
             // --- VINTERDÖD FIX: BYPASS INTRO TRIGGERS ---
@@ -612,7 +617,6 @@ export class GameSessionSetup {
 
                     const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                     if (tracker) {
-                        tracker.recordKill(session, id, true);
                         tracker.recordSp(session, 2); // Boss Kill = +2 SP
                     }
 
@@ -830,9 +834,6 @@ export class GameSessionSetup {
 
                 // Immediate SP/State updates via App.tsx props
                 if (props.onBossKilled) props.onBossKilled(id);
-
-                const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                if (tracker) tracker.recordKill(session, id, true);
 
                 const currentFM = refs.familyMemberRef.current;
                 if (currentFM && !currentFM.rescued) {
@@ -1188,6 +1189,7 @@ export class GameSessionSetup {
 
     static disposeSector(session: GameSessionLogic, state: RuntimeState) {
         EnemyManager.clear();
+        ChunkManager.clear();
         AssetLoader.getInstance().clearCache();
 
         const engine = WinterEngine.getInstance();

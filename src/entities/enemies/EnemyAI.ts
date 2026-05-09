@@ -912,13 +912,30 @@ function updateLastSeen(e: Enemy, pos: THREE.Vector3, simTime: number) {
 }
 
 function handleStatusEffects(e: Enemy, delta: number, simTime: number, callbacks: any) {
-    if ((e.statusFlags & EnemyFlags.BURNING) !== 0) {
+    const flags = e.statusFlags;
+
+    // 1. BURNING: Damage + Flame Particles
+    if ((flags & EnemyFlags.BURNING) !== 0) {
         if (simTime > (e.lastBurnTick || 0) + 500) {
             const dmg = 5;
             e.hp -= dmg;
             callbacks.onEffectTick(e, EnemyEffectType.FLAME);
             callbacks.applyDamage(e, dmg, DamageID.BURN, false, e.burnSource);
             e.lastBurnTick = simTime;
+        }
+    }
+
+    // 2. STUNNED: Constant visual check (not damage)
+    if ((flags & EnemyFlags.STUNNED) !== 0) {
+        if (Math.random() < 0.1) {
+            callbacks.onEffectTick(e, EnemyEffectType.STUN);
+        }
+    }
+
+    // 3. ELECTROCUTED: Spark particles
+    if ((flags & EnemyFlags.ELECTROCUTED) !== 0) {
+        if (Math.random() < 0.2) {
+            callbacks.onEffectTick(e, EnemyEffectType.SPARK);
         }
     }
 }

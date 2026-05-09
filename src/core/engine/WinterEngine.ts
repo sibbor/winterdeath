@@ -13,6 +13,7 @@ import { AssetPreloader } from '../../systems/AssetPreloader';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { System, SystemID } from '../../systems/System';
 import { SectorEnvironment, EnvironmentOverride, EnvironmentalZone, EnvironmentalWeather, WeatherType } from '../../core/engine/EngineTypes';
+import { ChunkManager } from '../world/ChunkManager';
 
 // Module-level scratchpads for Zero-GC operations
 const _c1 = new THREE.Color();
@@ -439,6 +440,12 @@ export class WinterEngine {
                     }
                 }
 
+                if (child.isLight) {
+                    if (child.shadow && (child.shadow as any).map) {
+                        (child.shadow as any).map.dispose();
+                    }
+                }
+
                 for (let c = 0; c < child.children.length; c++) {
                     _traverseStack.push(child.children[c]);
                 }
@@ -451,6 +458,9 @@ export class WinterEngine {
         this._cachedSkyLight = null;
         this._cachedAmbientLight = null;
         this._cachedGround = null;
+
+        // --- VINTERDÖD FIX: Clear static chunk cache to prevent leaks across sectors ---
+        ChunkManager.clear();
 
         monitor.end('cleanup');
         if (monitor.consoleLoggingEnabled) {

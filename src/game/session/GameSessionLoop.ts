@@ -13,6 +13,7 @@ import { audioEngine } from '../../utils/audio/AudioEngine';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { WEAPONS, WeaponBehavior } from '../../content/weapons';
 import { Enemy, EnemyFlags, EnemyDeathState, NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
+import { StatusEffect } from '../../types/StatusEffects';
 import { DeathPhase } from '../../types/SessionTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
@@ -24,7 +25,7 @@ import { InteractionType } from '../../systems/ui/UIEventBridge';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { NavigationSystem } from '../../systems/NavigationSystem';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
-import { SubEffectType } from '../../systems/EffectManager';
+import { EffectPool, SubEffectType } from '../../systems/EffectManager';
 import { SystemID } from '../../systems/System';
 import { WeaponFX } from '../../systems/WeaponFX';
 import { PerkFX } from '../../systems/PerkFX';
@@ -72,6 +73,7 @@ interface LoopContext {
 const EMPTY_ARRAY: any[] = [];
 const EMPTY_OBJECT: any = {};
 
+const _v1 = new THREE.Vector3();
 const _vCamera = new THREE.Vector3();
 const _vInteraction = new THREE.Vector3();
 const _interactionScreenPosScratch = { x: 0, y: 0 };
@@ -288,14 +290,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             }
 
             const isDeadNow = enemy.hp <= 0;
-            if (wasAlive && isDeadNow) {
-                const damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                if (damageTracker) {
-                    const playerGroup = refs.playerGroupRef.current;
-                    const dSq = playerGroup ? enemy.mesh.position.distanceToSquared(playerGroup.position) : 0;
-                    damageTracker.recordKill(session, enemy.type, isBoss, undefined, weaponId, dSq);
-                }
-            }
 
             // Resolve color using the centralized system
             const weaponData = WEAPONS[type];
@@ -482,43 +476,57 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             }
 
             monitor.begin('burning_effects');
-            const burningObjects = refs.sectorContextRef.current?.burningObjects || EMPTY_ARRAY;
-            for (let i = 0; i < burningObjects.length; i++) {
-                const mesh = burningObjects[i];
-                if (!mesh.visible || !mesh.userData.effects) continue;
+            // DoD: Iterate through the unified EffectPool instead of legacy object arrays
+            const effectCount = EffectPool.activeCount;
+            for (let i = 0; i < effectCount; i++) {
+                const target = EffectPool.target[i];
+                if (!target || !target.visible) continue;
 
-                const distSq = mesh.position.distanceToSquared(playerGroup.position);
-                if (distSq > 3600) {
-                    continue;
-                }
+                if (EffectPool.type[i] !== SubEffectType.EMITTER) continue;
+                if (Math.random() > 0.3) continue; // Throttle particle spawn rate
 
-                const effs = mesh.userData.effects;
-                const cos = Math.cos(mesh.rotation.y);
-                const sin = Math.sin(mesh.rotation.y);
+                // Use pre-allocated vectors via scratchpad logic
+                _vInteraction.set(EffectPool.offsetX[i], EffectPool.offsetY[i], EffectPool.offsetZ[i]);
+                _vInteraction.add(target.position);
 
-                for (let j = 0; j < effs.length; j++) {
-                    const eff = effs[j];
-                    if (eff.type === SubEffectType.EMITTER && Math.random() < 0.8) {
-                        let count = eff.particle === FXParticleType.FLAME ? 2 : (eff.count || 1);
-                        if (eff.area && (eff.area.x * eff.area.z > 50)) count = Math.max(count, 3);
+                const distSq = _vInteraction.distanceToSquared(playerGroup.position);
+                if (distSq > 3600) continue; // 60 units LOD
 
-                        for (let k = 0; k < count; k++) {
-                            _vInteraction.copy(mesh.position);
-                            if (eff.offset) _vInteraction.add(eff.offset);
+                const pType = EffectPool.particleType[i] as FXParticleType;
+                const color = EffectPool.color[i];
+                const count = EffectPool.count[i];
+                const areaX = EffectPool.areaX[i];
+                const areaZ = EffectPool.areaZ[i];
 
-                            if (eff.area) {
-                                const lx = (Math.random() - 0.5) * eff.area.x;
-                                const lz = (Math.random() - 0.5) * eff.area.z;
-                                _vInteraction.x += lx * cos + lz * sin;
-                                _vInteraction.z += -lx * sin + lz * cos;
-                            } else {
-                                _vInteraction.x += (Math.random() - 0.5) * (eff.spread || 0.4);
-                                _vInteraction.z += (Math.random() - 0.5) * (eff.spread || 0.4);
-                            }
+                for (let k = 0; k < count; k++) {
+                    _v1.copy(_vInteraction);
 
-                            callbacks.spawnParticle(_vInteraction.x, _vInteraction.y, _vInteraction.z, eff.particle as FXParticleType, 1, undefined, undefined, eff.color);
-                        }
+                    if (areaX > 0 || areaZ > 0) {
+                        const cos = Math.cos(target.rotation.y);
+                        const sin = Math.sin(target.rotation.y);
+                        const lx = (Math.random() - 0.5) * areaX;
+                        const lz = (Math.random() - 0.5) * areaZ;
+                        _v1.x += lx * cos + lz * sin;
+                        _v1.z += -lx * sin + lz * cos;
+                    } else {
+                        const spread = EffectPool.spread[i] || 0.4;
+                        _v1.x += (Math.random() - 0.5) * spread;
+                        _v1.z += (Math.random() - 0.5) * spread;
                     }
+
+                    callbacks.spawnParticle(_v1.x, _v1.y, _v1.z, pType, 1, undefined, undefined, color);
+                }
+            }
+
+            // Player fire effects
+            if (state.statusMask & StatusEffect.BURNING) {
+                if (Math.random() > 0.5) {
+                    callbacks.spawnParticle(
+                        playerGroup.position.x + (Math.random() - 0.5) * 0.5,
+                        playerGroup.position.y + 1.8, // Head height
+                        playerGroup.position.z + (Math.random() - 0.5) * 0.5,
+                        FXParticleType.ENEMY_EFFECT_FLAME, 1
+                    );
                 }
             }
             monitor.end('burning_effects');
@@ -971,32 +979,25 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 }
             }
 
-            // Fill remaining slots with closest enemies (Top-K)
-            if (enemies && eCount > 0 && count < 8) {
-                for (let i = 0; i < eCount; i++) {
-                    const e = enemies[i];
+            // Fill remaining slots with closest enemies via SpatialGrid (O(1) Proximity Query)
+            const grid = state.collisionGrid;
+            if (grid && count < 8) {
+                const nearby = grid.getNearbyEnemies(pPos, 15); // 15m radius
+                const nLen = nearby.length;
+                
+                for (let i = 0; i < nLen && count < 8; i++) {
+                    const e = nearby[i];
+                    // Skip if it's already one of the priority interactors (rare, but possible if families are enemies?)
+                    // Actually, just skip dead ones.
                     if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
                     const dx = e.mesh.position.x - pPos.x;
                     const dz = e.mesh.position.z - pPos.z;
                     const dSq = dx * dx + dz * dz;
 
-                    // Find furthest current slot to potentially replace
-                    let furthestIdx = -1;
-                    let maxDSq = -1;
-
-                    for (let j = count; j < 8; j++) {
-                        if (_bendDistSq[j] > maxDSq) {
-                            maxDSq = _bendDistSq[j];
-                            furthestIdx = j;
-                        }
-                    }
-
-                    if (furthestIdx !== -1 && dSq < maxDSq) {
-                        const isBoss = (e.statusFlags & EnemyFlags.BOSS) !== 0;
-                        _bendInteractors[furthestIdx].set(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, isBoss ? 2.0 : 1.0);
-                        _bendDistSq[furthestIdx] = dSq;
-                    }
+                    _bendInteractors[count].set(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, (e.statusFlags & EnemyFlags.BOSS) !== 0 ? 2.0 : 1.0);
+                    _bendDistSq[count] = dSq;
+                    count++;
                 }
             }
 

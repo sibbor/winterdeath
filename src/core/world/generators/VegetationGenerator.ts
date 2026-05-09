@@ -456,6 +456,9 @@ const _placeTrees = async (ctx: SectorContext, region: Region, spacing: number, 
             id: `tree_fill_${i}`,
             materialId: MaterialType.WOOD
         });
+
+        // Register tree as vegetation for rustle sounds (radius based on scale)
+        ctx.collisionGrid.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
     }
 
     for (const key in matrixBuckets) {
@@ -1009,6 +1012,9 @@ export const VegetationGenerator = {
                 id: `tree_${i}`,
                 materialId: MaterialType.WOOD
             });
+
+            // Register tree as vegetation for rustle sounds
+            ctx.collisionGrid.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
         }
 
         for (const key in matrixBuckets) {
@@ -1075,6 +1081,9 @@ export const VegetationGenerator = {
                     id: `tree_poly_${i}`,
                     materialId: MaterialType.WOOD
                 });
+
+                // Register tree as vegetation for rustle sounds
+                ctx.collisionGrid.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
             }
         }
 

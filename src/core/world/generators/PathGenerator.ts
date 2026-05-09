@@ -254,7 +254,8 @@ export const PathGenerator = {
             curve.getTangent(t, _v1);
 
             _v1.setY(0).normalize();
-            _quat.setFromUnitVectors(_axisX, _v1);
+            const angle = Math.atan2(_v1.x, _v1.z);
+            _quat.setFromAxisAngle(_axisY, angle);
 
             _pos.setY(0.08); // Elevate sleeper slightly
             _scale.set(1, 1, 1);
@@ -418,7 +419,8 @@ export const PathGenerator = {
 
                 _v1.lerpVectors(p1, p2, 0.5); // Center
                 _v2.subVectors(p2, p1).normalize();
-                _quat.setFromUnitVectors(_axisX, _v2);
+                const angle = Math.atan2(_v2.x, _v2.z);
+                _quat.setFromAxisAngle(_axisY, angle);
 
                 // Rails
                 for (let r = 0; r < 2; r++) {
