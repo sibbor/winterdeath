@@ -121,7 +121,6 @@ export const Sector3: SectorDef = {
 
     setupProps: async (ctx: SectorContext) => {
         const { scene } = ctx;
-        (ctx as any).sectorState.ctx = ctx;
 
         let startTime = performance.now();
         const yieldIfBudgetExceeded = async () => {
@@ -251,7 +250,7 @@ export const Sector3: SectorDef = {
         spawnSectorHordes(ctx);
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
         // --- SECTOR 3: NATHALIE MISSION LOGIC ---
         if (Math.random() < 0.015 && gameState.enemies.length < 12 && !sectorState.epilogueBossDefeated) {
             const angle = Math.random() * Math.PI * 2;
@@ -563,7 +562,7 @@ export const Sector3: SectorDef = {
                         escapeCar.userData.isInteractable = true;
                         // Re-register with collision grid
                         SectorBuilder.addInteractable(
-                            (sectorState.ctx || null),
+                            ctx,
                             escapeCar,
                             {
                                 id: 's3_escape_car',

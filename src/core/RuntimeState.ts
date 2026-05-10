@@ -1,15 +1,15 @@
 import * as THREE from 'three';
-import { SectorTrigger } from '../types/TriggerTypes';
 import { TriggerSystem } from '../systems/TriggerSystem';
 import { SectorState, SectorStats } from '../types/StateTypes';
-import { PlayerStats } from '../entities/player/PlayerTypes';
+import { PlayerStats, PlayerStatID, StatWeaponIndex, StatPerkIndex, StatEnemyIndex, TELEMETRY_BUFFER_SIZE } from '../entities/player/PlayerTypes';
 import { PlayerDeathState, DamageID } from '../entities/player/CombatTypes';
 import { StatusEffectID } from '../content/perks';
 import { WeaponType } from '../content/weapons';
+import { MAX_ENTITIES, FX, LOOT } from '../content/constants';
 import { Obstacle } from './world/CollisionResolution';
 import { Enemy } from '../entities/enemies/EnemyManager';
-import { ScrapItem } from '../systems/WorldLootSystem';
-import { SpatialGrid } from './world/SpatialGrid';
+import { ScrapItem } from '../systems/LootSystem';
+import { WorldStreamer } from './world/WorldStreamer';
 import { ParticleState } from '../types/FXTypes';
 import { InteractionType, InteractionPromptId } from '../systems/ui/UIEventBridge';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
@@ -50,6 +50,15 @@ export interface PreallocatedVehicleState extends VehicleState {
     nodes: VehicleNodes | null;
 }
 
+export interface FireZone {
+    x: number;
+    z: number;
+    radius: number;
+    life: number;
+    damage: number;
+    sourceId: number;
+}
+
 /*
 Upcoming change
 
@@ -63,7 +72,7 @@ export interface RuntimeState {
     combat: PreallocatedCombatState;     // activeWeapon, ammo, reloadEndTime, multipliers
     movement: PreallocatedMovementState; // distanceSinceLastStep, isRushing, isWading
     enemies: PreallocatedEnemyManager;   // enemies array, bossSpawned, killerType
-    world: PreallocatedWorldState;       // sectorState, obstacles, collisionGrid, triggers
+    world: PreallocatedWorldState;       // sectorState, obstacles, worldStreamer, triggers
     isPlayground: boolean;
     discovery: PreallocatedDiscoveryState; // pois, clues, collectibles
     vehicle: PreallocatedVehicleState;
@@ -171,7 +180,8 @@ export interface RuntimeState {
     particles: ParticleState[];
     activeEffects: any[];
     projectiles: any[];
-    fireZones: any[];
+    fireZones: FireZone[];
+    fireZoneCount: number;
     scrapItems: ScrapItem[];
     chests: any[];
     bloodDecals: any[];
@@ -210,7 +220,7 @@ export interface RuntimeState {
     isPlayground: boolean;
     triggers: TriggerSystem;
     obstacles: Obstacle[];
-    collisionGrid: SpatialGrid;
+    worldStreamer: WorldStreamer;
     busUnlocked: boolean;
     clueActive: boolean;
     bossDefeatedTime: number;
@@ -325,32 +335,31 @@ export interface RuntimeState {
  * * Allocates the massive RuntimeState object and all its sub-objects EXACTLY ONCE.
  */
 export function allocateRuntimeState(): RuntimeState {
-    const effectCount = 32;
     return {
         velocity: new THREE.Vector3(),
         nodes: { gun: null, laserSight: null, barrelTip: null },
         baseScale: 1.0,
         baseY: 0,
-        statsBuffer: new Float32Array(48), // PlayerStatID.COUNT
-        effectDurations: new Float32Array(effectCount),
-        effectMaxDurations: new Float32Array(effectCount),
-        effectIntensities: new Float32Array(effectCount),
+        statsBuffer: new Float32Array(PlayerStatID.COUNT),
+        effectDurations: new Float32Array(MAX_ENTITIES.PERKS),
+        effectMaxDurations: new Float32Array(MAX_ENTITIES.PERKS),
+        effectIntensities: new Float32Array(MAX_ENTITIES.PERKS),
 
-        weaponKills: new Float64Array(64), // StatWeaponIndex.COUNT
-        weaponDamageDealt: new Float64Array(64),
-        weaponShotsFired: new Float64Array(64),
-        weaponShotsHit: new Float64Array(64),
-        weaponTimeActive: new Float64Array(64),
-        weaponEngagementDistSq: new Float64Array(64),
+        weaponKills: new Float64Array(StatWeaponIndex.COUNT),
+        weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
+        weaponShotsFired: new Float64Array(StatWeaponIndex.COUNT),
+        weaponShotsHit: new Float64Array(StatWeaponIndex.COUNT),
+        weaponTimeActive: new Float64Array(StatWeaponIndex.COUNT),
+        weaponEngagementDistSq: new Float64Array(StatWeaponIndex.COUNT),
 
-        perkTimesGained: new Float64Array(32), // StatPerkIndex.COUNT
-        perkDamageAbsorbed: new Float64Array(32),
-        perkDamageDealt: new Float64Array(32),
-        perkDebuffsCleansed: new Float64Array(32),
+        perkTimesGained: new Float64Array(StatPerkIndex.COUNT),
+        perkDamageAbsorbed: new Float64Array(StatPerkIndex.COUNT),
+        perkDamageDealt: new Float64Array(StatPerkIndex.COUNT),
+        perkDebuffsCleansed: new Float64Array(StatPerkIndex.COUNT),
 
-        enemyKills: new Float64Array(8), // StatEnemyIndex.COUNT
-        deathsByEnemyType: new Float64Array(8),
-        incomingDamageBuffer: new Float64Array(64 * 32),
+        enemyKills: new Float64Array(StatEnemyIndex.COUNT),
+        deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
+        incomingDamageBuffer: new Float64Array(TELEMETRY_BUFFER_SIZE),
 
         statusFlags: 0,
         statusMask: 0,
@@ -368,14 +377,14 @@ export function allocateRuntimeState(): RuntimeState {
         totalEnemiesKilled: 0,
         seenEnemies: [],
         seenBosses: [],
-        discoveredPerksMap: new Uint8Array(256),
+        discoveredPerksMap: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
         discoveredPOIs: [],
 
         prologueSeen: false,
         rescuedFamilyIndices: [],
         familyFoundCount: 0,
 
-        challengeTiers: new Int32Array(64),
+        challengeTiers: new Int32Array(MAX_ENTITIES.CHALLENGES),
         totalChallengePoints: 0,
         trackedChallengeIds: [],
 
@@ -415,7 +424,8 @@ export function allocateRuntimeState(): RuntimeState {
         particles: [],
         activeEffects: [],
         projectiles: [],
-        fireZones: [],
+        fireZones: Array.from({ length: MAX_ENTITIES.FIRE_ZONES }, () => ({ x: 0, z: 0, radius: 0, life: 0, damage: 0, sourceId: 0 })),
+        fireZoneCount: 0,
         scrapItems: [],
         chests: [],
         bloodDecals: [],
@@ -448,9 +458,9 @@ export function allocateRuntimeState(): RuntimeState {
         playerDeathState: PlayerDeathState.ALIVE,
         sectorState: { envOverride: undefined } as any,
         isPlayground: false,
-        triggers: new TriggerSystem(256),
+        triggers: new TriggerSystem(MAX_ENTITIES.TRIGGERS),
         obstacles: [],
-        collisionGrid: new SpatialGrid(),
+        worldStreamer: new WorldStreamer(),
         busUnlocked: false,
         clueActive: false,
         bossDefeatedTime: 0,
@@ -513,7 +523,8 @@ export function allocateRuntimeState(): RuntimeState {
             _lastNoiseTime: 0,
             engineVoiceIdx: -1,
             skidVoiceIdx: -1,
-            engineStartTime: 0
+            engineStartTime: 0,
+            prevPos: new THREE.Vector3(0, -1000, 0)
         },
 
         flashlightOn: false,
@@ -542,11 +553,11 @@ export function allocateRuntimeState(): RuntimeState {
 
         hitStopTime: 0,
         globalTimeScale: 1.0,
-        killStreakBuffer: new Float32Array(5),
+        killStreakBuffer: new Float32Array(MAX_ENTITIES.STREAK_BUFFER_SIZE),
         lastAdrenalineTime: 0,
         lastGibMasterTime: 0,
         lastQuickFingerTime: 0,
-        effectSources: new Uint8Array(32)
+        effectSources: new Uint8Array(MAX_ENTITIES.PERKS)
     };
 }
 
@@ -663,7 +674,11 @@ export function resetRuntimeState(state: RuntimeState, props: any): void {
     state.particles.length = 0;
     state.activeEffects.length = 0;
     state.projectiles.length = 0;
-    state.fireZones.length = 0;
+    const fzLen = state.fireZones.length | 0;
+    for (let i = 0; i < fzLen; i = (i + 1) | 0) {
+        state.fireZones[i].life = 0;
+    }
+    state.fireZoneCount = 0;
     state.scrapItems.length = 0;
     state.chests.length = 0;
     state.bloodDecals.length = 0;
@@ -681,7 +696,6 @@ export function resetRuntimeState(state: RuntimeState, props: any): void {
     state.sectorState = props.sectorState || { envOverride: undefined } as any;
     state.triggers.reset();
     state.obstacles.length = 0;
-    state.collisionGrid.clear();
 
     // 8. Input State
     state.inputState.w = false;

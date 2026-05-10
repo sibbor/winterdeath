@@ -162,9 +162,21 @@ export const DataResolver = {
     /**
      * Resolves the localized name key for a specific Weapon.
      */
-    getWeaponName(type: WeaponType): string {
+    getWeaponName(type: WeaponType, logFriendly: boolean = false): string {
         const weapon = WEAPONS[type];
-        return weapon ? weapon.displayName : 'ui.unknown';
+        const key = weapon ? weapon.displayName : 'ui.unknown';
+        if (logFriendly) return this._resolveLogName(key);
+        return key;
+    },
+
+    /**
+     * Resolves the localized name for an effect (Environmental or Status).
+     * Used primarily for combat logs and debug telemetries.
+     */
+    getEffectName(id: number, logFriendly: boolean = true): string {
+        const name = ENVIRONMENTAL_DAMAGE_NAMES[id] || 'ui.unknown';
+        if (logFriendly) return this._resolveLogName(name);
+        return name;
     },
 
     /**

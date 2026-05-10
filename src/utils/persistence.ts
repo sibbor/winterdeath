@@ -46,25 +46,52 @@ export const DEFAULT_STATE: GameState = {
 };
 
 export const getPersistentState = (state: GameState) => {
+    const s = state.stats;
     return {
         stats: {
-            ...state.stats,
-            statsBuffer: Array.from(state.stats.statsBuffer),
-            effectDurations: Array.from(state.stats.effectDurations),
-            effectMaxDurations: Array.from(state.stats.effectMaxDurations || []),
-            effectIntensities: Array.from(state.stats.effectIntensities),
-            weaponKills: Array.from(state.stats.weaponKills || []),
-            weaponDamageDealt: Array.from(state.stats.weaponDamageDealt || []),
-            weaponShotsFired: Array.from(state.stats.weaponShotsFired || []),
-            weaponShotsHit: Array.from(state.stats.weaponShotsHit || []),
-            weaponTimeActive: Array.from(state.stats.weaponTimeActive || []),
-            weaponEngagementDistSq: Array.from(state.stats.weaponEngagementDistSq || []),
-            perkTimesGained: Array.from(state.stats.perkTimesGained || []),
-            perkDamageAbsorbed: Array.from(state.stats.perkDamageAbsorbed || []),
-            perkDamageDealt: Array.from(state.stats.perkDamageDealt || []),
-            perkDebuffsCleansed: Array.from(state.stats.perkDebuffsCleansed || []),
-            enemyKills: Array.from(state.stats.enemyKills || []),
-            challengeTiers: Array.from(state.stats.challengeTiers || [])
+            // Pick only serializable core fields
+            statusFlags: s.statusFlags,
+            statusMask: s.statusMask,
+            activePassives: [...s.activePassives],
+            activeBuffs: [...s.activeBuffs],
+            activeDebuffs: [...s.activeDebuffs],
+            sectorsCompleted: s.sectorsCompleted,
+            totalSkillPointsEarned: s.totalSkillPointsEarned,
+            collectiblesDiscovered: [...s.collectiblesDiscovered],
+            viewedCollectibles: s.viewedCollectibles ? [...s.viewedCollectibles] : [],
+            cluesFound: [...s.cluesFound],
+            mostUsedWeapon: s.mostUsedWeapon,
+            totalEnemiesKilled: s.totalEnemiesKilled,
+            seenEnemies: [...s.seenEnemies],
+            seenBosses: [...s.seenBosses],
+            discoveredPOIs: [...s.discoveredPOIs],
+            prologueSeen: s.prologueSeen,
+            rescuedFamilyIndices: [...s.rescuedFamilyIndices],
+            deadBossIndices: [...s.deadBossIndices],
+            familyFoundCount: s.familyFoundCount,
+            totalChallengePoints: s.totalChallengePoints,
+            trackedChallengeIds: [...s.trackedChallengeIds],
+
+            // Serialize Buffers
+            statsBuffer: Array.from(s.statsBuffer),
+            effectDurations: Array.from(s.effectDurations),
+            effectMaxDurations: Array.from(s.effectMaxDurations || []),
+            effectIntensities: Array.from(s.effectIntensities),
+            weaponKills: Array.from(s.weaponKills || []),
+            weaponDamageDealt: Array.from(s.weaponDamageDealt || []),
+            weaponShotsFired: Array.from(s.weaponShotsFired || []),
+            weaponShotsHit: Array.from(s.weaponShotsHit || []),
+            weaponTimeActive: Array.from(s.weaponTimeActive || []),
+            weaponEngagementDistSq: Array.from(s.weaponEngagementDistSq || []),
+            perkTimesGained: Array.from(s.perkTimesGained || []),
+            perkDamageAbsorbed: Array.from(s.perkDamageAbsorbed || []),
+            perkDamageDealt: Array.from(s.perkDamageDealt || []),
+            perkDebuffsCleansed: Array.from(s.perkDebuffsCleansed || []),
+            enemyKills: Array.from(s.enemyKills || []),
+            deathsByEnemyType: Array.from(s.deathsByEnemyType || []),
+            incomingDamageBuffer: Array.from(s.incomingDamageBuffer || []),
+            challengeTiers: Array.from(s.challengeTiers || []),
+            discoveredPerksMap: Array.from(s.discoveredPerksMap || [])
         },
         currentSector: state.currentSector,
         loadout: state.loadout,
@@ -76,7 +103,21 @@ export const getPersistentState = (state: GameState) => {
         settings: state.settings,
         weather: state.weather,
         environmentOverrides: state.environmentOverrides,
-        sectorState: state.sectorState,
+        sectorState: (function () {
+            const raw = state.sectorState || {};
+            const cleaned: any = {};
+            for (const key in raw) {
+                const val = raw[key];
+                // Skip the ephemeral context and any Three.js objects that might have leaked
+                if (key === 'ctx' || (val && (val.isObject3D || val.isMesh || val.isTexture))) continue;
+
+                const t = typeof val;
+                if (val === null || t === 'string' || t === 'number' || t === 'boolean') {
+                    cleaned[key] = val;
+                }
+            }
+            return cleaned;
+        })(),
         sessionToken: state.sessionToken
     };
 };
@@ -121,6 +162,16 @@ export const loadGameState = (): GameState => {
                     perkDamageDealt: ensureBufferSize(loaded.stats?.perkDamageDealt, StatPerkIndex.COUNT),
                     perkDebuffsCleansed: ensureBufferSize(loaded.stats?.perkDebuffsCleansed, StatPerkIndex.COUNT),
                     enemyKills: ensureBufferSize(loaded.stats?.enemyKills, StatEnemyIndex.COUNT),
+                    deathsByEnemyType: ensureBufferSize(loaded.stats?.deathsByEnemyType, StatEnemyIndex.COUNT),
+                    incomingDamageBuffer: ensureBufferSize(loaded.stats?.incomingDamageBuffer, 64 * 32),
+                    discoveredPerksMap: (function () {
+                        const arr = new Uint8Array(256);
+                        const saved = loaded.stats?.discoveredPerksMap;
+                        if (saved && Array.isArray(saved)) {
+                            for (let i = 0; i < Math.min(saved.length, 256); i++) arr[i] = saved[i];
+                        }
+                        return arr;
+                    })(),
                     challengeTiers: (function () {
                         const expectedSize = 64;
                         const buffer = ensureBufferSize(loaded.stats?.challengeTiers, expectedSize, Int32Array);

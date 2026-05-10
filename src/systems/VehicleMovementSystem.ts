@@ -11,6 +11,7 @@ import { _buoyancyResult } from './WaterSystem';
 import { KMH_TO_MS } from '../content/constants';
 import { VehicleState, VehicleNodes, VehicleTypes, VehicleDrivetrain, VehicleCategory, VehicleEngineState, VehicleID } from '../entities/vehicles/VehicleTypes';
 import { InputAction } from '../core/engine/InputManager';
+import { RuntimeStressHarness } from '../utils/debug/RuntimeStressHarness';
 
 // --- PERFORMANCE SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
@@ -26,15 +27,22 @@ export class VehicleMovementSystem implements System {
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
+        // --- VINTERDÖD LIFECYCLE GUARD ---
+        if (!session?.state?.sectorState?.ctx) return;
+
         VehicleManager.tick(session, this.playerGroup, delta, simTime, renderTime);
 
         const state = session.state;
         const input = session.engine.input.state;
 
         const interactables = state.sectorState.ctx.interactables;
+        if (!interactables) return;
+
         const len = interactables.length;
         for (let i = 0; i < len; i++) {
             const obj = interactables[i];
+            if (!obj) continue;
+
             const def = obj.userData.vehicleDef;
             if (def) {
                 const isActive = (state.vehicle.active && state.vehicle.mesh === obj);
@@ -59,7 +67,7 @@ export class VehicleMovementSystem implements System {
             state.vehicle.speed = 0;
             state.vehicle.throttle = 0;
 
-            const vState = state.vehicle as any as VehicleState; // Global active state
+            const vState = state.vehicle as any as VehicleState;
             if (vState) {
                 if (vState.engineVoiceIdx !== -1) {
                     audioEngine.stopVoice(vState.engineVoiceIdx);
@@ -83,7 +91,6 @@ export class VehicleMovementSystem implements System {
         renderTime: number,
         def: VehicleDef
     ) {
-        // 1. O(1) Data Acquisition
         if (!vehicle.userData.state) vehicle.userData.state = VehicleTypes.createState();
         if (!vehicle.userData.nodes) vehicle.userData.nodes = VehicleManager.discoverNodes(vehicle);
 
@@ -97,12 +104,10 @@ export class VehicleMovementSystem implements System {
         const vel = vState.velocity;
         const angVel = vState.angularVelocity;
 
-        // --- COMPUTE FORWARD & RIGHT VECTORS ---
         const elements = vehicle.matrixWorld.elements;
         _right.set(elements[0], elements[1], elements[2]).normalize();
         _forward.set(elements[8], elements[9], elements[10]).normalize();
 
-        // --- INPUT ---
         let throttle = 0;
         let steer = 0;
         let handbrake = false;
@@ -129,37 +134,26 @@ export class VehicleMovementSystem implements System {
         throttle = THREE.MathUtils.clamp(throttle, -1, 1);
         steer = THREE.MathUtils.clamp(steer, -1, 1);
 
-        // --- SPEED DECOMPOSITION ---
         let forwardSpeed = vel.dot(_forward);
         let currentLatSpeed = vel.dot(_right);
         let absLatSpeed = Math.abs(currentLatSpeed);
         const maxSpeedMS = def.maxSpeed * KMH_TO_MS;
 
-        // --- ACCELERATION / NORMAL BRAKING ---
         let isBraking = false;
-
         if (throttle !== 0) {
             if (throttle < 0 && forwardSpeed > 1.0) {
-                const decel = def.brakeForce * (throttle * -1) * dt;
-                vel.addScaledVector(_forward, -decel);
+                vel.addScaledVector(_forward, -def.brakeForce * (throttle * -1) * dt);
                 isBraking = true;
             } else if (throttle > 0 && forwardSpeed < -1.0) {
-                const decel = def.brakeForce * throttle * dt;
-                vel.addScaledVector(_forward, decel);
+                vel.addScaledVector(_forward, def.brakeForce * throttle * dt);
                 isBraking = true;
             } else {
                 const maxReverseMS = maxSpeedMS * def.reverseSpeedFraction;
                 const atLimit = throttle > 0 ? (forwardSpeed >= maxSpeedMS) : (forwardSpeed <= -maxReverseMS);
-
                 if (!atLimit) {
                     let tractionMul = 1.0;
-                    if (def.drivetrain === VehicleDrivetrain.FWD) {
-                        const slip = absLatSpeed * 0.05;
-                        tractionMul = 1.0 - Math.min(0.5, slip);
-                    } else if (def.drivetrain === VehicleDrivetrain.AWD) {
-                        const slip = absLatSpeed * 0.02;
-                        tractionMul = 1.0 - Math.min(0.2, slip);
-                    }
+                    if (def.drivetrain === VehicleDrivetrain.FWD) tractionMul = 1.0 - Math.min(0.5, absLatSpeed * 0.05);
+                    else if (def.drivetrain === VehicleDrivetrain.AWD) tractionMul = 1.0 - Math.min(0.2, absLatSpeed * 0.02);
                     vel.addScaledVector(_forward, def.acceleration * throttle * tractionMul * dt);
                 }
             }
@@ -215,50 +209,37 @@ export class VehicleMovementSystem implements System {
             vState.suspVelY -= vState.suspY * def.suspensionStiffness * dt;
             vState.suspVelY *= (1.0 - def.suspensionDamping * dt);
             vState.suspY += vState.suspVelY * dt;
-
-            // Boat bobbing (premium handle for stationary/slow boats)
-            if (isBoat && speed < 10.0) {
-                const bobIntensity = 0.04 * (1.0 - (speed / 10.0));
-                vState.suspY += Math.sin(renderTime * 0.005) * bobIntensity;
+            if (def.category === VehicleCategory.BOAT && speed < 10.0) {
+                vState.suspY += Math.sin(renderTime * 0.005) * 0.04 * (1.0 - (speed / 10.0));
             }
-
             vState.suspY = THREE.MathUtils.clamp(vState.suspY, -0.3, 0.3);
-        } else {
-            vState.suspY = 0;
-            vState.suspVelY = 0;
         }
 
         // VISUAL SUSPENSION (Pitch & Roll)
         if (vNodes.chassis) {
             const chassis = vNodes.chassis;
             chassis.position.y = vState.suspY;
-
             const fwdAccel = (forwardSpeed - vState.prevFwdSpeed) / dt;
             vState.prevFwdSpeed = forwardSpeed;
-
-            const targetPitch = THREE.MathUtils.clamp(fwdAccel * 0.003, -0.04, 0.04);
-            const targetRoll = THREE.MathUtils.clamp(-currentLatSpeed * 0.015, -0.06, 0.06);
-
-            chassis.rotation.x = THREE.MathUtils.lerp(chassis.rotation.x, targetPitch, dt * 8);
-            chassis.rotation.z = THREE.MathUtils.lerp(chassis.rotation.z, targetRoll, dt * 8);
+            chassis.rotation.x = THREE.MathUtils.lerp(chassis.rotation.x, THREE.MathUtils.clamp(fwdAccel * 0.003, -0.04, 0.04), dt * 8);
+            chassis.rotation.z = THREE.MathUtils.lerp(chassis.rotation.z, THREE.MathUtils.clamp(-currentLatSpeed * 0.015, -0.06, 0.06), dt * 8);
         }
 
-        // --- APPLY TRANSFORMS ---
         vehicle.position.addScaledVector(vel, dt);
+
+        // --- STRESS HARNESS: MONITOR PHASING ---
+        RuntimeStressHarness.assertPhasing("Vehicle", vehicle.position.x, vehicle.position.z, vState.prevPos.x, vState.prevPos.z);
+        vState.prevPos.copy(vehicle.position);
         vehicle.rotation.y += angVel.y * dt;
         vehicle.updateMatrixWorld(true);
 
         const obs = vehicle.userData.obstacleRef;
         if (obs && (speedSq > 0 || angVel.lengthSq() > 0.01)) {
-            const grid = state.collisionGrid;
-            if (grid && typeof grid.updateObstacle === 'function') {
-                grid.updateObstacle(obs);
-            }
+            session.worldStreamer?.updateObstacle(obs);
         }
 
         // --- LIGHTING SYSTEM ---
         const isEngineOn = (input !== null && state.vehicle.engineState !== VehicleEngineState.OFF);
-
         if (vNodes.headlights) {
             (vNodes.headlights.material as THREE.MeshStandardMaterial).emissiveIntensity = isEngineOn ? 5.0 : 0.0;
         }
@@ -266,48 +247,40 @@ export class VehicleMovementSystem implements System {
         if (vNodes.brakeLights) {
             const brakeIntensity = isBraking ? 20.0 : (isEngineOn ? 2.0 : 0.0);
             const brakeColor = isBraking ? 0xff3333 : 0x660000;
-
             for (let i = 0; i < vNodes.brakeLights.length; i++) {
                 const mat = vNodes.brakeLights[i].material as THREE.MeshStandardMaterial;
                 mat.emissiveIntensity = brakeIntensity;
                 mat.emissive.setHex(brakeColor);
             }
-
-            if (vNodes.brakeGlow) {
-                vNodes.brakeGlow.visible = isBraking;
-            }
         }
+        if (vNodes.brakeGlow) vNodes.brakeGlow.visible = isBraking;
 
         if (vNodes.sirenRed && vNodes.sirenBlue) {
             const matBlue = vNodes.sirenBlue.material as THREE.MeshStandardMaterial;
             const matRed = vNodes.sirenRed.material as THREE.MeshStandardMaterial;
-
             if (isEngineOn) {
-                const blinkSpeed = 0.015;
-                matBlue.emissiveIntensity = Math.sin(renderTime * blinkSpeed) > 0 ? 20.0 : 0.0;
-                matRed.emissiveIntensity = Math.cos(renderTime * blinkSpeed) > 0 ? 20.0 : 0.0;
+                matBlue.emissiveIntensity = Math.sin(renderTime * 0.015) > 0 ? 20.0 : 0.0;
+                matRed.emissiveIntensity = Math.cos(renderTime * 0.015) > 0 ? 20.0 : 0.0;
             } else {
-                matBlue.emissiveIntensity = 0.0;
-                matRed.emissiveIntensity = 0.0;
+                matBlue.emissiveIntensity = 0; matRed.emissiveIntensity = 0;
             }
         }
 
-        // --- AUDIO & SMOKE FX ---
-        if (input) {
-            const speedRatio = speed / Math.max(1.0, maxSpeedMS);
-            const normSpeed = Math.min(1.0, speedRatio);
-
+        // --- HUD & AUDIO SYNC (Zero-GC Copy) ---
+        if (isActive) {
             state.vehicle.speed = speed * 3.6;
             state.vehicle.throttle = throttle;
-            state.vehicle.engineState = VehicleEngineState.RUNNING;
+            state.vehicle.velocity.copy(vel);
+            state.vehicle.angularVelocity.copy(angVel);
 
-            if (Number.isFinite(normSpeed)) {
-                VehicleSounds.updateEngine(vState.engineVoiceIdx, normSpeed);
-            }
+            // --- AUDIO & FX ---
+            const speedRatio = speed / Math.max(1.0, maxSpeedMS);
+            const normSpeed = Math.min(1.0, speedRatio);
+            state.vehicle.engineState = VehicleEngineState.RUNNING;
+            VehicleSounds.updateEngine(vState.engineVoiceIdx, normSpeed);
 
             const isSkidding = absLatSpeed > 4.5 || (speedSq > 25 && Math.abs(angVel.y) > 0.8);
-
-            if (!isBoat) {
+            if (def.category !== VehicleCategory.BOAT) {
                 if (isSkidding) {
                     if (vState.skidVoiceIdx === -1) vState.skidVoiceIdx = VehicleSounds.startSkid();
                     VehicleSounds.updateSkid(vState.skidVoiceIdx, Math.min(1.0, absLatSpeed / 10.0));
@@ -315,38 +288,24 @@ export class VehicleMovementSystem implements System {
                     audioEngine.stopVoice(vState.skidVoiceIdx);
                     vState.skidVoiceIdx = -1;
                 }
-
                 if (speedSq > 4.0) {
                     if (Math.random() < speedRatio * 0.3) {
                         _v1.copy(_forward).multiplyScalar(-def.size.z * 0.45);
                         FXSystem.spawnParticle(session.engine.scene, state.particles, vehicle.position.x + _v1.x, 0.2, vehicle.position.z + _v1.z, FXParticleType.SMOKE, 1, undefined, undefined, 0xaaaaaa, 0.4);
                     }
-                    if (isSkidding && Math.random() < 0.6) {
-                        _v1.copy(_forward).multiplyScalar(-def.size.z * 0.45);
-                        _v1.addScaledVector(_right, currentLatSpeed > 0 ? -0.5 : 0.5);
-                        FXSystem.spawnParticle(session.engine.scene, state.particles, vehicle.position.x + _v1.x, 0.2, vehicle.position.z + _v1.z, FXParticleType.LARGE_SMOKE, 1, undefined, undefined, 0xcccccc, 0.8 + Math.random() * 0.5);
-                    }
                 }
-            } else {
-                // Boat Wake Particles
-                if (speedSq > 4.0 && Math.random() < 0.4) {
-                    _v1.copy(_forward).multiplyScalar(-def.size.z * 0.35);
-                    _v1.addScaledVector(_right, (Math.random() - 0.5) * 2.0);
-                    FXSystem.spawnParticle(session.engine.scene, state.particles, vehicle.position.x + _v1.x, 0.1, vehicle.position.z + _v1.z, FXParticleType.SPLASH, 1, undefined, undefined, 0xffffff, 0.5 + Math.random() * 0.5);
-                }
+            } else if (speedSq > 4.0 && Math.random() < 0.4) {
+                _v1.copy(_forward).multiplyScalar(-def.size.z * 0.35);
+                _v1.addScaledVector(_right, (Math.random() - 0.5) * 2.0);
+                FXSystem.spawnParticle(session.engine.scene, state.particles, vehicle.position.x + _v1.x, 0.1, vehicle.position.z + _v1.z, FXParticleType.SPLASH, 1, undefined, undefined, 0xffffff, 0.5 + Math.random() * 0.5);
             }
-        }
 
-        // --- SYNC PLAYER TO VEHICLE ---
-        if (isActive) {
+            // --- SYNC PLAYER TO VEHICLE ---
             playerGroup.position.copy(vehicle.position);
             playerGroup.quaternion.copy(vehicle.quaternion);
-
             const chassisSuspY = vNodes.chassis?.position.y || 0;
-            _v1.set(def.seatOffset.x, def.seatOffset.y + chassisSuspY, def.seatOffset.z);
-            _v1.applyQuaternion(vehicle.quaternion);
+            _v1.set(def.seatOffset.x, def.seatOffset.y + chassisSuspY, def.seatOffset.z).applyQuaternion(vehicle.quaternion);
             playerGroup.position.add(_v1);
-
             for (let i = 0; i < playerGroup.children.length; i++) {
                 const child = playerGroup.children[i];
                 if (child.rotation) child.rotation.y = 0;

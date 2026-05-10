@@ -78,8 +78,12 @@ export class StatsBridge {
     // ANALYTICAL LOGIC (Zero-GC)
     // ========================================================================
 
+    public static hasPerk(stats: { statusMask: number }, perkId: number): boolean {
+        return (stats.statusMask & (1 << perkId)) !== 0;
+    }
+
     /**
-     * Finds the enemy that has killed the player the most.
+     * Resolves the "Nemesis" enemy (the one that has killed the player most often).
      * Returns a static Int32Array: [EnemyIndex, DeathCount]
      */
     public static getNemesis(stats: PlayerStats): Int32Array {
@@ -110,6 +114,14 @@ export class StatsBridge {
         const buffer = stats.weaponKills;
 
         for (let i = 0; i < buffer.length; i++) {
+            // Skip technical/move indices and environmental/tactical indices
+            if (i === StatWeaponIndex.NONE || 
+                i === StatWeaponIndex.RADIO || 
+                i === StatWeaponIndex.RUSH || 
+                i === StatWeaponIndex.VEHICLE || 
+                i === StatWeaponIndex.DODGE || 
+                i >= StatWeaponIndex.PHYSICAL) continue;
+
             if (buffer[i] > maxKills) {
                 maxKills = buffer[i];
                 signatureIdx = i;
@@ -131,6 +143,14 @@ export class StatsBridge {
         const buffer = stats.weaponTimeActive;
 
         for (let i = 0; i < buffer.length; i++) {
+            // Skip technical/move indices
+            if (i === StatWeaponIndex.NONE || 
+                i === StatWeaponIndex.RADIO || 
+                i === StatWeaponIndex.RUSH || 
+                i === StatWeaponIndex.VEHICLE || 
+                i === StatWeaponIndex.DODGE || 
+                i >= StatWeaponIndex.PHYSICAL) continue;
+
             if (buffer[i] > maxTime) {
                 maxTime = buffer[i];
                 comfortIdx = i;
@@ -211,24 +231,24 @@ export class StatsBridge {
     // TELEMETRY GETTERS (Enforces Abstraction)
     // ========================================================================
 
-    public static getWeaponKillCount(stats: AnyStatsEntity, weaponIdx: number): number {
-        return stats.weaponKills[weaponIdx] | 0;
+    public static getWeaponKillCount(stats: AnyStatsEntity, weaponIdx: StatWeaponIndex): number {
+        return (stats.weaponKills && stats.weaponKills[weaponIdx]) | 0;
     }
 
-    public static getWeaponDamageDealt(stats: AnyStatsEntity, weaponIdx: number): number {
-        return stats.weaponDamageDealt[weaponIdx] || 0.0;
+    public static getWeaponDamageDealt(stats: AnyStatsEntity, weaponIdx: StatWeaponIndex): number {
+        return (stats.weaponDamageDealt && stats.weaponDamageDealt[weaponIdx]) || 0.0;
     }
 
-    public static getWeaponShotsFired(stats: AnyStatsEntity, weaponIdx: number): number {
-        return stats.weaponShotsFired[weaponIdx] | 0;
+    public static getWeaponShotsFired(stats: AnyStatsEntity, weaponIdx: StatWeaponIndex): number {
+        return (stats.weaponShotsFired && stats.weaponShotsFired[weaponIdx]) | 0;
     }
 
-    public static getWeaponShotsHit(stats: AnyStatsEntity, weaponIdx: number): number {
-        return stats.weaponShotsHit[weaponIdx] | 0;
+    public static getWeaponShotsHit(stats: AnyStatsEntity, weaponIdx: StatWeaponIndex): number {
+        return (stats.weaponShotsHit && stats.weaponShotsHit[weaponIdx]) | 0;
     }
 
-    public static getEnemyKillCount(stats: AnyStatsEntity, enemyIdx: number): number {
-        return stats.enemyKills[enemyIdx] | 0;
+    public static getEnemyKillCount(stats: AnyStatsEntity, enemyIdx: StatEnemyIndex): number {
+        return (stats.enemyKills && stats.enemyKills[enemyIdx]) | 0;
     }
 
     public static getEnemyDeathCount(stats: AnyStatsEntity, enemyIdx: number): number {
@@ -400,42 +420,42 @@ export class StatsBridge {
         const clone = { ...stats } as PlayerStats;
 
         // PERFORMANCE FIX: Use .slice() instead of new TypedArray() to invoke fast C++ memcpy in V8
-        clone.statsBuffer = stats.statsBuffer.slice();
-        clone.effectDurations = stats.effectDurations.slice();
-        clone.effectMaxDurations = stats.effectMaxDurations.slice();
-        clone.effectIntensities = stats.effectIntensities.slice();
+        if (stats.statsBuffer) clone.statsBuffer = stats.statsBuffer.slice();
+        if (stats.effectDurations) clone.effectDurations = stats.effectDurations.slice();
+        if (stats.effectMaxDurations) clone.effectMaxDurations = stats.effectMaxDurations.slice();
+        if (stats.effectIntensities) clone.effectIntensities = stats.effectIntensities.slice();
 
-        clone.weaponKills = stats.weaponKills.slice();
-        clone.weaponDamageDealt = stats.weaponDamageDealt.slice();
-        clone.weaponShotsFired = stats.weaponShotsFired.slice();
-        clone.weaponShotsHit = stats.weaponShotsHit.slice();
-        clone.weaponTimeActive = stats.weaponTimeActive.slice();
-        clone.weaponEngagementDistSq = stats.weaponEngagementDistSq.slice();
+        if (stats.weaponKills) clone.weaponKills = stats.weaponKills.slice();
+        if (stats.weaponDamageDealt) clone.weaponDamageDealt = stats.weaponDamageDealt.slice();
+        if (stats.weaponShotsFired) clone.weaponShotsFired = stats.weaponShotsFired.slice();
+        if (stats.weaponShotsHit) clone.weaponShotsHit = stats.weaponShotsHit.slice();
+        if (stats.weaponTimeActive) clone.weaponTimeActive = stats.weaponTimeActive.slice();
+        if (stats.weaponEngagementDistSq) clone.weaponEngagementDistSq = stats.weaponEngagementDistSq.slice();
 
-        clone.perkTimesGained = stats.perkTimesGained.slice();
-        clone.perkDamageAbsorbed = stats.perkDamageAbsorbed.slice();
-        clone.perkDamageDealt = stats.perkDamageDealt.slice();
-        clone.perkDebuffsCleansed = stats.perkDebuffsCleansed.slice();
+        if (stats.perkTimesGained) clone.perkTimesGained = stats.perkTimesGained.slice();
+        if (stats.perkDamageAbsorbed) clone.perkDamageAbsorbed = stats.perkDamageAbsorbed.slice();
+        if (stats.perkDamageDealt) clone.perkDamageDealt = stats.perkDamageDealt.slice();
+        if (stats.perkDebuffsCleansed) clone.perkDebuffsCleansed = stats.perkDebuffsCleansed.slice();
 
-        clone.enemyKills = stats.enemyKills.slice();
-        clone.deathsByEnemyType = stats.deathsByEnemyType.slice();
-        clone.incomingDamageBuffer = stats.incomingDamageBuffer.slice();
+        if (stats.enemyKills) clone.enemyKills = stats.enemyKills.slice();
+        if (stats.deathsByEnemyType) clone.deathsByEnemyType = stats.deathsByEnemyType.slice();
+        if (stats.incomingDamageBuffer) clone.incomingDamageBuffer = stats.incomingDamageBuffer.slice();
 
-        clone.challengeTiers = stats.challengeTiers.slice();
-        clone.discoveredPerksMap = stats.discoveredPerksMap.slice();
+        if (stats.challengeTiers) clone.challengeTiers = stats.challengeTiers.slice();
+        if (stats.discoveredPerksMap) clone.discoveredPerksMap = stats.discoveredPerksMap.slice();
 
         // PERFORMANCE FIX: Use .slice() instead of spread operator [...] to avoid JS iterator overhead
-        clone.activePassives = stats.activePassives.slice();
-        clone.activeBuffs = stats.activeBuffs.slice();
-        clone.activeDebuffs = stats.activeDebuffs.slice();
-        clone.collectiblesDiscovered = stats.collectiblesDiscovered.slice();
+        if (stats.activePassives) clone.activePassives = stats.activePassives.slice();
+        if (stats.activeBuffs) clone.activeBuffs = stats.activeBuffs.slice();
+        if (stats.activeDebuffs) clone.activeDebuffs = stats.activeDebuffs.slice();
+        if (stats.collectiblesDiscovered) clone.collectiblesDiscovered = stats.collectiblesDiscovered.slice();
         clone.viewedCollectibles = stats.viewedCollectibles ? stats.viewedCollectibles.slice() : [];
-        clone.cluesFound = stats.cluesFound.slice();
-        clone.seenEnemies = stats.seenEnemies.slice();
-        clone.seenBosses = stats.seenBosses.slice();
-        clone.discoveredPOIs = stats.discoveredPOIs.slice();
-        clone.rescuedFamilyIndices = stats.rescuedFamilyIndices.slice();
-        clone.trackedChallengeIds = stats.trackedChallengeIds.slice();
+        if (stats.cluesFound) clone.cluesFound = stats.cluesFound.slice();
+        if (stats.seenEnemies) clone.seenEnemies = stats.seenEnemies.slice();
+        if (stats.seenBosses) clone.seenBosses = stats.seenBosses.slice();
+        if (stats.discoveredPOIs) clone.discoveredPOIs = stats.discoveredPOIs.slice();
+        if (stats.rescuedFamilyIndices) clone.rescuedFamilyIndices = stats.rescuedFamilyIndices.slice();
+        if (stats.trackedChallengeIds) clone.trackedChallengeIds = stats.trackedChallengeIds.slice();
 
         // Clone Three.js objects
         // In UI context, .clone() is acceptable since it only happens once upon opening the menu.

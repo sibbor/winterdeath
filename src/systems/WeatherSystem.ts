@@ -33,11 +33,25 @@ export class WeatherSystem implements System {
     private _windOffset = new THREE.Vector2(0, 0);
     private _smoothWind = new THREE.Vector2(0, 0);
 
+    // Persistent material registry to avoid runtime compilation/disposal churn
+    private materialRegistry: Map<WeatherType, THREE.ShaderMaterial> = new Map();
+
     constructor(scene: THREE.Scene, wind: WindSystem, camera: THREE.Camera, maxCount: number = WEATHER_SYSTEM.MAX_NUM_PARTICLES) {
         this.scene = scene;
         this.wind = wind;
         this.camera = camera;
         this.maxCount = maxCount;
+
+        // Precompile all necessary weather variations immediately
+        this.precompileMaterials();
+    }
+
+    private precompileMaterials() {
+        const activeTypes = [WeatherType.RAIN, WeatherType.SNOW, WeatherType.ASH, WeatherType.EMBER];
+        for (let i = 0; i < activeTypes.length; i++) {
+            const t = activeTypes[i];
+            this.materialRegistry.set(t, this.createWeatherMaterial(t));
+        }
     }
 
     public sync(type: WeatherType, targetCount: number, areaSize: number = 100) {
@@ -55,6 +69,7 @@ export class WeatherSystem implements System {
         // Set physics multipliers for the shader
         switch (type) {
             case WeatherType.RAIN: this.swayMult = 5.0; break;
+            case WeatherType.SNOW: this.swayMult = 40.0; break;
             case WeatherType.ASH: this.swayMult = 15.0; break;
             case WeatherType.EMBER: this.swayMult = 25.0; break;
             default: this.swayMult = 40.0; break;
@@ -76,8 +91,13 @@ export class WeatherSystem implements System {
             geo.setAttribute('initialPos', new THREE.InstancedBufferAttribute(posArr, 3));
             geo.setAttribute('velocity', new THREE.InstancedBufferAttribute(velArr, 3));
 
-            const initialMaterial = this.createWeatherMaterial(type);
-            this.instancedMesh = new THREE.InstancedMesh(geo, initialMaterial, this.maxCount);
+            let cachedMaterial = this.materialRegistry.get(type);
+            if (!cachedMaterial) {
+                cachedMaterial = this.createWeatherMaterial(type);
+                this.materialRegistry.set(type, cachedMaterial);
+            }
+
+            this.instancedMesh = new THREE.InstancedMesh(geo, cachedMaterial, this.maxCount);
             this.instancedMesh.name = 'WeatherSystem_Particles';
             this.instancedMesh.userData = { isPersistent: true, isEngineStatic: true };
             this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -85,11 +105,13 @@ export class WeatherSystem implements System {
             this.instancedMesh.renderOrder = 999;
             this.scene.add(this.instancedMesh);
         } else if (isNewMaterial) {
-            // Clean up old shader material to prevent memory leaks
-            if (this.instancedMesh.material instanceof THREE.ShaderMaterial) {
-                this.instancedMesh.material.dispose();
+            // Re-use precompiled material directly from the map instead of disposing
+            let cachedMaterial = this.materialRegistry.get(type);
+            if (!cachedMaterial) {
+                cachedMaterial = this.createWeatherMaterial(type);
+                this.materialRegistry.set(type, cachedMaterial);
             }
-            this.instancedMesh.material = this.createWeatherMaterial(type);
+            this.instancedMesh.material = cachedMaterial;
         }
 
         this.instancedMesh.visible = true;
@@ -151,21 +173,25 @@ export class WeatherSystem implements System {
         const identity = new THREE.Matrix4();
         for (let i = 0; i < this.maxCount; i++) this.instancedMesh.setMatrixAt(i, identity);
         this.instancedMesh.instanceMatrix.needsUpdate = true;
+
+        // Synchronize area size uniform safely
+        const mat = this.instancedMesh.material as THREE.ShaderMaterial;
+        if (mat && mat.uniforms && mat.uniforms.uAreaSize) {
+            mat.uniforms.uAreaSize.value = areaSize;
+        }
     }
 
     public update(ctx: any, delta: number, simTime: number, renderTime: number) {
         if (!this.instancedMesh || !this.instancedMesh.visible || this.count === 0) return;
 
         const mat = this.instancedMesh.material as THREE.ShaderMaterial;
-        if (!mat.uniforms) return;
+        if (!mat || !mat.uniforms) return;
 
         // --- ZERO-GC UNIFORM UPDATE ---
         mat.uniforms.uTime.value = renderTime * 0.001;
 
-        // Apply Weather Inertia (Smoothing)
-        // delta is in seconds. lerp factor gives it "weight" compared to the global wind.
-        // Reduced factor from 0.8 to 0.2 for heavy inertia (prevents "snapping" wind).
-        const lerpFactor = 1.0 - Math.exp(-0.2 * delta);
+        // Apply Weather Inertia (Smoothing) - Increased speed for better responsiveness
+        const lerpFactor = 1.0 - Math.exp(-1.5 * delta);
         this._smoothWind.lerp(this.wind.current, lerpFactor);
 
         // Integrate wind into offset (Movement over time)
@@ -261,6 +287,7 @@ export class WeatherSystem implements System {
     public clear() {
         if (this.instancedMesh) {
             this.scene.remove(this.instancedMesh);
+            // Retain cached registry items safely to prevent GC churn upon reattachment
             this.instancedMesh.dispose();
             this.instancedMesh = null;
         }

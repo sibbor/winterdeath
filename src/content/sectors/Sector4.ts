@@ -52,7 +52,7 @@ const PERK_ZONES = [
     { id: 'pz_water', x: -85, z: 20, radius: 15, effect: StatusEffectID.DROWNING, type: 'debuff', color: 0x0066ff, particle: FXParticleType.SPLASH },
     { id: 'pz_elec', x: -85, z: -20, radius: 15, effect: StatusEffectID.ELECTRIFIED, type: 'debuff', color: 0x00ffff, particle: FXParticleType.SPARK },
     { id: 'pz_bleed', x: -120, z: -40, radius: 15, effect: StatusEffectID.BLEEDING, type: 'debuff', color: 0xcc0000, particle: FXParticleType.BLOOD_SPLATTER },
-    { id: 'pz_frost', x: -155, z: -20, radius: 15, effect: StatusEffectID.FREEZING, type: 'debuff', color: 0xffffff, particle: FXParticleType.FROST_NOVA },
+    { id: 'pz_frost', x: -155, z: -20, radius: 15, effect: StatusEffectID.FREEZING, type: 'debuff', color: 0xffffff, particle: FXParticleType.SNOW_PUFF },
     { id: 'pz_quick', x: -155, z: 20, radius: 15, effect: StatusEffectID.QUICK_FINGER, type: 'buff', color: 0xffcc00, particle: FXParticleType.FLASH }
 ];
 
@@ -106,6 +106,7 @@ export const SECTOR6_ZONES: AtmosphereZone[] = [
 
 export const Sector4: SectorDef = {
     id: 4,
+    spawnZombiesOnSector: false,
     environment: {
         bgColor: 0x020208,
         fog: {
@@ -465,9 +466,12 @@ export const Sector4: SectorDef = {
         const rubble = await SectorBuilder.spawnRubble(ctx, EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.z, 20, MATERIALS.busBlue, Math.PI);
         await yieldIfBudgetExceeded();
         rubble.position.set(0, 0, 0);
-        rubble.visible = true;
+        rubble.visible = false; // [VINTERDÖD FIX] Keep hidden until explosion
         rubble.frustumCulled = false;
+        rubble.userData.active = false;
         rubble.userData.hasLanded = new Uint8Array(rubble.count);
+        rubble.userData.positions = new Float32Array(rubble.count * 3);
+        rubble.userData.velocities = new Float32Array(rubble.count * 3);
         (ctx as any).busRubble = rubble;
 
         // Tires (4 bouncing tires)
@@ -485,6 +489,14 @@ export const Sector4: SectorDef = {
         tires.userData.scales = new Float32Array(4).fill(1.0);
         scene.add(tires);
         (ctx as any).busTires = tires;
+
+        // [VINTERDÖD FIX] Restore state if already exploded
+        if (ctx.sectorState && ctx.sectorState.busExploded) {
+            bus.position.set(0, -1000, 0);
+            bus.userData.isInteractable = false;
+            rubble.visible = true;
+            tires.visible = true;
+        }
     },
 
     onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {
@@ -511,18 +523,18 @@ export const Sector4: SectorDef = {
 
         // BUS EXPLOSION
         if (id === EXPLODING_BUS_ID) {
-            if (state.sectorState.busExploded || state.sectorState.busPlanting) return;
+            if (!state.sectorState || state.sectorState.busExploded || state.sectorState.busPlanting) return;
 
             state.sectorState.busPlanting = true;
             state.sectorState.busPlantingTime = state.simTime;
             object.userData.isInteractable = false;
 
-            if (events.spawnBubble) events.spawnBubble("Planting explosives...", 3000);
+            if (events.spawnBubble) events.spawnBubble(t("ui.planting_explosives"), 3000);
             if (events.playSound) events.playSound(SoundID.IMPACT_METAL);
         }
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
         // --- PERK ZONE LOGIC (Zero-GC) ---
         for (let i = 0; i < PERK_ZONES.length; i++) {
             const zone = PERK_ZONES[i];
@@ -591,9 +603,9 @@ export const Sector4: SectorDef = {
         }
 
         // --- SECTOR 4 LOGIC ---
-        // Extract the ball from state
-        const ball = sectorState.interactiveBall;
-        const obs = sectorState.interactiveBallObs;
+        // Extract the ball from ctx
+        const ball = (ctx as any).interactiveBall;
+        const obs = (ctx as any).interactiveBallObs;
 
         if (ball && obs) {
             const vel = ball.userData.velocity as THREE.Vector3;
@@ -614,9 +626,9 @@ export const Sector4: SectorDef = {
                 // 4. Sync the collision box so the player can't walk straight through it
                 obs.position.copy(ball.position);
 
-                // Update the SpatialGrid so physics match rendering
-                if (gameState.collisionGrid && typeof gameState.collisionGrid.updateObstacle === 'function') {
-                    gameState.collisionGrid.updateObstacle(obs);
+                // Update the WorldStreamer so physics match rendering
+                if (gameState.worldStreamer && typeof gameState.worldStreamer.updateObstacle === 'function') {
+                    gameState.worldStreamer.updateObstacle(obs);
                 }
             }
         }
@@ -658,13 +670,13 @@ export const Sector4: SectorDef = {
             }
 
             // Clear bus
-            const _busObj = (sectorState.ctx as any).busObject as THREE.Object3D | null;
+            const _busObj = (ctx as any).busObject as THREE.Object3D | null;
 
             if (_busObj) {
                 _busObj.position.set(0, -1000, 0);
             }
 
-            const _obsArray = sectorState.ctx.obstacles;
+            const _obsArray = ctx.obstacles;
             if (_obsArray) {
                 for (let i = 0; i < _obsArray.length; i++) {
                     const o = _obsArray[i];
@@ -681,9 +693,9 @@ export const Sector4: SectorDef = {
             }
 
             // Activate Rubble
-            const rMesh = (sectorState.ctx as any).busRubble;
+            const rMesh = (ctx as any).busRubble;
             if (rMesh) {
-                sectorState.busRubble = rMesh;
+                // sectorState.busRubbleActive = true; // Not strictly needed if we just check visibility
                 rMesh.position.set(0, 0, 0); // [VINTERDÖD FIX] Snap to origin so absolute instance coordinates work
                 rMesh.visible = true;
                 rMesh.userData.active = true;
@@ -718,9 +730,8 @@ export const Sector4: SectorDef = {
                 }
 
                 // Activate Tires
-                const tires = (sectorState.ctx as any).busTires;
+                const tires = (ctx as any).busTires;
                 if (tires) {
-                    sectorState.busTires = tires;
                     tires.position.set(0, 0, 0); // [VINTERDÖD FIX] Snap to origin
                     tires.visible = true;
                     tires.userData.active = true;
@@ -748,11 +759,14 @@ export const Sector4: SectorDef = {
 
         // --- RUBBLE & TIRE PHYSICS ---
         const activeMeshes = [];
-        if (sectorState.busRubble && sectorState.busRubble.userData.active) activeMeshes.push(sectorState.busRubble);
-        if (sectorState.busTires && sectorState.busTires.userData.active) activeMeshes.push(sectorState.busTires);
+        const busRubble = (ctx as any).busRubble;
+        const busTires = (ctx as any).busTires;
+        
+        if (busRubble && busRubble.userData.active) activeMeshes.push(busRubble);
+        if (busTires && busTires.userData.active) activeMeshes.push(busTires);
 
         for (const rubble of activeMeshes) {
-            const isTire = rubble === sectorState.busTires;
+            const isTire = rubble === busTires;
             const rubbleWeight = isTire ? 35.0 : 18.0;
             const bouncy = isTire ? 0.7 : 0.4;
             const data = rubble.userData;
@@ -763,8 +777,8 @@ export const Sector4: SectorDef = {
                 const ix = i * 3;
 
                 // [VINTERDÖD FIX] Dynamic ground height lookup
-                const groundY = (gameState.collisionGrid && gameState.collisionGrid.getGroundHeight)
-                    ? gameState.collisionGrid.getGroundHeight(data.positions[ix], data.positions[ix + 2])
+                const groundY = (gameState.worldStreamer && gameState.worldStreamer.getGroundHeight)
+                    ? gameState.worldStreamer.getGroundHeight(data.positions[ix], data.positions[ix + 2])
                     : 0.1;
                 const minHeight = groundY + (isTire ? 0.8 : 0.2);
 
@@ -798,9 +812,12 @@ export const Sector4: SectorDef = {
                         if (Math.abs(data.velocities[ix]) < 0.2) data.velocities[ix] = 0;
                         if (Math.abs(data.velocities[ix + 2]) < 0.2) data.velocities[ix + 2] = 0;
 
-                        if (data.hasLanded && !data.hasLanded[i] && events.playSound) {
-                            if (!isTire || Math.abs(data.velocities[ix + 1]) > 2) {
-                                events.playSound(isTire ? SoundID.IMPACT_METAL : SoundID.IMPACT_METAL);
+                        if (data.hasLanded && !data.hasLanded[i] && events.playSound && sectorState.busExplosionTime) {
+                            // Only play impact sounds during the active explosion window (first 10 seconds)
+                            if (simTime - sectorState.busExplosionTime < 10000) {
+                                if (!isTire || Math.abs(data.velocities[ix + 1]) > 2) {
+                                    events.playSound(isTire ? SoundID.IMPACT_METAL : SoundID.IMPACT_METAL);
+                                }
                             }
                             if (Math.abs(data.velocities[ix + 1]) < 2) data.hasLanded[i] = 1;
                         }

@@ -175,7 +175,7 @@ export const PathGenerator = {
 
         // Register material for footstep audio
         for (let i = 0; i < pts.length; i++) {
-            ctx.collisionGrid.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, matType);
+            ctx.worldStreamer.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, matType);
             if (i % 10 === 0) {
                 ctx.mapItems.push({ id: `road_${Math.random()}`, x: pts[i].x, z: pts[i].z, type: MapItemType.ROAD, label: null, icon: null, radius: width / 2, color: '#333' });
             }
@@ -209,7 +209,7 @@ export const PathGenerator = {
         ctx.scene.add(path);
 
         for (let i = 0; i < pts.length; i++) {
-            ctx.collisionGrid.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, MaterialType.DIRT);
+            ctx.worldStreamer.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, MaterialType.DIRT);
         }
 
         _pathLayerIndex++;
@@ -270,7 +270,7 @@ export const PathGenerator = {
             bucket.push(_matrix.clone());
         }
 
-        chunkBuckets.forEach((matrices, key) => {
+        for (const [key, matrices] of chunkBuckets) {
             const ix = key >> 8;
             const iz = key & 0xFF;
             const mesh = new THREE.InstancedMesh(sleeperGeo, MATERIALS.brownBrick, matrices.length);
@@ -281,7 +281,7 @@ export const PathGenerator = {
             mesh.instanceMatrix.needsUpdate = true;
             GeneratorUtils.freezeStatic(mesh);
             ChunkManager.registerMesh(ix, iz, mesh);
-        });
+        }
 
         // 3. Rails (Ribbon instead of InstancedMesh for smooth curves)
         const railMat = MATERIALS.blackMetal.clone();
@@ -301,7 +301,7 @@ export const PathGenerator = {
         ctx.scene.add(leftRail, rightRail);
 
         for (let i = 0; i < pts.length; i++) {
-            ctx.collisionGrid.registerGroundMaterial(pts[i].x, pts[i].z, 2.0, MaterialType.METAL);
+            ctx.worldStreamer.registerGroundMaterial(pts[i].x, pts[i].z, 2.0, MaterialType.METAL);
         }
 
         return curve;
@@ -355,7 +355,7 @@ export const PathGenerator = {
             bucket.push(_matrix.clone());
         }
 
-        chunkBuckets.forEach((matrices, key) => {
+        for (const [key, matrices] of chunkBuckets) {
             const ix = key >> 8;
             const iz = key & 0xFF;
             const im = new THREE.InstancedMesh(_PLANE_GEO, mat, matrices.length);
@@ -365,7 +365,7 @@ export const PathGenerator = {
             im.instanceMatrix.needsUpdate = true;
             GeneratorUtils.freezeStatic(im);
             ChunkManager.registerMesh(ix, iz, im);
-        });
+        }
 
         _pathLayerIndex++;
     },
@@ -444,7 +444,7 @@ export const PathGenerator = {
             }
         }
 
-        chunkBuckets.forEach((data, key) => {
+        for (const [key, data] of chunkBuckets) {
             const ix = key >> 8;
             const iz = key & 0xFF;
 
@@ -467,7 +467,7 @@ export const PathGenerator = {
                 GeneratorUtils.freezeStatic(rails);
                 ChunkManager.registerMesh(ix, iz, rails);
             }
-        });
+        }
     },
 
     createGuardrail: async (ctx: SectorContext, points: THREE.Vector3[], floating: boolean = false) => {

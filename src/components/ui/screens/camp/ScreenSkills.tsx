@@ -92,7 +92,7 @@ const ScreenSkills: React.FC<ScreenSkillsProps> = React.memo(({ stats, onSave, o
                         : t('ui.sp_hint_rankup', { xp: xpNeeded })}
                 </span>
             </div>
-            <div className={`grid ${(!isMobileDevice || isLandscapeMode) ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'} gap-6 md:gap-10 h-full pt-8 ${isMobileDevice ? 'overflow-y-auto' : ''}`}>
+            <div className={`grid ${(!isMobileDevice || isLandscapeMode) ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'} gap-6 md:gap-10 h-full pt-8 ${isMobileDevice ? 'overflow-y-auto touch-auto' : ''}`}>
                 {SKILLS_CONFIG.map(skill => (
                     <SkillCard
                         key={skill.statId}

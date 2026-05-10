@@ -28,16 +28,20 @@ export class ChallengeSystem implements System {
         // Run evaluation logic
         // Optimized: Only run evaluation every 30 frames (approx 2Hz) 
         // to save CPU cycles, as challenges are long-term goals.
-        if (session.engine.frameCount % 30 !== 0) return;
+        const frameCount = session.engine.frameCount;
+        const isFirstEval = frameCount < 5; // Initial burst to sync tiers silently
+        
+        if (!isFirstEval && frameCount % 30 !== 0) return;
 
-        this.evaluateAll(session);
+        this.evaluateAll(session, isFirstEval);
     }
 
     /**
      * Evaluates all challenges against current stats.
-     * Zero-GC: Does not allocate arrays or objects during runtime.
+     * @param session The current game session
+     * @param silent If true, tiers are updated without emitting UI events or awarding CP (used for initialization)
      */
-    private evaluateAll(session: GameSessionLogic) {
+    private evaluateAll(session: GameSessionLogic, silent: boolean = false) {
         const stats = session.state.stats;
         const tiers = stats.challengeTiers;
         if (!tiers) return;
@@ -54,6 +58,8 @@ export class ChallengeSystem implements System {
             if (currentValue >= target) {
                 // MILESTONE REACHED!
                 tiers[i] = nextTier;
+
+                if (silent) continue; // Just sync state during boot
 
                 // Award CP!
                 const cpReward = def.cpRewards[nextTier - 1] || 0;

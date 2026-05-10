@@ -107,13 +107,15 @@ export class FamilySystem implements System {
                 const dY = def?.seatOffset?.y || 0.6;
                 const dZ = def?.seatOffset?.z || 0.0;
 
-                if (i === 0) { pX = -dX; pY = dY; pZ = dZ; }
-                else if (i === 1) { pX = dX; pY = dY; pZ = dZ - 1.2; }
-                else if (i === 2) { pX = 0; pY = dY; pZ = dZ - 1.2; }
-                else if (i === 3) { pX = -dX; pY = dY; pZ = dZ - 1.2; }
-                else if (i === 4) { pX = dX * 0.8; pY = dY + 0.1; pZ = dZ - 2.2; }
-                else if (i === 5) { pX = -dX * 0.8; pY = dY + 0.1; pZ = dZ - 2.2; }
-                else { pX = 0; pY = dY + 0.1; pZ = dZ - 2.2; }
+                switch (i) {
+                    case 0: pX = -dX; pY = dY; pZ = dZ; break;
+                    case 1: pX = dX; pY = dY; pZ = dZ - 1.2; break;
+                    case 2: pX = 0; pY = dY; pZ = dZ - 1.2; break;
+                    case 3: pX = -dX; pY = dY; pZ = dZ - 1.2; break;
+                    case 4: pX = dX * 0.8; pY = dY + 0.1; pZ = dZ - 2.2; break;
+                    case 5: pX = -dX * 0.8; pY = dY + 0.1; pZ = dZ - 2.2; break;
+                    default: pX = 0; pY = dY + 0.1; pZ = dZ - 2.2; break;
+                }
 
                 _v1.set(pX, pY + suspY, pZ);
                 _v1.applyQuaternion(activeVehicle.quaternion);

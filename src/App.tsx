@@ -892,6 +892,7 @@ const App: React.FC = () => {
                                         onToggleMap={handleToggleMapAction}
                                         onSelectWeapon={handleSelectWeaponAction}
                                         onRotateCamera={handleRotateCameraAction}
+                                        onOpenAdventureLog={handleOpenAdventureLogAction}
                                     />
                                 )}
                             </>

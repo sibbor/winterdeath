@@ -89,7 +89,7 @@ PERKS[StatusEffectID.REFLEX_SHIELD] = {
     description: 'perks.REFLEX_SHIELD.description',
     category: PerkCategory.BUFF,
     duration: 1000, // Linger duration
-    cooldown: 0,
+    cooldown: 10000,
     damageResistModifier: 50, // 50% damage resistance
 };
 PERKS[StatusEffectID.ADRENALINE_PATCH] = {
@@ -196,6 +196,17 @@ PERKS[StatusEffectID.DROWNING] = {
     category: PerkCategory.DEBUFF,
     duration: 3000,
     dotDamage: 10,
+};
+
+// --- SYSTEM STATES (Unifying SSoT) ---
+PERKS[StatusEffectID.INFECTED] = {
+    id: StatusEffectID.INFECTED,
+    icon: '🤢',
+    displayName: 'status.INFECTED.title',
+    description: 'status.INFECTED.description',
+    category: PerkCategory.DEBUFF,
+    duration: 30000,
+    dotDamage: 2
 };
 
 /**

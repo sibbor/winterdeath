@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { PlayerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../entities/player/PlayerTypes';
+import { PlayerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex, TELEMETRY_BUFFER_SIZE } from '../entities/player/PlayerTypes';
 import { DamageID } from '../entities/player/CombatTypes';
+import { ChallengeID } from './ChallengeTypes';
 import { GameSettings } from '../core/engine/EngineTypes';
 import { ColorPair } from '../utils/ui/ColorUtils';
 
@@ -12,13 +13,9 @@ export { WEAPONS } from './weapons';
 // Sector constants
 export const OVERRIDE_DEFAULT_SECTOR = -1;       // Set to -1 to disable override
 
-// PHASE 7: SPATIAL GRID CONFIG (DOD Optimized)
+// PHASE 7: SPATIAL CONFIG (DOD Optimized)
 export const WORLD_CHUNK_SIZE = 256;             // 256m x 256m active simulation area
 export const POOL_PARTICLE_MAX = 5000;          // Max hardware-accelerated particles
-export const GRID_CELL_POWER = 2;               // 4m cells (1 << 2)
-export const GRID_RESOLUTION = 64;              // 256 / 4
-export const GRID_CELL_COUNT = 4096;            // 64 * 64 (Fits in 16KB L1 cache)
-export const GRID_OFFSET = 128;                 // Centering offset (WORLD_CHUNK_SIZE / 2)
 export const POOL_ENEMY_MAX = 120;              // Current contiguous enemy pool limit
 
 // PHASE 9: ENTITY STATE MASKING
@@ -28,18 +25,106 @@ export const ENTITY_STATUS = {
     DEAD: 1 << 1
 } as const;
 
-// Player constants
+// --- VINTERDÖD ENGINE HARDENING (Magic Number Eradication) ---
+export enum TriggerShape { CIRCLE = 0, BOX = 1 }
+
+export const PHYSICS = { 
+    GRAVITY: 30.0, 
+    TERMINAL_VELOCITY: 50.0,
+    GROUND_HEIGHT_EPSILON: 0.1,
+    SWIM_DEPTH_MAX: 1.25,
+    SWIM_DEPTH_MID: 0.95,
+    WADE_DEPTH: 0.4,
+    SWIM_Y_OFFSET: 0.35,
+    SOFT_SHOVE_RADIUS_SQ: 0.6,
+    SOFT_SHOVE_FORCE: 1.2
+};
+
+export const AI_LOD = { 
+    CORE_RADIUS_SQ: 1600,       // 40m
+    THROTTLED_RADIUS_SQ: 6400,  // 80m
+    CULL_RADIUS_SQ: 14400,      // 120m
+    CULL_DOT_THRESHOLD: -2.0
+};
+
+export const COMBAT = { 
+    HYSTERESIS: 1.15,           // 15% range buffer
+    CRISIS_HP_RATIO: 0.25,      // 25% HP adrenaline trigger
+    LONG_RANGE_SQ: 625,         // 25m threshold
+    MUZZLE_CONE_COS: 0.94,      // ~20 degrees
+    LETHAL_DAMAGE: 9999,
+    STAMINA_COST_DODGE: 15,
+    STAMINA_REGEN_IDLE: 15,
+    STAMINA_REGEN_DELAY: 2500,
+    STAMINA_DRAIN_SWIM: 7,
+    STAMINA_DRAIN_WADE: 3,
+    HP_REGEN_IDLE: 3,
+    HP_REGEN_DELAY: 5000,
+    INVULNERABLE_TIME_HIT: 400,
+    DODGE_DURATION: 300,
+    KILL_STREAK_WINDOW_SHORT: 3000,
+    KILL_STREAK_WINDOW_LONG: 5000
+};
+
+export const MAX_ENTITIES = { 
+    PERKS: 32, 
+    FIRE_ZONES: 16, 
+    BUCKET_CAPACITY: 16,
+    MAX_BOSS_IDS: 32,
+    STREAK_BUFFER_SIZE: 5,
+    CHALLENGES: 64,
+    DISCOVERY_MAP_SIZE: 256,
+    TRIGGERS: 256,
+    SCRAP: 300,
+    FOOTPRINTS: 100,
+    DECALS: 250,
+    PARTICLE_REQUESTS: 5000,
+    PARTICLE_STATES: 10000,
+    SPAWN_QUEUE: 512
+};
+
+export const FX = {
+    NUM_PARTICLE_TYPES: 64,
+    MAX_INSTANCES_PER_MESH: 10000,
+    MAX_AMBIENT_SPAWNS_PER_FRAME: 500,
+    AMBIENT_QUEUE_HARD_CAP: 2000,
+    FADE_DURATION: 15000,
+    GRAVITY: 150.0
+};
+
+export const LOOT = {
+    MAGNET_RANGE_SQ: 100.0,
+    COLLECTION_RANGE_SQ: 0.8,
+    MAGNET_SPEED: 25.0,
+    MAGNETISM_DELAY: 500,
+    GRAVITY: 35.0,
+    GROUND_Y: 0.3
+};
+
+export const PLAYER = {
+    BASE_SPEED: 20.0,
+    DEATH_VELOCITY_NORMAL: 12,
+    DEATH_VELOCITY_RUSH: 15,
+    DEATH_UPWARD_VELOCITY: 4,
+    INVULNERABILITY_PULSE_SPEED: 0.005,
+    DISORIENTED_NOISE_SCALE: 0.01,
+    DISORIENTED_DRIFT_MAGNITUDE: 0.5,
+    DODGE_PRESS_THRESHOLD: 200,
+    RUSH_HOLD_THRESHOLD: 250,
+    RUSH_RAMP_SPEED: 0.5 // 2 seconds (1.0 / 0.5)
+};
+
 export const PLAYER_DEATH_TIMER = 3000;         // ms
 export const HEALTH_CRITICAL_THRESHOLD = 0.2;   // 20% HP
-export const PLAYER_BASE_SPEED = 20.0;          // km/h, km/tim, kph
+export const PLAYER_BASE_SPEED = PLAYER.BASE_SPEED;          // km/h, km/tim, kph
 export const KMH_TO_MS = 1.0 / 3.6;             // km/h to m/s
 
 export const CAMERA_HEIGHT = 50;
 
 // WindSystem
 export const WIND_SYSTEM = {
-    MIN_STRENGTH: 0.02,
-    MAX_STRENGTH: 0.05,
+    MIN_STRENGTH: 0.04,
+    MAX_STRENGTH: 0.12,
     DIRECTION: { x: 0, z: 1 },
     ANGLE_VARIANCE: Math.PI / 4,
 };
@@ -155,9 +240,9 @@ export const INITIAL_STATS: PlayerStats = {
 
         return b;
     })(),
-    effectDurations: new Float32Array(32),
-    effectMaxDurations: new Float32Array(32),
-    effectIntensities: new Float32Array(32),
+    effectDurations: new Float32Array(MAX_ENTITIES.PERKS),
+    effectMaxDurations: new Float32Array(MAX_ENTITIES.PERKS),
+    effectIntensities: new Float32Array(MAX_ENTITIES.PERKS),
 
     weaponKills: new Float64Array(StatWeaponIndex.COUNT),
     weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
@@ -173,7 +258,7 @@ export const INITIAL_STATS: PlayerStats = {
 
     enemyKills: new Float64Array(StatEnemyIndex.COUNT),
     deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
-    incomingDamageBuffer: new Float64Array(64 * 32),
+    incomingDamageBuffer: new Float64Array(TELEMETRY_BUFFER_SIZE),
 
     statusFlags: 0,
     statusMask: 0,
@@ -191,13 +276,13 @@ export const INITIAL_STATS: PlayerStats = {
     seenEnemies: [],
     seenBosses: [],
     deadBossIndices: [],
-    discoveredPerksMap: new Uint8Array(256),
+    discoveredPerksMap: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
 
     prologueSeen: false,
     rescuedFamilyIndices: [],
     familyFoundCount: 0,
     mostUsedWeapon: DamageID.NONE,
-    challengeTiers: new Int32Array(32),
+    challengeTiers: new Int32Array(MAX_ENTITIES.CHALLENGES),
     totalEnemiesKilled: 0,
     totalChallengePoints: 0,
     trackedChallengeIds: [],
@@ -223,7 +308,7 @@ export enum FamilyMemberID {
 
 export const PLAYER_CHARACTER = {
     id: FamilyMemberID.ROBERT,
-    name: 'Robert',
+    name: 'family.dad',
     race: 'human',
     gender: 'male',
     title: 'family.dad',

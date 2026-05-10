@@ -74,6 +74,9 @@ export interface SectorStats {
   familyExtracted: boolean;
   isExtraction: boolean;
   discoveredPerksMap: Uint8Array;
+  activePassives: number[];
+  activeBuffs: number[];
+  activeDebuffs: number[];
 
   // Standardized wave naming
   waveActive?: boolean;

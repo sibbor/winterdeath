@@ -33,8 +33,8 @@ import { PlayerMovementSystem } from '../../systems/PlayerMovementSystem';
 import { VehicleMovementSystem } from '../../systems/VehicleMovementSystem';
 import { PlayerCombatSystem } from '../../systems/PlayerCombatSystem';
 import { PlayerStatsSystem } from '../../systems/PlayerStatsSystem';
-import { WorldLootSystem } from '../../systems/WorldLootSystem';
-import { PlayerInteractionSystem } from '../../systems/PlayerInteractionSystem';
+import { LootSystem } from '../../systems/LootSystem';
+import { InteractionSystem } from '../../systems/InteractionSystem';
 import { EnemySystem } from '../../systems/EnemySystem';
 import { SectorSystem } from '../../systems/SectorSystem';
 import { FamilySystem } from '../../systems/FamilySystem';
@@ -49,6 +49,7 @@ import { HudSystem } from '../../systems/HudSystem';
 import { RuntimeState } from '../../core/RuntimeState';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { PerkFX } from '../../systems/PerkFX';
+import { PerkSystem } from '../../systems/PerkSystem';
 import { InteractionType } from '../../systems/ui/UIEventBridge';
 
 const seededRandom = (seed: number) => {
@@ -195,10 +196,8 @@ export class GameSessionSetup {
 
             // 7. Initialize Systems
             this.setupSystems(ctx, playerGroup, sectorCtx);
-            
-            // Link TriggerSystem to SpatialGrid for O(1) proximity checks
-            state.triggers.setGrid(state.collisionGrid);
-            
+
+
             await yielder();
 
             // --- VINTERDÖD FIX: BYPASS INTRO TRIGGERS ---
@@ -291,6 +290,12 @@ export class GameSessionSetup {
         NavigationSystem.init(ctx);
 
         console.info(`[SectorBuilder] ✅ ACTIVATION complete in ${(performance.now() - setupStart).toFixed(1)}ms`);
+
+        // --- VINTERDÖD FIX: RESET INITIALIZATION SPIKE ---
+        // We do this last to ensure the QueryResultPool budget is 100% fresh for the first simulation tick.
+        if (ctx.worldStreamer) {
+            ctx.worldStreamer.resetQueryPools();
+        }
     }
 
     // --- HELPER METHODS FOR CLEANER SETUP ---
@@ -452,7 +457,8 @@ export class GameSessionSetup {
         };
 
         return {
-            scene: engine.scene, engine, obstacles: state.obstacles, collisionGrid: state.collisionGrid, chests: state.chests,
+            scene: engine.scene, engine, obstacles: state.obstacles, chests: state.chests,
+            worldStreamer: state.worldStreamer,
             flickeringLights, burningObjects, rng, triggers: state.triggers, mapItems, debugMode: props.debugMode,
             textures: textures, spawnZombie: realSpawnZombie, spawnHorde, spawnBoss,
             cluesFound: (props.stats.cluesFound || []) as string[], collectiblesDiscovered: (props.stats.collectiblesDiscovered || []) as string[],
@@ -801,7 +807,7 @@ export class GameSessionSetup {
         session.addSystem(new PlayerMovementSystem(playerGroup));
         session.addSystem(new VehicleMovementSystem(playerGroup));
         session.addSystem(new PlayerCombatSystem(playerGroup));
-        session.addSystem(new PlayerInteractionSystem(
+        session.addSystem(new InteractionSystem(
             playerGroup, callbacks.concludeSector, sectorCtx.collectibles, refs.activeFamilyMembers, engine.scene,
             (id, respawnable) => {
                 if (callbacks.onDiscovery) {
@@ -813,6 +819,7 @@ export class GameSessionSetup {
             }
         ));
 
+        session.addSystem(new PerkSystem(playerGroup, refs.activeFamilyMembers));
         const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
         session.addSystem(playerStatsSystem);
 
@@ -876,7 +883,7 @@ export class GameSessionSetup {
             setOverlay: ui.setOverlay
         }));
 
-        session.addSystem(new WorldLootSystem(playerGroup, engine.scene, { gainScrap: callbacks.gainScrap }));
+        session.addSystem(new LootSystem(playerGroup, engine.scene, { gainScrap: callbacks.gainScrap }));
 
         session.addSystem(new FamilySystem(playerGroup, refs.activeFamilyMembers, refs.cinematicRef, {
             setFoundMember: (id: FamilyMemberID) => ctx.ui.setFoundMember && ctx.ui.setFoundMember(id),
@@ -1043,9 +1050,6 @@ export class GameSessionSetup {
         state.bloodDecals.length = 0;
 
         // Purge ghost cells to prevent immediate collision conflicts with new spawns
-        if (state.collisionGrid) {
-            state.collisionGrid.clearEnemies();
-        }
 
         // Weapons:
         for (const key in state.weaponAmmo) {
@@ -1140,11 +1144,6 @@ export class GameSessionSetup {
         EnemyManager.clear();
         ProjectileSystem.clear(engine.scene, state.projectiles, state.fireZones);
         FXSystem.reset();
-
-        // --- VINTERDÖD FIX: PURGE STALE GRID STATE ---
-        if (state.collisionGrid) {
-            state.collisionGrid.clear();
-        }
 
         const toRemove: THREE.Object3D[] = [];
         engine.scene.traverse(obj => {

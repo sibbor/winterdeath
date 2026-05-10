@@ -75,9 +75,11 @@ export const ENEMY_WIDTH_SCALE = new Float32Array(32);
 export const ENEMY_ATTACK_RANGE = new Float32Array(32);
 
 // --- INITIALIZATION (Module Level) ---
-Object.keys(ZOMBIE_TYPES).forEach(key => {
-    const typeSMI = Number(key);
-    if (isNaN(typeSMI)) return; // SMI Security Fix: Skip string reverse-mapping keys
+const zombieKeys = Object.keys(ZOMBIE_TYPES);
+for (let i = 0, len = zombieKeys.length; i < len; i = (i + 1) | 0) {
+    const key = zombieKeys[i];
+    const typeSMI = Number(key) | 0;
+    if (isNaN(typeSMI)) continue; // SMI Security Fix: Skip string reverse-mapping keys
 
     const data = (ZOMBIE_TYPES as any)[key];
 
@@ -96,18 +98,22 @@ Object.keys(ZOMBIE_TYPES).forEach(key => {
 
     // Ensure all attacks have defined force (Zero-GC safety for Handler)
     if (data.attacks) {
-        data.attacks.forEach((att: any) => {
+        const attLen = data.attacks.length | 0;
+        for (let j = 0; j < attLen; j = (j + 1) | 0) {
+            const att = data.attacks[j];
             if (att.force === undefined) {
                 att.force = (att.type === EnemyAttackType.EXPLODE) ? 25.0 : 0.0;
             }
-        });
+        }
     }
-});
+}
 
 // Initialize Boss stats from BOSSES registry
-Object.keys(BOSSES).forEach(key => {
-    const id = Number(key);
-    if (isNaN(id)) return;
+const bossKeys = Object.keys(BOSSES);
+for (let i = 0, len = bossKeys.length; i < len; i = (i + 1) | 0) {
+    const key = bossKeys[i];
+    const id = Number(key) | 0;
+    if (isNaN(id)) continue;
 
     const data = (BOSSES as any)[id];
     const typeSMI = EnemyType.BOSS; // Currently all bosses share the BOSS type or are variants
@@ -125,13 +131,15 @@ Object.keys(BOSSES).forEach(key => {
 
     // Zero-GC force initialization for Boss attacks
     if (data.attacks) {
-        data.attacks.forEach((att: any) => {
+        const attLen = data.attacks.length | 0;
+        for (let j = 0; j < attLen; j = (j + 1) | 0) {
+            const att = data.attacks[j];
             if (att.force === undefined) {
                 att.force = (att.type === EnemyAttackType.EXPLODE) ? 25.0 : 0.0;
             }
-        });
+        }
     }
-});
+}
 
 /**
  * The core Enemy entity structure used across all systems.
@@ -253,4 +261,6 @@ export interface Enemy {
     _accumulatedDamage: number;
     _lastDamageTextTime: number;
     attackOffset: number;
+    _sqf: number;
+    _internalBucketIdx: number;
 }

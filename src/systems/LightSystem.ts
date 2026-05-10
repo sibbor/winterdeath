@@ -103,10 +103,11 @@ export class LightSystem implements System {
         const activeKeys = ChunkManager.getActiveKeys();
         
         // 3. Process Static Lights in Active Chunks
-        activeKeys.forEach(key => {
+        for (const key of activeKeys) {
             const bucket = this.lightBuckets.get(key);
             if (bucket) {
-                for (let i = 0; i < bucket.length; i++) {
+                const bLen = bucket.length | 0;
+                for (let i = 0; i < bLen; i = (i + 1) | 0) {
                     const l = bucket[i];
                     if (!l._worldPos) l._worldPos = new THREE.Vector3();
                     if (l.position) l._worldPos.copy(l.position);
@@ -119,7 +120,7 @@ export class LightSystem implements System {
                     }
                 }
             }
-        });
+        }
 
         // 4. Process Dynamic Lights (Muzzle flashes, player lights, attached lights)
         // These are exempt from chunking because they move every frame.
@@ -234,7 +235,9 @@ export class LightSystem implements System {
         if (_lastLightSource === lights) return;
         _lastLightSource = lights;
 
-        this.lightBuckets.forEach(b => b.length = 0);
+        for (const bucket of this.lightBuckets.values()) {
+            bucket.length = 0;
+        }
         this.dynamicLightsList.length = 0;
 
         for (let i = 0; i < lights.length; i++) {

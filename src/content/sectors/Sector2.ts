@@ -122,7 +122,6 @@ export const Sector2: SectorDef = {
 
     setupProps: async (ctx: SectorContext) => {
         const { scene } = ctx;
-        (ctx as any).sectorState.ctx = ctx;
 
         let startTime = performance.now();
         const yieldIfBudgetExceeded = async () => {
@@ -384,7 +383,7 @@ export const Sector2: SectorDef = {
 
         const mast = await SectorBuilder.spawnPoi(ctx, POI_TYPE.MAST, mastPos.x, mastPos.z, 0);
         mast.name = "POI_MAST";
-        ctx.sectorState.mastLightHub = mast.getObjectByName("mastWarningLights") || null;
+        (ctx as any).mastLightHub = mast.getObjectByName("mastWarningLights") || null;
         await yieldIfBudgetExceeded();
 
         // Esmeralda - Inside the building, not following yet
@@ -475,11 +474,12 @@ export const Sector2: SectorDef = {
         }
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
         // --- SECTOR 2: ESMERALDA MISSION LOGIC ---
         // Rotating mast warning light (every frame, Zero-GC)
-        if (sectorState.mastLightHub) {
-            sectorState.mastLightHub.rotation.y += delta * 2.0;
+        const mastLightHub = (ctx as any).mastLightHub;
+        if (mastLightHub) {
+            mastLightHub.rotation.y += delta * 2.0;
         }
 
         // =====================================================================

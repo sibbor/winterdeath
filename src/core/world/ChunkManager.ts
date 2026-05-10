@@ -30,12 +30,13 @@ export class ChunkManager {
      * Resets the manager for a new sector.
      */
     static clear() {
-        this.chunks.forEach(meshes => {
-            meshes.forEach(m => {
+        for (const meshes of this.chunks.values()) {
+            for (let i = 0; i < meshes.length; i++) {
+                const m = meshes[i];
                 if (m.parent) m.parent.remove(m);
-            });
+            }
             meshes.length = 0;
-        });
+        }
         this.chunks.clear();
         this.activeKeys.clear();
         this._lastChunkX = -100;
@@ -101,7 +102,7 @@ export class ChunkManager {
         const endZ = Math.min(GRID_DIM - 1, cz + radius);
 
         // 1. Hide all currently active chunks that are now out of range
-        this.chunks.forEach((meshes, key) => {
+        for (const [key, meshes] of this.chunks) {
             const kx = key >> 8;
             const kz = key & 0xFF;
 
@@ -128,6 +129,6 @@ export class ChunkManager {
                     }
                 }
             }
-        });
+        }
     }
 }

@@ -33,7 +33,7 @@ const _NOOP_DAMAGE_TEXT = (x: number, y: number, z: number, t: string, c?: strin
 interface ContinuousContext {
     scene: THREE.Scene | null;
     enemies: any[];
-    collisionGrid: any;
+    worldStreamer: any;
     spawnParticle: Function | null;
     showDamageText: Function;
     spawnDecal: Function | null;
@@ -55,7 +55,7 @@ interface ContinuousContext {
 const _continuousCtx: ContinuousContext = {
     scene: null,
     enemies: [],
-    collisionGrid: null,
+    worldStreamer: null,
     spawnParticle: null,
     showDamageText: _NOOP_DAMAGE_TEXT,
     spawnDecal: null,
@@ -341,7 +341,7 @@ export const WeaponHandler = {
 
                         _continuousCtx.scene = scene;
                         _continuousCtx.enemies = state.enemies || [];
-                        _continuousCtx.collisionGrid = state.collisionGrid;
+                        _continuousCtx.worldStreamer = session.worldStreamer;
                         _continuousCtx.spawnParticle = cb?.spawnParticle;
                         _continuousCtx.showDamageText = cb?.showDamageText || _NOOP_DAMAGE_TEXT;
                         _continuousCtx.spawnDecal = cb?.spawnDecal;

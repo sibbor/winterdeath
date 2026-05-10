@@ -29,12 +29,8 @@ interface GameHUDProps {
     onToggleMap?: () => void;
     onSelectWeapon?: (slot: string) => void;
     onRotateCamera?: (dir: number) => void;
+    onOpenAdventureLog?: (tab?: any, itemId?: string) => void;
 }
-
-// --- PERFORMANCE: Stable Ref Setters to avoid anonymous functions in render loops ---
-const _setPassiveRef = (refs: React.MutableRefObject<any[]>, i: number) => (el: any) => { if (el) refs.current[i] = el; };
-const _setEffectRef = (refs: React.MutableRefObject<any>, group: 'buffs' | 'debuffs', i: number) => (el: any) => { if (el) refs.current[group][i] = el; };
-const _setWeaponSlotRef = (refs: React.MutableRefObject<any[]>, i: number) => (el: any) => { if (el) refs.current[i] = el; };
 
 // --- PERFORMANCE: Static CSS ---
 const HUD_WRAPPER = "absolute inset-0 pointer-events-none transition-all duration-500 ease-in z-[60]";
@@ -51,9 +47,7 @@ const getCachedArray = (length: number): number[] => {
 };
 
 const getStatusIcon = (type: StatusEffectID | string) => {
-    // If it's a number (numeric SMI enum), direct index
     if (typeof type === 'number') return DataResolver.getPerks()[type]?.icon || '❓';
-    // If it's a string (legacy or pet name), lookup by keys
     const n = type.toUpperCase();
     const perks = DataResolver.getPerks() as any;
     if (perks[n]) return perks[n].icon;
@@ -61,82 +55,16 @@ const getStatusIcon = (type: StatusEffectID | string) => {
 };
 
 const getPassiveIcon = (type: StatusEffectID | string) => {
-    // Special cases for pets (which might still be names or IDs)
     if (typeof type === 'string') {
         const n = type.toUpperCase();
         return getStatusIcon(n);
     }
-
-    // Direct enum lookup for FamilyMemberID (if passed as an ID)
-    //if (type === FamilyMemberID.SOTIS || type === FamilyMemberID.PANTER) return '🐱';
-
-    // Direct enum lookup
     return DataResolver.getPerks()[type]?.icon || '❓';
 };
-
 
 // ============================================================================
 // SUB-COMPONENTS (Refactored to accept Refs)
 // ============================================================================
-
-const StatusEffectIcon = React.memo(({ type, isDebuff, isMobileDevice, isLandscapeMode, handleActionEnter }: any) => {
-    const barRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const handleUpdate = (e: any) => {
-            if (!barRef.current) return;
-            const data = e.detail;
-
-            // Check if this effect is active in the buffer pool
-            // HudSystem projects active effects into state.statusEffects
-            // We can listen to a specific event or check the global state if needed, 
-            // but for Zero-GC we'll use the fast-update detail if we expand it, 
-            // OR use a specialized effect-update event.
-            // For now, continue using the subscribe pattern but with a Ref bypass.
-            const state = HudStore.getState();
-            let progress = 0;
-            let found = false;
-            const count = state.statusEffectsCount;
-            const types = state.StatusEffectIDs;
-            const progs = state.statusEffectProgress;
-
-            for (let i = 0; i < count; i++) {
-                if (types[i] === type) {
-                    progress = progs[i];
-                    found = true;
-                    break;
-                }
-            }
-
-            if (found) {
-                barRef.current.style.transform = `scaleX(${progress})`;
-                barRef.current.parentElement!.parentElement!.style.display = 'flex';
-            } else {
-                barRef.current.parentElement!.parentElement!.style.display = 'none';
-            }
-        };
-
-        window.addEventListener('hud-fast-update', handleUpdate);
-        return () => window.removeEventListener('hud-fast-update', handleUpdate);
-    }, [type]);
-
-    const colorPair = isDebuff ? COLORS.RED : COLORS.GREEN;
-    const pulseClass = isDebuff ? 'hud-debuff-pulse' : 'hud-buff-pulse';
-
-    const tooltip = DataResolver.getPerkName(type) ? `${t(DataResolver.getPerkName(type))}: ${t(DataResolver.getPerkDescription(type))}` : type.toString();
-
-    return (
-        <div className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-10 h-10 text-[14px]'} flex items-center justify-center bg-black/80 border-2 rounded-sm ${pulseClass} relative cursor-help`}
-            style={{ borderColor: colorPair.str, display: 'none' }}
-            data-tooltip={tooltip}
-            onTouchStart={isMobileDevice ? handleActionEnter : undefined}>
-            <span>{getStatusIcon(type)}</span>
-            <div className="absolute -bottom-2 left-0 w-full h-0.5 bg-black/40">
-                <div ref={barRef} className="w-full h-full origin-left will-change-transform" style={{ backgroundColor: colorPair.str, transform: 'scaleX(1)' }} />
-            </div>
-        </div>
-    );
-});
 
 const ReloadGrittyFill = ({ reloadBarRef, catColor }: { reloadBarRef: React.RefObject<HTMLDivElement>, catColor: string }) => {
     return (
@@ -184,11 +112,6 @@ const VitalsPanel = React.memo(({ isMobileDevice, isBossIntro, hpBarRef, hpTextR
             <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-2' : 'h-4'} w-full border border-purple-500/30 bg-slate-950`}>
                 <div className="h-full bg-purple-900/20 relative">
                     <div ref={stBarRef} className="w-full h-full bg-purple-500 origin-left will-change-transform hud-bar-glow" style={{ backgroundColor: COLORS.PURPLE.str, transform: 'scaleX(0)' }} />
-                    {/*
-                    <div className="absolute inset-0 flex items-center justify-start px-2 opacity-40 pointer-events-none">
-                        <span ref={stTextRef} className="text-[10px] text-white font-mono font-bold uppercase">{t('ui.stamina')}</span>
-                    </div>
-                    */}
                 </div>
             </div>
 
@@ -301,21 +224,53 @@ const StatusBitmaskIcon = React.memo(({ bit, icon, color, label }: { bit: number
 });
 
 const StatusBitmaskPanel = React.memo(({ isMobileDevice, isLandscapeMode }: any) => {
+    const mask = useStatusStore(m => m);
+    
+    const icons = useMemo(() => {
+        const result = [];
+        // 1. Iterate over Perks (Buffs/Debuffs)
+        const perks = DataResolver.getPerks();
+        for (let i = 0; i < 32; i++) {
+            if ((mask & (1 << i)) !== 0) {
+                const perk = perks[i];
+                if (perk) {
+                    const isDebuff = perk.category === PerkCategory.DEBUFF;
+                    const color = isDebuff ? COLORS.RED.str : COLORS.GREEN.str;
+                    result.push(
+                        <StatusBitmaskIcon 
+                            key={i} 
+                            bit={1 << i} 
+                            icon={perk.icon} 
+                            color={color} 
+                            label={perk.displayName} 
+                        />
+                    );
+                }
+            }
+        }
+
+        // 2. Special System States
+        if ((mask & StatusEffect.INVULNERABLE) !== 0 && (mask & (1 << StatusEffectID.INVULNERABLE))) {
+            // Already handled by loop if defined in PERKS, but StatusEffect.INVULNERABLE is 1 << 19.
+            // If it's not in PERKS, we add it here.
+            if (!perks[StatusEffectID.INVULNERABLE]) {
+                result.push(<StatusBitmaskIcon key="invuln" bit={StatusEffect.INVULNERABLE} icon="🛡️" color={COLORS.GREEN.str} label="perks.INVULNERABLE.title" />);
+            }
+        }
+
+        return result;
+    }, [mask]);
+
+    if (icons.length === 0) return null;
+
     return (
         <div className={isMobileDevice && isLandscapeMode ? "absolute top-24 left-0 flex flex-col gap-2 pl-safe pointer-events-auto" : "flex flex-wrap gap-2 mt-1 ml-1 pointer-events-auto"}>
-            <StatusBitmaskIcon bit={StatusEffect.BLEEDING} icon="🩸" color={COLORS.RED.str} label="perks.BLEEDING.title" />
-            <StatusBitmaskIcon bit={StatusEffect.INFECTED} icon="☣️" color={COLORS.GREEN.str} label="perks.INFECTION.title" />
-            <StatusBitmaskIcon bit={StatusEffect.ADRENALINE} icon="💉" color={COLORS.YELLOW.str} label="perks.ADRENALINE_SHOT.title" />
-            <StatusBitmaskIcon bit={StatusEffect.LOW_HEALTH} icon="⚠️" color={COLORS.RED.str} label="ui.low_health" />
-            <StatusBitmaskIcon bit={StatusEffect.STUNNED} icon="💫" color={COLORS.INDIGO.str} label="perks.STUNNED.title" />
-            <StatusBitmaskIcon bit={StatusEffect.EXHAUSTED} icon="🔋" color={COLORS.PURPLE.str} label="ui.exhausted" />
-            <StatusBitmaskIcon bit={StatusEffect.INVULNERABLE} icon="🛡️" color={COLORS.CYAN.str} label="perks.INVULNERABLE.title" />
+            {icons}
         </div>
     );
 });
 
 const KillsPanel = React.memo(({ isMobileDevice, isBossIntro, handlePauseInternal, killsTextRef }: any) => {
-
     return (
         <div className={`flex items-start ${isMobileDevice ? 'gap-4' : 'gap-8'} transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
             {isMobileDevice && (
@@ -359,8 +314,6 @@ const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro, scrapTextRef, s
 });
 
 const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
-    // IMPORTANT: We only listen to static/slow values (active, name, maxHp). 
-    // We NEVER listen to current HP here. That is handled by the DOM ref.
     const bossActive = useHudStore(s => s.bossActive && !s.bossDefeated);
     const bossName = useHudStore(s => s.bossActive ? s.bossName : '');
     const waveActive = useHudStore(s => s.waveActive);
@@ -388,7 +341,7 @@ const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
     );
 });
 
-const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, handleSelectWeaponInternal, ammoTextRef, reloadBarRef, speedTextRef, gasPedalRef, brakePedalRef, interactionRef, interactionComponentRef }: any) => {
+const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, handleSelectWeaponInternal, ammoTextRef, reloadBarRef, speedTextRef, gasPedalRef, brakePedalRef }: any) => {
     const isDriving = useHudStore(s => s.isDriving);
     const activeWeapon = useHudStore(s => s.activeWeapon);
     const throwableAmmo = useHudStore(s => s.throwableAmmo);
@@ -397,14 +350,13 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
 
     const wep = DataResolver.getWeapons()[activeWeapon];
 
-    const interactionActive = useHudStore(s => s.interactionActive);
-    const interactionType = useHudStore(s => interactionActive ? s.interactionType : InteractionType.NONE);
-    const interactionLabel = useHudStore(s => interactionActive ? s.interactionLabel : '');
+    // PERFORMANCE: Cached JSX slots generation to completely bypass array allocations on fast re-renders
+    const slots = useMemo(() => {
+        if (isDriving || !weaponSlots) return [];
 
-    // Zero-GC Loop pre-calculation (Step 14)
-    const slots = [];
-    if (!isDriving && weaponSlots) {
-        for (let i = 0; i < weaponSlots.length; i++) {
+        const result = [];
+        const len = weaponSlots.length;
+        for (let i = 0; i < len; i++) {
             const { slot, type } = weaponSlots[i];
             const wData = DataResolver.getWeapons()[Number(type)];
             if (!wData) continue;
@@ -426,7 +378,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                 }
             }
 
-            slots.push(
+            result.push(
                 <button key={slot} data-slot={slot}
                     onClick={!isMobileDevice ? handleSelectWeaponInternal : undefined}
                     onTouchStart={isMobileDevice ? handleSelectWeaponInternal : undefined}
@@ -458,7 +410,8 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                 </button>
             );
         }
-    }
+        return result;
+    }, [isDriving, weaponSlots, activeWeapon, throwableAmmo, familyFound, isMobileDevice, handleSelectWeaponInternal, reloadBarRef]);
 
     return (
         <div className={`absolute ${isMobileDevice ? 'bottom-4' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
@@ -506,7 +459,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
 
 const GameHUD: React.FC<GameHUDProps> = React.memo(({
     loadout, debugMode = false, isBossIntro = false, isMobileDevice = false,
-    onTogglePause, onToggleMap, onSelectWeapon
+    onTogglePause, onToggleMap, onSelectWeapon, onOpenAdventureLog
 }) => {
     const isDead = useHudStore(s => s.isDead);
     const isDisoriented = useHudStore(s => s.isDisoriented);
@@ -551,18 +504,13 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     useUIEventBridge(useCallback((type, p1, p2) => {
         switch (type) {
             case UIEventType.HUD_COMMAND:
-                // p1: 0 = HIDE, 1 = SHOW
                 HudStore.setHudVisible(p1 === 1);
                 break;
 
             case UIEventType.RELOAD_START:
-                // p1: actualReloadTime
-                // Handled via data.reloadProgress in handleFastUpdate for now,
-                // but we could trigger a specific "START RELOAD" animation here if needed.
                 break;
 
             case UIEventType.AMMO_LOW:
-                // p1: 5 (threshold)
                 if (ammoTextRef.current) {
                     ammoTextRef.current.classList.remove('hud-ammo-low-pulse');
                     void ammoTextRef.current.offsetWidth;
@@ -573,7 +521,6 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     }, []));
 
     // --- FAST HUD UPDATE LISTENER ---
-    // ZERO-GC: Switched from browser CustomEvents to the HudFastRegistry
     useEffect(() => {
         const handleFastUpdate = (data: any) => {
             // 1. HP Updates
@@ -715,7 +662,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 if (el) el.update(i < pCount ? pPassives[i] : null);
             }
 
-            // Buffs/Debuffs (Extracted from SoA statusEffects buffers)
+            // Buffs/Debuffs
             const effCount = hudState.statusEffectsCount;
             const effTypes = hudState.StatusEffectIDs;
             const effProgs = hudState.statusEffectProgress;
@@ -800,20 +747,22 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const catColor = wep ? (WeaponCategoryColors[wep.category] || COLORS.WHITE).str : COLORS.WHITE.str;
     const hudVisible = useHudStore(s => s.hudVisible);
 
+    // ZERO-GC: Pre-allocated arrays to assign pooled ref storage stably in render
+    const passivePoolRefs = useMemo(() => getCachedArray(POOL_SIZE_PASSIVE).map(i => (el: any) => { if (el) passiveRefs.current[i] = el; }), []);
+    const buffPoolRefs = useMemo(() => getCachedArray(POOL_SIZE_BUFF).map(i => (el: any) => { if (el) effectRefs.current.buffs[i] = el; }), []);
+    const debuffPoolRefs = useMemo(() => getCachedArray(POOL_SIZE_DEBUFF).map(i => (el: any) => { if (el) effectRefs.current.debuffs[i] = el; }), []);
+
     return (
         <div ref={hudContainerRef} className="absolute inset-0 pointer-events-none">
             <DamageVignette />
 
             <DiscoveryPopup onOpenAdventureLog={(tab, itemId) => {
-                // We assume there's a prop or global way to open it, 
-                // but usually GameHUD is used inside a screen that handles this.
-                // In winterdeath, we often use CustomEvents or props.
                 window.dispatchEvent(new CustomEvent('open-adventure-log', { detail: { tab, itemId } }));
             }} />
 
             <ChatBubble />
 
-            <ChallengePopup />
+            <ChallengePopup onOpenAdventureLog={onOpenAdventureLog} />
 
             <div className={`${HUD_WRAPPER} ${!hudVisible || isDead || isDisoriented ? 'opacity-0 -translate-y-4 blur-[5px]' : 'opacity-100 translate-y-0 blur-0 animate-hudFadeIn'}`}>
 
@@ -834,6 +783,45 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             stTextRef={staminaTextRef}
                             xpBarRef={xpBarRef}
                         />
+
+                        {/* POOLED ACTIVE PASSIVES (DOM Fixed Allocations) */}
+                        <div className={isMobileDevice && isLandscapeMode ? "absolute top-24 left-0 flex flex-col gap-2 pl-safe pointer-events-auto" : "flex flex-wrap gap-2 mt-1 ml-1 pointer-events-auto"}>
+                            {getCachedArray(POOL_SIZE_PASSIVE).map(i => (
+                                <PassiveIconPooled
+                                    key={`pass-pool-${i}`}
+                                    ref={passivePoolRefs[i]}
+                                    index={i}
+                                    isMobileDevice={isMobileDevice}
+                                    isLandscapeMode={isMobileDevice && isLandscapeMode}
+                                    handleActionEnter={handleActionEnter}
+                                />
+                            ))}
+                        </div>
+
+                        {/* POOLED BUFFS/DEBUFFS (DOM Fixed Allocations) */}
+                        <div className="flex flex-wrap gap-2 mt-8 ml-1 pointer-events-auto">
+                            {getCachedArray(POOL_SIZE_BUFF).map(i => (
+                                <StatusEffectIconPooled
+                                    key={`buff-pool-${i}`}
+                                    ref={buffPoolRefs[i]}
+                                    index={i}
+                                    isMobileDevice={isMobileDevice}
+                                    isLandscapeMode={isMobileDevice && isLandscapeMode}
+                                    handleActionEnter={handleActionEnter}
+                                />
+                            ))}
+                            {getCachedArray(POOL_SIZE_DEBUFF).map(i => (
+                                <StatusEffectIconPooled
+                                    key={`debuff-pool-${i}`}
+                                    ref={debuffPoolRefs[i]}
+                                    index={i}
+                                    isMobileDevice={isMobileDevice}
+                                    isLandscapeMode={isMobileDevice && isLandscapeMode}
+                                    handleActionEnter={handleActionEnter}
+                                />
+                            ))}
+                        </div>
+
                         {(!isMobileDevice || !isLandscapeMode) && (
                             <StatusBitmaskPanel isMobileDevice={isMobileDevice} isLandscapeMode={false} />
                         )}
@@ -866,8 +854,6 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     speedTextRef={speedTextRef}
                     gasPedalRef={gasPedalRef}
                     brakePedalRef={brakePedalRef}
-                    interactionRef={interactionRef}
-                    interactionComponentRef={interactionComponentRef}
                 />
 
                 {/* XP GAIN DISPLAY (DOM placeholder) */}

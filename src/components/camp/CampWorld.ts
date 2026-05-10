@@ -26,6 +26,11 @@ export const CAMP_SCENE = {
         color: 0xaaccff,
         intensity: 0.4
     },
+    wind: { minStrength: 0.01, maxStrength: 0.05 },
+    weather: {
+        type: WeatherType.SNOW,
+        count: WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES
+    },
 
     // Cameras
     cameraBaseLookAt: new THREE.Vector3(0, 2, -5),
@@ -372,23 +377,6 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false)
 
     scene.add(fireGroup);
 
-    // Logical Light - handled by LightSystem
-    /*
-    // OLD POINT LIGHT CONVERTED TO LOGICAL LIGHT:
-    const fireLight = new THREE.PointLight(
-            CAMP_SCENE.campfireLight.color,
-            CAMP_SCENE.campfireLight.intensity,
-            CAMP_SCENE.campfireLight.distance
-        );
-    fireLight.position.set(0, 3, 0);
-    fireLight.castShadow = CAMP_SCENE.campfireLight.castShadow;
-    fireLight.shadow.mapSize.width = CAMP_SCENE.campfireLight.shadowMapSizeWidth;
-    fireLight.shadow.mapSize.height = CAMP_SCENE.campfireLight.shadowMapSizeHeight;
-    fireLight.shadow.bias = CAMP_SCENE.campfireLight.bias;
-    fireLight.shadow.normalBias = CAMP_SCENE.campfireLight.normalBias;
-
-    return fireLight;
-    */
     const fireLightData: LogicalLight = {
         isLogicalLight: true,
         position: new THREE.Vector3(0, 3, 0), // Mid-fire height
@@ -691,9 +679,13 @@ export const CampWorld = {
         const engine = WinterEngine.getInstance();
 
         if (!isWarmup) {
-            engine.wind.setRandomWind(WIND_SYSTEM.MIN_STRENGTH, WIND_SYSTEM.MAX_STRENGTH);
+            // Restore the low-wind breeze feel in camp (data-driven from CAMP_SCENE)
+            engine.wind.setRandomWind(CAMP_SCENE.wind.minStrength, CAMP_SCENE.wind.maxStrength);
             engine.weather.reAttach(scene);
-            engine.weather.sync(weatherType, WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES, 60);
+
+            // ARCHITECTURAL UNIFICATION: Use CAMP_SCENE weather definition
+            const finalType = (weatherType !== undefined && weatherType !== WeatherType.NONE) ? weatherType : CAMP_SCENE.weather.type;
+            engine.weather.sync(finalType, CAMP_SCENE.weather.count, 60);
         }
 
         const { objects: skyObjects } = CampWorld.setupSky(scene, textures, isWarmup);

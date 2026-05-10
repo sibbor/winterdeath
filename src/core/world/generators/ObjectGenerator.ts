@@ -386,7 +386,11 @@ export const ObjectGenerator = {
         ];
 
         ctx.scene.add(GeneratorUtils.freezeStatic(group));
-        if (ctx.obstacles) ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
+        ctx.worldStreamer.registerObstacle({ 
+            mesh: group, 
+            position: group.position, 
+            radius: 0.8 * scale 
+        });
     },
 
 

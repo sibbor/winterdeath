@@ -5,8 +5,8 @@ import { DataResolver } from '../utils/ui/DataResolver';
 import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
 import { InteractionPromptId } from './ui/UIEventBridge';
-import { t } from '../utils/i18n';
-import { SpatialGrid } from '../core/world/SpatialGrid';
+import { WorldStreamer } from '../core/world/WorldStreamer';
+import { TriggerShape, MAX_ENTITIES } from '../content/constants';
 
 /**
  * Data-Oriented Trigger System using Struct of Arrays (SoA).
@@ -21,12 +21,12 @@ export class TriggerSystem implements System {
 
     private readonly maxTriggers: number;
     private activeCount: number = 0;
-    private grid: SpatialGrid | null = null;
+    private streamer: WorldStreamer | null = null;
 
     // --- Struct of Arrays (SoA) ---
     private readonly activeFlags: Uint8Array;
     private readonly triggerTypes: Uint8Array;
-    private readonly shapeTypes: Uint8Array; // 0 = Circle, 1 = Box
+    private readonly shapeTypes: Uint8Array; // Enum-locked: TriggerShape
     private readonly statusFlags: Uint16Array;
     private readonly positionsX: Float32Array;
     private readonly positionsY: Float32Array;
@@ -63,7 +63,7 @@ export class TriggerSystem implements System {
         label?: string;
     }>;
 
-    constructor(maxCapacity: number = 256) {
+    constructor(maxCapacity: number = MAX_ENTITIES.TRIGGERS) {
         this.maxTriggers = maxCapacity;
 
         this.activeFlags = new Uint8Array(maxCapacity);
@@ -86,8 +86,8 @@ export class TriggerSystem implements System {
         }
     }
 
-    public setGrid(grid: SpatialGrid): void {
-        this.grid = grid;
+    public setStreamer(streamer: WorldStreamer): void {
+        this.streamer = streamer;
     }
 
     public reset(): void {
@@ -100,7 +100,8 @@ export class TriggerSystem implements System {
             m.id = '';
             m.content = '';
             m.contentId = 0;
-            m.actions.length = 0;
+            // Zero-GC: reset count without resizing
+            (m.actions as any)._count = 0;
             m.familyId = undefined;
             m.ownerId = undefined;
             m.interactionPromptId = undefined;
@@ -144,12 +145,12 @@ export class TriggerSystem implements System {
                 this.lastTriggerTimes[i] = 0;
 
                 if (config.size) {
-                    this.shapeTypes[i] = 1; // BOX
+                    this.shapeTypes[i] = TriggerShape.BOX;
                     this.halfWidths[i] = config.size.width * 0.5;
                     this.halfDepths[i] = config.size.depth * 0.5;
                     this.radiiSq[i] = 0;
                 } else {
-                    this.shapeTypes[i] = 0; // CIRCLE
+                    this.shapeTypes[i] = TriggerShape.CIRCLE;
                     const r = config.radius || 5;
                     this.radiiSq[i] = r * r;
                     this.halfWidths[i] = 0;
@@ -161,10 +162,12 @@ export class TriggerSystem implements System {
                 const m = this.metadata[i];
                 m.id = config.id;
                 m.content = config.content || '';
-                m.actions.length = 0;
+                
+                const mActions = m.actions as any;
+                mActions._count = 0;
                 if (config.actions) {
                     for (let j = 0; j < config.actions.length; j++) {
-                        m.actions.push(config.actions[j]);
+                        mActions[mActions._count++] = config.actions[j];
                     }
                 }
                 m.familyId = config.familyId;
@@ -185,13 +188,9 @@ export class TriggerSystem implements System {
                     if (col) m.contentId = (col.sector << 8) | col.index;
                 }
 
-                // Register in SpatialGrid if provided
-                if (this.grid) {
-                    this.grid.addTrigger({
-                        index: i,
-                        position: { x: config.x, z: config.z },
-                        radius: config.size ? Math.sqrt((config.size.width/2)**2 + (config.size.depth/2)**2) : (config.radius || 5)
-                    });
+                if (this.streamer) {
+                    const radius = config.size ? (Math.max(config.size.width, config.size.depth) * 0.5) : (config.radius || 5);
+                    this.streamer.registerTrigger(i, config.x - radius, config.z - radius, config.x + radius, config.z + radius);
                 }
 
                 return i;
@@ -226,7 +225,7 @@ export class TriggerSystem implements System {
                 this.positionsX[i] = x;
                 this.positionsY[i] = y;
                 this.positionsZ[i] = z;
-                this.shapeTypes[i] = 0; // CIRCLE
+                this.shapeTypes[i] = TriggerShape.CIRCLE;
                 this.radiiSq[i] = radius * radius;
                 this.halfWidths[i] = 0;
                 this.halfDepths[i] = 0;
@@ -237,7 +236,7 @@ export class TriggerSystem implements System {
                 const m = this.metadata[i];
                 m.id = id;
                 m.content = content;
-                m.actions.length = 0;
+                (m.actions as any)._count = 0;
                 m.familyId = undefined;
                 m.ownerId = undefined;
                 m.interactionPromptId = interactionPromptId;
@@ -250,9 +249,10 @@ export class TriggerSystem implements System {
     }
 
     public removeTrigger(index: number): void {
-        if (index < 0 || index >= this.maxTriggers) return;
-        if (this.activeFlags[index] === 1) {
-            this.activeFlags[index] = 0;
+        const idx = index | 0;
+        if (idx < 0 || idx >= this.maxTriggers) return;
+        if (this.activeFlags[idx] === 1) {
+            this.activeFlags[idx] = 0;
             this.activeCount--;
         }
     }
@@ -260,23 +260,25 @@ export class TriggerSystem implements System {
     public getTriggerById(id: string): number {
         for (let i = 0; i < this.maxTriggers; i++) {
             if (this.activeFlags[i] === 1 && this.metadata[i].id === id) {
-                return i;
+                return i | 0;
             }
         }
         return -1;
     }
 
     public isTriggered(index: number): boolean {
-        if (index < 0 || index >= this.maxTriggers) return false;
-        return (this.statusFlags[index] & TriggerStatus.TRIGGERED) !== 0;
+        const idx = index | 0;
+        if (idx < 0 || idx >= this.maxTriggers) return false;
+        return ((this.statusFlags[idx] | 0) & (TriggerStatus.TRIGGERED | 0)) !== 0;
     }
 
     public setStatusFlag(index: number, flag: number, active: boolean): void {
-        if (index < 0 || index >= this.maxTriggers) return;
+        const idx = index | 0;
+        if (idx < 0 || idx >= this.maxTriggers) return;
         if (active) {
-            this.statusFlags[index] |= flag;
+            this.statusFlags[idx] = (this.statusFlags[idx] | flag) | 0;
         } else {
-            this.statusFlags[index] &= ~flag;
+            this.statusFlags[idx] = (this.statusFlags[idx] & ~flag) | 0;
         }
     }
 
@@ -288,33 +290,36 @@ export class TriggerSystem implements System {
         const playerPos = session.playerPos;
         if (!playerPos) return;
 
-        // --- SPATIAL GRID OPTIMIZATION ---
-        // Instead of O(N) over 256 triggers, we query the grid for triggers within 15m.
-        if (this.grid) {
-            const nearby = this.grid.getNearbyTriggers(playerPos, 15);
-            for (let j = 0; j < nearby.length; j++) {
-                const tObj = nearby[j];
-                const i = typeof tObj === 'number' ? tObj : tObj.index;
-                if (i === undefined || this.activeFlags[i] === 0) continue;
+        if (this.streamer) {
+            const poolIdx = this.streamer.getTriggerPool().nextIndex();
+            this.streamer.getNearbyTriggers(playerPos.x, playerPos.z, 15, poolIdx);
+            
+            const nearby = this.streamer.getTriggerPool().getPool(poolIdx);
+            const nearCount = this.streamer.getTriggerPool().getCount(poolIdx);
 
-                const status = this.statusFlags[i];
+            for (let j = 0; j < nearCount; j++) {
+                const i = nearby[j] | 0;
+                if (this.activeFlags[i] === 0) continue;
+
+                const status = this.statusFlags[i] | 0;
                 if (!(status & TriggerStatus.ACTIVE)) continue;
-                if (status & TriggerStatus.TRIGGERED && !(status & TriggerStatus.REPEATABLE)) continue;
+                if ((status & TriggerStatus.TRIGGERED) && !(status & TriggerStatus.REPEATABLE)) continue;
 
-                if (status & TriggerStatus.REPEATABLE && this.repeatIntervals[i] > 0) {
+                if ((status & TriggerStatus.REPEATABLE) && this.repeatIntervals[i] > 0) {
                     if (simTime - this.lastTriggerTimes[i] < this.repeatIntervals[i]) continue;
                 }
 
                 let isInside = false;
                 const tx = this.positionsX[i];
                 const tz = this.positionsZ[i];
+                const shape = this.shapeTypes[i] | 0;
 
-                if (this.shapeTypes[i] === 0) { // Circle
+                if (shape === TriggerShape.CIRCLE) {
                     const dx = playerPos.x - tx;
                     const dz = playerPos.z - tz;
                     const distSq = dx * dx + dz * dz;
                     isInside = distSq < this.radiiSq[i];
-                } else { // Box
+                } else if (shape === TriggerShape.BOX) {
                     const dx = Math.abs(playerPos.x - tx);
                     const dz = Math.abs(playerPos.z - tz);
                     isInside = dx < this.halfWidths[i] && dz < this.halfDepths[i];
@@ -324,47 +329,35 @@ export class TriggerSystem implements System {
                     this.trigger(i, session);
                 }
             }
-        } else {
-            // Fallback for warmup/no-grid contexts
-            for (let i = 0; i < this.maxTriggers; i++) {
-                if (this.activeFlags[i] === 0) continue;
-                const status = this.statusFlags[i];
-                if (!(status & TriggerStatus.ACTIVE)) continue;
-                if (status & TriggerStatus.TRIGGERED && !(status & TriggerStatus.REPEATABLE)) continue;
-
-                const dx = playerPos.x - this.positionsX[i];
-                const dz = playerPos.z - this.positionsZ[i];
-                if (dx*dx + dz*dz < this.radiiSq[i]) this.trigger(i, session);
-            }
         }
     }
 
     private trigger(index: number, session: any): void {
+        const idx = index | 0;
         const engine = WinterEngine.getInstance();
         const simTime = engine.simTime;
 
-        this.statusFlags[index] |= TriggerStatus.TRIGGERED;
-        this.lastTriggerTimes[index] = simTime;
+        this.statusFlags[idx] = (this.statusFlags[idx] | TriggerStatus.TRIGGERED) | 0;
+        this.lastTriggerTimes[idx] = simTime;
 
-        const m = this.metadata[index];
-        const type = this.triggerTypes[index];
+        const m = this.metadata[idx];
+        const type = this.triggerTypes[idx] | 0;
         const state = session.state;
 
-        // --- FIRE NARRATIVE & DISCOVERY VIA ZERO-GC RINGBUFFER ---
+        // --- FIRE NARRATIVE & DISCOVERY (Zero-GC: Passing raw i18n keys) ---
         switch (type) {
             case TriggerType.THOUGHT:
-                UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, `🧠 ${t(DataResolver.getClueReaction(m.id))}`, 3000, simTime);
+                UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, DataResolver.getClueReaction(m.id), 3000, simTime);
                 break;
 
             case TriggerType.SPEAK:
-                UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, t(DataResolver.getClueReaction(m.id)), 4000, simTime);
+                UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, DataResolver.getClueReaction(m.id), 4000, simTime);
                 break;
 
             case TriggerType.POI:
-                // Only push discovery if it hasn't been discovered yet
                 if (state && state.discoverySets && !state.discoverySets.pois.has(m.id)) {
                     UIEventRingBuffer.push(UIEventType.DISCOVERY, m.contentId, DiscoveryType.POI, simTime);
-                    UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, t(DataResolver.getPoiReaction(m.id)), 4000, simTime);
+                    UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, DataResolver.getPoiReaction(m.id), 4000, simTime);
                 }
                 break;
 
@@ -382,15 +375,16 @@ export class TriggerSystem implements System {
         }
 
         // --- FIRE ACTIONS ---
-        if (m.actions && m.actions.length > 0) {
-            for (let i = 0; i < m.actions.length; i++) {
-                session.onAction(m.actions[i]);
+        const mActions = m.actions as any;
+        const actionCount = mActions._count | 0;
+        if (actionCount > 0) {
+            for (let i = 0; i < actionCount; i++) {
+                session.onAction(mActions[i]);
             }
         }
 
-        // --- AUTO-REMOVE IF 'ONCE' FLAG IS SET ---
-        if (this.statusFlags[index] & TriggerStatus.ONCE) {
-            this.activeFlags[index] = 0;
+        if ((this.statusFlags[idx] | 0) & (TriggerStatus.ONCE | 0)) {
+            this.activeFlags[idx] = 0;
             this.activeCount--;
         }
     }

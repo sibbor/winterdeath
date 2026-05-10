@@ -198,9 +198,9 @@ export class WaterSystem implements System {
                 }
             }
 
-            chunkBuckets.forEach((matrices, key) => {
-                const ix = key >> 8;
-                const iz = key & 0xFF;
+            for (const [key, matrices] of chunkBuckets) {
+                const ix = (key >> 8) | 0;
+                const iz = (key & 0xFF) | 0;
                 const mesh = new THREE.InstancedMesh(geo, MATERIALS.seaweed, matrices.length);
                 mesh.userData.material = 'LEAVES';
                 mesh.frustumCulled = true;
@@ -208,7 +208,7 @@ export class WaterSystem implements System {
                 for (let i = 0; i < matrices.length; i++) mesh.setMatrixAt(i, matrices[i]);
                 mesh.instanceMatrix.needsUpdate = true;
                 ChunkManager.registerMesh(ix, iz, mesh);
-            });
+            }
         }
 
         if (lilies.length > 0) {
@@ -248,9 +248,9 @@ export class WaterSystem implements System {
                 }
             }
 
-            chunkBuckets.forEach((data, key) => {
-                const ix = key >> 8;
-                const iz = key & 0xFF;
+            for (const [key, data] of chunkBuckets) {
+                const ix = (key >> 8) | 0;
+                const iz = (key & 0xFF) | 0;
 
                 const pads = new THREE.InstancedMesh(padGeo, MATERIALS.waterLily, data.matrices.length);
                 pads.frustumCulled = true;
@@ -278,7 +278,7 @@ export class WaterSystem implements System {
                     flowers.instanceMatrix.needsUpdate = true;
                     ChunkManager.registerMesh(ix, iz, flowers);
                 }
-            });
+            }
         }
     }
 

@@ -22,7 +22,7 @@ const _dismountDir = new THREE.Vector3();
 
 // Zero-GC context bridge for EnemyManager physics
 const _vehicleKnockbackCtx: any = {
-    collisionGrid: null,
+    worldStreamer: null,
     applyDamage: null,
     scene: null,
     engine: null,
@@ -162,7 +162,7 @@ export const VehicleManager = {
 
         playerGroup.visible = false;
 
-        if (state.collisionGrid) {
+        if (state.worldStreamer) {
             vehicle.userData.isInteractable = false;
         }
 
@@ -262,9 +262,9 @@ export const VehicleManager = {
             vNodes.brakeGlow.visible = false;
         }
 
-        if (state.collisionGrid) {
+        if (state.worldStreamer) {
             vehicle.userData.isInteractable = true;
-            state.collisionGrid.updateInteractable(vehicle);
+            // Interaction state is now managed via bucket membership/flags in WorldStreamer
         }
     },
 
@@ -297,10 +297,15 @@ export const VehicleManager = {
 
         _toEnemy.copy(vehicle.position).addScaledVector(_knockDir, 1.0);
 
-        // --- SPATIAL GRID ENEMY LOOKUP ---
+        // --- WORLD STREAMER ENEMY LOOKUP ---
         // Look around the *front* of the vehicle
-        const enemies = state.collisionGrid.getNearbyEnemies(_toEnemy, hitRadius);
-        const eLen = enemies.length;
+        const streamer = session.worldStreamer;
+        const enPool = streamer.getEnemyPool();
+        const enPoolIdx = enPool.nextIndex();
+        streamer.getNearbyEnemies(_toEnemy.x, _toEnemy.z, hitRadius, enPoolIdx);
+
+        const enemies = enPool.getPool(enPoolIdx);
+        const eCount = enPool.getCount(enPoolIdx);
 
         let hitAnyone = false;
         let isHeavyHit = false;
@@ -310,7 +315,7 @@ export const VehicleManager = {
         // Mass ratio determines how easily the vehicle bowls over enemies
         const massRatio = (def.mass * 0.001);
 
-        for (let i = 0; i < eLen; i++) {
+        for (let i = 0; i < eCount; i++) {
             const e = enemies[i];
             if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
@@ -331,7 +336,7 @@ export const VehicleManager = {
             const maxDamage = (speedKmh * def.collisionDamageMultiplier * 0.8) * massRatio;
 
             // Prepare context for EnemyManager
-            _vehicleKnockbackCtx.collisionGrid = state.collisionGrid;
+            _vehicleKnockbackCtx.worldStreamer = session.worldStreamer;
             _vehicleKnockbackCtx.applyDamage = state.callbacks?.applyDamage;
             _vehicleKnockbackCtx.scene = session.engine.scene;
             _vehicleKnockbackCtx.engine = session.engine;
@@ -370,11 +375,16 @@ export const VehicleManager = {
         const state = session.state;
         const hitRadius = (def.size.x > def.size.z ? def.size.x : def.size.z) * 0.5;
 
-        // --- SPATIAL GRID OBSTACLE LOOKUP ---
-        const obstacles = state.collisionGrid.getNearbyObstacles(vehicle.position, hitRadius + 2.0);
-        const oLen = obstacles.length;
+        // --- WORLD STREAMER OBSTACLE LOOKUP ---
+        const streamer = session.worldStreamer;
+        const obsPool = streamer.getObstaclePool();
+        const obsPoolIdx = obsPool.nextIndex();
+        streamer.getNearbyObstacles(vehicle.position.x, vehicle.position.z, hitRadius + 2.0, obsPoolIdx);
 
-        for (let i = 0; i < oLen; i++) {
+        const obstacles = obsPool.getPool(obsPoolIdx);
+        const oCount = obsPool.getCount(obsPoolIdx);
+
+        for (let i = 0; i < oCount; i++) {
             const obs = obstacles[i];
             if (obs.mesh === vehicle) continue;
 

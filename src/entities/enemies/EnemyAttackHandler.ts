@@ -5,6 +5,8 @@ import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { DataResolver } from '../../utils/ui/DataResolver';
 import { FXParticleType } from '../../types/FXTypes';
+import { WorldStreamer } from '../../core/world/WorldStreamer';
+import { COMBAT } from '../../content/constants';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -12,14 +14,15 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 
 export const EnemyAttackHandler = {
-    executeAttack: (e: Enemy, att: AttackDefinition, distSq: number, playerPos: THREE.Vector3, callbacks: {
+
+    executeAttack: (e: Enemy, att: AttackDefinition, distSq: number, playerPos: THREE.Vector3, streamer: WorldStreamer, callbacks: {
         onPlayerHit: (damage: number, attacker: Enemy | null, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void,
         playSound: (id: SoundID) => void,
         spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D | null, vel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void,
         applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => boolean,
-        queryEnemies?: (pos: THREE.Vector3, radius: number) => Enemy[],
+        queryEnemies?: (pos: THREE.Vector3, radius: number, outPoolIdx: number) => void,
         applyExternalForce?: (force: THREE.Vector3, factor: number) => void
-    }, delta: number, simTime: number, renderTime: number) => {
+    }, delta: number, simTime: number, renderTime: number): boolean => {
         if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
             const attackName = DataResolver.getAttackName(att.type, true);
             const enemyName = DataResolver.getEnemyName(e.type, e.bossId, true);
@@ -35,41 +38,41 @@ export const EnemyAttackHandler = {
 
         switch (att.type) {
             case EnemyAttackType.HIT:
-                EnemyAttackHandler.handleBasicHit(e, att, distSq, callbacks, delta, simTime, renderTime);
-                break;
+                return EnemyAttackHandler.handleBasicHit(e, att, distSq, callbacks, delta, simTime, renderTime);
             default:
-                EnemyAttackHandler.handleSpecialAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
-                break;
+                return EnemyAttackHandler.handleSpecialAttack(e, att, distSq, playerPos, streamer, callbacks, delta, simTime, renderTime);
         }
     },
 
     handleBasicHit: (e: Enemy, att: AttackDefinition, distSq: number, callbacks: {
         onPlayerHit: (damage: number, attacker: Enemy | null, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void,
         playSound: (id: SoundID) => void
-    }, delta: number, simTime: number, renderTime: number) => {
+    }, delta: number, simTime: number, renderTime: number): boolean => {
         const range = att.range || ENEMY_ATTACK_RANGE[e.type];
-        // Add 10% tolerance buffer for "fairness"
-        const bufferedRange = range * 1.1;
+        // VINTERDÖD STABILIZATION: 15% hysteresis buffer prevents "chase-stall"
+        const bufferedRange = range * COMBAT.HYSTERESIS;
         const inRange = distSq < (bufferedRange * bufferedRange);
 
         if (inRange) {
             callbacks.onPlayerHit(att.damage, e, DamageID.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
             const id = att.type === EnemyAttackType.HIT ? SoundID.ZOMBIE_ATTACK_HIT : SoundID.ZOMBIE_GROWL_WALKER;
             callbacks.playSound(id);
+            return true;
         }
+        return false;
     },
 
-    handleSpecialAttack: (e: Enemy, att: AttackDefinition, distSq: number, playerPos: THREE.Vector3, callbacks: {
+    handleSpecialAttack: (e: Enemy, att: AttackDefinition, distSq: number, playerPos: THREE.Vector3, streamer: WorldStreamer, callbacks: {
         onPlayerHit: (damage: number, attacker: Enemy | null, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void,
         playSound: (id: SoundID) => void,
         spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D | null, vel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void,
         applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => boolean,
-        queryEnemies?: (pos: THREE.Vector3, radius: number) => Enemy[]
-    }, delta: number, simTime: number, renderTime: number) => {
+        queryEnemies?: (pos: THREE.Vector3, radius: number, outPoolIdx: number) => void
+    }, delta: number, simTime: number, renderTime: number): boolean => {
         const pos = e.mesh.position;
         const effectiveRange = att.radius || att.range || ENEMY_ATTACK_RANGE[e.type];
-        // 10% Tolerance Buffer
-        const bufferedRange = effectiveRange * 1.1;
+        // VINTERDÖD STABILIZATION: 15% hysteresis buffer prevents "chase-stall"
+        const bufferedRange = effectiveRange * COMBAT.HYSTERESIS;
         const inRange = distSq < (bufferedRange * bufferedRange);
 
         switch (att.type) {
@@ -117,8 +120,12 @@ export const EnemyAttackHandler = {
                 // AOE EXPLOSION: Damage surrounding enemies
                 const radius = att.radius || 10.0;
                 if (callbacks.queryEnemies && callbacks.applyDamage) {
-                    const nearby = callbacks.queryEnemies(pos, radius + 3.0);
-                    const nLen = nearby.length;
+                    const pool = streamer.getEnemyPool();
+                    const poolIdx = pool.nextIndex();
+                    callbacks.queryEnemies(pos, radius + 3.0, poolIdx);
+                    
+                    const nearby = pool.getPool(poolIdx);
+                    const nLen = pool.getCount(poolIdx);
                     const radSq = radius * radius;
 
                     for (let i = 0; i < nLen; i++) {
@@ -143,7 +150,7 @@ export const EnemyAttackHandler = {
 
                 e.hp = 0;
                 e.lastDamageType = DamageID.EXPLOSION;
-                if (callbacks.applyDamage) callbacks.applyDamage(e, 9999, DamageID.EXPLOSION, true);
+                if (callbacks.applyDamage) callbacks.applyDamage(e, COMBAT.LETHAL_DAMAGE, DamageID.EXPLOSION, true);
                 break;
 
             case EnemyAttackType.SMASH:
@@ -174,6 +181,8 @@ export const EnemyAttackHandler = {
                 callbacks.playSound(SoundID.SHOT_ARC_CANNON);
                 break;
         }
+
+        return inRange;
     },
 
     updateContinuousAttack: (e: Enemy, att: AttackDefinition, playerPos: THREE.Vector3, callbacks: {

@@ -44,7 +44,6 @@ const TABS: { id: Tab, label: string }[] = [
 
 const THEME_COLOR = '#3b82f6'; // blue-500
 
-
 const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onOpenDiscovery, isMobileDevice, debugMode, initialTab, initialItemId }) => {
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
@@ -56,7 +55,31 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
         nextLevelXp: StatsBridge.getNextLevelExperience(stats)
     }), [stats]);
 
-    // Sync tab when initialTab changes (e.g. when opened from Pause Menu)
+    // CENTRALIZED SSoT PRE-CALCULATIONS (Avoids leaking scope or breaking subcomponents)
+    const {
+        scrapTotal, avgDistance, avgTime, totalDistanceKm, totalTimeH,
+        discoveryPoints, marathonProgress, totalDistance, totalTimeFormatted
+    } = useMemo(() => {
+        const ST = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SCRAP_COLLECTED);
+        const SESS = Math.max(1, StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SESSIONS_STARTED));
+        const totalDist = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_DISTANCE_TRAVELED);
+        const totalTime = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME);
+        const discPoints = (StatsBridge.getDiscoveredPOIs(stats).length) + (StatsBridge.getCollectiblesDiscovered(stats).length) + (StatsBridge.getCluesFound(stats).length);
+
+        return {
+            scrapTotal: ST,
+            avgDistance: FormatUtils.formatDistanceSmart(totalDist / SESS),
+            avgTime: FormatUtils.formatTimeMinutes(totalTime / SESS),
+            totalDistanceKm: totalDist / 1000,
+            totalTimeH: totalTime / 3600,
+            totalDistance: FormatUtils.formatDistanceSmart(totalDist),
+            totalTimeFormatted: FormatUtils.formatTimeSmart(totalTime),
+            discoveryPoints: discPoints,
+            marathonProgress: (totalDist > 0) ? FormatUtils.formatDecimal(Math.min(100, ((totalDist / 1000) / 42.195) * 100), 1) : "0.0"
+        };
+    }, [stats]);
+
+    // Sync tab when initialTab changes
     useEffect(() => {
         if (initialTab) {
             setActiveTab(initialTab);
@@ -109,7 +132,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
         >
             <div className={`flex h-full dossier-bg p-4 rounded-lg overflow-hidden ${effectiveLandscape ? 'flex-row gap-8' : 'flex-col gap-4'}`}>
                 <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
-                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-zinc-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide'}`}>
+                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-zinc-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide touch-auto cursor-pointer'}`}>
                         {TABS.map(tab => (
                             <TacticalTab
                                 key={tab.id}
@@ -130,6 +153,10 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
                             currentXp={currentXp}
                             nextLevelXp={nextLevelXp}
                             level={level}
+                            totalDistance={totalDistance}
+                            totalTimeFormatted={totalTimeFormatted}
+                            discoveryPoints={discoveryPoints}
+                            marathonProgress={marathonProgress}
                             isMobileDevice={!effectiveLandscape}
                             onOpenDiscovery={onOpenDiscovery}
                         />
@@ -198,28 +225,11 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
     );
 };
 
-const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: number, nextLevelXp: number, isMobileDevice?: boolean, onOpenDiscovery?: () => void }> = React.memo(({ stats, level, currentXp, nextLevelXp, isMobileDevice, onOpenDiscovery }) => {
-
-    const {
-        scrapTotal, avgDistance, avgTime,
-        totalDistanceKm, totalTimeH, discoveryPoints, marathonProgress
-    } = useMemo(() => {
-        const ST = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SCRAP_COLLECTED);
-        const SESS = Math.max(1, StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SESSIONS_STARTED));
-        const totalDist = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_DISTANCE_TRAVELED);
-        const totalTime = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME);
-        const discPoints = (StatsBridge.getDiscoveredPOIs(stats).length) + (StatsBridge.getCollectiblesDiscovered(stats).length) + (StatsBridge.getCluesFound(stats).length);
-
-        return {
-            scrapTotal: ST,
-            avgDistance: FormatUtils.formatDistance(totalDist / SESS),
-            avgTime: FormatUtils.formatTimeMinutes(totalTime / SESS),
-            totalDistanceKm: FormatUtils.formatDistance(totalDist),
-            totalTimeH: FormatUtils.formatTimeHours(totalTime),
-            discoveryPoints: discPoints,
-            marathonProgress: (totalDist > 0) ? FormatUtils.formatDecimal(Math.min(100, ((totalDist / 1000) / 42.195) * 100), 1) : "0.0"
-        };
-    }, [stats]);
+const OverviewTab: React.FC<{
+    stats: PlayerStats, level: number, currentXp: number, nextLevelXp: number,
+    totalDistance: string, totalTimeFormatted: string, discoveryPoints: number, marathonProgress: string,
+    isMobileDevice?: boolean, onOpenDiscovery?: () => void
+}> = React.memo(({ stats, level, currentXp, nextLevelXp, totalDistance, totalTimeFormatted, discoveryPoints, marathonProgress, isMobileDevice, onOpenDiscovery }) => {
 
     const getRank = (lvl: number) => t(DataResolver.getRankName(lvl));
     const FAMILY_MEMBERS = DataResolver.getFamilyMembers();
@@ -281,14 +291,14 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
                 <div className="bg-blue-900/10 border-2 border-blue-500/20 p-4 flex flex-col relative group/hvr overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <span className="text-blue-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.global_explorer')}</span>
-                    <span className="text-3xl font-light text-white font-mono relative z-10">{totalDistanceKm} <span className="text-xs">{t('ui.km')}</span></span>
+                    <span className="text-3xl font-light text-white font-mono relative z-10">{totalDistance}</span>
 
                     <div className="mt-auto pt-2 relative z-10">
                         <div className="w-full bg-blue-950/40 h-1 rounded-full overflow-hidden">
                             <div className="h-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,1)]" style={{ width: `${marathonProgress}%` }}></div>
                         </div>
                         <span className="text-[10px] font-bold text-blue-400/50 uppercase mt-1 block">
-                            {t('ui.marathon_progress')}:<br />{totalDistanceKm} / 42.2 {t('ui.km')} ({marathonProgress}%)
+                            {t('ui.marathon_progress')}:<br />{totalDistance} / 42.2 {t('ui.km')} ({marathonProgress}%)
                         </span>
                     </div>
                 </div>
@@ -296,7 +306,7 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
                 <div className="bg-blue-950/10 border-2 border-blue-500/20 p-4 flex flex-col relative group overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <span className="text-blue-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-1 relative z-10">{t('ui.survival_legacy')}</span>
-                    <span className="text-3xl font-light text-white font-mono relative z-10">{totalTimeH} <span className="text-xs">{t('ui.hrs')}</span></span>
+                    <span className="text-3xl font-light text-white font-mono relative z-10">{totalTimeFormatted}</span>
                     <span className="mt-auto text-[10px] font-black text-blue-500/30 uppercase tracking-widest relative z-10">{t('ui.on_field_time')}</span>
                 </div>
 
@@ -321,7 +331,7 @@ const OverviewTab: React.FC<{ stats: PlayerStats, level: number, currentXp: numb
 const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: number, onOpenDiscovery?: () => void, isMobileDevice?: boolean }> = React.memo(({ stats, level, currentXp, onOpenDiscovery, isMobileDevice }) => {
     const totalDodges = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_DODGES);
     const totalRushes = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_RUSHES);
-    const totalRushDistance = FormatUtils.formatDistance(StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_RUSH_DISTANCE));
+    const totalRushDistance = FormatUtils.formatDistanceSmart(StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_RUSH_DISTANCE));
     const hasData = StatsBridge.getSectorsCompleted(stats) > 0 || StatsBridge.getTotalSkillPointsEarned(stats) > 0 || StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME) > 10;
 
     if (!hasData) {
@@ -371,7 +381,7 @@ const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: n
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.total_game_time')}</span>
-                        <span className="text-white font-mono text-lg">{FormatUtils.formatTimeHours(StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME))} {t('ui.h')}</span>
+                        <span className="text-white font-mono text-lg">{FormatUtils.formatTimeSmart(StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME))}</span>
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.times_dodged')}</span>
@@ -609,7 +619,6 @@ const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?:
                                 const kills = StatsBridge.getWeaponKillCount(stats, idx);
                                 const dmg = StatsBridge.getWeaponDamageDealt(stats, idx);
 
-                                // Only list weapons that have been used (fired or dealt damage)
                                 if (fired === 0 && dmg === 0 && kills === 0) return null;
 
                                 const accuracy = FormatUtils.formatAccuracy(fired, hit);
@@ -643,7 +652,6 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
         const uptimePercent = Math.min(100, (buffTime / time) * 100);
         const resisted = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_DEBUFFS_RESISTED);
 
-        // Sum total perk ROI
         let dealt = 0;
         let absorb = 0;
         for (let i = 0; i < 32; i++) {
@@ -827,7 +835,7 @@ const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: st
     </div>
 ));
 
-const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevice?: boolean }> = ({ item, isFound, isMobileDevice }) => {
+const CollectiblePreviewExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevice?: boolean }> = ({ item, isFound, isMobileDevice }) => {
     const [isExpanded, setIsExpanded] = useState(false);
 
     return (
@@ -850,4 +858,3 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevi
 };
 
 export default ScreenStatistics;
-

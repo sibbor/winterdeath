@@ -80,7 +80,8 @@ export enum DamageID {
     FIRE = 33,
     FALL_DAMAGE = 34,
     OTHER = 35,
-    BOSS_GENERIC = 36
+    BOSS_GENERIC = 36,
+    FROST = 37
 }
 
 export const ENVIRONMENTAL_DAMAGE_NAMES: Partial<Record<DamageID, string>> = {
@@ -94,6 +95,7 @@ export const ENVIRONMENTAL_DAMAGE_NAMES: Partial<Record<DamageID, string>> = {
     [DamageID.EXPLOSION]: 'ui.explosion',
     [DamageID.BITE]: 'ui.bite',
     [DamageID.ELECTRIC]: 'ui.electric',
+    [DamageID.FROST]: 'ui.frost',
     [DamageID.BOSS]: 'ui.boss',
     [DamageID.BOSS_GENERIC]: 'ui.boss',
     [DamageID.OTHER]: 'ui.other',

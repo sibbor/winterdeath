@@ -98,7 +98,7 @@ const _zoomOffsetLook = new THREE.Vector3(0, 2, 0);
  * Unified Bus Explosion Handler
  * Reuses the optimized physics and FX logic from Sector 4.
  */
-function explodeBus(dt: number, renderTime: number, gameState: any, sectorState: any, events: any) {
+function explodeBus(dt: number, renderTime: number, gameState: any, sectorState: any, ctx: any, events: any) {
     if (!sectorState.busExplosionHandled) {
         sectorState.busExplosionHandled = true;
         sectorState.busExplosionTime = renderTime;
@@ -120,12 +120,12 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
         }
 
         // Clear bus
-        const _busObj = (sectorState.ctx as any).busObject as THREE.Object3D | null;
+        const _busObj = (ctx as any).busObject as THREE.Object3D | null;
         if (_busObj) {
             _busObj.position.set(0, -1000, 0);
         }
 
-        const _obsArray = sectorState.ctx.obstacles;
+        const _obsArray = ctx.obstacles;
         if (_obsArray) {
             for (let i = 0; i < _obsArray.length; i++) {
                 const o = _obsArray[i];
@@ -142,9 +142,9 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
         }
 
         // Activate Rubble
-        const rMesh = (sectorState.ctx as any).busRubble;
+        const rMesh = (ctx as any).busRubble;
         if (rMesh) {
-            sectorState.busRubble = rMesh;
+            // sectorState.busRubble = rMesh; // PERSISTENCE FIX: Don't store mesh in state
             rMesh.position.set(0, 0, 0); // [VINTERDÖD FIX] Snap to origin so absolute instance coordinates work
             rMesh.visible = true;
             rMesh.userData.active = true;
@@ -179,9 +179,9 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
             }
 
             // Activate Tires
-            const tires = (sectorState.ctx as any).busTires;
+            const tires = (ctx as any).busTires;
             if (tires) {
-                sectorState.busTires = tires;
+                // sectorState.busTires = tires; // PERSISTENCE FIX
                 tires.position.set(0, 0, 0); // [VINTERDÖD FIX] Snap to origin
                 tires.visible = true;
                 tires.userData.active = true;
@@ -209,11 +209,13 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
 
     // --- RUBBLE & TIRE PHYSICS ---
     const activeMeshes = [];
-    if (sectorState.busRubble && sectorState.busRubble.userData.active) activeMeshes.push(sectorState.busRubble);
-    if (sectorState.busTires && sectorState.busTires.userData.active) activeMeshes.push(sectorState.busTires);
+    const busRubble = (ctx as any).busRubble;
+    const busTires = (ctx as any).busTires;
+    if (busRubble && busRubble.userData.active) activeMeshes.push(busRubble);
+    if (busTires && busTires.userData.active) activeMeshes.push(busTires);
 
     for (const rubble of activeMeshes) {
-        const isTire = rubble === sectorState.busTires;
+        const isTire = rubble === busTires;
         const rubbleWeight = isTire ? 35.0 : 18.0;
         const bouncy = isTire ? 0.7 : 0.4;
         const data = rubble.userData;
@@ -224,8 +226,8 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
             const ix = i * 3;
 
             // [VINTERDÖD FIX] Dynamic ground height lookup
-            const groundY = (gameState.collisionGrid && gameState.collisionGrid.getGroundHeight)
-                ? gameState.collisionGrid.getGroundHeight(data.positions[ix], data.positions[ix + 2])
+            const groundY = (gameState.worldStreamer && gameState.worldStreamer.getGroundHeight)
+                ? gameState.worldStreamer.getGroundHeight(data.positions[ix], data.positions[ix + 2])
                 : 0.1;
             const minHeight = groundY + (isTire ? 0.8 : 0.2);
 
@@ -350,7 +352,6 @@ export const Sector0: SectorDef = {
     setupProps: async (ctx: SectorContext) => {
         performance.mark('sector0-props-start');
         const { scene, obstacles } = ctx;
-        (ctx as any).sectorState.ctx = ctx;
 
         let startTime = performance.now();
         const yieldIfBudgetExceeded = async () => {
@@ -993,7 +994,7 @@ export const Sector0: SectorDef = {
         }
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
         // --- SECTOR 0: LOKE MISSION LOGIC ---
         if (!sectorState.spawns) sectorState.spawns = {};
 
@@ -1196,7 +1197,7 @@ export const Sector0: SectorDef = {
                     statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE
                 });
 
-                // Flag interaction for PlayerInteractionSystem
+                // Flag interaction for InteractionSystem
                 sectorState.busCanBeInteractedWith = true;
 
                 const busObj = (sectorState.ctx as any).busObject;
@@ -1285,7 +1286,7 @@ export const Sector0: SectorDef = {
             const elapsed = simTime - sectorState.busEventTimer;
 
             // PHYSICS UPDATE
-            explodeBus(delta, renderTime, gameState, sectorState, events);
+            explodeBus(delta, renderTime, gameState, sectorState, ctx, events);
 
             if (elapsed > 10000 || (!sectorState.busRubble?.userData.active)) {
                 sectorState.busEventState = 9;

@@ -66,7 +66,7 @@ export class FamilyAnimationSystem implements System {
 
             for (let j = 0; j < fm.emissiveMaterials.length; j++) {
                 const mat = fm.emissiveMaterials[j];
-                mat.emissive.setHex(0xaaaaaa);
+                mat.emissive.setHex(0xffffff);
                 mat.emissiveIntensity = emissiveIntensity;
             }
         }

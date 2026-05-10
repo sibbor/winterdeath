@@ -90,23 +90,22 @@ export class WindSystem implements System {
   }
 
   update(ctx: any, delta: number, simTime: number, renderTime: number): THREE.Vector2 {
-    if (this.boundUniforms.length === 0) {
-      this.bindMaterial(MATERIALS.hedge);
-      this.bindMaterial(MATERIALS.grass);
-      this.bindMaterial(MATERIALS.flower);
-      this.bindMaterial(MATERIALS.wheat);
-      this.bindMaterial(MATERIALS.treeFirNeedles);
-      this.bindMaterial(MATERIALS.treeLeavesOak);
-      this.bindMaterial(MATERIALS.treeLeavesBirch);
-      this.bindMaterial(MATERIALS.treeTrunk);
-      this.bindMaterial(MATERIALS.treeTrunkOak);
-      this.bindMaterial(MATERIALS.treeTrunkBirch);
-      this.bindMaterial(MATERIALS.deadWood);
-      this.bindMaterial(MATERIALS.treeSilhouette);
-      this.bindMaterial(MATERIALS.sunflowerStem);
-      this.bindMaterial(MATERIALS.sunflowerHead);
-      this.bindMaterial(MATERIALS.sunflowerCenter);
-    }
+    // Ensure all core materials are bound. bindMaterial handles duplicates internally.
+    this.bindMaterial(MATERIALS.hedge);
+    this.bindMaterial(MATERIALS.grass);
+    this.bindMaterial(MATERIALS.flower);
+    this.bindMaterial(MATERIALS.wheat);
+    this.bindMaterial(MATERIALS.treeFirNeedles);
+    this.bindMaterial(MATERIALS.treeLeavesOak);
+    this.bindMaterial(MATERIALS.treeLeavesBirch);
+    this.bindMaterial(MATERIALS.treeTrunk);
+    this.bindMaterial(MATERIALS.treeTrunkOak);
+    this.bindMaterial(MATERIALS.treeTrunkBirch);
+    this.bindMaterial(MATERIALS.deadWood);
+    this.bindMaterial(MATERIALS.treeSilhouette);
+    this.bindMaterial(MATERIALS.sunflowerStem);
+    this.bindMaterial(MATERIALS.sunflowerHead);
+    this.bindMaterial(MATERIALS.sunflowerCenter);
 
     if (!this.overrideActive && renderTime > this.nextChange) {
       if (Math.random() > 0.4) {
@@ -121,9 +120,10 @@ export class WindSystem implements System {
       this.nextChange = renderTime + 3000 + Math.random() * 5000;
     }
 
-    // Slowed down base wind transitions from 0.6 to 0.3 for weight.
-    const lerpFactor = 1.0 - Math.exp(-0.3 * delta);
-    this.current.lerp(this.target, lerpFactor); this.direction.set(this.current.x, 0, this.current.y);
+    // Faster wind transitions (0.3 -> 0.8) for better responsiveness.
+    const lerpFactor = 1.0 - Math.exp(-0.8 * delta);
+    this.current.lerp(this.target, lerpFactor); 
+    this.direction.set(this.current.x, 0, this.current.y).normalize();
     this.strength = this.current.length();
 
     // Brutal iterations-loop för just DETTA WindSystem

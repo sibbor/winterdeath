@@ -12,7 +12,7 @@ import {
 } from '../../entities/enemies/EnemyTypes';
 import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { EnemyAttackHandler } from './EnemyAttackHandler';
-import { SpatialGrid } from '../../core/world/SpatialGrid';
+import { WorldStreamer } from '../../core/world/WorldStreamer';
 import { WEAPONS } from '../../content/weapons';
 import { haptic } from '../../utils/HapticManager';
 import { WeaponSounds } from '../../utils/audio/AudioLib';
@@ -59,7 +59,7 @@ export const EnemyAI = {
         e: Enemy,
         playerPos: THREE.Vector3,
         playerStatusFlags: number,
-        collisionGrid: SpatialGrid,
+        streamer: WorldStreamer,
         isDead: boolean,
         callbacks: {
             onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void;
@@ -68,7 +68,7 @@ export const EnemyAI = {
             playSound: (id: SoundID) => void;
             spawnBubble: (text: string, duration: number) => void;
             spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D | null, vel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
-            queryEnemies?: (pos: THREE.Vector3, radius: number) => Enemy[];
+            queryEnemies?: (pos: THREE.Vector3, radius: number, outPoolIdx: number) => void;
         },
         water: WaterSystem | null,
         delta: number,
@@ -107,7 +107,9 @@ export const EnemyAI = {
 
             if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
                 const isWeapon = !!weapon;
-                const cause = isWeapon ? `Weapon (${dmgType})` : `Effect (${dmgType})`;
+                const cause = isWeapon
+                    ? `Weapon (${DataResolver.getWeaponName(dmgType as any, true)})`
+                    : `Effect (${DataResolver.getEffectName(dmgType as any, true)})`;
                 console.log(`[AI] ${EnemyType[e.type]}_${e.id} killed by: ${cause}`);
             }
 
@@ -188,11 +190,16 @@ export const EnemyAI = {
                         if (e.type === EnemyType.BOMBER && callbacks.queryEnemies && callbacks.applyDamage) {
                             const radius = 10.0;
                             const damage = 60.0;
-                            const nearby = callbacks.queryEnemies(pos, radius + 3.0);
-                            const nLen = nearby.length;
+                            
+                            const pool = streamer.getEnemyPool();
+                            const poolIdx = pool.nextIndex();
+                            callbacks.queryEnemies(pos, radius + 3.0, poolIdx);
+
+                            const nearby = pool.getPool(poolIdx);
+                            const nearCount = pool.getCount(poolIdx);
                             const radSq = radius * radius;
 
-                            for (let i = 0; i < nLen; i++) {
+                            for (let i = 0; i < nearCount; i++) {
                                 const other = nearby[i];
                                 if (other === e || other.hp <= 0) continue;
 
@@ -506,8 +513,14 @@ export const EnemyAI = {
         if (isTier3) shouldCheckSeparation = false;
 
         if (shouldCheckSeparation && e.state !== AIState.ATTACK_CHARGE && e.state !== AIState.ATTACKING && e.state !== AIState.GRAPPLE) {
-            const nearbyEnemies = collisionGrid.getNearbyEnemies(e.mesh.position, SEPARATION_RADIUS);
-            for (let i = 0; i < nearbyEnemies.length; i++) {
+            const pool = streamer.getEnemyPool();
+            const poolIdx = pool.nextIndex();
+            streamer.getNearbyEnemies(e.mesh.position.x, e.mesh.position.z, SEPARATION_RADIUS, poolIdx);
+            
+            const nearbyEnemies = pool.getPool(poolIdx);
+            const nearCount = pool.getCount(poolIdx);
+
+            for (let i = 0; i < nearCount; i++) {
                 const other = nearbyEnemies[i];
                 if (other === e || other.deathState !== EnemyDeathState.ALIVE) continue;
 
@@ -569,7 +582,7 @@ export const EnemyAI = {
 
                 // Movement Lock Guard applied ONLY to physical displacement
                 if (!isTier4 && !isKnockedBackH) {
-                    moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                    moveEntity(e, _v1, delta, e.speed * 0.5, streamer, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                 }
 
                 if (seesPlayer) {
@@ -601,10 +614,10 @@ export const EnemyAI = {
                     logStateChange(simTime, e, AIState.IDLE);
                     e.state = AIState.IDLE;
                     e.idleTimer = 1.0 + Math.random() * 2.0;
-                } else if (e.mesh.position.distanceToSquared(e.lastKnownPosition) > 1.5) {
+                } else if (e.mesh.position.distanceToSquared(e.lastKnownPosition) > 2.25) { // 1.5m threshold (squared)
                     // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                        moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, streamer, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                     }
                 } else {
                     e.mesh.rotation.y += delta * 2.5;
@@ -637,7 +650,7 @@ export const EnemyAI = {
 
                     // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, target, delta, chaseSpeed, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                        moveEntity(e, target, delta, chaseSpeed, streamer, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
                     }
 
                     const chaseStepInterval = e.type === EnemyType.RUNNER ? 250 : 400;
@@ -653,33 +666,35 @@ export const EnemyAI = {
                             if (cooldown > 0) continue;
 
                             const range = (att.type === EnemyAttackType.HIT && !att.range) ? ENEMY_ATTACK_RANGE[e.type] : (att.range || ENEMY_ATTACK_RANGE[e.type]);
-                            const rangeSq = range * range;
+                            // VINTERDÖD STABILIZATION: 15% buffer prevents "running-in-place" without attacking
+                            const bufferedRangeSq = (range * 1.15) * (range * 1.15);
 
-                            if (distSq < rangeSq) {
+                            if (distSq < bufferedRangeSq) {
                                 bestAttackIndex = i;
-                                if (att.type !== EnemyAttackType.HIT) {
-                                    break;
-                                }
+                                // Prioritize special attacks (Bite, Smash) over basic hits
+                                if (att.type !== EnemyAttackType.HIT) break;
                             }
                         }
 
                         if (bestAttackIndex !== -1) {
                             const att = e.attacks[bestAttackIndex];
                             e.currentAttackIndex = bestAttackIndex;
+                            e.targetPos.copy(playerPos);
+                            e.animStartPos.copy(e.mesh.position);
 
                             if (att.chargeTime && att.chargeTime > 0) {
                                 logStateChange(simTime, e, AIState.ATTACK_CHARGE);
                                 e.state = AIState.ATTACK_CHARGE;
-                                e.attackTimer = att.chargeTime * 0.001;
+                                e.attackTimer = Math.max(0.001, att.chargeTime * 0.001); // Harden: Ensure timer is non-zero
                             } else {
-                                // State-Guard to prevent GRAPPLE being overwritten
-                                const prevState = e.state;
-                                EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
-
-                                if (e.state === prevState) {
+                                // Immediate execution for 0-charge attacks (HIT, etc.)
+                                const success = EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, streamer, callbacks, delta, simTime, renderTime);
+                                
+                                // Ensure we transition to ATTACKING if executeAttack succeeded and didn't switch to a special state (like GRAPPLE)
+                                if (success && e.state === AIState.CHASE) {
                                     logStateChange(simTime, e, AIState.ATTACKING);
                                     e.state = AIState.ATTACKING;
-                                    e.attackTimer = (att.activeTime || 500) * 0.001;
+                                    e.attackTimer = Math.max(0.016, (att.activeTime || 500) * 0.001); // Harden: Min 1 frame active
                                 }
                             }
                         }
@@ -693,18 +708,22 @@ export const EnemyAI = {
 
                     // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, playerPos, delta, e.speed * 0.25, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                        moveEntity(e, playerPos, delta, e.speed * 0.25, streamer, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
                     }
 
                     if (e.attackTimer <= 0) {
                         // State-Guard for charge-finish
                         const prevState = e.state;
-                        EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks, delta, simTime, renderTime);
+                        const success = EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, streamer, callbacks, delta, simTime, renderTime);
 
-                        if (e.state === prevState) {
+                        if (success && e.state === prevState) {
                             logStateChange(simTime, e, AIState.ATTACKING);
                             e.state = AIState.ATTACKING;
-                            e.attackTimer = (att.activeTime || 100) * 0.001;
+                            e.attackTimer = Math.max(0.016, (att.activeTime || 100) * 0.001); // Harden: Min 1 frame active
+                        } else if (!success && e.state === prevState) {
+                            // If attack failed (out of range?), go back to chase
+                            logStateChange(simTime, e, AIState.CHASE, 'ATTACK_FAILED_RANGE');
+                            e.state = AIState.CHASE;
                         }
                     }
                 }
@@ -716,7 +735,7 @@ export const EnemyAI = {
 
                     // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, playerPos, delta, e.speed * 0.15, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                        moveEntity(e, playerPos, delta, e.speed * 0.15, streamer, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
                     }
 
                     if (att && att.activeTime) {
@@ -835,7 +854,7 @@ export const EnemyAI = {
 };
 
 // --- HELPERS ---
-function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid, sepForce: THREE.Vector3, simTime: number, renderTime: number, isChasing: boolean, isTier1: boolean, isTier2: boolean, frameOffset: number) {
+function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, streamer: WorldStreamer, sepForce: THREE.Vector3, simTime: number, renderTime: number, isChasing: boolean, isTier1: boolean, isTier2: boolean, frameOffset: number) {
     // 1. NAVIGATION: Get desired steering vector from FlowField
     NavigationSystem.getFlowVector(e.mesh.position.x, e.mesh.position.z, _v1);
 
@@ -880,12 +899,15 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     );
 
     // 6. COLLISION RESOLUTION: Harden path against world obstacles
-    // Use Tier-based distance to optimize collision query
-    // TODO: accept a "scratchpad-array" as an argument
-    // (ex: collisionGrid.getNearbyObstacles(_v4, 4.0, _reusableArray))
-    const nearbyObs = collisionGrid.getNearbyObstacles(_v4, 4.0);
+    const obsPool = streamer.getObstaclePool();
+    const poolIdx = obsPool.nextIndex();
+    streamer.getNearbyObstacles(_v4.x, _v4.z, 4.0, poolIdx);
+
+    const nearbyObs = obsPool.getPool(poolIdx);
+    const obsCount = obsPool.getCount(poolIdx);
+
     const rad = (e.originalScale || 1.0) * (e.widthScale || 1.0) * 0.5;
-    for (let i = 0; i < nearbyObs.length; i++) {
+    for (let i = 0; i < obsCount; i++) {
         applyCollisionResolution(_v4, rad, nearbyObs[i]);
     }
 

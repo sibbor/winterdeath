@@ -190,7 +190,7 @@ export const NaturePropGenerator = {
             valid++;
         }
 
-        chunkBuckets.forEach((matrices, key) => {
+        for (const [key, matrices] of chunkBuckets) {
             const ix = key >> 8;
             const iz = key & 0xFF;
             const instMesh = new THREE.InstancedMesh(geo, mat, matrices.length);
@@ -203,6 +203,6 @@ export const NaturePropGenerator = {
             instMesh.instanceMatrix.needsUpdate = true;
             GeneratorUtils.freezeStatic(instMesh);
             ChunkManager.registerMesh(ix, iz, instMesh);
-        });
+        }
     }
 };

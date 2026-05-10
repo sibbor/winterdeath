@@ -5,7 +5,7 @@
  * This ensures contiguous memory access and zero heap allocations during the main loop.
  */
 
-import { POOL_ENEMY_MAX, GRID_CELL_COUNT } from '../../content/constants';
+import { POOL_ENEMY_MAX } from '../../content/constants';
 
 export const ENEMY_POOL_SIZE = POOL_ENEMY_MAX;
 
@@ -40,8 +40,4 @@ export const EnemyPoolState = {
 
     // --- INTERNAL REFS ---
     meshIndex: new Int32Array(ENEMY_POOL_SIZE),
-
-    // --- PHASE 7: SPATIAL HASH GRID (L1 Optimized) ---
-    gridHeads: new Int32Array(GRID_CELL_COUNT).fill(-1),
-    gridNext: new Int32Array(ENEMY_POOL_SIZE),
 };

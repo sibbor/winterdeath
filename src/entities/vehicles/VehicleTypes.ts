@@ -58,6 +58,9 @@ export interface VehicleState {
     // Voices
     engineVoiceIdx: number;
     skidVoiceIdx: number;
+
+    // Zero-GC: Monitoring
+    prevPos: THREE.Vector3;
 }
 
 /**
@@ -94,7 +97,8 @@ export const VehicleTypes = {
         _lastNoiseTime: 0,
         engineStartTime: 0,
         engineVoiceIdx: -1,
-        skidVoiceIdx: -1
+        skidVoiceIdx: -1,
+        prevPos: new THREE.Vector3(Infinity, Infinity, Infinity)
     }),
 
     createNodes: (): VehicleNodes => ({

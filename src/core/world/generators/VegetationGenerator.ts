@@ -458,7 +458,7 @@ const _placeTrees = async (ctx: SectorContext, region: Region, spacing: number, 
         });
 
         // Register tree as vegetation for rustle sounds (radius based on scale)
-        ctx.collisionGrid.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
+        ctx.worldStreamer.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
     }
 
     for (const key in matrixBuckets) {
@@ -515,11 +515,11 @@ const _placeGroundCover = async (
         }
         bucket.push({ pos: p, mat: _mat.clone() });
 
-        ctx.collisionGrid.registerVegetation(x, z, 1.2, MaterialType.PLANT);
+        ctx.worldStreamer.registerVegetation(x, z, 1.2, MaterialType.PLANT);
     }
 
     // Create instanced mesh per chunk
-    chunkBuckets.forEach((bucket, key) => {
+    for (const [key, bucket] of chunkBuckets) {
         const ix = key >> 8;
         const iz = key & 0xFF;
 
@@ -534,7 +534,7 @@ const _placeGroundCover = async (
         mesh.instanceMatrix.needsUpdate = true;
         GeneratorUtils.freezeStatic(mesh);
         ChunkManager.registerMesh(ix, iz, mesh);
-    });
+    }
 };
 
 const _placeSunflowers = async (ctx: SectorContext, region: Region, density: number) => {
@@ -574,10 +574,10 @@ const _placeSunflowers = async (ctx: SectorContext, region: Region, density: num
         }
         bucket.push(_mat.clone());
 
-        ctx.collisionGrid.registerVegetation(x, z, 1.5, MaterialType.PLANT);
+        ctx.worldStreamer.registerVegetation(x, z, 1.5, MaterialType.PLANT);
     }
 
-    chunkBuckets.forEach((matrices, key) => {
+    for (const [key, matrices] of chunkBuckets) {
         const ix = key >> 8;
         const iz = key & 0xFF;
 
@@ -601,7 +601,7 @@ const _placeSunflowers = async (ctx: SectorContext, region: Region, density: num
             GeneratorUtils.freezeStatic(m);
             ChunkManager.registerMesh(ix, iz, m);
         }
-    });
+    }
 };
 
 export const VegetationGenerator = {
@@ -872,7 +872,7 @@ export const VegetationGenerator = {
             bucket.push(m);
         }
 
-        chunkBuckets.forEach((chunkMatrices, key) => {
+        for (const [key, chunkMatrices] of chunkBuckets) {
             const ix = key >> 8;
             const iz = key & 0xFF;
 
@@ -922,7 +922,7 @@ export const VegetationGenerator = {
             ChunkManager.registerMesh(ix, iz, trunkMesh);
             if (leavesMesh) ChunkManager.registerMesh(ix, iz, leavesMesh);
             if (snowMesh) ChunkManager.registerMesh(ix, iz, snowMesh);
-        });
+        }
     },
 
     fillArea: async (
@@ -1014,7 +1014,7 @@ export const VegetationGenerator = {
             });
 
             // Register tree as vegetation for rustle sounds
-            ctx.collisionGrid.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
+            ctx.worldStreamer.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
         }
 
         for (const key in matrixBuckets) {
@@ -1083,7 +1083,7 @@ export const VegetationGenerator = {
                 });
 
                 // Register tree as vegetation for rustle sounds
-                ctx.collisionGrid.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
+                ctx.worldStreamer.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
             }
         }
 

@@ -33,6 +33,16 @@ export interface Obstacle {
     type?: string;
     physicsGroup?: PhysicsGroup; // Numeric collision group for Zero-GC hot-paths
     materialId?: MATERIAL_TYPE; // High-performance lookup for impact sounds/FX
+    _sqf?: number; // Spatial Query Frame for de-duplication
+
+    // Spatial Tracking (Zero-GC)
+    _currentChunkKey?: number;
+    _bucketIndex?: number;
+    _internalBucketIdx?: number;
+
+    // Mutation Persistence
+    logicId?: number; // Unique ID within the chunk (0-511)
+    isMutated?: boolean; // Flag for state serialization (e.g. destroyed)
 }
 
 // --- PERFORMANCE SCRATCHPADS ---
@@ -54,31 +64,30 @@ export const applyCollisionResolution = (
     height: number = 2.0,
     centerOffset: number = 0
 ): boolean => {
-    if (!obstacle || !obstacle.position) return false;
+    if (!obstacle) return false;
+
+    // 0. High-Speed Broad-phase Check (IMMEDIATE)
+    // Perform scalar-only calculation before any object property access or matrix math.
+    const oPos = obstacle.position;
+    const dx_bp = entityPos.x - oPos.x;
+    const dz_bp = entityPos.z - oPos.z;
+    const distSq_XZ = dx_bp * dx_bp + dz_bp * dz_bp;
+
+    // Fast radius-based discard using pre-calculated or default radius
+    const obsRad = obstacle.radius || 2.0;
+    const checkRadius = obsRad + entityRadius + 0.5;
+
+    // Abort processing instantly if entities do not overlap
+    if (distSq_XZ > checkRadius * checkRadius) return false;
 
     const col = obstacle.collider;
-    const obsPos = obstacle.position;
-
     const eX = entityPos.x;
     const eY = entityPos.y;
     const eZ = entityPos.z;
 
-    const oX = obsPos.x;
-    const oY = obsPos.y;
-    const oZ = obsPos.z;
-
-    // 0. High-Speed Broad-phase Check
-    const dx_bp = eX - oX;
-    const dz_bp = eZ - oZ;
-    const distSq_XZ = dx_bp * dx_bp + dz_bp * dz_bp;
-
-    // Fast radius-based discard
-    const colRad = col && col.radius ? col.radius : 0;
-    const obsRad = obstacle.radius || 2.0;
-    const checkRadius = (colRad || obsRad) + entityRadius + 1.0;
-
-    // Quick exit if too far away
-    if (distSq_XZ > checkRadius * checkRadius) return false;
+    const oX = oPos.x;
+    const oY = oPos.y;
+    const oZ = oPos.z;
 
     // Vertical overlap check
     const entityMinY = eY - centerOffset;

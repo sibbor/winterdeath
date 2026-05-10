@@ -3,6 +3,7 @@ import { System, SystemID } from './System';
 import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { PlayerStatID } from '../entities/player/PlayerTypes';
+import { MAX_ENTITIES, LOOT } from '../content/constants';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _tempQuat = new THREE.Quaternion();
@@ -24,48 +25,48 @@ export interface ScrapItem {
     needsUpdate: boolean;
 }
 
-export class WorldLootSystem implements System {
-    readonly systemId = SystemID.WORLD_LOOT;
-    id = 'world_loot_system';
+export class LootSystem implements System {
+    readonly systemId = SystemID.LOOT;
+    id = 'loot_system';
     enabled = true;
     persistent = false;
     isFixedStep = true;
 
-    private static MAX_SCRAP = 300;
+    private static MAX_SCRAP = MAX_ENTITIES.SCRAP;
     private instancedMesh: THREE.InstancedMesh;
 
     // --- ZERO-GC DATA STRUCTURES ---
     private pool: ScrapItem[] = [];
 
     // Fast iteration lists using contiguous typed memory
-    private activeIndices = new Uint16Array(WorldLootSystem.MAX_SCRAP);
+    private activeIndices = new Uint16Array(LootSystem.MAX_SCRAP);
     private activeCount = 0;
 
-    private freeIndices = new Uint16Array(WorldLootSystem.MAX_SCRAP);
+    private freeIndices = new Uint16Array(LootSystem.MAX_SCRAP);
     private freeCount = 0;
 
     // Ring-buffer for spawn requests (Zero Object Allocation)
-    private spawnQueueX = new Float32Array(512);
-    private spawnQueueZ = new Float32Array(512);
+    private spawnQueueX = new Float32Array(MAX_ENTITIES.SPAWN_QUEUE);
+    private spawnQueueZ = new Float32Array(MAX_ENTITIES.SPAWN_QUEUE);
     private spawnHead = 0;
     private spawnTail = 0;
 
     private lastSoundTime = 0;
-    private static instance: WorldLootSystem | null = null;
+    private static instance: LootSystem | null = null;
 
     constructor(
         private playerGroup: THREE.Group,
         scene: THREE.Scene,
         private callbacks?: { gainScrap: (val: number) => void }
     ) {
-        this.instancedMesh = new THREE.InstancedMesh(GEOMETRY.scrap, MATERIALS.scrap, WorldLootSystem.MAX_SCRAP);
+        this.instancedMesh = new THREE.InstancedMesh(GEOMETRY.scrap, MATERIALS.scrap, LootSystem.MAX_SCRAP);
         this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-        this.instancedMesh.count = WorldLootSystem.MAX_SCRAP;
+        this.instancedMesh.count = LootSystem.MAX_SCRAP;
         this.instancedMesh.frustumCulled = false;
         scene.add(this.instancedMesh);
 
         // Pre-allocate the physical data objects
-        for (let i = 0; i < WorldLootSystem.MAX_SCRAP; i++) {
+        for (let i = 0; i < LootSystem.MAX_SCRAP; i++) {
             this.pool.push({
                 velocity: new THREE.Vector3(),
                 value: 0,
@@ -87,7 +88,7 @@ export class WorldLootSystem implements System {
         }
 
         this.instancedMesh.instanceMatrix.needsUpdate = true;
-        WorldLootSystem.instance = this;
+        LootSystem.instance = this;
     }
 
     update(ctx: any, delta: number, simTime: number, renderTime: number) {
@@ -96,7 +97,7 @@ export class WorldLootSystem implements System {
         if (pendingSpawns > 0) {
             const batchSize = Math.min(pendingSpawns, 10);
             for (let i = 0; i < batchSize; i++) {
-                const idx = this.spawnTail % 512;
+                const idx = this.spawnTail % MAX_ENTITIES.SPAWN_QUEUE;
                 this.spawnSingle(this.spawnQueueX[idx], this.spawnQueueZ[idx], simTime);
                 this.spawnTail++;
             }
@@ -126,10 +127,10 @@ export class WorldLootSystem implements System {
         let collectedAmount = 0;
         let gpuNeedsUpdate = false;
 
-        const collectionRangeSq = 0.8;
-        const magnetRangeSq = 100.0; // Increased range (10m)
-        const magnetSpeed = 25.0;
-        const magnetismDelay = 500;
+        const collectionRangeSq = LOOT.COLLECTION_RANGE_SQ;
+        const magnetRangeSq = LOOT.MAGNET_RANGE_SQ;
+        const magnetSpeed = LOOT.MAGNET_SPEED;
+        const magnetismDelay = LOOT.MAGNETISM_DELAY;
 
         const px = playerPos.x;
         const py = playerPos.y;
@@ -177,14 +178,14 @@ export class WorldLootSystem implements System {
                 item.needsUpdate = true;
 
             } else if (!item.grounded) {
-                item.velocity.y -= 35 * delta;
+                item.velocity.y -= LOOT.GRAVITY * delta;
 
                 item.position.x += item.velocity.x * delta;
                 item.position.y += item.velocity.y * delta;
                 item.position.z += item.velocity.z * delta;
 
-                if (item.position.y <= 0.3) {
-                    item.position.y = 0.3;
+                if (item.position.y <= LOOT.GROUND_Y) {
+                    item.position.y = LOOT.GROUND_Y;
                     item.velocity.y *= -0.4;
                     item.velocity.x *= 0.7;
                     item.velocity.z *= 0.7;
@@ -254,14 +255,14 @@ export class WorldLootSystem implements System {
     }
 
     public static spawnScrapExplosion(scene: THREE.Scene, x: number, z: number, amount: number) {
-        if (!WorldLootSystem.instance) return;
-        const sys = WorldLootSystem.instance;
+        if (!LootSystem.instance) return;
+        const sys = LootSystem.instance;
         const count = Math.min(Math.ceil(amount / 5), 15);
 
         for (let i = 0; i < count; i++) {
             // Write to ring buffer safely preventing bounds overflow
-            if (sys.spawnHead - sys.spawnTail < 512) {
-                const idx = sys.spawnHead % 512;
+            if (sys.spawnHead - sys.spawnTail < MAX_ENTITIES.SPAWN_QUEUE) {
+                const idx = sys.spawnHead % MAX_ENTITIES.SPAWN_QUEUE;
                 sys.spawnQueueX[idx] = x;
                 sys.spawnQueueZ[idx] = z;
                 sys.spawnHead++;
@@ -306,7 +307,7 @@ export class WorldLootSystem implements System {
         this.freeCount = 0;
 
         // Fully reset and hide everything
-        for (let i = 0; i < WorldLootSystem.MAX_SCRAP; i++) {
+        for (let i = 0; i < LootSystem.MAX_SCRAP; i++) {
             this.pool[i].active = false;
             this.freeIndices[this.freeCount++] = i;
             this.instancedMesh.setMatrixAt(i, _hiddenMatrix);

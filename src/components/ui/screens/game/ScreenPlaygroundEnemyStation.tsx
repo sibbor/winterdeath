@@ -54,7 +54,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
         const bossData = DataResolver.getBosses()[id];
         if (bossData) {
             _spawnPos.set(_centerPos.x, 0, _centerPos.z - 5);
-            const boss = EnemyManager.spawnBoss(scene, _spawnPos, bossData);
+            const boss = EnemyManager.spawnBoss(scene, _spawnPos, bossData, true);
             if (boss) {
                 if (collection) collection.push(boss);
                 else spawnedRef.current.push(boss);
@@ -89,7 +89,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                     0,
                     _centerPos.z + (Math.random() - 0.5) * spread
                 );
-                const newEnemy = EnemyManager.spawn(scene, _playerPosRef, type, _spawnPos);
+                const newEnemy = EnemyManager.spawn(scene, _playerPosRef, type, _spawnPos, false, 0, true);
                 if (newEnemy) spawned.push(newEnemy);
             }
         });

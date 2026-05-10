@@ -77,9 +77,10 @@ export const EnemySpawner = {
         forcedType?: EnemyType,
         forcedPos?: THREE.Vector3,
         bossSpawned: boolean = false,
+        isWarmup: boolean = false,
         enemyCount: number = 0
     ): Enemy | null => {
-        if (enemyCount >= 100) {
+        if (!isWarmup && enemyCount >= 100) {
             console.warn(`[Spawner] Ignoring spawn request! Max limit reached (100).`);
             return null;
         }
@@ -195,7 +196,9 @@ export const EnemySpawner = {
             _lastDamageTextTime: 0,
             attackOffset: 0,
             currentChunkKey: 0,
-            bucketIndex: -1
+            bucketIndex: -1,
+            _sqf: 0,
+            _internalBucketIdx: -1
         };
 
         const s = enemy.originalScale;
@@ -210,7 +213,7 @@ export const EnemySpawner = {
         g.add(enemyIndicatorRing);
         enemy.indicatorRing = enemyIndicatorRing;
 
-        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+        if (!isWarmup && PerformanceMonitor.getInstance().aiLoggingEnabled) {
             console.log(`[EnemySpawner] Spawns ${EnemyType[typeKey]}_${enemy.id} at (${x.toFixed(1)}, ${z.toFixed(1)})`);
         }
 
@@ -315,7 +318,9 @@ export const EnemySpawner = {
             _lastDamageTextTime: 0,
             attackOffset: 0,
             currentChunkKey: 0,
-            bucketIndex: -1
+            bucketIndex: -1,
+            _sqf: 0,
+            _internalBucketIdx: -1
         };
 
         boss.userData.entity = enemy;
@@ -328,7 +333,9 @@ export const EnemySpawner = {
         boss.add(bossIndicatorRing);
         enemy.indicatorRing = bossIndicatorRing;
 
-        console.log(`[Spawner] Spawns BOSS at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`);
+        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+            console.log(`[Spawner] Spawns BOSS at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`);
+        }
         return enemy;
     },
 };

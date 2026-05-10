@@ -25,7 +25,7 @@ export const PerkFX = {
 
         // Position it decisively in front of the player and rotate to face forward (+Z)
         // [VINTERDÖD FIX] Muzzle flashes are at Z=0.8, we place the shield slightly closer at Z=0.65
-        _shieldMesh.position.set(0, 0.85, 0.65); // -0.65
+        _shieldMesh.position.set(0, 0.85, -0.65);
         _shieldMesh.rotation.set(0, 0, 0);
 
         _shieldMesh.visible = false;

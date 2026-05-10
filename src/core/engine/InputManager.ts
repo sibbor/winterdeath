@@ -116,8 +116,13 @@ export class InputManager implements System {
     private screenHalfWidth: number = this.screenWidth * 0.5;
     private screenHalfHeight: number = this.screenHeight * 0.5;
 
-    public onKeyDown?: (key: string) => void;
-    public onKeyUp?: (key: string) => void;
+    private onKeyDown: ((key: string) => void) | null = null;
+    private onKeyUp: ((key: string) => void) | null = null;
+
+    private lastNavBackTime = 0;
+    private lastNavMapTime = 0;
+    private lastNavLogTime = 0;
+    private readonly NAV_DEBOUNCE_MS = 150;
     public onMetaAction?: (actionId: MetaActionId) => void;
 
     constructor() {
@@ -284,12 +289,19 @@ export class InputManager implements System {
             this.physicalActions[action] = 1;
 
             // Signal navigation events to the UI via Zero-GC SMI bridge
+            const now = performance.now();
             if (action === InputAction.ESCAPE) {
-                UIEventBridge.signalEngineEvent(MetaActionId.NAV_BACK);
+                if (now - this.lastNavBackTime > this.NAV_DEBOUNCE_MS) {
+                    UIEventBridge.signalEngineEvent(MetaActionId.NAV_BACK);
+                    this.lastNavBackTime = now;
+                }
             } else if (action === InputAction.ENTER) {
                 UIEventBridge.signalEngineEvent(MetaActionId.NAV_CONFIRM);
             } else if (action === InputAction.MAP) {
-                UIEventBridge.signalEngineEvent(MetaActionId.NAV_MAP);
+                if (now - this.lastNavMapTime > this.NAV_DEBOUNCE_MS) {
+                    UIEventBridge.signalEngineEvent(MetaActionId.NAV_MAP);
+                    this.lastNavMapTime = now;
+                }
             }
         }
     }

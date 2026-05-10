@@ -4,6 +4,7 @@ import { GameCanvasProps } from '../../types/CanvasTypes';
 import { SectorStats } from '../../types/StateTypes';
 import { Enemy, NoiseType, EnemyDeathState, EnemyFlags } from '../../entities/enemies/EnemyTypes';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
+import { WorldStreamer } from '../../core/world/WorldStreamer';
 import { RuntimeState } from '../../core/RuntimeState';
 import { System, SystemID } from '../../systems/System';
 import { DamageID } from '../../entities/player/CombatTypes';
@@ -15,19 +16,20 @@ import { allocateRuntimeState, resetRuntimeState } from '../../core/RuntimeState
 import { FXSystem } from '../../systems/FXSystem';
 import { SectorID } from './SectorTypes';
 import { FXParticleType } from '../../types/FXTypes';
-import { EffectPool, clearEffects } from '../../systems/EffectManager';
+import { clearEffects } from '../../systems/EffectManager';
 
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
     public isMobileDevice: boolean = false;
     public debugMode: boolean = false;
     public cameraAngle: number = 0;
-    public mapId: number = 0;
+    public sectorId: number = 0;
     public cinematicActive: boolean = false;
     public engine: WinterEngine;
     public state!: RuntimeState;
     public playerPos: THREE.Vector3 | null = null;
     public detectionSystem!: EnemyDetectionSystem;
+    public worldStreamer!: WorldStreamer;
 
     /**
      * Zero-GC Reset Logic
@@ -127,6 +129,9 @@ export class GameSessionLogic {
         stats.seenEnemies.length = 0;
         stats.seenBosses.length = 0;
         stats.collectiblesDiscovered.length = 0;
+        stats.activePassives = [];
+        stats.activeBuffs = [];
+        stats.activeDebuffs = [];
         stats.aborted = false;
         stats.familyFound = !!props.familyAlreadyRescued;
         stats.familyExtracted = false;
@@ -195,6 +200,9 @@ export class GameSessionLogic {
             bossDamageDealt: 0,
             bossDamageTaken: 0,
             discoveredPerksMap: new Uint8Array(256),
+            activePassives: [],
+            activeBuffs: [],
+            activeDebuffs: [],
             gibbedEnemies: 0,
             uniqueEnemiesHitByExplosives: 0,
         };
@@ -237,14 +245,14 @@ export class GameSessionLogic {
             return result;
         };
 
-        // Register passive core utilities from the state
-        if (this.state.collisionGrid) {
-            this.engine.registerSystem(SystemID.SPATIAL_GRID, this.state.collisionGrid);
+        if (this.state.worldStreamer) {
+            this.worldStreamer = this.state.worldStreamer;
+            this.engine.registerSystem(SystemID.WORLD_STREAMER, this.state.worldStreamer);
         }
     }
 
-    update(dt: number, mapId: number = 0) {
-        this.mapId = mapId;
+    update(dt: number, sectorId: number = 0) {
+        this.sectorId = sectorId;
         if (!this.state) return;
 
         // --- TRACK PERSISTENT GAME TIME (Zero-GC) ---
@@ -252,6 +260,7 @@ export class GameSessionLogic {
             this.state.statsBuffer[PlayerStatID.TOTAL_GAME_TIME] += dt;
         }
         this.state.sessionStats.timePlayed += dt;
+        this.state.sessionStats.timeElapsed = this.state.sessionStats.timePlayed;
 
         // Sync player position for systems (TriggerSystem, EnemySystem, etc.)
         if (this.state.nodes.gun) {
@@ -369,9 +378,8 @@ export class GameSessionLogic {
             this.state.initialAim.active = false;
             this.state.interaction.active = false;
 
-            // System's collision grid
-            if (this.state.collisionGrid && typeof this.state.collisionGrid.clear === 'function') {
-                this.state.collisionGrid.clear();
+            if (this.state.worldStreamer) {
+                this.state.worldStreamer.clear();
             }
 
             // --- CINEMATIC CLEANUP ---

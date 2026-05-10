@@ -423,12 +423,10 @@ export const HudSystem = {
 
         // --- ZERO-GC NAVIGATION SIGNAL SYNC ---
         const engineSignal = UIEventBridge.consumeEngineSignal();
-        if (engineSignal !== MetaActionId.NONE) {
-            _bufferA.lastMetaSignal = engineSignal;
-            _bufferA.metaSignalTimestamp = now;
-            _bufferB.lastMetaSignal = engineSignal;
-            _bufferB.metaSignalTimestamp = now;
-        }
+        _bufferA.lastMetaSignal = engineSignal;
+        _bufferA.metaSignalTimestamp = engineSignal !== MetaActionId.NONE ? now : 0;
+        _bufferB.lastMetaSignal = engineSignal;
+        _bufferB.metaSignalTimestamp = engineSignal !== MetaActionId.NONE ? now : 0;
 
         _current.discoveryActive = false;
 

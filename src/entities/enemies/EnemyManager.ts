@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SystemID } from '../../systems/System';
 import { MATERIALS } from '../../utils/assets';
-import { KMH_TO_MS } from '../../content/constants';
+import { KMH_TO_MS, AI_LOD, PHYSICS } from '../../content/constants';
 import { EnemyPoolState, ENEMY_POOL_SIZE } from '../../core/state/EnemyPool';
 import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_SCORE, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType, EnemyDeathDecal, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { COLORS, ENEMY_COLORS } from '../../utils/ui/ColorUtils';
@@ -10,6 +10,7 @@ import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
 import { EnemySpawner } from './EnemySpawner';
 import { EnemyAI } from './EnemyAI';
+import { RuntimeStressHarness } from '../../utils/debug/RuntimeStressHarness';
 import { MaterialType } from '../../content/environment';
 import { GamePlaySounds, EnemySounds } from '../../utils/audio/AudioLib';
 import { audioEngine } from '../../utils/audio/AudioEngine';
@@ -21,8 +22,9 @@ import { FXSystem } from '../../systems/FXSystem';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { GameSessionLogic } from '../../game/session/GameSessionLogic';
 import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
-import { SPATIAL_CONFIG } from '../../config/SpatialConfig';
-import { ChunkManager } from '../../core/world/ChunkManager';
+import { WorldStreamer } from '../../core/world/WorldStreamer';
+import { SectorID } from '../../game/session/SectorTypes';
+import { SectorSystem } from '../../systems/SectorSystem';
 
 export type { Enemy };
 
@@ -52,6 +54,7 @@ let zombieRenderer: ZombieRenderer | null = null;
 let corpseRenderer: CorpseRenderer | null = null;
 let ashRenderer: AshRenderer | null = null;
 
+let _currentSession: GameSessionLogic | null = null;
 let _frameCount = 0;
 
 // --- ZERO-GC MATERIAL HELPERS ---
@@ -127,7 +130,7 @@ export interface AIContext {
     onEffectTick: ((e: Enemy, type: EnemyEffectType) => void) | null;
     playSound: (id: SoundID) => void;
     spawnBubble: ((text: string, duration: number) => void) | null;
-    queryEnemies: ((pos: THREE.Vector3, radius: number) => Enemy[]) | null;
+    queryEnemies: ((pos: THREE.Vector3, radius: number, outPoolIdx: number) => void) | null;
     onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void;
     _realOnPlayerHit: ((damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void) | null;
 }
@@ -157,6 +160,7 @@ export const EnemyManager = {
     persistent: false, // Must be false to prevent leaking into the Camp
 
     init: (session: GameSessionLogic, initialPoolSize: number = ENEMY_POOL_SIZE) => {
+        _currentSession = session;
         const scene = session.engine.scene;
         if (!zombieRenderer) zombieRenderer = new ZombieRenderer(scene);
         else zombieRenderer.reAttach(scene);
@@ -176,11 +180,14 @@ export const EnemyManager = {
         const dummyScene = new THREE.Scene();
         const dummyPos = new THREE.Vector3();
         for (let i = 0; i < ENEMY_POOL_SIZE; i++) {
-            const enemy = EnemySpawner.spawn(dummyScene, dummyPos, EnemyType.WALKER);
+            const enemy = EnemySpawner.spawn(dummyScene, dummyPos, EnemyType.WALKER, undefined, false, true);
             if (enemy) {
                 enemy.mesh.visible = false;
                 enemy.mesh.removeFromParent();
                 enemy.poolId = i;
+                enemy.currentChunkKey = -1;
+                enemy.bucketIndex = -1;
+                enemy._sqf = 0;
                 inactiveEnemies.push(enemy);
             }
         }
@@ -199,10 +206,10 @@ export const EnemyManager = {
         renderTime: number
     ) => {
         // Lifecycle Guard - Prevent AI updates during sector transitions or in the Camp
-        if (!session || !session.state || !session.state.collisionGrid) return;
+        const streamer = session.worldStreamer;
+        if (!session || !session.state || !streamer) return;
 
         const state = session.state;
-        const collisionGrid = state.collisionGrid;
 
         const playerPos = session.playerPos || session.engine.camera?.lookAtTarget;
         if (!playerPos) return;
@@ -228,7 +235,7 @@ export const EnemyManager = {
         _aiContext.spawnDecal = spawnDecal;
         _aiContext.applyDamage = applyDamage;
         _aiContext.spawnBubble = spawnBubble;
-        _aiContext.queryEnemies = (pos: THREE.Vector3, rad: number) => collisionGrid.getNearbyEnemies(pos, rad);
+        _aiContext.queryEnemies = (pos: THREE.Vector3, rad: number, outPoolIdx: number) => streamer.getNearbyEnemies(pos.x, pos.z, rad, outPoolIdx);
 
         const globalTimeScale = state?.globalTimeScale ?? 1.0;
         const scaledDelta = delta * globalTimeScale;
@@ -250,21 +257,36 @@ export const EnemyManager = {
             const isDying = e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD;
 
             let updateFrequency = 0;
-            if (isDying || distSq < SPATIAL_CONFIG.AI_CORE_RADIUS_SQ) {
+            const AI_CORE_RADIUS_SQ = AI_LOD.CORE_RADIUS_SQ;
+            const AI_THROTTLED_RADIUS_SQ = AI_LOD.THROTTLED_RADIUS_SQ;
+
+            if (isDying || distSq < AI_CORE_RADIUS_SQ) {
                 updateFrequency = 1;
-            } else if (distSq < SPATIAL_CONFIG.AI_THROTTLED_RADIUS_SQ) {
+            } else if (distSq < AI_THROTTLED_RADIUS_SQ) {
                 updateFrequency = 6;
             }
 
             const shouldUpdate = updateFrequency > 0 && (_frameCount % updateFrequency === 0);
 
             if (shouldUpdate) {
+                // --- VINTERDÖD STABILIZATION: Sync SoA -> Object ---
+                // This allows TriggerSystem/ProjectileSystem to inject flags/damage directly into SoA
+                e.statusFlags |= EnemyPoolState.statusFlags[i];
+                if (EnemyPoolState.hp[i] < e.hp && EnemyPoolState.hp[i] > 0) e.hp = EnemyPoolState.hp[i];
+
                 // --- 2. LOGIC UPDATE ---
                 if (e.deathState === EnemyDeathState.ALIVE) {
-                    EnemyAI.updateEnemy(e, playerPos, playerStatusFlags, collisionGrid, isDead, _aiContext, water, scaledDelta * updateFrequency, simTime, renderTime);
+                    EnemyAI.updateEnemy(e, playerPos, playerStatusFlags, streamer as any, isDead, _aiContext, water, scaledDelta * updateFrequency, simTime, renderTime);
+                    
+                    // --- STRESS HARNESS: MONITOR PHASING ---
+                    RuntimeStressHarness.assertPhasing("Enemy", e.mesh.position.x, e.mesh.position.z, e.prevP.x, e.prevP.z);
+                    e.prevP.copy(e.mesh.position);
                 } else if (isDying) {
                     EnemyManager.processDeathAnimation(e, _aiContext, scaledDelta, simTime, renderTime);
                 }
+
+                // --- 2b. SPATIAL RE-BUCKETING (Zero-GC Migration) ---
+                EnemyManager.updateSpatialPosition(e, streamer);
 
                 // SYNC TO TypedArray SoA (Source of Truth for other systems)
                 EnemyPoolState.posX[i] = e.mesh.position.x;
@@ -301,7 +323,7 @@ export const EnemyManager = {
                                 _v2.subVectors(e.mesh.position, cameraPos);
                                 const dot = cameraDir.dot(_v2);
                                 const dSq = _v2.lengthSq();
-                                if (dot < -2.0 && dSq > 625) isVisible = false;
+                                if (dot < AI_LOD.CULL_DOT_THRESHOLD && dSq > AI_LOD.THROTTLED_RADIUS_SQ) isVisible = false;
                             }
                             const isTelegraphing = e.indicatorRing && e.indicatorRing.visible;
                             if (isVisible && !isTelegraphing) {
@@ -348,7 +370,6 @@ export const EnemyManager = {
             }
         }
 
-        collisionGrid.updateEnemyGrid(_syncList);
         if (zombieRenderer) zombieRenderer.sync(_syncList, simTime);
         if (ashRenderer) ashRenderer.update(Math.max(simTime, 1), playerPos);
     },
@@ -360,15 +381,41 @@ export const EnemyManager = {
         zombieRenderer = null;
         corpseRenderer = null;
         ashRenderer = null;
+        
+        // VINTERDÖD STABILIZATION: Strict nulling to prevent sector-to-sector reference leaks
+        for (let i = 0; i < ENEMY_POOL_SIZE; i++) {
+            if (activeEnemies[i]) {
+                activeEnemies[i].mesh.removeFromParent();
+            }
+            activeEnemies[i] = null!;
+        }
+        
         inactiveEnemies.length = 0;
         activeCount = 0;
+        EnemyPoolState.activeCount = 0;
+        
+        // Zero-out entire SoA state to be safe
+        EnemyPoolState.statusFlags.fill(0);
+        EnemyPoolState.hp.fill(0);
+        EnemyPoolState.posX.fill(0);
+        EnemyPoolState.posZ.fill(0);
+        EnemyPoolState.deathState.fill(EnemyDeathState.DEAD);
     },
 
     getAshRenderer: () => ashRenderer,
     getActiveEnemies: () => activeEnemies,
     getActiveCount: () => activeCount,
 
-    spawn: (scene: THREE.Scene, playerPos: THREE.Vector3, forcedType?: EnemyType, forcedPos?: THREE.Vector3, bossSpawned: boolean = false, enemyCount: number = 0): Enemy | null => {
+    spawn: (scene: THREE.Scene, playerPos: THREE.Vector3, forcedType?: EnemyType, forcedPos?: THREE.Vector3, bossSpawned: boolean = false, enemyCount: number = 0, isForced: boolean = false): Enemy | null => {
+        // VINTERDÖD STABILIZATION: Generic Sector Gating
+        // Non-combat sectors (e.g. PLAYGROUND) suppress all ambient/event spawns. Only direct 'isForced' calls (Terminals) are allowed.
+        if (_currentSession && !isForced) {
+            const sectorDef = SectorSystem.getSector(_currentSession.sectorId);
+            if (sectorDef && sectorDef.spawnZombiesOnSector === false) {
+                return null;
+            }
+        }
+
         if (activeCount >= ENEMY_POOL_SIZE) return null;
 
         const newType = (forcedType !== undefined) ? forcedType : EnemySpawner.determineType(bossSpawned);
@@ -380,7 +427,7 @@ export const EnemyManager = {
             if (!enemy.mesh.parent) scene.add(enemy.mesh);
         } else {
             // Defensive: should ideally never happen with fixed pool
-            enemy = EnemySpawner.spawn(scene, playerPos, newType, forcedPos, bossSpawned, enemyCount)!;
+            enemy = EnemySpawner.spawn(scene, playerPos, newType, forcedPos, bossSpawned, false, enemyCount)!;
         }
 
         if (enemy) {
@@ -388,6 +435,7 @@ export const EnemyManager = {
 
             const index = activeCount;
             activeEnemies[index] = enemy;
+            enemy.poolId = index;
 
             // Sync Initial State to SoA
             EnemyPoolState.posX[index] = enemy.mesh.position.x;
@@ -401,9 +449,70 @@ export const EnemyManager = {
 
             activeCount++;
             EnemyPoolState.activeCount = activeCount;
+
+            // Initial Spatial Positioning
+            if (_currentSession) {
+                EnemyManager.updateSpatialPosition(enemy, _currentSession.worldStreamer);
+            }
         }
 
         return enemy;
+    },
+
+    /**
+     * Updates an enemy's position in the unified WorldStreamer grid.
+     * Uses strict O(1) Swap-and-Pop for bucket migration to ensure Zero-GC.
+     */
+    updateSpatialPosition: (e: Enemy, streamer: WorldStreamer) => {
+        const posX = e.mesh.position.x;
+        const posZ = e.mesh.position.z;
+
+        const newKey = streamer.getSmiKeyFromWorld(posX, posZ);
+        const newBucketIdx = streamer.getBucketIndex(posX, posZ);
+
+        // If chunk or bucket changed, migrate
+        if (newKey !== e.currentChunkKey || newBucketIdx !== e.bucketIndex) {
+            // 1. Remove from old bucket (Swap-and-Pop)
+            if (e.currentChunkKey !== -1) {
+                const oldGrid = streamer.getGridByKey(e.currentChunkKey);
+                if (oldGrid) {
+                    const oldBucket = oldGrid.enemyBuckets[e.bucketIndex];
+                    const oldCount = oldGrid.enemyCounts[e.bucketIndex];
+                    const localIdx = e._internalBucketIdx; // Need to track internal index for O(1) removal
+
+                    if (localIdx !== -1 && localIdx < oldCount) {
+                        // Swap with last
+                        const lastEnemy = oldBucket[oldCount - 1];
+                        oldBucket[localIdx] = lastEnemy;
+                        if (lastEnemy) lastEnemy._internalBucketIdx = localIdx;
+                        
+                        oldBucket[oldCount - 1] = null;
+                        oldGrid.enemyCounts[e.bucketIndex]--;
+                    }
+                }
+            }
+
+            // 2. Add to new bucket
+            const newGrid = streamer.getGridByKey(newKey);
+            if (newGrid) {
+                const count = newGrid.enemyCounts[newBucketIdx];
+                if (count < 16) { // BUCKET_CAPACITY
+                    newGrid.enemyBuckets[newBucketIdx][count] = e;
+                    e._internalBucketIdx = count;
+                    newGrid.enemyCounts[newBucketIdx]++;
+                    e.currentChunkKey = newKey;
+                    e.bucketIndex = newBucketIdx;
+                } else {
+                    // Overflow handling: Force to -1 to retry next frame or skip
+                    e.currentChunkKey = -1;
+                    e._internalBucketIdx = -1;
+                }
+            } else {
+                // Out of streamed bounds
+                e.currentChunkKey = -1;
+                e._internalBucketIdx = -1;
+            }
+        }
     },
 
     recycleEnemy: (index: number) => {
@@ -412,6 +521,26 @@ export const EnemyManager = {
         const enemy = activeEnemies[index];
         enemy.mesh.visible = false;
         enemy.mesh.removeFromParent();
+
+        // Remove from spatial grid
+        if (enemy.currentChunkKey !== -1) {
+            if (_currentSession && _currentSession.worldStreamer) {
+                const grid = _currentSession.worldStreamer.getGridByKey(enemy.currentChunkKey);
+                if (grid) {
+                    const bIdx = enemy.bucketIndex;
+                    const count = grid.enemyCounts[bIdx];
+                    const localIdx = enemy._internalBucketIdx;
+                    if (localIdx !== -1 && localIdx < count) {
+                        const last = grid.enemyBuckets[bIdx][count - 1];
+                        grid.enemyBuckets[bIdx][localIdx] = last;
+                        if (last) last._internalBucketIdx = localIdx;
+                        grid.enemyBuckets[bIdx][count - 1] = null;
+                        grid.enemyCounts[bIdx]--;
+                    }
+                }
+            }
+        }
+
         inactiveEnemies.push(enemy);
 
         // SWAP-AND-GO: Move last active enemy to current slot
@@ -434,6 +563,8 @@ export const EnemyManager = {
             EnemyPoolState.velX[index] = EnemyPoolState.velX[lastIdx];
             EnemyPoolState.velY[index] = EnemyPoolState.velY[lastIdx];
             EnemyPoolState.velZ[index] = EnemyPoolState.velZ[lastIdx];
+
+            lastEnemy.poolId = index;
         }
 
         activeCount--;
@@ -543,9 +674,19 @@ export const EnemyManager = {
 
         e.currentChunkKey = -1;
         e.bucketIndex = -1;
+        e._internalBucketIdx = -1;
+        e._sqf = 0;
     },
 
-    spawnBoss: (scene: THREE.Scene, pos: { x: number, z: number }, bossData: any) => {
+    spawnBoss: (scene: THREE.Scene, pos: { x: number, z: number }, bossData: any, isForced: boolean = false) => {
+        // VINTERDÖD STABILIZATION: Generic Sector Gating
+        if (_currentSession && !isForced) {
+            const sectorDef = SectorSystem.getSector(_currentSession.sectorId);
+            if (sectorDef && sectorDef.spawnZombiesOnSector === false) {
+                return null;
+            }
+        }
+
         const boss = EnemySpawner.spawnBoss(scene, pos, bossData);
         if (boss) {
             boss.mesh.visible = true;
@@ -565,7 +706,7 @@ export const EnemyManager = {
         return boss;
     },
 
-    spawnHorde: (scene: THREE.Scene, startPos: THREE.Vector3, count: number, bossSpawned: boolean, currentCount: number, forcedType?: EnemyType) => {
+    spawnHorde: (scene: THREE.Scene, startPos: THREE.Vector3, count: number, bossSpawned: boolean, currentCount: number, forcedType?: EnemyType, isForced: boolean = false) => {
         const horde: Enemy[] = [];
         const goldenAngle = 137.5 * (Math.PI / 180);
         const spacing = 1.5;
@@ -580,7 +721,7 @@ export const EnemyManager = {
                 startPos.z + Math.sin(theta) * radius
             );
 
-            const enemy = EnemyManager.spawn(scene, startPos, forcedType, _v1, bossSpawned, currentCount + i);
+            const enemy = EnemyManager.spawn(scene, startPos, forcedType, _v1, bossSpawned, currentCount + i, isForced);
             if (enemy) horde.push(enemy);
         }
         return horde;
@@ -841,12 +982,16 @@ export const EnemyManager = {
         maxDamage: number,
         damageType: DamageID
     ) => {
-        const grid = ctx.collisionGrid;
-        if (!grid) return;
+        const streamer = ctx.worldStreamer;
+        if (!streamer) return;
 
         let hitAnyone = false;
-        const enemies = grid.getNearbyEnemies(center, radius);
-        const len = enemies.length;
+        const enPool = streamer.getEnemyPool();
+        const enPoolIdx = enPool.nextIndex();
+        streamer.getNearbyEnemies(center.x, center.z, radius, enPoolIdx);
+
+        const enemies = enPool.getPool(enPoolIdx);
+        const len = enPool.getCount(enPoolIdx);
         const radiusSq = radius * radius;
 
         for (let i = 0; i < len; i++) {

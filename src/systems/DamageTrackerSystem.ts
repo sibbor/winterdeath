@@ -1,11 +1,11 @@
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System, SystemID } from './System';
 import { DamageID } from '../entities/player/CombatTypes';
-import { StatWeaponIndex, PlayerStatID, StatEnemyIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE, TELEMETRY_BUFFER_SIZE } from '../entities/player/PlayerTypes';
-import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
+import { StatWeaponIndex, PlayerStatID, StatEnemyIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE, TELEMETRY_BUFFER_SIZE, TelemetrySourceOffset } from '../entities/player/PlayerTypes';
+import { COMBAT, MAX_ENTITIES } from '../content/constants';
 
 // Zero-GC: Pre-allocate boss keys to prevent template literal string allocations during runtime
-const MAX_BOSS_IDS = 32;
+const MAX_BOSS_IDS = MAX_ENTITIES.MAX_BOSS_IDS;
 const _bossKeyCache: string[] = new Array(MAX_BOSS_IDS);
 for (let i = 0; i < MAX_BOSS_IDS; i++) {
     _bossKeyCache[i] = `Boss_${i}`;
@@ -41,7 +41,9 @@ export class DamageTrackerSystem implements System {
      * Guards against recording TOOL/RADIO stats.
      */
     private isTechnical(id: DamageID): boolean {
-        return id === DamageID.RADIO || id === DamageID.NONE;
+        return id === DamageID.RADIO || id === DamageID.NONE || 
+               id === DamageID.RUSH || id === DamageID.DODGE || 
+               id === DamageID.VEHICLE;
     }
 
     /**
@@ -155,6 +157,28 @@ export class DamageTrackerSystem implements System {
         weaponId?: DamageID,
         distSq?: number
     ) {
+        if (weaponId !== undefined && this.isTechnical(weaponId)) {
+            // Still record the general kill, but skip the weapon-specific kill count
+            const stats = session.state.sessionStats;
+            const playerStats = session.state.statsBuffer;
+
+            stats.kills++;
+            playerStats[PlayerStatID.TOTAL_KILLS]++;
+            
+            this.currentKillstreak++;
+            const maxK = playerStats[PlayerStatID.LONGEST_KILLSTREAK];
+            if (this.currentKillstreak > maxK) {
+                playerStats[PlayerStatID.LONGEST_KILLSTREAK] = this.currentKillstreak;
+                stats.maxKillstreak = this.currentKillstreak;
+            }
+
+            if (enemyType >= 0 && enemyType < StatEnemyIndex.COUNT) {
+                stats.enemyKills[enemyType]++;
+                session.state.enemyKills[enemyType]++;
+            }
+            return;
+        }
+
         const stats = session.state.sessionStats;
         const playerStats = session.state.statsBuffer;
 
@@ -162,7 +186,7 @@ export class DamageTrackerSystem implements System {
         playerStats[PlayerStatID.TOTAL_KILLS]++;
 
         // Long Range Kill: > 25m (625 units squared)
-        if (distSq !== undefined && distSq > 625) {
+        if (distSq !== undefined && distSq > COMBAT.LONG_RANGE_SQ) {
             playerStats[PlayerStatID.TOTAL_LONG_RANGE_KILLS]++;
         }
 
@@ -205,15 +229,6 @@ export class DamageTrackerSystem implements System {
             stats.killingBlowWeapon = weaponId;
             stats.killingBlowSource = enemyType as number;
         }
-
-        // --- VINTERDÖD CHALLENGES (Zero-GC) ---
-        // TODO: IMPLEMENT PROPER CHALLENGE SYSTEM
-        if (stats.kills === 50) {
-            UIEventRingBuffer.push(UIEventType.CHALLENGE_COMPLETE, 1); // 1: Session Slayer
-        }
-        if (this.currentKillstreak === 10) {
-            UIEventRingBuffer.push(UIEventType.CHALLENGE_COMPLETE, 2); // 2: Untouchable
-        }
     }
 
     /**
@@ -227,11 +242,16 @@ export class DamageTrackerSystem implements System {
         playerStats[PlayerStatID.TOTAL_DEATHS]++;
 
         // sourceId < 16 usually indicates an enemy type (EnemyType enum)
-        const enemyType = sourceId < 16 ? sourceId : undefined;
+        let enemyTypeIdx = -1;
+        if (sourceId < TelemetrySourceOffset.BOSS) {
+            enemyTypeIdx = sourceId;
+        } else if (sourceId < TelemetrySourceOffset.ENVIRONMENT) {
+            enemyTypeIdx = StatEnemyIndex.BOSS;
+        }
 
-        if (enemyType !== undefined && enemyType >= 0 && enemyType < StatEnemyIndex.COUNT) {
-            stats.enemyDeaths[enemyType]++;
-            globalStats.deathsByEnemyType[enemyType]++;
+        if (enemyTypeIdx >= 0 && enemyTypeIdx < StatEnemyIndex.COUNT) {
+            stats.enemyDeaths[enemyTypeIdx]++;
+            globalStats.deathsByEnemyType[enemyTypeIdx]++;
         }
     }
 

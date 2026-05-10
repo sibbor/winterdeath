@@ -136,7 +136,8 @@ const _sectorUpdateContext: SectorUpdateContext = {
     onPlayerHit: null,
     startCinematic: null,
     setCameraOverride: null,
-    makeNoise: null
+    makeNoise: null,
+    ctx: null as any
 };
 
 export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, renderTime: number) => void {
@@ -223,7 +224,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         scene: null,
         enemies: null,
         obstacles: null,
-        collisionGrid: null,
+        worldStreamer: null,
         spawnParticle: null,
         spawnDecal: null,
         showDamageText: null,
@@ -389,7 +390,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
         const movementSystem = session.getSystem<any>(SystemID.PLAYER_MOVEMENT);
         const combatSystem = session.getSystem<any>(SystemID.PLAYER_COMBAT);
-        const lootSystem = session.getSystem<any>(SystemID.WORLD_LOOT);
+        const lootSystem = session.getSystem<any>(SystemID.LOOT);
         const familySystem = session.getSystem<any>(SystemID.FAMILY);
         const water = engine.water;
 
@@ -608,7 +609,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             NavigationSystem.tick(playerGroup.position, simTime);
         }
 
-        session.update(delta, propsRef.current.mapId || 0);
+        session.update(delta, propsRef.current.currentSector || 0);
         monitor.end('session_update');
 
         // Chunk-based spatial mounting
@@ -626,6 +627,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         if (playerGroup) _sectorUpdateContext.playerPos = playerGroup.position;
         _sectorUpdateContext.gameState = state;
         _sectorUpdateContext.sectorState = state.sectorState;
+        _sectorUpdateContext.ctx = refs.sectorContextRef.current;
         _sectorUpdateContext.scene = engine.scene;
         _sectorUpdateContext.onAction = callbacks.onAction;
         _sectorUpdateContext.spawnZombie = callbacks.spawnZombie;
@@ -649,7 +651,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         _sectorUpdateContext.setCameraOverride = callbacks.setCameraOverride;
         _sectorUpdateContext.makeNoise = (pos: THREE.Vector3, type: any, radius?: number) => session.makeNoise(pos, type, radius);
 
-        const currentSector = propsRef.current.currentSectorData || SectorSystem.getSector(propsRef.current.mapId || 0);
+        const currentSector = propsRef.current.currentSectorData || SectorSystem.getSector(propsRef.current.currentSector || 0);
         if (currentSector && currentSector.onSectorUpdate) {
             currentSector.onSectorUpdate(_sectorUpdateContext);
         }
@@ -834,7 +836,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         _gameContext.scene = engine.scene;
         _gameContext.enemies = state.enemies;
         _gameContext.obstacles = state.obstacles;
-        _gameContext.collisionGrid = state.collisionGrid;
+        _gameContext.worldStreamer = state.worldStreamer;
         _gameContext.spawnParticle = activeCallbacks.spawnParticle || callbacks.spawnParticle;
         _gameContext.spawnDecal = activeCallbacks.spawnDecal || callbacks.spawnDecal;
         _gameContext.showDamageText = activeCallbacks.showDamageText || callbacks.showDamageText;
@@ -979,11 +981,15 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 }
             }
 
-            // Fill remaining slots with closest enemies via SpatialGrid (O(1) Proximity Query)
-            const grid = state.collisionGrid;
+            // Fill remaining slots with closest enemies via WorldStreamer (O(1) Proximity Query)
+            const grid = state.worldStreamer;
             if (grid && count < 8) {
-                const nearby = grid.getNearbyEnemies(pPos, 15); // 15m radius
-                const nLen = nearby.length;
+                const enPool = grid.getEnemyPool();
+                const enPoolIdx = enPool.nextIndex();
+                grid.getNearbyEnemies(pPos.x, pPos.z, 15, enPoolIdx); // 15m radius
+
+                const nearby = enPool.getPool(enPoolIdx);
+                const nLen = enPool.getCount(enPoolIdx);
                 
                 for (let i = 0; i < nLen && count < 8; i++) {
                     const e = nearby[i];

@@ -51,7 +51,7 @@ export class SectorSystem implements System {
 
     constructor(
         private playerGroup: THREE.Group,
-        mapId: number,
+        sectorId: number,
         private callbacks: {
             setNotification: (notification: any) => void;
             t: (key: string) => string;
@@ -69,31 +69,31 @@ export class SectorSystem implements System {
             setOverlay: (type: number | null) => void;
         }
     ) {
-        this.currentSector = SectorSystem.getSector(mapId);
+        this.currentSector = SectorSystem.getSector(sectorId);
     }
 
     /**
      * Asynchronously loads a sector definition into the cache.
      * Must be called before creating the SectorSystem or accessing SECTORS[id].
      */
-    static async loadSector(mapId: number): Promise<SectorDef> {
-        if (SECTOR_CACHE[mapId]) return SECTOR_CACHE[mapId];
+    static async loadSector(sectorId: number): Promise<SectorDef> {
+        if (SECTOR_CACHE[sectorId]) return SECTOR_CACHE[sectorId];
 
-        const loader = SECTOR_LOADERS[mapId];
-        if (!loader) throw new Error(`[SectorSystem] Unknown sector ID: ${mapId}`);
+        const loader = SECTOR_LOADERS[sectorId];
+        if (!loader) throw new Error(`[SectorSystem] Unknown sector ID: ${sectorId}`);
 
         const module = await loader();
         // Sectors are exported as 'Sector0', 'Sector1', etc.
-        const sector = module[`Sector${mapId}`] || module.default || module.Sector;
+        const sector = module[`Sector${sectorId}`] || module.default || module.Sector;
 
-        if (!sector) throw new Error(`[SectorSystem] Failed to find SectorDef in module for sector ${mapId}`);
+        if (!sector) throw new Error(`[SectorSystem] Failed to find SectorDef in module for sector ${sectorId}`);
 
-        SECTOR_CACHE[mapId] = sector;
+        SECTOR_CACHE[sectorId] = sector;
         return sector;
     }
 
-    static getSector(mapId: number) {
-        return SECTOR_CACHE[mapId];
+    static getSector(sectorId: number) {
+        return SECTOR_CACHE[sectorId];
     }
 
     update(session: GameSessionLogic, dt: number, simTime: number, renderTime: number) {

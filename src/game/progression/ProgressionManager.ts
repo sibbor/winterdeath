@@ -42,7 +42,8 @@ export const aggregateStats = (
         enemyKills: new Float64Array(prevStats.enemyKills),
         deathsByEnemyType: new Float64Array(prevStats.deathsByEnemyType),
         incomingDamageBuffer: new Float64Array(prevStats.incomingDamageBuffer),
-        discoveredPerksMap: new Uint8Array(prevStats.discoveredPerksMap)
+        discoveredPerksMap: new Uint8Array(prevStats.discoveredPerksMap),
+        challengeTiers: new Int32Array(prevStats.challengeTiers)
     };
 
     const sb = s.statsBuffer;
@@ -55,6 +56,7 @@ export const aggregateStats = (
     s.seenEnemies = s.seenEnemies ? s.seenEnemies.slice() : [];
     s.deadBossIndices = s.deadBossIndices ? s.deadBossIndices.slice() : [];
     s.rescuedFamilyIndices = s.rescuedFamilyIndices ? s.rescuedFamilyIndices.slice() : [];
+    s.trackedChallengeIds = s.trackedChallengeIds ? s.trackedChallengeIds.slice() : [];
 
     // 1. Sector Completion Progress
     if (!died && !aborted) {
@@ -208,6 +210,11 @@ export const aggregateStats = (
     // Sync total skill points and challenge points earned for UI displays
     s.totalSkillPointsEarned = sb[PlayerStatID.SKILL_POINTS];
     s.totalChallengePoints = sb[PlayerStatID.TOTAL_CHALLENGE_POINTS];
+
+    // --- SESSION STATE MERGE (For UI Pause/Recap) ---
+    if (sectorStats.activePassives) s.activePassives = [...sectorStats.activePassives];
+    if (sectorStats.activeBuffs) s.activeBuffs = [...sectorStats.activeBuffs];
+    if (sectorStats.activeDebuffs) s.activeDebuffs = [...sectorStats.activeDebuffs];
 
     return s;
 };

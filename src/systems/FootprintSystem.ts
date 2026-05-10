@@ -6,20 +6,31 @@ import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
 import { System, SystemID } from './System';
 import { FXParticleType, FXDecalType } from '../types/FXTypes';
+import { MAX_ENTITIES, FX } from '../content/constants';
 
-const MAX_FOOTPRINTS = 100; // Vi kan dubbla antalet nu när det är Instanced!
-const FADE_DURATION = 15000; // 15 seconds life
+const MAX_FOOTPRINTS = MAX_ENTITIES.FOOTPRINTS;
+const FADE_DURATION = FX.FADE_DURATION;
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-const _dummyObj = new THREE.Object3D();
 const _color = new THREE.Color();
 const _scaleRight = new THREE.Vector3(-0.6, 1, 1);
 const _scaleLeft = new THREE.Vector3(0.6, 1, 1);
+
+// Direct matrix composition scratchpads completely bypassing Object3D overhead
+const _tempMatrix = new THREE.Matrix4();
+const _tempScale = new THREE.Vector3();
+const _UP = new THREE.Vector3(0, 1, 0);
+
+// Pre-calculated zero matrix for instant O(1) hiding without composition math
+const _zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
 
 interface FootprintData {
     life: number;
     active: boolean;
     scaleRef: THREE.Vector3;
+    // Caching original transformations to completely avoid matrix.decompose() during updates
+    position: THREE.Vector3;
+    quat: THREE.Quaternion;
 }
 
 class FootprintSystemClass implements System {
@@ -30,7 +41,6 @@ class FootprintSystemClass implements System {
     public persistent = false;
     private scene: THREE.Scene | null = null;
 
-    // Instanced rendering replaces 50 individual meshes with 1 draw call
     private instancedMesh: THREE.InstancedMesh | null = null;
     private geometry: THREE.PlaneGeometry;
 
@@ -47,35 +57,35 @@ class FootprintSystemClass implements System {
         this.index = 0;
 
         if (!this.instancedMesh) {
-            // Skapa InstancedMesh med stöd för per-instans-färger
             this.instancedMesh = new THREE.InstancedMesh(this.geometry, MATERIALS.footprintDecal, MAX_FOOTPRINTS);
             this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 
-            // Färg-stöd
             const colors = new Float32Array(MAX_FOOTPRINTS * 3);
             this.instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
 
             this.instancedMesh.renderOrder = 2;
             this.instancedMesh.frustumCulled = false;
 
-            // Pre-allocate tracking data
+            // Pre-allocate tracking data with dedicated Zero-GC vectors and quaternions
             for (let i = 0; i < MAX_FOOTPRINTS; i++) {
-                this.footprintData.push({ life: 0, active: false, scaleRef: _scaleLeft });
-                // Hide all instances initially by setting scale to 0
-                _dummyObj.scale.set(0, 0, 0);
-                _dummyObj.updateMatrix();
-                this.instancedMesh.setMatrixAt(i, _dummyObj.matrix);
+                this.footprintData.push({
+                    life: 0,
+                    active: false,
+                    scaleRef: _scaleLeft,
+                    position: new THREE.Vector3(),
+                    quat: new THREE.Quaternion()
+                });
+
+                // Hide all instances initially
+                this.instancedMesh.setMatrixAt(i, _zeroMatrix);
             }
 
             scene.add(this.instancedMesh);
         } else {
-            // Om återanvänd
             if (this.instancedMesh.parent !== scene) scene.add(this.instancedMesh);
             for (let i = 0; i < MAX_FOOTPRINTS; i++) {
                 this.footprintData[i].active = false;
-                _dummyObj.scale.set(0, 0, 0);
-                _dummyObj.updateMatrix();
-                this.instancedMesh.setMatrixAt(i, _dummyObj.matrix);
+                this.instancedMesh.setMatrixAt(i, _zeroMatrix);
             }
             this.instancedMesh.instanceMatrix.needsUpdate = true;
         }
@@ -116,14 +126,13 @@ class FootprintSystemClass implements System {
             return;
         }
 
-        // 2. Fast Ground Detection via Spatial Grid (Zero-Raycast)
-        const grid = session.state.collisionGrid;
-        if (!grid) return;
+        // 2. Fast Ground Detection via WorldStreamer (Zero-Raycast)
+        const streamer = session.state.worldStreamer;
+        if (!streamer) return;
 
-        // Vi litar på att spelaren är på rätt y-position, men vi kan dubbelkolla
-        const groundHeight = grid.getGroundHeight ? grid.getGroundHeight(position.x, position.z) : 0;
+        const groundHeight = streamer.getGroundHeight(position.x, position.z);
 
-        // Blixtsnabb matematisk X/Z offset
+        // Extremely fast mathematical X/Z offset avoiding trig overhead where possible
         const offsetDist = isRight ? 0.15 : -0.15;
         const cosY = Math.cos(rotationY);
         const sinY = Math.sin(rotationY);
@@ -137,14 +146,14 @@ class FootprintSystemClass implements System {
         data.life = FADE_DURATION;
         data.scaleRef = isRight ? _scaleRight : _scaleLeft;
 
-        _dummyObj.position.set(spawnX, spawnY, spawnZ);
-        _dummyObj.rotation.set(0, rotationY, 0);
-        _dummyObj.scale.copy(data.scaleRef);
-        _dummyObj.updateMatrix();
+        // Cache exact position and quaternion directly to bypass runtime decomposition later
+        data.position.set(spawnX, spawnY, spawnZ);
+        data.quat.setFromAxisAngle(_UP, rotationY);
 
-        this.instancedMesh.setMatrixAt(this.index, _dummyObj.matrix);
+        // Fast raw composition
+        _tempMatrix.compose(data.position, data.quat, data.scaleRef);
+        this.instancedMesh.setMatrixAt(this.index, _tempMatrix);
 
-        // Standardized color assignment (Snow/Dirt check via generic fallback if no metadata exists)
         _color.setHex(0x222222); // Default dark
         this.instancedMesh.setColorAt(this.index, _color);
 
@@ -161,9 +170,8 @@ class FootprintSystemClass implements System {
 
         GamePlaySounds.playFootstep(playMaterial, isRight, isRushing);
 
-        // Layered vegetation rustle for immersive flora interaction
         if (!inWater && !isSwimming) {
-            const vegMat = grid.getVegetationAt(position.x, position.z);
+            const vegMat = streamer.getVegetationAt(position.x, position.z);
             if (vegMat === MaterialType.PLANT) {
                 GamePlaySounds.playVegetationStep(isRight, isRushing ? 1.4 : 1.0);
             }
@@ -182,7 +190,7 @@ class FootprintSystemClass implements System {
 
     /**
      * Main update loop for fading footprints.
-     * Uses scale fading instead of opacity to allow single-material instancing.
+     * Highly optimized: Bypasses getMatrixAt() and decompose() entirely via cached transformations.
      */
     update(ctx: any, delta: number, simTime: number, renderTime: number) {
         if (!this.enabled || !this.instancedMesh) return;
@@ -197,24 +205,22 @@ class FootprintSystemClass implements System {
 
             if (data.life <= 0) {
                 data.active = false;
-                _dummyObj.scale.set(0, 0, 0);
-                this.instancedMesh.setMatrixAt(i, _dummyObj.matrix);
+                // Instantly hide using the pre-composed zero matrix
+                this.instancedMesh.setMatrixAt(i, _zeroMatrix);
                 needsUpdate = true;
             } else if (data.life < 2000) {
                 // Shrink fade during the last 2 seconds
-                const scaleDown = (data.life / 2000);
+                const scaleDown = data.life / 2000;
 
-                this.instancedMesh.getMatrixAt(i, _dummyObj.matrix);
-                _dummyObj.matrix.decompose(_dummyObj.position, _dummyObj.quaternion, _dummyObj.scale);
-
-                _dummyObj.scale.set(
+                _tempScale.set(
                     data.scaleRef.x * scaleDown,
                     data.scaleRef.y,
                     data.scaleRef.z * scaleDown
                 );
 
-                _dummyObj.updateMatrix();
-                this.instancedMesh.setMatrixAt(i, _dummyObj.matrix);
+                // Direct matrix composition from cached state (Zero-GC, extremely low CPU cycles)
+                _tempMatrix.compose(data.position, data.quat, _tempScale);
+                this.instancedMesh.setMatrixAt(i, _tempMatrix);
                 needsUpdate = true;
             }
         }

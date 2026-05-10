@@ -49,23 +49,57 @@ export const NavigationSystem = {
      */
     init: (ctx: SectorContext) => {
         costMap.fill(0);
-        const grid = ctx.collisionGrid;
+        const streamer = ctx.worldStreamer;
+        if (!streamer) return;
 
-        for (let iz = -GRID_HALF; iz < GRID_HALF; iz++) {
-            for (let ix = -GRID_HALF; ix < GRID_HALF; ix++) {
-                const idx = (iz + GRID_HALF) * GRID_SIZE + (ix + GRID_HALF);
+        // --- VINTERDÖD OPTIMIZATION: OBSTACLE-CENTRIC RASTERIZATION ---
+        // Instead of 40,000 sequential spatial queries, we perform ONE broad-phase query
+        // and mathematically project obstacle footprints onto the grid indices.
+        costMap.fill(0);
+        
+        const obsPool = streamer.getObstaclePool();
+        const poolIdx = obsPool.nextIndex();
+        streamer.getNearbyObstacles(0, 0, 150, poolIdx);
+        
+        const obstacles = obsPool.getPool(poolIdx);
+        const obsLen = obsPool.getCount(poolIdx);
 
-                // Center-aligned cell query
-                const obstacles = grid.getNearbyObstacles({ x: ix + 0.5, y: 1, z: iz + 0.5 } as any, 1.5);
+        for (let i = 0; i < obsLen; i++) {
+            const obs = obstacles[i];
+            
+            // Derive half-extents for footprint projection
+            let hW = 0;
+            let hD = 0;
+            if (obs.collider && obs.collider.type === InteractionShape.BOX && obs.collider.size) {
+                hW = obs.collider.size.x * 0.5;
+                hD = obs.collider.size.z * 0.5;
+            } else {
+                const r = obs.radius || 2.0;
+                hW = r;
+                hD = r;
+            }
 
-                for (let i = 0; i < obstacles.length; i++) {
-                    if (isCellBlocked(ix + 0.5, iz + 0.5, obstacles[i])) {
-                        costMap[idx] = 255;
-                        break;
+            // Project bounding box to grid indices using 0.5 cell-center offset
+            const startX = Math.max(-GRID_HALF, Math.ceil(obs.position.x - hW - 0.5));
+            const endX = Math.min(GRID_HALF, Math.floor(obs.position.x + hW - 0.5) + 1);
+            const startZ = Math.max(-GRID_HALF, Math.ceil(obs.position.z - hD - 0.5));
+            const endZ = Math.min(GRID_HALF, Math.floor(obs.position.z + hD - 0.5) + 1);
+
+            for (let iz = startZ; iz < endZ; iz++) {
+                const rowOffset = (iz + GRID_HALF) * GRID_SIZE;
+                const wz = iz + 0.5;
+                for (let ix = startX; ix < endX; ix++) {
+                    const wx = ix + 0.5;
+                    // Secondary precision check for non-rectangular footprints
+                    if (isCellBlocked(wx, wz, obs)) {
+                        costMap[rowOffset + (ix + GRID_HALF)] = 255;
                     }
                 }
             }
         }
+
+        // Finalize state
+        streamer.resetQueryPools();
     },
 
     /**

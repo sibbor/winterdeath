@@ -16,15 +16,11 @@ import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes'
 import { SoundID } from '../utils/audio/AudioTypes';
 import { PlayerStatsSystem } from './PlayerStatsSystem';
 import { InputAction } from '../core/engine/InputManager';
+import { StatsBridge } from '../core/data/StatsBridge';
+import { KMH_TO_MS, PLAYER, PHYSICS, COMBAT } from '../content/constants';
 
-// --- SPEED AUDIT TELEMETRY (ZERO-GC) ---
-let _auditSimDist = 0;
-let _auditSteps = 0;
-let _auditFrameCount = 0;
-let _auditMinDelta = 999;
-let _auditMaxDelta = 0;
-let _auditClampedCount = 0;
-let _auditLastLogTime = 0;
+// --- SPEED AUDIT TELEMETRY (DEPRECATED) ---
+// Audit variables removed for Zero-GC compliance. Logging moved to TelemetrySystem.
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -45,7 +41,7 @@ export class PlayerMovementSystem implements System {
 
     // Zero-GC context bridge for EnemyManager physics 
     private _knockbackCtx: any = {
-        collisionGrid: null,
+        worldStreamer: null,
         applyDamage: null,
         scene: null,
         engine: null,
@@ -89,8 +85,13 @@ export class PlayerMovementSystem implements System {
         const input = session.engine.input.state;
         const disableInput = session.inputDisabled || false;
 
-        // --- APPLY DYNAMIC MULTIPLIERS (DOD) ---
-        const currentSpeed = stats[PlayerStatID.FINAL_SPEED];
+        // --- 1. SSoT SPEED AGGREGATION (Zero-GC) ---
+        // Vinterdöd Refactor: We resolve the 'Rush Perk' bug by explicitly aggregating 
+        // speed multipliers from the StatsBridge to ensure all perks (e.g. Adrenaline)
+        // are universally applied to both normal walking and rushing states.
+        const baseMoveSpeed = stats[PlayerStatID.SPEED] * KMH_TO_MS;
+        const moveMult = stats[PlayerStatID.MULTIPLIER_SPEED];
+        const currentSpeed = baseMoveSpeed * moveMult;
 
         if (state.vehicle.active) {
             state.isMoving = false;
@@ -122,51 +123,19 @@ export class PlayerMovementSystem implements System {
         );
 
         this.updateInvincibleGlow(state, session.state.renderTime);
-
-        // --- ZERO-GC TELEMETRY LOGGING (Throttled @ 1000ms) ---
-        _auditFrameCount++;
-        if (delta < _auditMinDelta) _auditMinDelta = delta;
-        if (delta > _auditMaxDelta) _auditMaxDelta = delta;
-
-        // 0.05 is the hard clamp in WinterEngine.ts
-        if (delta >= 0.0499) _auditClampedCount++;
-
-        const now = performance.now();
-        if (now - _auditLastLogTime > 1000) {
-            const elapsed = (now - _auditLastLogTime) / 1000;
-            /*
-            const fps = _auditFrameCount / elapsed;
-            const avgSteps = _auditSteps / _auditFrameCount;
-
-            console.log(
-                `[SPEED_AUDIT] ` +
-                `FPS: ${fps.toFixed(1)} | ` +
-                `Delta: ${(_auditMinDelta * 1000).toFixed(1)}-${(_auditMaxDelta * 1000).toFixed(1)}ms ` +
-                `(${_auditClampedCount}/${_auditFrameCount} clamped) | ` +
-                `Steps: ${avgSteps.toFixed(1)}/fr | ` +
-                `SimDist: ${_auditSimDist.toFixed(2)}m (Total)`
-            );
-            */
-
-            // Reset for next window
-            _auditSimDist = 0;
-            _auditSteps = 0;
-            _auditFrameCount = 0;
-            _auditMinDelta = 999;
-            _auditMaxDelta = 0;
-            _auditClampedCount = 0;
-            _auditLastLogTime = now;
-        }
     }
 
 
     private checkReflexShield(session: GameSessionLogic, simTime: number) {
         const state = session.state;
         const perkID = StatusEffectID.REFLEX_SHIELD;
-        const perk = PERKS[perkID];
-        if (!perk) return;
 
-        const cooldown = perk.cooldown ?? 10000;
+        // ONLY trigger if the player has unlocked the perk!
+        if (!StatsBridge.hasPerk(session.state, perkID)) return;
+
+        const perk = PERKS[perkID];
+        const cooldown = perk?.cooldown ?? 10000;
+
         if (simTime - state.lastReflexShieldTime > cooldown) {
             state.lastReflexShieldTime = simTime;
 
@@ -181,7 +150,7 @@ export class PlayerMovementSystem implements System {
         if (state.sectorState.isInvincible && this._invincibilityMesh) {
 
             // Pulse effect
-            const sineWave = Math.sin(renderTime * 0.005) * 0.05;
+            const sineWave = Math.sin(renderTime * PLAYER.INVULNERABILITY_PULSE_SPEED) * 0.05;
 
             (this._invincibilityMesh.material as THREE.MeshBasicMaterial).opacity = 0.15 + sineWave;
             this._invincibilityMesh.scale.setScalar(1.0 + sineWave);
@@ -212,9 +181,9 @@ export class PlayerMovementSystem implements System {
                 const pressDuration = simTime - state.spacePressTime;
 
                 // Increased window (150->200ms) and added '!state.isDodging' check
-                if (!state.isRushing && !state.isDodging && pressDuration < 200) {
-                    if (stats[PlayerStatID.STAMINA] >= 15) {
-                        stats[PlayerStatID.STAMINA] -= 15;
+                if (!state.isRushing && !state.isDodging && pressDuration < PLAYER.DODGE_PRESS_THRESHOLD) {
+                    if (stats[PlayerStatID.STAMINA] >= COMBAT.STAMINA_COST_DODGE) {
+                        stats[PlayerStatID.STAMINA] -= COMBAT.STAMINA_COST_DODGE;
                         state.lastStaminaUseTime = simTime;
                         state.isDodging = true;
                         state.dodgeStartTime = simTime; // Logic MUST use simTime for parity
@@ -246,7 +215,7 @@ export class PlayerMovementSystem implements System {
 
             // Handle Rush Elevation (Hold Space)
             if (state.spaceDepressed && !state.isDodging) {
-                if (simTime - state.spacePressTime >= 250) { // Increased threshold to avoid accidental dodge blocking
+                if (simTime - state.spacePressTime >= PLAYER.RUSH_HOLD_THRESHOLD) { // Increased threshold to avoid accidental dodge blocking
                     if (stats[PlayerStatID.STAMINA] >= 1.0) { // Check for minimal stamina to CONTINUE rushing
                         if (!state.isRushing) {
                             state.isRushing = true;
@@ -282,13 +251,13 @@ export class PlayerMovementSystem implements System {
             if (inWater) {
                 const flatDepth = _buoyancyResult.baseWaterLevel - _buoyancyResult.groundY;
 
-                if (flatDepth > 1.25) {
+                if (flatDepth > PHYSICS.SWIM_DEPTH_MAX) {
                     isSwimming = true;
                     speed *= 0.525; // 50% faster (0.35 * 1.5)
-                } else if (flatDepth > 0.95 && isSwimming) {
+                } else if (flatDepth > PHYSICS.SWIM_DEPTH_MID && isSwimming) {
                     isSwimming = true;
                     speed *= 0.525;
-                } else if (flatDepth > 0.4) {
+                } else if (flatDepth > PHYSICS.WADE_DEPTH) {
                     isSwimming = false;
                     isWading = true;
                     speed *= 0.9; // 50% faster (0.6 * 1.5)
@@ -297,7 +266,7 @@ export class PlayerMovementSystem implements System {
                     speed *= 0.85;
                 }
 
-                const swimY = _buoyancyResult.waterLevel - 0.35;
+                const swimY = _buoyancyResult.waterLevel - PHYSICS.SWIM_Y_OFFSET;
                 const targetY = isSwimming ? swimY : _buoyancyResult.groundY;
                 playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, targetY, 4 * delta);
             } else {
@@ -320,7 +289,7 @@ export class PlayerMovementSystem implements System {
         }
 
         // --- 4. STAMINA & REGENERATION ---
-        const waterStaminaDrain = isSwimming ? 7 : (isWading ? 3 : 0);
+        const waterStaminaDrain = isSwimming ? COMBAT.STAMINA_DRAIN_SWIM : (isWading ? COMBAT.STAMINA_DRAIN_WADE : 0);
         if (waterStaminaDrain > 0 && !state.vehicle.active) {
             state.lastStaminaUseTime = simTime;
             stats[PlayerStatID.STAMINA] = Math.max(0, stats[PlayerStatID.STAMINA] - waterStaminaDrain * delta);
@@ -337,7 +306,7 @@ export class PlayerMovementSystem implements System {
         }
 
         const isMoving = state.isMoving;
-        const rushRampSpeed = delta / 2.0; // 2 seconds for full ramp
+        const rushRampSpeed = delta * PLAYER.RUSH_RAMP_SPEED; // 2 seconds for full ramp
 
         if (state.isRushing) {
             this.checkReflexShield(session, simTime);
@@ -352,12 +321,9 @@ export class PlayerMovementSystem implements System {
             state.statusFlags |= PlayerStatusFlags.RUSHING;
 
             if (stats[PlayerStatID.STAMINA] <= 0) {
-                state.statusFlags |= PlayerStatusFlags.EXHAUSTED;
                 state.isRushing = false;
                 state.lastRushEndTime = simTime;
                 state.statusFlags &= ~PlayerStatusFlags.RUSHING;
-            } else if (stats[PlayerStatID.STAMINA] >= stats[PlayerStatID.MAX_STAMINA] * 0.5) {
-                state.statusFlags &= ~PlayerStatusFlags.EXHAUSTED;
             }
         } else {
             // --- VINTERDÖD FIX: Properly ramp down when not rushing ---
@@ -365,7 +331,9 @@ export class PlayerMovementSystem implements System {
             state.statusFlags &= ~PlayerStatusFlags.RUSHING;
         }
 
-        // Apply Speed Multiplier based on Rush Factor (1.0x to 2.0x)
+        // --- 4. FINAL VELOCITY RESOLUTION ---
+        // Apply Rush Multiplier (1.0x to 2.0x) universally to the pre-calculated speed.
+        // This ensures perk modifiers are correctly inherited during the rush ramp.
         speed *= (1.0 + state.rushFactor);
 
         // Update Speed Ratio for Animation Sync (Base = 1.0)
@@ -373,15 +341,15 @@ export class PlayerMovementSystem implements System {
 
         if (!state.isDodging && !state.isRushing && waterStaminaDrain === 0) {
             // Natural regeneration only if idle/walking and not soon after stamina use
-            if (simTime - state.lastStaminaUseTime > 2500) {
-                stats[PlayerStatID.STAMINA] = Math.min(stats[PlayerStatID.MAX_STAMINA], stats[PlayerStatID.STAMINA] + 15 * delta);
+            if (simTime - state.lastStaminaUseTime > COMBAT.STAMINA_REGEN_DELAY) {
+                stats[PlayerStatID.STAMINA] = Math.min(stats[PlayerStatID.MAX_STAMINA], stats[PlayerStatID.STAMINA] + COMBAT.STAMINA_REGEN_IDLE * delta);
             }
         }
 
         if (stats[PlayerStatID.HP] < stats[PlayerStatID.MAX_HP] &&
             !(state.statusFlags & PlayerStatusFlags.DEAD) &&
-            simTime - state.lastDamageTime > 5000) {
-            stats[PlayerStatID.HP] = Math.min(stats[PlayerStatID.MAX_HP], stats[PlayerStatID.HP] + 3 * delta);
+            simTime - state.lastDamageTime > COMBAT.HP_REGEN_DELAY) {
+            stats[PlayerStatID.HP] = Math.min(stats[PlayerStatID.MAX_HP], stats[PlayerStatID.HP] + COMBAT.HP_REGEN_IDLE * delta);
         }
 
         let isMovingVal = false;
@@ -410,9 +378,12 @@ export class PlayerMovementSystem implements System {
                 session.makeNoise(playerGroup.position, NoiseType.PLAYER_DODGING, NOISE_RADIUS[NoiseType.PLAYER_DODGING]);
 
                 // Proximity-Based Quick Finger (Witch Time)
-                if (session.state.collisionGrid) {
-                    const nearby = session.state.collisionGrid.getNearbyEnemies(playerGroup.position, 1.0);
-                    if (nearby.length > 0) {
+                if (session.worldStreamer) {
+                    const pool = session.worldStreamer.getEnemyPool();
+                    const poolIdx = pool.nextIndex();
+                    session.worldStreamer.getNearbyEnemies(playerGroup.position.x, playerGroup.position.z, 1.0, poolIdx);
+                    
+                    if (pool.getCount(poolIdx) > 0) {
                         if (this._statsSystem) {
                             this._statsSystem.triggerPerfectDodge(session);
                         }
@@ -426,7 +397,7 @@ export class PlayerMovementSystem implements System {
                 );
             }
 
-            if (simTime < state.dodgeStartTime + 300) {
+            if (simTime < state.dodgeStartTime + COMBAT.DODGE_DURATION) {
                 const dodgeSpeed = speed * 2.5;
                 _v1.copy(state.dodgeDir).multiplyScalar(dodgeSpeed * delta);
                 this.performMove(playerGroup, _v1, state, session, simTime, delta);
@@ -455,7 +426,7 @@ export class PlayerMovementSystem implements System {
             const isDisoriented = disorientedDuration > 0;
 
             if (isDisoriented) {
-                const noise = Math.sin(simTime * 0.01) * 0.5;
+                const noise = Math.sin(simTime * PLAYER.DISORIENTED_NOISE_SCALE) * PLAYER.DISORIENTED_DRIFT_MAGNITUDE;
                 _v6.x += noise;
                 if (simTime % 300 < 50) {
                     _v6.x += (Math.random() - 0.5) * 2;
@@ -525,7 +496,7 @@ export class PlayerMovementSystem implements System {
                             state.isRushing,
                             inWater,
                             isSwimming,
-                            session.state.collisionGrid.getGroundMaterial(playerGroup.position.x, playerGroup.position.z)
+                            session.worldStreamer.getGroundMaterial(playerGroup.position.x, playerGroup.position.z)
                         );
 
                         let noiseType = NoiseType.PLAYER_WALK;
@@ -570,7 +541,7 @@ export class PlayerMovementSystem implements System {
 
         if (canKnockback) {
             // Populate Zero-GC context for the plow physics
-            this._knockbackCtx.collisionGrid = state.collisionGrid;
+            this._knockbackCtx.worldStreamer = session.worldStreamer;
             this._knockbackCtx.applyDamage = state.callbacks?.applyDamage;
             this._knockbackCtx.scene = session.engine.scene;
             this._knockbackCtx.engine = session.engine;
@@ -599,21 +570,32 @@ export class PlayerMovementSystem implements System {
                 }
             }
 
-            const nearbyObs = state.collisionGrid.getNearbyObstacles(_v3, 2.5);
-            const nLen = nearbyObs.length;
+            const streamer = session.worldStreamer;
+            const obsPool = streamer.getObstaclePool();
+            const obsPoolIdx = obsPool.nextIndex();
+            streamer.getNearbyObstacles(_v3.x, _v3.z, 2.5, obsPoolIdx);
+
+            const nearbyObs = obsPool.getPool(obsPoolIdx);
+            const obsCount = obsPool.getCount(obsPoolIdx);
 
             for (let i = 0; i < 4; i++) {
                 let adjusted = false;
 
                 // --- 1. ENEMY COLLISION RESOLUTION (Standard Soft Shove) ---
-                const nearbyEnemies = state.collisionGrid.getNearbyEnemies(_v3, 1.2);
-                for (let j = 0; j < nearbyEnemies.length; j++) {
+                const enPool = streamer.getEnemyPool();
+                const enPoolIdx = enPool.nextIndex();
+                streamer.getNearbyEnemies(_v3.x, _v3.z, 1.2, enPoolIdx);
+
+                const nearbyEnemies = enPool.getPool(enPoolIdx);
+                const enCount = enPool.getCount(enPoolIdx);
+
+                for (let j = 0; j < enCount; j++) {
                     const enemy = nearbyEnemies[j];
                     const distSq = _v3.distanceToSquared(enemy.mesh.position);
-                    if (distSq < 0.6) {
+                    if (distSq < PHYSICS.SOFT_SHOVE_RADIUS_SQ) {
                         // Sqrt Purge! 
-                        // Using squared approximation for soft shove (0.6 - distSq) * factor
-                        const overlap = (0.6 - distSq) * 1.2;
+                        // Using squared approximation for soft shove (RADIUS_SQ - distSq) * force
+                        const overlap = (PHYSICS.SOFT_SHOVE_RADIUS_SQ - distSq) * PHYSICS.SOFT_SHOVE_FORCE;
                         _v1.subVectors(_v3, enemy.mesh.position).normalize().multiplyScalar(overlap);
                         _v3.add(_v1);
                         adjusted = true;
@@ -621,7 +603,7 @@ export class PlayerMovementSystem implements System {
                 }
 
                 // --- 2. STANDARD WALL/OBJECT COLLISION ---
-                for (let j = 0; j < nLen; j++) {
+                for (let j = 0; j < obsCount; j++) {
                     const obs = nearbyObs[j];
 
                     if (applyCollisionResolution(_v3, 0.5, obs)) {

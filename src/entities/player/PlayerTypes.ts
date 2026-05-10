@@ -169,8 +169,6 @@ export enum PlayerStatusFlags {
     INVULNERABLE = 1 << 2,
     IN_VEHICLE = 1 << 3,
     RUSHING = 1 << 4,
-    EXHAUSTED = 1 << 5,
-    REGENERATING = 1 << 6,
     STUNNED = 1 << 7,
     DODGING = 1 << 8,
 
@@ -332,7 +330,6 @@ export const PlayerStatsUtils = {
      * Initializes the DOD buffers for a new session.
      */
     initBuffers: () => {
-        const effectCount = 32; // Over-allocated for expansion
         return {
             velocity: new THREE.Vector3(),
             nodes: { gun: null, laserSight: null, barrelTip: null } as PlayerNodes,
@@ -340,9 +337,9 @@ export const PlayerStatsUtils = {
             baseY: 0,
 
             statsBuffer: new Float32Array(PlayerStatID.COUNT),
-            effectDurations: new Float32Array(effectCount),
-            effectMaxDurations: new Float32Array(effectCount),
-            effectIntensities: new Float32Array(effectCount),
+            effectDurations: new Float32Array(StatPerkIndex.COUNT),
+            effectMaxDurations: new Float32Array(StatPerkIndex.COUNT),
+            effectIntensities: new Float32Array(StatPerkIndex.COUNT),
 
             weaponKills: new Float64Array(StatWeaponIndex.COUNT),
             weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
@@ -358,7 +355,7 @@ export const PlayerStatsUtils = {
 
             enemyKills: new Float64Array(StatEnemyIndex.COUNT),
             deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
-            incomingDamageBuffer: new Float64Array(64 * 32),
+            incomingDamageBuffer: new Float64Array(TELEMETRY_BUFFER_SIZE),
             challengeTiers: new Int32Array(64),
 
             activePassives: [] as StatusEffectID[],

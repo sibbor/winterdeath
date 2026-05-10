@@ -10,8 +10,7 @@ import { FXParticleType, FXDecalType } from '../types/FXTypes';
 import { FXSystem } from './FXSystem';
 import { DamageID } from '../entities/player/CombatTypes';
 import { Enemy } from '../entities/enemies/EnemyTypes';
-import { WorldLootSystem } from './WorldLootSystem';
-import { GRID_CELL_POWER, GRID_RESOLUTION, GRID_OFFSET } from '../content/constants';
+import { LootSystem } from './LootSystem';
 import { EnemyPoolState } from '../core/state/EnemyPool';
 
 // --- TYPE DEFINITIONS ---
@@ -60,7 +59,7 @@ export class EnemySystem implements System {
             spawnDecal: this.updateCallbacks.spawnDecal,
             spawnScrap: (x: number, z: number, amt: number) => {
                 if (!this.currentSession) return;
-                WorldLootSystem.spawnScrapExplosion(this.currentSession.engine.scene, x, z, amt);
+                LootSystem.spawnScrapExplosion(this.currentSession.engine.scene, x, z, amt);
             },
             gainXp: (amount: number) => this.callbacks.gainXp(amount),
             onBossKilled: (id: number) => this.callbacks.onBossKilled(id),
@@ -96,42 +95,8 @@ export class EnemySystem implements System {
             simTime
         );
 
-        // --- PHASE 7: SPATIAL GRID UPDATE ---
-        this.updateSpatialGrid();
     }
 
-    /**
-     * Rebuilds the spatial hash grid using bit-shifting and a linked list.
-     * ZERO-GC hot path.
-     */
-    private updateSpatialGrid() {
-        const pool = EnemyPoolState;
-        const activeCount = pool.activeCount;
-        const heads = pool.gridHeads;
-        const next = pool.gridNext;
-
-        // 1. Reset all grid heads (Zero-GC)
-        heads.fill(-1);
-
-        // 2. Iterate through active enemies and link them to the grid
-        for (let i = 0; i < activeCount; i++) {
-            const x = pool.posX[i];
-            const z = pool.posZ[i];
-
-            const ix = (x + GRID_OFFSET) >> GRID_CELL_POWER;
-            const iz = (z + GRID_OFFSET) >> GRID_CELL_POWER;
-
-            // Bounds check using GRID_RESOLUTION (64)
-            if (ix >= 0 && ix < GRID_RESOLUTION && iz >= 0 && iz < GRID_RESOLUTION) {
-                const gridIndex = ix + (iz * GRID_RESOLUTION);
-
-                next[i] = heads[gridIndex];
-                heads[gridIndex] = i;
-            } else {
-                next[i] = -1;
-            }
-        }
-    }
 
     private spawnParticle(session: GameSessionLogic, x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) {
         if (!session.state.particles) return;
@@ -167,41 +132,3 @@ export class EnemySystem implements System {
     }
 }
 
-/**
- * PHASE 9: SPATIAL GRID QUERY
- * Rapidly resolves which enemy (if any) is at a world position.
- * ZERO-GC: No allocations, uses the per-frame linked-list grid.
- */
-export function getEnemyAt(x: number, z: number, radius: number = 1.0): number {
-    // Bit-shifting spatial hash lookup using 256m chunk bounds
-    const ix = (x + GRID_OFFSET) >> GRID_CELL_POWER;
-    const iz = (z + GRID_OFFSET) >> GRID_CELL_POWER;
-
-    if (ix < 0 || ix >= GRID_RESOLUTION || iz < 0 || iz >= GRID_RESOLUTION) return -1;
-
-    const gridIndex = ix + (iz * GRID_RESOLUTION);
-    const heads = EnemyPoolState.gridHeads;
-    const next = EnemyPoolState.gridNext;
-    const posX = EnemyPoolState.posX;
-    const posZ = EnemyPoolState.posZ;
-    const status = EnemyPoolState.statusFlags;
-    const radiusSq = radius * radius;
-
-    let current = heads[gridIndex];
-
-    while (current !== -1) {
-        if (!(status[current] & (EnemyFlags.DEAD | EnemyFlags.EXPLODED))) {
-            const dx = posX[current] - x;
-            const dz = posZ[current] - z;
-            const distSq = dx * dx + dz * dz;
-
-            if (distSq <= radiusSq) {
-                return current;
-            }
-        }
-
-        current = next[current];
-    }
-
-    return -1;
-}

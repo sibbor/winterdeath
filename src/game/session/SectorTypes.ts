@@ -4,7 +4,6 @@ import { MapItem } from '../../components/ui/hud/HudTypes';
 import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
 import { WeatherType } from '../../core/engine/EngineTypes';
 import { SectorState } from '../../types/StateTypes';
-import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorEnvironment, EnvironmentalZone as AtmosphereZone } from '../../core/engine/EngineTypes';
@@ -12,6 +11,7 @@ import { TriggerAction } from '../../types/TriggerTypes';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { InteractionPromptId } from '../../systems/ui/UIEventBridge';
+import { WorldStreamer } from '../../core/world/WorldStreamer';
 
 export enum SectorID {
     VILLAGE = 0,
@@ -110,7 +110,7 @@ export interface SectorContext {
     scene: THREE.Scene;
     engine: any;
     obstacles: any[];
-    collisionGrid: SpatialGrid;
+    worldStreamer: WorldStreamer;
     chests: any[];
     flickeringLights: any[];
     burningObjects: any[];
@@ -150,6 +150,7 @@ export interface SectorContext {
 
 export interface SectorDef {
     id: number;
+    spawnZombiesOnSector?: boolean;
     ground: GroundType;
     bossId?: BossID;
     environment: SectorEnvironment;
@@ -197,6 +198,7 @@ export interface SectorUpdateContext {
     playerPos: THREE.Vector3;
     gameState: any; // RuntimeState
     sectorState: SectorState;
+    ctx: SectorContext;
 
     // --- CALLBACKS & HELPERS ---
     onAction: (action: any) => void;

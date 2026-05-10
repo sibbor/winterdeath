@@ -23,6 +23,8 @@ import { LIGHT_SYSTEM, FAMILY_MEMBERS, FamilyMemberID } from '../../content/cons
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
 import { POI_TYPE } from '../../content/pois';
+import { worldStateRegistry } from './WorldStateRegistry';
+import { ChunkManager } from './ChunkManager';
 import { PoiGenerator } from './generators/PoiGenerator';
 import { InteractionType, InteractionShape } from '../../systems/ui/UIEventBridge';
 import { MapItemType } from '../../components/ui/hud/HudTypes';
@@ -100,7 +102,7 @@ export const SectorBuilder = {
             return;
         }
 
-        ctx.collisionGrid.addObstacle(obstacle);
+        ctx.worldStreamer.registerObstacle(obstacle);
     },
 
     addInteractable: (ctx: SectorContext, object: THREE.Object3D, params?: InteractableParams) => {
@@ -144,7 +146,8 @@ export const SectorBuilder = {
         }
         if (!exists) ctx.interactables.push(object);
 
-        ctx.collisionGrid.addInteractable(object);
+        const radius = object.userData.interactionRadius || 2.5;
+        ctx.worldStreamer.registerInteractable(object, object.position.x, object.position.z, radius);
     },
 
     generateAutomaticContent: async (ctx: SectorContext, def: any) => {
@@ -184,14 +187,12 @@ export const SectorBuilder = {
     createWarmupContext: (scene: THREE.Scene, sectorId: number, yieldFn?: () => Promise<void>): SectorContext => {
         const NOOP = () => { };
         const NOOP_ARRAY = () => [] as any[];
-        const STUB_GRID: any = {
-            setTerrainProvider: NOOP, getGroundHeight: () => 0, registerGroundMaterial: NOOP,
-            getGroundMaterial: () => 0, fillGroundMaterial: NOOP, registerVegetation: NOOP,
-            getVegetationAt: () => 0, addObstacle: NOOP, removeObstacle: NOOP,
-            addInteractable: NOOP, removeInteractable: NOOP, addTrigger: NOOP, removeTrigger: NOOP,
-            updateObstacle: NOOP, updateInteractable: NOOP, clear: NOOP, update: NOOP,
-            updateEnemyGrid: NOOP, clearEnemies: NOOP, getNearbyEnemies: NOOP_ARRAY, getNearbyObstacles: NOOP_ARRAY,
-            getNearbyInteractables: NOOP_ARRAY, getNearbyTriggers: NOOP_ARRAY, getObstaclesInPath: NOOP_ARRAY,
+        const STUB_STREAMER: any = {
+            clear: NOOP, update: NOOP, setTerrainProvider: NOOP, getGroundHeight: () => 0,
+            getGroundMaterial: () => 0, getVegetationAt: () => 0, getOrCreateGrid: () => ({ ground: new Uint8Array(1), vegetation: new Uint8Array(1), enemyBuckets: [], obstacleBuckets: [] }),
+            getNearbyEnemies: NOOP_ARRAY, getNearbyObstacles: NOOP_ARRAY, registerObstacle: NOOP, registerInteractable: NOOP,
+            registerTrigger: NOOP, registerGroundMaterial: NOOP, registerVegetation: NOOP, fillGroundMaterial: NOOP,
+            getNearbyTriggers: NOOP_ARRAY
         };
         const MOCK_ENGINE: any = {
             scene,
@@ -210,11 +211,11 @@ export const SectorBuilder = {
             updateAtmosphere: NOOP
         };
         return {
-            scene, engine: MOCK_ENGINE, sectorId, isWarmup: true, collisionGrid: STUB_GRID,
+            scene, engine: MOCK_ENGINE, sectorId, isWarmup: true, worldStreamer: STUB_STREAMER,
             obstacles: [], chests: [], triggers: new TriggerSystem(1), mapItems: [],
             interactables: [], collectibles: [], dynamicLights: [], flickeringLights: [], burningObjects: [], smokeEmitters: [],
             cluesFound: [], collectiblesDiscovered: [], rng: Math.random, debugMode: false,
-            textures: {} as any, sectorState: {} as any, state: {} as any, activeFamilyMembers: [],
+            textures: {} as any, sectorState: {} as any, state: { sectorState: {} } as any, activeFamilyMembers: [],
             yield: yieldFn ?? (() => new Promise<void>(resolve => setTimeout(resolve, 0))),
             spawnZombie: NOOP as any, spawnHorde: NOOP as any, spawnBoss: NOOP as any, makeNoise: NOOP as any, onAction: NOOP as any,
         };
@@ -267,9 +268,10 @@ export const SectorBuilder = {
 
         // Skip expensive entity and system initialization during asset warmup
         // These are handled by GameSessionSetup.activateSector(ctx) when the sector goes LIVE.
-        if (!ctx.isWarmup) {
-            if (def.setupZombies) await def.setupZombies(ctx);
-            if (ctx.yield) await ctx.yield();
+        // Dynamic population (zombies, actors) is now deferred to activateSector 
+        // to ensure static world baking completes first.
+        if (!ctx.isWarmup && ctx.yield) {
+            await ctx.yield();
         }
 
         if (ctx.debugMode) {
@@ -286,7 +288,7 @@ export const SectorBuilder = {
         let mat = MaterialType.SNOW;
         if (type === GroundType.DIRT) mat = MaterialType.DIRT;
         else if (type === GroundType.GRAVEL) mat = MaterialType.GRAVEL;
-        ctx.collisionGrid.fillGroundMaterial(mat);
+        ctx.worldStreamer.fillGroundMaterial(mat);
 
         const engine = WinterEngine.getInstance();
         if (engine && engine.water) {
@@ -333,7 +335,7 @@ export const SectorBuilder = {
         createWall(w / 2, 0, 2, d);
     },
 
-    spawnChest: (ctx: SectorContext, x: number, z: number, type: ChestType = ChestType.STANDARD, rot: number = 0) => {
+    spawnChest: (ctx: SectorContext, x: number, z: number, type: ChestType = ChestType.STANDARD, rot: number = 0, logicId?: number) => {
         const chest = ObjectGenerator.createChest(type);
         chest.position.set(x, 0, z);
         chest.rotation.y = rot;
@@ -355,12 +357,25 @@ export const SectorBuilder = {
             type: type,
             scrap: isBig ? 100 : 25,
             opened: false,
+            logicId: logicId,
             collider: {
                 type: InteractionShape.BOX,
                 size: new THREE.Vector3(_v1_sg.x, _v1_sg.y, _v1_sg.z)
             },
             physicsGroup: PhysicsGroup.OBJECT
         };
+
+        // --- HYDRATION CHECK (Phase 5) ---
+        if (logicId !== undefined) {
+            const key = ChunkManager.getSmiKey(ChunkManager.getCoordIndex(x), ChunkManager.getCoordIndex(z));
+            if (worldStateRegistry.isMutated(key, logicId)) {
+                obs.opened = true;
+                const lid = chest.getObjectByName("chestLid");
+                if (lid) lid.rotation.x = -Math.PI / 2.5;
+                const glow = chest.getObjectByName("chestGlow");
+                if (glow) glow.visible = false;
+            }
+        }
 
         ctx.chests.push(obs);
         SectorBuilder.addObstacle(ctx, obs);
@@ -476,6 +491,11 @@ export const SectorBuilder = {
             content,
             actions: actions || []
         });
+
+        // Register in WorldStreamer for chunk-local spatial queries
+        const hW = width * 0.5;
+        const hD = depth * 0.5;
+        ctx.worldStreamer.registerTrigger(0, x - hW, z - hD, x + hW, z + hD); // Trigger ID 0 placeholder if not needed by query
     },
 
     setOnFire: (ctx: SectorContext, object: THREE.Object3D, opts?: { smoke?: boolean, color?: number, intensity?: number, distance?: number, offset?: THREE.Vector3, onRoof?: boolean, area?: THREE.Vector3 }) => {
@@ -1084,12 +1104,17 @@ export const SectorBuilder = {
         });
     },
 
-    spawnBarrel: (ctx: SectorContext, x: number, z: number, explosive: boolean = false) => {
+    spawnBarrel: (ctx: SectorContext, x: number, z: number, explosive: boolean = false, logicId?: number) => {
         const barrel = ObjectGenerator.createBarrel(explosive);
         barrel.position.set(x, 0, z);
         GeneratorUtils.freezeStatic(barrel);
         ctx.scene.add(barrel);
-        SectorBuilder.addObstacle(ctx, { mesh: barrel, position: barrel.position, collider: { type: InteractionShape.SPHERE, radius: 0.6 } });
+        SectorBuilder.addObstacle(ctx, { 
+            mesh: barrel, 
+            position: barrel.position, 
+            collider: { type: InteractionShape.SPHERE, radius: 0.6 },
+            logicId: logicId 
+        });
     },
 
     updateAtmosphere: (dt: number, now: number, playerPos: THREE.Vector3, gameState: any, sectorState: any, events: any, sectorDef: any, zones?: any[]) => {

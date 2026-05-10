@@ -3,16 +3,17 @@ import type React from 'react';
 import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { UiSounds, GamePlaySounds } from '../utils/audio/AudioLib';
-import { WorldLootSystem } from './WorldLootSystem';
+import { LootSystem } from './LootSystem';
 import { getCollectibleById } from '../content/collectibles';
 import { FXSystem } from './FXSystem';
-import { InteractionType, InteractionShape, InteractionPromptId } from './ui/UIEventBridge';
+import { UIEventBridge, InteractionType, InteractionShape, InteractionPromptId } from './ui/UIEventBridge';
 import { FXParticleType } from '../types/FXTypes';
 import { TriggerType, TriggerStatus } from '../types/TriggerTypes';
 import { PlayerStatID } from '../entities/player/PlayerTypes';
 import { VehicleID } from '../entities/vehicles/VehicleTypes';
 import { InputAction } from '../core/engine/InputManager';
 import { TriggerSystem } from './TriggerSystem';
+import { VehicleManager } from './VehicleManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -51,9 +52,9 @@ interface ActiveChestAnimation {
 
 const MAX_ANIMATIONS = 10;
 
-export class PlayerInteractionSystem implements System {
-    readonly systemId = SystemID.PLAYER_INTERACTION;
-    id = 'player_interaction';
+export class InteractionSystem implements System {
+    readonly systemId = SystemID.INTERACTION;
+    id = 'interaction_system';
     enabled = true;
     persistent = false;
     public onCollectibleDiscovered?: (collectibleId: string, isRespawnable?: boolean) => void;
@@ -89,6 +90,24 @@ export class PlayerInteractionSystem implements System {
         const state = session.state;
         const input = session.engine.input.state;
 
+        if (state.vehicle.active) {
+            UIEventBridge.setInteractionPrompt(InteractionPromptId.EXIT_VEHICLE);
+            if (input.actions[InputAction.INTERACT]) {
+                if (!state.eDepressed) {
+                    state.eDepressed = true;
+                    // --- EXIT VEHICLE LOGIC ---
+                    const vehicle = state.vehicle.mesh;
+                    if (vehicle) {
+                        const def = vehicle.userData.vehicleDef;
+                        VehicleManager.exitVehicle(this.playerGroup, vehicle, state, def);
+                    }
+                }
+            } else {
+                state.eDepressed = false;
+            }
+            return;
+        }
+
         // 1. Detect nearby interactive objects (Throttled to 10hz)
         if (simTime - this.lastDetectionTime > 100) {
             this.lastDetectionTime = simTime;
@@ -98,14 +117,30 @@ export class PlayerInteractionSystem implements System {
             _detectionResult.object = null;
             _detectionResult.label = '';
 
-            const nearbyTriggers = state.collisionGrid ? state.collisionGrid.getNearbyTriggers(this.playerGroup.position, 15.0) : state.triggers || this.EMPTY_ARRAY;
-            const nearbyInteractables = state.collisionGrid ? state.collisionGrid.getNearbyInteractables(this.playerGroup.position, 15.0) : (state.sectorState.ctx?.interactables || this.EMPTY_ARRAY);
+            let triggers: any[] | TriggerSystem;
+            let interactables: any[];
+
+            if (session.worldStreamer) {
+                const ws = session.worldStreamer;
+                const tPoolIdx = ws.getTriggerPool().nextIndex();
+                ws.getNearbyTriggers(this.playerGroup.position.x, this.playerGroup.position.z, 15.0, tPoolIdx);
+                triggers = ws.getTriggerPool().getPool(tPoolIdx);
+                (triggers as any)._count = ws.getTriggerPool().getCount(tPoolIdx);
+
+                const iPoolIdx = ws.getInteractablePool().nextIndex();
+                ws.getNearbyInteractables(this.playerGroup.position.x, this.playerGroup.position.z, 15.0, iPoolIdx);
+                interactables = ws.getInteractablePool().getPool(iPoolIdx);
+                (interactables as any)._count = ws.getInteractablePool().getCount(iPoolIdx);
+            } else {
+                triggers = state.triggers || this.EMPTY_ARRAY;
+                interactables = (state.sectorState.ctx?.interactables || this.EMPTY_ARRAY);
+            }
 
             this.detectInteraction(
                 this.playerGroup.position,
-                nearbyTriggers,
+                triggers,
                 state,
-                nearbyInteractables
+                interactables
             );
 
             if (_detectionResult.type !== InteractionType.NONE) {
@@ -310,8 +345,8 @@ export class PlayerInteractionSystem implements System {
         }
 
         // --- Priority 2: Spatial Grid Objects ---
-        const iLen = nearbyInteractables.length;
-        for (let i = 0; i < iLen; i++) {
+        const iLen = (nearbyInteractables as any)._count ?? nearbyInteractables.length;
+        for (let i = 0; i < iLen; i = (i + 1) | 0) {
             const obj = nearbyInteractables[i];
             if (!obj || !obj.userData?.isInteractable) continue;
             if (obj.userData.interactionType === InteractionType.COLLECTIBLE && obj.userData.pickedUp) continue;
@@ -394,8 +429,8 @@ export class PlayerInteractionSystem implements System {
 
         // --- Priority 3: Mission Triggers (SoA Compliant) ---
         if (triggers instanceof Array) {
-            const tLen = triggers.length;
-            for (let i = 0; i < tLen; i++) {
+            const tLen = (triggers as any)._count ?? triggers.length;
+            for (let i = 0; i < tLen; i = (i + 1) | 0) {
                 const t = triggers[i];
                 if (!((t.statusFlags & TriggerStatus.ACTIVE) !== 0)) continue;
 
@@ -610,7 +645,7 @@ export class PlayerInteractionSystem implements System {
             }
             if (!inRegistry) chests.push(c);
 
-            WorldLootSystem.spawnScrapExplosion(session.engine.scene, c.mesh.position.x, c.mesh.position.z, c.scrap);
+            LootSystem.spawnScrapExplosion(session.engine.scene, c.mesh.position.x, c.mesh.position.z, c.scrap);
 
             const glowRing = c.mesh.getObjectByName('chestGlow');
             if (glowRing) {

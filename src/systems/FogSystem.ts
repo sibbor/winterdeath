@@ -14,6 +14,9 @@ export class FogSystem implements System {
     public enabled = true;
     public persistent = true;
 
+    // --- PERFORMANCE SCRATCHPADS ---
+    private static _sizeScratch = new THREE.Vector2();
+    private _fogNodes: THREE.Object3D[] = [];
     private scene: THREE.Scene;
     private wind: WindSystem;
     private camera: THREE.Camera;
@@ -140,8 +143,8 @@ export class FogSystem implements System {
             // Resolve Depth Texture and Resolution from Engine Instance
             if (engine.depthTexture) uniforms.uDepthTexture.value = engine.depthTexture;
             if (engine.renderer) {
-                const size = engine.renderer.getSize(new THREE.Vector2());
-                uniforms.uResolution.value.copy(size);
+                engine.renderer.getSize(FogSystem._sizeScratch);
+                uniforms.uResolution.value.copy(FogSystem._sizeScratch);
             }
             if (this.camera instanceof THREE.PerspectiveCamera) {
                 uniforms.uCameraNear.value = this.camera.near;

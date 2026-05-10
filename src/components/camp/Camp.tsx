@@ -441,7 +441,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                         if (newHover) {
                             const isMember = newHover.startsWith('family_') || newHover.startsWith('player_');
                             if (isMember) {
-                                toolTipText = `${target.userData.name}`;
+                                toolTipText = t(target.userData.name);
                             } else {
                                 toolTipText = t(`stations.${target.userData.name || newHover}`);
                                 if (newHover === 'armory') {

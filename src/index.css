@@ -329,3 +329,12 @@ canvas {
     width: 80px;
     height: 80px;
 }
+
+/* --- MOBILE UI UTILITIES --- */
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}

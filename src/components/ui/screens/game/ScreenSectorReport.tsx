@@ -149,8 +149,8 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                             <StatBox label={t('ui.pois_discovered')} value={StatsBridge.getDiscoveredPOIs(stats as any)?.length || 0} color={COLORS.ORANGE} />
                         </div>
                         <div className="space-y-3">
-                            <StatBox label={t('ui.time_elapsed')} value={FormatUtils.formatTimeMinutes(StatsBridge.getSectorTimeElapsed(stats))} color={COLORS.ORANGE} />
-                            <StatBox label={t('ui.distance_traveled')} value={FormatUtils.formatDistance(StatsBridge.getSectorDistanceTraveled(stats))} color={COLORS.ORANGE} />
+                            <StatBox label={t('ui.time_elapsed')} value={FormatUtils.formatTimeSmart(StatsBridge.getSectorTimeElapsed(stats))} color={COLORS.ORANGE} />
+                            <StatBox label={t('ui.distance_traveled')} value={FormatUtils.formatDistanceSmart(StatsBridge.getSectorDistanceTraveled(stats))} color={COLORS.ORANGE} />
                         </div>
                     </div>
 

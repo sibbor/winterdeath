@@ -68,13 +68,22 @@ export const patchTreeWindMaterial = <T extends THREE.Material>(material: T): T 
                 }
             }
 
-            // Combine Wind + Interaction
-            // Global wind boost for better visibility on small tufts
-            vec3 vWind = vec3(uWind.x, 0.0, uWind.y) * 2.2; 
+            // Combine Wind + Interaction + High-frequency Sway (Noise)
+            // We use uTime to create a natural fluttering effect even when base wind is static.
+            float sway = sin(uTime * 1.5 + wPos.x * 0.5 + wPos.z * 0.5) * 0.1;
+            float flutter = cos(uTime * 3.2 + wPos.x * 1.2) * 0.05;
+            
+            float windStrength = length(uWind);
+            vec2 windDir = windStrength > 0.001 ? normalize(uWind) : vec2(0.0, 1.0);
+            
+            // Prioritize sway along wind direction
+            vec3 vWind = vec3(uWind.x, 0.0, uWind.y) * 2.0; 
+            vWind += vec3(windDir.x * sway, 0.0, windDir.y * sway) * (0.5 + bendFactor * 0.5);
+            vWind += vec3(flutter, 0.0, -flutter) * (0.2 + bendFactor * 0.2); // Perpendicular flutter
+            
             vec3 vBend = vec3(bendVec.x, 0.0, bendVec.y);
-
+            
             // Transform vectors from World Space to the Instance's Local Space
-            // Normalize basis vectors to ignore instance scale (prevents squashed bending)
             mat3 basis = mat3(iMat);
             mat3 normalMatrix = mat3(normalize(basis[0]), normalize(basis[1]), normalize(basis[2]));
             mat3 invRot = transpose(normalMatrix);
@@ -155,8 +164,17 @@ export const patchGrassWindMaterial = <T extends THREE.Material>(material: T): T
                 }
             }
 
-            // Combine Wind + High Interaction
-            vec3 vWind = vec3(uWind.x, 0.0, uWind.y) * 2.5; 
+            // Combine Wind + High Interaction + Grass Flutter
+            float sway = sin(uTime * 2.2 + wPos.x * 0.8) * 0.08;
+            float flutter = cos(uTime * 4.5 + wPos.z * 1.5) * 0.04;
+
+            float windStrength = length(uWind);
+            vec2 windDir = windStrength > 0.001 ? normalize(uWind) : vec2(0.0, 1.0);
+
+            vec3 vWind = vec3(uWind.x, 0.0, uWind.y) * 2.2; 
+            vWind += vec3(windDir.x * sway, 0.0, windDir.y * sway) * (1.0 + bendFactor);
+            vWind += vec3(flutter, 0.0, -flutter) * (0.3 + bendFactor);
+            
             vec3 vBend = vec3(bendVec.x, 0.0, bendVec.y);
 
             // Transform to Local Space

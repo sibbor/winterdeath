@@ -5,15 +5,11 @@ import { MaterialType } from '../content/environment';
 import { FXParticleType, FXDecalType, ParticleState, FXSpawnRequest } from '../types/FXTypes';
 import { COLORS } from '../utils/ui/ColorUtils';
 import { SystemID } from './SystemID';
-
-type FXMaterial = THREE.Material & {
-    opacity?: number;
-    transparent?: boolean;
-    color?: THREE.Color;
-};
+import { ChunkManager } from '../core/world/ChunkManager';
+import { MAX_ENTITIES, FX } from '../content/constants';
 
 // --- DOD JUMP TABLES (Zero-GC Lookups) ---
-const NUM_PARTICLE_TYPES = 64; // Increased to accommodate SCRAP, MEAT, and future expansion
+const NUM_PARTICLE_TYPES = FX.NUM_PARTICLE_TYPES; // Increased to accommodate SCRAP, MEAT, and future expansion
 const PHYSICS_FLAGS = new Uint8Array(NUM_PARTICLE_TYPES);
 const INSTANCED_FLAGS = new Uint8Array(NUM_PARTICLE_TYPES);
 const ESSENTIAL_FLAGS = new Uint8Array(NUM_PARTICLE_TYPES);
@@ -60,7 +56,7 @@ const initTypedArrays = () => {
         FXParticleType.FROST_NOVA, FXParticleType.SCREECH_WAVE, FXParticleType.ELECTRIC_BEAM,
         FXParticleType.MAGNETIC_SPARKS, FXParticleType.IMPACT, FXParticleType.BLAST_RADIUS,
         FXParticleType.BLACK_SMOKE, FXParticleType.DEBRIS_TRAIL, FXParticleType.BLOOD_SPLATTER,
-        FXParticleType.SCRAP, FXParticleType.MEAT
+        FXParticleType.SCRAP, FXParticleType.MEAT, FXParticleType.SNOW_PUFF
     ].forEach(t => INSTANCED_FLAGS[t] = 1);
 
     // --- ESSENTIAL FLAGS ---
@@ -101,6 +97,7 @@ const initTypedArrays = () => {
     PARTICLE_COLORS[FXParticleType.DEBRIS_TRAIL] = COLORS.GRAY.num;
     PARTICLE_COLORS[FXParticleType.SCRAP] = COLORS.GRAY.num;
     PARTICLE_COLORS[FXParticleType.MEAT] = COLORS.RED_DIM.num;
+    PARTICLE_COLORS[FXParticleType.SNOW_PUFF] = COLORS.WHITE.num;
 
     // --- TTL (Seconds) ---
     PARTICLE_TTL[FXParticleType.BLOOD_SPLATTER] = 1.8;
@@ -121,6 +118,7 @@ const initTypedArrays = () => {
     PARTICLE_TTL[FXParticleType.SCREECH_WAVE] = 0.4;
     PARTICLE_TTL[FXParticleType.MAGNETIC_SPARKS] = 0.6;
     PARTICLE_TTL[FXParticleType.IMPACT] = 0.2;
+    PARTICLE_TTL[FXParticleType.SNOW_PUFF] = 0.8;
     PARTICLE_TTL[0] = 0.5; // Default fallback
 };
 
@@ -133,11 +131,11 @@ const _FALLBACK_REQUEST: FXSpawnRequest = {
 };
 
 // Limits
-const MAX_INSTANCES_PER_MESH = 10000;
-const MAX_AMBIENT_SPAWNS_PER_FRAME = 500;
-const AMBIENT_QUEUE_HARD_CAP = 2000;
-const MAX_DECALS = 250;
-const MAX_PARTICLE_REQUESTS = 5000;
+const MAX_INSTANCES_PER_MESH = FX.MAX_INSTANCES_PER_MESH;
+const MAX_AMBIENT_SPAWNS_PER_FRAME = FX.MAX_AMBIENT_SPAWNS_PER_FRAME;
+const AMBIENT_QUEUE_HARD_CAP = FX.AMBIENT_QUEUE_HARD_CAP;
+const MAX_DECALS = MAX_ENTITIES.DECALS;
+const MAX_PARTICLE_REQUESTS = MAX_ENTITIES.PARTICLE_REQUESTS;
 
 for (let i = 0; i < MAX_PARTICLE_REQUESTS; i++) {
     REQUEST_POOL.push({
@@ -159,7 +157,7 @@ let _whiteGoreMaterial: THREE.Material | null = null;
 
 const _INITIAL_STATE_POOL: ParticleState[] = [];
 const _INITIAL_STATE_FREE: number[] = [];
-for (let i = 0; i < 10000; i++) {
+for (let i = 0; i < MAX_ENTITIES.PARTICLE_STATES; i++) {
     _INITIAL_STATE_POOL.push({
         pos: new THREE.Vector3(), rot: new THREE.Euler(),
         scaleVec: new THREE.Vector3(1, 1, 1), vel: new THREE.Vector3(),
@@ -181,6 +179,10 @@ export const FXSystem = {
     _ambientQueueHead: 0,
     _decalQueueHead: 0,
     _decalPoolIdx: 0,
+
+    // --- SPATIAL DISPOSAL REGISTRY (Phase 5) ---
+    // Key: SMI Chunk Key -> Value: Array of decals in that chunk
+    _decalRegistry: new Map<number, THREE.Mesh[]>(),
 
     reset: () => {
         FXSystem.essentialQueue.length = 0;
@@ -279,11 +281,31 @@ export const FXSystem = {
 
         let d: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
 
+        const ix = ChunkManager.getCoordIndex(req.x);
+        const iz = ChunkManager.getCoordIndex(req.z);
+        const chunkKey = ChunkManager.getSmiKey(ix, iz);
+
         if (decalList.length < MAX_DECALS) {
             d = FXSystem.getPooledMesh(req.scene, geo, req.material || MATERIALS.bloodDecal);
             decalList.push(d);
         } else {
             d = decalList[FXSystem._decalPoolIdx] as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
+
+            // --- SPATIAL RECYCLING (Phase 5) ---
+            // If reusing a decal, remove it from its previous chunk's registry
+            if (d.userData._chunkKey !== undefined) {
+                const prevRegistry = FXSystem._decalRegistry.get(d.userData._chunkKey);
+                if (prevRegistry) {
+                    const idx = d.userData._registryIdx;
+                    if (idx !== undefined && prevRegistry[idx] === d) {
+                        const last = prevRegistry[prevRegistry.length - 1];
+                        prevRegistry[idx] = last;
+                        last.userData._registryIdx = idx;
+                        prevRegistry.pop();
+                    }
+                }
+            }
+
             d.geometry = geo;
             d.material = req.material || MATERIALS.bloodDecal;
             d.visible = true;
@@ -294,6 +316,16 @@ export const FXSystem = {
         }
 
         FXSystem._decalPoolIdx = (FXSystem._decalPoolIdx + 1) % MAX_DECALS;
+
+        // Register in new chunk
+        d.userData._chunkKey = chunkKey;
+        let registryArr = FXSystem._decalRegistry.get(chunkKey);
+        if (!registryArr) {
+            registryArr = [];
+            FXSystem._decalRegistry.set(chunkKey, registryArr);
+        }
+        d.userData._registryIdx = registryArr.length;
+        registryArr.push(d);
 
         d.position.set(req.x, 0.2 + Math.random() * 0.05, req.z);
         d.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
@@ -306,6 +338,31 @@ export const FXSystem = {
         }
 
         d.renderOrder = (req.material === MATERIALS.scorchDecal) ? -1 : 50;
+    },
+
+    /**
+     * Hibernates and culled all decals associated with a specific chunk.
+     * Called during WorldStreamer hibernation to ensure Zero-GC disposal of 
+     * out-of-range visual effects.
+     */
+    hibernateChunkDecals: (chunkKey: number) => {
+        const decals = FXSystem._decalRegistry.get(chunkKey);
+        if (!decals) return;
+
+        for (let i = 0; i < decals.length; i++) {
+            const d = decals[i];
+            // Instantly hide and move to prevent traversal/frustum overhead
+            d.visible = false;
+            d.position.set(0, -1000, 0);
+
+            // Mark as un-assigned to a chunk so it's not double-culled if recycled
+            d.userData._chunkKey = undefined;
+            d.userData._registryIdx = undefined;
+        }
+
+        // Zero-GC: Clear the array reference and remove entry
+        decals.length = 0;
+        FXSystem._decalRegistry.delete(chunkKey);
     },
 
     _spawnParticleImmediate: (req: FXSpawnRequest, particlesList: ParticleState[]) => {
@@ -388,6 +445,10 @@ export const FXSystem = {
                 break;
             case FXParticleType.ELECTRIC_BEAM:
                 p.scaleVec.set(0.2, 0.2, 5.0);
+                break;
+            case FXParticleType.SNOW_PUFF:
+                fs = (0.2 + Math.random() * 0.3) * s;
+                p.scaleVec.set(fs, fs, fs);
                 break;
             case FXParticleType.SCREECH_WAVE:
             case FXParticleType.SHOCKWAVE:
@@ -543,7 +604,7 @@ export const FXSystem = {
 
                 const t = p.type;
                 if (p.isPhysics) {
-                    p.vel.y -= 150 * safeDelta;
+                    p.vel.y -= FX.GRAVITY * safeDelta;
                     if (t !== FXParticleType.SPLASH && t !== FXParticleType.BLOOD_SPLATTER) {
                         p.rot.x += p.rotVel.x * 60 * safeDelta;
                         p.rot.z += p.rotVel.z * 60 * safeDelta;
@@ -580,6 +641,10 @@ export const FXSystem = {
                             break;
                         case FXParticleType.ELECTRIC_BEAM:
                             pScale.z += 20 * safeDelta; pScale.x *= 0.9; pScale.y *= 0.9;
+                            break;
+                        case FXParticleType.SNOW_PUFF:
+                            const puffGrow = 2.0 * safeDelta;
+                            pScale.x += puffGrow; pScale.y += puffGrow; pScale.z += puffGrow;
                             break;
                         default:
                             pScale.x *= safeShrinkRate; pScale.y *= safeShrinkRate; pScale.z *= safeShrinkRate;
@@ -739,6 +804,10 @@ export const FXSystem = {
                 case FXParticleType.BLOOD_SPLATTER:
                     geo = GEOMETRY.bloodSplatter;
                     mat = MATERIALS.bloodSplatter;
+                    break;
+                case FXParticleType.SNOW_PUFF:
+                    geo = GEOMETRY.sphere;
+                    mat = MATERIALS.particle_snow;
                     break;
                 case FXParticleType.IMPACT_SPLAT:
                     geo = GEOMETRY.impactSplat;

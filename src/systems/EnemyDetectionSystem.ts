@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Enemy, ENEMY_DETECTION, NoiseType, NOISE_RADIUS, AIState, EnemyFlags, EnemyType } from '../entities/enemies/EnemyTypes';
-import { SpatialGrid } from '../core/world/SpatialGrid';
+import { WorldStreamer } from '../core/world/WorldStreamer';
 import { System, SystemID } from './System';
+import { RuntimeStressHarness } from '../utils/debug/RuntimeStressHarness';
 
 export interface NoiseEvent {
     pos: THREE.Vector3;
@@ -16,9 +17,16 @@ export class EnemyDetectionSystem implements System {
     enabled = true;
     persistent = false;
     isFixedStep = true;
-    private noiseEvents: NoiseEvent[] = [];
-    private raycaster = new THREE.Raycaster();
+    
+    // --- ZERO-GC NOISE POOL ---
+    private readonly maxNoises = 32;
+    private readonly noiseEvents: NoiseEvent[];
+    private activeNoiseCount: number = 0;
+    
     private context: any = null;
+
+    // Reusable array to hold objects for intersection (Pruned in Phase 5)
+    private _intersectCandidates: THREE.Object3D[] = [];
 
     // Pre-allocated vectors for Zero-GC
     private _vStart = new THREE.Vector3();
@@ -26,8 +34,17 @@ export class EnemyDetectionSystem implements System {
     private _vDir = new THREE.Vector3();
     private _vForward = new THREE.Vector3();
 
-    // Reusable array to hold objects for intersection
-    private _intersectCandidates: THREE.Object3D[] = [];
+    constructor() {
+        this.noiseEvents = new Array(this.maxNoises);
+        for (let i = 0; i < this.maxNoises; i++) {
+            this.noiseEvents[i] = {
+                pos: new THREE.Vector3(),
+                type: 0,
+                radius: 0,
+                timestamp: 0
+            };
+        }
+    }
 
     public attach() { }
     public detach() { }
@@ -50,36 +67,36 @@ export class EnemyDetectionSystem implements System {
         const simTime = this.context.state.simTime;
 
         // --- CENTRALIZED THROTTLING (SPATIAL MERGING) ---
-        // Iterate active noises to see if we can merge this new noise with an existing one.
-        for (let i = 0; i < this.noiseEvents.length; i++) {
+        for (let i = 0; i < this.activeNoiseCount; i++) {
             const evt = this.noiseEvents[i];
 
             if (evt.type === type) {
-                // Check squared distance to avoid Math.sqrt. (25.0 = 5 meters squared)
                 const distSq = evt.pos.distanceToSquared(pos);
-
                 if (distSq < 25.0) {
-                    // Update the existing noise instead of creating a new one
                     evt.pos.copy(pos);
                     evt.timestamp = simTime;
-                    // We return early. ZERO garbage collection, ZERO array growth!
                     return;
                 }
             }
         }
 
-        this.noiseEvents.push({
-            pos: pos.clone(),
-            type,
-            radius,
-            timestamp: simTime
-        });
+        if (this.activeNoiseCount < this.maxNoises) {
+            const evt = this.noiseEvents[this.activeNoiseCount];
+            evt.pos.copy(pos);
+            evt.type = type;
+            evt.radius = radius;
+            evt.timestamp = simTime;
+            this.activeNoiseCount++;
+            
+            // --- STRESS HARNESS: MONITOR NOISE POOL STARVATION ---
+            RuntimeStressHarness.checkPoolCapacity("NoiseEventPool", this.activeNoiseCount, this.maxNoises);
+        }
     }
 
     /**
      * Determines if an enemy has direct line of sight to the player utilizing SpatialGrid occlusion.
      */
-    canSeePlayer(enemy: Enemy, playerPos: THREE.Vector3, collisionGrid: SpatialGrid): boolean {
+    canSeePlayer(enemy: Enemy, playerPos: THREE.Vector3, streamer: WorldStreamer): boolean {
         const dx = playerPos.x - enemy.mesh.position.x;
         const dy = playerPos.y - enemy.mesh.position.y;
         const dz = playerPos.z - enemy.mesh.position.z;
@@ -103,35 +120,19 @@ export class EnemyDetectionSystem implements System {
             return false; // Player is outside FOV cone
         }
 
-        // Raycast Check using SpatialGrid candidates
+        // Raycast Check using WorldStreamer Path Query (Zero-GC)
         this._vStart.copy(enemy.mesh.position);
         this._vStart.y += 1.5; // Eye height
         this._vEnd.copy(playerPos);
         this._vEnd.y += 1.0; // Player torso height
 
-        this._vDir.subVectors(this._vEnd, this._vStart).normalize();
-        const dist = Math.sqrt(distSq);
-
-        this.raycaster.set(this._vStart, this._vDir);
-        this.raycaster.far = dist;
-
-        const obstacles = collisionGrid.getObstaclesInPath(this._vStart, this._vEnd);
-        this._intersectCandidates.length = 0;
-
-        for (let i = 0; i < obstacles.length; i++) {
-            if (obstacles[i].mesh) {
-                this._intersectCandidates.push(obstacles[i].mesh!);
-            }
-        }
-
-        if (this._intersectCandidates.length > 0) {
-            const hits = this.raycaster.intersectObjects(this._intersectCandidates, false);
-            if (hits.length > 0) {
-                return false; // Blocked by obstacle
-            }
-        }
-
-        return true;
+        const pool = streamer.getObstaclePool();
+        const poolIdx = pool.nextIndex();
+        streamer.getObstaclesInPath(this._vStart, this._vEnd, poolIdx);
+        
+        // If any obstacle intersects the path segment, line-of-sight is blocked.
+        // O(1) mathematical occlusion replaces the heavy Three.js Raycaster allocation.
+        return pool.getCount(poolIdx) === 0;
     }
 
     update(context: any, delta: number, simTime: number, renderTime: number) {
@@ -140,16 +141,24 @@ export class EnemyDetectionSystem implements System {
 
         const enemies: Enemy[] = state.enemies || [];
         const playerPos: THREE.Vector3 = context.playerPos;
-        const collisionGrid: SpatialGrid = state.collisionGrid;
+        const streamer: WorldStreamer = context.worldStreamer;
 
-        if (!playerPos || !collisionGrid) return;
+        if (!playerPos || !streamer) return;
 
         // 1. Cleanup stale noise events FIRST using Swap-and-Go to save inner loop cycles
-        for (let i = this.noiseEvents.length - 1; i >= 0; i--) {
+        // 1. Cleanup stale noise events FIRST using Swap-and-Go to save inner loop cycles
+        for (let i = this.activeNoiseCount - 1; i >= 0; i--) {
             const evt = this.noiseEvents[i];
-            if (simTime - evt.timestamp > 200) { // Increased to 200ms for stability
-                this.noiseEvents[i] = this.noiseEvents[this.noiseEvents.length - 1];
-                this.noiseEvents.pop();
+            if (simTime - evt.timestamp > 200) { 
+                // Swap with last active
+                const lastIdx = this.activeNoiseCount - 1;
+                if (i < lastIdx) {
+                    const lastEvt = this.noiseEvents[lastIdx];
+                    // Swap the object references in the pool
+                    this.noiseEvents[lastIdx] = evt;
+                    this.noiseEvents[i] = lastEvt;
+                }
+                this.activeNoiseCount--;
             }
         }
 
@@ -163,7 +172,7 @@ export class EnemyDetectionSystem implements System {
 
             // 2. VISUAL CHECK (Staggered)
             if ((i % 3) === frameIndex) {
-                if (this.canSeePlayer(e, playerPos, collisionGrid)) {
+                if (this.canSeePlayer(e, playerPos, streamer)) {
                     e.lastKnownPosition.copy(playerPos);
                     e.searchTimer = 0;
                     e.awareness = 1.0;
@@ -216,7 +225,7 @@ export class EnemyDetectionSystem implements System {
             const isAggressive = e.state === AIState.CHASE || e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING || e.state === AIState.GRAPPLE;
 
             if (!isAggressive) {
-                for (let j = 0; j < this.noiseEvents.length; j++) {
+                for (let j = 0; j < this.activeNoiseCount; j++) {
                     const evt = this.noiseEvents[j];
 
                     const dx = evt.pos.x - e.mesh.position.x;

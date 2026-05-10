@@ -11,11 +11,11 @@ import { t } from '../../utils/i18n';
 export class FormatUtils {
 
     /**
-     * Formats milliseconds into a readable MM:SS string.
-     * Uses bitwise OR (| 0) for fast float-to-int conversion (faster than Math.floor).
+     * Formats seconds into a readable MM:SS string.
+     * Uses bitwise OR (| 0) for fast float-to-int conversion.
      */
-    public static formatTimeMinutes(ms: number): string {
-        const totalSec = (ms / 1000) | 0;
+    public static formatTimeMinutes(seconds: number): string {
+        const totalSec = seconds | 0;
         const m = (totalSec / 60) | 0;
         const s = totalSec % 60;
         return `${m}:${s.toString().padStart(2, '0')}${t('report.time.unit_min')}`;
@@ -29,14 +29,36 @@ export class FormatUtils {
     }
 
     /**
-     * Formats distance in meters to a readable string (m or km).
-     * Uses bitwise OR (| 0) for fast flooring when under 1km.
+     * [VINTERDÖD] Smart Time Formatting
+     * Returns minutes (MM:SS) if under 1 hour, otherwise returns hours (X.X hrs).
+     */
+    public static formatTimeSmart(seconds: number): string {
+        if (seconds < 3600) {
+            const totalSec = seconds | 0;
+            const m = (totalSec / 60) | 0;
+            const s = totalSec % 60;
+            return `${m}:${s.toString().padStart(2, '0')} ${t('report.time.unit_min')}`;
+        }
+        return `${(seconds / 3600).toFixed(1)} ${t('ui.hrs')}`;
+    }
+
+    /**
+     * [VINTERDÖD] Deterministic Distance Formatting
+     * Enforces strict numeric thresholds (< 1000m vs >= 1.00km) with exactly 2 decimal places.
      */
     public static formatDistance(meters: number): string {
-        if (meters >= 1000) {
-            return `${(meters / 1000).toFixed(2)}${t('report.distance.unit_km')}`;
+        const val = meters || 0;
+        if (val >= 1000) {
+            return `${(val / 1000).toFixed(2)} ${t('report.distance.unit_km')}`;
         }
-        return `${meters | 0}${t('report.distance.unit_m')}`;
+        return `${val | 0} ${t('report.distance.unit_m')}`;
+    }
+
+    /**
+     * Alias for formatDistance to maintain API compatibility while enforcing deterministic output.
+     */
+    public static formatDistanceSmart(meters: number): string {
+        return FormatUtils.formatDistance(meters);
     }
 
     /**

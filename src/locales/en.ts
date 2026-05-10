@@ -31,6 +31,7 @@ export const en = {
         shots_fired: "Shots Fired",
         shots_hit: "Shots Hit",
         accuracy: "Accuracy",
+        frost: "Frost",
         rescued_family_members: "Rescued Family Members",
         clues_found: "Clues Found",
         none: "None",
@@ -157,11 +158,36 @@ export const en = {
         interact_open_chest: "OPEN CHEST",
         interact_knock_on_port: "KNOCK ON DOOR",
         interact_blow_up_bus: "BLOW UP BUS",
+        planting_explosives: "Planting explosives...",
         map: "MAP",
         map_btn: "MAP",
         teleport_x: "X COORD",
         teleport_z: "Z COORD",
         jump: "JUMP",
+        view_report: "VIEW REPORT",
+        view_details: "VIEW DETAILS",
+        challenge_complete: "CHALLENGE COMPLETE",
+        challenges: {
+            marathon: { title: "Marathon", desc: "Travel a total of {target} meters across all sectors." },
+            scrapper: { title: "Scrapper", desc: "Collect a total of {target} scrap." },
+            explorer: { title: "Explorer", desc: "Discover {target} points of interest." },
+            treasure_hunter: { title: "Treasure Hunter", desc: "Open {target} supply chests." },
+            scavenger: { title: "Scavenger", desc: "Collect {target} items or resources." },
+            zombie_hunter: { title: "Zombie Hunter", desc: "Neutralize {target} undead threats." },
+            walker_exterminator: { title: "Walker Exterminator", desc: "Kill {target} Walkers specifically." },
+            knee_capper: { title: "Knee Capper", desc: "Dismember {target} enemy limbs." },
+            tank_buster: { title: "Tank Buster", desc: "Defeat {target} heavy armored enemies." },
+            boss_slayer: { title: "Boss Slayer", desc: "Defeat {target} Sector Bosses." },
+            gibber: { title: "Gibber", desc: "Explode {target} enemies into pieces." },
+            pyromaniac: { title: "Pyromaniac", desc: "Ignite {target} enemies with fire." },
+            shock_therapy: { title: "Shock Therapy", desc: "Electrocute {target} enemies." },
+            demolition_expert: { title: "Demolition Expert", desc: "Kill {target} enemies with explosives." },
+            brawler: { title: "Brawler", desc: "Kill {target} enemies with melee attacks." },
+            sharpshooter: { title: "Sharpshooter", desc: "Kill {target} enemies with long-range shots." },
+            survivor: { title: "Survivor", desc: "Survive for {target} minutes in a single sector." },
+            veteran: { title: "Veteran", desc: "Complete {target} sectors successfully." },
+            untouchable: { title: "Untouchable", desc: "Complete a sector taking less than {target} damage." }
+        },
         return_camp: "RETURN TO CAMP",
         respawn: "RESPAWN",
         player_died: "{name} died",
@@ -344,7 +370,6 @@ export const en = {
         scrap_scavenged: "Scrap Scavenged",
         sectors_completed: "Sectors Completed",
         chests_opened: "Chests Opened",
-        view_report: "VIEW REPORT",
         damage_dealt: "Damage Dealt",
         available_pts: "Available Points",
         upcoming_rank: "UPCOMING RANK",
@@ -403,12 +428,52 @@ export const en = {
         no_logs: "No logs captured...",
         challenge_mastered: "MASTERED",
         challenge_tier: "TIER {tier}",
+        challenge_completed: "CHALLENGE COMPLETED",
         tracked_challenges: "TRACKED CHALLENGES",
         active_perks: "ACTIVE PERKS",
         unknown: "UNKNOWN",
         skip_epilogue_error: "Skip Epilogue (Error Loading)",
         skip_prologue_error: "Skip Prologue (Error Loading)",
         go_to_story_point: "Go to story point {num}",
+    },
+    report: {
+        damage: {
+            incoming: "INCOMING DAMAGE",
+            outgoing: "OUTGOING DAMAGE",
+        },
+        time: {
+            unit_min: " min",
+            unit_h: " h"
+        },
+        distance: {
+            unit_m: " m",
+            unit_km: " km"
+        },
+        labels: {
+            physical: "PHYSICAL",
+            boss: "BOSS",
+            player: "YOU",
+            unknown: "UNKNOWN"
+        },
+        stats: {
+            xp: "XP",
+            sp: "SP",
+            scrap: "SCRAP",
+            chests: "CHESTS",
+            shots: "SHOTS",
+            accuracy: "ACCURACY",
+            kills: "KILLS",
+            gibbed: "GIBBED",
+            throwables: "THROWABLES",
+            explosive_hits: "EXPLOSIVE HITS",
+            unit_kpm: "K/M"
+        }
+    },
+    status: {
+        INFECTED: {
+            title: "Infected",
+            description: "The virus is spreading. Health is gradually decreasing."
+        }
     },
     challenges: {
         title: "Challenges",
@@ -986,37 +1051,5 @@ export const en = {
         "3_25": "(Whispering) /1... 2... 3, run!/",
         "3_26": "COME GET SOME, YOU BASTARD!"
     },
-    report: {
-        damage: {
-            incoming: "INCOMING DAMAGE",
-            outgoing: "OUTGOING DAMAGE",
-        },
-        time: {
-            unit_min: " min",
-            unit_h: " h"
-        },
-        distance: {
-            unit_m: " m",
-            unit_km: " km"
-        },
-        labels: {
-            physical: "PHYSICAL",
-            boss: "BOSS",
-            player: "YOU",
-            unknown: "UNKNOWN"
-        },
-        stats: {
-            xp: "XP",
-            sp: "SP",
-            scrap: "SCRAP",
-            chests: "CHESTS",
-            shots: "SHOTS",
-            accuracy: "ACCURACY",
-            kills: "KILLS",
-            gibbed: "GIBBED",
-            throwables: "THROWABLES",
-            explosive_hits: "EXPLOSIVE HITS",
-            unit_kpm: "K/M"
-        }
-    }
+
 };

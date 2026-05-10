@@ -34,6 +34,7 @@ import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 import { useUIEventBridge } from '../../hooks/useUIEventBridge';
 import { InteractionPromptId, MetaActionId } from '../../systems/ui/UIEventBridge';
+import { GAME_CHALLENGES } from '../../content/ChallengeTypes';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -99,6 +100,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         stats.timePlayed = stats.timeElapsed;
         stats.accuracy = (stats.shotsFired > 0 ? (stats.shotsHit / stats.shotsFired) : 1) * 100;
         stats.distanceTraveled = refs.distanceTraveledRef.current;
+
+        // Sync active perks for Pause/Recap screens
+        stats.activePassives = [...state.activePassives];
+        stats.activeBuffs = [...state.activeBuffs];
+        stats.activeDebuffs = [...state.activeDebuffs];
 
         return stats;
     }, [refs]);
@@ -201,7 +207,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (s) {
             s.setSystemEnabled(SystemID.PLAYER_COMBAT, true);
             s.setSystemEnabled(SystemID.PLAYER_MOVEMENT, true);
-            s.setSystemEnabled(SystemID.PLAYER_INTERACTION, true);
+            s.setSystemEnabled(SystemID.INTERACTION, true);
         }
         if (!currentProps.isMobileDevice && refs.containerRef.current) {
             refs.engineRef.current?.input.requestPointerLock(refs.containerRef.current);
@@ -738,6 +744,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 break;
             }
             case UIEventType.CHAT_BUBBLE:
+                break;
             case UIEventType.CHALLENGE_COMPLETE:
                 break;
         }
