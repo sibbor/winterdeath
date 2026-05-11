@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { SPATIAL_CONFIG } from '../../config/SpatialConfig';
+import { POOL_ASH_MAX, POOL_ASH_ANIM_MAX } from '../../content/constants';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _tempColor = new THREE.Color();
@@ -37,7 +38,7 @@ export class AshRenderer {
     private animatingList: AnimatingAsh[] = [];
     private animatingPool: AnimatingAsh[] = []; // Pool to avoid GC
 
-    constructor(scene: THREE.Scene, maxInstances: number = 2000) {
+    constructor(scene: THREE.Scene, maxInstances: number = POOL_ASH_MAX) {
         this.scene = scene;
         this.maxInstances = maxInstances;
 
@@ -55,9 +56,8 @@ export class AshRenderer {
 
         this.scene.add(this.mesh);
 
-        // TODO: DON'T USE MAGIC NUMBER 500 HERE:
         // Pre-allocate animation pool (no runtime GC)
-        for (let i = 0; i < 500; i++) {
+        for (let i = 0; i < POOL_ASH_ANIM_MAX; i++) {
             this.animatingPool.push({
                 idx: 0, startTime: 0, duration: 0,
                 targetScaleX: 0, targetScaleY: 0, targetScaleZ: 0,

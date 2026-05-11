@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
-import { ZOMBIE_TYPES } from '../../content/constants';
+import { ZOMBIE_TYPES, POOL_ZOMBIE_PER_TYPE_MAX } from '../../content/constants';
 import { Enemy, EnemyDeathState, EnemyType } from '../../entities/enemies/EnemyTypes';
 import { WeaponType } from '../../content/weapons';
 import { COLORS, ENEMY_COLORS } from '../../utils/ui/ColorUtils';
@@ -18,7 +18,7 @@ export class ZombieRenderer {
     // men tillåter THREE att ignorera hela gruppen om du tittar bort.
     private _sharedBoundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 2000);
 
-    constructor(scene: THREE.Scene, maxInstances: number = 500) {
+    constructor(scene: THREE.Scene, maxInstances: number = POOL_ZOMBIE_PER_TYPE_MAX) {
         this.scene = scene;
         this.maxInstances = maxInstances;
 

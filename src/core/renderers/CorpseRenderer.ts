@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
+import { POOL_CORPSE_MAX } from '../../content/constants';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _tempColor = new THREE.Color();
@@ -18,7 +19,7 @@ export class CorpseRenderer {
     private dummy = new THREE.Object3D();
     private _sharedBoundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 2000);
 
-    constructor(scene: THREE.Scene, maxInstances: number = 2000) {
+    constructor(scene: THREE.Scene, maxInstances: number = POOL_CORPSE_MAX) {
         this.scene = scene;
         this.maxInstances = maxInstances;
 

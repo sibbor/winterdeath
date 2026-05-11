@@ -1,3 +1,5 @@
+import { POOL_PROJECTILE_MAX } from '../../content/constants';
+
 /**
  * Projectile Object Pool (Phase 8)
  * 
@@ -5,7 +7,7 @@
  * Optimized for massive numbers of bullets with minimal CPU/GPU overhead.
  */
 
-export const MAX_PROJECTILES = 2000;
+export const MAX_PROJECTILES = POOL_PROJECTILE_MAX;
 
 export const ProjectilePoolState = {
     activeCount: 0,

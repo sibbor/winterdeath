@@ -18,6 +18,13 @@ export const WORLD_CHUNK_SIZE = 256;             // 256m x 256m active simulatio
 export const POOL_PARTICLE_MAX = 5000;          // Max hardware-accelerated particles
 export const POOL_ENEMY_MAX = 120;              // Current contiguous enemy pool limit
 
+// PHASE 17: RENDERER POOL SIZES (Magic Number Eradication)
+export const POOL_CORPSE_MAX = 2000;
+export const POOL_ASH_MAX = 2000;
+export const POOL_ASH_ANIM_MAX = 500;
+export const POOL_PROJECTILE_MAX = 2000;
+export const POOL_ZOMBIE_PER_TYPE_MAX = 500;
+
 // PHASE 9: ENTITY STATE MASKING
 export const ENTITY_STATUS = {
     NONE: 0,
