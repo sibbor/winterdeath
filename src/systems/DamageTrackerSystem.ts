@@ -28,7 +28,7 @@ export class DamageTrackerSystem implements System {
         // --- TRACK WEAPON USAGE (TIME ACTIVE) ---
         const state = session.state;
         const activeWeapon = state.activeWeapon;
-        if (activeWeapon !== DamageID.NONE) {
+        if ((activeWeapon as number) !== 0) {
             const idx = activeWeapon as number;
             //  HARDENING: Strict bounds check (64 slots)
             if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
@@ -41,9 +41,7 @@ export class DamageTrackerSystem implements System {
      * Guards against recording TOOL/RADIO stats.
      */
     private isTechnical(id: DamageID): boolean {
-        return id === DamageID.RADIO || id === DamageID.NONE || 
-               id === DamageID.RUSH || id === DamageID.DODGE || 
-               id === DamageID.VEHICLE;
+        return id === DamageID.NONE;
     }
 
     /**
@@ -164,7 +162,7 @@ export class DamageTrackerSystem implements System {
 
             stats.kills++;
             playerStats[PlayerStatID.TOTAL_KILLS]++;
-            
+
             this.currentKillstreak++;
             const maxK = playerStats[PlayerStatID.LONGEST_KILLSTREAK];
             if (this.currentKillstreak > maxK) {
@@ -262,21 +260,6 @@ export class DamageTrackerSystem implements System {
         this.currentKillstreak = 0;
     }
 
-    /**
-     * Records XP gained during the session.
-     */
-    recordXp(session: GameSessionLogic, amount: number) {
-        session.state.sessionStats.xpGained += amount;
-        // Global XP is handled by PlayerStatsSystem or LevelSystem
-    }
-
-    /**
-     * Records SP earned during the session.
-     */
-    recordSp(session: GameSessionLogic, amount: number) {
-        session.state.sessionStats.spGained += amount;
-        session.state.statsBuffer[PlayerStatID.SKILL_POINTS] += amount;
-    }
 
     /**
      * Records a throwable thrown by the player.

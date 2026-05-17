@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback, useMemo } from 'react';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import { t } from '../../../utils/i18n';
-import { DataResolver } from '../../../utils/ui/DataResolver';
+import { DataResolver } from '../../../core/data/DataResolver';
 import { ColorPair, COLORS, colorToHex, adjustColor } from '../../../utils/ui/ColorUtils';
 import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputManager';
 
@@ -168,16 +168,17 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
 
                     let nextIndex = currentIndex;
                     if (currOrient === 'vertical') {
-                        if (action === InputAction.DOWN) nextIndex = (currentIndex + 1) % currTabs.length;
-                        else if (action === InputAction.UP) nextIndex = (currentIndex - 1 + currTabs.length) % currTabs.length;
+                        if (action === InputAction.DOWN || action === InputAction.ARROW_DOWN) nextIndex = (currentIndex + 1) % currTabs.length;
+                        else if (action === InputAction.UP || action === InputAction.ARROW_UP) nextIndex = (currentIndex - 1 + currTabs.length) % currTabs.length;
                     } else {
-                        if (action === InputAction.RIGHT) nextIndex = (currentIndex + 1) % currTabs.length;
-                        else if (action === InputAction.LEFT) nextIndex = (currentIndex - 1 + currTabs.length) % currTabs.length;
+                        if (action === InputAction.RIGHT || action === InputAction.ARROW_RIGHT) nextIndex = (currentIndex + 1) % currTabs.length;
+                        else if (action === InputAction.LEFT || action === InputAction.ARROW_LEFT) nextIndex = (currentIndex - 1 + currTabs.length) % currTabs.length;
                     }
 
                     if (nextIndex !== currentIndex) {
                         e.stopPropagation();
                         e.preventDefault();
+                        UiSounds.playClick();
                         currChange(currTabs[nextIndex]);
                     }
                 }
@@ -290,7 +291,7 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
                             {extraHeaderContent && <div className="hidden sm:block flex-shrink-0">{extraHeaderContent}</div>}
 
                             {/* Desktop/Landscape Action Buttons */}
-                            <div className="hidden md:flex items-center gap-4">
+                            <div className={`hidden md:flex items-center gap-4 ${isLandscapeMode ? '!flex' : ''}`}>
                                 {debugAction && (
                                     <button onClick={handleDebugInternal} className={`${BUTTON_STYLE} ${BTN_DEBUG}`}>
                                         <div className="absolute inset-0 opacity-20 group-hover/btn:opacity-40 transition-opacity" style={BUTTON_HATCHING_STYLE} />
@@ -448,7 +449,7 @@ export const TacticalCard: React.FC<{
 
 
 export const TacticalTab: React.FC<{
-    label: string,
+    label: string | React.ReactNode,
     isActive: boolean,
     onClick: () => void,
     color?: ColorPair | string,
@@ -457,10 +458,9 @@ export const TacticalTab: React.FC<{
 }> = React.memo(({ label, isActive, onClick, color = COLORS.GREEN, orientation = 'horizontal', className = '' }) => {
     const baseStyle = "px-6 py-2 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700 relative overflow-hidden group/tab font-bold uppercase tracking-widest transition-all";
     const activeStyle = isActive ? "text-white animate-tab-pulsate" : "bg-transparent text-zinc-400 hover:bg-white/5 border-zinc-700";
-    const orientationStyle = orientation === 'vertical' ? "w-full text-left p-4 md:p-6 text-xl tracking-wider mx-2" : "text-[10px] md:text-lg";
+    const orientationStyle = orientation === 'vertical' ? "w-full text-left p-3 md:p-6 text-sm md:text-xl tracking-wider mx-0 md:mx-2" : "text-[10px] md:text-lg";
 
     const colorStr = typeof color === 'string' ? color : color.str;
-    const colorNum = typeof color === 'string' ? 0 : color.num; // Fallback for adjustColor if string
 
     return (
         <button

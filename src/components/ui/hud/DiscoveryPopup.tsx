@@ -5,12 +5,13 @@ import { UiSounds } from '../../../utils/audio/AudioLib';
 import { DiscoveryType } from './HudTypes';
 import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
 import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
-import { DataResolver } from '../../../utils/ui/DataResolver';
-import { PERKS, PerkCategory } from '../../../content/perks';
+import { DataResolver } from '../../../core/data/DataResolver';
+import { PERKS } from '../../../content/perks';
 import { CLUES } from '../../../content/clues';
 import { POIS } from '../../../content/pois';
 import { COLLECTIBLES } from '../../../content/collectibles';
 import { MetaActionId } from '../../../systems/ui/UIEventBridge';
+import { EnemyType } from '../../../entities/enemies/EnemyTypes';
 
 interface DiscoveryPopupProps {
   onOpenAdventureLog: (tab?: DiscoveryType, itemId?: string) => void;
@@ -25,15 +26,17 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
   const [visible, setVisible] = useState(false);
   const lastTimestamp = useRef(0);
 
-  const handleUIEvent = useCallback((type: UIEventType, id: any, discoveryType: number, timestamp: number) => {
+  const handleUIEvent = useCallback((type: UIEventType, data: any, discoveryType: number, timestamp: number) => {
     if (type !== UIEventType.DISCOVERY) return;
 
     const state = HudStore.getState();
     lastTimestamp.current = timestamp;
 
     setActiveDiscovery({
-      id: id,
+      id: data.id,
       type: discoveryType as DiscoveryType,
+      title: data.title,
+      details: data.details,
       timestamp: timestamp,
       isMobile: state.isMobileDevice,
       sector: state.currentSector,
@@ -110,31 +113,31 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
 
     switch (type) {
       case DiscoveryType.CLUE:
-        title = t('ui.discovered_clue');
+        title = activeDiscovery.title ? t(activeDiscovery.title) : t('ui.discovered_clue');
         const totalClues = Object.values(CLUES).filter(c => c.sector === sector).length;
-        subtitle = `${t('ui.clue')} ${cluesFound}/${totalClues}`;
+        subtitle = `${activeDiscovery.details || t('ui.clue')} (${cluesFound}/${totalClues})`;
         icon = '🔍';
         break;
 
       case DiscoveryType.POI:
-        title = t('ui.discovered_poi');
+        title = activeDiscovery.title ? t(activeDiscovery.title) : t('ui.discovered_poi');
         const totalPois = Object.values(POIS).filter(p => p.sector === sector).length;
-        subtitle = `${t('ui.poi_short')} ${poisFound}/${totalPois}`;
+        subtitle = `${activeDiscovery.details || t('ui.poi_short')} (${poisFound}/${totalPois})`;
         icon = '📍';
         break;
 
       case DiscoveryType.COLLECTIBLE:
-        title = t('ui.discovered_collectible');
+        title = activeDiscovery.title ? t(activeDiscovery.title) : t('ui.discovered_collectible');
         const totalCollectibles = Object.values(COLLECTIBLES).filter(c => c.sector === sector).length;
-        subtitle = `${t(DataResolver.getCollectibleName(id))} (${collectiblesFound}/${totalCollectibles})`;
+        subtitle = `${activeDiscovery.details || t(DataResolver.getCollectibleName(id))} (${collectiblesFound}/${totalCollectibles})`;
         icon = '📦';
         break;
 
       case DiscoveryType.ZOMBIE:
       case DiscoveryType.BOSS:
-        title = t('ui.discovered_enemy');
+        title = activeDiscovery.title ? t(activeDiscovery.title) : t('ui.discovered_enemy');
         icon = type === DiscoveryType.BOSS ? '💀' : '🧟';
-        subtitle = t(DataResolver.getEnemyName(Number(id), type === DiscoveryType.BOSS ? Number(id) : -1));
+        subtitle = activeDiscovery.details || t(DataResolver.getEnemyName(type === DiscoveryType.BOSS ? EnemyType.BOSS : Number(id), type === DiscoveryType.BOSS ? Number(id) : -1));
         break;
 
       case DiscoveryType.PERK:
@@ -144,7 +147,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         if (perk) {
           icon = perk.icon || '✨';
           const catKey = DataResolver.getPerkCategoryKey(perk.category);
-          subtitle = `${t(catKey)}: ${t(perk.displayName)}`;
+          subtitle = `${t(catKey)}: ${activeDiscovery.details || t(perk.displayName)}`;
         } else {
           icon = '✨';
           subtitle = t('ui.unknown_perk');
@@ -172,6 +175,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         animation: visible ? `discovery-pop 4500ms cubic-bezier(0.25, 1, 0.5, 1) forwards` : 'none'
       }}
       onClick={handleInteraction}
+      onTouchStart={handleInteraction}
     >
       <div className="bg-black/90 border-2 border-zinc-800 rounded-xl p-3 flex items-center gap-4 min-w-[320px] shadow-[0_10px_30px_rgba(0,0,0,0.8)] cursor-pointer hover:bg-zinc-900 transition-colors">
         {/* ICON with Filter */}

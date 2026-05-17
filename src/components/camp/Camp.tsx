@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { PlayerStats, PlayerStatID } from '../../entities/player/PlayerTypes';;
-import { WeaponType } from '../../content/weapons';
+import { WeaponID } from '../../entities/player/CombatTypes';
 import { PLAYER_CHARACTER } from '../../content/constants';
 import { UiSounds, AmbientSounds, VoiceSounds } from '../../utils/audio/AudioLib';
 import { audioEngine } from '../../utils/audio/AudioEngine';
-import { DataResolver } from '../../utils/ui/DataResolver';
+import { DataResolver } from '../../core/data/DataResolver';
 import { t } from '../../utils/i18n';
 import { createProceduralTextures } from '../../utils/assets';
 import { WinterEngine, GameSettings } from '../../core/engine/WinterEngine';
@@ -30,10 +30,10 @@ import { StatsBridge } from '../../core/data/StatsBridge';
 
 interface CampProps {
     stats: PlayerStats;
-    currentLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
-    weaponLevels: Record<WeaponType, number>;
+    currentLoadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; };
+    weaponLevels: Record<WeaponID, number>;
     onSaveStats: (newStats: PlayerStats) => void;
-    onSaveLoadout: (loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; }, levels: Record<WeaponType, number>) => void;
+    onSaveLoadout: (loadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; }, levels: Record<WeaponID, number>) => void;
     onSelectSector: (sectorIndex: number) => void;
     onStartSector: () => void;
     currentSector: number;
@@ -150,6 +150,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         engine.updateSettings(graphics);
         engine.clearUpdateContext(); // HARSH RESET: Prevent state leakage during mount
         engine.mount(container);
+
+        // Ensure systems are attached to the current scene immediately
+        engine.syncSystemsToScene(engine.scene);
         engineRef.current = engine;
 
         const scene = engine.scene;
@@ -164,17 +167,28 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             // ARCHITECTURAL UNIFICATION: Provide a minimal RuntimeState for the Camp
             const campState: any = {
                 simTime: 0, renderTime: 0, lastSimDelta: 0.016, lastRenderDelta: 0.016,
-                playerPos: camera.threeCamera.position, dynamicLights: [], isDodging: false,
+                playerPos: camera.threeCamera.position, isDodging: false,
                 isDead: false, staminaRatio: 1.0, hp: 100, maxHp: 100
             };
             campStateRef.current = campState;
-            engine.onUpdateContext = _campCtx;
             _campCtx.state = campState;
+            _campCtx.camera = camera;
+            _campCtx.playerPos = camera.threeCamera.position;
+            _campCtx.dynamicLights.length = 0; // reset on each setup
+            engine.onUpdateContext = _campCtx;
 
             engine.resetTime();
             const { interactables, outlines, envState } = await CampWorld.build(scene, textures, weather);
 
             if (setupCounterRef.current !== currentSetupId || !container.parentElement) return;
+
+            // Register the campfire light into the persistent dynamic lights array.
+            // We push into _campCtx.dynamicLights directly (not reassign campState.dynamicLights)
+            // because engine.onUpdateContext already holds a reference to _campCtx.
+            _campCtx.dynamicLights.length = 0;
+            if (envState && envState.fireLight) {
+                _campCtx.dynamicLights.push(envState.fireLight);
+            }
 
             envStateRef.current = envState;
 
@@ -257,20 +271,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             engine.registerSystem(SystemID.CAMP_EFFECT_MANAGER, new CampEffectsSystem());
             engine.registerSystem(SystemID.FAMILY_ANIMATION, new FamilyAnimationSystem());
             engine.registerSystem(SystemID.CAMP_CHATTER, new CampChatterSystem());
+
+            // --- VINTERDÖD FIX: Signal ready only AFTER async build is complete ---
+            if (onCampLoaded) onCampLoaded();
         };
 
         setup();
-
-        let framesToWait = 2;
-        const checkReady = () => {
-            if (framesToWait > 0) {
-                framesToWait--;
-                requestAnimationFrame(checkReady);
-            } else {
-                if (onCampLoaded) onCampLoaded();
-            }
-        };
-        requestAnimationFrame(checkReady);
 
         return () => {
             if (debugUnsubscribeRef.current) debugUnsubscribeRef.current();

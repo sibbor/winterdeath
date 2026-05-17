@@ -16,6 +16,7 @@ export enum SystemID {
 
     // Player
     PLAYER_STATS = 20, PLAYER_MOVEMENT = 21, PLAYER_COMBAT = 22, INTERACTION = 23, PERK_SYSTEM = 24,
+    SKY = 25,
 
     // Combat & Enemies
     PROJECTILE = 30, WEAPON_HANDLER = 31, CHALLENGE_TRACKER = 32, ENEMY_MANAGER = 33,
@@ -31,6 +32,8 @@ export enum SystemID {
 
     CAMP_CHATTER = 61, FAMILY_ANIMATION = 62,
     WORLD_STREAMER = 63,
+    ENVIRONMENT_MANAGER = 64,
+    GROUND = 65,
 
     COUNT = 70
 }

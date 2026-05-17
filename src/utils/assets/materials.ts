@@ -278,7 +278,7 @@ export const MATERIALS = {
     scarecrowHat: new THREE.MeshStandardMaterial({ color: 0x4a3c31, roughness: 1.0 }),
 
     // ---- WEAPONS & COMBAT ----
-    bullet: new THREE.MeshBasicMaterial({ color: 0x000000 }),
+    bullet: new THREE.MeshBasicMaterial({ color: 0xffffff }),
     grenade: new THREE.MeshStandardMaterial({ color: 0x3f663f, roughness: 0.6 }),
     molotov: new THREE.MeshStandardMaterial({ color: 0x331100, roughness: 0.3, emissive: 0x331100, emissiveIntensity: 0.2 }),
     flashbang: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, emissive: 0xffffff, emissiveIntensity: 0.2 }),
@@ -351,26 +351,6 @@ export const MATERIALS = {
     camp_metal: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7, userData: { isSharedAsset: true } }),
     camp_ammoGreen: new THREE.MeshStandardMaterial({ color: 0x335533, roughness: 0.6, userData: { isSharedAsset: true } }),
     camp_medkitRed: new THREE.MeshStandardMaterial({ color: 0xcc0000, userData: { isSharedAsset: true } }),
-    camp_sky: new THREE.MeshBasicMaterial({ color: 0xffffeb, fog: false, userData: { isSharedAsset: true } }),
-    camp_star: new THREE.ShaderMaterial({
-        uniforms: { uTime: { value: 0 } },
-        vertexShader: `
-            attribute float size; attribute float phase; attribute float twinkleSpeed; varying float vAlpha; uniform float uTime;
-            void main() {
-                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;
-                float alpha = 0.8 + 0.2 * sin(phase);
-                if (twinkleSpeed > 0.0) alpha = 0.9 + 0.1 * sin(uTime * twinkleSpeed + phase);
-                vAlpha = alpha; gl_PointSize = size * (2500.0 / -mvPosition.z);
-            }
-        `,
-        fragmentShader: `varying float vAlpha; void main() { vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha); }`,
-        transparent: true, depthWrite: false,
-        userData: { isSharedAsset: true }
-    }),
-    camp_moonHalo: new THREE.SpriteMaterial({
-        color: 0xffffee, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, fog: false, depthWrite: false,
-        userData: { isSharedAsset: true }
-    }),
     camp_ash: new THREE.MeshStandardMaterial({ color: 0x111111, userData: { isSharedAsset: true } }),
     camp_stone: new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9, userData: { isSharedAsset: true } }),
     camp_log: new THREE.MeshStandardMaterial({ color: 0x5e3723, userData: { isSharedAsset: true } }),

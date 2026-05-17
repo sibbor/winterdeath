@@ -14,7 +14,8 @@ const DEBUG_COLORS = {
     RED: 0xff0000,
     GREEN: 0x00ff00,
     BLUE: 0x0000ff,
-    YELLOW: 0xffff00
+    YELLOW: 0xffff00,
+    ORANGE: 0xffa500
 };
 
 /**
@@ -80,7 +81,10 @@ export const DebugVisualizer = {
         // 2. Visualize Triggers
         DebugVisualizer.visualizeTriggers(ctx, debugGroup);
 
-        // 3. Visualize Areas from MapItems (Forests, Lakes, Mountains, Wheat)
+        // 3. Visualize Atmosphere Zones
+        DebugVisualizer.visualizeenvironmentalZones(ctx, debugGroup);
+
+        // 4. Visualize Areas from MapItems (Forests, Lakes, Mountains, Wheat)
         if (ctx.mapItems) {
             for (let i = 0; i < ctx.mapItems.length; i++) {
                 const item = ctx.mapItems[i];
@@ -168,26 +172,19 @@ export const DebugVisualizer = {
         if (!ctx.debugMode || !ctx.triggers) return;
 
         const triggers = ctx.triggers;
-        const activeFlags = triggers.getActiveFlags();
-        const posX = triggers.getPositionsX();
-        const posZ = triggers.getPositionsZ();
-        const radiiSq = triggers.getRadiiSq();
-        const halfWidths = triggers.getHalfWidths();
-        const halfDepths = triggers.getHalfDepths();
-        const metadata = triggers.metadata;
+        const len = triggers.length;
 
-        for (let i = 0; i < triggers.capacity; i++) {
-            if (activeFlags[i] === 0) continue;
+        for (let i = 0; i < len; i++) {
+            const trigger = triggers[i];
+            const tx = trigger.position.x;
+            const tz = trigger.position.z;
+            const id = trigger.id;
 
-            const tx = posX[i];
-            const tz = posZ[i];
-            const id = metadata[i].id;
+            DebugVisualizer.spawnMarker(ctx, tx, tz, 2, String(id).toUpperCase(), parent);
 
-            DebugVisualizer.spawnMarker(ctx, tx, tz, 2, id.toUpperCase(), parent);
-
-            let drawRadius = Math.sqrt(radiiSq[i]);
-            if (halfWidths[i] > 0) {
-                drawRadius = Math.max(halfWidths[i], halfDepths[i]);
+            let drawRadius = trigger.radius || 2;
+            if (trigger.size) {
+                drawRadius = Math.max(trigger.size.width, trigger.size.depth);
             }
 
             // PERFORMANCE FIX: Reuse shared ring geometry and scale it
@@ -200,6 +197,49 @@ export const DebugVisualizer = {
 
             if (parent) parent.add(ring);
             else ctx.scene.add(ring);
+        }
+    },
+
+    visualizeenvironmentalZones: (ctx: SectorContext, parent?: THREE.Object3D) => {
+        if (!ctx.debugMode) return;
+
+        const processZone = (z: any) => {
+            if (z.polygon) {
+                const len = z.polygon.length;
+                _pointsScratch.length = 0;
+                for (let i = 0; i < len; i++) {
+                    _pointsScratch.push(new THREE.Vector3(z.polygon[i].x, 1.5, z.polygon[i].z));
+                }
+                DebugVisualizer.drawPolygon(ctx, _pointsScratch, DEBUG_COLORS.ORANGE, 1.5, parent);
+            } else {
+                const x = z.x || 0;
+                const zPos = z.z || 0;
+                const r = z.outerRadius || 100;
+
+                // Draw circle using path scratch
+                _pointsScratch.length = 0;
+                const segments = 32;
+                for (let i = 0; i <= segments; i++) {
+                    const theta = (i / segments) * Math.PI * 2;
+                    _pointsScratch.push(new THREE.Vector3(x + Math.cos(theta) * r, 1.5, zPos + Math.sin(theta) * r));
+                }
+                DebugVisualizer.drawPath(ctx, _pointsScratch, DEBUG_COLORS.ORANGE, 1.5, parent);
+            }
+        };
+
+        // Static zones from sector definition
+        const sectorDef = (ctx.engine as any).currentSectorData || (window as any).VINTERDOD_SECTOR_DEF;
+        if (sectorDef?.environmentalZones) {
+            for (let i = 0; i < sectorDef.environmentalZones.length; i++) {
+                processZone(sectorDef.environmentalZones[i]);
+            }
+        }
+
+        // Dynamic zones from context
+        if (ctx.environmentalZones) {
+            for (let i = 0; i < ctx.environmentalZones.length; i++) {
+                processZone(ctx.environmentalZones[i]);
+            }
         }
     }
 };

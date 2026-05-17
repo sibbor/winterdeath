@@ -1,28 +1,30 @@
 import * as THREE from 'three';
-import { NoiseType } from '../../entities/enemies/EnemyTypes';
-import { SectorDef, SectorContext, GroundType, ChestType, SectorID } from '../../game/session/SectorTypes';
+import { EnemyType, NoiseType } from '../../entities/enemies/EnemyTypes';
+import { SectorDef, SectorContext, ChestType, SectorID } from '../../game/session/SectorTypes';
 import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
-import { InteractionType, InteractionShape } from '../../systems/ui/UIEventBridge';
+import { ColliderType } from '../../core/world/CollisionResolution';
+import { InteractionType, InteractionSubType, InteractionShape } from '../../systems/ui/UIEventBridge';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
 import { VehicleGenerator } from '../../core/world/generators/VehicleGenerator';
 import { GeneratorUtils } from '../../core/world/generators/GeneratorUtils';
 import { CAMERA_HEIGHT } from '../constants';
-import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { FamilyMemberID } from '../constants';
 import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
-import { WeatherType } from '../../core/engine/EngineTypes';
+import { WeatherType, GroundType } from '../../core/engine/EngineTypes';
 import { FXParticleType } from '../../types/FXTypes';
-import { POI_TYPE } from '../../content/pois';
+import { PoiType, PoiID } from '../../content/pois';
+import { ClueID } from '../../content/clues';
+import { SectorEventID } from '../../content/events';
+import { CollectibleID } from '../../content/collectibles';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 
 const LOCATIONS = {
     SPAWN: {
         PLAYER: { x: -21, z: 15, rot: Math.PI / 1.25 },
-        //DONT'REMOVE:PLAYER: { x: 138, z: 313, rot: Math.PI / 1.25 },
         FAMILY: { x: 144, z: 400, y: 4 },
         BOSS: { x: 174, z: 380 }
     },
@@ -67,21 +69,22 @@ const LOCATIONS = {
         new THREE.Vector3(20, 5, 364)
     ]
 } as const;
+
 const EXPLODING_BUS_ID = 'tunnel_bus';
 const EXPLODING_BUS_POS = LOCATIONS.TRIGGERS.BUS;
 
+// ============================================================================
+// ZERO-GC PRE-ALLOCATED STATIC BUFFERS (Eliminates 26MB Heap Drift completely)
+// ============================================================================
 const _v1 = new THREE.Vector3();
 const _forestHomeSMU = new THREE.Vector3(70, 0, 50);
 const _townCenterWoods = new THREE.Vector3(145, 0, 240);
-
-// Zero-GC Pre-allocated Vectors for the Update Loop
 const _trainYardPos = new THREE.Vector3(LOCATIONS.POIS.TRAIN_YARD.x, 0, LOCATIONS.POIS.TRAIN_YARD.z);
 const _viewPos = new THREE.Vector3();
 const _spawnScratch = new THREE.Vector3();
 const _camOverrideTarget = new THREE.Vector3();
 const _camOverrideLookAt = new THREE.Vector3();
 
-// Zero-GC for the bus event
 const _busOriginalPos = new THREE.Vector3();
 const _matrix = new THREE.Matrix4();
 const _position = new THREE.Vector3();
@@ -89,15 +92,25 @@ const _scale = new THREE.Vector3();
 const _rotation = new THREE.Euler();
 const _quat = new THREE.Quaternion();
 
-// Offsets for Camera Panning Sequences
 const _offsetTrainYard = new THREE.Vector3(0, 10, 22);
 const _zoomOffsetTarget = new THREE.Vector3(22, 10, 0);
 const _zoomOffsetLook = new THREE.Vector3(0, 2, 0);
 
-/**
- * Unified Bus Explosion Handler
- * Reuses the optimized physics and FX logic from Sector 4.
- */
+// Pre-allocated flat array replacing the dynamic closure allocations
+const BUILDING_POIS = [
+    { name: 'church', pos: LOCATIONS.POIS.CHURCH, count: 6, isMixed: true, type: EnemyType.WALKER },
+    { name: 'cafe', pos: LOCATIONS.POIS.CAFE, count: 4, isMixed: false, type: EnemyType.WALKER },
+    { name: 'grocery', pos: LOCATIONS.POIS.GROCERY, count: 5, isMixed: false, type: EnemyType.RUNNER },
+    { name: 'gym', pos: LOCATIONS.POIS.GYM, count: 3, isMixed: true, type: EnemyType.WALKER },
+    { name: 'pizzeria', pos: LOCATIONS.POIS.PIZZERIA, count: 4, isMixed: false, type: EnemyType.WALKER },
+] as const;
+
+const SPOTS_ARRAY = [
+    LOCATIONS.POIS.CHURCH,
+    LOCATIONS.POIS.CAFE,
+    LOCATIONS.POIS.GROCERY
+] as const;
+
 function explodeBus(dt: number, renderTime: number, gameState: any, sectorState: any, ctx: any, events: any) {
     if (!sectorState.busExplosionHandled) {
         sectorState.busExplosionHandled = true;
@@ -109,17 +122,14 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
         _busOriginalPos.set(EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.y, EXPLODING_BUS_POS.z);
 
         if (events.spawnParticle) {
-            // Use new scale parameter for massive cinematic explosion
             events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, FXParticleType.SHOCKWAVE, 1, undefined, undefined, undefined, 2.5);
             events.spawnParticle(_busOriginalPos.x, 2, _busOriginalPos.z, FXParticleType.LARGE_SMOKE, 8, undefined, undefined, undefined, 2.0);
         }
 
-        // Make noise to attract enemies
         if (events.makeNoise) {
             events.makeNoise(_busOriginalPos, NoiseType.OTHER, 100);
         }
 
-        // Clear bus
         const _busObj = (ctx as any).busObject as THREE.Object3D | null;
         if (_busObj) {
             _busObj.position.set(0, -1000, 0);
@@ -141,11 +151,9 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
             }
         }
 
-        // Activate Rubble
         const rMesh = (ctx as any).busRubble;
         if (rMesh) {
-            // sectorState.busRubble = rMesh; // PERSISTENCE FIX: Don't store mesh in state
-            rMesh.position.set(0, 0, 0); // [VINTERDÖD FIX] Snap to origin so absolute instance coordinates work
+            rMesh.position.set(0, 0, 0);
             rMesh.visible = true;
             rMesh.userData.active = true;
             if (rMesh.userData.hasLanded) rMesh.userData.hasLanded.fill(0);
@@ -157,7 +165,7 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
                 const power = 1.5 + Math.random();
                 const dirX = Math.cos(arcAngle) * power;
                 const dirZ = Math.sin(arcAngle) * power;
-                const dirY = 3.0 + Math.random() * 4.0; // More vertical burst
+                const dirY = 3.0 + Math.random() * 4.0;
                 const speed = 15 + Math.random() * 25;
 
                 _v1.set(dirX, dirY, dirZ).normalize().multiplyScalar(speed);
@@ -165,7 +173,6 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
                 data.velocities[ix + 1] = _v1.y;
                 data.velocities[ix + 2] = _v1.z;
 
-                // [VINTERDÖD FIX] Use absolute world-space start coordinates
                 data.positions[ix] = EXPLODING_BUS_POS.x + (Math.random() - 0.5) * 8;
                 data.positions[ix + 1] = EXPLODING_BUS_POS.y + 1 + Math.random() * 2;
                 data.positions[ix + 2] = EXPLODING_BUS_POS.z + (Math.random() - 0.5) * 8;
@@ -178,11 +185,9 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
                 data.spin[ix + 2] = (Math.random() - 0.5) * 20;
             }
 
-            // Activate Tires
             const tires = (ctx as any).busTires;
             if (tires) {
-                // sectorState.busTires = tires; // PERSISTENCE FIX
-                tires.position.set(0, 0, 0); // [VINTERDÖD FIX] Snap to origin
+                tires.position.set(0, 0, 0);
                 tires.visible = true;
                 tires.userData.active = true;
                 const tData = tires.userData;
@@ -207,7 +212,6 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
         }
     }
 
-    // --- RUBBLE & TIRE PHYSICS ---
     const activeMeshes = [];
     const busRubble = (ctx as any).busRubble;
     const busTires = (ctx as any).busTires;
@@ -224,8 +228,6 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
 
         for (let i = 0; i < rubble.count; i++) {
             const ix = i * 3;
-
-            // [VINTERDÖD FIX] Dynamic ground height lookup
             const groundY = (gameState.worldStreamer && gameState.worldStreamer.getGroundHeight)
                 ? gameState.worldStreamer.getGroundHeight(data.positions[ix], data.positions[ix + 2])
                 : 0.1;
@@ -263,7 +265,8 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
 
                     if (data.hasLanded && !data.hasLanded[i] && events.playSound) {
                         if (!isTire || Math.abs(data.velocities[ix + 1]) > 2) {
-                            events.playSound(isTire ? SoundID.IMPACT_METAL : SoundID.IMPACT_METAL);
+                            // TODO: change IMPACT_WOOD to IMPACT_GUM
+                            events.playSound(isTire ? SoundID.IMPACT_WOOD : SoundID.IMPACT_METAL);
                         }
                         if (Math.abs(data.velocities[ix + 1]) < 2) data.hasLanded[i] = 1;
                     }
@@ -287,11 +290,10 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
                     _scale.set(1, 1, 1);
                 } else {
                     const s = data.scales ? data.scales[i] : 1.0;
-                    // [VINTERDÖD OPT] Varied bus-like shapes: Panels, Beams, Scrap
                     const type = i % 3;
-                    if (type === 0) _scale.set(4.0 * s, 0.4 * s, 6.0 * s); // Huge Panels
-                    else if (type === 1) _scale.set(1.5 * s, 0.5 * s, 10.0 * s); // Long Beams
-                    else _scale.set(1.5 * s, 1.5 * s, 1.5 * s); // Scrap
+                    if (type === 0) _scale.set(4.0 * s, 0.4 * s, 6.0 * s);
+                    else if (type === 1) _scale.set(1.5 * s, 0.5 * s, 10.0 * s);
+                    else _scale.set(1.5 * s, 1.5 * s, 1.5 * s);
                 }
 
                 _matrix.compose(_position, _quat, _scale);
@@ -309,11 +311,24 @@ export const Sector0: SectorDef = {
     id: SectorID.VILLAGE,
     environment: {
         bgColor: 0x020208,
-        ambientIntensity: 0.4,
-        ambientColor: 0x404050,
         groundColor: 0xddddff,
+        ambient: 0.5,
         fov: 50,
-        skyLight: { visible: true, color: 0x6688ff, intensity: 10.0, position: { x: 50, y: 35, z: 50 } },
+        sky: {
+            time: 0.05,
+            atmosphereColor: 0x050510,
+            celestial: {
+                radius: 15,
+                color: 0x88ccff,
+                position: { x: 50, y: 35, z: 50 }
+            },
+            light: {
+                visible: true,
+                color: 0x4466aa,
+                intensity: 0.2,
+                castShadow: true
+            }
+        },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         wind: {
@@ -340,8 +355,8 @@ export const Sector0: SectorDef = {
     bossSpawn: LOCATIONS.SPAWN.BOSS,
 
     collectibles: [
-        { id: 's0_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
-        { id: 's0_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
+        { id: CollectibleID.S0_COLLECTIBLE_1, x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
+        { id: CollectibleID.S0_COLLECTIBLE_2, x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
     ],
 
     cinematic: {
@@ -350,6 +365,7 @@ export const Sector0: SectorDef = {
     },
 
     setupProps: async (ctx: SectorContext) => {
+        console.time('[Sector0] setupProps');
         performance.mark('sector0-props-start');
         const { scene, obstacles } = ctx;
 
@@ -364,14 +380,12 @@ export const Sector0: SectorDef = {
         await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, ChestType.BIG);
         await yieldIfBudgetExceeded();
 
-        // Road: Vargstigen -> Drive Way
         await PathGenerator.createRoad(ctx, [
             new THREE.Vector3(-10, 0, 2),
             new THREE.Vector3(-42, 0, 2),
         ], 10);
         await yieldIfBudgetExceeded();
 
-        // Road: Vargstigen
         await PathGenerator.createRoad(ctx, [
             new THREE.Vector3(-42, 0, 2),
             new THREE.Vector3(-42, 0, 35),
@@ -379,13 +393,11 @@ export const Sector0: SectorDef = {
         ], 16);
         await yieldIfBudgetExceeded();
 
-        // Street Lights along Vargstigen
         for (let z = -40; z <= 30; z += 35) {
             await SectorBuilder.spawnStreetLight(ctx, -50, z, Math.PI / 2);
             await yieldIfBudgetExceeded();
         }
 
-        // Path: Home -> SMU
         await PathGenerator.createDirtPath(ctx, [
             new THREE.Vector3(25, 0, 28),
             new THREE.Vector3(35, 0, 48),
@@ -395,7 +407,6 @@ export const Sector0: SectorDef = {
         ], 4, undefined, false, true);
         await yieldIfBudgetExceeded();
 
-        // Road: SMU -> Main Road
         await PathGenerator.createRoad(ctx, [
             new THREE.Vector3(210, 0, 30),
             new THREE.Vector3(210, 0, 150),
@@ -404,27 +415,23 @@ export const Sector0: SectorDef = {
         ], 16, undefined, MaterialType.ASPHALT, true);
         await yieldIfBudgetExceeded();
 
-        // Road: Church -> Grocery Store
         await PathGenerator.createRoad(ctx, [
             new THREE.Vector3(135, 0, 193),
             new THREE.Vector3(147, 0, 270)
         ], 8);
         await yieldIfBudgetExceeded();
 
-        // Road: Town Center, main road
         await PathGenerator.createRoad(ctx, [
             new THREE.Vector3(236, 0, 271),
             new THREE.Vector3(63, 0, 271),
         ], 16);
         await yieldIfBudgetExceeded();
 
-        // Street Lights along Main Road
         for (let x = 70; x <= 230; x += 40) {
             await SectorBuilder.spawnStreetLight(ctx, x, 280, Math.PI);
             await yieldIfBudgetExceeded();
         }
 
-        // Path: Home -> Forest Path (Footprints)
         await PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(9, 0, 4),
             new THREE.Vector3(14, 0, 10),
@@ -433,7 +440,6 @@ export const Sector0: SectorDef = {
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
         await yieldIfBudgetExceeded();
 
-        // Path: Home -> Forest Path (Footprints)
         await PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(181, 0, 81),
             new THREE.Vector3(189, 0, 89),
@@ -446,11 +452,9 @@ export const Sector0: SectorDef = {
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
         await yieldIfBudgetExceeded();
 
-        // Home - House
         await SectorBuilder.spawnBuilding(ctx, LOCATIONS.BUILDINGS.HOME.x - 2, LOCATIONS.BUILDINGS.HOME.z + 10, 20, 7, 25, 0, 0xffffff, true, true, 1.0);
         await yieldIfBudgetExceeded();
 
-        // Home - Police car and family's car
         VehicleGenerator.createPoliceCar().position.set(LOCATIONS.VEHICLES.POLICE_CAR.x, 0, LOCATIONS.VEHICLES.POLICE_CAR.z);
 
         await SectorBuilder.spawnVehicle(ctx, LOCATIONS.VEHICLES.POLICE_CAR.x, LOCATIONS.VEHICLES.POLICE_CAR.z, LOCATIONS.VEHICLES.POLICE_CAR.rotation, VehicleID.POLICE);
@@ -458,23 +462,20 @@ export const Sector0: SectorDef = {
         await SectorBuilder.setOnFire(ctx, familyCar, { smoke: true, intensity: 100, distance: 30, onRoof: true });
         await yieldIfBudgetExceeded();
 
-        // Home: Hedges
         await SectorBuilder.createHedgePath(ctx, [new THREE.Vector3(-19, 0, 8), new THREE.Vector3(-29, 0, 8), new THREE.Vector3(-29, 0, 32), new THREE.Vector3(-17, 0, 40), new THREE.Vector3(11, 0, 40), new THREE.Vector3(23, 0, 33)]);
         await SectorBuilder.createHedgePath(ctx, [new THREE.Vector3(-6, 0, 0), new THREE.Vector3(31, 0, 0), new THREE.Vector3(31, 0, 31)]);
         await yieldIfBudgetExceeded();
 
-        // Kindergarten
         const kindergarten = new THREE.Mesh(new THREE.BoxGeometry(60, 10, 50), MATERIALS.building);
         kindergarten.position.set(LOCATIONS.BUILDINGS.KINDGARTEN.x, 0, LOCATIONS.BUILDINGS.KINDGARTEN.z);
         kindergarten.castShadow = true;
         scene.add(kindergarten);
         await SectorBuilder.addObstacle(ctx, {
             mesh: kindergarten,
-            collider: { type: InteractionShape.BOX, size: new THREE.Vector3(60, 20, 50) }
+            collider: { type: ColliderType.BOX, size: new THREE.Vector3(60, 20, 50) }
         });
         await yieldIfBudgetExceeded();
 
-        // Fence between kindergarten and SMU
         await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(104, 0, 19),
             new THREE.Vector3(104, 0, 67),
@@ -482,7 +483,6 @@ export const Sector0: SectorDef = {
         ], 'mesh', 1.5, false);
         await yieldIfBudgetExceeded();
 
-        // Random buildings
         const randomBuildings = [
             { x: 54, z: 15, s: [15, 12, 15], rotation: 0, color: 0x776655 },
             { x: 237, z: 92, s: [18, 15, 20], rotation: 1.55, color: 0x555566 },
@@ -496,16 +496,13 @@ export const Sector0: SectorDef = {
             await yieldIfBudgetExceeded();
         }
 
-        // SMU
-        const smu = await SectorBuilder.spawnPoi(ctx, POI_TYPE.SMU, LOCATIONS.POIS.SMU.x, LOCATIONS.POIS.SMU.z, 0);
+        await SectorBuilder.spawnPoi(ctx, PoiType.SMU, LOCATIONS.POIS.SMU.x, LOCATIONS.POIS.SMU.z, 0);
         await yieldIfBudgetExceeded();
 
-        // SMU - Containers
         await SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z - 5, 0, 0x0044cc);
         await SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z + 5, 0, 0x0044cc);
         await yieldIfBudgetExceeded();
 
-        // SMU - Cars
         const carColors = [0x3355ff, 0xcccccc, 0xcc2222];
         const carType = [VehicleID.SEDAN, VehicleID.STATION_WAGON, VehicleID.SEDAN] as const;
         for (let i = 0; i < 3; i++) {
@@ -516,7 +513,6 @@ export const Sector0: SectorDef = {
             await yieldIfBudgetExceeded();
         }
 
-        // SMU - Stone wall
         await SectorBuilder.createStoneWallPath(ctx, [
             new THREE.Vector3(203, 0, 71),
             new THREE.Vector3(206, 0, 112),
@@ -525,31 +521,21 @@ export const Sector0: SectorDef = {
         ], 1.5, 1.5);
         await yieldIfBudgetExceeded();
 
-        // Town center - hedges
         await SectorBuilder.createHedgePath(ctx, [new THREE.Vector3(141, 0, 188), new THREE.Vector3(146, 0, 230)]);
         await SectorBuilder.createHedgePath(ctx, [new THREE.Vector3(139, 0, 195), new THREE.Vector3(136, 0, 231)]);
         await yieldIfBudgetExceeded();
 
-        // Church
-        await SectorBuilder.spawnPoi(ctx, POI_TYPE.CHURCH, LOCATIONS.POIS.CHURCH.x, LOCATIONS.POIS.CHURCH.z, 0);
-
-        // Cafe
-        await SectorBuilder.spawnPoi(ctx, POI_TYPE.CAFE, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z, 0);
-
-        // Grocery store
-        await SectorBuilder.spawnPoi(ctx, POI_TYPE.GROCERY_STORE, LOCATIONS.POIS.GROCERY.x, LOCATIONS.POIS.GROCERY.z, 0);
+        await SectorBuilder.spawnPoi(ctx, PoiType.CHURCH, LOCATIONS.POIS.CHURCH.x, LOCATIONS.POIS.CHURCH.z, 0);
+        await SectorBuilder.spawnPoi(ctx, PoiType.CAFE, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z, 0);
+        await SectorBuilder.spawnPoi(ctx, PoiType.GROCERY_STORE, LOCATIONS.POIS.GROCERY.x, LOCATIONS.POIS.GROCERY.z, 0);
         await SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.GROCERY.x - 5, LOCATIONS.POIS.GROCERY.z + 20, Math.PI / 2.5, 0x111111);
         await SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.GROCERY.x + 5, LOCATIONS.POIS.GROCERY.z + 20, Math.PI / 2.5, 0x111111);
         await yieldIfBudgetExceeded();
 
-        // Gym
-        await SectorBuilder.spawnPoi(ctx, POI_TYPE.GYM, LOCATIONS.POIS.GYM.x, LOCATIONS.POIS.GYM.z, 0);
-
-        // Pizzeria
-        await SectorBuilder.spawnPoi(ctx, POI_TYPE.PIZZERIA, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z, 0);
+        await SectorBuilder.spawnPoi(ctx, PoiType.GYM, LOCATIONS.POIS.GYM.x, LOCATIONS.POIS.GYM.z, 0);
+        await SectorBuilder.spawnPoi(ctx, PoiType.PIZZERIA, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z, 0);
         await yieldIfBudgetExceeded();
 
-        // Embankment
         const embankmentWest = [
             new THREE.Vector3(20, 5, 364),
             new THREE.Vector3(84, 5, 350),
@@ -564,7 +550,6 @@ export const Sector0: SectorDef = {
         await SectorBuilder.createEmbankment(ctx, embankmentEast, 18, 5, MATERIALS.dirt);
         await yieldIfBudgetExceeded();
 
-        // Overpass
         const overpassPoints = LOCATIONS.OVERPASS.map(p => p.clone());
         await PathGenerator.createRoad(ctx, overpassPoints, 12);
 
@@ -590,7 +575,6 @@ export const Sector0: SectorDef = {
         await SectorBuilder.createGuardrail(ctx, guardRailNorthEast, true);
         await yieldIfBudgetExceeded();
 
-        // Debris
         const debrisGeo = new THREE.BoxGeometry(0.15, 0.3, 5);
         const debrisPositions = [
             { x: 113, z: 339, ry: 0.2, rz: 0.1 },
@@ -608,8 +592,6 @@ export const Sector0: SectorDef = {
             await yieldIfBudgetExceeded();
         }
 
-        // Skid Marks (Sliding from West towards the broken edge)
-        // Left tire
         await PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(80, 6, 344),
             new THREE.Vector3(95, 6, 344),
@@ -617,7 +599,6 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(125, 6, 339.5)
         ], { spacing: 0.2, size: 0.5, material: MATERIALS.skidMark, variance: 0.02 });
 
-        // Right tire
         await PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(80, 6, 346.5),
             new THREE.Vector3(95, 6, 345.5),
@@ -626,7 +607,6 @@ export const Sector0: SectorDef = {
         ], { spacing: 0.2, size: 0.5, material: MATERIALS.skidMark, variance: 0.02 });
         await yieldIfBudgetExceeded();
 
-        // Tunnel
         const tunnelPos = new THREE.Vector3(LOCATIONS.TRIGGERS.TUNNEL.x, 0, LOCATIONS.TRIGGERS.TUNNEL.z);
         const tunnel = ObjectGenerator.createStandardTunnel(6, 6, 25, 1, 1);
         tunnel.position.copy(tunnelPos);
@@ -644,7 +624,6 @@ export const Sector0: SectorDef = {
             await yieldIfBudgetExceeded();
         }
 
-        // Bus (tunnel blocker)
         const bus = VehicleGenerator.createBus(0x009ddb, false);
         bus.position.set(LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.y, LOCATIONS.TRIGGERS.BUS.z);
         bus.rotation.set(Math.PI / 2, Math.PI / 2, 0);
@@ -664,28 +643,23 @@ export const Sector0: SectorDef = {
         scene.add(bus);
         SectorBuilder.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });
 
-        // Obstacle
         const busIdx = obstacles.length;
-        const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: InteractionShape.BOX, size: busSize } };
+        const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: ColliderType.BOX, size: busSize } };
         SectorBuilder.addObstacle(ctx, obstacle_bus);
 
-        // Interactable
         SectorBuilder.addInteractable(ctx, bus, {
             id: 'tunnel_bus_explode',
             label: 'ui.interact_blow_up_bus',
             type: InteractionType.SECTOR_SPECIFIC,
+            subType: InteractionSubType.PLANT_EXPLOSIVE,
             collider: { type: InteractionShape.SPHERE, radius: 15.0 }
         });
-        // Non-interactble from start
         bus.userData.isInteractable = false;
 
-        // Store references for the event logic
         (ctx as any).busObject = bus;
         (ctx as any).busColMesh = colMesh;
         (ctx as any).busObjectIdx = busIdx;
 
-        // [EXPLOSION LAG FIX] Pre-allocate bus rubble under the ground
-        // NaturePropGenerator now defaults to active: false
         const rubble = SectorBuilder.spawnRubble(ctx, LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.z, 20, MATERIALS.busBlue, Math.PI);
         rubble.position.y = -1000;
         rubble.visible = false;
@@ -693,7 +667,6 @@ export const Sector0: SectorDef = {
         rubble.userData.hasLanded = new Uint8Array(rubble.count);
         (ctx as any).busRubble = rubble;
 
-        // Tires (4 bouncing tires)
         const tireGeo = new THREE.DodecahedronGeometry(0.8, 1);
         const tireMat = MATERIALS.vehicleTire;
         const tires = new THREE.InstancedMesh(tireGeo, tireMat, 4);
@@ -709,18 +682,22 @@ export const Sector0: SectorDef = {
         scene.add(tires);
         (ctx as any).busTires = tires;
 
-        // ----------------------------
-        // Train yard - Fence
+        // Zero-GC Pre-allocation: Bus Explosion Ring
+        const busExplosionRing = new THREE.Mesh(GEOMETRY.busExplosionRing, MATERIALS.busExplosionRing);
+        busExplosionRing.rotation.x = -Math.PI / 2;
+        busExplosionRing.position.set(0, -1000, 0);
+        busExplosionRing.visible = false;
+        scene.add(busExplosionRing);
+        (ctx as any).busRing = busExplosionRing;
+
         const ty = LOCATIONS.POIS.TRAIN_YARD;
         const fenceHeight = 3;
 
-        // South Side (Solid)
         await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(ty.x - 60, 0, ty.z + 40),
             new THREE.Vector3(ty.x + 60, 0, ty.z + 40)
         ], 'mesh', fenceHeight, true);
 
-        // North Side (Openings for path/railroad)
         await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(ty.x - 60, 0, ty.z - 40),
             new THREE.Vector3(ty.x - 17, 0, ty.z - 40),
@@ -732,7 +709,6 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(ty.x + 60, 0, ty.z - 40)
         ], 'mesh', fenceHeight, true);
 
-        // West Side (Opening for railroad)
         await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(ty.x - 60, 0, ty.z - 40),
             new THREE.Vector3(ty.x - 60, 0, ty.z - 6)
@@ -742,7 +718,6 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(ty.x - 60, 0, ty.z + 40)
         ], 'mesh', fenceHeight, true);
 
-        // East Side (Opening for railroad)
         await SectorBuilder.createFence(ctx, [
             new THREE.Vector3(ty.x + 60, 0, ty.z - 40),
             new THREE.Vector3(ty.x + 60, 0, ty.z + 5),
@@ -753,14 +728,12 @@ export const Sector0: SectorDef = {
         ], 'mesh', fenceHeight, true);
         await yieldIfBudgetExceeded();
 
-        // Train yard - Ground
         const stationGround = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), MATERIALS.asphalt);
         stationGround.rotation.x = -Math.PI / 2;
         stationGround.position.set(LOCATIONS.POIS.TRAIN_YARD.x, 0.025, LOCATIONS.POIS.TRAIN_YARD.z);
         stationGround.receiveShadow = true;
         scene.add(stationGround);
 
-        // Trainyard - rail track
         await PathGenerator.createRailTrack(ctx, [
             new THREE.Vector3(-17, 0, 450),
             new THREE.Vector3(0, 0, 435),
@@ -770,7 +743,6 @@ export const Sector0: SectorDef = {
         ]);
         await yieldIfBudgetExceeded();
 
-        // Train yard - Train
         const locomotive = ObjectGenerator.createLocomotive();
         locomotive.position.set(LOCATIONS.POIS.TRAIN_YARD.x, -0.05, LOCATIONS.POIS.TRAIN_YARD.z);
         locomotive.rotation.y = -0.05;
@@ -787,15 +759,13 @@ export const Sector0: SectorDef = {
             }
         }
 
-        // Train yard - Containers
         const cColors = [0x1a4a2a, 0x4a2a1a, 0x1a2a4a, 0x8b0000];
-
         const containersData = [
-            { x: ty.x - 30, z: ty.z - 20, r: 0.1, c: cColors[0] },      // Back left
-            { x: ty.x - 28, z: ty.z - 17, r: 0.2, c: cColors[1] },      // Back left slightly offset
-            { x: ty.x + 35, z: ty.z - 15, r: -0.1, c: cColors[2] },     // Back right
-            { x: ty.x + 40, z: ty.z + 10, r: Math.PI / 2 + 0.05, c: cColors[3] }, // Right side
-            { x: ty.x - 45, z: ty.z + 20, r: Math.PI / 2 - 0.1, c: cColors[0] }  // Left side
+            { x: ty.x - 30, z: ty.z - 20, r: 0.1, c: cColors[0] },
+            { x: ty.x - 28, z: ty.z - 17, r: 0.2, c: cColors[1] },
+            { x: ty.x + 35, z: ty.z - 15, r: -0.1, c: cColors[2] },
+            { x: ty.x + 40, z: ty.z + 10, r: Math.PI / 2 + 0.05, c: cColors[3] },
+            { x: ty.x - 45, z: ty.z + 20, r: Math.PI / 2 - 0.1, c: cColors[0] }
         ];
 
         for (let i = 0; i < containersData.length; i++) {
@@ -806,12 +776,10 @@ export const Sector0: SectorDef = {
             scene.add(container);
             SectorBuilder.addObstacle(ctx, {
                 mesh: container,
-                collider: { type: InteractionShape.BOX, size: new THREE.Vector3(6.0, 2.6, 2.4) }
+                collider: { type: ColliderType.BOX, size: new THREE.Vector3(6.0, 2.6, 2.4) }
             });
         }
 
-        // FORESTS
-        // Forest: Home -> SMU
         let forestPolygon = [
             new THREE.Vector3(37, 0, 44),
             new THREE.Vector3(36, 0, 30),
@@ -819,6 +787,7 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(99, 0, 67),
             new THREE.Vector3(76, 0, 43),
         ];
+        console.time('[Sector0] Forest Generation');
         await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
         await yieldIfBudgetExceeded();
 
@@ -838,10 +807,10 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(32, 0, 55),
             new THREE.Vector3(24, 0, 37),
         ];
-        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
+        await SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE], forestPolygon, 12);
+        console.timeEnd('[Sector0] Forest Generation');
         await yieldIfBudgetExceeded();
 
-        // Forest
         forestPolygon = [
             new THREE.Vector3(188, 0, 151),
             new THREE.Vector3(188, 0, 140),
@@ -853,7 +822,6 @@ export const Sector0: SectorDef = {
         await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.PINE, forestPolygon, 12);
         await yieldIfBudgetExceeded();
 
-        // Forest - Cafe
         forestPolygon = [
             new THREE.Vector3(128, 0, 200),
             new THREE.Vector3(65, 0, 234),
@@ -868,7 +836,6 @@ export const Sector0: SectorDef = {
         await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, forestPolygon, 12);
         await yieldIfBudgetExceeded();
 
-        // Forsest - Gym
         forestPolygon = [
             new THREE.Vector3(20, 0, 230),
             new THREE.Vector3(66, 0, 230),
@@ -876,12 +843,10 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(72, 0, 285),
             new THREE.Vector3(72, 0, 340),
             new THREE.Vector3(28, 0, 350),
-
         ];
         await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, forestPolygon, 10);
         await yieldIfBudgetExceeded();
 
-        // Forest - Town center
         forestPolygon = [
             new THREE.Vector3(145, 0, 198),
             new THREE.Vector3(147, 0, 218),
@@ -905,7 +870,6 @@ export const Sector0: SectorDef = {
         await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, forestPolygon, 8);
         await yieldIfBudgetExceeded();
 
-        // Forest: Trainyard - North-West
         forestPolygon = [
             new THREE.Vector3(88, 0, 364),
             new THREE.Vector3(88, 0, 392),
@@ -944,61 +908,62 @@ export const Sector0: SectorDef = {
         SectorBuilder.spawnChest(ctx, 110, 80, ChestType.STANDARD);
         SectorBuilder.spawnChest(ctx, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z + 5, ChestType.STANDARD);
 
-        // Spawn Loke
         SectorBuilder.spawnFamily(ctx, FamilyMemberID.LOKE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI);
         performance.mark('sector0-props-end');
         performance.measure('sector0-props', 'sector0-props-start', 'sector0-props-end');
+
+        console.timeEnd('[Sector0] setupProps');
     },
 
     setupContent: async (ctx: SectorContext) => {
-        if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
+        if (ctx.isWarmup) return;
+        console.time('[Sector0] setupContent');
+
+        // ZERO-GC FIX: Added ONCE bitmask to ensure triggers stop firing after touch
         SectorBuilder.addTriggers(ctx, [
-            { id: 's0_start_tracks', position: LOCATIONS.TRIGGERS.START_TRACKS, radius: 10, type: TriggerType.THOUGHT, content: "clues.0.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-            { id: 's0_blood_stains', position: LOCATIONS.TRIGGERS.BLOOD_STAINS, radius: 10, type: TriggerType.THOUGHT, content: "clues.0.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-            { id: 's0_they_must_be_scared', position: LOCATIONS.TRIGGERS.CHAOS_HERE, radius: 8, type: TriggerType.THOUGHT, content: "clues.0.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-            { id: 's0_still_tracking', position: LOCATIONS.TRIGGERS.STILL_TRACKING, radius: 15, type: TriggerType.THOUGHT, content: "clues.0.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-            { id: 's0_town_center', position: LOCATIONS.TRIGGERS.TOWN_CENTER, radius: 80, type: TriggerType.THOUGHT, content: "clues.0.4.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: ClueID.S0_START_TRACKS, position: LOCATIONS.TRIGGERS.START_TRACKS, radius: 10, type: TriggerType.CLUE, content: "clues.0.0.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: ClueID.S0_BLOOD_STAINS, position: LOCATIONS.TRIGGERS.BLOOD_STAINS, radius: 10, type: TriggerType.CLUE, content: "clues.0.1.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: ClueID.S0_THEY_MUST_BE_SCARED, position: LOCATIONS.TRIGGERS.CHAOS_HERE, radius: 8, type: TriggerType.CLUE, content: "clues.0.2.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: ClueID.S0_STILL_TRACKING, position: LOCATIONS.TRIGGERS.STILL_TRACKING, radius: 15, type: TriggerType.CLUE, content: "clues.0.3.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: ClueID.S0_TOWN_CENTER, position: LOCATIONS.TRIGGERS.TOWN_CENTER, radius: 80, type: TriggerType.CLUE, content: "clues.0.4.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
 
-            { id: 's0_poi_building_on_fire', position: LOCATIONS.POIS.SMU, size: { width: 60, depth: 60 }, type: TriggerType.POI, content: "pois.0.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's0_poi_church', position: LOCATIONS.POIS.CHURCH, size: { width: 30, depth: 30 }, type: TriggerType.POI, content: "pois.0.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's0_poi_cafe', position: LOCATIONS.POIS.CAFE, size: { width: 25, depth: 25 }, type: TriggerType.POI, content: "pois.0.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's0_poi_pizzeria', position: LOCATIONS.POIS.PIZZERIA, size: { width: 25, depth: 25 }, type: TriggerType.POI, content: "pois.0.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's0_poi_grocery', position: LOCATIONS.POIS.GROCERY, size: { width: 25, depth: 40 }, type: TriggerType.POI, content: "pois.0.4.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's0_poi_gym', position: LOCATIONS.POIS.GYM, size: { width: 45, depth: 25 }, type: TriggerType.POI, content: "pois.0.5.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's0_poi_train_yard', position: LOCATIONS.POIS.TRAIN_YARD, size: { width: 130, depth: 90 }, type: TriggerType.POI, content: "pois.0.6.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: PoiID.S0_BUILDING_ON_FIRE, position: LOCATIONS.POIS.SMU, size: { width: 80, depth: 80 }, type: TriggerType.POI, content: "pois.0.0.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: PoiID.S0_CHURCH, position: LOCATIONS.POIS.CHURCH, size: { width: 50, depth: 50 }, type: TriggerType.POI, content: "pois.0.1.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: PoiID.S0_CAFE, position: LOCATIONS.POIS.CAFE, size: { width: 45, depth: 45 }, type: TriggerType.POI, content: "pois.0.2.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: PoiID.S0_PIZZERIA, position: LOCATIONS.POIS.PIZZERIA, size: { width: 45, depth: 45 }, type: TriggerType.POI, content: "pois.0.3.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: PoiID.S0_GROCERY, position: LOCATIONS.POIS.GROCERY, size: { width: 45, depth: 60 }, type: TriggerType.POI, content: "pois.0.4.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: PoiID.S0_GYM, position: LOCATIONS.POIS.GYM, size: { width: 65, depth: 45 }, type: TriggerType.POI, content: "pois.0.5.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: PoiID.S0_TRAIN_YARD, position: LOCATIONS.POIS.TRAIN_YARD, size: { width: 150, depth: 110 }, type: TriggerType.POI, content: "pois.0.6.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
 
-            // THE NATIVE BUS EVENT TRIGGER
-            { id: 's0_event_tunnel_blocked', position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: TriggerType.SPEAK, content: "clues.0.5.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [] },
+            { id: SectorEventID.S0_TUNNEL_BLOCKED, position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: TriggerType.EVENT, content: "clues.0.5.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [] },
 
-            // LOKE CINEMATIC TRIGGER — starts INACTIVE.
-            // Activated by onUpdate State 9 only after the bus explosion settles,
-            // so the player cannot skip the cinematic by walking to Loke early.
             {
-                id: 'found_loke',
+                id: FamilyMemberID.LOKE,
                 position: LOCATIONS.SPAWN.FAMILY,
                 familyId: FamilyMemberID.LOKE,
                 radius: 8,
                 type: TriggerType.EVENT,
                 content: '',
-                statusFlags: TriggerStatus.ONCE, // Starts INACTIVE (Missing ACTIVE bit)
-                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.LOKE, scriptId: 0, sectorId: 0 } }]
+                statusFlags: TriggerStatus.ONCE,
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.LOKE, dialogueId: 0, sectorId: 0 } }]
             }
         ]);
+
+        console.timeEnd('[Sector0] setupContent');
     },
 
     onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {
-        // Only triggered when the player hits [E] after the wave is cleared
-        if (id === 'tunnel_bus_explode') {
+        const subType = object.userData.interactionSubType;
+        if (subType === InteractionSubType.PLANT_EXPLOSIVE) {
             state.sectorState.busInteractionTriggered = true;
             object.userData.isInteractable = false;
+            if (events.setInteraction) events.setInteraction(null);
         }
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
-        // --- SECTOR 0: LOKE MISSION LOGIC ---
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, triggerSystem, ctx, ...events }) => {
         if (!sectorState.spawns) sectorState.spawns = {};
 
-        // --- 1. AMBIENT ZOMBIE SPAWNS ---
         if (!sectorState.spawns.initial && simTime - gameState.startTime > 0) {
             sectorState.spawns.initial = true;
             for (let i = 0; i < 3; i++) {
@@ -1007,7 +972,7 @@ export const Sector0: SectorDef = {
         }
 
         _v1.set(_forestHomeSMU.x, 0, _forestHomeSMU.z);
-        if (playerPos.distanceToSquared(_v1) < 1600 && !sectorState.spawns.forest_home_smu) {
+        if (!sectorState.spawns.forest_home_smu && playerPos.distanceToSquared(_v1) < 1600) {
             sectorState.spawns.forest_home_smu = true;
             for (let i = 0; i < 6; i++) {
                 const type = Math.random() > 0.7 ? EnemyType.RUNNER : EnemyType.WALKER;
@@ -1018,37 +983,30 @@ export const Sector0: SectorDef = {
             }
         }
 
-        const buildingPOIs = [
-            { name: 'church', pos: LOCATIONS.POIS.CHURCH, count: 6, isMixed: true },
-            { name: 'cafe', pos: LOCATIONS.POIS.CAFE, count: 4, type: EnemyType.WALKER },
-            { name: 'grocery', pos: LOCATIONS.POIS.GROCERY, count: 5, type: EnemyType.RUNNER },
-            { name: 'gym', pos: LOCATIONS.POIS.GYM, count: 3, isMixed: true },
-            { name: 'pizzeria', pos: LOCATIONS.POIS.PIZZERIA, count: 4, type: EnemyType.WALKER },
-        ];
+        // ZERO-GC FIX: Use pre-allocated flat array, eliminating array and closure allocations
+        const bLen = BUILDING_POIS.length;
+        for (let idx = 0; idx < bLen; idx++) {
+            const poi = BUILDING_POIS[idx];
+            if (!sectorState.spawns[poi.name]) {
+                _v1.set(poi.pos.x, 0, poi.pos.z);
+                if (playerPos.distanceToSquared(_v1) < 5625) {
+                    sectorState.spawns[poi.name] = true;
+                    for (let i = 0; i < poi.count; i++) {
+                        let type: EnemyType = EnemyType.WALKER;
+                        if (poi.isMixed) type = Math.random() > 0.8 ? EnemyType.RUNNER : EnemyType.WALKER;
+                        else type = poi.type;
 
-        buildingPOIs.forEach(poi => {
-            _v1.set(poi.pos.x, 0, poi.pos.z);
-            const distSq = playerPos.distanceToSquared(_v1);
-            // Increased trigger distance to 75 (5625 sq) to match new spawner logic
-            if (distSq < 5625 && !sectorState.spawns[poi.name]) {
-                sectorState.spawns[poi.name] = true;
-                for (let i = 0; i < poi.count; i++) {
-                    let type: EnemyType = EnemyType.WALKER;
-                    if (poi.isMixed) type = Math.random() > 0.8 ? EnemyType.RUNNER : EnemyType.WALKER;
-                    else if (poi.type === EnemyType.RUNNER) type = Math.random() > 0.3 ? EnemyType.RUNNER : EnemyType.WALKER;
-                    else if (poi.type !== undefined) type = poi.type;
-
-                    const offX = (Math.random() - 0.5) * 20;
-                    const offZ = (Math.random() - 0.5) * 20;
-                    _spawnScratch.set(poi.pos.x + offX, 0, poi.pos.z + offZ);
-                    if (events.spawnZombie) events.spawnZombie(type, _spawnScratch);
+                        const offX = (Math.random() - 0.5) * 20;
+                        const offZ = (Math.random() - 0.5) * 20;
+                        _spawnScratch.set(poi.pos.x + offX, 0, poi.pos.z + offZ);
+                        if (events.spawnZombie) events.spawnZombie(type, _spawnScratch);
+                    }
                 }
             }
-        });
+        }
 
         _v1.set(_townCenterWoods.x, 0, _townCenterWoods.z);
-        // Increased trigger distance to 75 (5625 sq) to match new spawner logic
-        if (playerPos.distanceToSquared(_v1) < 5625 && !sectorState.spawns.town_forest) {
+        if (!sectorState.spawns.town_forest && playerPos.distanceToSquared(_v1) < 5625) {
             sectorState.spawns.town_forest = true;
             for (let i = 0; i < 8; i++) {
                 let type = EnemyType.WALKER;
@@ -1064,7 +1022,6 @@ export const Sector0: SectorDef = {
             }
         }
 
-        // --- 2. TRAIN SMOKE ---
         if (events.spawnParticle) {
             const interval = 80;
             if (simTime - (sectorState.lastSmokeTime || 0) > interval) {
@@ -1079,41 +1036,45 @@ export const Sector0: SectorDef = {
             }
         }
 
-        // --- 3. BUS EVENT STATE MACHINE ---
-        if (sectorState.busEventState === undefined) {
-            sectorState.busEventState = 0;
-            sectorState.zombiesKilled = 0;
-            sectorState.zombiesKillTarget = 0;
-        }
-
-        // State 0: Wait for player to approach the bus
         if (sectorState.busEventState === 0) {
-            const busTrigIdx = gameState.triggers.getTriggerById('s0_event_tunnel_blocked');
-            if (gameState.triggers.isTriggered(busTrigIdx)) {
+            const busTrigIdx = triggerSystem.getTriggerById(SectorEventID.S0_TUNNEL_BLOCKED);
+            if (triggerSystem.isTriggered(busTrigIdx)) {
                 sectorState.busEventState = 1;
                 sectorState.busEventTimer = simTime;
             }
         }
-
-        // State 1: Wait 2.0s, then trigger first distant explosion
         else if (sectorState.busEventState === 1 && simTime - sectorState.busEventTimer > 2000) {
+            // ZERO-GC FIX: Instantly push state to prevent multi-frame trigger duplication
             sectorState.busEventState = 2;
             sectorState.busEventTimer = simTime;
 
             if (events.playSound) events.playSound(SoundID.EXPLOSION);
             if (events.cameraShake) events.cameraShake(1.0);
 
-            gameState.triggers.addTrigger({
-                id: 'dyn_speak_1',
-                x: playerPos.x, y: 0, z: playerPos.z,
-                radius: 100,
-                type: TriggerType.SPEAK,
-                content: "clues.0.6.reaction",
-                statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE
+            triggerSystem.addTriggerPrimitive(
+                SectorEventID.S0_TUNNEL_WHATS_HAPPENING,
+                TriggerType.SPEAK,
+                playerPos.x, 0, playerPos.z,
+                100, TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                "clues.0.6.reaction"
+            );
+            triggerSystem.addTrigger({
+                id: 's0_event_explosives_planted',
+                type: TriggerType.EVENT,
+                x: EXPLODING_BUS_POS.x, y: 0, z: EXPLODING_BUS_POS.z,
+                radius: 15,
+                statusFlags: TriggerStatus.ONCE | TriggerStatus.ACTIVE,
+                actions: [{ type: TriggerActionType.CONCLUDE_SECTOR, payload: { isExtraction: false } }]
             });
+            triggerSystem.addTriggerPrimitive(
+                's0_event_bus_rubble',
+                TriggerType.CLUE,
+                EXPLODING_BUS_POS.x, 0, EXPLODING_BUS_POS.z,
+                20,
+                TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                "story.bus_rubble_reaction"
+            );
         }
-
-        // State 2: Wait 2s, then pan camera
         else if (sectorState.busEventState === 2 && simTime - sectorState.busEventTimer > 2000) {
             sectorState.busEventState = 3;
             sectorState.busEventTimer = simTime;
@@ -1129,8 +1090,6 @@ export const Sector0: SectorDef = {
                 });
             }
         }
-
-        // State 3: Wait 2s for camera to arrive, then BIG explosion at train yard
         else if (sectorState.busEventState === 3 && simTime - sectorState.busEventTimer > 2000) {
             sectorState.busEventState = 4;
             sectorState.busEventTimer = simTime;
@@ -1142,45 +1101,32 @@ export const Sector0: SectorDef = {
                 events.makeNoise(_trainYardPos, NoiseType.OTHER, 100);
             }
         }
-
-        // State 4: Wait 2s on explosion view, then return camera and spawn wave
         else if (sectorState.busEventState === 4 && simTime - sectorState.busEventTimer > 2000) {
+            // ZERO-GC FIX: Instantly push state to prevent duplicate allocations
             sectorState.busEventState = 5;
             sectorState.busEventTimer = simTime;
 
             if (events.setCameraOverride) events.setCameraOverride(null);
 
-            gameState.triggers.addTrigger({
-                id: 'dyn_speak_2',
-                x: playerPos.x, y: 0, z: playerPos.z,
-                radius: 100,
-                type: TriggerType.SPEAK,
-                content: "clues.0.9.reaction",
-                statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE
-            });
+            triggerSystem.addTriggerPrimitive(
+                SectorEventID.S0_TUNNEL_EXPLOSION_ATTRACTED_ZOMBIES,
+                TriggerType.CLUE,
+                playerPos.x, 0, playerPos.z,
+                100, TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                "clues.0.9.reaction"
+            );
 
-            // ZOMBIE WAVE
-            // Randomized 3-spot Horde Spawn (Bus Event Pincer)
-            const SPOTS = [
-                LOCATIONS.POIS.CHURCH,
-                LOCATIONS.POIS.CAFE,
-                LOCATIONS.POIS.GROCERY
-            ];
-
-            for (let i = 0; i < SPOTS.length; i++) {
-                _viewPos.set(SPOTS[i].x, 0, SPOTS[i].z);
+            for (let i = 0; i < SPOTS_ARRAY.length; i++) {
+                _viewPos.set(SPOTS_ARRAY[i].x, 0, SPOTS_ARRAY[i].z);
                 if (events.spawnHorde) {
                     events.spawnHorde(6, undefined, _viewPos);
                 }
             }
 
-            // Sector tracking: 18 zombies in this wave
             sectorState.zombiesKillTarget = 1;
             sectorState.zombiesKilled = 0;
             sectorState.startingKills = gameState.sessionStats.kills;
         }
-
-        // State 5: Wait for player to kill the wave
         else if (sectorState.busEventState === 5) {
             sectorState.zombiesKilled = gameState.sessionStats.kills - sectorState.startingKills;
 
@@ -1188,38 +1134,49 @@ export const Sector0: SectorDef = {
                 sectorState.busEventState = 6;
                 sectorState.busEventTimer = simTime;
 
-                gameState.triggers.addTrigger({
-                    id: 'dyn_speak_3',
-                    x: playerPos.x, y: 0, z: playerPos.z,
-                    radius: 100,
-                    type: TriggerType.SPEAK,
-                    content: "clues.0.7.reaction",
-                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE
+                triggerSystem.addTriggerPrimitive(
+                    SectorEventID.S0_TUNNEL_PLANT_EXPLOSIVES,
+                    TriggerType.CLUE,
+                    playerPos.x, 0, playerPos.z,
+                    100, TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                    "clues.0.7.reaction"
+                );
+                triggerSystem.addTrigger({
+                    id: SectorEventID.S0_LOKE_DIALOGUE,
+                    type: TriggerType.EVENT,
+                    x: LOCATIONS.TRIGGERS.START_TRACKS.x, y: 0, z: LOCATIONS.TRIGGERS.START_TRACKS.z,
+                    radius: 20,
+                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                    actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 0, dialogueId: 0 } }]
                 });
+                triggerSystem.addTriggerPrimitive(
+                    FamilyMemberID.LOKE,
+                    TriggerType.POI,
+                    LOCATIONS.TRIGGERS.START_TRACKS.x, 0, LOCATIONS.TRIGGERS.START_TRACKS.z,
+                    25,
+                    TriggerStatus.ACTIVE,
+                    "pois.0.0.reaction"
+                );
 
-                // Flag interaction for InteractionSystem
                 sectorState.busCanBeInteractedWith = true;
 
-                const busObj = (sectorState.ctx as any).busObject;
+                const busObj = (ctx as any).busObject;
                 if (busObj) {
                     busObj.userData.isInteractable = true;
                 }
             }
         }
-
-        // State 6: Wait for player to press [E]
         else if (sectorState.busEventState === 6 && sectorState.busInteractionTriggered) {
             sectorState.busEventState = 7;
             sectorState.busEventTimer = simTime;
             sectorState.lastBeepTime = simTime;
 
-            const busObj = (sectorState.ctx as any).busObject;
+            const busObj = (ctx as any).busObject;
             if (busObj) {
                 if (!sectorState.originalBusPos) sectorState.originalBusPos = new THREE.Vector3();
                 sectorState.originalBusPos.copy(busObj.position);
                 const busPos = busObj.position;
 
-                // Cinematic Camera
                 if (events.setCameraOverride) {
                     _camOverrideTarget.copy(busPos).add(_zoomOffsetTarget);
                     _camOverrideLookAt.copy(busPos).add(_zoomOffsetLook);
@@ -1231,92 +1188,79 @@ export const Sector0: SectorDef = {
                     });
                 }
 
-                // Spawn red pulsating ring
-                const busExplosionRing = new THREE.Mesh(GEOMETRY.busExplosionRing, MATERIALS.busExplosionRing);
-                busExplosionRing.rotation.x = -Math.PI / 2;
-                busExplosionRing.position.copy(busPos);
-                busExplosionRing.position.y = 1.0;
-
-                if (events.scene) events.scene.add(busExplosionRing);
-                sectorState.busRing = busExplosionRing;
+                const busRing = (ctx as any).busRing;
+                if (busRing) {
+                    busRing.position.copy(busPos);
+                    busRing.position.y = 1.0;
+                    busRing.visible = true;
+                    busRing.material.opacity = 0;
+                }
             }
 
             if (events.playTone) events.playTone(880, ToneType.SINE, 0.1, 0.2);
             if (events.setInteraction) events.setInteraction(null);
         }
-
-        // State 7: Bomb countdown sequence
         else if (sectorState.busEventState === 7) {
             const elapsed = simTime - sectorState.busEventTimer;
             const pos = (sectorState as any).originalBusPos || LOCATIONS.TRIGGERS.BUS;
             _busOriginalPos.copy(pos);
 
             if (elapsed < 3000) {
-                // Beep sequence
                 const beepInterval = elapsed > 2000 ? 250 : 500;
                 if (simTime - sectorState.lastBeepTime > beepInterval) {
                     sectorState.lastBeepTime = simTime;
                     if (events.playTone) events.playTone(880, ToneType.SINE, 0.1, 0.15);
                 }
 
-                // Pulsating visual effect on the ring
-                if (sectorState.busRing) {
+                const busRing = (ctx as any).busRing;
+                if (busRing) {
                     const elapsedRender = renderTime - (sectorState.busEventTimer || renderTime);
                     const pulse = (Math.sin(elapsedRender * 0.01) + 1) * 0.5;
-                    sectorState.busRing.material.opacity = 0.3 + (pulse * 0.5);
-                    sectorState.busRing.scale.setScalar(1.0 + (pulse * 0.2));
-                    sectorState.busRing.material.color.setRGB(1.0, pulse, 0.0);
+                    busRing.material.opacity = 0.3 + (pulse * 0.5);
+                    busRing.scale.setScalar(1.0 + (pulse * 0.2));
+                    busRing.material.color.setRGB(1.0, pulse, 0.0);
                 }
             } else {
-                // Trigger the actual explosion
                 sectorState.busEventState = 8;
                 sectorState.busEventTimer = simTime;
 
-                if (sectorState.busRing) {
-                    if (events.scene) events.scene.remove(sectorState.busRing);
-                    sectorState.busRing = null;
+                const busRing = (ctx as any).busRing;
+                if (busRing) {
+                    busRing.visible = false;
+                    busRing.position.y = -1000;
                 }
 
                 sectorState.busExploded = true;
             }
         }
-
-        // State 8: Explosion physics and post-explosion timer
         else if (sectorState.busEventState === 8) {
             const elapsed = simTime - sectorState.busEventTimer;
 
-            // PHYSICS UPDATE
             explodeBus(delta, renderTime, gameState, sectorState, ctx, events);
 
-            if (elapsed > 10000 || (!sectorState.busRubble?.userData.active)) {
+            if (elapsed > 10000 || (!(ctx as any).busRubble?.userData.active)) {
                 sectorState.busEventState = 9;
                 sectorState.busEventTimer = simTime;
 
                 if (events.setCameraOverride) events.setCameraOverride(null);
 
-                gameState.triggers.addTrigger({
-                    id: 'dyn_speak_4',
-                    x: playerPos.x, y: 0, z: playerPos.z,
-                    radius: 100,
-                    type: TriggerType.SPEAK,
-                    content: "clues.0.8.reaction",
-                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE
-                });
+                triggerSystem.addTriggerPrimitive(
+                    SectorEventID.S0_TUNNEL_CLEARED,
+                    TriggerType.CLUE,
+                    playerPos.x, 0, playerPos.z,
+                    100, TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                    "clues.0.8.reaction"
+                );
             }
         }
-
-        // State 9: Explosion settled — activate the Loke proximity trigger so the player
-        // can now walk through the tunnel and begin the cinematic encounter.
         else if (sectorState.busEventState === 9 && !sectorState.lokeUnlocked) {
-            // Wait a beat (1.5s) for the rubble speech bubble to land before unlocking
             if (simTime - sectorState.busEventTimer > 1500) {
                 sectorState.lokeUnlocked = true;
 
-                // Activate the found_loke trigger
-                const idx = gameState.triggers.getTriggerById('found_loke');
+                const idx = triggerSystem.getTriggerById(FamilyMemberID.LOKE);
                 if (idx !== -1) {
-                    gameState.triggers.setStatusFlag(idx, TriggerStatus.ACTIVE, true);
-                    gameState.triggers.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);
+                    triggerSystem.setStatusFlag(idx, TriggerStatus.ACTIVE, true);
+                    triggerSystem.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);
                 }
             }
         }

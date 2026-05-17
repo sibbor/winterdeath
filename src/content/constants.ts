@@ -35,8 +35,8 @@ export const ENTITY_STATUS = {
 // --- VINTERDÖD ENGINE HARDENING (Magic Number Eradication) ---
 export enum TriggerShape { CIRCLE = 0, BOX = 1 }
 
-export const PHYSICS = { 
-    GRAVITY: 30.0, 
+export const PHYSICS = {
+    GRAVITY: 30.0,
     TERMINAL_VELOCITY: 50.0,
     GROUND_HEIGHT_EPSILON: 0.1,
     SWIM_DEPTH_MAX: 1.25,
@@ -47,15 +47,15 @@ export const PHYSICS = {
     SOFT_SHOVE_FORCE: 1.2
 };
 
-export const AI_LOD = { 
-    CORE_RADIUS_SQ: 1600,       // 40m
-    THROTTLED_RADIUS_SQ: 6400,  // 80m
-    CULL_RADIUS_SQ: 14400,      // 120m
+export const AI_LOD = {
+    CORE_RADIUS_SQ: 5625,       // 75m (Matching Sector0 trigger distance)
+    THROTTLED_RADIUS_SQ: 14400,  // 120m (Zombies are updated and visible up to spawn range)
+    CULL_RADIUS_SQ: 40000,      // 200m (Zombies stay active until well behind the player)
     CULL_DOT_THRESHOLD: -2.0
 };
 
-export const COMBAT = { 
-    HYSTERESIS: 1.15,           // 15% range buffer
+export const COMBAT = {
+    HYSTERESIS: 1.25,           // 25% range buffer
     CRISIS_HP_RATIO: 0.25,      // 25% HP adrenaline trigger
     LONG_RANGE_SQ: 625,         // 25m threshold
     MUZZLE_CONE_COS: 0.94,      // ~20 degrees
@@ -69,13 +69,15 @@ export const COMBAT = {
     HP_REGEN_DELAY: 5000,
     INVULNERABLE_TIME_HIT: 400,
     DODGE_DURATION: 300,
+    RUSH_IMPACT_DAMAGE: 10,
+    DODGE_IMPACT_DAMAGE: 5,
     KILL_STREAK_WINDOW_SHORT: 3000,
     KILL_STREAK_WINDOW_LONG: 5000
 };
 
-export const MAX_ENTITIES = { 
-    PERKS: 32, 
-    FIRE_ZONES: 16, 
+export const MAX_ENTITIES = {
+    PERKS: StatPerkIndex.COUNT,
+    FIRE_ZONES: 16,
     BUCKET_CAPACITY: 16,
     MAX_BOSS_IDS: 32,
     STREAK_BUFFER_SIZE: 5,
@@ -121,10 +123,11 @@ export const PLAYER = {
     RUSH_RAMP_SPEED: 0.5 // 2 seconds (1.0 / 0.5)
 };
 
-export const PLAYER_DEATH_TIMER = 3000;         // ms
-export const HEALTH_CRITICAL_THRESHOLD = 0.2;   // 20% HP
-export const PLAYER_BASE_SPEED = PLAYER.BASE_SPEED;          // km/h, km/tim, kph
-export const KMH_TO_MS = 1.0 / 3.6;             // km/h to m/s
+export const PLAYER_DEATH_TIMER = 3000; // ms
+export const HEALTH_CRITICAL_THRESHOLD = 0.2; // 20% HP
+export const PLAYER_BASE_SPEED = PLAYER.BASE_SPEED; // km/h, km/tim, kph
+export const COLLECTIBLES_PER_SECTOR = 2;
+export const KMH_TO_MS = 1.0 / 3.6; // km/h to m/s
 
 export const CAMERA_HEIGHT = 50;
 
@@ -140,20 +143,26 @@ export const WIND_SYSTEM = {
 export const WEATHER_SYSTEM = {
     MAX_NUM_PARTICLES: 5000,
     DEFAULT_NUM_PARTICLES: 400
-}
+};
 
 // WaterSystem
 export const WATER_SYSTEM = {
     MAX_RIPPLES: 16,
     MAX_FLOATING_OBJECTS: 8
-}
+};
+
+// SkySystem
+export const SKY_SYSTEM = {
+    STAR_COUNT_MAX: 2000,
+    DRIFT_SPEED: -0.003,
+    SKY_LIGHT: 'SKY_LIGHT',
+    HEMI_LIGHT: 'HEMI_LIGHT'
+};
 
 // LightSystem
 export const LIGHT_SYSTEM = {
     MAX_VISIBLE_LIGHTS: 16,
-    MAX_SHADOW_CASTING_LIGHTS: 2,
-    SKY_LIGHT: 'SKY_LIGHT',
-    AMBIENT_LIGHT: 'AMBIENT_LIGHT'
+    MAX_SHADOW_CASTING_LIGHTS: 2
 };
 
 export const LIGHT_SETTINGS = {
@@ -242,10 +251,18 @@ export const INITIAL_STATS: PlayerStats = {
         b[PlayerStatID.MULTIPLIER_DMG_RESIST] = 1.0;
         b[PlayerStatID.MULTIPLIER_RANGE] = 1.0;
 
+        // --- BASE MULTIPLIERS (Phase 11) ---
+        b[PlayerStatID.BASE_MULTIPLIER_SPEED] = 1.0;
+        b[PlayerStatID.BASE_MULTIPLIER_RELOAD] = 1.0;
+        b[PlayerStatID.BASE_MULTIPLIER_FIRERATE] = 1.0;
+        b[PlayerStatID.BASE_MULTIPLIER_DMG_RESIST] = 1.0;
+        b[PlayerStatID.BASE_MULTIPLIER_RANGE] = 1.0;
+
         // --- BAKE FINAL PRE-CALCULATED STATS (Zero-GC) ---
-        b[PlayerStatID.FINAL_SPEED] = b[PlayerStatID.SPEED] * b[PlayerStatID.MULTIPLIER_SPEED] * KMH_TO_MS;
+        b[PlayerStatID.FINAL_SPEED] = b[PlayerStatID.SPEED] * b[PlayerStatID.BASE_MULTIPLIER_SPEED] * b[PlayerStatID.MULTIPLIER_SPEED] * KMH_TO_MS;
 
         return b;
+
     })(),
     effectDurations: new Float32Array(MAX_ENTITIES.PERKS),
     effectMaxDurations: new Float32Array(MAX_ENTITIES.PERKS),
@@ -268,7 +285,6 @@ export const INITIAL_STATS: PlayerStats = {
     incomingDamageBuffer: new Float64Array(TELEMETRY_BUFFER_SIZE),
 
     statusFlags: 0,
-    statusMask: 0,
     activePassives: [],
     activeBuffs: [],
     activeDebuffs: [],
@@ -315,7 +331,7 @@ export enum FamilyMemberID {
 
 export const PLAYER_CHARACTER = {
     id: FamilyMemberID.ROBERT,
-    name: 'family.dad',
+    name: 'Robert',
     race: 'human',
     gender: 'male',
     title: 'family.dad',
@@ -355,13 +371,14 @@ export const SPEAKER_ID_TO_KEY: Record<FamilyMemberID, string> = {
 };
 
 export const FAMILY_MEMBERS = [
-    { id: FamilyMemberID.LOKE, name: 'family.loke', race: 'human', gender: 'male', title: 'family.son', color: { num: 0xfacc15, str: '#facc15' } as const, scale: 0.7 },
-    { id: FamilyMemberID.JORDAN, name: 'family.jordan', race: 'human', gender: 'male', title: 'family.son', color: { num: 0x4ade80, str: '#4ade80' } as const, scale: 0.5 },
-    { id: FamilyMemberID.ESMERALDA, name: 'family.esmeralda', race: 'human', gender: 'female', title: 'family.daughter', color: { num: 0xe879f9, str: '#e879f9' } as const, scale: 0.8 },
-    { id: FamilyMemberID.NATHALIE, name: 'family.nathalie', race: 'human', gender: 'female', title: 'family.wife', color: { num: 0xf43f5e, str: '#f43f5e' } as const, scale: 0.95 },
-    { id: FamilyMemberID.SOTIS, name: 'family.sotis', race: 'animal', gender: 'female', title: 'family.cat', color: { num: 0xcccccc, str: '#cccccc' } as const, scale: 0.6 },
-    { id: FamilyMemberID.PANTER, name: 'family.panter', race: 'animal', gender: 'male', title: 'family.cat', color: { num: 0x222222, str: '#222222' } as const, scale: 0.6 }
+    { id: FamilyMemberID.LOKE, name: 'Loke', race: 'human', gender: 'male', title: 'family.son', color: { num: 0xfacc15, str: '#facc15' } as const, scale: 0.7 },
+    { id: FamilyMemberID.JORDAN, name: 'Jordan', race: 'human', gender: 'male', title: 'family.son', color: { num: 0x4ade80, str: '#4ade80' } as const, scale: 0.5 },
+    { id: FamilyMemberID.ESMERALDA, name: 'Esmeralda', race: 'human', gender: 'female', title: 'family.daughter', color: { num: 0xe879f9, str: '#e879f9' } as const, scale: 0.8 },
+    { id: FamilyMemberID.NATHALIE, name: 'Nathalie', race: 'human', gender: 'female', title: 'family.wife', color: { num: 0xf43f5e, str: '#f43f5e' } as const, scale: 0.95 },
+    { id: FamilyMemberID.SOTIS, name: 'Sotis', race: 'animal', gender: 'female', title: 'family.cat', color: { num: 0xcccccc, str: '#cccccc' } as const, scale: 0.6 },
+    { id: FamilyMemberID.PANTER, name: 'Panter', race: 'animal', gender: 'male', title: 'family.cat', color: { num: 0x222222, str: '#222222' } as const, scale: 0.6 }
 ];
+
 /**
  * Type-safe interface for voice parameters to enable Zero-GC audio synthesis.
  */

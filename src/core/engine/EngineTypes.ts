@@ -22,6 +22,17 @@ export enum WeatherType {
   EMBER = 4,
 }
 
+export enum GroundType {
+  SNOW = 0,
+  GRAVEL = 1,
+  DIRT = 2,
+  ASPHALT = 3,
+  WOOD = 4,
+  METAL = 5,
+  ICE = 6,
+  WATER = 7
+}
+
 export interface EnvironmentalFog {
   density: number; // 0-40 (Antal plan för FogSystem)
   color?: number;  // Om satt, override:ar bgColor
@@ -43,31 +54,20 @@ export interface EnvironmentalWind {
 export interface SectorEnvironment {
   bgColor: number;
   fog?: EnvironmentalFog;
-  ambientIntensity: number;
-  ambientColor?: number;
   groundColor: number;
   fov: number;
-  skyLight: {
-    visible: boolean;
-    color: number;
-    intensity: number;
-    position?: { x: number, y: number, z: number };
-  };
-  hemiLight?: {
-    sky: number;
-    ground: number;
-    intensity: number;
-  };
+  sky: import('../../utils/assets/materials_sky').SkyConfig;
   cameraOffsetZ: number;
   cameraHeight?: number;
   weather: EnvironmentalWeather;
   wind?: EnvironmentalWind;
+  ambient?: number; // Global ambient fill (Hemisphere intensity fallback)
 }
 
 export interface EnvironmentalZone {
   label: string;
-  x: number;
-  z: number;
+  x?: number; // Optional if polygon is provided
+  z?: number; // Optional if polygon is provided
   weather: WeatherType;
   bgColor: number;
   fogDensity: number;
@@ -75,15 +75,24 @@ export interface EnvironmentalZone {
   weatherDensity?: number;
   innerRadius?: number;
   outerRadius?: number;
+  windStrength?: number;
+  polygon?: { x: number, z: number }[];
+  polygonFadeDistance?: number;
+}
+
+export interface TargetEnvironment {
+  fogColor: number;
+  fogDensity: number;
+  groundColor: number;
+  weatherType: WeatherType;
+  weatherDensity: number;
+  windStrength: number;
+  ambient: number;
+  maxWeight: number; // To determine if zone weather should dominate
 }
 
 export interface EnvironmentOverride extends Partial<Omit<SectorEnvironment, 'weather'>> {
   weather?: WeatherType | EnvironmentalWeather;
-  directionalIntensity?: number;
-  skyLightVisible?: boolean;
-  skyLightColor?: number;
-  skyLightIntensity?: number;
-  skyLightPosition?: { x: number, y: number, z: number };
   fogColor?: number;
   fogDensity?: number;
   weatherDensity?: number;

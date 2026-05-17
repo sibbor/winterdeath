@@ -3,7 +3,8 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 import { createProceduralDiffuse } from '../../../utils/assets/procedural';
 import { MATERIALS } from '../../../utils/assets/materials';
 import { MaterialType } from '../../../content/environment';
-import { SectorContext, GroundType } from '../../../game/session/SectorTypes';
+import { SectorContext } from '../../../game/session/SectorTypes';
+import { GroundType } from '../../engine/EngineTypes';
 import { GeneratorUtils } from './GeneratorUtils';
 import { WinterEngine } from '../../engine/WinterEngine';
 import { PhysicsGroup } from '../CollisionResolution';
@@ -55,9 +56,9 @@ export const TerrainGenerator = {
         }
 
         const mesh = new THREE.Mesh(geo, mat);
-        mesh.name = `Ground_Surface`;
+        mesh.name = 'GROUND';
         mesh.userData.materialId = type === GroundType.SNOW ? MaterialType.SNOW : (type === GroundType.GRAVEL ? MaterialType.GRAVEL : MaterialType.DIRT);
-        mesh.userData.physicsGroup = PhysicsGroup.GROUND; // 
+        mesh.userData.physicsGroup = PhysicsGroup.GROUND;
         mesh.rotation.x = -Math.PI / 2;
         mesh.position.y = -0.05;
         mesh.receiveShadow = true;
@@ -121,7 +122,7 @@ export const TerrainGenerator = {
         geo.computeVertexNormals();
 
         const mesh = new THREE.Mesh(geo, mat);
-        mesh.name = `Ground_LakeBed`; // 
+        mesh.name = 'GROUND_LAKEBED';
         mesh.rotation.x = -Math.PI / 2;
         mesh.receiveShadow = true;
         mesh.userData.materialId = MaterialType.DIRT; // 

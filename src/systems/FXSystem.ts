@@ -183,6 +183,8 @@ export const FXSystem = {
     // --- SPATIAL DISPOSAL REGISTRY (Phase 5) ---
     // Key: SMI Chunk Key -> Value: Array of decals in that chunk
     _decalRegistry: new Map<number, THREE.Mesh[]>(),
+    _registryArrayPool: [] as THREE.Mesh[][],
+
 
     reset: () => {
         FXSystem.essentialQueue.length = 0;
@@ -191,7 +193,13 @@ export const FXSystem = {
         FXSystem._essentialQueueHead = 0;
         FXSystem._ambientQueueHead = 0;
         FXSystem._decalQueueHead = 0;
+
+        // Initialize pool if empty
+        if (FXSystem._registryArrayPool.length === 0) {
+            for (let i = 0; i < 256; i++) FXSystem._registryArrayPool.push([]);
+        }
     },
+
 
     MESH_POOL: [] as THREE.Mesh<THREE.BufferGeometry, THREE.Material>[],
     FREE_MESH_INDICES: [] as number[],
@@ -255,18 +263,19 @@ export const FXSystem = {
         return p;
     },
 
-    _getSpawnRequest: (): FXSpawnRequest => {
+    _getSpawnRequest: (): FXSpawnRequest | null => {
         const req = REQUEST_POOL.pop();
         if (req) {
             req.life = undefined; req.scale = undefined; req.color = undefined;
             req.material = undefined; req.hasCustomVel = false;
             return req;
         }
-        return _FALLBACK_REQUEST;
+        // [VINTERDÖD FIX] If the pool is exhausted, return null to drop the request
+        // and avoid shared mutation bugs or transient allocations.
+        return null;
     },
 
     // --- SPAWNING ---
-
     _spawnDecalImmediate: (req: FXSpawnRequest, decalList: THREE.Mesh[]) => {
         const type = req.type as FXDecalType;
         let geo: THREE.BufferGeometry;
@@ -321,11 +330,16 @@ export const FXSystem = {
         d.userData._chunkKey = chunkKey;
         let registryArr = FXSystem._decalRegistry.get(chunkKey);
         if (!registryArr) {
-            registryArr = [];
+            registryArr = FXSystem._registryArrayPool.pop();
+            if (!registryArr) {
+                // Emergency allocation if pool is exhausted (should be rare)
+                registryArr = [];
+            }
             FXSystem._decalRegistry.set(chunkKey, registryArr);
         }
         d.userData._registryIdx = registryArr.length;
         registryArr.push(d);
+
 
         d.position.set(req.x, 0.2 + Math.random() * 0.05, req.z);
         d.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
@@ -360,8 +374,9 @@ export const FXSystem = {
             d.userData._registryIdx = undefined;
         }
 
-        // Zero-GC: Clear the array reference and remove entry
+        // Zero-GC: Clear the array reference and return to pool
         decals.length = 0;
+        FXSystem._registryArrayPool.push(decals);
         FXSystem._decalRegistry.delete(chunkKey);
     },
 
@@ -507,13 +522,12 @@ export const FXSystem = {
             _whiteGoreMaterial.userData = { isSharedAsset: true };
         }
 
-        const dummyMatrix = new THREE.Matrix4();
-        dummyMatrix.makeTranslation(0, -1000, 0);
+        _dummyMatrix.makeTranslation(0, -1000, 0);
 
         for (let t = 1; t < NUM_PARTICLE_TYPES; t++) {
             if (INSTANCED_FLAGS[t] === 1) {
                 const imesh = FXSystem._getInstancedMesh(scene, t);
-                imesh.setMatrixAt(0, dummyMatrix);
+                imesh.setMatrixAt(0, _dummyMatrix);
                 imesh.instanceMatrix.needsUpdate = true;
                 imesh.count = 1;
                 if (imesh.parent !== scene) scene.add(imesh);
@@ -563,6 +577,8 @@ export const FXSystem = {
 
         for (let i = 0; i < count; i++) {
             let req = FXSystem._getSpawnRequest();
+            if (!req) break;
+
             req.scene = scene; req.x = x; req.y = y; req.z = z;
             req.type = type; req.customMesh = customMesh; req.color = color; req.scale = scale; req.life = life;
             if (customVel) {

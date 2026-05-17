@@ -38,7 +38,7 @@ export const FOOTSTEP_MAP: Partial<Record<MATERIAL_TYPE, SoundID>> = {
 // For impact sounds
 export const IMPACT_MAP: Partial<Record<MATERIAL_TYPE, SoundID>> = {
     [MaterialType.GENERIC]: SoundID.IMPACT_STONE,
-    [MaterialType.SNOW]: SoundID.NONE,
+    [MaterialType.SNOW]: SoundID.IMPACT_STONE,
     [MaterialType.WOOD]: SoundID.IMPACT_WOOD,
     [MaterialType.METAL]: SoundID.IMPACT_METAL,
     [MaterialType.CONCRETE]: SoundID.IMPACT_STONE,

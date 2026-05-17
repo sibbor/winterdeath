@@ -143,7 +143,10 @@ export const aggregateStats = (
             const c = sectorStats.cluesFound[i];
             const id = typeof c === 'string' ? c : c.id;
             if (typeof id === 'string') {
-                if (!s.cluesFound.includes(id)) s.cluesFound.push(id);
+                if (!s.cluesFound.includes(id)) {
+                    s.cluesFound.push(id);
+                    sb[PlayerStatID.SKILL_POINTS]++;
+                }
             }
         }
     }
@@ -151,7 +154,10 @@ export const aggregateStats = (
     if (sectorStats.discoveredPOIs) {
         for (let i = 0; i < sectorStats.discoveredPOIs.length; i++) {
             const poi = sectorStats.discoveredPOIs[i];
-            if (!s.discoveredPOIs.includes(poi)) s.discoveredPOIs.push(poi);
+            if (!s.discoveredPOIs.includes(poi)) {
+                s.discoveredPOIs.push(poi);
+                sb[PlayerStatID.SKILL_POINTS]++;
+            }
         }
     }
 
@@ -185,6 +191,20 @@ export const aggregateStats = (
         }
     }
 
+    // --- SYNC ACTIVE PERKS FOR UI (Bridge Int32Array to number[]) ---
+    if (sectorStats.activePassives && sectorStats.activePassivesCount !== undefined) {
+        s.activePassives = [];
+        for (let i = 0; i < sectorStats.activePassivesCount; i++) s.activePassives.push(sectorStats.activePassives[i]);
+    }
+    if (sectorStats.activeBuffs && sectorStats.activeBuffsCount !== undefined) {
+        s.activeBuffs = [];
+        for (let i = 0; i < sectorStats.activeBuffsCount; i++) s.activeBuffs.push(sectorStats.activeBuffs[i]);
+    }
+    if (sectorStats.activeDebuffs && sectorStats.activeDebuffsCount !== undefined) {
+        s.activeDebuffs = [];
+        for (let i = 0; i < sectorStats.activeDebuffsCount; i++) s.activeDebuffs.push(sectorStats.activeDebuffs[i]);
+    }
+
     // Session SP
     const sessionSp = (sectorStats.spGained || 0);
     if (sessionSp > 0 || newUniqueAchievements > 0) {
@@ -210,11 +230,6 @@ export const aggregateStats = (
     // Sync total skill points and challenge points earned for UI displays
     s.totalSkillPointsEarned = sb[PlayerStatID.SKILL_POINTS];
     s.totalChallengePoints = sb[PlayerStatID.TOTAL_CHALLENGE_POINTS];
-
-    // --- SESSION STATE MERGE (For UI Pause/Recap) ---
-    if (sectorStats.activePassives) s.activePassives = [...sectorStats.activePassives];
-    if (sectorStats.activeBuffs) s.activeBuffs = [...sectorStats.activeBuffs];
-    if (sectorStats.activeDebuffs) s.activeDebuffs = [...sectorStats.activeDebuffs];
 
     return s;
 };

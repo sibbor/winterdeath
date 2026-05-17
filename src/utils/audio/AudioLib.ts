@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { WeaponType } from '../../content/weapons';
+import { WeaponID } from '../../entities/player/CombatTypes';
 import { SoundID, MusicID } from './AudioTypes';
 import { MATERIAL_TYPE, FOOTSTEP_MAP, IMPACT_MAP } from '../../content/environment';
 import { EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { VehicleCategory, VehicleImpactIntensity } from '../../entities/vehicles/VehicleTypes';
 import { FamilyMemberID } from '../../content/constants';
 import { audioEngine } from './AudioEngine';
-import { DataResolver } from '../ui/DataResolver';
+import { DataResolver } from '../../core/data/DataResolver';
 
 /**
  * GENERATORS
@@ -864,13 +864,13 @@ export const GamePlaySounds = {
 };
 
 export const WeaponSounds = {
-    playShot: (weaponId: WeaponType) => {
+    playShot: (weaponId: WeaponID) => {
         let id = SoundID.SHOT_PISTOL;
-        if (weaponId === WeaponType.SMG) id = SoundID.SHOT_SMG;
-        else if (weaponId === WeaponType.RIFLE) id = SoundID.SHOT_RIFLE;
-        else if (weaponId === WeaponType.REVOLVER) id = SoundID.SHOT_REVOLVER;
-        else if (weaponId === WeaponType.SHOTGUN) id = SoundID.SHOT_SHOTGUN;
-        else if (weaponId === WeaponType.MINIGUN) id = SoundID.SHOT_MINIGUN;
+        if (weaponId === WeaponID.SMG) id = SoundID.SHOT_SMG;
+        else if (weaponId === WeaponID.RIFLE) id = SoundID.SHOT_RIFLE;
+        else if (weaponId === WeaponID.REVOLVER) id = SoundID.SHOT_REVOLVER;
+        else if (weaponId === WeaponID.SHOTGUN) id = SoundID.SHOT_SHOTGUN;
+        else if (weaponId === WeaponID.MINIGUN) id = SoundID.SHOT_MINIGUN;
 
         const pitch = 0.95 + Math.random() * 0.1;
         audioEngine.playSound(id, 0.8, pitch);

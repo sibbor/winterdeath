@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProceduralTextures, TREE_DEPTH_MATS } from '../utils/assets';
+import { MATERIALS_SKY } from '../utils/assets/materials_sky';
 import { TEXTURES } from '../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../utils/assets/materials_water';
-import { WeatherType } from '../core/engine/EngineTypes';
+import { createFogMaterial } from '../utils/assets/materials_fog';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, LIGHT_SETTINGS, FLASHLIGHT } from '../content/constants';
 import { VEGETATION_TYPE } from '../content/environment';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
@@ -235,15 +236,22 @@ export const AssetPreloader = {
 
             // Sync environment
             let envConfig = null;
+            let groundType = undefined;
+
             if (isCamp) {
                 envConfig = CAMP_SCENE;
+                // Camp default ground is Snow (0)
+                groundType = 0;
             } else if (isSector) {
                 const sector = await SectorSystem.loadSector(sectorId ?? 0);
                 envConfig = sector.environment;
+                groundType = sector.ground;
             }
 
             if (envConfig) {
-                engine.syncEnvironment(envConfig, _dummyScene);
+                engine.syncEnvironment(envConfig, groundType, _dummyScene);
+
+
             }
 
             // Preload FX materials (like _blackSmoke) now that we have a scene
@@ -265,11 +273,8 @@ export const AssetPreloader = {
                     }
                 }
 
-                // Camp specials (formerly in global pool)
-                _dummyScene.add(new THREE.Points(GEOMETRY.box, MATERIALS.camp_star));
-                _dummyScene.add(new THREE.Sprite(MATERIALS.camp_moonHalo));
 
-                await CampWorld.build(_dummyScene, textures as any, WeatherType.SNOW, true);
+                await CampWorld.build(_dummyScene, textures as any, CAMP_SCENE.weather.type, true);
 
                 let lampsInScene = 0;
                 _dummyScene.traverse((obj) => { if (obj instanceof THREE.PointLight) lampsInScene++; });
@@ -603,12 +608,27 @@ export const AssetPreloader = {
         // --- PRUNED SHARED POOL (CORE ONLY) ---
         // We only add the absolutely essential base geometries and materials here.
         // Everything else is warmed up via Sector skeletons.
+
+        // Universal Sky System Materials (Shared)
+        for (const skyKey in MATERIALS_SKY) {
+            const mat = (MATERIALS_SKY as any)[skyKey];
+            if (mat.isShaderMaterial) {
+                add(new THREE.Points(GEOMETRY.box, mat), false);
+            } else if (mat.isSpriteMaterial) {
+                add(new THREE.Sprite(mat), false);
+            } else {
+                add(new THREE.Mesh(GEOMETRY.box, mat), false);
+            }
+        }
+        add(new THREE.Mesh(GEOMETRY.celestialBody, MATERIALS_SKY.moon), false);
+        add(new THREE.Mesh(GEOMETRY.celestialBody, MATERIALS_SKY.sun), false);
+
         add(new THREE.Mesh(GEOMETRY.box, MATERIALS.zombie), false);
         add(new THREE.Mesh(GEOMETRY.sphere, MATERIALS.zombie), false);
         add(new THREE.Mesh(GEOMETRY.barrel, MATERIALS.zombie), false);
 
         // Core UI/Material testers
-        for (const key of ['snow', 'dirt', 'asphalt', 'stone', 'concrete']) {
+        for (const key of ['snow', 'dirt', 'asphalt', 'stone', 'concrete', 'gravel']) {
             const mat = (MATERIALS as any)[key];
             if (mat) add(new THREE.Mesh(GEOMETRY.box, mat), false);
         }
@@ -617,6 +637,10 @@ export const AssetPreloader = {
         // Using globally pre-allocated vectors to prevent GC spikes
         const coreWaterMat = createWaterMaterial(10, 10, _dummyRipples, _dummyObjects, WaterShape.RECT);
         add(new THREE.Mesh(GEOMETRY.plane, coreWaterMat), false);
+
+        // Volumetric Fog material & geometry (Shared)
+        const dummyFogMat = createFogMaterial(new THREE.Color(0.7, 0.75, 0.8));
+        add(new THREE.InstancedMesh(GEOMETRY.plane, dummyFogMat, 1), false);
 
         // FX
         for (let f = 0; f < ALL_FX.length; f++) {
@@ -648,6 +672,7 @@ export const AssetPreloader = {
         }
 
         // --- COMMON GAME ASSETS ---
+        add(ObjectGenerator.createChest(ChestType.BIG), true, true);
         add(ObjectGenerator.createChest(ChestType.STANDARD), true, true);
         add(ObjectGenerator.createBarrel(false), true, true);
         add(ObjectGenerator.createStreetLamp(), true, true);

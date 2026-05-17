@@ -6,8 +6,7 @@ import { SectorBuilder } from '../SectorBuilder';
 import { VEGETATION_TYPE } from '../../../content/environment';
 import { MaterialType } from '../../../content/environment';
 import { GeneratorUtils } from './GeneratorUtils';
-import { PhysicsGroup } from '../CollisionResolution';
-import { InteractionShape } from '../../../systems/ui/UIEventBridge';
+import { PhysicsGroup, ColliderType } from '../CollisionResolution';
 import { ChunkManager } from '../ChunkManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -19,7 +18,6 @@ const _euler = new THREE.Euler();
 const _mat = new THREE.Matrix4();
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
-const _v3 = new THREE.Vector3();
 const _axisX = new THREE.Vector3(1, 0, 0);
 const PI2 = Math.PI * 2;
 type Region = { x: number, z: number, w: number, d: number } | THREE.Vector3[];
@@ -452,7 +450,7 @@ const _placeTrees = async (ctx: SectorContext, region: Region, spacing: number, 
         SectorBuilder.addObstacle(ctx, {
             position: _v1.clone(),
             quaternion: _quat.clone(),
-            collider: { type: InteractionShape.CYLINDER, radius: 0.5 * scale, height: 4 },
+            collider: { type: ColliderType.SPHERE, radius: 0.5 * scale },
             id: `tree_fill_${i}`,
             materialId: MaterialType.WOOD
         });
@@ -658,12 +656,30 @@ export const VegetationGenerator = {
 
     initNaturePrototypes: async (yieldToMain?: () => Promise<void>) => {
         const VARIANTS = 3;
+        // [VINTERDÖD] SSoT Mapping: Ensure prototypes are keyed via the authoritative VTYPE_NAME array
+        // to prevent mismatches between generation and placement (e.g. SPRUCE_1).
+        const types = [
+            VEGETATION_TYPE.PINE,
+            VEGETATION_TYPE.SPRUCE,
+            VEGETATION_TYPE.OAK,
+            VEGETATION_TYPE.BIRCH,
+            VEGETATION_TYPE.DEAD_TREE
+        ];
+
         for (let i = 0; i < VARIANTS; i++) {
-            if (!prototypes[`PINE_${i}`]) prototypes[`PINE_${i}`] = generatePinePrototype(i);
-            if (!prototypes[`SPRUCE_${i}`]) prototypes[`SPRUCE_${i}`] = generateSprucePrototype(i);
-            if (!prototypes[`OAK_${i}`]) prototypes[`OAK_${i}`] = generateOakPrototype(i);
-            if (!prototypes[`BIRCH_${i}`]) prototypes[`BIRCH_${i}`] = generateBirchPrototype(i);
-            if (!prototypes[`DEAD_TREE_${i}`]) prototypes[`DEAD_TREE_${i}`] = generateDeadTreePrototype(i);
+            for (let t = 0; t < types.length; t++) {
+                const type = types[t];
+                const name = VTYPE_NAME[type];
+                const key = `${name}_${i}`;
+
+                if (!prototypes[key]) {
+                    if (type === VEGETATION_TYPE.PINE) prototypes[key] = generatePinePrototype(i);
+                    else if (type === VEGETATION_TYPE.SPRUCE) prototypes[key] = generateSprucePrototype(i);
+                    else if (type === VEGETATION_TYPE.OAK) prototypes[key] = generateOakPrototype(i);
+                    else if (type === VEGETATION_TYPE.BIRCH) prototypes[key] = generateBirchPrototype(i);
+                    else if (type === VEGETATION_TYPE.DEAD_TREE) prototypes[key] = generateDeadTreePrototype(i);
+                }
+            }
             if (yieldToMain) await yieldToMain();
         }
     },
@@ -739,7 +755,7 @@ export const VegetationGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: _pos.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: InteractionShape.BOX, size: _scale.clone() },
+                collider: { type: ColliderType.BOX, size: _scale.clone() },
                 physicsGroup: PhysicsGroup.WALL,
                 materialId: MaterialType.WOOD
             });
@@ -789,7 +805,7 @@ export const VegetationGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: _pos.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: InteractionShape.BOX, size: _scale.clone() },
+                collider: { type: ColliderType.BOX, size: _scale.clone() },
                 physicsGroup: PhysicsGroup.WALL,
                 materialId: MaterialType.STONE
             });
@@ -1008,7 +1024,7 @@ export const VegetationGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: _v1.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: 'cylinder', radius: 0.5 * scale, height: 4 },
+                collider: { type: ColliderType.SPHERE, radius: 0.5 * scale, height: 4 },
                 id: `tree_${i}`,
                 materialId: MaterialType.WOOD
             });
@@ -1077,7 +1093,7 @@ export const VegetationGenerator = {
                 SectorBuilder.addObstacle(ctx, {
                     position: _v1.clone(),
                     quaternion: _quat.clone(),
-                    collider: { type: 'cylinder', radius: 0.5 * scale, height: 4 },
+                    collider: { type: ColliderType.SPHERE, radius: 0.5 * scale, height: 4 },
                     id: `tree_poly_${i}`,
                     materialId: MaterialType.WOOD
                 });
@@ -1145,7 +1161,7 @@ export const VegetationGenerator = {
                 _v1.set(tx, 0, tz);
                 SectorBuilder.addObstacle(ctx, {
                     position: _v1.clone(),
-                    collider: { type: 'cylinder', radius: 0.4, height: 4 },
+                    collider: { type: ColliderType.SPHERE, radius: 0.4, height: 4 },
                     id: `deforest_tree_${i}`
                 });
             }

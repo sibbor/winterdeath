@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { GEOMETRY } from '../geometry';
 import { MATERIALS } from '../materials';
@@ -31,6 +30,13 @@ export const ZombieModels = {
         group.add(ash);
 
         group.add(body);
+
+        // VINTERDÖD HIGH-PERFORMANCE INSTANCING BYPASS:
+        // Cache the body reference on the group and set it to invisible by default.
+        // The instanced ZombieRenderer renders active, living zombies. Standard rendering is bypassed to avoid draw call duplication.
+        group.userData.cachedBody = body;
+        body.visible = false;
+
         return group;
     },
 
@@ -64,6 +70,7 @@ export const ZombieModels = {
             if (child instanceof THREE.Mesh) {
                 child.material = child.material.clone();
                 child.material.color.multiplyScalar(0.5);
+                child.visible = true; // Ensure cloned corpse mesh parts are fully visible!
             }
         });
         return corpse;

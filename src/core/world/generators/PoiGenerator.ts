@@ -6,7 +6,7 @@ import { MaterialType } from '../../../content/environment';
 import { EffectType, SubEffectType } from '../../../systems/EffectManager';
 import { FXParticleType } from '../../../types/FXTypes';
 import { GeneratorUtils } from './GeneratorUtils';
-import { InteractionShape } from '../../../systems/ui/UIEventBridge';
+import { ColliderType } from '../CollisionResolution';
 
 const _v1 = new THREE.Vector3();
 
@@ -52,8 +52,8 @@ export const PoiGenerator = {
                 { type: EffectType.FIRE, smoke: true, intensity: 60, distance: 25, onRoof: true, target: 'tower', offset: new THREE.Vector3(-10, 12, -15) }
             ],
             colliders: [
-                { type: InteractionShape.BOX, size: new THREE.Vector3(15, 20, 25) },
-                { type: InteractionShape.BOX, size: new THREE.Vector3(6, 20, 6), offset: new THREE.Vector3(-10, 0, -15) }
+                { type: ColliderType.BOX, size: new THREE.Vector3(15, 20, 25) },
+                { type: ColliderType.BOX, size: new THREE.Vector3(6, 20, 6), offset: new THREE.Vector3(-10, 0, -15) }
             ]
         };
 
@@ -79,7 +79,7 @@ export const PoiGenerator = {
             size: new THREE.Vector3(18, 20, 12),
             material: MaterialType.CONCRETE,
             neonSign: { text: "CAFÉ", color: 0xffaa00, offset: new THREE.Vector3(0, 6, -6) },
-            colliders: [{ type: InteractionShape.BOX, size: new THREE.Vector3(18, 20, 12) }]
+            colliders: [{ type: ColliderType.BOX, size: new THREE.Vector3(18, 20, 12) }]
         };
         return GeneratorUtils.freezeStatic(group);
     },
@@ -109,7 +109,7 @@ export const PoiGenerator = {
         // Store sign logic in userData so SectorBuilder can attach it later
         group.userData.neonSign = { text: "Ica Hjärtat", color: 0xffffff, offset: new THREE.Vector3(-7.7, 7.5, -2), rot: -Math.PI / 2 };
         group.userData.neonHeart = { offset: new THREE.Vector3(-7.7, 7.5, 6), rot: -Math.PI / 2 };
-        group.userData.colliders = [{ type: InteractionShape.BOX, size: new THREE.Vector3(15, 10, 30) }];
+        group.userData.colliders = [{ type: ColliderType.BOX, size: new THREE.Vector3(15, 10, 30) }];
 
         return GeneratorUtils.freezeStatic(group);
     },
@@ -129,7 +129,7 @@ export const PoiGenerator = {
         // Add staircase as separated group in userData? (To apply flicker)
         group.userData.staircase = { width: 6, height: 12, depth: 8, offset: new THREE.Vector3(-23, 0, 0) };
         group.userData.neonSign = { text: "Gånghester Gym", color: 0xffaa00, offset: new THREE.Vector3(-10, 4.5, 10.1) };
-        group.userData.colliders = [{ type: InteractionShape.BOX, size: new THREE.Vector3(40, 12, 20) }];
+        group.userData.colliders = [{ type: ColliderType.BOX, size: new THREE.Vector3(40, 12, 20) }];
 
         return GeneratorUtils.freezeStatic(group);
     },
@@ -144,7 +144,7 @@ export const PoiGenerator = {
         });
 
         group.userData.neonSign = { text: "Gånghester Pizzera", color: 0xffffff, backingColor: 0x000000, offset: new THREE.Vector3(0, 4.0, 7.6), rot: Math.PI };
-        group.userData.colliders = [{ type: InteractionShape.BOX, size: new THREE.Vector3(20, 8, 15) }];
+        group.userData.colliders = [{ type: ColliderType.BOX, size: new THREE.Vector3(20, 8, 15) }];
 
         return GeneratorUtils.freezeStatic(group);
     },
@@ -157,7 +157,7 @@ export const PoiGenerator = {
         shed.position.y = 4;
         group.add(shed);
 
-        group.userData.colliders = [{ type: InteractionShape.SPHERE, radius: 12 }];
+        group.userData.colliders = [{ type: ColliderType.BOX, size: new THREE.Vector3(20, 8, 20) }];
         return GeneratorUtils.freezeStatic(group);
     },
 
@@ -215,7 +215,7 @@ export const PoiGenerator = {
         }
 
         group.add(lightHub);
-        group.userData.colliders = [{ type: InteractionShape.BOX, size: new THREE.Vector3(10, 60, 10) }];
+        group.userData.colliders = [{ type: ColliderType.BOX, size: new THREE.Vector3(10, 60, 10) }];
 
         return GeneratorUtils.freezeStatic(group, ["mastWarningLights"]);
     },
@@ -288,7 +288,7 @@ export const PoiGenerator = {
         group.add(smu);
 
         group.userData.colliders = [
-            { type: InteractionShape.BOX, size: new THREE.Vector3(50, 10, 50) }
+            { type: ColliderType.BOX, size: new THREE.Vector3(50, 10, 50) }
         ];
         group.userData.effects = [
             { type: EffectType.FIRE, smoke: true, intensity: 120, distance: 35, onRoof: true }
@@ -338,7 +338,7 @@ export const PoiGenerator = {
         ];
 
         group.userData.colliders = [
-            { type: InteractionShape.SPHERE, radius: 0.8 * scale }
+            { type: ColliderType.SPHERE, radius: 0.8 * scale }
         ];
 
         return GeneratorUtils.freezeStatic(group);

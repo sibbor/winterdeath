@@ -373,31 +373,7 @@ export class WaterSystem implements System {
         }
     }
 
-    public reAttach(newScene: THREE.Scene): void {
-        this.scene = newScene;
-        for (let i = 0; i < this.surfaces.length; i++) {
-            this.scene.add(this.surfaces[i].mesh);
-        }
-    }
-
-    public clear(): void {
-        for (let i = this.waterBodies.length - 1; i >= 0; i--) {
-            const body = this.waterBodies[i];
-            this.scene.remove(body.surface.mesh);
-            body.dispose();
-        }
-        this.waterBodies.length = 0;
-        this.surfaces.length = 0;
-
-        if (this.seaweedMesh) { this.scene.remove(this.seaweedMesh); this.seaweedMesh.dispose(); this.seaweedMesh = null; }
-        if (this.lilyPads) { this.scene.remove(this.lilyPads); this.lilyPads.dispose(); this.lilyPads = null; }
-        if (this.lilyStems) { this.scene.remove(this.lilyStems); this.lilyStems.dispose(); this.lilyStems = null; }
-        if (this.lilyFlowers) { this.scene.remove(this.lilyFlowers); this.lilyFlowers.dispose(); this.lilyFlowers = null; }
-        this.lilyData.length = 0;
-        this.grounds.length = 0;
-
-        this.playerWasInWater = false;
-    }
+    public getBuoyancyResult() { return _buoyancyResult; }
 
     public update(ctx: any, delta: number, simTime: number, renderTime: number): void {
 
@@ -792,6 +768,45 @@ export class WaterSystem implements System {
     public setCallbacks(c: { makeNoise?: any, spawnParticle?: any }) {
         if (c.makeNoise) this.emitNoiseCb = c.makeNoise;
         if (c.spawnParticle) this.spawnParticleCb = c.spawnParticle;
+    }
+
+    public clear(): void {
+        const len = this.waterBodies.length;
+        for (let i = 0; i < len; i++) {
+            const body = this.waterBodies[i];
+            if (body.surface.mesh.parent) body.surface.mesh.parent.remove(body.surface.mesh);
+            body.surface.dispose();
+        }
+
+        this.waterBodies.length = 0;
+        this.surfaces.length = 0;
+        this.lilyData.length = 0;
+        this.boundUniforms.length = 0;
+        this.grounds.length = 0;
+
+        if (this.seaweedMesh) { this.scene.remove(this.seaweedMesh); this.seaweedMesh.dispose(); this.seaweedMesh = null; }
+        if (this.lilyPads) { this.scene.remove(this.lilyPads); this.lilyPads.dispose(); this.lilyPads = null; }
+        if (this.lilyStems) { this.scene.remove(this.lilyStems); this.lilyStems.dispose(); this.lilyStems = null; }
+        if (this.lilyFlowers) { this.scene.remove(this.lilyFlowers); this.lilyFlowers.dispose(); this.lilyFlowers = null; }
+
+        // Reset internal state
+        this.rippleIndex = 0;
+        for (let i = 0; i < WATER_SYSTEM.MAX_RIPPLES; i++) {
+            this.rippleData[i].set(0, 0, -1000, 0);
+        }
+        this.playerWasInWater = false;
+    }
+
+    public reAttach(newScene: THREE.Scene): void {
+        this.scene = newScene;
+        const len = this.surfaces.length;
+        for (let i = 0; i < len; i++) {
+            newScene.add(this.surfaces[i].mesh);
+        }
+        if (this.seaweedMesh) newScene.add(this.seaweedMesh);
+        if (this.lilyPads) newScene.add(this.lilyPads);
+        if (this.lilyStems) newScene.add(this.lilyStems);
+        if (this.lilyFlowers) newScene.add(this.lilyFlowers);
     }
 }
 

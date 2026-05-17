@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { ZOMBIE_TYPES, POOL_ZOMBIE_PER_TYPE_MAX } from '../../content/constants';
 import { Enemy, EnemyDeathState, EnemyType } from '../../entities/enemies/EnemyTypes';
-import { WeaponType } from '../../content/weapons';
+import { WeaponID } from '../../entities/player/CombatTypes';
 import { COLORS, ENEMY_COLORS } from '../../utils/ui/ColorUtils';
 
 export class ZombieRenderer {
@@ -111,7 +111,7 @@ export class ZombieRenderer {
             // Calculate color based on hit feedback. Arc-Cannon has a unique cyan-white flash.
             const timeSinceHit = time - e.hitTime;
             if (timeSinceHit < 100) {
-                if (e.lastDamageType === WeaponType.ARC_CANNON) {
+                if (e.lastDamageType === WeaponID.ARC_CANNON) {
                     this._tempColor.setHex(ENEMY_COLORS.ELECTRIC_ARC_FLASH.num);
                 } else {
                     this._tempColor.setHex(ENEMY_COLORS.HIT_FLASH.num);

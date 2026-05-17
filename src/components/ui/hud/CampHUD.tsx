@@ -4,6 +4,7 @@ import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import { DiscoveryType } from '../hud/HudTypes';
 import { StatsBridge } from '../../../core/data/StatsBridge';
+import { FormatUtils } from '../../../utils/ui/FormatUtils';
 
 interface CampHUDProps {
     stats: PlayerStats;
@@ -103,7 +104,7 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
 
         return {
             kills: kills.toLocaleString(),
-            time: (time / 3600).toFixed(1) + ' h',
+            time: FormatUtils.formatTimeSmart(time),
         };
     }, [stats]);
 
@@ -111,7 +112,7 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
         <>
             {/* Top Left Stats / Buttons */}
             <div
-                className={`absolute top-0 left-0 p-8 z-30 flex flex-col gap-4 items-start pointer-events-none ${uiFadeClass} ${isMobileDevice ? 'camp-hud-mobile-scale' : ''}`}
+                className={`absolute top-0 left-0 p-8 z-30 flex flex-col gap-4 pointer-events-none ${uiFadeClass} ${isMobileDevice ? 'camp-hud-mobile-scale' : ''}`}
             >
                 {/* Level / Dossier (Player Card) */}
                 <div
@@ -123,7 +124,7 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
                     {/* Shimmer Effect (Always visible, intensifies on hover) */}
                     <div className="absolute inset-0 pointer-events-none opacity-40 group-hover:opacity-100 transition-opacity duration-700 shimmer-overlay" />
 
-                    <h1 className="text-4xl font-semibold text-white tracking-tighter leading-none uppercase relative z-10" style={{ fontSize: '2.25rem' }}>
+                    <h1 className="text-4xl font-semibold text-white tracking-tighter leading-none uppercase relative z-10 font-mono" style={{ fontSize: '2.25rem' }}>
                         {getRank(StatsBridge.getLevel(stats))}
                     </h1>
                     <div className="flex items-center gap-4 mt-2 relative z-10">
@@ -133,20 +134,26 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
                         </div>
                     </div>
 
-                    {/* Statistics Tooltip (Integrated - Always Visible) */}
-                    <div className="mt-3 pt-3 border-t border-blue-500/20 transition-all duration-500">
-                        <div className="flex flex-col gap-1">
-                            <span className="text-[12px] font-black text-gray-500 uppercase tracking-widest">{t('ui.statistics')}</span>
+                    {/* Statistics - brief data */}
+                    <div className="mt-3 pt-3 border-t border-blue-500/20 transition-all relative overflow-hidden bg-blue-500/5 backdrop-blur-sm rounded-md p-2">
+                        {/* Shimmer overlay for premium look */}
+                        <div className="absolute inset-0 pointer-events-none opacity-20 shimmer-overlay" />
+                        
+                        <div className="flex flex-col gap-1 relative z-10">
+                            <div className="flex items-center gap-2">
+                                {/* Pulse Animation - Always visible now */}
+                                <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.8)]" />
+                                <span className="text-[12px] font-black text-gray-400 uppercase tracking-widest">{t('ui.statistics')}</span>
+                            </div>
+                            
                             <div className="flex font-mono items-center gap-2 text-[12px] uppercase tracking-tighter whitespace-nowrap overflow-hidden font-bold">
-                                <span><span className="text-gray-400">{t('ui.kills')}:</span> <span className="ml-1 text-white">{statsSummary.kills}</span></span>
-                                <span className="text-gray-500/60">|</span>
-                                <span><span className="text-gray-400">{t('ui.time_played')}:</span> <span className="ml-1 text-white">{statsSummary.time}</span></span>
+                                <span><span className="text-gray-400/60">{t('ui.kills')}:</span> <span className="ml-1 text-white">{statsSummary.kills}</span></span>
+                                <span className="text-gray-500/40">|</span>
+                                <span><span className="text-gray-400/60">{t('ui.time_played')}:</span> <span className="ml-1 text-white">{statsSummary.time}</span></span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Subtle Pulse Animation when Idle */}
-                    {!isHovered && <div className="absolute right-4 top-4 w-2 h-2 rounded-full bg-blue-500/40 animate-ping" />}
                 </div>
 
                 <div className="flex gap-4 pointer-events-auto">

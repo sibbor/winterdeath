@@ -1,11 +1,12 @@
 import { DialogueLineType } from '../game/session/SectorTypes';
 import { FamilyMemberID } from './constants';
+import { TriggerActionType, TriggerAction } from '../types/TriggerTypes';
 
 export interface CinematicLine {
     speaker: FamilyMemberID;
     type?: DialogueLineType;
     text: string;
-    trigger?: string[];
+    trigger?: (TriggerActionType | TriggerAction)[];
     duration?: number;
     typingDuration?: number;
     tail?: 'bottom' | 'top' | 'left' | 'right';
@@ -33,7 +34,7 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.0_11" },
             {
                 speaker: FamilyMemberID.LOKE, text: "dialogue.0_12",
-                trigger: ['FAMILY_MEMBER_FOUND', 'SPAWN_BOSS']
+                trigger: [TriggerActionType.FAMILY_MEMBER_FOUND, TriggerActionType.SPAWN_BOSS]
             }
         ]
     },
@@ -62,7 +63,7 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.1_15" },
             {
                 speaker: FamilyMemberID.UNKNOWN, type: DialogueLineType.ACTION, text: "dialogue.1_16",
-                trigger: ['SPAWN_JORDAN']
+                trigger: [{ type: TriggerActionType.SET_SECTOR_FLAG, payload: { flag: 'SPAWN_JORDAN' } }]
             }
         ],
         // Part 2: Jordan appears
@@ -75,7 +76,7 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: FamilyMemberID.UNKNOWN, text: "dialogue.1_22" },
             {
                 speaker: FamilyMemberID.UNKNOWN, type: DialogueLineType.ACTION, text: "dialogue.1_23",
-                trigger: ['CLOSE_DOORS']
+                trigger: [{ type: TriggerActionType.SET_SECTOR_FLAG, payload: { flag: 'CLOSE_DOORS' } }]
             }
         ]
     },
@@ -100,7 +101,7 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.2_12" },
             {
                 speaker: FamilyMemberID.ROBERT, text: "dialogue.2_13",
-                trigger: ['FAMILY_MEMBER_FOUND', 'SPAWN_BOSS']
+                trigger: [TriggerActionType.FAMILY_MEMBER_FOUND, TriggerActionType.SPAWN_BOSS]
             }
         ],
         // mast_flyover intro
@@ -149,7 +150,11 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.3_25" },
             {
                 speaker: FamilyMemberID.ROBERT, text: "dialogue.3_26",
-                trigger: ['FAMILY_MEMBER_FOUND', 'RUSH_TO_NATHALIE', 'SPAWN_BOSS']
+                trigger: [
+                    TriggerActionType.FAMILY_MEMBER_FOUND,
+                    { type: TriggerActionType.SET_SECTOR_FLAG, payload: { flag: 'RUSH_TO_NATHALIE' } },
+                    TriggerActionType.SPAWN_BOSS
+                ]
             }
         ]
     }

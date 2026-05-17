@@ -7,7 +7,7 @@ import { SystemID } from './System';
 export class PerformanceMonitor {
     readonly systemId = SystemID.PERFORMANCE_MONITOR;
     id = 'performance_monitor';
-    enabled = true;
+    enabled = false; // [VINTERDÖD] Disabled by default to protect menu performance
     persistent = true;
 
     private static instance: PerformanceMonitor | null = null;
@@ -56,10 +56,15 @@ export class PerformanceMonitor {
         objectCount: 0
     };
 
-    // FPS Tracking
+    // FPS Tracking (Stable Counter-based calculation)
     private _fps: number = 0;
-    private _frameCount: number = 0;
-    private _lastFpsUpdate: number = 0;
+    private _renderFrameCount: number = 0;
+    private _lastRenderFpsUpdate: number = 0;
+
+    // Logic FPS (Fixed Step)
+    private _logicFps: number = 0;
+    private _logicFrameCount: number = 0;
+    private _lastLogicFpsUpdate: number = 0;
 
     // GC Tracking
     private lastHeapSize: number = 0;
@@ -82,13 +87,18 @@ export class PerformanceMonitor {
     // --- RECORDING STATE ---
     private _reports: Record<string, number[]> = {};
     private _isRecording = false;
-    private _recordingPending = false;
+    public _recordingPending = false;
     private _recordingFramesLeft = 0;
     private _recordingStartRecompiles = 0;
+    private _recordingStartTime = 0;
 
     constructor() {
         this.timings = new Float32Array(this.MAX_SYSTEMS);
         this.startTimes = new Float32Array(this.MAX_SYSTEMS);
+
+        const now = performance.now();
+        this._lastLogicFpsUpdate = now;
+        this._lastRenderFpsUpdate = now;
 
         const savedEng = localStorage.getItem('vinterdod_debug_console_logging');
         if (savedEng !== null) this._consoleLoggingEnabled = savedEng === 'true';
@@ -103,7 +113,23 @@ export class PerformanceMonitor {
         if (savedHijack === 'true') this.logsHijackEnabled = true;
     }
 
+    public silenceWarnings: boolean = false; // [VINTERDÖD] Prevent console spam during heavy loads
+
     public startFrame() {
+        // [VINTERDÖD] Relaxed Guard: Enable if in session OR if debug mode is active.
+        // This allows capturing preloader and menu metrics when the developer opts-in.
+        const hudState = (window as any).HudStore?.getState();
+        const hudVisible = hudState ? !!hudState.hudVisible : false;
+        const debugMode = hudState ? !!hudState.debugMode : false;
+
+        this.enabled = hudVisible || debugMode;
+
+        if (!this.enabled) {
+            this._lastRenderFpsUpdate = 0;
+            this._renderFrameCount = 0;
+            return;
+        }
+
         this._lastFrameTotal = 0;
 
         // ZERO-GC: Reset arrays using standard loop
@@ -112,21 +138,17 @@ export class PerformanceMonitor {
             this.startTimes[i] = 0;
         }
 
-        // --- RECORDING LOGIC ---
-        if (this._isRecording) {
-            this._recordingFramesLeft--;
-            if (this._recordingFramesLeft <= 0) {
-                this._isRecording = false;
-                this.dumpReport();
-            }
+        const now = performance.now();
+        if (this._lastRenderFpsUpdate === 0) {
+            this._lastRenderFpsUpdate = now;
         }
 
-        const now = performance.now();
-        this._frameCount++;
-        if (now - this._lastFpsUpdate > 1000) {
-            this._fps = this._frameCount;
-            this._frameCount = 0;
-            this._lastFpsUpdate = now;
+        this._renderFrameCount++;
+        if (now - this._lastRenderFpsUpdate > 1000) {
+            const timePassed = now - this._lastRenderFpsUpdate;
+            this._fps = (this._renderFrameCount * 1000) / timePassed;
+            this._renderFrameCount = 0;
+            this._lastRenderFpsUpdate = now;
         }
 
         const mem = (performance as any).memory;
@@ -149,6 +171,7 @@ export class PerformanceMonitor {
     }
 
     public updateGameState(playerX: number, playerZ: number, camX: number, camY: number, camZ: number, enemies: number, objects: number) {
+        if (!this.enabled) return;
         this.gameState.playerCoords.x = playerX;
         this.gameState.playerCoords.z = playerZ;
         this.gameState.cameraPos.x = camX;
@@ -159,6 +182,7 @@ export class PerformanceMonitor {
     }
 
     public setRendererStats(rendererInfo: { render: { calls: number; triangles: number }; memory: { textures: number; geometries: number }; programs: any[] | null | undefined }): void {
+        if (!this.enabled) return;
         this._drawCalls = rendererInfo.render.calls;
         this._triangles = rendererInfo.render.triangles;
         this._textures = rendererInfo.memory.textures;
@@ -216,6 +240,7 @@ export class PerformanceMonitor {
     }
 
     public begin(id: string) {
+        if (!this.enabled) return;
         let idx = this._keyMap[id];
         if (idx === undefined) {
             idx = this._registerSystem(id);
@@ -224,6 +249,7 @@ export class PerformanceMonitor {
     }
 
     public end(id: string) {
+        if (!this.enabled) return;
         let idx = this._keyMap[id];
         if (idx === undefined) return;
 
@@ -241,12 +267,14 @@ export class PerformanceMonitor {
     }
 
     public track(id: string, fn: () => void) {
+        if (!this.enabled) { fn(); return; }
         this.begin(id);
         fn();
         this.end(id);
     }
 
     public addTime(id: string, ms: number) {
+        if (!this.enabled) return;
         let idx = this._keyMap[id];
         if (idx === undefined) {
             idx = this._registerSystem(id);
@@ -267,21 +295,38 @@ export class PerformanceMonitor {
         setTimeout(() => {
             this._recordingPending = false;
             this._isRecording = true;
-            this._recordingFramesLeft = this.RECORD_FRAMES;
             this._reports = {};
             this._recordingStartRecompiles = this._shaderRecompileCount;
-            console.log(`🔴 [WinterEngine] Recording active gameplay for ${this.RECORD_FRAMES} frames...`);
+            this._recordingStartTime = performance.now();
+            console.log(`🔴 [WinterEngine] Recording started! Click REC again to stop and dump report.`);
         }, 2000);
     }
 
-    public get isRecordingActive(): boolean {
-        return this._isRecording || this._recordingPending;
+    public stopRecording() {
+        if (this._isRecording) {
+            this._isRecording = false;
+            const duration = performance.now() - this._recordingStartTime;
+            console.log(`⏹️ [WinterEngine] Recording finished (Duration: ${(duration / 1000).toFixed(2)}s). Dumping report...`);
+            this.dumpReport();
+        } else if (this._recordingPending) {
+            this._recordingPending = false;
+            console.log("⏹️ [WinterEngine] Recording cancelled.");
+        }
     }
 
     private dumpReport() {
         console.log("📊 ========================================================");
-        console.log(`📊 --- WINTER ENGINE ${this.RECORD_FRAMES}-FRAME PERFORMANCE REPORT ---`);
+        console.log(`📊 --- WINTER ENGINE PERFORMANCE REPORT ---`);
         console.log("📊 ========================================================");
+
+        const reportKeys = Object.keys(this._reports);
+        if (reportKeys.length === 0) {
+            console.log("📊 [WinterEngine] No systems tracked during recording.");
+            return;
+        }
+
+        const frameCount = reportKeys.length > 0 ? this._reports[reportKeys[0]].length : 0;
+        console.log(`📊 Session: ${frameCount} frames captured.`);
 
         const world = this.getFormattedGameState();
         const render = this.getFormattedRendererStats();
@@ -298,13 +343,13 @@ export class PerformanceMonitor {
         console.log(`   Geometries: ${render.geometries} | Textures: ${render.textures}`);
 
         const sessionRecompiles = render.shaderRecompiles - this._recordingStartRecompiles;
-        console.log(`   Shaders: ${render.shaderPrograms} (Recompiles during ${this.RECORD_FRAMES} frames: ${sessionRecompiles} | Lifetime: ${render.shaderRecompiles})`);
+        console.log(`   Shaders: ${render.shaderPrograms} (Recompiles during ${frameCount} frames: ${sessionRecompiles} | Lifetime: ${render.shaderRecompiles})`);
 
         console.log("⚙️  [SYSTEMS]");
         const activeSystems = Object.keys(this._reports).filter(k => this._reports[k].length > 0);
         console.log(`   Active tracked systems: ${activeSystems.join(', ')}`);
 
-        console.log(`⏱️  [CPU TIMINGS (Avg over ${this.RECORD_FRAMES} frames)]`);
+        console.log(`⏱️  [CPU TIMINGS]`);
         const report: any = {};
         let totalFrameTime = 0;
 
@@ -315,7 +360,7 @@ export class PerformanceMonitor {
             const avg = sum / times.length;
             report[id] = `${avg.toFixed(2)} ms`;
 
-            if (id === 'logic' || id === 'camera' || id === 'render') {
+            if (id === 'logic' || id === 'logic_simulation' || id === 'camera' || id === 'render') {
                 totalFrameTime += avg;
             }
         }
@@ -373,6 +418,23 @@ export class PerformanceMonitor {
     // ============================================================================
 
     public getFps(): number { return this._fps; }
+    public getLogicFps(): number { return this._logicFps; }
+    public get isRecordingActive(): boolean { return this._isRecording; }
+    public get isRecordingPending(): boolean { return this._recordingPending; }
+
+    /**
+     * Ticks the logic frame counter. Should be called inside the fixed-step loop.
+     */
+    public tickLogic() {
+        if (!this.enabled) return;
+        const now = performance.now();
+        this._logicFrameCount++;
+        if (now - this._lastLogicFpsUpdate > 1000) {
+            this._logicFps = this._logicFrameCount;
+            this._logicFrameCount = 0;
+            this._lastLogicFpsUpdate = now;
+        }
+    }
 
     public get consoleLoggingEnabled(): boolean { return this._consoleLoggingEnabled; }
     public set consoleLoggingEnabled(value: boolean) {
@@ -493,6 +555,7 @@ export class PerformanceMonitor {
     }
 
     public printIfHeavy(context: string, totalTime: number, threshold: number = 50) {
+        if (!this.enabled || this.silenceWarnings) return;
         this._lastFrameTotal = totalTime;
 
         if (totalTime > threshold && this._consoleLoggingEnabled) {

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ProjectilePoolState, MAX_PROJECTILES } from '../../core/state/ProjectilePool';
 import { GEOMETRY } from '../../utils/assets/geometry';
 import { MATERIALS } from '../../utils/assets/materials';
+import { DamageID } from '../../entities/player/CombatTypes';
 
 /**
  * Projectile Renderer (Phase 8)
@@ -19,6 +20,7 @@ export class ProjectileRenderer {
     private _position = new THREE.Vector3();
     private _quaternion = new THREE.Quaternion();
     private _scale = new THREE.Vector3(1, 1, 1);
+    private _color = new THREE.Color();
 
     constructor(scene: THREE.Scene) {
         this.scene = scene;
@@ -52,6 +54,7 @@ export class ProjectileRenderer {
 
         if (activeCount === 0) {
             this.mesh.instanceMatrix.needsUpdate = true;
+            if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
             return;
         }
 
@@ -59,15 +62,40 @@ export class ProjectileRenderer {
         for (let i = 0; i < activeCount; i++) {
             this._position.set(pool.posX[i], pool.posY[i], pool.posZ[i]);
 
+            // Select scale and color based on projectile type and weapon definition
+            let colorHex = 0xffeebb; // Warm tracer glow for standard bullets
+            if (pool.type[i] === 1) {
+                // Throwable: Grenade, Molotov, Flashbang
+                this._scale.set(3.5, 3.5, 3.5);
+                const wep = pool.weaponId[i];
+                if (wep === DamageID.GRENADE) {
+                    colorHex = 0x22c55e; // Bright Toxic Green for visibility
+                } else if (wep === DamageID.MOLOTOV) {
+                    colorHex = 0xf97316; // Vivid Orange
+                } else if (wep === DamageID.FLASHBANG) {
+                    colorHex = 0x38bdf8; // Vivid light blue/cyan glow
+                }
+            } else {
+                // Bullet
+                this._scale.set(1, 1, 1);
+            }
+
             // Compose the matrix for this instance
             // Note: Since bullets are currently spheres, rotation is ignored for speed.
             this._matrix.compose(this._position, this._quaternion, this._scale);
 
             this.mesh.setMatrixAt(i, this._matrix);
+
+            // Set color for instanced mesh
+            this._color.setHex(colorHex);
+            this.mesh.setColorAt(i, this._color);
         }
 
-        // Notify WebGL that the instance matrix buffer is dirty
+        // Notify WebGL that the instance matrix and color buffers are dirty
         this.mesh.instanceMatrix.needsUpdate = true;
+        if (this.mesh.instanceColor) {
+            this.mesh.instanceColor.needsUpdate = true;
+        }
     }
 
     /**

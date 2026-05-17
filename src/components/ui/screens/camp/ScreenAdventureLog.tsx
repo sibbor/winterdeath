@@ -6,7 +6,7 @@ import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalTab
 import CollectiblePreview from '../../core/CollectiblePreview';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { DiscoveryType } from '../../hud/HudTypes';
-import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { DataResolver } from '../../../../core/data/DataResolver';
 import { SectorID } from '../../../../game/session/SectorTypes';
 import { GAME_CHALLENGES, ChallengeCategory, ChallengeDef } from '../../../../content/ChallengeTypes';
 import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputManager';
@@ -26,7 +26,6 @@ interface ScreenAdventureLogProps {
 }
 
 // --- ZERO-GC STATIC ARRAYS & CONFIGS (PRESERVES REACT.MEMO STABILITY) ---
-const EMPTY_ARRAY: any[] = [];
 const TABS: { id: DiscoveryType, label: string }[] = [
     { id: DiscoveryType.CHALLENGE, label: 'challenges.title' },
     { id: DiscoveryType.CLUE, label: 'ui.log_clues' },
@@ -35,9 +34,8 @@ const TABS: { id: DiscoveryType, label: string }[] = [
     { id: DiscoveryType.ZOMBIE, label: 'ui.log_zombies' },
     { id: DiscoveryType.BOSS, label: 'ui.log_bosses' },
 ];
-const SECTORS = [SectorID.VILLAGE, SectorID.MOUNTAIN_VAULT, SectorID.THE_MAST, SectorID.SCRAPYARD];
+const SECTORS = [SectorID.VILLAGE, SectorID.MOUNTAIN_VAULT, SectorID.MAST, SectorID.SCRAPYARD];
 const THEME_COLOR = '#16a34a'; // green-600
-
 
 const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, onToggleChallengeTracking, isMobileDevice, debugMode, initialTab, initialItemId }) => {
     const { isLandscapeMode } = useOrientation();
@@ -148,7 +146,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
             <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8' : 'flex-col gap-4'}`}>
                 {/* Tabs Bar */}
                 <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
-                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-zinc-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide touch-auto cursor-pointer'}`}>
+                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex flex-nowrap gap-2 border-b-2 border-zinc-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide touch-auto cursor-pointer'}`}>
                         {TABS.map(tab => (
                             <TacticalTab
                                 key={tab.id}
@@ -653,13 +651,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
 
     const sectorsCompleted = StatsBridge.getSectorsCompleted(stats);
-    const hasAny = useMemo(() => SECTORS.some(sectorId => {
-        const sectorItems = items.filter(c => c.sector === sectorId);
-        return sectorItems.length > 0 && (isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId);
-    }), [items, sectorsCompleted, isDebug]);
-
-    if (!hasAny) return <NoDataMessage />;
-
+    // Always show the sector list
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
             {SECTORS.map(sectorId => {
@@ -668,13 +660,12 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
 
                 // Accurate found count regardless of data pollution (strings vs objects)
                 const discoveredItems = sectorItems.filter(c => {
-                    return foundIds.some(fid => (typeof fid === 'string' ? fid : (fid as any).id) === c.id);
+                    return foundIds.some(fid => DataResolver.resolveCollectibleID(fid) === c.id);
                 });
 
                 const itemsToShow = isDebug ? sectorItems : discoveredItems;
 
-                // If not debug, only show sector if it has at least one discovered item or is unlocked
-                if (!isDebug && discoveredItems.length === 0 && !isSectorUnlocked) return null;
+                // Always show the sector if it has items defined in the data
                 if (sectorItems.length === 0) return null;
 
                 // Enforce 0 count for locked sectors to avoid revealing progress early
@@ -692,16 +683,20 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
                         </div>
 
                         {(isSectorUnlocked || isDebug) ? (
-                            <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                                {itemsToShow.map(item => {
-                                    const isFound = isDebug || foundIds.includes(item.id);
-                                    return (
-                                        <TacticalCard key={item.id} id={`log-item-${item.id}`} isLocked={!isFound} color={COLORS.YELLOW} className="p-0" showHover={isFound}>
-                                            <DescriptionExpansion item={item} isFound={isFound} isMobileDevice={isMobileDevice} />
-                                        </TacticalCard>
-                                    );
-                                })}
-                            </div>
+                            itemsToShow.length > 0 ? (
+                                <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
+                                    {itemsToShow.map(item => {
+                                        const isFound = isDebug || foundIds.some(fid => DataResolver.resolveCollectibleID(fid) === item.id);
+                                        return (
+                                            <TacticalCard key={item.id} id={`log-item-${item.id}`} isLocked={!isFound} color={COLORS.YELLOW} className="p-0" showHover={isFound}>
+                                                <DescriptionExpansion item={item} isFound={isFound} isMobileDevice={isMobileDevice} />
+                                            </TacticalCard>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <NoDataMessage />
+                            )
                         ) : (
                             <div className="py-8 flex flex-col items-center justify-center border border-dashed border-zinc-900 rounded-lg bg-zinc-900/10">
                                 <span className="text-zinc-700 italic text-[10px] uppercase tracking-widest">{t('ui.sector_undiscovered_hint')}</span>
@@ -720,13 +715,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effecti
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
 
     const sectorsCompleted = StatsBridge.getSectorsCompleted(stats);
-    const hasAny = useMemo(() => SECTORS.some(sectorId => {
-        const sectorItems = items.filter(c => c.sector === sectorId);
-        return sectorItems.length > 0 && (isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId);
-    }), [items, sectorsCompleted, isDebug]);
-
-    if (!hasAny) return <NoDataMessage />;
-
+    // Always show the sector list
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
@@ -735,13 +724,12 @@ const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effecti
 
                 // Accurate found count regardless of data pollution (strings vs objects)
                 const discoveredItems = sectorItems.filter(c => {
-                    return foundIds.some(fid => (typeof fid === 'string' ? fid : (fid as any).id) === c.id);
+                    return foundIds.some(fid => DataResolver.resolveClueID(fid) === c.id);
                 });
 
                 const itemsToShow = isDebug ? sectorItems : discoveredItems;
 
-                // If not debug, only show sector if it has at least one discovered item or is unlocked
-                if (!isDebug && discoveredItems.length === 0 && !isSectorUnlocked) return null;
+                // Always show the sector if it has items defined in the data
                 if (sectorItems.length === 0) return null;
 
                 // Enforce 0 count for locked sectors to avoid revealing progress early
@@ -761,27 +749,31 @@ const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effecti
                         </div>
 
                         {(isSectorUnlocked || isDebug) ? (
-                            <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                                {itemsToShow.map((clue) => {
-                                    const isFound = isDebug || foundIds.includes(clue.id);
-                                    const isThought = clue.type === 'THOUGHT';
-                                    const typeColor = isThought ? COLORS.BLUE : COLORS.YELLOW;
-                                    return (
-                                        <TacticalCard key={clue.id} id={`log-item-${clue.id}`} isLocked={!isFound} color={typeColor} showHover={isFound} className={`flex flex-col ${isMobileDevice ? 'p-4' : 'p-6'}`}>
-                                            <div className="flex flex-col gap-4 relative z-10 w-full">
-                                                <div className="flex justify-between items-center border-b border-zinc-800/50 pb-2">
-                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest" style={{ backgroundColor: isFound ? typeColor.str : '#333' }}>
-                                                        {isFound ? clue.type : '???'}
-                                                    </span>
+                            itemsToShow.length > 0 ? (
+                                <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
+                                    {itemsToShow.map((clue) => {
+                                        const isFound = isDebug || foundIds.some(fid => DataResolver.resolveClueID(fid) === clue.id);
+                                        const isThought = clue.type === 'THOUGHT';
+                                        const typeColor = isThought ? COLORS.BLUE : COLORS.YELLOW;
+                                        return (
+                                            <TacticalCard key={clue.id} id={`log-item-${clue.id}`} isLocked={!isFound} color={typeColor} showHover={isFound} className={`flex flex-col ${isMobileDevice ? 'p-4' : 'p-6'}`}>
+                                                <div className="flex flex-col gap-4 relative z-10 w-full">
+                                                    <div className="flex justify-between items-center border-b border-zinc-800/50 pb-2">
+                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest" style={{ backgroundColor: isFound ? typeColor.str : '#333' }}>
+                                                            {isFound ? clue.type : '???'}
+                                                        </span>
+                                                    </div>
+                                                    <p className={`text-lg italic leading-relaxed border-l-4 pl-4 py-1 ${isFound ? 'text-gray-200' : 'text-zinc-800'}`} style={{ borderColor: isFound ? typeColor.str : '#333' }}>
+                                                        {isFound ? `"${t(DataResolver.getClueReaction(clue.id))}"` : '???'}
+                                                    </p>
                                                 </div>
-                                                <p className={`text-lg italic leading-relaxed border-l-4 pl-4 py-1 ${isFound ? 'text-gray-200' : 'text-zinc-800'}`} style={{ borderColor: isFound ? typeColor.str : '#333' }}>
-                                                    {isFound ? `"${t(DataResolver.getClueReaction(clue.id))}"` : '???'}
-                                                </p>
-                                            </div>
-                                        </TacticalCard>
-                                    );
-                                })}
-                            </div>
+                                            </TacticalCard>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <NoDataMessage />
+                            )
                         ) : (
                             <div className="py-8 flex flex-col items-center justify-center border border-dashed border-zinc-900 rounded-lg bg-zinc-900/10">
                                 <span className="text-zinc-700 italic text-[10px] uppercase tracking-widest">{t('ui.clue_undiscovered_hint')}</span>
@@ -800,12 +792,7 @@ const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effective
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
 
     const sectorsCompleted = StatsBridge.getSectorsCompleted(stats);
-    const hasAny = useMemo(() => SECTORS.some(sectorId => {
-        const sectorItems = items.filter(poi => poi.sector === sectorId);
-        return sectorItems.length > 0 && (isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId);
-    }), [items, sectorsCompleted, isDebug]);
-
-    if (!hasAny) return <NoDataMessage />;
+    // Removed hasAny check to always show the list of sectors
 
     return (
         <div className="space-y-16 pb-12">
@@ -815,13 +802,12 @@ const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effective
 
                 // Normalize visitedList (POI IDs)
                 const discoveredItems = sectorItems.filter(poi => {
-                    return visitedList.some(fid => (typeof fid === 'string' ? fid : (fid as any).id) === poi.id);
+                    return visitedList.some(fid => DataResolver.resolvePoiID(fid) === poi.id);
                 });
 
                 const itemsToShow = isDebug ? sectorItems : discoveredItems;
 
-                // If not debug, only show sector if it has at least one discovered item or is unlocked
-                if (!isDebug && discoveredItems.length === 0 && !isSectorUnlocked) return null;
+                // Always show the sector if it has items defined in the data
                 if (sectorItems.length === 0) return null;
 
                 // Enforce 0 count for locked sectors
@@ -841,33 +827,37 @@ const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effective
                         </div>
 
                         {(isSectorUnlocked || isDebug) ? (
-                            <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                                {itemsToShow.map((poi) => {
-                                    const poiId = poi.id;
-                                    const isFound = isDebug || visitedList.includes(poiId);
-                                    return (
-                                        <TacticalCard key={poiId} id={`log-item-${poiId}`} isLocked={!isFound} color={COLORS.YELLOW} showHover={isFound} className={isMobileDevice ? 'p-4' : 'p-6'}>
-                                            <div className="flex flex-col gap-4 relative z-10 w-full">
-                                                <div className="flex justify-between items-start border-b border-zinc-800/50 pb-3">
-                                                    <h3 className={`text-2xl font-semibold uppercase tracking-tighter ${isFound ? 'text-white' : 'text-zinc-800'}`}>
-                                                        {isFound ? t(DataResolver.getPoiName(poiId)) : '???'}
-                                                    </h3>
-                                                </div>
-                                                <div className="space-y-3">
-                                                    <p className={`text-sm leading-relaxed ${isFound ? 'text-zinc-400' : 'text-zinc-800'}`}>
-                                                        {isFound ? t(DataResolver.getPoiDescription(poiId)) : '???'}
-                                                    </p>
-                                                    {isFound && DataResolver.getPoiReaction(poiId) && (
-                                                        <p className="text-lg italic leading-relaxed border-l-4 pl-4 py-1 border-blue-500 text-gray-200">
-                                                            "{t(DataResolver.getPoiReaction(poiId))}"
+                            itemsToShow.length > 0 ? (
+                                <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
+                                    {itemsToShow.map((poi) => {
+                                        const poiId = poi.id;
+                                        const isFound = isDebug || visitedList.some(fid => DataResolver.resolvePoiID(fid) === poiId);
+                                        return (
+                                            <TacticalCard key={poiId} id={`log-item-${poiId}`} isLocked={!isFound} color={COLORS.YELLOW} showHover={isFound} className={isMobileDevice ? 'p-4' : 'p-6'}>
+                                                <div className="flex flex-col gap-4 relative z-10 w-full">
+                                                    <div className="flex justify-between items-start border-b border-zinc-800/50 pb-3">
+                                                        <h3 className={`text-2xl font-semibold uppercase tracking-tighter ${isFound ? 'text-white' : 'text-zinc-800'}`}>
+                                                            {isFound ? t(DataResolver.getPoiName(poiId)) : '???'}
+                                                        </h3>
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <p className={`text-sm leading-relaxed ${isFound ? 'text-zinc-400' : 'text-zinc-800'}`}>
+                                                            {isFound ? t(DataResolver.getPoiDescription(poiId)) : '???'}
                                                         </p>
-                                                    )}
+                                                        {isFound && DataResolver.getPoiReaction(poiId) && (
+                                                            <p className="text-lg italic leading-relaxed border-l-4 pl-4 py-1 border-blue-500 text-gray-200">
+                                                                "{t(DataResolver.getPoiReaction(poiId))}"
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </TacticalCard>
-                                    );
-                                })}
-                            </div>
+                                            </TacticalCard>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <NoDataMessage />
+                            )
                         ) : (
                             <div className="py-8 flex flex-col items-center justify-center border border-dashed border-zinc-900 rounded-lg bg-zinc-900/10">
                                 <span className="text-zinc-700 italic text-[10px] uppercase tracking-widest">{t('ui.sector_undiscovered_hint')}</span>

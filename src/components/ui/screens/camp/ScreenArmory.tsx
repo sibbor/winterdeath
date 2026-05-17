@@ -1,23 +1,24 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
 import { StatsBridge } from '../../../../core/data/StatsBridge';
-import { WeaponType, WeaponCategory, WeaponCategoryColors, WeaponStats } from '../../../../content/weapons';
+import { WeaponCategory, WeaponCategoryColors, WeaponStats } from '../../../../content/weapons';
+import { WeaponID } from '../../../../entities/player/CombatTypes';
 import { t } from '../../../../utils/i18n';
 import { SCRAP_COST_BASE } from '../../../../content/constants';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { DataResolver } from '../../../../utils/ui/DataResolver';
-import { ColorPair, COLORS, darkenColor, colorToHex } from '../../../../utils/ui/ColorUtils';
+import { DataResolver } from '../../../../core/data/DataResolver';
+import { ColorPair, COLORS } from '../../../../utils/ui/ColorUtils';
 import { useOrientation } from '../../../../hooks/useOrientation';
 import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalButton, TacticalTab } from '../../layout/ScreenModalLayout';
 
 interface ScreenArmoryProps {
     stats: PlayerStats;
-    currentLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
-    weaponLevels: Record<WeaponType, number>;
+    currentLoadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; };
+    weaponLevels: Record<WeaponID, number>;
     onSave: (
         newStats: PlayerStats,
-        newLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; },
-        newLevels: Record<WeaponType, number>
+        newLoadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; },
+        newLevels: Record<WeaponID, number>
     ) => void;
     onClose: () => void;
     isMobileDevice?: boolean;
@@ -35,7 +36,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
     const [tempWeaponLevels, setTempWeaponLevels] = useState({ ...weaponLevels });
 
     // Upgrade Weapon
-    const handleUpgradeWeapon = useCallback((e: React.MouseEvent, weapon: WeaponType) => {
+    const handleUpgradeWeapon = useCallback((e: React.MouseEvent, weapon: WeaponID) => {
         e.stopPropagation();
 
         // Calculate cost based on current level in the render scope
@@ -64,8 +65,8 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
         });
     }, [tempWeaponLevels]); // Dependency required to calculate accurate current cost
 
-    const handleEquip = useCallback((weapon: WeaponType, category: WeaponCategory) => {
-        if (category === WeaponCategory.TOOL) return;
+    const handleEquip = useCallback((weapon: WeaponID, category: WeaponCategory) => {
+        // All categories in this screen are now holdable/throwable
 
         UiSounds.playConfirm();
         setTempLoadout(prev => {
@@ -84,7 +85,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
         if (tempLoadout.throwable !== currentLoadout.throwable) return true;
         if (tempLoadout.special !== currentLoadout.special) return true;
 
-        const weaponIds = Object.keys(DataResolver.getWeapons()).map(Number) as unknown as WeaponType[];
+        const weaponIds = DataResolver.getWeapons().map(w => w.name);
         for (const k of weaponIds) {
             if ((tempWeaponLevels[k] || 1) !== (weaponLevels[k] || 1)) return true;
         }
@@ -109,7 +110,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
         </div>
     ), [StatsBridge.getStatInt(tempStats, PlayerStatID.SCRAP)]);
 
-    const TABS = [WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL];
+    const TABS = [WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL];
 
     return (
         <ScreenModalLayout
@@ -130,7 +131,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
             <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
                 {/* Tabs bar */}
                 <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
-                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide touch-auto cursor-pointer'}`}>
+                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex flex-nowrap gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide touch-auto cursor-pointer'}`}>
                         {TABS.map(cat => {
                             const catName = DataResolver.getWeaponCategoryName(cat);
                             const catColor = WeaponCategoryColors[cat] || COLORS.YELLOW;
@@ -174,14 +175,14 @@ interface WeaponListProps {
     scrapAmount: number;
     isMobileDevice?: boolean;
     isLandscapeMode?: boolean;
-    onEquip: (weapon: WeaponType, category: WeaponCategory) => void;
-    onUpgrade: (e: React.MouseEvent, weapon: WeaponType) => void;
+    onEquip: (weapon: WeaponID, category: WeaponCategory) => void;
+    onUpgrade: (e: React.MouseEvent, weapon: WeaponID) => void;
 }
 
 const WeaponList: React.FC<WeaponListProps> = React.memo(({ activeTab, tempWeaponLevels, tempLoadout, scrapAmount, isMobileDevice, isLandscapeMode, onEquip, onUpgrade }) => {
     // PERFORMANCE FIX: Sorterar och hämtar vapen endast när man byter flik, inte varje gång Scrap ändras.
     const filteredWeapons = useMemo(() => {
-        return Object.values(DataResolver.getWeapons()).filter(w => w.category === activeTab && !w.isPseudoWeapon);
+        return DataResolver.getWeapons().filter(w => w.category === activeTab);
     }, [activeTab]);
 
     return (
@@ -192,7 +193,7 @@ const WeaponList: React.FC<WeaponListProps> = React.memo(({ activeTab, tempWeapo
                 const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;
                 const canAfford = scrapAmount >= cost;
                 const categoryColor = WeaponCategoryColors[weapon.category] || COLORS.YELLOW;
-                const isEquippable = weapon.category !== WeaponCategory.TOOL;
+                const isEquippable = true;
                 const isUpgradeable = isEquippable;
 
                 return (
@@ -226,8 +227,8 @@ interface WeaponCardProps {
     isEquippable: boolean;
     isUpgradeable: boolean;
     isMobileDevice?: boolean;
-    onEquip: (weapon: WeaponType, category: WeaponCategory) => void;
-    onUpgrade: (e: React.MouseEvent, weapon: WeaponType) => void;
+    onEquip: (weapon: WeaponID, category: WeaponCategory) => void;
+    onUpgrade: (e: React.MouseEvent, weapon: WeaponID) => void;
 }
 
 const WeaponCard: React.FC<WeaponCardProps> = React.memo(({

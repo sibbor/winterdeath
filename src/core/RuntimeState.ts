@@ -1,17 +1,15 @@
 import * as THREE from 'three';
-import { TriggerSystem } from '../systems/TriggerSystem';
 import { SectorState, SectorStats } from '../types/StateTypes';
 import { PlayerStats, PlayerStatID, StatWeaponIndex, StatPerkIndex, StatEnemyIndex, TELEMETRY_BUFFER_SIZE } from '../entities/player/PlayerTypes';
-import { PlayerDeathState, DamageID } from '../entities/player/CombatTypes';
-import { StatusEffectID } from '../content/perks';
-import { WeaponType } from '../content/weapons';
-import { MAX_ENTITIES, FX, LOOT } from '../content/constants';
+import { PlayerDeathState, DamageID, DamageType, WeaponID, ToolID, HoldableID } from '../entities/player/CombatTypes';
+import { StatusEffectID } from '../types/StatusEffects';
+import { MAX_ENTITIES } from '../content/constants';
 import { Obstacle } from './world/CollisionResolution';
 import { Enemy } from '../entities/enemies/EnemyManager';
 import { ScrapItem } from '../systems/LootSystem';
 import { WorldStreamer } from './world/WorldStreamer';
 import { ParticleState } from '../types/FXTypes';
-import { InteractionType, InteractionPromptId } from '../systems/ui/UIEventBridge';
+import { InteractionType, InteractionSubType, InteractionPromptId } from '../systems/ui/UIEventBridge';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
 
 export interface PreallocatedInitialAim {
@@ -33,6 +31,8 @@ export interface PreallocatedCinematicState {
     active: boolean;
     speaker: string;
     text: string;
+    currentSpeakerId: number;
+    lastSkipTime: number;
 }
 
 export interface PreallocatedInteractionRequest {
@@ -112,10 +112,12 @@ export interface RuntimeState {
     incomingDamageBuffer: Float64Array;
 
     statusFlags: number;
-    statusMask: number;
-    activePassives: StatusEffectID[];
-    activeBuffs: StatusEffectID[];
-    activeDebuffs: StatusEffectID[];
+    activePassives: Int32Array;
+    activePassivesCount: number;
+    activeBuffs: Int32Array;
+    activeBuffsCount: number;
+    activeDebuffs: Int32Array;
+    activeDebuffsCount: number;
 
     sectorsCompleted: number;
     totalSkillPointsEarned: number;
@@ -132,6 +134,7 @@ export interface RuntimeState {
 
     prologueSeen: boolean;
     rescuedFamilyIndices: number[];
+    deadBossIndices: number[];
     familyFoundCount: number;
 
     challengeTiers: Int32Array;
@@ -140,11 +143,11 @@ export interface RuntimeState {
 
     // --- SESSION STATE ---
     startTime: number;
-    activeWeapon: WeaponType;
-    loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
-    weaponLevels: Partial<Record<WeaponType, number>>;
+    activeWeapon: HoldableID;
+    loadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; };
+    weaponLevels: Partial<Record<WeaponID, number>>;
 
-    weaponAmmo: Record<WeaponType, number>;
+    weaponAmmo: Record<HoldableID, number>;
     isReloading: boolean;
     reloadEndTime: number;
 
@@ -196,7 +199,7 @@ export interface RuntimeState {
         seenBosses: Set<number>;
     };
 
-    applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean, attributionOverride?: DamageID) => boolean;
+    applyDamage: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
 
 
     bossesDefeated: number[];
@@ -218,7 +221,6 @@ export interface RuntimeState {
     // --- SECTOR & WORLD ---
     sectorState: SectorState;
     isPlayground: boolean;
-    triggers: TriggerSystem;
     obstacles: Obstacle[];
     worldStreamer: WorldStreamer;
     busUnlocked: boolean;
@@ -230,13 +232,14 @@ export interface RuntimeState {
     sectorName: string;
     initialAim: PreallocatedInitialAim;
     deathStartTime: number;
-    killerType: DamageID; // Numerisk SMI
+    killerType: DamageType;
+    killerSource: DamageID;
     killerName: string;
 
     killerAttackName: string;
     killedByEnemy: boolean;
-    lethalSourceId: number;
-    lethalStatusEffect: number;
+    lethalSourceId: number; // Combined Telemetry key (Offset + ID)
+    lethalStatusEffect: StatusEffectID;
     playerBloodSpawned: boolean;
     playerAshSpawned: boolean;
     lastDrownTick: number;
@@ -264,6 +267,7 @@ export interface RuntimeState {
     interaction: {
         active: boolean;
         type: InteractionType;
+        subType: InteractionSubType;
         promptId: InteractionPromptId;
         label: string;
         targetId: string;
@@ -314,7 +318,6 @@ export interface RuntimeState {
     hudVisible: boolean;
 
     // --- UTILITIES & STATE ---
-    previousPerkMask: number;
     inputState: any;
 
     // --- NEW COMBAT FEEL & BUFFS ---
@@ -362,10 +365,12 @@ export function allocateRuntimeState(): RuntimeState {
         incomingDamageBuffer: new Float64Array(TELEMETRY_BUFFER_SIZE),
 
         statusFlags: 0,
-        statusMask: 0,
-        activePassives: [],
-        activeBuffs: [],
-        activeDebuffs: [],
+        activePassives: new Int32Array(MAX_ENTITIES.PERKS),
+        activePassivesCount: 0,
+        activeBuffs: new Int32Array(MAX_ENTITIES.PERKS),
+        activeBuffsCount: 0,
+        activeDebuffs: new Int32Array(MAX_ENTITIES.PERKS),
+        activeDebuffsCount: 0,
 
         sectorsCompleted: 0,
         totalSkillPointsEarned: 0,
@@ -382,6 +387,7 @@ export function allocateRuntimeState(): RuntimeState {
 
         prologueSeen: false,
         rescuedFamilyIndices: [],
+        deadBossIndices: [],
         familyFoundCount: 0,
 
         challengeTiers: new Int32Array(MAX_ENTITIES.CHALLENGES),
@@ -389,8 +395,8 @@ export function allocateRuntimeState(): RuntimeState {
         trackedChallengeIds: [],
 
         startTime: 0,
-        activeWeapon: WeaponType.SMG,
-        loadout: { primary: WeaponType.SMG, secondary: WeaponType.PISTOL, throwable: WeaponType.GRENADE, special: WeaponType.RADIO },
+        activeWeapon: WeaponID.SMG,
+        loadout: { primary: WeaponID.SMG, secondary: WeaponID.PISTOL, throwable: WeaponID.GRENADE, special: ToolID.RADIO as any },
         weaponLevels: {},
         weaponAmmo: {} as any,
         isReloading: false,
@@ -458,7 +464,6 @@ export function allocateRuntimeState(): RuntimeState {
         playerDeathState: PlayerDeathState.ALIVE,
         sectorState: { envOverride: undefined } as any,
         isPlayground: false,
-        triggers: new TriggerSystem(MAX_ENTITIES.TRIGGERS),
         obstacles: [],
         worldStreamer: new WorldStreamer(),
         busUnlocked: false,
@@ -470,12 +475,13 @@ export function allocateRuntimeState(): RuntimeState {
         sectorName: '',
         initialAim: { active: false, x: 0, y: 0 },
         deathStartTime: 0,
-        killerType: DamageID.NONE,
+        killerType: DamageType.NONE,
+        killerSource: DamageID.NONE,
         killerName: '',
         killerAttackName: '',
         killedByEnemy: false,
-        lethalSourceId: -1,
-        lethalStatusEffect: -1,
+        lethalSourceId: DamageID.NONE,
+        lethalStatusEffect: StatusEffectID.NONE,
         playerBloodSpawned: false,
         playerAshSpawned: false,
         lastDrownTick: 0,
@@ -496,7 +502,7 @@ export function allocateRuntimeState(): RuntimeState {
         drawCalls: 0,
         triangles: 0,
 
-        interaction: { active: false, type: InteractionType.NONE, promptId: InteractionPromptId.NONE, label: '', targetId: '' },
+        interaction: { active: false, type: InteractionType.NONE, subType: InteractionSubType.NONE, promptId: InteractionPromptId.NONE, label: '', targetId: '' },
         interactionRequest: { active: false, type: InteractionType.NONE, id: '', object: null },
         hasInteractionTarget: false,
         interactionTargetPos: new THREE.Vector3(),
@@ -532,7 +538,7 @@ export function allocateRuntimeState(): RuntimeState {
         currentInteractionPayload: {},
         discovery: { active: false, id: '', type: DiscoveryType.CLUE, title: '', details: '', timestamp: 0 },
         cinematicActive: false,
-        cinematicLine: { active: false, speaker: '', text: '' },
+        cinematicLine: { active: false, speaker: '', text: '', currentSpeakerId: 0, lastSkipTime: 0 },
         callbacks: null,
         stats: null as any,
 
@@ -542,7 +548,6 @@ export function allocateRuntimeState(): RuntimeState {
         lastRenderDelta: 0.016,
 
         hudVisible: true,
-        previousPerkMask: 0,
         inputState: {
             w: false, a: false, s: false, d: false, space: false, fire: false, r: false, e: false, f: false,
             joystickMove: new THREE.Vector2(),
@@ -611,10 +616,9 @@ export function resetRuntimeState(state: RuntimeState, props: any): void {
 
     // 3. State Flags & Lists
     state.statusFlags = 0;
-    state.statusMask = 0;
-    state.activePassives.length = 0;
-    state.activeBuffs.length = 0;
-    state.activeDebuffs.length = 0;
+    state.activePassivesCount = 0;
+    state.activeBuffsCount = 0;
+    state.activeDebuffsCount = 0;
 
     safeCopyBuffer(state.discoveredPerksMap, pStats.discoveredPerksMap);
 
@@ -668,6 +672,13 @@ export function resetRuntimeState(state: RuntimeState, props: any): void {
     state.lastAdrenalinePatchTime = -100000;
     state.lastPerfectDodgeTime = -100000;
     state.playerDeathState = PlayerDeathState.ALIVE;
+    state.killerType = DamageType.NONE;
+    state.killerSource = DamageID.NONE;
+    state.killerName = '';
+    state.killerAttackName = '';
+    state.killedByEnemy = false;
+    state.lethalSourceId = DamageID.NONE;
+    state.lethalStatusEffect = StatusEffectID.NONE;
 
     // 5. Object Pool Reset
     state.enemies.length = 0;
@@ -694,7 +705,6 @@ export function resetRuntimeState(state: RuntimeState, props: any): void {
 
     // 7. World & Collision
     state.sectorState = props.sectorState || { envOverride: undefined } as any;
-    state.triggers.reset();
     state.obstacles.length = 0;
 
     // 8. Input State
@@ -718,7 +728,7 @@ export function resetRuntimeState(state: RuntimeState, props: any): void {
  * Uses a primitive loop to avoid allocating ArrayBufferView objects (which .subarray() does)
  * and handles size mismatches gracefully, preventing RangeErrors.
  */
-function safeCopyBuffer(target: Float32Array | Float64Array | Int32Array | Uint8Array, source: any): void {
+export function safeCopyBuffer(target: Float32Array | Float64Array | Int32Array | Uint8Array, source: any): void {
     if (!source || typeof source.length !== 'number') return;
     const len = Math.min(target.length, source.length);
     for (let i = 0; i < len; i++) {

@@ -43,6 +43,9 @@ export class CameraSystem implements System {
     private _targetAngle = 0;
     private _targetHeightMod = 0;
 
+    public enabled = true;
+    public persistent = true;
+
     constructor() {
         // Create the camera that WinterEngine will use
         this.threeCamera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2500);

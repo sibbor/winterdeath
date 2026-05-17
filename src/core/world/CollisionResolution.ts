@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { MATERIAL_TYPE } from '../../content/environment';
-import { InteractionShape } from '../../systems/ui/UIEventBridge';
 
 export enum PhysicsGroup {
     NONE = 0,
@@ -12,7 +11,10 @@ export enum PhysicsGroup {
     WATER = 6
 }
 
-export type ColliderType = InteractionShape;
+export enum ColliderType {
+    SPHERE = 0,
+    BOX = 1,
+}
 
 export interface ColliderData {
     type: ColliderType;
@@ -75,7 +77,7 @@ export const applyCollisionResolution = (
 
     // Fast radius-based discard using pre-calculated or default radius
     const obsRad = obstacle.radius || 2.0;
-    const checkRadius = obsRad + entityRadius + 0.5;
+    const checkRadius = obsRad + entityRadius + 0.1; // Small epsilon
 
     // Abort processing instantly if entities do not overlap
     if (distSq_XZ > checkRadius * checkRadius) return false;
@@ -94,7 +96,7 @@ export const applyCollisionResolution = (
     const entityMaxY = entityMinY + height;
 
     // 1. Box Collider (Oriented Bounding Box)
-    if (col && col.type === InteractionShape.BOX && col.size) {
+    if (col && col.type === ColliderType.BOX && col.size) {
         const size = col.size;
 
         // Fast World-to-Local space transformation
@@ -131,7 +133,8 @@ export const applyCollisionResolution = (
         const hZ = size.z * 0.5;
 
         // Local Y check
-        if (_v1.y + height < -hY || _v1.y > hY) return false;
+        const localHeight = obstacle.scale ? height * (1.0 / obstacle.scale.y) : height;
+        if (_v1.y + localHeight < -hY || _v1.y > hY) return false;
 
         // Find closest point on box in local XZ plane using fast branching
         let closestX = _v1.x;

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { WeaponType, WeaponCategory, WeaponBehavior, WEAPONS, WeaponStats } from '../content/weapons';
+import { WeaponCategory, WeaponBehavior, WEAPONS, WeaponStats } from '../content/weapons';
+import { DamageID, ToolID, HoldableID, WeaponID } from '../entities/player/CombatTypes';
 import { PlayerStatID } from '../entities/player/PlayerTypes';
 import { ProjectileSystem } from './ProjectileSystem';
 import { WeaponSounds, UiSounds } from '../utils/audio/AudioLib';
@@ -7,7 +8,7 @@ import { haptic } from '../utils/HapticManager';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
 import { _buoyancyResult } from './WaterSystem';
-import { DamageID } from '../entities/player/CombatTypes';
+import { TOOLS } from '../content/tools';
 import { WeaponFX } from './WeaponFX';
 import { SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
@@ -20,11 +21,12 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
+
 const _UP = new THREE.Vector3(0, 1, 0);
 
 // Pre-defined static array for scroll iteration to avoid GC allocations
 const _SLOTS = ['primary', 'secondary', 'throwable', 'special', 'radio'];
-const _validWeaponsScratch: WeaponType[] = [];
+const _validWeaponsScratch: WeaponID[] = [];
 
 // Avoid creating empty objects and functions in loops
 const _NOOP_DAMAGE_TEXT = (x: number, y: number, z: number, t: string, c?: string) => { };
@@ -37,8 +39,6 @@ interface ContinuousContext {
     spawnParticle: Function | null;
     showDamageText: Function;
     spawnDecal: Function | null;
-    explodeEnemy: Function | null;
-    trackStats: Function | null;
     addScore: Function | null;
     fireZones: any[];
     simTime: number;
@@ -59,8 +59,6 @@ const _continuousCtx: ContinuousContext = {
     spawnParticle: null,
     showDamageText: _NOOP_DAMAGE_TEXT,
     spawnDecal: null,
-    explodeEnemy: null,
-    trackStats: null,
     addScore: null,
     fireZones: [],
     simTime: 0,
@@ -142,18 +140,18 @@ export const WeaponHandler = {
     handleSlotSwitch: (state: any, loadout: any, action: InputAction) => {
         // Block input during cinematics
         if (state.vehicle.active || state.cinematicActive) return;
-        let next: WeaponType | null = null;
+        let next: HoldableID | null = null;
         switch (action) {
             case InputAction.SLOT_1: next = loadout.primary; break;
             case InputAction.SLOT_2: next = loadout.secondary; break;
             case InputAction.SLOT_3: next = loadout.throwable; break;
             case InputAction.SLOT_4: next = loadout.special; break;
-            case InputAction.SLOT_5: next = WeaponType.RADIO; break;
+            case InputAction.SLOT_5: next = ToolID.RADIO; break;
         }
 
         if (!next) return;
 
-        const nextDef = (WEAPONS as any)[next] as WeaponStats;
+        const nextDef = (WEAPONS as any)[next] || (TOOLS as any)[next];
 
         // Restriction: Cannot switch to empty throwables
         if (nextDef?.category === WeaponCategory.THROWABLE && (state.weaponAmmo[next] || 0) <= 0) {
@@ -162,7 +160,7 @@ export const WeaponHandler = {
         }
 
         // Restriction: Radio is only for calling family
-        if (next === WeaponType.RADIO && state.familyFound) {
+        if (next === ToolID.RADIO && state.familyFound) {
             UiSounds.playClick();
             return;
         }
@@ -190,14 +188,15 @@ export const WeaponHandler = {
             _validWeaponsScratch.length = 0;
             let vCount = 0;
 
-            for (let i = 0; i < 5; i++) {
+            for (let i = 0; i < _SLOTS.length; i++) {
                 const slotKey = _SLOTS[i];
-                let w = (slotKey === 'radio') ? WeaponType.RADIO : loadout[slotKey];
+                const isTool = slotKey === 'radio';
+                let w = isTool ? ToolID.RADIO : loadout[slotKey];
 
-                if (w && w !== WeaponType.NONE) {
-                    const def = (WEAPONS as any)[w] as WeaponStats;
+                if (w && w !== WeaponID.NONE) {
+                    const def = isTool ? (TOOLS as any)[w] : (WEAPONS as any)[w];
                     if (def?.category === WeaponCategory.THROWABLE && (state.weaponAmmo[w] || 0) <= 0) continue;
-                    if (w === WeaponType.RADIO && state.familyFound) continue;
+                    if (w === ToolID.RADIO && state.familyFound) continue;
 
                     if (w === state.activeWeapon) currentIdx = vCount;
                     _validWeaponsScratch[vCount++] = w;
@@ -231,9 +230,9 @@ export const WeaponHandler = {
         }
 
         // 3. Reload Logic
-        const isThrowable = wep.category === WeaponCategory.THROWABLE;
-        const isRadio = state.activeWeapon === WeaponType.RADIO;
-        const isEnergy = !!wep.isEnergy;
+        const isThrowable = wep?.category === WeaponCategory.THROWABLE;
+        const isRadio = state.activeWeapon === ToolID.RADIO;
+        const isEnergy = !!wep?.isEnergy;
 
         if (acts[InputAction.RELOAD] && !state.isReloading && !isThrowable && !isRadio && !isEnergy && (state.weaponAmmo[state.activeWeapon] || 0) < (wep.magSize || 0)) {
             state.isReloading = true;
@@ -264,8 +263,8 @@ export const WeaponHandler = {
     },
 
     // --- DAMAGE SCALING ---
-    getScaledDamage: (weaponType: WeaponType, level: number = 0) => {
-        const damage = ((WEAPONS as any)[weaponType] as WeaponStats)?.damage || 0;
+    getScaledDamage: (weaponId: WeaponID, level: number = 0) => {
+        const damage = ((WEAPONS as any)[weaponId] as WeaponStats)?.damage || 0;
         // 10% increase per level above 1: Damage * (1 + (level - 1) * 0.1)
         return Math.floor(damage * (1 + (level - 1) * 0.1));
     },
@@ -282,7 +281,7 @@ export const WeaponHandler = {
             if (!wep) return; // Both active and primary are invalid — bail out safely
         }
 
-        if (state.activeWeapon === WeaponType.RADIO) {
+        if (state.activeWeapon === ToolID.RADIO) {
             if (input.actions[InputAction.FIRE]) WeaponSounds.playRadio();
             state.throwChargeStart = 0;
             if (aimCrossMesh) aimCrossMesh.visible = false;
@@ -292,7 +291,7 @@ export const WeaponHandler = {
 
         // --- 0. ENERGY MANAGEMENT (Zero-GC) ---
         // Regenerate ALL energy weapons in the loadout simultaneously
-        for (let i = 0; i < 4; i++) {
+        for (let i = 0; i < _SLOTS.length; i++) {
             const wId = loadout[_SLOTS[i]];
             if (wId && (WEAPONS as any)[wId]?.isEnergy) {
                 const isFiring = input.actions[InputAction.FIRE] && state.activeWeapon === wId;
@@ -345,8 +344,6 @@ export const WeaponHandler = {
                         _continuousCtx.spawnParticle = cb?.spawnParticle;
                         _continuousCtx.showDamageText = cb?.showDamageText || _NOOP_DAMAGE_TEXT;
                         _continuousCtx.spawnDecal = cb?.spawnDecal;
-                        _continuousCtx.explodeEnemy = cb?.explodeEnemy;
-                        _continuousCtx.trackStats = cb?.trackStats;
                         _continuousCtx.addScore = cb?.gainXp;
                         _continuousCtx.fireZones = state.fireZones;
                         _continuousCtx.simTime = simTime;
@@ -360,19 +357,13 @@ export const WeaponHandler = {
                         _continuousCtx.weaponHandler = WeaponHandler;
 
                         if (WeaponHandler.consumeAmmo(state, state.activeWeapon)) {
-                            // Continuous logic moved to ProjectileSystem.update() (DoD)
-                            // This avoids redundant raycasting and object allocations.
-                            WeaponFX.handleContinuousFire(state.activeWeapon, _v2, _v3, session, delta);
+                            WeaponHandler.handleContinuousFire(wep, _v2, _v3, session, delta);
 
                             // --- MUZZLE FX (Audit Fix) ---
-                            if (state.activeWeapon === DamageID.FLAMETHROWER) {
-                                WeaponFX.createMuzzleFire(_v2, _v3, 0.8);
-                            } else {
-                                WeaponFX.createMuzzleFlash(_v2, _v3, true); // Cyan flash for Arc-Cannon
-                            }
+                            WeaponFX.createMuzzleEffect(scene, state.activeWeapon, _v2, _v3);
                         }
                     } else {
-                        if (state.activeWeapon === WeaponType.FLAMETHROWER && (state as any).lastFireState) {
+                        if (state.activeWeapon === WeaponID.FLAMETHROWER && (state as any).lastFireState) {
                             WeaponSounds.playFlamethrowerEnd();
                         }
 
@@ -382,7 +373,7 @@ export const WeaponHandler = {
                         }
                     }
                 } else {
-                    if (state.activeWeapon === WeaponType.FLAMETHROWER && (state as any).lastFireState) {
+                    if (state.activeWeapon === WeaponID.FLAMETHROWER && (state as any).lastFireState) {
                         WeaponSounds.playFlamethrowerEnd();
 
                         // O(1) Node Lookup (Phase 13)
@@ -434,8 +425,8 @@ export const WeaponHandler = {
                             state.callbacks.makeNoise(_v2, NoiseType.GUNSHOT, NOISE_RADIUS[NoiseType.GUNSHOT]);
                         }
 
-                        const pellets = wep.name === WeaponType.SHOTGUN ? 8 : 1;
-                        const spread = wep.name === WeaponType.SHOTGUN ? 0.15 : 0;
+                        const pellets = wep.name === WeaponID.SHOTGUN ? 8 : 1;
+                        const spread = wep.name === WeaponID.SHOTGUN ? 0.15 : 0;
 
                         // Calculate total damage once (Zero-GC and faster)
                         const totalDamage = WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]);
@@ -454,8 +445,11 @@ export const WeaponHandler = {
                             const rangeMult = state.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0;
                             const bulletLife = ((wep.range || 15) / (wep.bulletSpeed || 70)) * rangeMult;
 
-                            ProjectileSystem.launchBullet(scene, state.projectiles, _v2, _v3, wep.name as unknown as DamageID, damagePerPellet, bulletLife);
+                            ProjectileSystem.launchBullet(state.projectiles, _v2, _v3, wep.name as unknown as DamageID, damagePerPellet, bulletLife);
                         }
+
+                        // --- MUZZLE FX (Audit Fix: Standard Projectiles) ---
+                        WeaponFX.createMuzzleEffect(scene, state.activeWeapon, _v2, _v3);
                     } else if (input.actions[InputAction.FIRE] && (state.weaponAmmo[state.activeWeapon] || 0) <= 0 && simTime > state.lastShotTime + (wep.fireRate || 0)) {
                         state.lastShotTime = simTime;
                         if (state.sectorState.noReload) {
@@ -580,4 +574,19 @@ export const WeaponHandler = {
                 break;
         }
     },
+
+    // --- VISUAL FEEDBACK BRIDGE ---
+    handleContinuousFire: (weapon: WeaponStats, origin: THREE.Vector3, direction: THREE.Vector3, ctx: any, delta: number) => {
+        switch (weapon.name) {
+            case WeaponID.FLAMETHROWER:
+                WeaponFX.drawFlames(origin, direction, weapon.range);
+                break;
+            case WeaponID.ARC_CANNON:
+                // We let ProjectileSystem handle the authoritative hit-beam and chaining.
+                // The handler only draws the "idle" beam if no enemies are nearby, 
+                // but for now, the ProjectileSystem is the primary source of truth.
+                break;
+        }
+    }
+
 };

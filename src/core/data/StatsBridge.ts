@@ -56,7 +56,9 @@ export class StatsBridge {
     public static getSectorDamageDealt(stats: any): number { return stats.damageDealt || 0.0; }
     public static getSectorDamageTaken(stats: any): number { return stats.damageTaken || 0.0; }
     public static getSectorXPGained(stats: any): number { return stats.xpGained | 0; }
-    public static getSectorSPGained(stats: any): number { return stats.spGained | 0; }
+    public static getSectorSPGained(stats: any): number {
+        return (stats.spGained | 0) + (stats.collectiblesDiscovered?.length || 0) + (stats.discoveredPOIs?.length || 0);
+    }
     public static getSectorScrapLooted(stats: any): number { return stats.scrapLooted | 0; }
     public static getSectorTimeElapsed(stats: any): number { return stats.timeElapsed || 0.0; }
     public static getSectorDistanceTraveled(stats: any): number { return stats.distanceTraveled || 0.0; }
@@ -78,8 +80,12 @@ export class StatsBridge {
     // ANALYTICAL LOGIC (Zero-GC)
     // ========================================================================
 
-    public static hasPerk(stats: { statusMask: number }, perkId: number): boolean {
-        return (stats.statusMask & (1 << perkId)) !== 0;
+    public static hasPerk(stats: any, perkId: number): boolean {
+        return (stats.discoveredPerksMap && stats.discoveredPerksMap[perkId] > 0) || false;
+    }
+
+    public static isEffectActive(stats: { effectDurations: Float32Array }, perkId: number): boolean {
+        return stats.effectDurations[perkId] > 0;
     }
 
     /**
@@ -87,7 +93,7 @@ export class StatsBridge {
      * Returns a static Int32Array: [EnemyIndex, DeathCount]
      */
     public static getNemesis(stats: PlayerStats): Int32Array {
-        let maxDeaths = -1;
+        let maxDeaths = 0;
         let nemesisIdx = -1;
         const buffer = stats.deathsByEnemyType;
 
@@ -99,6 +105,9 @@ export class StatsBridge {
             }
         }
 
+        // VINTERDÖD FIX: If maxDeaths is 0, we have no nemesis. Force -1.
+        if (maxDeaths <= 0) nemesisIdx = -1;
+
         StatsBridge._nemesisResult[0] = nemesisIdx;
         StatsBridge._nemesisResult[1] = maxDeaths > 0 ? maxDeaths : 0;
         return StatsBridge._nemesisResult;
@@ -109,7 +118,7 @@ export class StatsBridge {
      * Returns a static Int32Array: [WeaponIndex, KillCount]
      */
     public static getSignatureWeapon(stats: PlayerStats): Int32Array {
-        let maxKills = -1;
+        let maxKills = 0;
         let signatureIdx = -1;
         const buffer = stats.weaponKills;
 
@@ -117,16 +126,17 @@ export class StatsBridge {
             // Skip technical/move indices and environmental/tactical indices
             if (i === StatWeaponIndex.NONE || 
                 i === StatWeaponIndex.RADIO || 
-                i === StatWeaponIndex.RUSH || 
-                i === StatWeaponIndex.VEHICLE || 
-                i === StatWeaponIndex.DODGE || 
-                i >= StatWeaponIndex.PHYSICAL) continue;
+                (i >= StatWeaponIndex.RUSH && i < StatWeaponIndex.PHYSICAL) || // Abilities/Vehicles
+                i >= StatWeaponIndex.PHYSICAL) continue;      // Environment
 
             if (buffer[i] > maxKills) {
                 maxKills = buffer[i];
                 signatureIdx = i;
             }
         }
+
+        // VINTERDÖD FIX: If maxKills is 0, we have no signature weapon. Force -1.
+        if (maxKills <= 0) signatureIdx = -1;
 
         StatsBridge._signatureResult[0] = signatureIdx;
         StatsBridge._signatureResult[1] = maxKills > 0 ? maxKills : 0;
@@ -138,7 +148,7 @@ export class StatsBridge {
      * Returns a static Float64Array: [WeaponIndex, TimeActive]
      */
     public static getComfortWeapon(stats: PlayerStats): Float64Array {
-        let maxTime = -1;
+        let maxTime = 0;
         let comfortIdx = -1;
         const buffer = stats.weaponTimeActive;
 
@@ -146,9 +156,7 @@ export class StatsBridge {
             // Skip technical/move indices
             if (i === StatWeaponIndex.NONE || 
                 i === StatWeaponIndex.RADIO || 
-                i === StatWeaponIndex.RUSH || 
-                i === StatWeaponIndex.VEHICLE || 
-                i === StatWeaponIndex.DODGE || 
+                (i >= StatWeaponIndex.RUSH && i < StatWeaponIndex.PHYSICAL) || 
                 i >= StatWeaponIndex.PHYSICAL) continue;
 
             if (buffer[i] > maxTime) {
@@ -156,6 +164,9 @@ export class StatsBridge {
                 comfortIdx = i;
             }
         }
+
+        // VINTERDÖD FIX: If maxTime is 0, we have no comfort weapon. Force -1.
+        if (maxTime <= 0) comfortIdx = -1;
 
         StatsBridge._comfortResult[0] = comfortIdx;
         StatsBridge._comfortResult[1] = maxTime > 0 ? maxTime : 0;
@@ -215,7 +226,7 @@ export class StatsBridge {
             case ChallengeID.TANK_BUSTER: return ek[StatEnemyIndex.TANK];
             case ChallengeID.BOSS_SLAYER: return ek[StatEnemyIndex.BOSS];
             case ChallengeID.GIBBER: return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_GIBBED);
-            case ChallengeID.PYROMANIAC: return wk[StatWeaponIndex.FIRE] + wk[StatWeaponIndex.BURN] + wk[StatWeaponIndex.MOLOTOV] + wk[StatWeaponIndex.FLAMETHROWER];
+            case ChallengeID.PYROMANIAC: return wk[StatWeaponIndex.BURN] + wk[StatWeaponIndex.MOLOTOV] + wk[StatWeaponIndex.FLAMETHROWER];
             case ChallengeID.SHOCK_THERAPY: return wk[StatWeaponIndex.ELECTRIC] + wk[StatWeaponIndex.ARC_CANNON];
             case ChallengeID.DEMOLITION_EXPERT: return wk[StatWeaponIndex.EXPLOSION] + wk[StatWeaponIndex.GRENADE];
             case ChallengeID.BRAWLER: return wk[StatWeaponIndex.RUSH] + wk[StatWeaponIndex.PHYSICAL] + wk[StatWeaponIndex.DODGE];
@@ -377,19 +388,42 @@ export class StatsBridge {
     // DISCOVERY & PROGRESSION ARRAYS
     // ========================================================================
 
-    public static getCollectiblesDiscovered(stats: PlayerStats): string[] { return stats.collectiblesDiscovered; }
+    public static getCollectiblesDiscovered(stats: PlayerStats): string[] { return stats.collectiblesDiscovered || []; }
     public static getViewedCollectibles(stats: PlayerStats): string[] { return stats.viewedCollectibles || []; }
-    public static getCluesFound(stats: PlayerStats): string[] { return stats.cluesFound; }
-    public static getDiscoveredPOIs(stats: PlayerStats): string[] { return stats.discoveredPOIs; }
-    public static getSeenEnemies(stats: PlayerStats): number[] { return stats.seenEnemies; }
-    public static getSeenBosses(stats: PlayerStats): number[] { return stats.seenBosses; }
+    public static getCluesFound(stats: PlayerStats): string[] { return stats.cluesFound || []; }
+    public static getDiscoveredPOIs(stats: PlayerStats): string[] { return stats.discoveredPOIs || []; }
+    public static getSeenEnemies(stats: PlayerStats): number[] { return stats.seenEnemies || []; }
+    public static getSeenBosses(stats: PlayerStats): number[] { return stats.seenBosses || []; }
     public static getDeadBossIndices(stats: PlayerStats): number[] { return stats.deadBossIndices || []; }
-    public static getRescuedFamilyIndices(stats: PlayerStats): number[] { return stats.rescuedFamilyIndices; }
-    public static getTrackedChallengeIds(stats: PlayerStats): number[] { return stats.trackedChallengeIds; }
+    public static getRescuedFamilyIndices(stats: PlayerStats): number[] { return stats.rescuedFamilyIndices || []; }
+    public static getTrackedChallengeIds(stats: PlayerStats): number[] { return stats.trackedChallengeIds || []; }
     public static getChallengeTier(stats: PlayerStats, id: ChallengeID): number { return stats.challengeTiers[id] | 0; }
-    public static getActivePassives(stats: PlayerStats): number[] { return stats.activePassives; }
-    public static getActiveBuffs(stats: PlayerStats): number[] { return stats.activeBuffs; }
-    public static getActiveDebuffs(stats: PlayerStats): number[] { return stats.activeDebuffs; }
+    public static getActivePassives(stats: any): number[] {
+        if (stats.activePassivesCount !== undefined && stats.activePassives instanceof Int32Array) {
+            const result = new Array(stats.activePassivesCount);
+            for (let i = 0; i < stats.activePassivesCount; i++) result[i] = stats.activePassives[i];
+            return result;
+        }
+        return stats.activePassives || [];
+    }
+
+    public static getActiveBuffs(stats: any): number[] {
+        if (stats.activeBuffsCount !== undefined && stats.activeBuffs instanceof Int32Array) {
+            const result = new Array(stats.activeBuffsCount);
+            for (let i = 0; i < stats.activeBuffsCount; i++) result[i] = stats.activeBuffs[i];
+            return result;
+        }
+        return stats.activeBuffs || [];
+    }
+
+    public static getActiveDebuffs(stats: any): number[] {
+        if (stats.activeDebuffsCount !== undefined && stats.activeDebuffs instanceof Int32Array) {
+            const result = new Array(stats.activeDebuffsCount);
+            for (let i = 0; i < stats.activeDebuffsCount; i++) result[i] = stats.activeDebuffs[i];
+            return result;
+        }
+        return stats.activeDebuffs || [];
+    }
     public static getFamilyFoundCount(stats: PlayerStats): number { return stats.familyFoundCount | 0; }
     public static getTotalSkillPointsEarned(stats: PlayerStats): number { return stats.totalSkillPointsEarned | 0; }
 

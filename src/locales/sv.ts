@@ -65,7 +65,9 @@ export const sv = {
         failed: "MISSLYCKAD",
         summary: "ÖVERSIKT",
         details: "STRIDSDETALJER",
-        pois_discovered: "Platser funna",
+        collectibles_discovered: "Samlingsobjekt upptäckta",
+        clues_discovered: "Ledtrådar upptäckta",
+        pois_discovered: "POIs Upptäckta",
         settings: "INSTÄLLNINGAR",
         language: "SPRÅK",
         language_sub: "Engelska / Svenska",
@@ -125,28 +127,31 @@ export const sv = {
         jump: "HOPPA",
         view_report: "VISA RAPPORT",
         view_details: "VISA DETALJER",
+        passive: "PASSIV",
+        buff: "BUFF",
+        debuff: "DEBUFF",
         challenge_complete: "UTMANING SLUTFÖRD",
-    challenges: {
-        marathon: { title: "Maraton", desc: "Res totalt {target} meter över alla sektorer." },
-        scrapper: { title: "Skrotsamlare", desc: "Samla totalt {target} skrot." },
-        explorer: { title: "Upptäckare", desc: "Upptäck {target} intressepunkter." },
-        treasure_hunter: { title: "Skattejägare", desc: "Öppna {target} förrådslådor." },
-        scavenger: { title: "Asätare", desc: "Samla {target} föremål eller resurser." },
-        zombie_hunter: { title: "Zombiejägare", desc: "Neutralisera {target} odöda hot." },
-        walker_exterminator: { title: "Walker-utrotare", desc: "Döda {target} Walkers specifikt." },
-        knee_capper: { title: "Knäskålskrossare", desc: "Stympa {target} fiendelemmar." },
-        tank_buster: { title: "Tank-knäckare", desc: "Besegra {target} tunga bepansrade fiender." },
-        boss_slayer: { title: "Boss-dräpare", desc: "Besegra {target} sektorsbossar." },
-        gibber: { title: "Köttkvarn", desc: "Spräng {target} fiender i stycken." },
-        pyromaniac: { title: "Pyroman", desc: "Tänd eld på {target} fiender." },
-        shock_therapy: { title: "Chockterapi", desc: "Ge {target} fiender elstötar." },
-        demolition_expert: { title: "Sprängexpert", desc: "Döda {target} fiender med sprängämnen." },
-        brawler: { title: "Slagsmålskämpe", desc: "Döda {target} fiender med närstridsattacker." },
-        sharpshooter: { title: "Prickskytt", desc: "Döda {target} fiender med långdistansskott." },
-        survivor: { title: "Överlevare", desc: "Överlev i {target} minuter i en enda sektor." },
-        veteran: { title: "Veteran", desc: "Slutför {target} sektorer framgångsrikt." },
-        untouchable: { title: "Oåtkomlig", desc: "Slutför en sektor genom att ta mindre än {target} skada." }
-    },
+        challenges: {
+            marathon: { title: "Maraton", desc: "Res totalt {target} meter över alla sektorer." },
+            scrapper: { title: "Skrotsamlare", desc: "Samla totalt {target} skrot." },
+            explorer: { title: "Upptäckare", desc: "Upptäck {target} intressepunkter." },
+            treasure_hunter: { title: "Skattejägare", desc: "Öppna {target} förrådslådor." },
+            scavenger: { title: "Asätare", desc: "Samla {target} föremål eller resurser." },
+            zombie_hunter: { title: "Zombiejägare", desc: "Neutralisera {target} odöda hot." },
+            walker_exterminator: { title: "Walker-utrotare", desc: "Döda {target} Walkers specifikt." },
+            knee_capper: { title: "Knäskålskrossare", desc: "Stympa {target} fiendelemmar." },
+            tank_buster: { title: "Tank-knäckare", desc: "Besegra {target} tunga bepansrade fiender." },
+            boss_slayer: { title: "Boss-dräpare", desc: "Besegra {target} sektorsbossar." },
+            gibber: { title: "Köttkvarn", desc: "Spräng {target} fiender i stycken." },
+            pyromaniac: { title: "Pyroman", desc: "Tänd eld på {target} fiender." },
+            shock_therapy: { title: "Chockterapi", desc: "Ge {target} fiender elstötar." },
+            demolition_expert: { title: "Sprängexpert", desc: "Döda {target} fiender med sprängämnen." },
+            brawler: { title: "Slagsmålskämpe", desc: "Döda {target} fiender med närstridsattacker." },
+            sharpshooter: { title: "Prickskytt", desc: "Döda {target} fiender med långdistansskott." },
+            survivor: { title: "Överlevare", desc: "Överlev i {target} minuter i en enda sektor." },
+            veteran: { title: "Veteran", desc: "Slutför {target} sektorer framgångsrikt." },
+            untouchable: { title: "Oåtkomlig", desc: "Slutför en sektor genom att ta mindre än {target} skada." }
+        },
         return_camp: "ÅTERVÄND TILL LÄGRET",
         respawn: "RESPAWN",
         player_died: "{name} dog",
@@ -180,6 +185,7 @@ export const sv = {
         exit_vehicle: "GÅ UR FORDON",
         gas: "GAS",
         brake: "BROMS",
+        vehicle: "Fordon",
         discovered: "UPPTÄCKTA",
         collected: "SAMLADE",
         tap: "TRYCK",
@@ -234,7 +240,7 @@ export const sv = {
         log_clues: "LEDTRÅDAR",
         log_perks: "FÖRMÅGOR",
         log_weapons: "VAPEN",
-        passive_abilities: "PASSIVA FÖRMÅGOR",
+        passives: "PASSIVA",
         buffs: "BUFFAR",
         debuffs: "DEBUFFAR",
         electrified: "Elektrifiering",
@@ -257,6 +263,7 @@ export const sv = {
         weather: "VÄDER",
         wind_strength: "VINDSTYRKA",
         time_of_day: "TID PÅ DYGNET",
+        time_factor: "TIDSFAKTOR",
         enemy_spawner: "ZOMBIESPAWNER",
         enemy_type: "FIENDETYP",
         count: "ANTAL",
@@ -328,16 +335,18 @@ export const sv = {
         avg_distance: "SNITTAVSTÅND / SEKTOR",
         aggression_ratio: "AGGRESSIONSRATIO",
         engagement_range: "SNITTAVSTÅND STRID",
-        total_game_time: "TOTAL SPELTID",
+        game_time: "SPELTID",
         avg_game_time: "SNITTID / SEKTOR",
         engagement_metric: "meter",
         times_gained: "Gånger erhållna",
         statistics: "STATISTIK",
         overview: "ÖVERSIKT",
         combat: "STRID",
-        // Parity with en.ts (Missing statistics & system labels)
         next_rank: "NÄSTA RANG",
-        weapon_performance_log: "VAPENPRESTANDA",
+        weapon_log: "VAPENLOGG",
+        shots: "SKOTT",
+        hits: "TRÄFFAR",
+        weapon: "VAPEN",
         no_weapon_data: "Ingen vapendata tillgänglig",
         continue_to_play_weapons: "fortsätt använda vapen i fält för att logga prestanda",
         buff_uptime: "BUFF-TID",
@@ -416,6 +425,7 @@ export const sv = {
         cpu_timings: "CPU-tider",
         system_logs: "Systemloggar",
         clear: "RENSA",
+        copy: "KOPIERA",
         no_logs: "Inga loggar fångade...",
         challenge_mastered: "MÄSTARE",
         challenge_tier: "NIVÅ {tier}",
@@ -426,6 +436,7 @@ export const sv = {
         skip_epilogue_error: "Hoppa över epilog (Fel vid laddning)",
         skip_prologue_error: "Hoppa över prolog (Fel vid laddning)",
         go_to_story_point: "Gå till storypunkt {num}",
+        no_data_available: "Ingen data tillgänglig",
     },
     status: {
         INFECTED: {
@@ -513,9 +524,6 @@ export const sv = {
         throwable: "KASTVAPEN",
         special: "SPECIAL",
         tool: "VERKTYG",
-        passive: "PASSIV",
-        buff: "BUFF",
-        debuff: "DEBUFF"
     },
     weather: {
         none: "INGET",
@@ -569,72 +577,89 @@ export const sv = {
         // Passives
         TRICKSTERS_HASTE: {
             title: "Bedragarens brådska",
-            description: "20% snabbare omladdning"
+            description: "20% snabbare omladdning",
+            prerequisite: "Rädda Loke"
         },
         EAGLES_SIGHT: {
             title: "Falkögon",
-            description: "15% ökad räckvidd"
+            description: "15% ökad räckvidd",
+            prerequisite: "Rädda Jordan"
         },
         LEAD_FEVER: {
             title: "Blyfeber",
-            description: "20% ökad eldhastighet"
+            description: "20% ökad eldhastighet",
+            prerequisite: "Rädda Esmeralda"
         },
         WINTERS_BONE: {
             title: "Vinterben",
-            description: "10% skaderesistans"
+            description: "10% skaderesistans",
+            prerequisite: "Rädda Nathalie"
         },
 
         // Buffs
         REFLEX_SHIELD: {
             title: "Reflexsköld",
-            description: "0.5s odödlighet vid rullning eller rusning. 10s cooldown."
+            description: "0.5s odödlighet vid rullning eller rusning. 10s cooldown.",
+            prerequisite: "Aktiveras vid rullning eller rusning"
         },
         ADRENALINE_PATCH: {
             title: "Adrenalinplåster",
-            description: "3s odödlighet när hälsan sjunker under 25%. 60s cooldown."
+            description: "3s odödlighet när hälsan sjunker under 25%. 60s cooldown.",
+            prerequisite: "Aktiveras när hälsan understiger 25%"
         },
         GIB_MASTER: {
             title: "Gibb-mästare",
-            description: "Explosioner och hårda träffar har en betydligt högre chans att slita fiender i stycken."
+            description: "Explosioner och hårda träffar har en betydligt högre chans att slita fiender i stycken.",
+            prerequisite: "Erfarenhet av tung krigföring"
         },
         QUICK_FINGER: {
             title: "Snabba fingrar",
-            description: "Manuell omladdning är 30% snabbare under en kort tid efter ett dödande skott."
+            description: "Manuell omladdning är 30% snabbare under en kort tid efter ett dödande skott.",
+            prerequisite: "Aktiveras efter ett dödande skott"
         },
 
         // Debuffs
         BLEEDING: {
             title: "Blödning",
-            description: "Tar kontinuerlig skada och rör sig 10% långsammare."
+            description: "Tar kontinuerlig skada och rör sig 10% långsammare.",
+            prerequisite: "Uppstår vid fysiskt trauma"
         },
         BURNING: {
             title: "Brinner",
-            description: "Intensiv hetta som ger kontinuerlig skada och saktar ner dig något."
+            description: "Intensiv hetta som ger kontinuerlig skada och saktar ner dig något.",
+            prerequisite: "Exponering för intensiv eld eller hetta"
         },
         STUNNED: {
             title: "Bedövad",
-            description: "Rörelse och handlingar är helt inaktiverade."
+            description: "Rörelse och handlingar är helt inaktiverade.",
+            prerequisite: "Effekt av tunga, bedövande attacker"
         },
         DISORIENTED: {
             title: "Desorienterad",
-            description: "Synen är suddig och rörelsehastigheten är sänkt med 20%."
+            description: "Synen är suddig och rörelsehastigheten är sänkt med 20%.",
+            prerequisite: "Synnedsättande taktiska effekter"
         },
         SLOWED: {
             title: "Långsam",
-            description: "Rörelsehastigheten är kraftigt sänkt med 40%."
+            description: "Rörelsehastigheten är kraftigt sänkt med 40%.",
+            prerequisite: "Rörelse i begränsande terräng"
         },
         FREEZING: {
             title: "Fryser",
-            description: "Tar skada och rör sig betydligt långsammare på grund av kylan."
+            description: "Tar skada och rör sig betydligt långsammare på grund av kylan.",
+            prerequisite: "Exponering för extrem kyla"
         },
         ELECTRIFIED: {
             title: "Elektrifierad",
-            description: "Tar skada och rör sig betydligt långsammare på grund av elektrisk ström."
+            description: "Tar skada och rör sig betydligt långsammare på grund av elektrisk ström.",
+            prerequisite: "Kontakt med högspänningskällor"
         },
         DROWNING: {
             title: "Drunknar",
-            description: "Tar snabb skada under vattenytan."
-        }
+            description: "Tar snabb skada under vattenytan.",
+            prerequisite: "Nedsänkt i djupt vatten"
+        },
+        vehicle_desc: "Krossa de infekterade under tyngden av ditt fordon. Höghastighetskollisioner ger betydande fysisk skada och knockback."
     },
     weapons: {
         smg: "SMG",
@@ -998,4 +1023,5 @@ export const sv = {
         "3_25": "(Viskar) /1... 2... 3, spring!/",
         "3_26": "KOM OCH TA ME DIG DÅ, DIN JÄVEL!"
     }
+
 };

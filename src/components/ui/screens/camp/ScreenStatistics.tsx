@@ -1,24 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { PlayerStats, PlayerStatID, StatEnemyIndex } from '../../../../entities/player/PlayerTypes';
-import { DamageID } from '../../../../entities/player/CombatTypes';
+import { PlayerStats, PlayerStatID, StatEnemyIndex, StatWeaponIndex } from '../../../../entities/player/PlayerTypes';
 import { t } from '../../../../utils/i18n';
 import { useOrientation } from '../../../../hooks/useOrientation';
-import ScreenModalLayout, {
-    HORIZONTAL_HATCHING_STYLE,
-    TacticalCard,
-    TacticalButton,
-    TacticalTab,
-    GRITTY_HEADER_TITLE_STYLE
-} from '../../layout/ScreenModalLayout';
-import CollectiblePreview from '../../core/CollectiblePreview';
+import ScreenModalLayout, { TacticalCard, TacticalTab, } from '../../layout/ScreenModalLayout';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { DataResolver } from '../../../../utils/ui/DataResolver';
-import { ColorPair, COLORS, colorToHex, adjustColor } from '../../../../utils/ui/ColorUtils';
-import { PERKS, PerkCategory } from '../../../../content/perks';
-import { WEAPONS, WeaponCategory } from '../../../../content/weapons';
+import { MAX_ENTITIES } from '../../../../content/constants';
+import { DataResolver } from '../../../../core/data/DataResolver';
+import { COLORS } from '../../../../utils/ui/ColorUtils';
+import { PerkCategory } from '../../../../content/perks';
+import { WEAPONS } from '../../../../content/weapons';
 import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputManager';
 import { StatsBridge } from '../../../../core/data/StatsBridge';
 import { FormatUtils } from '../../../../utils/ui/FormatUtils';
+import CollectiblePreview from '../../core/CollectiblePreview';
 
 interface ScreenStatisticsProps {
     stats: PlayerStats;
@@ -132,7 +126,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
         >
             <div className={`flex h-full dossier-bg p-4 rounded-lg overflow-hidden ${effectiveLandscape ? 'flex-row gap-8' : 'flex-col gap-4'}`}>
                 <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
-                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-zinc-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide touch-auto cursor-pointer'}`}>
+                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex flex-nowrap gap-2 border-b-2 border-zinc-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide touch-auto cursor-pointer'}`}>
                         {TABS.map(tab => (
                             <TacticalTab
                                 key={tab.id}
@@ -267,7 +261,7 @@ const OverviewTab: React.FC<{
                         <span className="text-white uppercase tracking-tighter">{getRank(level + 1)}</span>
                     </div>
                 </TacticalCard>
-                <TacticalCard color={0x3b82f6} showHover={true} className="group shadow-inner">
+                <TacticalCard color={0x3b82f6} showHover={true} className="group shadow-inner border-2 border-blue-500/20">
                     <h3 className="text-xl font-light text-white uppercase tracking-wider mb-6 border-b border-zinc-800 pb-3 relative z-10">{t('ui.family_header')}</h3>
                     <div className="flex flex-col gap-4 relative z-10">
                         <div className="flex flex-wrap items-baseline gap-2">
@@ -380,7 +374,7 @@ const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: n
                         <span className="text-white font-mono text-lg">{StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_CHESTS_OPENED) + StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_BIG_CHESTS_OPENED)}</span>
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
-                        <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.total_game_time')}</span>
+                        <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.game_time')}</span>
                         <span className="text-white font-mono text-lg">{FormatUtils.formatTimeSmart(StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME))}</span>
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
@@ -424,7 +418,7 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
             lethality: FormatUtils.formatAccuracy(shots, hits),
             longestKillstreak: peakAggression.toString(),
             crisisSaves: crisisSaves.toLocaleString(),
-            nemesis: { name: nemesisName, count: nemesisCount },
+            nemesis: { id: nemesisId, name: nemesisName, count: nemesisCount },
             peakAggression: peakAggression.toLocaleString(),
             time
         };
@@ -462,10 +456,14 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
                 <div className="group/hvr relative p-6 border-2 border-red-900/20 bg-red-950/5 overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-red-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                     <h4 className="text-[10px] font-black text-red-500/40 uppercase tracking-widest mb-1 relative z-10">{t('ui.nemesis_id')}</h4>
-                    <div className="flex flex-col relative z-10">
-                        <span className="text-xl font-bold text-red-500 uppercase tracking-tighter truncate">{nemesis.name}</span>
-                        {nemesis.count > 0 && <span className="text-[10px] text-zinc-500 font-mono italic">{t('ui.killed_most_by')} ({nemesis.count})</span>}
-                    </div>
+                    {(nemesis.id !== -1 && nemesis.count > 0) ? (
+                        <div className="flex flex-col relative z-10">
+                            <span className="text-xl font-bold text-red-500 uppercase tracking-tighter truncate">{nemesis.name}</span>
+                            <span className="text-[10px] text-zinc-500 font-mono italic">{t('ui.killed_most_by')} ({nemesis.count})</span>
+                        </div>
+                    ) : (
+                        <span className="text-xl font-bold text-zinc-600 uppercase tracking-tighter truncate relative z-10">{t('ui.none')}</span>
+                    )}
                 </div>
                 <div className="group/hvr relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
@@ -533,8 +531,53 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
     );
 });
 
+const WeaponEntry: React.FC<{ stats: PlayerStats, wep: any }> = React.memo(({ stats, wep }) => {
+    const fired = StatsBridge.getWeaponShotsFired(stats, wep.id);
+    const hit = StatsBridge.getWeaponShotsHit(stats, wep.id);
+    const kills = StatsBridge.getWeaponKillCount(stats, wep.id);
+    const accuracy = (fired > 0) ? Math.floor((hit / fired) * 100) : 0;
+
+    return (
+        <div className="flex justify-between items-center px-4 py-3 bg-black/40 border border-zinc-800 hover:border-zinc-700 transition-colors group">
+            <div className="flex-1 flex items-center gap-3">
+                <div className="w-8 h-8 bg-zinc-900 border border-zinc-800 flex items-center justify-center text-lg p-1">
+                    {wep.iconIsPng ? <img src={wep.icon} alt="" className="w-full h-full object-contain" /> : wep.icon}
+                </div>
+                <span className="text-sm font-bold text-zinc-200 uppercase tracking-tighter">{t(wep.name)}</span>
+            </div>
+            <span className="w-32 text-right font-mono text-zinc-300 text-lg">{fired.toLocaleString()}</span>
+            <span className="w-32 text-right font-mono text-blue-400 font-bold text-lg">{accuracy}%</span>
+            <span className="w-32 text-right font-mono text-white text-lg">{kills.toLocaleString()}</span>
+        </div>
+    );
+});
+
 const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
-    const weaponItems = useMemo(() => Object.values(DataResolver.getWeapons()).filter(w => w && !w.isPseudoWeapon && w.category !== WeaponCategory.TOOL), []);
+    // 1. Unified Domain Resolution (Zero-GC Pattern)
+    const { arsenal, tactics, vehicles, environment } = useMemo(() => {
+        const arsenalItems: any[] = [];
+        const tacticsItems: any[] = [];
+        const vehicleItems: any[] = [];
+        const environmentItems: any[] = [];
+
+        for (let i = 0; i < StatWeaponIndex.COUNT; i++) {
+            const data = DataResolver.getDamageData(i);
+            if (!data || data.id === 0) continue;
+
+            const hasUsage = StatsBridge.getWeaponShotsFired(stats, i) > 0 ||
+                StatsBridge.getWeaponDamageDealt(stats, i) > 0 ||
+                StatsBridge.getWeaponKillCount(stats, i) > 0;
+
+            if (!hasUsage) continue;
+
+            if (data.categoryName === 'weapon' || data.categoryName === 'tool') arsenalItems.push(data);
+            else if (data.categoryName === 'ability') tacticsItems.push(data);
+            else if (data.categoryName === 'vehicle') vehicleItems.push(data);
+            else if (data.categoryName === 'environment') environmentItems.push(data);
+        }
+
+        return { arsenal: arsenalItems, tactics: tacticsItems, vehicles: vehicleItems, environment: environmentItems };
+    }, [stats]);
 
     const { signature, comfort, throwables } = useMemo(() => {
         const sigRes = StatsBridge.getSignatureWeapon(stats);
@@ -554,9 +597,11 @@ const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?:
         };
     }, [stats]);
 
+    const noData = arsenal.length === 0 && tactics.length === 0 && vehicles.length === 0;
+
     return (
         <div className="space-y-8 pb-12">
-            {!weaponItems.length ? (
+            {noData ? (
                 <div className="flex flex-col items-center justify-center p-20 border-2 border-dashed border-zinc-800 bg-zinc-900/10">
                     <span className="text-zinc-600 font-black text-xs uppercase tracking-[0.4em] mb-2 text-center">{t('ui.no_weapon_data')}</span>
                     <span className="text-zinc-400 font-light text-sm text-center uppercase tracking-widest">{t('ui.continue_to_play_weapons')}</span>
@@ -574,68 +619,94 @@ const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?:
                         <div className="group/hvr relative p-6 border-2 border-blue-900/20 bg-blue-950/10 overflow-hidden">
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                             <h4 className="text-[10px] font-black text-blue-500/40 uppercase tracking-widest mb-2 relative z-10">{t('ui.signature_weapon')}</h4>
-                            <div className="flex items-center gap-4 relative z-10">
-                                <div className="w-12 h-12 bg-black/40 border border-blue-500/20 flex items-center justify-center p-1">
-                                    {signature?.isPng ? <img src={signature.icon} alt="" className="w-full h-full object-contain" /> : <span className="text-2xl">{signature?.icon || '—'}</span>}
+                            {(signature && signature.count > 0) ? (
+                                <div className="flex items-center gap-4 relative z-10">
+                                    <div className="w-12 h-12 bg-black/40 border border-blue-500/20 flex items-center justify-center p-1">
+                                        {signature.isPng ? <img src={signature.icon} alt="" className="w-full h-full object-contain" /> : <span className="text-2xl">{signature.icon}</span>}
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-lg font-bold text-white uppercase tracking-tighter leading-none">{signature.name}</span>
+                                        <span className="text-[10px] text-blue-400/60 font-mono mt-1 uppercase">{signature.count.toLocaleString()} {t('ui.kills')}</span>
+                                    </div>
                                 </div>
-                                <div className="flex flex-col">
-                                    <span className="text-lg font-bold text-white uppercase tracking-tighter leading-none">{signature?.name || t('ui.none')}</span>
-                                    {signature && <span className="text-[10px] text-blue-400/60 font-mono mt-1 uppercase">{signature.count.toLocaleString()} {t('ui.kills')}</span>}
-                                </div>
-                            </div>
+                            ) : (
+                                <span className="text-xl font-bold text-zinc-600 uppercase tracking-tighter leading-none relative z-10">{t('ui.none')}</span>
+                            )}
                         </div>
                         <div className="group relative p-6 border-2 border-zinc-800 bg-zinc-900/40 overflow-hidden">
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-500/5 rounded-full scale-0 group-hover:scale-[6] transition-transform duration-700 pointer-events-none" />
                             <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 relative z-10">{t('ui.comfort_weapon')}</h4>
-                            <div className="flex items-center gap-4 relative z-10">
-                                <div className="w-12 h-12 bg-black/40 border border-zinc-800 flex items-center justify-center p-1">
-                                    {comfort?.isPng ? <img src={comfort.icon} alt="" className="w-full h-full object-contain" /> : <span className="text-2xl">{comfort?.icon || '—'}</span>}
+                            {comfort ? (
+                                <div className="flex items-center gap-4 relative z-10">
+                                    <div className="w-12 h-12 bg-black/40 border border-zinc-800 flex items-center justify-center p-1">
+                                        {comfort.isPng ? <img src={comfort.icon} alt="" className="w-full h-full object-contain" /> : <span className="text-2xl">{comfort.icon}</span>}
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-lg font-bold text-white uppercase tracking-tighter leading-none">{comfort.name}</span>
+                                        <span className="text-[10px] text-zinc-500 font-mono mt-1 uppercase">{t('ui.on_field_choice')}</span>
+                                    </div>
                                 </div>
-                                <div className="flex flex-col">
-                                    <span className="text-lg font-bold text-white uppercase tracking-tighter leading-none">{comfort?.name || t('ui.none')}</span>
-                                    <span className="text-[10px] text-zinc-500 font-mono mt-1 uppercase">{t('ui.on_field_choice')}</span>
-                                </div>
-                            </div>
+                            ) : (
+                                <span className="text-xl font-bold text-zinc-600 uppercase tracking-tighter leading-none relative z-10">{t('ui.none')}</span>
+                            )}
                         </div>
                     </div>
 
                     <div className="bg-zinc-900/20 border border-zinc-800 p-8 w-full">
                         <h3 className="text-xl font-light text-white uppercase tracking-tighter mb-8 border-b-2 border-zinc-800 pb-4">{t('ui.weapon_log')}</h3>
 
-                        <div className="flex flex-col gap-2">
-                            {/* Table Header */}
-                            <div className="flex justify-between items-center px-4 py-2 border-b border-zinc-800 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
-                                <span className="flex-1">{t('ui.weapon')}</span>
-                                <span className="w-32 text-right">{t('ui.shots')}</span>
-                                <span className="w-32 text-right">{t('ui.accuracy')}</span>
-                                <span className="w-32 text-right">{t('ui.kills')}</span>
-                            </div>
-
-                            {/* Table Body */}
-                            {weaponItems.map(wep => {
-                                const idx = wep.name;
-                                const fired = StatsBridge.getWeaponShotsFired(stats, idx);
-                                const hit = StatsBridge.getWeaponShotsHit(stats, idx);
-                                const kills = StatsBridge.getWeaponKillCount(stats, idx);
-                                const dmg = StatsBridge.getWeaponDamageDealt(stats, idx);
-
-                                if (fired === 0 && dmg === 0 && kills === 0) return null;
-
-                                const accuracy = FormatUtils.formatAccuracy(fired, hit);
-                                return (
-                                    <div key={wep.name} className="flex justify-between items-center px-4 py-3 bg-zinc-950/20 border border-transparent hover:border-blue-500/20 transition-all group/hvr">
-                                        <div className="flex-1 flex items-center gap-4">
-                                            <div className="w-10 h-10 bg-black/50 border border-zinc-800 flex items-center justify-center p-1">
-                                                {wep.iconIsPng ? <img src={wep.icon} alt={t(wep.displayName)} className="w-full h-full object-contain" /> : <span className="text-xl">{wep.icon}</span>}
-                                            </div>
-                                            <span className="text-sm font-bold text-zinc-200 uppercase tracking-tighter">{t(wep.displayName)}</span>
-                                        </div>
-                                        <span className="w-32 text-right font-mono text-zinc-300 text-lg">{fired.toLocaleString()}</span>
-                                        <span className="w-32 text-right font-mono text-blue-400 font-bold text-lg">{wep.category === WeaponCategory.THROWABLE ? `${hit} ${t('ui.hits')}` : `${accuracy}%`}</span>
-                                        <span className="w-32 text-right font-mono text-white text-lg">{kills.toLocaleString()}</span>
+                        <div className="flex flex-col gap-12">
+                            {/* ARSENAL SECTION */}
+                            {arsenal.length > 0 && (
+                                <div>
+                                    <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 bg-blue-500" />
+                                        {t('ui.category_weapons')}
+                                    </h4>
+                                    <div className="flex flex-col gap-2">
+                                        {arsenal.map(wep => <WeaponEntry key={wep.id} stats={stats} wep={wep} />)}
                                     </div>
-                                );
-                            }).filter(Boolean)}
+                                </div>
+                            )}
+
+                            {/* TACTICS SECTION */}
+                            {tactics.length > 0 && (
+                                <div>
+                                    <h4 className="text-[10px] font-black text-green-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 bg-green-500" />
+                                        {t('ui.category_tactics')}
+                                    </h4>
+                                    <div className="flex flex-col gap-2">
+                                        {tactics.map(ability => <WeaponEntry key={ability.id} stats={stats} wep={ability} />)}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TRANSPORT SECTION */}
+                            {vehicles.length > 0 && (
+                                <div>
+                                    <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 bg-amber-500" />
+                                        {t('ui.transport')}
+                                    </h4>
+                                    <div className="flex flex-col gap-2">
+                                        {vehicles.map(vehicle => <WeaponEntry key={vehicle.id} stats={stats} wep={vehicle} />)}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ENVIRONMENT SECTION */}
+                            {environment.length > 0 && (
+                                <div>
+                                    <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 bg-zinc-500" />
+                                        {t('ui.environmental')}
+                                    </h4>
+                                    <div className="flex flex-col gap-2">
+                                        {environment.map(env => <WeaponEntry key={env.id} stats={stats} wep={env} />)}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </>
@@ -644,23 +715,72 @@ const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?:
     );
 });
 
+const PerkItem: React.FC<{ perk: any, stats: PlayerStats, t: (key: string) => string }> = React.memo(({ perk, stats, t }) => {
+    return (
+        <div key={perk.id} id={`log-item-${perk.id}`} className="bg-zinc-900/40 border border-zinc-800 p-6 relative group/hvr overflow-hidden">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
+            <div className="flex flex-col relative z-10">
+                <div className="flex justify-between items-start mb-4 border-b border-zinc-800 pb-2">
+                    <div className="flex flex-col">
+                        <span className="text-blue-500/80 text-lg font-black uppercase tracking-widest mb-1">{t(perk.displayName)}</span>
+                        <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">
+                            {t(perk.category === PerkCategory.PASSIVE ? 'ui.passive' : (perk.category === PerkCategory.BUFF ? 'ui.buff' : 'ui.debuff'))}
+                        </span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                        <span className="text-lg font-mono text-white">{StatsBridge.getPerkTimesGained(stats, perk.id)}</span>
+                        <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{t('ui.activations')}</span>
+                    </div>
+                </div>
+                <p className="text-sm text-zinc-400 mb-3 text-white">{t(perk.description)}</p>
+                {perk.prerequisite && <p className="text-sm text-zinc-400 italic mb-3">"{t(perk.prerequisite)}"</p>}
+                {(StatsBridge.getPerkDamageAbsorbed(stats, perk.id) > 0 || StatsBridge.getPerkDamageDealt(stats, perk.id) > 0 || StatsBridge.getPerkDebuffsCleansed(stats, perk.id) > 0) && (
+                    <div className="grid grid-cols-3 gap-4 border-t border-zinc-800 pt-4">
+                        {StatsBridge.getPerkDamageAbsorbed(stats, perk.id) > 0 && (
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-blue-500/70 uppercase tracking-wider">{t('ui.damage_absorbed')}</span>
+                                <span className="text-sm font-mono text-blue-400">{Math.floor(StatsBridge.getPerkDamageAbsorbed(stats, perk.id)).toLocaleString()}</span>
+                            </div>
+                        )}
+                        {StatsBridge.getPerkDamageDealt(stats, perk.id) > 0 && (
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-red-500/70 uppercase tracking-wider">{t('ui.damage_dealt')}</span>
+                                <span className="text-sm font-mono text-red-400">{Math.floor(StatsBridge.getPerkDamageDealt(stats, perk.id)).toLocaleString()}</span>
+                            </div>
+                        )}
+                        {StatsBridge.getPerkDebuffsCleansed(stats, perk.id) > 0 && (
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-green-500/70 uppercase tracking-wider">{t('ui.debuffs_cleansed')}</span>
+                                <span className="text-sm font-mono text-green-400">{StatsBridge.getPerkDebuffsCleansed(stats, perk.id)}</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+});
+
 const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effectiveLandscape: boolean }> = React.memo(({ stats, t, effectiveLandscape }) => {
 
     const { uptime, resilience, roiDealt, roiAbsorb, totalROI } = useMemo(() => {
-        const time = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME) || 1;
+        const time = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME);
         const buffTime = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_BUFF_TIME);
-        const uptimePercent = Math.min(100, (buffTime / time) * 100);
         const resisted = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_DEBUFFS_RESISTED);
+
+        // [VINTERDÖD] Zero-GC Guard: Ensure time is strictly positive before division
+        const safeTime = Math.max(0.001, time);
+        const uptimePercent = Math.min(100, (buffTime / safeTime) * 100);
 
         let dealt = 0;
         let absorb = 0;
-        for (let i = 0; i < 32; i++) {
+        for (let i = 0; i < MAX_ENTITIES.PERKS; i++) {
             dealt += StatsBridge.getPerkDamageDealt(stats, i);
             absorb += StatsBridge.getPerkDamageAbsorbed(stats, i);
         }
 
         return {
-            uptime: FormatUtils.formatAccuracy(time, StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_BUFF_TIME)).replace('%', ''),
+            uptime: uptimePercent.toFixed(1),
             resilience: resisted.toLocaleString(),
             roiDealt: Math.floor(dealt).toLocaleString(),
             roiAbsorb: Math.floor(absorb).toLocaleString(),
@@ -706,51 +826,6 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
         });
     }, [stats]);
 
-    const renderPerk = (perk: any) => {
-        return (
-            <div key={perk.id} id={`log-item-${perk.id}`} className="bg-zinc-900/40 border border-zinc-800 p-6 relative group/hvr overflow-hidden">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
-                <div className="flex flex-col relative z-10">
-                    <div className="flex justify-between items-start mb-4 border-b border-zinc-800 pb-2">
-                        <div className="flex flex-col">
-                            <span className="text-blue-500/80 text-[10px] font-black uppercase tracking-widest mb-1">{t(perk.displayName)}</span>
-                            <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">
-                                {t(perk.category === PerkCategory.PASSIVE ? 'ui.passive' : (perk.category === PerkCategory.BUFF ? 'ui.buff' : 'ui.debuff'))}
-                            </span>
-                        </div>
-                        <div className="flex flex-col items-end">
-                            <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{t('ui.activations')}</span>
-                            <span className="text-lg font-mono text-white">{StatsBridge.getPerkTimesGained(stats, perk.id)}</span>
-                        </div>
-                    </div>
-                    <p className="text-sm text-zinc-400 italic mb-6">"{t(perk.description)}"</p>
-                    {(StatsBridge.getPerkDamageAbsorbed(stats, perk.id) > 0 || StatsBridge.getPerkDamageDealt(stats, perk.id) > 0 || StatsBridge.getPerkDebuffsCleansed(stats, perk.id) > 0) && (
-                        <div className="grid grid-cols-3 gap-4 border-t border-zinc-800 pt-4">
-                            {StatsBridge.getPerkDamageAbsorbed(stats, perk.id) > 0 && (
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-blue-500/70 uppercase tracking-wider">{t('ui.damage_absorbed')}</span>
-                                    <span className="text-sm font-mono text-blue-400">{Math.floor(StatsBridge.getPerkDamageAbsorbed(stats, perk.id)).toLocaleString()}</span>
-                                </div>
-                            )}
-                            {StatsBridge.getPerkDamageDealt(stats, perk.id) > 0 && (
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-red-500/70 uppercase tracking-wider">{t('ui.damage_dealt')}</span>
-                                    <span className="text-sm font-mono text-red-400">{Math.floor(StatsBridge.getPerkDamageDealt(stats, perk.id)).toLocaleString()}</span>
-                                </div>
-                            )}
-                            {StatsBridge.getPerkDebuffsCleansed(stats, perk.id) > 0 && (
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-green-500/70 uppercase tracking-wider">{t('ui.debuffs_cleansed')}</span>
-                                    <span className="text-sm font-mono text-green-400">{StatsBridge.getPerkDebuffsCleansed(stats, perk.id)}</span>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </div>
-        );
-    };
-
     const hasData = buffs.length > 0 || debuffs.length > 0 || passives.length > 0;
 
     if (!hasData) {
@@ -793,10 +868,10 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
                 {passives.length > 0 && (
                     <div className="space-y-6">
                         <div className="border-b-2 border-zinc-800 pb-2">
-                            <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.passive_abilities')}</h3>
+                            <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.passives')}</h3>
                         </div>
                         <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                            {passives.map(renderPerk)}
+                            {passives.map(perk => <PerkItem key={perk.id} perk={perk} stats={stats} t={t} />)}
                         </div>
                     </div>
                 )}
@@ -806,7 +881,7 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
                             <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.buffs')}</h3>
                         </div>
                         <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                            {buffs.map(renderPerk)}
+                            {buffs.map(perk => <PerkItem key={perk.id} perk={perk} stats={stats} t={t} />)}
                         </div>
                     </div>
                 )}
@@ -816,7 +891,7 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
                             <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.debuffs')}</h3>
                         </div>
                         <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                            {debuffs.map(renderPerk)}
+                            {debuffs.map(perk => <PerkItem key={perk.id} perk={perk} stats={stats} t={t} />)}
                         </div>
                     </div>
                 )}

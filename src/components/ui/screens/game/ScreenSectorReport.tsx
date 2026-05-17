@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { t } from '../../../../utils/i18n';
 import { SectorStats } from '../../../../types/StateTypes';
 import ScreenModalLayout, { TacticalCard, TacticalTab, TacticalRow } from '../../layout/ScreenModalLayout';
-import { StatWeaponIndex, StatEnemyIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../../entities/player/PlayerTypes';
+import { StatWeaponIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../../entities/player/PlayerTypes';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { DataResolver } from '../../../../core/data/DataResolver';
 import { ColorPair, COLORS } from '../../../../utils/ui/ColorUtils';
 import { FormatUtils } from '../../../../utils/ui/FormatUtils';
 import { StatsBridge } from '../../../../core/data/StatsBridge';
+import { SectorID } from '../../../../game/session/SectorTypes';
 
 interface ScreenSectorReportProps {
     stats: SectorStats;
@@ -52,7 +53,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
     // Buttons logic
     const showRespawn = isFailed || isAborted;
     const isFinished = !showRespawn;
-    const isLastSector = currentSector >= 3;
+    const isLastSector = currentSector >= SectorID.SCRAPYARD;
 
     let confirmLabel: string | undefined;
     let confirmAction: (() => void) | undefined;
@@ -112,7 +113,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     {/* COL 1: PRESTATION */}
                     <div className="space-y-6">
                         <h3 className="text-white font-light uppercase text-xl border-b border-gray-800 pb-2 tracking-tighter">{t('ui.performance')}</h3>
-                        <div className="pt-4 space-y-3">
+                        <div className="space-y-3">
                             <StatBox
                                 label={t('ui.family_member')}
                                 value={t(familyStatusKey)}
@@ -144,8 +145,8 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     <div className="space-y-6">
                         <h3 className="text-white font-light uppercase text-xl border-b border-gray-800 pb-2 tracking-tighter">{t('ui.exploration')}</h3>
                         <div className="space-y-3">
-                            <StatBox label={t('ui.collectible')} value={`${StatsBridge.getCollectiblesDiscovered(stats as any)?.length || 0} / 2`} color={COLORS.ORANGE} />
-                            <StatBox label={t('ui.clues_found')} value={StatsBridge.getCluesFound(stats as any)?.length || 0} color={COLORS.ORANGE} />
+                            <StatBox label={t('ui.collectibles_discovered')} value={`${StatsBridge.getCollectiblesDiscovered(stats as any)?.length || 0} / 2`} color={COLORS.ORANGE} />
+                            <StatBox label={t('ui.clues_discovered')} value={StatsBridge.getCluesFound(stats as any)?.length || 0} color={COLORS.ORANGE} />
                             <StatBox label={t('ui.pois_discovered')} value={StatsBridge.getDiscoveredPOIs(stats as any)?.length || 0} color={COLORS.ORANGE} />
                         </div>
                         <div className="space-y-3">
@@ -175,33 +176,58 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                             <h3 className="text-2xl font-black uppercase tracking-tighter text-red-500">{t('report.damage.incoming')}</h3>
                             <span className="text-xl font-mono text-red-400 font-bold">{Math.round(totalIncoming)}</span>
                         </div>
-                        <div className="space-y-4 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
-                            {Array.from({ length: TELEMETRY_SOURCES_COUNT }).map((_, sourceId) => {
-                                // 1. Calculate total for this source to see if we should render it
-                                const sourceTotal = StatsBridge.getIncomingDamageTotalBySource(stats as any, sourceId);
-                                if (sourceTotal <= 0) return null;
+                        <div className="space-y-6 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
+                            {(() => {
+                                const incomingCategories = ['ui.enemy', 'weapon', 'ability', 'vehicle', 'environment'];
+                                const incomingLabels: Record<string, string> = {
+                                    'ui.enemy': 'ui.enemies',
+                                    'weapon': 'ui.category_weapons',
+                                    'ability': 'ui.category_tactics',
+                                    'vehicle': 'ui.transport',
+                                    'environment': 'ui.environmental'
+                                };
 
-                                const sourceInfo = DataResolver.resolveIncomingSource(sourceId);
-                                const attackerName = t(sourceInfo.name);
-                                const offset = sourceId * TELEMETRY_ATTACKS_PER_SOURCE;
+                                return incomingCategories.map(catKey => {
+                                    const sourceItems: any[] = [];
+                                    for (let sourceId = 0; sourceId < TELEMETRY_SOURCES_COUNT; sourceId++) {
+                                        const sourceTotal = StatsBridge.getIncomingDamageTotalBySource(stats as any, sourceId);
+                                        if (sourceTotal <= 0) continue;
 
-                                return (
-                                    <div key={sourceId} className="bg-red-950/10 border border-red-500/20 p-3 rounded shadow-inner">
-                                        <div className="flex justify-between items-center mb-2 border-b border-red-500/10 pb-1">
-                                            <span className="text-red-400 text-xs font-black uppercase tracking-widest">{attackerName}</span>
-                                            <span className="text-red-500 font-mono font-bold text-xs">{Math.round(sourceTotal)}</span>
+                                        const sourceInfo = DataResolver.resolveIncomingSource(sourceId);
+                                        if (sourceInfo.category === catKey) {
+                                            sourceItems.push({ id: sourceId, info: sourceInfo, total: sourceTotal });
+                                        }
+                                    }
+
+                                    if (sourceItems.length === 0) return null;
+
+                                    return (
+                                        <div key={catKey} className="space-y-3">
+                                            <h4 className="text-[10px] font-black text-red-500/50 uppercase tracking-widest border-l-2 border-red-500/20 pl-2">
+                                                {t(incomingLabels[catKey])}
+                                            </h4>
+                                            <div className="space-y-3">
+                                                {sourceItems.map(item => (
+                                                    <div key={item.id} className="bg-red-950/10 border border-red-500/20 p-3 rounded shadow-inner">
+                                                        <div className="flex justify-between items-center mb-2 border-b border-red-500/10 pb-1">
+                                                            <span className="text-red-400 text-xs font-black uppercase tracking-widest">{t(item.info.name)}</span>
+                                                            <span className="text-red-500 font-mono font-bold text-xs">{Math.round(item.total)}</span>
+                                                        </div>
+                                                        <div className="space-y-1 pl-2 border-l-2 border-red-500/10">
+                                                            {Array.from({ length: TELEMETRY_ATTACKS_PER_SOURCE }).map((_, attackId) => {
+                                                                const dmg = StatsBridge.getIncomingDamage(stats, item.id, attackId);
+                                                                if (dmg <= 0) return null;
+                                                                const atkName = t(DataResolver.getAttackName(attackId));
+                                                                return <LineItem key={attackId} title={atkName.toUpperCase()} val={dmg} color={COLORS.RED} />;
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
-                                        <div className="space-y-1 pl-2 border-l-2 border-red-500/10">
-                                            {Array.from({ length: TELEMETRY_ATTACKS_PER_SOURCE }).map((_, attackId) => {
-                                                const dmg = StatsBridge.getIncomingDamage(stats, sourceId, attackId);
-                                                if (dmg <= 0) return null;
-                                                const atkName = t(DataResolver.getAttackName(attackId));
-                                                return <LineItem key={attackId} title={atkName.toUpperCase()} val={dmg} color={COLORS.RED} />;
-                                            })}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                });
+                            })()}
                         </div>
                     </TacticalCard>
 
@@ -210,16 +236,43 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                             <h3 className="text-2xl font-black uppercase tracking-tighter text-green-500">{t('report.damage.outgoing')}</h3>
                             <span className="text-xl font-mono text-green-400 font-bold">{Math.round(totalOutgoing)}</span>
                         </div>
-                        <div className="space-y-1 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
-                            {Array.from({ length: StatWeaponIndex.COUNT }).map((_, idx) => {
-                                const dmgVal = StatsBridge.getWeaponDamageDealt(stats, idx);
-                                if (dmgVal <= 0) return null;
+                        <div className="space-y-6 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
+                            {(() => {
+                                const categories = ['weapon', 'ability', 'vehicle', 'environment'];
+                                const labels: Record<string, string> = {
+                                    'weapon': 'ui.category_weapons',
+                                    'ability': 'ui.category_tactics',
+                                    'vehicle': 'ui.transport',
+                                    'environment': 'report.labels.unknown'
+                                };
 
-                                const instrumentId = idx;
-                                const name = t(DataResolver.getDamageName(instrumentId));
+                                return categories.map(cat => {
+                                    const items: any[] = [];
+                                    for (let i = 0; i < StatWeaponIndex.COUNT; i++) {
+                                        const dmgVal = StatsBridge.getWeaponDamageDealt(stats, i);
+                                        if (dmgVal <= 0) continue;
+                                        const data = DataResolver.getDamageData(i);
+                                        if (data.categoryName === cat) {
+                                            items.push({ id: i, name: data.name, val: dmgVal });
+                                        }
+                                    }
 
-                                return <LineItem key={idx} title={name.toUpperCase()} val={dmgVal} color={COLORS.GREEN} />;
-                            })}
+                                    if (items.length === 0) return null;
+
+                                    return (
+                                        <div key={cat} className="space-y-2">
+                                            <h4 className="text-[10px] font-black text-green-500/50 uppercase tracking-widest border-l-2 border-green-500/20 pl-2">
+                                                {t(labels[cat])}
+                                            </h4>
+                                            <div className="space-y-1">
+                                                {items.map(item => (
+                                                    <LineItem key={item.id} title={t(item.name).toUpperCase()} val={item.val} color={COLORS.GREEN} />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()}
                         </div>
                     </TacticalCard>
                 </div>

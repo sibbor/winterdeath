@@ -1,18 +1,22 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, GroundType, ChestType, SectorID } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, ChestType } from '../../game/session/SectorTypes';
+import { GroundType } from '../../core/engine/EngineTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { VEGETATION_TYPE } from '../../content/environment';
 import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
-import { InteractionType, InteractionShape } from '../../systems/ui/UIEventBridge';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { FamilyMemberID } from '../constants';
-import { POI_TYPE } from '../../content/pois';
+import { PoiType, PoiID } from '../../content/pois';
+import { ClueID } from '../../content/clues';
+import { SectorEventID } from '../../content/events';
+import { CollectibleID } from '../../content/collectibles';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { WeatherType } from '../../core/engine/EngineTypes';
+import { ColliderType } from '../../core/world/CollisionResolution';
 
 const LOCATIONS = {
     SPAWN: {
@@ -71,8 +75,10 @@ const LOCATIONS = {
     }
 } as const;
 
+// ─── Zero-GC Scratchpads ──────────────────────────────────────────────────────
+const _vS2 = new THREE.Vector3();
+
 // Mast light
-let mastLightHubRef: THREE.Object3D | null = null;
 
 export const Sector2: SectorDef = {
     id: 2,
@@ -83,11 +89,24 @@ export const Sector2: SectorDef = {
             color: 0x020208,
             height: 10
         },
-        ambientIntensity: 0.3,
-        ambientColor: 0x404050,
         groundColor: 0x112211,
+        ambient: 0.5,
         fov: 50,
-        skyLight: { visible: true, color: 0x88ffaa, intensity: 5.0, position: { x: 50, y: 35, z: 50 } },
+        sky: {
+            time: 0.2,
+            atmosphereColor: 0x051015,
+            celestial: {
+                radius: 10,
+                color: 0xffffff,
+                position: { x: 50, y: 35, z: 50 }
+            },
+            light: {
+                visible: true,
+                color: 0x88ffaa,
+                intensity: 0.5,
+                castShadow: true
+            }
+        },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: {
@@ -110,8 +129,8 @@ export const Sector2: SectorDef = {
     bossSpawn: LOCATIONS.SPAWN.BOSS,
 
     collectibles: [
-        { id: 's2_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
-        { id: 's2_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
+        { id: CollectibleID.S2_COLLECTIBLE_1, x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
+        { id: CollectibleID.S2_COLLECTIBLE_2, x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
     ],
 
     cinematic: {
@@ -161,7 +180,7 @@ export const Sector2: SectorDef = {
 
         // --- 2. BUILDINGS & PROPS ---
         // POI - Farm
-        await SectorBuilder.spawnPoi(ctx, POI_TYPE.FARM, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, (3 * Math.PI) / 4);
+        await SectorBuilder.spawnPoi(ctx, PoiType.FARM, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, (3 * Math.PI) / 4);
         await yieldIfBudgetExceeded();
 
         await SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z + 5, EnemyType.WALKER, Math.random() * Math.PI);
@@ -182,8 +201,8 @@ export const Sector2: SectorDef = {
         await yieldIfBudgetExceeded();
 
         // POI - Egg farm
-        await SectorBuilder.spawnPoi(ctx, POI_TYPE.EGG_FARM, LOCATIONS.POIS.EGG_FARM.x, LOCATIONS.POIS.EGG_FARM.z, (3 * Math.PI) / 4);
-        await SectorBuilder.spawnPoi(ctx, POI_TYPE.BARN, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, (3 * Math.PI) / 4);
+        await SectorBuilder.spawnPoi(ctx, PoiType.EGG_FARM, LOCATIONS.POIS.EGG_FARM.x, LOCATIONS.POIS.EGG_FARM.z, (3 * Math.PI) / 4);
+        await SectorBuilder.spawnPoi(ctx, PoiType.BARN, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, (3 * Math.PI) / 4);
         await yieldIfBudgetExceeded();
 
         // Abandoned House 1: North of Farmhouse (Birch Forest)
@@ -317,7 +336,7 @@ export const Sector2: SectorDef = {
         SectorBuilder.addObstacle(ctx, {
             mesh: stone,
             position: stone.position,
-            collider: { type: InteractionShape.SPHERE, radius: 12.5 }
+            collider: { type: ColliderType.SPHERE, radius: 12.5 }
         });
         await yieldIfBudgetExceeded();
 
@@ -381,7 +400,7 @@ export const Sector2: SectorDef = {
         const mastGroup = new THREE.Group();
         mastGroup.position.set(mastPos.x, 5, mastPos.z);
 
-        const mast = await SectorBuilder.spawnPoi(ctx, POI_TYPE.MAST, mastPos.x, mastPos.z, 0);
+        const mast = await SectorBuilder.spawnPoi(ctx, PoiType.MAST, mastPos.x, mastPos.z, 0);
         mast.name = "POI_MAST";
         (ctx as any).mastLightHub = mast.getObjectByName("mastWarningLights") || null;
         await yieldIfBudgetExceeded();
@@ -397,18 +416,18 @@ export const Sector2: SectorDef = {
             // ESMERALDA CINEMATIC TRIGGER — starts INACTIVE.
             // Activated by onUpdate once all mast-area zombies are cleared.
             {
-                id: 's2_found_esmeralda',
+                id: FamilyMemberID.ESMERALDA,
                 position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA,
                 familyId: FamilyMemberID.ESMERALDA,
                 radius: 8,
                 type: TriggerType.EVENT,
                 content: '',
                 statusFlags: TriggerStatus.ONCE, // Starts INACTIVE — activated after kill clear
-                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.ESMERALDA, sectorId: 2, scriptId: 0 } }]
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.ESMERALDA, sectorId: 2, dialogueId: 0 } }]
             },
             // MAST ZONE — player entering this activates the zombie kill event
             {
-                id: 's2_mast_zone_enter',
+                id: SectorEventID.S2_MAST_ZONE_ENTER,
                 position: LOCATIONS.TRIGGERS.POI_MAST,
                 radius: 40,
                 type: TriggerType.EVENT,
@@ -416,9 +435,9 @@ export const Sector2: SectorDef = {
                 statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
                 actions: [] // Consumed in onUpdate via mastEventState
             },
-            { id: 's2_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_AMBIENT, radius: 8, type: TriggerType.SPEAK, content: "clues.2.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: ClueID.S2_FOREST_NOISE, position: LOCATIONS.TRIGGERS.FOREST_AMBIENT, radius: 8, type: TriggerType.CLUE, content: "clues.2.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
             {
-                id: 's2_poi_mast',
+                id: PoiID.S2_MAST,
                 position: LOCATIONS.TRIGGERS.POI_MAST,
                 radius: 50,
                 type: TriggerType.POI,
@@ -426,13 +445,13 @@ export const Sector2: SectorDef = {
                 statusFlags: TriggerStatus.ACTIVE,
                 actions: [
                     { type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } },
-                    { type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 2, scriptId: 1, customPath: 'mast_flyover' } }
+                    { type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 2, dialogueId: 1, customPath: 'mast_flyover' } }
                 ]
             },
-            { id: 's2_poi_farm', position: LOCATIONS.POIS.FARM, radius: 20, type: TriggerType.POI, content: "pois.2.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's2_tractor', position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: TriggerType.SPEAK, content: "clues.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-            { id: 's2_poi_egg_farm', position: LOCATIONS.POIS.EGG_FARM, radius: 20, type: TriggerType.POI, content: "pois.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's2_poi_barn', position: LOCATIONS.POIS.BARN, radius: 20, type: TriggerType.POI, content: "pois.2.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
+            { id: PoiID.S2_FARM, position: LOCATIONS.POIS.FARM, radius: 20, type: TriggerType.POI, content: "pois.2.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: ClueID.S2_TRACTOR, position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: TriggerType.CLUE, content: "clues.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: PoiID.S2_EGG_FARM, position: LOCATIONS.POIS.EGG_FARM, radius: 20, type: TriggerType.POI, content: "pois.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: PoiID.S2_BARN, position: LOCATIONS.POIS.BARN, radius: 20, type: TriggerType.POI, content: "pois.2.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
         ]);
     },
 
@@ -474,7 +493,7 @@ export const Sector2: SectorDef = {
         }
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, triggerSystem, ctx, ...events }) => {
         // --- SECTOR 2: ESMERALDA MISSION LOGIC ---
         // Rotating mast warning light (every frame, Zero-GC)
         const mastLightHub = (ctx as any).mastLightHub;
@@ -509,7 +528,7 @@ export const Sector2: SectorDef = {
                 sectorState.mastEventState = 1;
                 sectorState.mastEventTimer = simTime;
                 // Tell the player something is happening
-                events.setNotification({ text: (events as any).t?.('clues.2.mast_enter') || 'Zombies inside the compound...', duration: 3500 });
+                events.setBubble((events as any).t?.('clues.2.mast_enter') || 'Zombies inside the compound...', 3500);
             }
         }
 
@@ -536,7 +555,7 @@ export const Sector2: SectorDef = {
                     // All mast zombies dead — transition to Esmeralda exit
                     sectorState.mastEventState = 2;
                     sectorState.mastEventTimer = simTime;
-                    events.setNotification({ text: (events as any).t?.('clues.2.mast_clear') || 'The area is clear...', duration: 3000 });
+                    events.setBubble((events as any).t?.('clues.2.mast_clear') || 'The area is clear...', 3000);
                 }
                 sectorState.mastZombiesSpawnedAt = sectorState.mastZombiesSpawnedAt || simTime; // Set once
             }
@@ -545,17 +564,19 @@ export const Sector2: SectorDef = {
         else if (mes === 2) {
             // Wait 1.5s, then walk Esmeralda out of the building toward the player
             if (mesElapsed > 1500 && scene) {
-                const esmeralda = scene.children.find(
-                    (c: any) => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Esmeralda'
-                ) as any;
+                // --- ZERO-GC SCENE CACHING ---
+                if (!sectorState.esmeraldaMesh) {
+                    sectorState.esmeraldaMesh = scene.children.find(
+                        (c: any) => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Esmeralda'
+                    );
+                }
+                const esmeralda = sectorState.esmeraldaMesh as any;
 
                 if (esmeralda) {
                     if (!sectorState.esmeraldaWalkTarget) {
-                        sectorState.esmeraldaWalkTarget = new THREE.Vector3(
-                            mastX,
-                            0,
-                            mastZ + 20 // Walk out from the building toward the road
-                        );
+                        // Reuse _vS2 for target calculation then store clone for persistence
+                        _vS2.set(mastX, 0, mastZ + 20);
+                        sectorState.esmeraldaWalkTarget = _vS2.clone();
                     }
 
                     esmeralda.position.lerp(sectorState.esmeraldaWalkTarget, 0.04);
@@ -570,10 +591,10 @@ export const Sector2: SectorDef = {
                         }
 
                         // Activate the proximity trigger as a fallback (player walked in late)
-                        const esmeraldaTrigger = (gameState as any).triggers?.find((t: any) => t.id === 's2_found_esmeralda');
-                        if (esmeraldaTrigger) {
-                            esmeraldaTrigger.statusFlags = TriggerStatus.ACTIVE | TriggerStatus.ONCE;
-                            esmeraldaTrigger.triggered = false; // Maintain boolean compatibility
+                        const idx = triggerSystem.getTriggerById(FamilyMemberID.ESMERALDA);
+                        if (idx !== -1) {
+                            triggerSystem.setStatusFlag(idx, TriggerStatus.ACTIVE, true);
+                            triggerSystem.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);
                         }
                     }
                 } else {

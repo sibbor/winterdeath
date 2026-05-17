@@ -65,6 +65,7 @@ const createEnvMap = () => {
     }
     const texture = new THREE.CanvasTexture(canvas);
     texture.mapping = THREE.EquirectangularReflectionMapping;
+    texture.minFilter = THREE.LinearFilter; // Prevent unnecessary mipmap generation warnings
     return texture;
 };
 
@@ -131,7 +132,8 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
         // Sätt EnvMap på scenen så att allt reflekterande material plockar upp den
         scene.environment = envMapTexture;
 
-        const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 100);
+        const aspect = width / Math.max(0.1, height);
+        const camera = new THREE.PerspectiveCamera(45, aspect, 0.01, 100);
 
         // --- VINTERDÖD FIX: Kamerans placering ---
         // Sänkte kameran på Y-axeln för att titta mer "rakt på" objektet istället för mycket ovanifrån.
@@ -196,7 +198,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
         // Hitta den största ledden (X, Y eller Z) och skala upp/ner till exakt 0.9 enheter
         // (Sänkt från 1.2 till 0.9 så att objektet "vilar" lite bättre i rutan)
         const maxDim = Math.max(sizeObj.x, sizeObj.y, sizeObj.z);
-        if (maxDim > 0) {
+        if (maxDim > 0.0001) {
             const scaleFactor = 0.9 / maxDim;
             mesh.scale.setScalar(scaleFactor);
         }
@@ -226,7 +228,9 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
             grd.addColorStop(1, 'rgba(0,0,0,0)');
             ctx.fillStyle = grd;
             ctx.fillRect(0, 0, 128, 128);
-            shadowMat.map = new THREE.CanvasTexture(canvas);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.minFilter = THREE.LinearFilter;
+            shadowMat.map = texture;
         }
 
         const dropShadow = new THREE.Mesh(shadowGeo, shadowMat);

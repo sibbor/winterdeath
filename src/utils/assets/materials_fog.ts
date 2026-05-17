@@ -67,21 +67,17 @@ export function createFogMaterial(initialColor: THREE.Color): THREE.ShaderMateri
                 float edgeFade = smoothstep(0.5, 0.1, dist);
 
                 // 2. Depth Clipping (Soft intersection with world geometry)
-                vec2 screenUV = gl_FragCoord.xy / uResolution;
+                // VINTERDÖD FIX: Inject epsilon to prevent X4008 division-by-zero warnings
+                vec2 screenUV = gl_FragCoord.xy / (uResolution + 0.0001);
                 float sceneViewZ = getLinearDepth(screenUV);
                 
                 // sceneViewZ and vViewZ are negative (Three.js view-space)
-                // depthDiff = (fog depth) - (scene depth)
-                // E.g., fog at -5.0, scene at -10.0 => diff = 5.0 (fog is in front)
-                // E.g., fog at -10.0, scene at -5.0 => diff = -5.0 (fog is behind)
                 float depthDiff = vViewZ - sceneViewZ;
                 
                 // Fades from 0 to 1 over 1.5 units of distance.
-                // If depthDiff < 0, it's 0 (occluded).
                 float softFade = smoothstep(0.0, 1.5, depthDiff);
 
                 // 3. Smoke Noise & Wind Drift
-                // Multi-layered sine noise for "smoke" look
                 vec2 drift = uWind * uTime * 0.15;
                 vec2 uv1 = vWorldPos.xz * 0.08 + drift;
                 vec2 uv2 = vWorldPos.xz * 0.04 - drift * 0.5;
@@ -91,7 +87,6 @@ export function createFogMaterial(initialColor: THREE.Color): THREE.ShaderMateri
                 float smokeNoise = (n1 * 0.5 + 0.5) * (n2 * 0.5 + 0.5);
 
                 // 4. Ground/Height Fade
-                // Ensure fog is thickest near its origin and fades upward
                 float heightFade = smoothstep(6.0, 0.0, vWorldPos.y);
 
                 float alpha = edgeFade * softFade * smokeNoise * heightFade * uDensity;

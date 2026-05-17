@@ -4,10 +4,11 @@ import { useOrientation } from '../../../../hooks/useOrientation';
 import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalTab } from '../../layout/ScreenModalLayout';
 import { PlayerStats } from '../../../../entities/player/PlayerTypes';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { DataResolver } from '../../../../core/data/DataResolver';
 import { ColorPair, COLORS, colorToHex } from '../../../../utils/ui/ColorUtils';
 import { SectorID } from '../../../../game/session/SectorTypes';
 import { StatsBridge } from '../../../../core/data/StatsBridge';
+import { PoiID } from '../../../../content/pois';
 
 interface ScreenSectorOverviewProps {
     currentSector: number;
@@ -63,7 +64,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
         const allCollectibles = Object.values(DataResolver.getCollectibles());
         const sectorCollectibles = allCollectibles.filter(c => c.sector === selectedSectorIndex);
         const foundCollectiblesCount = StatsBridge.getCollectiblesDiscovered(stats).filter(id =>
-            sectorCollectibles.some(c => c.id === id)
+            sectorCollectibles.some(c => c.id === Number(id))
         ).length;
 
         // Accurate Clue Count
@@ -79,7 +80,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
         const sectorPoiIds = Object.values(DataResolver.getPois())
             .filter(p => p.sector === selectedSectorIndex)
             .map(p => p.id);
-        const foundPoisCount = StatsBridge.getDiscoveredPOIs(stats).filter(id => sectorPoiIds.includes(id)).length;
+        const foundPoisCount = StatsBridge.getDiscoveredPOIs(stats).filter(id => sectorPoiIds.includes(Number(id) as PoiID)).length;
 
         return {
             collectibles: { found: foundCollectiblesCount, total: sectorCollectibles.length },
@@ -126,13 +127,22 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
             <div className={`flex h-full gap-4 md:gap-8 ${effectiveLandscape ? 'flex-row' : 'flex-col overflow-y-auto touch-auto'}`}>
                 {/* LEFT: Sector List */}
                 <div className={`${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : 'w-full shrink-0 relative'}`}>
-                    <div className={`${!effectiveLandscape ? 'flex gap-2 overflow-x-auto pb-4 px-10 snap-x snap-mandatory pt-2 scrollbar-hide touch-auto cursor-pointer' : 'flex flex-col gap-4 pt-4 pr-10'}`}>
+                    <div className={`${!effectiveLandscape ? 'flex flex-nowrap gap-2 overflow-x-auto pb-4 px-10 snap-x snap-mandatory pt-2 scrollbar-hide touch-auto cursor-pointer' : 'flex flex-col gap-4 pt-4 pr-10'}`}>
                         {DataResolver.getSectorThemes().map((map, i) => {
                             const locked = !debugMode && (i > SectorID.VILLAGE && i !== SectorID.PLAYGROUND && !deadBossIndices.includes(i - 1));
                             return (
                                 <TacticalTab
                                     key={i}
-                                    label={locked ? '???' : t(DataResolver.getSectorName(i))}
+                                    label={
+                                        <div className="flex flex-col items-start leading-none gap-1 py-1">
+                                            <span className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.25em]">
+                                                {t('ui.sector')} {String(i).padStart(3, '0')}
+                                            </span>
+                                            <span className={`${isMobileDevice ? 'text-sm' : 'text-xl'} font-mono font-bold text-zinc-400 uppercase tracking-tighter`}>
+                                                {locked ? '???' : t(DataResolver.getSectorName(i))}
+                                            </span>
+                                        </div>
+                                    }
                                     isActive={selectedSectorIndex === i}
                                     onClick={() => handleSelect(i)}
                                     color={COLORS.RED}

@@ -58,7 +58,7 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
         const state = refs.stateRef.current;
         const input = refs.engineRef.current?.input;
 
-        if (state?.cinematicActive && (uiState.currentLine || state.dialogueLine)) {
+        if (state?.cinematicActive && (uiState.currentLine || state.currentLine)) {
             e.stopPropagation();
             callbacks.triggerCinematicNext();
             return;
@@ -95,15 +95,15 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
             {/* Mobile Touch Controls 
                 VINTERDÖD FIX: Corrected prop name mismatch (isRushing -> isGameRunning).
                 Also ensured inputState is safely derived from either the store or the engine ref. */}
-            {gameProps.isMobileDevice && gameProps.isGameRunning && !gameProps.isPaused && !uiState.cinematicActive && !uiState.bossIntroActive && (
-                <TouchController
-                    inputState={refs.engineRef.current?.input?.state || refs.stateRef.current.inputState}
-                    onPause={handlePauseTouch}
-                    onOpenMap={handleOpenMapTouch}
-                />
-            )}
-
-            <div ref={refs.chatOverlayRef} className="absolute inset-0 pointer-events-none overflow-hidden z-50" />
+            {/* Mobile Controls Overlay */}
+            {gameProps.isMobileDevice && gameProps.isGameRunning && !gameProps.isPaused && !uiState.bossIntroActive && (
+                <div className="absolute inset-0 pointer-events-none z-30">
+                    <TouchController 
+                        inputState={refs.engineRef.current?.input.state}
+                        onPause={() => callbacks.onPauseToggle(true)}
+                    />
+                </div>
+            )}<div ref={refs.chatOverlayRef} className="absolute inset-0 pointer-events-none overflow-hidden z-50" />
 
             {/* Cinematic Letterboxing */}
             <div

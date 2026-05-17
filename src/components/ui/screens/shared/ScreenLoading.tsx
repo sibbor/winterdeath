@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { t } from '../../../../utils/i18n';
-import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { DataResolver } from '../../../../core/data/DataResolver';
 
 interface ScreenLoadingProps {
     sectorIndex: number;

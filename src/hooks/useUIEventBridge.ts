@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { UIEventRingBuffer, UIEventType } from '../systems/ui/UIEventRingBuffer';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
-import { DataResolver } from '../utils/ui/DataResolver';
+import { DataResolver } from '../core/data/DataResolver';
 import { t } from '../utils/i18n';
 import { useStatusStore, StatusStore } from '../store/StatusStore';
 
@@ -42,18 +42,26 @@ const pump = () => {
         let p1Value: any = p1;
 
         if (type === UIEventType.CHAT_BUBBLE) {
-            p1Value = UIEventRingBuffer.getString(p1);
+            // [VINTERDÖD] Unify String-based and SMI-based chat bubbles
+            const poolString = UIEventRingBuffer.getString(p1);
+            if (poolString) {
+                p1Value = poolString;
+            } else {
+                // If not in the string pool, it's a pre-computed reaction SMI
+                const reactionKey = DataResolver.getReactionKeyFromSmi(p1);
+                p1Value = reactionKey ? t(reactionKey) : '';
+            }
         }
         else if (type === UIEventType.SYNC_STATUS) {
-            StatusStore.setStatusMask(p1);
+            StatusStore.setStatusFlags(p1);
         }
         else if (type === UIEventType.DISCOVERY) {
-            /*
             const discoveryType = p2 as DiscoveryType;
-            let resolvedId: string | number = p1;
+            let resolvedId: any = p1;
             let title = '';
             let details = '';
 
+            // [VINTERDÖD] Resolve localized content based on discovery category
             switch (discoveryType) {
                 case DiscoveryType.PERK:
                     const perk = DataResolver.getPerks()[resolvedId as any];
@@ -83,15 +91,8 @@ const pump = () => {
                     details = t(DataResolver.getBossName(resolvedId as any));
                     break;
             }
-            p1Value = { title, details };
-            */
+            p1Value = { id: p1, title, details };
         }
-
-
-        //if (process.env.NODE_ENV === 'development') {
-        const eventName = UIEventType[type] || 'UNKNOWN';
-        console.debug(`[UIBridge] Drained: ${eventName} | P1: ${p1Value} | P2: ${p2} | Listeners: ${listenerCount}`);
-        //}
 
         // Notify all bridge listeners (Zero-GC Loop)
         // [VINTERDÖD] We use for...of on the Set. While it creates an iterator, 

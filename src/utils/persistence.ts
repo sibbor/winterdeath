@@ -1,31 +1,27 @@
 import { GameState } from '../types/StateTypes';
 import { GameScreen } from '../types/SessionTypes';
-import { WeaponType } from '../content/weapons';
-import { INITIAL_STATS, DEFAULT_SETTINGS, OVERRIDE_DEFAULT_SECTOR } from '../content/constants';
-import { PlayerStatsUtils, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../entities/player/PlayerTypes';
+import { WeaponID } from '../entities/player/CombatTypes';
+import { INITIAL_STATS, DEFAULT_SETTINGS, OVERRIDE_DEFAULT_SECTOR, MAX_ENTITIES } from '../content/constants';
+import { PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex, TELEMETRY_BUFFER_SIZE } from '../entities/player/PlayerTypes';
 import { WeatherType } from '../core/engine/EngineTypes';
 
 export const DEFAULT_STATE: GameState = {
     screen: GameScreen.PROLOGUE,
     stats: INITIAL_STATS,
     currentSector: 0,
-    loadout: { primary: WeaponType.RIFLE, secondary: WeaponType.REVOLVER, throwable: WeaponType.MOLOTOV, special: WeaponType.ARC_CANNON },
+    loadout: { primary: WeaponID.RIFLE, secondary: WeaponID.REVOLVER, throwable: WeaponID.MOLOTOV, special: WeaponID.ARC_CANNON },
     weaponLevels: {
-        [WeaponType.PISTOL]: 1,
-        [WeaponType.SMG]: 1,
-        [WeaponType.SHOTGUN]: 1,
-        [WeaponType.RIFLE]: 1,
-        [WeaponType.REVOLVER]: 1,
-        [WeaponType.GRENADE]: 1,
-        [WeaponType.MOLOTOV]: 1,
-        [WeaponType.MINIGUN]: 1,
-        [WeaponType.RADIO]: 1,
-        [WeaponType.FLASHBANG]: 1,
-        [WeaponType.FLAMETHROWER]: 1,
-        [WeaponType.ARC_CANNON]: 1,
-        [WeaponType.RUSH]: 1,
-        [WeaponType.VEHICLE]: 1,
-        [WeaponType.NONE]: 0
+        [WeaponID.PISTOL]: 1,
+        [WeaponID.SMG]: 1,
+        [WeaponID.SHOTGUN]: 1,
+        [WeaponID.RIFLE]: 1,
+        [WeaponID.REVOLVER]: 1,
+        [WeaponID.GRENADE]: 1,
+        [WeaponID.MOLOTOV]: 1,
+        [WeaponID.MINIGUN]: 1,
+        [WeaponID.FLASHBANG]: 1,
+        [WeaponID.FLAMETHROWER]: 1,
+        [WeaponID.ARC_CANNON]: 1,
     },
     sectorBriefing: '',
     debugMode: true,
@@ -35,7 +31,6 @@ export const DEFAULT_STATE: GameState = {
     settings: DEFAULT_SETTINGS,
     weather: WeatherType.SNOW,
     environmentOverrides: {},
-    midRunCheckpoint: null,
     sectorState: {
         unlimitedAmmo: false,
         noReload: false,
@@ -51,7 +46,6 @@ export const getPersistentState = (state: GameState) => {
         stats: {
             // Pick only serializable core fields
             statusFlags: s.statusFlags,
-            statusMask: s.statusMask,
             activePassives: [...s.activePassives],
             activeBuffs: [...s.activeBuffs],
             activeDebuffs: [...s.activeDebuffs],
@@ -148,9 +142,9 @@ export const loadGameState = (): GameState => {
                     ...DEFAULT_STATE.stats,
                     ...(loaded.stats || {}),
                     statsBuffer: ensureBufferSize(loaded.stats?.statsBuffer, PlayerStatID.COUNT, Float32Array),
-                    effectDurations: ensureBufferSize(loaded.stats?.effectDurations, 32, Float32Array),
-                    effectMaxDurations: ensureBufferSize(loaded.stats?.effectMaxDurations, 32, Float32Array),
-                    effectIntensities: ensureBufferSize(loaded.stats?.effectIntensities, 32, Float32Array),
+                    effectDurations: ensureBufferSize(loaded.stats?.effectDurations, MAX_ENTITIES.PERKS, Float32Array),
+                    effectMaxDurations: ensureBufferSize(loaded.stats?.effectMaxDurations, MAX_ENTITIES.PERKS, Float32Array),
+                    effectIntensities: ensureBufferSize(loaded.stats?.effectIntensities, MAX_ENTITIES.PERKS, Float32Array),
                     weaponKills: ensureBufferSize(loaded.stats?.weaponKills, StatWeaponIndex.COUNT),
                     weaponDamageDealt: ensureBufferSize(loaded.stats?.weaponDamageDealt, StatWeaponIndex.COUNT),
                     weaponShotsFired: ensureBufferSize(loaded.stats?.weaponShotsFired, StatWeaponIndex.COUNT),
@@ -163,17 +157,17 @@ export const loadGameState = (): GameState => {
                     perkDebuffsCleansed: ensureBufferSize(loaded.stats?.perkDebuffsCleansed, StatPerkIndex.COUNT),
                     enemyKills: ensureBufferSize(loaded.stats?.enemyKills, StatEnemyIndex.COUNT),
                     deathsByEnemyType: ensureBufferSize(loaded.stats?.deathsByEnemyType, StatEnemyIndex.COUNT),
-                    incomingDamageBuffer: ensureBufferSize(loaded.stats?.incomingDamageBuffer, 64 * 32),
+                    incomingDamageBuffer: ensureBufferSize(loaded.stats?.incomingDamageBuffer, TELEMETRY_BUFFER_SIZE),
                     discoveredPerksMap: (function () {
-                        const arr = new Uint8Array(256);
+                        const arr = new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE);
                         const saved = loaded.stats?.discoveredPerksMap;
                         if (saved && Array.isArray(saved)) {
-                            for (let i = 0; i < Math.min(saved.length, 256); i++) arr[i] = saved[i];
+                            for (let i = 0; i < Math.min(saved.length, MAX_ENTITIES.DISCOVERY_MAP_SIZE); i++) arr[i] = saved[i];
                         }
                         return arr;
                     })(),
                     challengeTiers: (function () {
-                        const expectedSize = 64;
+                        const expectedSize = MAX_ENTITIES.CHALLENGES;
                         const buffer = ensureBufferSize(loaded.stats?.challengeTiers, expectedSize, Int32Array);
                         if (process.env.NODE_ENV !== 'production' && buffer.length !== expectedSize) {
                             console.warn(`[VINTERDÖD] Persistence Mismatch: challengeTiers buffer size is ${buffer.length}, expected ${expectedSize}.`);

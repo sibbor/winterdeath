@@ -128,6 +128,18 @@ export class VehicleMovementSystem implements System {
                 if (!_buoyancyResult.inWater || vehicle.position.y < _buoyancyResult.waterLevel - 2.0) {
                     if (throttle > 0.1 || throttle < -0.1) throttle = 0;
                 }
+            } else if (session.engine.ground) {
+                // Terrain Alignment for Land Vehicles
+                const groundY = session.engine.ground.getGroundHeight(vehicle.position.x, vehicle.position.z, session);
+                const targetY = groundY;
+
+                // Simple gravity/ground snap
+                if (vehicle.position.y > targetY + 0.1) {
+                    vel.y -= 19.8 * dt; // Gravity
+                } else {
+                    vehicle.position.y = THREE.MathUtils.lerp(vehicle.position.y, targetY, 15 * dt);
+                    vel.y = 0;
+                }
             }
         }
 
@@ -291,13 +303,31 @@ export class VehicleMovementSystem implements System {
                 if (speedSq > 4.0) {
                     if (Math.random() < speedRatio * 0.3) {
                         _v1.copy(_forward).multiplyScalar(-def.size.z * 0.45);
-                        FXSystem.spawnParticle(session.engine.scene, state.particles, vehicle.position.x + _v1.x, 0.2, vehicle.position.z + _v1.z, FXParticleType.SMOKE, 1, undefined, undefined, 0xaaaaaa, 0.4);
+                        const groundX = vehicle.position.x + _v1.x;
+                        const groundZ = vehicle.position.z + _v1.z;
+                        
+                        const groundY = session.engine.ground?.getGroundHeight(groundX, groundZ, session) || 0.1;
+                        const groundMat = session.worldStreamer?.getGroundMaterial(groundX, groundZ) || 0;
+                        
+                        let pType = FXParticleType.SMOKE;
+                        let pColor = 0xaaaaaa;
+                        
+                        if (groundMat === 1) { // SNOW (Hardcoded check for now, can be optimized)
+                            pType = FXParticleType.SNOW_PUFF;
+                            pColor = 0xffffff;
+                        } else if (groundMat === 2) { // DIRT
+                            pColor = 0x886644;
+                        }
+
+                        FXSystem.spawnParticle(session.engine.scene, state.particles, groundX, groundY + 0.1, groundZ, pType, 1, undefined, undefined, pColor, 0.4);
                     }
                 }
             } else if (speedSq > 4.0 && Math.random() < 0.4) {
                 _v1.copy(_forward).multiplyScalar(-def.size.z * 0.35);
                 _v1.addScaledVector(_right, (Math.random() - 0.5) * 2.0);
-                FXSystem.spawnParticle(session.engine.scene, state.particles, vehicle.position.x + _v1.x, 0.1, vehicle.position.z + _v1.z, FXParticleType.SPLASH, 1, undefined, undefined, 0xffffff, 0.5 + Math.random() * 0.5);
+                
+                const splashY = session.engine.water?.getBuoyancyResult().waterLevel || 0.1;
+                FXSystem.spawnParticle(session.engine.scene, state.particles, vehicle.position.x + _v1.x, splashY + 0.05, vehicle.position.z + _v1.z, FXParticleType.SPLASH, 1, undefined, undefined, 0xffffff, 0.5 + Math.random() * 0.5);
             }
 
             // --- SYNC PLAYER TO VEHICLE ---

@@ -1,4 +1,4 @@
-import { WeaponType } from '../content/weapons';
+import { WeaponID } from '../entities/player/CombatTypes';
 import { PlayerStats } from '../entities/player/PlayerTypes';
 import { GameSettings, WeatherType, EnvironmentOverride } from '../core/engine/EngineTypes';
 import { SectorStats, SectorState } from './StateTypes';
@@ -6,12 +6,12 @@ import { SectorStats, SectorState } from './StateTypes';
 export interface GameCanvasProps {
   stats: PlayerStats;
   loadout: {
-    primary: WeaponType;
-    secondary: WeaponType;
-    throwable: WeaponType;
-    special: WeaponType;
+    primary: WeaponID;
+    secondary: WeaponID;
+    throwable: WeaponID;
+    special: WeaponID;
   };
-  weaponLevels: Partial<Record<WeaponType, number>>;
+  weaponLevels: Partial<Record<WeaponID, number>>;
   currentSector: number;
   deadBossIndices: number[];
   rescuedFamilyIndices: number[];
@@ -36,6 +36,7 @@ export interface GameCanvasProps {
   onBossDiscovered?: (id: number) => void;
   onBossKilled?: (id: number) => void;
   onFamilyRescued?: (id: number) => void;
+  onPerkDiscovered?: (id: number) => void;
   isCollectibleOpen: boolean;
   onCollectibleClose: () => void;
   onDialogueStateChange: (active: boolean) => void;

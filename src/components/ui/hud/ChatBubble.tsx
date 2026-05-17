@@ -1,7 +1,10 @@
-import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
+import React, { useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
-import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
+import { UIEventType, ChatBubbleSubtype, CHAT_BUBBLE_DURATIONS } from '../../../systems/ui/UIEventRingBuffer';
 import { COLORS } from '../../../utils/ui/ColorUtils';
+import { t } from '../../../utils/i18n';
+import { VoiceSounds } from '../../../utils/audio/AudioLib';
+import { FamilyMemberID } from '../../../content/constants';
 
 const MAX_BUBBLES = 5;
 
@@ -14,11 +17,23 @@ const ChatBubblePooled = forwardRef((_, ref) => {
     const versionRef = useRef(0);
 
     useImperativeHandle(ref, () => ({
-        spawn: (text: string, duration: number) => {
+        spawn: (text: string, duration: number, subType: ChatBubbleSubtype) => {
             if (!containerRef.current || !contentRef.current) return;
 
             const v = ++versionRef.current;
             contentRef.current.innerText = text;
+
+            // Apply different looks depending on if it is a THOUGHT or SPEAK
+            if (subType === ChatBubbleSubtype.THOUGHT) {
+                containerRef.current.style.borderLeft = `4px dashed ${COLORS.CYAN.str}`;
+                containerRef.current.style.color = COLORS.CYAN.str;
+            } else if (subType === ChatBubbleSubtype.SPEAK) {
+                containerRef.current.style.borderLeft = `4px solid ${COLORS.WHITE.str}`;
+                containerRef.current.style.color = COLORS.WHITE.str;
+            } else { // ChatBubbleSubtype.GENERIC
+                containerRef.current.style.borderLeft = `4px solid ${COLORS.TEAL.str}`;
+                containerRef.current.style.color = COLORS.TEAL.str;
+            }
 
             // Trigger animation and visibility (Direct CSS mutation)
             containerRef.current.style.display = 'block';
@@ -55,18 +70,34 @@ const ChatBubble: React.FC = () => {
     const nextIdx = useRef(0);
     const lastMessageRef = useRef<string | null>(null);
 
-    const handleSpawn = useCallback((type: UIEventType, text: any, duration: number = 3000) => {
+    const handleSpawn = useCallback((type: UIEventType, p1: any, p2: number) => {
         if (type !== UIEventType.CHAT_BUBBLE) return;
 
+        const text = typeof p1 === 'string' ? p1 : '';
+        if (!text) return;
+
+        // Translate if it's an i18n key (contains a dot like 'dialogue.foo' and has no spaces)
+        const localizedText = (text.includes('.') && !text.includes(' ')) ? t(text) : text;
+
         // Deduplication (Zero-GC)
-        if (lastMessageRef.current === text) return;
-        lastMessageRef.current = text;
+        if (lastMessageRef.current === localizedText) return;
+        lastMessageRef.current = localizedText;
         setTimeout(() => { lastMessageRef.current = null; }, 100);
+
+        // Decode duration and subtype from p2 without magic numbers
+        const p2Duration = p2 > 0 ? (p2 & 0xFFFF) : 0;
+        const subType = p2 > 0 ? ((p2 >> 16) & 0xFF) as ChatBubbleSubtype : ChatBubbleSubtype.GENERIC;
+        const duration = p2Duration > 0 ? p2Duration : CHAT_BUBBLE_DURATIONS[subType];
 
         const idx = nextIdx.current;
         const bubble = bubbleRefs.current[idx];
         if (bubble) {
-            bubble.spawn(text, duration);
+            bubble.spawn(localizedText, duration, subType);
+        }
+
+        // Play the player's voice (FamilyMemberID.ROBERT is the protagonist/player) if speaking
+        if (subType === ChatBubbleSubtype.SPEAK) {
+            VoiceSounds.playDialogueBeep(FamilyMemberID.ROBERT);
         }
 
         nextIdx.current = (nextIdx.current + 1) % MAX_BUBBLES;

@@ -8,7 +8,7 @@ The engine relies on modular systems (`src/core/systems/`) inheriting from a bas
 ## 🏗 Core Systems Breakdown
 - **Combat Pipeline**: `InputManager` -> `PlayerCombatSystem` -> `WeaponHandler` -> `ProjectileSystem` -> `CollisionResolution` -> `DeathSystem`.
 - **Interaction Pipeline**: `InputManager` -> `PlayerInteractionSystem` -> Raycast against `ctx.obstacles` or triggers -> `HudSystem` (prompts).
-- **Environment**: `WindSystem` (updates global wind uniforms), `WaterSystem` (procedural flow), `WeatherSystem` (snow/fog particles).
+- **Environment**: `WindSystem` (updates global wind uniforms), `WaterSystem` (procedural flow), `WeatherSystem` (snow/rain/ember/etc. particles), `FogSystem` (volymetric fog)
 
 ## 🗺 World Generation (3-Tier + Environment)
 1.  **ObjectGenerator**: Builds individual `THREE.Group` or `Mesh` assets (Atoms).
@@ -27,7 +27,7 @@ The engine relies on modular systems (`src/core/systems/`) inheriting from a bas
 
 
 ## ⚡ Performance Optimization (Zero-GC)
-- **SpatialGrid**: `src/core/world/SpatialGrid.ts` is mandatory for finding nearby loot (`WorldLootSystem`), enemies, or obstacles. Do not use $O(N^2)$ loops.
+- **SpatialGrid**: `src/core/world/SpatialGrid.ts` is mandatory for finding nearby loot (`LootSystem`), enemies, or obstacles. Do not use $O(N^2)$ loops.
 - **AssetPreloader**: Generic warmup for ALL models, materials, and sounds (`src/core/systems/AssetPreloader.ts`).
 - **Memory Management**: Use module-level scratchpads (`const _v1 = new THREE.Vector3()`). Use "Swap-and-Pop" to remove items from arrays.
 

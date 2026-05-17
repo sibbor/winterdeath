@@ -17,6 +17,9 @@ export enum ChallengeCategory {
     COUNT
 }
 
+export const MAX_CHALLENGE_TIER = 3;
+export const CP_REWARD_GOLD = 100;
+
 /**
  * SMI Challenge ID Enum
  * Must be sequential for direct array indexing.

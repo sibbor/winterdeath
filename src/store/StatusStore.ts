@@ -8,14 +8,14 @@ class StatusStoreClass {
     private mask: number = 0;
     private listeners: (() => void)[] = [];
 
-    public setStatusMask(mask: number): void {
-        if (this.mask !== mask) {
-            this.mask = mask;
+    public setStatusFlags(flags: number): void {
+        if (this.mask !== flags) {
+            this.mask = flags;
             this.notifyListeners();
         }
     }
 
-    public getStatusMask(): number {
+    public getStatusFlags(): number {
         return this.mask;
     }
 
@@ -41,8 +41,8 @@ export const StatusStore = new StatusStoreClass();
 // Hook implementation for React
 import { useSyncExternalStore, useCallback } from 'react';
 
-export function useStatusStore<T>(selector: (mask: number) => T): T {
-    const getSnapshot = useCallback(() => selector(StatusStore.getStatusMask()), [selector]);
+export function useStatusStore<T>(selector: (flags: number) => T): T {
+    const getSnapshot = useCallback(() => selector(StatusStore.getStatusFlags()), [selector]);
     const subscribe = useCallback((onStoreChange: () => void) => StatusStore.subscribe(onStoreChange), []);
 
     return useSyncExternalStore(subscribe, getSnapshot);

@@ -66,7 +66,9 @@ export const en = {
         failed: "FAILED",
         summary: "SUMMARY",
         details: "COMBAT DETAILS",
-        pois_discovered: "Locations Found",
+        collectibles_discovered: "Collectibles Discovered",
+        clues_discovered: "Clues Discovered",
+        pois_discovered: "POIs Discovered",
         settings: "SETTINGS",
         language: "LANGUAGE",
         language_sub: "English / Svenska",
@@ -107,7 +109,10 @@ export const en = {
         discovery_popups_sub: "Show real-time notifications for progress",
         next_rank: "NEXT RANK",
         current_rank: "CURRENT RANK",
-        weapon_performance_log: "WEAPON PERFORMANCE LOG",
+        weapon_log: "WEAPON LOG",
+        shots: "SHOTS",
+        hits: "HITS",
+        weapon: "WEAPON",
         no_weapon_data: "No weapon data available",
         continue_to_play_weapons: "continue to use weapons in the field to log performance",
         buff_uptime: "BUFF UPTIME",
@@ -166,6 +171,9 @@ export const en = {
         jump: "JUMP",
         view_report: "VIEW REPORT",
         view_details: "VIEW DETAILS",
+        passive: "PASSIVE",
+        buff: "BUFF",
+        debuff: "DEBUFF",
         challenge_complete: "CHALLENGE COMPLETE",
         challenges: {
             marathon: { title: "Marathon", desc: "Travel a total of {target} meters across all sectors." },
@@ -220,6 +228,7 @@ export const en = {
         exit_vehicle: "EXIT VEHICLE",
         gas: "GAS",
         brake: "BRAKE",
+        vehicle: "Vehicle",
         boss_encountered: "BOSS ENCOUNTERED",
         skill_point: "SKILL POINT",
         discovered_collectible: "COLLECTIBLE DISCOVERED",
@@ -269,7 +278,7 @@ export const en = {
         log_poi: "POIS",
         log_perks: "PERKS",
         log_weapons: "WEAPONS",
-        passive_abilities: "PASSIVES ABILITIES",
+        passives: "PASSIVES",
         buffs: "BUFFS",
         debuffs: "DEBUFFS",
         unknown_sector: "Unknown Sector",
@@ -291,6 +300,7 @@ export const en = {
         weather: "WEATHER",
         wind_strength: "WIND STRENGTH",
         time_of_day: "TIME OF DAY",
+        time_factor: "TIME FACTOR",
         enemy_spawner: "SOULS SPAWNER",
         enemy_type: "ENEMY TYPE",
         count: "COUNT",
@@ -358,7 +368,7 @@ export const en = {
         avg_distance: "AVG DISTANCE / SECTOR",
         aggression_ratio: "AGGRESSION RATIO",
         engagement_range: "AVG ENGAGEMENT RANGE",
-        total_game_time: "TOTAL GAME TIME",
+        game_time: "GAME TIME",
         avg_game_time: "AVG TIME / SECTOR",
         engagement_metric: "meters",
         times_gained: "Times Gained",
@@ -425,6 +435,7 @@ export const en = {
         cpu_timings: "CPU Timings",
         system_logs: "System Logs",
         clear: "CLEAR",
+        copy: "COPY",
         no_logs: "No logs captured...",
         challenge_mastered: "MASTERED",
         challenge_tier: "TIER {tier}",
@@ -435,6 +446,7 @@ export const en = {
         skip_epilogue_error: "Skip Epilogue (Error Loading)",
         skip_prologue_error: "Skip Prologue (Error Loading)",
         go_to_story_point: "Go to story point {num}",
+        no_data_available: "No data available",
     },
     report: {
         damage: {
@@ -522,9 +534,6 @@ export const en = {
         throwable: "THROWABLE",
         special: "SPECIAL",
         tool: "TOOL",
-        passive: "PASSIVE",
-        buff: "BUFF",
-        debuff: "DEBUFF"
     },
     weather: {
         none: "NONE",
@@ -620,72 +629,89 @@ export const en = {
         // Passives
         TRICKSTERS_HASTE: {
             title: "Trickster's Haste",
-            description: "20% faster reload speed"
+            description: "20% faster reload speed",
+            prerequisite: "Rescue Loke"
         },
         EAGLES_SIGHT: {
             title: "Eagle's Sight",
-            description: "15% increased weapon range"
+            description: "15% increased weapon range",
+            prerequisite: "Rescue Jordan"
         },
         LEAD_FEVER: {
             title: "Lead Fever",
-            description: "20% increased rate of fire"
+            description: "20% increased rate of fire",
+            prerequisite: "Rescue Esmeralda"
         },
         WINTERS_BONE: {
             title: "Winter's Bone",
-            description: "10% damage resistance"
+            description: "10% damage resistance",
+            prerequisite: "Rescue Nathalie"
         },
 
         // Buffs
         REFLEX_SHIELD: {
             title: "Reflex Shield",
-            description: "500ms invulnerability when dodging or rushing. 10s cooldown."
+            description: "500ms invulnerability when dodging or rushing. 10s cooldown.",
+            prerequisite: "Triggered by dodging or rushing"
         },
         ADRENALINE_PATCH: {
             title: "Adrenaline Patch",
-            description: "3s invulnerability when health drops below 25%. 60s cooldown."
+            description: "3s invulnerability when health drops below 25%. 60s cooldown.",
+            prerequisite: "Triggered when health is below 25%"
         },
         GIB_MASTER: {
             title: "Gib Master",
-            description: "Explosions and high-impact hits have a much higher chance to dismember enemies."
+            description: "Explosions and high-impact hits have a much higher chance to dismember enemies.",
+            prerequisite: "High-impact combat proficiency"
         },
         QUICK_FINGER: {
             title: "Quick Finger",
-            description: "Manual reloading is 30% faster for a short duration after a kill."
+            description: "Manual reloading is 30% faster for a short duration after a kill.",
+            prerequisite: "Triggered after eliminating an enemy"
         },
 
         // Debuffs
         BLEEDING: {
             title: "Bleeding",
-            description: "Taking continuous damage and moving 10% slower."
+            description: "Taking continuous damage and moving 10% slower.",
+            prerequisite: "Sustained during physical trauma"
         },
         BURNING: {
             title: "Burning",
-            description: "Intense heat causing continuous damage and slight slowing."
+            description: "Intense heat causing continuous damage and slight slowing.",
+            prerequisite: "Exposure to intense fire or heat"
         },
         STUNNED: {
             title: "Stunned",
-            description: "Movement and actions are completely disabled."
+            description: "Movement and actions are completely disabled.",
+            prerequisite: "Impact from concussive attacks"
         },
         DISORIENTED: {
             title: "Disoriented",
-            description: "Vision is blurred and movement speed is reduced by 20%."
+            description: "Vision is blurred and movement speed is reduced by 20%.",
+            prerequisite: "Vision-impairing tactical effects"
         },
         SLOWED: {
             title: "Slowed",
-            description: "Movement speed is significantly reduced by 40%."
+            description: "Movement speed is significantly reduced by 40%.",
+            prerequisite: "Movement through restrictive terrain"
         },
         FREEZING: {
             title: "Freezing",
-            description: "Taking damage and moving significantly slower due to extreme cold."
+            description: "Taking damage and moving significantly slower due to extreme cold.",
+            prerequisite: "Exposure to sub-zero temperatures"
         },
         ELECTRIFIED: {
             title: "Electrified",
-            description: "Taking damage and moving significantly slower due to electrical current."
+            description: "Taking damage and moving significantly slower due to electrical current.",
+            prerequisite: "Contact with high-voltage sources"
         },
         DROWNING: {
             title: "Drowning",
-            description: "Taking rapid damage while submerged in deep water."
-        }
+            description: "Taking rapid damage while submerged in deep water.",
+            prerequisite: "Submerged in deep water"
+        },
+        vehicle_desc: "Crush the infected under the weight of your vehicle. High-speed collisions deal significant physical damage and knockback."
     },
     weapons: {
         smg: "SMG",
@@ -797,6 +823,7 @@ export const en = {
                 audio: "Zombies groaning and attacking."
             }
         ],
+        bus_rubble_reaction: "The path is clear now. Let's move!",
     },
     family: {
         dad: "Dad",
@@ -1050,6 +1077,6 @@ export const en = {
         "3_24": "(Whispering in radio) /Ready. COME IN./",
         "3_25": "(Whispering) /1... 2... 3, run!/",
         "3_26": "COME GET SOME, YOU BASTARD!"
-    },
+    }
 
 };

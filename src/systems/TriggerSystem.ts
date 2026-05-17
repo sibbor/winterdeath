@@ -1,23 +1,20 @@
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { TriggerType, TriggerAction, TriggerStatus } from '../types/TriggerTypes';
 import { System, SystemID } from './System';
-import { DataResolver } from '../utils/ui/DataResolver';
-import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
+import { DataResolver } from '../core/data/DataResolver';
+import { UIEventRingBuffer, UIEventType, ChatBubbleSubtype, CHAT_BUBBLE_DURATIONS } from './ui/UIEventRingBuffer';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
 import { InteractionPromptId } from './ui/UIEventBridge';
 import { WorldStreamer } from '../core/world/WorldStreamer';
 import { TriggerShape, MAX_ENTITIES } from '../content/constants';
+import { ClueType } from '../game/session/SectorTypes';
 
-/**
- * Data-Oriented Trigger System using Struct of Arrays (SoA).
- * Pre-allocated typed arrays ensure Zero-GC and maximum L1/L2 cache locality.
- * Phase 2 Optimization.
- */
 export class TriggerSystem implements System {
     readonly systemId = SystemID.TRIGGER_SYSTEM;
     id = 'trigger_system';
     enabled = true;
     persistent = false;
+    isFixedStep = true;
 
     private readonly maxTriggers: number;
     private activeCount: number = 0;
@@ -26,7 +23,7 @@ export class TriggerSystem implements System {
     // --- Struct of Arrays (SoA) ---
     private readonly activeFlags: Uint8Array;
     private readonly triggerTypes: Uint8Array;
-    private readonly shapeTypes: Uint8Array; // Enum-locked: TriggerShape
+    private readonly shapeTypes: Uint8Array;
     private readonly statusFlags: Uint16Array;
     private readonly positionsX: Float32Array;
     private readonly positionsY: Float32Array;
@@ -51,11 +48,10 @@ export class TriggerSystem implements System {
     public getTriggerTypes(): Uint8Array { return this.triggerTypes; }
     public getStatusFlags(): Uint16Array { return this.statusFlags; }
 
-    // --- Metadata Pool (Pre-allocated objects to store non-numeric data) ---
     public readonly metadata: Array<{
-        id: string;
+        id: string | number;
         content: string;
-        contentId: number; // SMI for Zero-GC transport
+        contentId: number;
         actions: TriggerAction[];
         familyId?: number;
         ownerId?: string;
@@ -88,6 +84,55 @@ export class TriggerSystem implements System {
 
     public setStreamer(streamer: WorldStreamer): void {
         this.streamer = streamer;
+
+        // Retroactive registration: Index all currently active triggers into the spatial grid
+        for (let i = 0; i < this.maxTriggers; i++) {
+            if (this.activeFlags[i] === 1) {
+                const tx = this.positionsX[i];
+                const tz = this.positionsZ[i];
+
+                let radius = 5;
+                if (this.shapeTypes[i] === TriggerShape.CIRCLE) {
+                    radius = Math.sqrt(this.radiiSq[i]);
+                } else if (this.shapeTypes[i] === TriggerShape.BOX) {
+                    radius = Math.max(this.halfWidths[i], this.halfDepths[i]);
+                }
+
+                if (this.streamer) {
+                    this.streamer.registerTrigger(i, tx - radius, tz - radius, tx + radius, tz + radius);
+                }
+            }
+        }
+    }
+
+    /**
+     * Re-syncs all active triggers with the world streamer.
+     * Essential for cold-starts and sector transitions.
+     */
+    public syncWithStreamer(): void {
+        if (!this.streamer) return;
+        for (let i = 0; i < this.maxTriggers; i++) {
+            if (this.activeFlags[i] === 1) {
+                const tx = this.positionsX[i];
+                const tz = this.positionsZ[i];
+                let radius = 5;
+                if (this.shapeTypes[i] === TriggerShape.CIRCLE) {
+                    radius = Math.sqrt(this.radiiSq[i]);
+                } else if (this.shapeTypes[i] === TriggerShape.BOX) {
+                    radius = Math.max(this.halfWidths[i], this.halfDepths[i]);
+                }
+                this.streamer.registerTrigger(i, tx - radius, tz - radius, tx + radius, tz + radius);
+            }
+        }
+    }
+
+    public resetTriggerStates(): void {
+        for (let i = 0; i < this.maxTriggers; i++) {
+            if (this.activeFlags[i] === 1) {
+                this.statusFlags[i] &= ~TriggerStatus.TRIGGERED;
+                this.lastTriggerTimes[i] = 0;
+            }
+        }
     }
 
     public reset(): void {
@@ -100,7 +145,6 @@ export class TriggerSystem implements System {
             m.id = '';
             m.content = '';
             m.contentId = 0;
-            // Zero-GC: reset count without resizing
             (m.actions as any)._count = 0;
             m.familyId = undefined;
             m.ownerId = undefined;
@@ -109,8 +153,38 @@ export class TriggerSystem implements System {
         }
     }
 
+    /**
+     * Batch registers an array of buffered triggers.
+     * Use this after sector construction to sync buffered triggers into the SoA system.
+     */
+    public addTriggers(triggers: any[]): void {
+        if (!triggers) return;
+        const len = triggers.length;
+        for (let i = 0; i < len; i++) {
+            const t = triggers[i];
+            this.addTrigger({
+                id: t.id,
+                type: t.type,
+                x: t.position.x,
+                y: (t.position as any).y || 0,
+                z: t.position.z,
+                radius: t.radius,
+                size: t.size,
+                rotation: t.rotation,
+                statusFlags: t.statusFlags,
+                content: t.content,
+                actions: t.actions,
+                repeatInterval: t.repeatInterval,
+                familyId: t.familyId,
+                ownerId: t.ownerId,
+                interactionPromptId: t.interactionPromptId,
+                label: t.label
+            });
+        }
+    }
+
     public addTrigger(config: {
-        id: string;
+        id: string | number;
         type: TriggerType;
         x: number;
         y: number;
@@ -162,7 +236,8 @@ export class TriggerSystem implements System {
                 const m = this.metadata[i];
                 m.id = config.id;
                 m.content = config.content || '';
-                
+                m.contentId = 0;
+
                 const mActions = m.actions as any;
                 mActions._count = 0;
                 if (config.actions) {
@@ -175,22 +250,30 @@ export class TriggerSystem implements System {
                 m.interactionPromptId = config.interactionPromptId;
                 m.label = config.label;
 
-                // --- VINTERDÖD RESTORATION: DISCOVERY SMI RESOLUTION ---
-                m.contentId = 0;
-                if (config.type === TriggerType.POI) {
-                    const poi = DataResolver.getPois()[m.id];
-                    if (poi) m.contentId = (poi.sector << 8) | poi.index;
-                } else if (config.type === TriggerType.CLUE) {
-                    const clue = DataResolver.getClues()[m.id];
-                    if (clue) m.contentId = (clue.sector << 8) | clue.index;
-                } else if (config.type === TriggerType.COLLECTIBLE) {
-                    const col = DataResolver.getCollectibles()[m.id];
-                    if (col) m.contentId = (col.sector << 8) | col.index;
+                if (this.streamer) {
+                    let minX, minZ, maxX, maxZ;
+                    if (config.size) {
+                        const hX = config.size.width * 0.5;
+                        const hZ = config.size.depth * 0.5;
+                        minX = config.x - hX;
+                        minZ = config.z - hZ;
+                        maxX = config.x + hX;
+                        maxZ = config.z + hZ;
+                    } else {
+                        const r = config.radius || 5;
+                        minX = config.x - r;
+                        minZ = config.z - r;
+                        maxX = config.x + r;
+                        maxZ = config.z + r;
+                    }
+                    this.streamer.registerTrigger(i, minX, minZ, maxX, maxZ);
                 }
 
-                if (this.streamer) {
-                    const radius = config.size ? (Math.max(config.size.width, config.size.depth) * 0.5) : (config.radius || 5);
-                    this.streamer.registerTrigger(i, config.x - radius, config.z - radius, config.x + radius, config.z + radius);
+                // [VINTERDÖD] Dynamic SMI Mapping: Register custom reaction keys at runtime
+                if (config.content && config.id && (config.type === TriggerType.CLUE
+                    || config.type === TriggerType.THOUGHT
+                    || config.type === TriggerType.SPEAK)) {
+                    DataResolver.registerReaction(config.id, config.content);
                 }
 
                 return i;
@@ -200,12 +283,8 @@ export class TriggerSystem implements System {
         return -1;
     }
 
-    /**
-     * Zero-GC Hot-Path Addition
-     * Use this method to add triggers during the simulation loop without object allocation.
-     */
     public addTriggerPrimitive(
-        id: string,
+        id: string | number,
         type: TriggerType,
         x: number,
         y: number,
@@ -236,16 +315,51 @@ export class TriggerSystem implements System {
                 const m = this.metadata[i];
                 m.id = id;
                 m.content = content;
+                m.contentId = 0;
                 (m.actions as any)._count = 0;
                 m.familyId = undefined;
                 m.ownerId = undefined;
                 m.interactionPromptId = interactionPromptId;
                 m.label = label;
 
+                if (this.streamer) {
+                    this.streamer.registerTrigger(i, x - radius, z - radius, x + radius, z + radius);
+                }
+
+                // [VINTERDÖD] Dynamic SMI Mapping: Register custom reaction keys at runtime
+                if (content && id && (type === TriggerType.CLUE
+                    || type === TriggerType.THOUGHT || type === TriggerType.SPEAK)) {
+                    DataResolver.registerReaction(id, content);
+                }
+
                 return i;
             }
         }
         return -1;
+    }
+
+    public clear(): void {
+        this.activeFlags.fill(0);
+        this.statusFlags.fill(0);
+        this.activeCount = 0;
+
+        // Zero-GC: Clear metadata references to allow GC of actions/strings
+        for (let i = 0; i < this.maxTriggers; i++) {
+            const m = this.metadata[i];
+            m.id = '';
+            m.content = '';
+            m.contentId = 0;
+            const mActions = m.actions as any;
+            if (mActions) mActions._count = 0;
+            m.familyId = undefined;
+            m.ownerId = undefined;
+            m.interactionPromptId = undefined;
+            m.label = undefined;
+        }
+
+        if (this.streamer) {
+            this.streamer.clearTriggers();
+        }
     }
 
     public removeTrigger(index: number): void {
@@ -257,7 +371,7 @@ export class TriggerSystem implements System {
         }
     }
 
-    public getTriggerById(id: string): number {
+    public getTriggerById(id: string | number): number {
         for (let i = 0; i < this.maxTriggers; i++) {
             if (this.activeFlags[i] === 1 && this.metadata[i].id === id) {
                 return i | 0;
@@ -292,8 +406,8 @@ export class TriggerSystem implements System {
 
         if (this.streamer) {
             const poolIdx = this.streamer.getTriggerPool().nextIndex();
-            this.streamer.getNearbyTriggers(playerPos.x, playerPos.z, 15, poolIdx);
-            
+            this.streamer.getNearbyTriggers(playerPos.x, playerPos.z, 50, poolIdx);
+
             const nearby = this.streamer.getTriggerPool().getPool(poolIdx);
             const nearCount = this.streamer.getTriggerPool().getCount(poolIdx);
 
@@ -344,37 +458,53 @@ export class TriggerSystem implements System {
         const type = this.triggerTypes[idx] | 0;
         const state = session.state;
 
-        // --- FIRE NARRATIVE & DISCOVERY (Zero-GC: Passing raw i18n keys) ---
+        console.log("Triggered:", type, m.id);
+
         switch (type) {
-            case TriggerType.THOUGHT:
-                UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, DataResolver.getClueReaction(m.id), 3000, simTime);
-                break;
+            case TriggerType.CLUE: {
+                const clue = DataResolver.getClues()[m.id as any];
+                if (clue) {
+                    const clueSmi = clue.id | 0;
+                    session.handleDiscovery(DiscoveryType.CLUE, m.id, clueSmi);
 
-            case TriggerType.SPEAK:
-                UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, DataResolver.getClueReaction(m.id), 4000, simTime);
-                break;
+                    const subType = clue.type === ClueType.SPEAK ? ChatBubbleSubtype.SPEAK : ChatBubbleSubtype.THOUGHT;
+                    const duration = CHAT_BUBBLE_DURATIONS[subType];
+                    const encodedP2 = duration | (subType << 16);
 
-            case TriggerType.POI:
-                if (state && state.discoverySets && !state.discoverySets.pois.has(m.id)) {
-                    UIEventRingBuffer.push(UIEventType.DISCOVERY, m.contentId, DiscoveryType.POI, simTime);
-                    UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, DataResolver.getPoiReaction(m.id), 4000, simTime);
+                    UIEventRingBuffer.push(
+                        UIEventType.CHAT_BUBBLE,
+                        clue.id,
+                        encodedP2,
+                        simTime
+                    );
                 }
                 break;
+            }
 
-            case TriggerType.CLUE:
-                if (state && state.discoverySets && !state.discoverySets.clues.has(m.id)) {
-                    UIEventRingBuffer.push(UIEventType.DISCOVERY, m.contentId, DiscoveryType.CLUE, simTime);
+            case TriggerType.POI: {
+                const poi = DataResolver.getPois()[m.id as any];
+                const poiSmi = poi ? poi.id : 0;
+                if (session.handleDiscovery(DiscoveryType.POI, m.id, poiSmi)) {
+                    const duration = CHAT_BUBBLE_DURATIONS[ChatBubbleSubtype.SPEAK];
+                    const encodedP2 = duration | (ChatBubbleSubtype.SPEAK << 16);
+                    UIEventRingBuffer.push(
+                        UIEventType.CHAT_BUBBLE,
+                        poiSmi,
+                        encodedP2,
+                        simTime
+                    );
                 }
                 break;
+            }
 
-            case TriggerType.COLLECTIBLE:
-                if (state && state.discoverySets && !state.discoverySets.collectibles.has(m.id)) {
-                    UIEventRingBuffer.push(UIEventType.DISCOVERY, m.contentId, DiscoveryType.COLLECTIBLE, simTime);
-                }
+            case TriggerType.COLLECTIBLE: {
+                const col = DataResolver.getCollectibles()[m.id as any];
+                const colSmi = col ? col.id : 0;
+                session.handleDiscovery(DiscoveryType.COLLECTIBLE, m.id, colSmi);
                 break;
+            }
         }
 
-        // --- FIRE ACTIONS ---
         const mActions = m.actions as any;
         const actionCount = mActions._count | 0;
         if (actionCount > 0) {
@@ -383,6 +513,7 @@ export class TriggerSystem implements System {
             }
         }
 
+        // SÄKERHET: Frigör slottet omedelbart om det är en engångstrigger
         if ((this.statusFlags[idx] | 0) & (TriggerStatus.ONCE | 0)) {
             this.activeFlags[idx] = 0;
             this.activeCount--;

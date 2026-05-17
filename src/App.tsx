@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState, SectorStats } from './types/StateTypes';
 import { GameScreen } from './types/SessionTypes';
-import { PlayerStats, PlayerStatID, StatEnemyIndex } from './entities/player/PlayerTypes';
+import { PlayerStats, PlayerStatID } from './entities/player/PlayerTypes';
 import { WeatherType } from './core/engine/EngineTypes';
 import { SectorTrigger } from './types/TriggerTypes';
 import { BossID, SectorID } from './game/session/SectorTypes';
@@ -53,10 +53,21 @@ const EMPTY_OVERRIDES = {};
 const App: React.FC = () => {
     const [gameState, setGameState] = useState<GameState>(loadGameState());
 
+    // Sync debugMode to HudStore immediately on boot/initialization
+    // so that subcomponents that read HudStore.getState().debugMode (like DebugDisplay)
+    // are correctly aligned from the very first frame.
+    const isInitializedRef = useRef(false);
+    if (!isInitializedRef.current) {
+        HudStore.patch({ debugMode: gameState.debugMode });
+        isInitializedRef.current = true;
+    }
+
     // Efficient Engine Reference: Prevent instantiation evaluation on every render frame
     const engineRef = useRef<WinterEngine | null>(null);
     if (!engineRef.current) {
         engineRef.current = WinterEngine.getInstance(gameState.settings);
+        (window as any).engine = engineRef.current;
+        (window as any).inputManager = engineRef.current.input;
     }
 
     const [isMobileDevice, setIsMobileDevice] = useState(checkIsMobileDevice());
@@ -109,9 +120,20 @@ const App: React.FC = () => {
             handleOpenAdventureLogAction(tab, itemId);
         };
 
+        const handleOpenStatisticsEvent = (e: any) => {
+            const tab = e.detail?.tab;
+            const itemId = e.detail?.itemId;
+            handleOpenStatisticsAction(tab, itemId);
+        };
+
         window.addEventListener('resize', checkMobile);
         document.addEventListener('pointerlockchange', handleLockChange);
         window.addEventListener('open-adventure-log', handleOpenAdventureLogEvent);
+        window.addEventListener('open-statistics', handleOpenStatisticsEvent);
+
+        // --- IMMERSIVE PC: Disable Context Menu ---
+        const handleContextMenu = (e: MouseEvent) => e.preventDefault();
+        window.addEventListener('contextmenu', handleContextMenu);
 
         if (typeof screen !== 'undefined' && (screen as any).orientation && (screen.orientation as any).lock) {
             (screen.orientation as any).lock('landscape').catch((e: any) => {
@@ -123,6 +145,8 @@ const App: React.FC = () => {
             window.removeEventListener('resize', checkMobile);
             document.removeEventListener('pointerlockchange', handleLockChange);
             window.removeEventListener('open-adventure-log', handleOpenAdventureLogEvent);
+            window.removeEventListener('open-statistics', handleOpenStatisticsEvent);
+            window.removeEventListener('contextmenu', handleContextMenu);
         };
     }, []);
 
@@ -268,29 +292,43 @@ const App: React.FC = () => {
         });
     }, []);
 
-    const handleClueDiscoveredAction = useCallback((clue: SectorTrigger) => {
-        if (!clue.id) return;
+    const handleClueDiscoveredAction = useCallback((clue: SectorTrigger | string) => {
+        const clueId = String(typeof clue === 'string' ? clue : (clue?.id || ''));
+        if (!clueId) return;
         setGameState(prev => {
-            if (StatsBridge.getCluesFound(prev.stats).includes(clue.id as string)) return prev;
+            if (StatsBridge.getCluesFound(prev.stats).includes(clueId)) return prev;
+
+            const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
+            newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
+
             return {
                 ...prev,
                 stats: {
                     ...prev.stats,
-                    cluesFound: [...StatsBridge.getCluesFound(prev.stats), clue.id as string]
+                    statsBuffer: newStatsBuffer,
+                    cluesFound: [...StatsBridge.getCluesFound(prev.stats), clueId],
+                    totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1
                 }
             };
         });
     }, []);
 
-    const handlePOIdiscoveredAction = useCallback((poi: SectorTrigger) => {
-        if (!poi.id) return;
+    const handlePOIdiscoveredAction = useCallback((poi: SectorTrigger | string) => {
+        const poiId = String(typeof poi === 'string' ? poi : (poi?.id || ''));
+        if (!poiId) return;
         setGameState(prev => {
-            if (StatsBridge.getDiscoveredPOIs(prev.stats).includes(poi.id as string)) return prev;
+            if (StatsBridge.getDiscoveredPOIs(prev.stats).includes(poiId)) return prev;
+
+            const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
+            newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
+
             return {
                 ...prev,
                 stats: {
                     ...prev.stats,
-                    discoveredPOIs: [...StatsBridge.getDiscoveredPOIs(prev.stats), poi.id as string]
+                    statsBuffer: newStatsBuffer,
+                    discoveredPOIs: [...StatsBridge.getDiscoveredPOIs(prev.stats), poiId],
+                    totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1
                 }
             };
         });
@@ -403,14 +441,18 @@ const App: React.FC = () => {
 
     const handleOpenSettingsAction = useCallback(() => setActiveOverlay(OverlayType.SETTINGS), []);
     const handleOpenAdventureLogAction = useCallback((tab?: DiscoveryType, itemId?: string) => {
-        setInitialAdventureLogTab(tab ?? DiscoveryType.CHALLENGE);
+        // Guard against direct React event bindings passing the event object as 'tab'
+        const resolvedTab = (tab !== undefined && tab !== null && typeof tab === 'number') ? tab : DiscoveryType.CHALLENGE;
+        setInitialAdventureLogTab(resolvedTab);
         setInitialAdventureLogItem(itemId || null);
         setActiveOverlay(OverlayType.ADVENTURE_LOG);
         UiSounds.playConfirm();
     }, []);
 
     const handleOpenStatisticsAction = useCallback((tab?: string, itemId?: string) => {
-        setInitialStatisticsTab(tab || 'overview');
+        // Guard against direct React event bindings passing the event object as 'tab'
+        const resolvedTab = (tab && typeof tab === 'string') ? tab : 'overview';
+        setInitialStatisticsTab(resolvedTab);
         setInitialStatisticsItem(itemId || null);
         setActiveOverlay(OverlayType.STATION_STATISTICS);
         UiSounds.playConfirm();
@@ -530,8 +572,7 @@ const App: React.FC = () => {
             const bossKilled = StatsBridge.isSectorBossDefeated(stats);
             return {
                 ...prev,
-                screen: bossKilled ? GameScreen.BOSS_KILLED : GameScreen.RECAP,
-                midRunCheckpoint: null
+                screen: bossKilled ? GameScreen.BOSS_KILLED : GameScreen.RECAP
             };
         });
     }, []);
@@ -572,25 +613,20 @@ const App: React.FC = () => {
         setGameState(prev => ({ ...prev, currentSector: sectorIndex, sessionToken: (prev.sessionToken || 0) + 1 }));
     }, []);
 
-    const aggregatePendingStats = useCallback(() => {
+    const aggregatePendingStats = useCallback(async () => {
         if (!sectorStats) return;
-        setGameState(prev => {
-            // Unique achievements (Boss/Family) are now awarded immediately during gameplay.
-            // We pass 0 as newUniqueAchievements to aggregateStats to reflect this shift.
-            const newStats = aggregateStats(prev.stats, sectorStats, !!deathDetails, !!sectorStats.aborted, prev.currentSector, 0);
-
-            return {
-                ...prev,
-                stats: newStats
-                // Indices are already updated in real-time
-            };
+        return new Promise<void>(resolve => {
+            setGameState(prev => {
+                const newStats = aggregateStats(prev.stats, sectorStats, !!deathDetails, !!sectorStats.aborted, prev.currentSector, 0);
+                setTimeout(resolve, 0);
+                return { ...prev, stats: newStats };
+            });
         });
-        setSectorStats(null);
     }, [sectorStats, deathDetails]);
 
-    const handleReturnToCamp = useCallback(() => {
+    const handleReturnToCamp = useCallback(async () => {
         UiSounds.playConfirm();
-        aggregatePendingStats();
+        await aggregatePendingStats();
 
         triggerLoadingTransition('CAMP', async () => {
             AssetPreloader.releaseSectorAssets(latestStateRef.current.gameState.currentSector);
@@ -613,11 +649,32 @@ const App: React.FC = () => {
                     screen: GameScreen.CAMP,
                     currentSector: nextSector,
                     weather: WeatherType.SNOW,
-                    sectorState: nextSector === SectorID.PLAYGROUND ? prev.sectorState : undefined // Clear if leaving playground
+                    sectorState: nextSector === SectorID.PLAYGROUND ? prev.sectorState : undefined
                 };
             });
+            setSectorStats(null);
+            setDeathDetails(null);
         });
     }, [triggerLoadingTransition, aggregatePendingStats]);
+
+    const handlePerkDiscoveredAction = useCallback((perkId: number) => {
+        setGameState(prev => {
+            const currentMap = StatsBridge.getPerkDiscoveredMap(prev.stats);
+            if (currentMap && currentMap[perkId] === 1) return prev;
+
+            const newMap = new Uint8Array(256);
+            if (currentMap) newMap.set(currentMap);
+            newMap[perkId] = 1;
+
+            return {
+                ...prev,
+                stats: {
+                    ...prev.stats,
+                    discoveredPerksMap: newMap
+                }
+            };
+        });
+    }, []);
 
     const handleNextSector = useCallback(() => {
         UiSounds.playConfirm();
@@ -879,6 +936,7 @@ const App: React.FC = () => {
                                     sectorState={gameState.sectorState}
                                     onBossKilled={handleBossDefeatedAction}
                                     onFamilyRescued={handleFamilyRescuedAction}
+                                    onPerkDiscovered={handlePerkDiscoveredAction}
                                 />
 
                                 {showHUD && (

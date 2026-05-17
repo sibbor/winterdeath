@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { SystemID } from '../../systems/System';
 import { MATERIALS } from '../../utils/assets';
-import { KMH_TO_MS, AI_LOD, PHYSICS } from '../../content/constants';
+import { KMH_TO_MS, AI_LOD } from '../../content/constants';
 import { EnemyPoolState, ENEMY_POOL_SIZE } from '../../core/state/EnemyPool';
 import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_SCORE, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType, EnemyDeathDecal, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { COLORS, ENEMY_COLORS } from '../../utils/ui/ColorUtils';
-import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
+import { AbilityID, DamageID, DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
+import { StatusEffectID } from '../../types/StatusEffects';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { BOSSES } from '../../content/enemies/bosses';
 import { EnemySpawner } from './EnemySpawner';
@@ -23,8 +24,13 @@ import { SoundID } from '../../utils/audio/AudioTypes';
 import { GameSessionLogic } from '../../game/session/GameSessionLogic';
 import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 import { WorldStreamer } from '../../core/world/WorldStreamer';
-import { SectorID } from '../../game/session/SectorTypes';
+import { ChunkManager } from '../../core/world/ChunkManager';
+import { SectorContext, SectorUpdateContext } from '../../game/session/SectorTypes';
+import { SPATIAL_CONFIG } from '../../config/SpatialConfig';
 import { SectorSystem } from '../../systems/SectorSystem';
+import { LootSystem } from '../../systems/LootSystem';
+import { _buoyancyResult } from '../../systems/WaterSystem';
+import { ABILITIES } from '../../content/abilities';
 
 export type { Enemy };
 
@@ -47,6 +53,9 @@ const activeEnemies: Enemy[] = new Array(ENEMY_POOL_SIZE);
 const inactiveEnemies: Enemy[] = [];
 let activeCount = 0;
 
+const EMPTY_ATTACKS: any[] = [];
+
+
 // Shared iterative stack to avoid recursive stack frames and closures
 const _traverseStack: THREE.Object3D[] = [];
 
@@ -55,7 +64,14 @@ let corpseRenderer: CorpseRenderer | null = null;
 let ashRenderer: AshRenderer | null = null;
 
 let _currentSession: GameSessionLogic | null = null;
+let _currentStreamer: WorldStreamer | null = null;
 let _frameCount = 0;
+
+// --- STATIC CALLBACK WRAPPERS (Zero-GC) ---
+const _queryEnemies = (pos: THREE.Vector3, rad: number, outPoolIdx: number) => {
+    if (_currentStreamer) _currentStreamer.getNearbyEnemies(pos.x, pos.z, rad, outPoolIdx);
+};
+
 
 // --- ZERO-GC MATERIAL HELPERS ---
 function applyElectrifiedGlow(root: any, colorObj: THREE.Color, intensity: number) {
@@ -126,13 +142,13 @@ function setBaseColor(root: any, colorObj: THREE.Color) {
 export interface AIContext {
     spawnParticle: ((x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void) | null;
     spawnDecal: ((x: number, z: number, s: number, mat: THREE.Material, type?: FXDecalType) => void) | null;
-    applyDamage: ((enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => boolean) | null;
+    applyDamage: ((enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean) | null;
     onEffectTick: ((e: Enemy, type: EnemyEffectType) => void) | null;
     playSound: (id: SoundID) => void;
-    spawnBubble: ((text: string, duration: number) => void) | null;
+    setBubble: ((text: string, duration: number) => void) | null;
     queryEnemies: ((pos: THREE.Vector3, radius: number, outPoolIdx: number) => void) | null;
-    onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void;
-    _realOnPlayerHit: ((damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void) | null;
+    onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
+    _realOnPlayerHit: ((damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void) | null;
 }
 
 const _aiContext: AIContext = {
@@ -141,11 +157,12 @@ const _aiContext: AIContext = {
     applyDamage: null,
     onEffectTick: null,
     playSound: (id: SoundID) => audioEngine.playSound(id),
-    spawnBubble: null,
-    queryEnemies: null,
-    onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => {
+    setBubble: null,
+    queryEnemies: _queryEnemies,
+
+    onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
         if (_aiContext._realOnPlayerHit) {
-            _aiContext._realOnPlayerHit(damage, attacker, type, isDoT, effect, duration, intensity, sourceAttack);
+            _aiContext._realOnPlayerHit(damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
         }
     },
     _realOnPlayerHit: null
@@ -197,6 +214,15 @@ export const EnemyManager = {
         if (zombieRenderer) zombieRenderer.reAttach(scene);
         if (corpseRenderer) corpseRenderer.reAttach(scene);
         if (ashRenderer) ashRenderer.reAttach(scene);
+
+        // VINTERDÖD FIX: Ensure all active enemies' visual meshes are migrated to the new scene
+        // Prevents "invisible enemies" hits when transitioning sectors without recycling.
+        for (let i = 0; i < activeCount; i++) {
+            const e = activeEnemies[i];
+            if (e && e.mesh && e.mesh.parent !== scene) {
+                scene.add(e.mesh);
+            }
+        }
     },
 
     update: (
@@ -209,6 +235,12 @@ export const EnemyManager = {
         const streamer = session.worldStreamer;
         if (!session || !session.state || !streamer) return;
 
+        // VINTERDÖD HARDENING: Prevent invisible enemies if the renderer was cleared but not re-inited
+        if (!zombieRenderer) {
+            const scene = session.engine.scene;
+            if (scene) zombieRenderer = new ZombieRenderer(scene);
+        }
+
         const state = session.state;
 
         const playerPos = session.playerPos || session.engine.camera?.lookAtTarget;
@@ -220,11 +252,11 @@ export const EnemyManager = {
         const isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
         const playerStatusFlags = state.statusFlags;
         const water = session.engine.water;
+        const ground = session.engine.ground;
         const callbacks = state.callbacks;
         const onPlayerHit = callbacks?.onPlayerHit;
         const spawnParticle = callbacks?.spawnParticle;
         const spawnDecal = callbacks?.spawnDecal;
-        const spawnBubble = callbacks?.spawnBubble;
         const applyDamage = state.applyDamage;
 
         _frameCount++;
@@ -234,8 +266,7 @@ export const EnemyManager = {
         _aiContext.spawnParticle = spawnParticle;
         _aiContext.spawnDecal = spawnDecal;
         _aiContext.applyDamage = applyDamage;
-        _aiContext.spawnBubble = spawnBubble;
-        _aiContext.queryEnemies = (pos: THREE.Vector3, rad: number, outPoolIdx: number) => streamer.getNearbyEnemies(pos.x, pos.z, rad, outPoolIdx);
+        _currentStreamer = streamer;
 
         const globalTimeScale = state?.globalTimeScale ?? 1.0;
         const scaledDelta = delta * globalTimeScale;
@@ -272,17 +303,17 @@ export const EnemyManager = {
                 // --- VINTERDÖD STABILIZATION: Sync SoA -> Object ---
                 // This allows TriggerSystem/ProjectileSystem to inject flags/damage directly into SoA
                 e.statusFlags |= EnemyPoolState.statusFlags[i];
-                if (EnemyPoolState.hp[i] < e.hp && EnemyPoolState.hp[i] > 0) e.hp = EnemyPoolState.hp[i];
+                if (EnemyPoolState.hp[i] < e.hp) e.hp = EnemyPoolState.hp[i];
 
                 // --- 2. LOGIC UPDATE ---
                 if (e.deathState === EnemyDeathState.ALIVE) {
-                    EnemyAI.updateEnemy(e, playerPos, playerStatusFlags, streamer as any, isDead, _aiContext, water, scaledDelta * updateFrequency, simTime, renderTime);
-                    
+                    EnemyAI.updateEnemy(e, playerPos, playerStatusFlags, streamer as any, isDead, _aiContext, water, ground, session, scaledDelta * updateFrequency, simTime, renderTime);
+
                     // --- STRESS HARNESS: MONITOR PHASING ---
                     RuntimeStressHarness.assertPhasing("Enemy", e.mesh.position.x, e.mesh.position.z, e.prevP.x, e.prevP.z);
                     e.prevP.copy(e.mesh.position);
                 } else if (isDying) {
-                    EnemyManager.processDeathAnimation(e, _aiContext, scaledDelta, simTime, renderTime);
+                    EnemyManager.processDeathAnimation(e, _aiContext, session, scaledDelta, simTime, renderTime, ground, water);
                 }
 
                 // --- 2b. SPATIAL RE-BUCKETING (Zero-GC Migration) ---
@@ -313,6 +344,10 @@ export const EnemyManager = {
                     case EnemyDeathState.DROWNED:
                         e.mesh.visible = true;
                         e.mesh.matrixAutoUpdate = true;
+                        
+                        // Ensure the standalone body mesh is temporarily visible for dying animations
+                        const dBody = e.mesh.userData.cachedBody || e.mesh.children.find((c: any) => c.userData?.isBody);
+                        if (dBody) dBody.visible = true;
                         break;
                     case EnemyDeathState.DEAD:
                         break;
@@ -381,7 +416,7 @@ export const EnemyManager = {
         zombieRenderer = null;
         corpseRenderer = null;
         ashRenderer = null;
-        
+
         // VINTERDÖD STABILIZATION: Strict nulling to prevent sector-to-sector reference leaks
         for (let i = 0; i < ENEMY_POOL_SIZE; i++) {
             if (activeEnemies[i]) {
@@ -389,11 +424,11 @@ export const EnemyManager = {
             }
             activeEnemies[i] = null!;
         }
-        
+
         inactiveEnemies.length = 0;
         activeCount = 0;
         EnemyPoolState.activeCount = 0;
-        
+
         // Zero-out entire SoA state to be safe
         EnemyPoolState.statusFlags.fill(0);
         EnemyPoolState.hp.fill(0);
@@ -424,7 +459,8 @@ export const EnemyManager = {
         if (inactiveEnemies.length > 0) {
             enemy = inactiveEnemies.pop()!;
             EnemyManager.resetEnemy(enemy, newType, playerPos, forcedPos);
-            if (!enemy.mesh.parent) scene.add(enemy.mesh);
+            // VINTERDÖD FIX: Robust scene attachment check to handle sector transitions
+            if (enemy.mesh.parent !== scene) scene.add(enemy.mesh);
         } else {
             // Defensive: should ideally never happen with fixed pool
             enemy = EnemySpawner.spawn(scene, playerPos, newType, forcedPos, bossSpawned, false, enemyCount)!;
@@ -469,6 +505,8 @@ export const EnemyManager = {
 
         const newKey = streamer.getSmiKeyFromWorld(posX, posZ);
         const newBucketIdx = streamer.getBucketIndex(posX, posZ);
+        const ix = ChunkManager.getCoordIndex(posX);
+        const iz = ChunkManager.getCoordIndex(posZ);
 
         // If chunk or bucket changed, migrate
         if (newKey !== e.currentChunkKey || newBucketIdx !== e.bucketIndex) {
@@ -485,7 +523,7 @@ export const EnemyManager = {
                         const lastEnemy = oldBucket[oldCount - 1];
                         oldBucket[localIdx] = lastEnemy;
                         if (lastEnemy) lastEnemy._internalBucketIdx = localIdx;
-                        
+
                         oldBucket[oldCount - 1] = null;
                         oldGrid.enemyCounts[e.bucketIndex]--;
                     }
@@ -493,7 +531,7 @@ export const EnemyManager = {
             }
 
             // 2. Add to new bucket
-            const newGrid = streamer.getGridByKey(newKey);
+            const newGrid = streamer.getOrCreateGrid(ix, iz);
             if (newGrid) {
                 const count = newGrid.enemyCounts[newBucketIdx];
                 if (count < 16) { // BUCKET_CAPACITY
@@ -585,7 +623,8 @@ export const EnemyManager = {
 
         // Attack list initialization (Zero-GC pooling)
         const typeData = (newType === EnemyType.BOSS) ? BOSSES[0] : ((ZOMBIE_TYPES as any)[newType] || ZOMBIE_TYPES.WALKER);
-        e.attacks = typeData.attacks || [];
+        e.attacks = typeData.attacks || EMPTY_ATTACKS;
+
         if (e.attackCooldowns) e.attackCooldowns.fill(0);
 
         // Initialize collision radii
@@ -642,6 +681,13 @@ export const EnemyManager = {
         const s = e.originalScale;
         const w = e.widthScale;
         e.mesh.scale.set(s * w, s, s * w);
+
+        // Reset the body visibility based on whether it is a Boss (regular zombies are instanced and hidden)
+        const body = e.mesh.userData.cachedBody || e.mesh.children.find((c: any) => c.userData?.isBody);
+        if (body) {
+            e.mesh.userData.cachedBody = body;
+            body.visible = (e.statusFlags & EnemyFlags.BOSS) !== 0;
+        }
 
         _color.setHex(e.color);
         setBaseColor(e.mesh, _color);
@@ -706,8 +752,7 @@ export const EnemyManager = {
         return boss;
     },
 
-    spawnHorde: (scene: THREE.Scene, startPos: THREE.Vector3, count: number, bossSpawned: boolean, currentCount: number, forcedType?: EnemyType, isForced: boolean = false) => {
-        const horde: Enemy[] = [];
+    spawnHorde: (scene: THREE.Scene, startPos: THREE.Vector3, count: number, bossSpawned: boolean, currentCount: number, forcedType?: EnemyType, isForced: boolean = false, onSpawn?: (e: Enemy) => void): void => {
         const goldenAngle = 137.5 * (Math.PI / 180);
         const spacing = 1.5;
 
@@ -722,9 +767,8 @@ export const EnemyManager = {
             );
 
             const enemy = EnemyManager.spawn(scene, startPos, forcedType, _v1, bossSpawned, currentCount + i, isForced);
-            if (enemy) horde.push(enemy);
+            if (enemy && onSpawn) onSpawn(enemy);
         }
-        return horde;
     },
 
     createCorpse: (enemy: Enemy, forcedColor?: number) => {
@@ -798,7 +842,7 @@ export const EnemyManager = {
         }
     },
 
-    processDeathAnimation: (e: Enemy, callbacks: any, delta: number, simTime: number, renderTime: number) => {
+    processDeathAnimation: (e: Enemy, callbacks: any, session: any, delta: number, simTime: number, renderTime: number, ground: any, water: any) => {
         const age = simTime - e.deathTimer;
 
         switch (e.deathState) {
@@ -813,7 +857,16 @@ export const EnemyManager = {
                 break;
 
             case EnemyDeathState.DROWNED:
-                // No-op
+                if (water) {
+                    water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, renderTime);
+                    const targetY = _buoyancyResult.waterLevel - 0.2 + Math.sin(renderTime * 0.002) * 0.05;
+                    e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, targetY, 2 * delta);
+
+                    // Fade out rotation to float face down
+                    e.mesh.rotation.x = THREE.MathUtils.lerp(e.mesh.rotation.x, -Math.PI / 1.1, delta);
+                    e.mesh.rotation.z = THREE.MathUtils.lerp(e.mesh.rotation.z, (Math.random() - 0.5) * 0.2, delta);
+                }
+                if (age > 2000) e.deathState = EnemyDeathState.DEAD;
                 break;
 
             case EnemyDeathState.BURNED:
@@ -890,8 +943,9 @@ export const EnemyManager = {
                     resetMaterialEmissive(e.mesh);
                     setBaseColor(e.mesh, _color);
 
+                    const floorY = ground.getGroundHeight(e.targetPos.x, e.targetPos.z, session);
                     e.mesh.position.x = e.targetPos.x;
-                    e.mesh.position.y = 0.2;
+                    e.mesh.position.y = floorY + 0.1;
                     e.mesh.position.z = e.targetPos.z;
 
                     e.deathState = EnemyDeathState.DEAD;
@@ -904,8 +958,19 @@ export const EnemyManager = {
             default:
                 e.deathVel.y -= 35 * delta;
                 e.mesh.position.addScaledVector(e.deathVel, delta);
-                if (e.mesh.position.y <= 0.2) {
-                    e.mesh.position.y = 0.2;
+
+                const floorY = ground.getGroundHeight(e.mesh.position.x, e.mesh.position.z, session);
+                if (e.mesh.position.y <= floorY) {
+                    e.mesh.position.y = floorY;
+
+                    if (e.deathVel.y < -5.0 && water) {
+                        water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, renderTime);
+                        if (_buoyancyResult.inWater) {
+                            water.spawnRipple(e.mesh.position.x, e.mesh.position.z, 0.8, 1.2);
+                            if (callbacks.spawnParticle) callbacks.spawnParticle(e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z, FXParticleType.SPLASH, 4);
+                        }
+                    }
+
                     e.deathVel.set(0, 0, 0);
                 }
 
@@ -929,11 +994,11 @@ export const EnemyManager = {
         liftRatio: number,
         stunDuration: number,
         spinIntensity: number,
-        sourceId: number = 0 // DamageID.NONE
+        damageSource: DamageID = DamageID.NONE
     ) => {
         if (enemy.deathState !== EnemyDeathState.ALIVE) return;
 
-        enemy.lastKnockback = sourceId;
+        enemy.lastKnockback = damageSource;
 
         // --- 1. DIRECTIONAL MATH (Zero-GC) ---
         _v1.subVectors(enemy.mesh.position, impactSourcePos);
@@ -975,12 +1040,13 @@ export const EnemyManager = {
      * player's Rush or Dodge.
      */
     knockbackEnemies: (
-        ctx: any,
+        ctx: SectorContext | SectorUpdateContext,
         center: THREE.Vector3,
         radius: number,
         maxForce: number,
         maxDamage: number,
-        damageType: DamageID
+        damageType: DamageType,
+        damageSource: DamageID
     ) => {
         const streamer = ctx.worldStreamer;
         if (!streamer) return;
@@ -1004,23 +1070,21 @@ export const EnemyManager = {
 
             if (distSq < radiusSq) {
                 hitAnyone = true;
-                // Sqrt Purge! 
-                // Using quadratic falloff for physics/damage (distSq / radiusSq). 
-                // APPROXIMATION: falloff = 1.0 - (distSq / radiusSq)
                 const falloff = 1.0 - (distSq / radiusSq);
 
-                // --- DAMAGE (Rush/Dodge now deal 0 immediate damage, deferred to Fall Damage) ---
-                const damage = (damageType === DamageID.RUSH || damageType === DamageID.DODGE) ? 0 : Math.ceil(maxDamage * falloff);
-                if (damage > 0) {
-                    const applyDamage = (ctx as any).applyDamage;
-                    if (applyDamage) applyDamage(e, damage, damageType, maxForce >= 20);
+                const abilityRush = ABILITIES[AbilityID.RUSH];
+                const abilityDodge = ABILITIES[AbilityID.DODGE];
+                const isRush = damageSource === DamageID.RUSH;
+                const isDodge = damageSource === DamageID.DODGE;
+                const baseDamage = isRush ? (abilityRush?.damage ?? 10) : (isDodge ? (abilityDodge?.damage ?? 0) : 0);
+                const damage = (isRush || isDodge) ? baseDamage : Math.ceil(maxDamage * falloff);
+
+                if (damage > 0 || (isRush || isDodge)) {
+                    if (ctx.applyDamage) ctx.applyDamage(e, damage, damageType, damageSource, maxForce >= 20);
                     else e.hp -= damage;
                 }
 
                 // --- PHYSICS (Using Unified Pipeline) ---
-                const isDodge = damageType === DamageID.DODGE;
-                const isRush = damageType === DamageID.RUSH;
-
                 // Dramatically increase RUSH lift and decrease DODGE lift for requested feedback
                 const liftRatio = isDodge ? 0.05 : (isRush ? 1.6 : 0.45);
                 const spinScale = isRush ? 2.5 : 0.8;
@@ -1038,12 +1102,12 @@ export const EnemyManager = {
                     liftRatio,
                     Math.max(0.8, stunDur),
                     force * spinScale,
-                    damageType
+                    damageSource
                 );
 
                 // --- VISUALS ---
-                if (ctx.particles) {
-                    FXSystem.spawnParticle(ctx.engine?.scene || ctx.scene, ctx.particles, e.mesh.position.x, 1.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 6);
+                if (ctx.spawnParticle) {
+                    ctx.spawnParticle(e.mesh.position.x, 1.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 6);
                 }
             }
         }
@@ -1079,13 +1143,13 @@ export const EnemyManager = {
         // Redirect damage through the centralized system to ensure proper telemetry and XP attribution
         const tracker = (session as GameSessionLogic).getSystem<any>(SystemID.DAMAGE_TRACKER);
         if (tracker) {
-            tracker.recordOutgoingDamage(session, baseDamage, DamageID.VEHICLE, (e.statusFlags & EnemyFlags.BOSS) !== 0);
+            tracker.recordOutgoingDamage(session, baseDamage, DamageID.VEHICLE_SPLATTER, (e.statusFlags & EnemyFlags.BOSS) !== 0);
         }
 
         // Call applyDamage instead of direct HP mutation to trigger centralized onEnemyKilled
         const applyDamage = session.state.applyDamage;
         if (applyDamage) {
-            applyDamage(e, baseDamage, DamageID.VEHICLE);
+            applyDamage(e, baseDamage, vehicleDef.defaultDamageType as DamageType, vehicleDef.defaultDamageID as DamageID);
         } else {
             e.hp -= baseDamage;
         }
@@ -1140,7 +1204,8 @@ export const EnemyManager = {
 
             // Unified Physics Impact for vehicles
             const liftRatio = 0.4 + (speedMS * 0.02); // Faster = more lift
-            EnemyManager.applyImpactForce(e, _v4, speedMS * 15, liftRatio, 1.5, speedMS * 2.0);
+            // [VINTERDÖD FIX] Attribution to the unified VEHICLE category
+            EnemyManager.applyImpactForce(e, _v4, speedMS * 15, liftRatio, 1.5, speedMS * 2.0, DamageID.VEHICLE);
 
             e.slowDuration = 0.5;
             return false;
@@ -1148,19 +1213,34 @@ export const EnemyManager = {
     },
 
     cleanupDeadEnemies: (
-        scene: THREE.Scene,
-        enemies: Enemy[],
-        state: any,
-        callbacks: any,
+        session: GameSessionLogic,
         delta: number,
         simTime: number
     ) => {
+        const scene = session.engine.scene;
+        const state = session.state;
+        const callbacks = state.callbacks;
+
         // --- PHASE 6: CONTIGUOUS CLEANUP ---
         let i = 0;
         while (i < activeCount) {
             const e = activeEnemies[i];
 
             if (e.deathState === EnemyDeathState.ALIVE) {
+                // Out-of-bounds check (Zero-GC ambient hibernation recycling)
+                const playerPos = session.playerPos || session.engine.camera?.lookAtTarget;
+                if (playerPos && (e.statusFlags & EnemyFlags.BOSS) === 0) {
+                    const dx = e.mesh.position.x - playerPos.x;
+                    const dz = e.mesh.position.z - playerPos.z;
+                    const distSq = dx * dx + dz * dz;
+
+                    // If beyond simulation/hibernation range, recycle immediately
+                    if (distSq > SPATIAL_CONFIG.AI_HIBERNATION_RADIUS_SQ) {
+                        EnemyManager.recycleEnemy(i);
+                        // Swap-and-Go: Do not increment i, check new occupant in this slot
+                        continue;
+                    }
+                }
                 i++;
                 continue;
             }
@@ -1186,9 +1266,9 @@ export const EnemyManager = {
 
                 if ((e.statusFlags & EnemyFlags.BOSS) !== 0 && e.bossId !== undefined && e.bossId !== -1) {
                     if (callbacks.onBossKilled) callbacks.onBossKilled(e.bossId);
-                    if (callbacks.spawnScrap) callbacks.spawnScrap(e.mesh.position.x, e.mesh.position.z, 500);
+                    LootSystem.spawnScrapExplosion(scene, e.mesh.position.x, e.mesh.position.z, 500);
                 } else if (Math.random() < 0.15) {
-                    if (callbacks.spawnScrap) callbacks.spawnScrap(e.mesh.position.x, e.mesh.position.z, 1 + Math.floor(Math.random() * 5));
+                    LootSystem.spawnScrapExplosion(scene, e.mesh.position.x, e.mesh.position.z, 1 + Math.floor(Math.random() * 5));
                 }
 
                 if (e.indicatorRing?.parent) e.indicatorRing.parent.remove(e.indicatorRing);

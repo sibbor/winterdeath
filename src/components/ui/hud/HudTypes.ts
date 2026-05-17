@@ -1,6 +1,6 @@
-import { WeaponType } from '../../../content/weapons';
 import { InteractionType, InteractionPromptId, MetaActionId } from '../../../systems/ui/UIEventBridge';
 import { StatusEffectID } from '../../../content/perks';
+import { HoldableID } from '../../../entities/player/CombatTypes';
 
 export const MAX_STATUS_EFFECTS = 16;
 export const MAX_PASSIVES = 16;
@@ -79,9 +79,6 @@ export interface DebugInfoData {
   };
 }
 
-
-
-
 export enum DiscoveryType {
   CLUE = 0,
   POI = 1,
@@ -132,7 +129,7 @@ export interface HudState {
   scrap: number;
   challengePoints: number;
   multiplier: number;
-  activeWeapon: WeaponType;
+  activeWeapon: HoldableID;
   isReloading: boolean;
 
   // Complex state slices (FLATTENED for Zero-GC)
@@ -245,7 +242,5 @@ export interface HudState {
   lastMetaSignal: MetaActionId;
   metaSignalTimestamp: number;
 
-  isCritical: boolean;
-  isGibMaster: boolean;
-  isQuickFinger: boolean;
+  hasCriticalHp: boolean;
 }

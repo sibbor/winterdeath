@@ -1,22 +1,23 @@
 import React, { useState, useMemo } from 'react';
 import { PlayerStats, SectorState } from '../../../../types/StateTypes';
-import { WeaponType, WeaponCategory, WeaponCategoryColors } from '../../../../content/weapons';
+import { WeaponCategory, WeaponCategoryColors } from '../../../../content/weapons';
+import { WeaponID } from '../../../../entities/player/CombatTypes';
 import { t } from '../../../../utils/i18n';
 import { SCRAP_COST_BASE } from '../../../../content/constants';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { DataResolver } from '../../../../core/data/DataResolver';
 import ScreenModalLayout, { TacticalTab } from '../../layout/ScreenModalLayout';
 import { StatsBridge } from '../../../../core/data/StatsBridge';
 
 interface ScreenPlaygroundArmoryStationProps {
     stats: PlayerStats;
     sectorState: SectorState;
-    currentLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
-    weaponLevels: Record<WeaponType, number>;
+    currentLoadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; };
+    weaponLevels: Record<WeaponID, number>;
     onSave: (
         newStats: PlayerStats,
-        newLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; },
-        newLevels: Record<WeaponType, number>,
+        newLoadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; },
+        newLevels: Record<WeaponID, number>,
         newSectorState: SectorState
     ) => void;
     onClose: () => void;
@@ -30,12 +31,12 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
     const [tempWeaponLevels, setTempWeaponLevels] = useState({ ...weaponLevels });
     const [tempSectorState, setTempSectorState] = useState({ ...sectorState });
 
-    const handleUpgradeWeapon = (e: React.MouseEvent, weapon: WeaponType) => {
+    const handleUpgradeWeapon = (e: React.MouseEvent, weapon: WeaponID) => {
         e.stopPropagation();
         UiSounds.playClick();
         const level = tempWeaponLevels[weapon] || 1;
         const cost = SCRAP_COST_BASE * level;
-        
+
         const nextStats = StatsBridge.deepCloneStats(tempStats);
         if (StatsBridge.consumeScrap(nextStats, cost)) {
             setTempStats(nextStats);
@@ -43,8 +44,8 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
         }
     };
 
-    const handleEquip = (weapon: WeaponType, category: WeaponCategory) => {
-        if (category === WeaponCategory.TOOL) return;
+    const handleEquip = (weapon: WeaponID, category: WeaponCategory) => {
+        // All categories in this screen are now holdable/throwable
 
         UiSounds.playConfirm();
         if (category === WeaponCategory.PRIMARY) setTempLoadout({ ...tempLoadout, primary: weapon });
@@ -95,7 +96,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
             confirmLabel={t('ui.close')}
             extraHeaderContent={scrapHeader}
             titleColorClass="text-yellow-600"
-            tabs={[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL]}
+            tabs={[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL]}
             activeTab={activeTab}
             onTabChange={(cat) => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
             tabOrientation="horizontal"
@@ -130,8 +131,8 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
 
                 {/* Tabs bar */}
                 <div className="relative shrink-0">
-                    <div className="flex gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto no-scrollbar pt-2 min-h-[50px] md:min-h-[80px] items-end scroll-smooth">
-                        {[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL].map(cat => (
+                    <div className="flex flex-nowrap gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto no-scrollbar pt-2 min-h-[50px] md:min-h-[80px] items-end scroll-smooth">
+                        {[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL].map(cat => (
                             <TacticalTab
                                 key={cat}
                                 label={t(`categories.${WeaponCategory[cat].toLowerCase()}`)}
@@ -149,7 +150,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                         const cost = SCRAP_COST_BASE * level;
                         const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;
                         const categoryColor = WeaponCategoryColors[weapon.category as keyof typeof WeaponCategoryColors];
-                        const isEquippable = weapon.category !== WeaponCategory.TOOL;
+                        const isEquippable = true;
                         const currentScrap = StatsBridge.getScrap(tempStats);
                         const canAfford = currentScrap >= cost;
 

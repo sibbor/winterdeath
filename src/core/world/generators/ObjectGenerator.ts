@@ -4,11 +4,11 @@ import { MATERIALS, GEOMETRY, ModelFactory } from '../../../utils/assets';
 import { EffectManager, EffectType, SubEffectType } from '../../../systems/EffectManager';
 import { FXParticleType } from '../../../types/FXTypes';
 import { SectorContext, ChestType, TerminalType } from '../../../game/session/SectorTypes';
-import { InteractionShape } from '../../../systems/ui/UIEventBridge';
 import { ZOMBIE_TYPES } from '../../../content/enemies/zombies';
 import { EnemyType } from '../../../entities/enemies/EnemyTypes';
 import { MaterialType } from '../../../content/environment';
 import { GeneratorUtils } from './GeneratorUtils';
+import { ColliderType } from '../CollisionResolution';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -120,7 +120,7 @@ export const ObjectGenerator = {
         const trainBody = new THREE.Mesh(mergedTrainGeo, MATERIALS.train);
         group.add(trainBody);
 
-        group.userData.colliders = [{ type: InteractionShape.BOX, size: new THREE.Vector3(18, 12, 6) }];
+        group.userData.colliders = [{ type: ColliderType.BOX, size: new THREE.Vector3(18, 12, 6) }];
 
         return GeneratorUtils.freezeStatic(group);
     },
@@ -144,8 +144,8 @@ export const ObjectGenerator = {
         group.add(roof);
 
         group.userData.colliders = [
-            { type: InteractionShape.BOX, size: new THREE.Vector3(wallThick, height, length), offset: new THREE.Vector3(-width / 2 - wallThick / 2, 0, 0) },
-            { type: InteractionShape.BOX, size: new THREE.Vector3(wallThick, height, length), offset: new THREE.Vector3(width / 2 + wallThick / 2, 0, 0) }
+            { type: ColliderType.BOX, size: new THREE.Vector3(wallThick, height, length), offset: new THREE.Vector3(-width / 2 - wallThick / 2, 0, 0) },
+            { type: ColliderType.BOX, size: new THREE.Vector3(wallThick, height, length), offset: new THREE.Vector3(width / 2 + wallThick / 2, 0, 0) }
         ];
 
         return GeneratorUtils.freezeStatic(group);
@@ -386,15 +386,12 @@ export const ObjectGenerator = {
         ];
 
         ctx.scene.add(GeneratorUtils.freezeStatic(group));
-        ctx.worldStreamer.registerObstacle({ 
-            mesh: group, 
-            position: group.position, 
-            radius: 0.8 * scale 
+        ctx.worldStreamer.registerObstacle({
+            mesh: group,
+            position: group.position,
+            radius: 0.8 * scale
         });
     },
-
-
-
 
     createHaybale: (scale: number = 1.0) => {
         const group = new THREE.Group();

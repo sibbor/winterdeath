@@ -11,14 +11,20 @@ export enum InteractionType {
     CHEST = 2,
     VEHICLE = 3,
     SECTOR_SPECIFIC = 4,
-    PLANT_EXPLOSIVE = 5,
-    KNOCK_ON_PORT = 6
+}
+
+export enum InteractionSubType {
+    NONE = 0,
+    CHEST = 1,
+    BIG_CHEST = 2,
+    TERMINAL = 3,
+    PLANT_EXPLOSIVE = 10,
+    KNOCK_ON_PORT = 11
 }
 
 export enum InteractionShape {
     BOX = 0,
-    SPHERE = 1,
-    CYLINDER = 2
+    SPHERE = 1
 }
 
 export enum InteractionPromptId {
@@ -51,7 +57,9 @@ export enum MetaActionId {
     NAV_BACK = 20,        // [ESC] pressed
     NAV_CONFIRM = 21,     // [ENTER] pressed
     NAV_MAP = 22,         // [M] pressed
-    NAV_LOG = 23          // [L] pressed
+    NAV_LOG = 23,         // [L] pressed
+
+    TOGGLE_FLASHLIGHT = 30
 }
 
 /**

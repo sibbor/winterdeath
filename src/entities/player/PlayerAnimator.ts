@@ -24,6 +24,7 @@ export interface AnimState {
     renderTime: number;
     simTime: number;
     seed: number;
+    isBurning?: boolean;
 
     // --- CACHED LEANING FOR SMOOTHER MOTION ---
     leanX?: number;
@@ -98,6 +99,14 @@ export const PlayerAnimator = {
             scaleXZ = 1.0 - bounce * 0.07;
             rotationX = -0.2 * bounce;
             rotationZ = Math.sin(t * 0.02 + seed) * 0.08;
+        }
+
+        // Burning: Procedural flailing/shivering
+        if (animState.isBurning && !animState.isDead) {
+            const intensity = 0.08 + Math.sin(t * 0.01) * 0.04;
+            rotationX += (Math.random() - 0.5) * intensity;
+            rotationZ += (Math.random() - 0.5) * intensity;
+            positionY += (Math.random() - 0.5) * intensity * 0.5;
         }
 
         // Hugging close embrace (lean forward + rock side to side)

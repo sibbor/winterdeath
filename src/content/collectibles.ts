@@ -1,82 +1,104 @@
-import { CollectibleModelType } from '../game/session/SectorTypes';
+import { CollectibleType } from '../game/session/SectorTypes';
 
-export interface CollectibleDefinition {
-    id: string;
-    sector: number;
-    index: number;
-    modelType: CollectibleModelType;
+export enum CollectibleID {
+    // Sector 0 (0x00)
+    S0_COLLECTIBLE_1 = (0 << 8) | 0,
+    S0_COLLECTIBLE_2 = (0 << 8) | 1,
+
+    // Sector 1 (0x01)
+    S1_COLLECTIBLE_1 = (1 << 8) | 0,
+    S1_COLLECTIBLE_2 = (1 << 8) | 1,
+
+    // Sector 2 (0x02)
+    S2_COLLECTIBLE_1 = (2 << 8) | 0,
+    S2_COLLECTIBLE_2 = (2 << 8) | 1,
+
+    // Sector 3 (0x03)
+    S3_COLLECTIBLE_1 = (3 << 8) | 0,
+    S3_COLLECTIBLE_2 = (3 << 8) | 1,
+
+    // Sector 4 (Playground Test 0x04)
+    DUMMY_BADGE_TEST = (4 << 8) | 0
 }
 
-export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
+export interface CollectibleDefinition {
+    id: CollectibleID;
+    sector: number;
+    index: number;
+    modelType: CollectibleType;
+}
+
+export const COLLECTIBLES: Record<CollectibleID, CollectibleDefinition> = {
     // Sector 0
-    's0_collectible_1': {
-        id: 's0_collectible_1',
+    [CollectibleID.S0_COLLECTIBLE_1]: {
+        id: CollectibleID.S0_COLLECTIBLE_1,
         sector: 0,
         index: 0,
-        modelType: CollectibleModelType.PHONE
+        modelType: CollectibleType.PHONE
     },
-    's0_collectible_2': {
-        id: 's0_collectible_2',
+    [CollectibleID.S0_COLLECTIBLE_2]: {
+        id: CollectibleID.S0_COLLECTIBLE_2,
         sector: 0,
         index: 1,
-        modelType: CollectibleModelType.AXE
+        modelType: CollectibleType.AXE
     },
 
     // Sector 1
-    's1_collectible_1': {
-        id: 's1_collectible_1',
+    [CollectibleID.S1_COLLECTIBLE_1]: {
+        id: CollectibleID.S1_COLLECTIBLE_1,
         sector: 1,
         index: 0,
-        modelType: CollectibleModelType.PACIFIER
+        modelType: CollectibleType.PACIFIER
     },
-    's1_collectible_2': {
-        id: 's1_collectible_2',
+    [CollectibleID.S1_COLLECTIBLE_2]: {
+        id: CollectibleID.S1_COLLECTIBLE_2,
         sector: 1,
         index: 1,
-        modelType: CollectibleModelType.TEDDY
+        modelType: CollectibleType.TEDDY
     },
 
     // Sector 2
-    's2_collectible_1': {
-        id: 's2_collectible_1',
+    [CollectibleID.S2_COLLECTIBLE_1]: {
+        id: CollectibleID.S2_COLLECTIBLE_1,
         sector: 2,
         index: 0,
-        modelType: CollectibleModelType.DIARY
+        modelType: CollectibleType.DIARY
     },
-    's2_collectible_2': {
-        id: 's2_collectible_2',
+    [CollectibleID.S2_COLLECTIBLE_2]: {
+        id: CollectibleID.S2_COLLECTIBLE_2,
         sector: 2,
         index: 1,
-        modelType: CollectibleModelType.JACKET
+        modelType: CollectibleType.JACKET
     },
 
     // Sector 3
-    's3_collectible_1': {
-        id: 's3_collectible_1',
+    [CollectibleID.S3_COLLECTIBLE_1]: {
+        id: CollectibleID.S3_COLLECTIBLE_1,
         sector: 3,
         index: 0,
-        modelType: CollectibleModelType.RING
+        modelType: CollectibleType.RING
     },
-    's3_collectible_2': {
-        id: 's3_collectible_2',
+    [CollectibleID.S3_COLLECTIBLE_2]: {
+        id: CollectibleID.S3_COLLECTIBLE_2,
         sector: 3,
         index: 1,
-        modelType: CollectibleModelType.BADGE
+        modelType: CollectibleType.BADGE
     },
 
     // Sector 4 (Playground Test)
-    'dummy_badge_test': {
-        id: 'dummy_badge_test',
+    [CollectibleID.DUMMY_BADGE_TEST]: {
+        id: CollectibleID.DUMMY_BADGE_TEST,
         sector: 4,
         index: 0,
-        modelType: CollectibleModelType.BADGE
+        modelType: CollectibleType.BADGE
     }
 };
 
-export function getCollectibleById(id: string): CollectibleDefinition | undefined {
+export function getCollectibleById(id: CollectibleID): CollectibleDefinition | undefined {
     return COLLECTIBLES[id];
 }
 
 export function getCollectiblesBySector(sector: number): CollectibleDefinition[] {
     return Object.values(COLLECTIBLES).filter(c => c.sector === sector);
 }
+

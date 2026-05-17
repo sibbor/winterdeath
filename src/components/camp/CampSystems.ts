@@ -3,7 +3,7 @@ import { System, SystemID } from '../../systems/System';
 import { CampWorld } from './CampWorld';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { UiSounds, VoiceSounds } from '../../utils/audio/AudioLib';
-import { DataResolver } from '../../utils/ui/DataResolver';
+import { DataResolver } from '../../core/data/DataResolver';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { SoundID } from '../../utils/audio/AudioTypes';
 

@@ -1,15 +1,6 @@
 import * as THREE from 'three';
 import { WinterEngine } from '../../core/engine/WinterEngine';
-import {
-    Enemy,
-    AIState,
-    EnemyEffectType,
-    EnemyDeathState,
-    EnemyType,
-    SEARCH_TIMERS,
-    EnemyFlags,
-    ENEMY_ATTACK_RANGE
-} from '../../entities/enemies/EnemyTypes';
+import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, EnemyFlags, ENEMY_ATTACK_RANGE, SEARCH_TIMERS } from '../../entities/enemies/EnemyTypes';
 import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { EnemyAttackHandler } from './EnemyAttackHandler';
 import { WorldStreamer } from '../../core/world/WorldStreamer';
@@ -22,10 +13,14 @@ import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { EnemyAnimator } from './EnemyAnimator';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
-import { DataResolver } from '../../utils/ui/DataResolver';
+import { DataResolver } from '../../core/data/DataResolver';
+import { DamageType } from '../../entities/player/CombatTypes';
 import { NavigationSystem } from '../../systems/NavigationSystem';
 import { applyCollisionResolution } from '../../core/world/CollisionResolution';
 import { FXParticleType } from '../../types/FXTypes';
+import { StatusEffectID } from '../../types/StatusEffects';
+import { COMBAT, MAX_ENTITIES, AI_LOD } from '../../content/constants';
+import { ENEMY_DETECTION } from '../../entities/enemies/EnemyTypes';
 
 const _waterCheckResult = { flatDepth: 0 };
 
@@ -35,7 +30,6 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
-const _v6 = new THREE.Vector3();
 
 // --- PRE-CALCULATED CONSTANTS ---
 const TWO_PI = Math.PI * 2;
@@ -45,7 +39,7 @@ const INV_SEPARATION_RADIUS = 1.0 / SEPARATION_RADIUS;
 
 export const logStateChange = (simTime: number, e: Enemy, newState: AIState, reason?: string) => {
     if (!PerformanceMonitor.getInstance().aiLoggingEnabled) return;
-    const typeName = DataResolver.getEnemyName(e.type, e.bossId, true);
+    const typeName = DataResolver.getEnemyName(e.type, e.bossId);
     console.log(`[EnemyAI] ${typeName} ${e.id} changed state: ${AIState[e.state]} -> ${AIState[newState]} ${reason ? `(${reason})` : ''}`);
 };
 
@@ -62,20 +56,25 @@ export const EnemyAI = {
         streamer: WorldStreamer,
         isDead: boolean,
         callbacks: {
-            onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, sourceAttack?: EnemyAttackType) => void;
-            applyDamage: (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean) => boolean;
+            onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
+            applyDamage: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean, attributionOverride?: DamageID) => boolean;
             onEffectTick: (e: Enemy, type: EnemyEffectType) => void;
             playSound: (id: SoundID) => void;
-            spawnBubble: (text: string, duration: number) => void;
             spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D | null, vel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
+            applyExternalForce?: (force: THREE.Vector3, factor: number) => void;
             queryEnemies?: (pos: THREE.Vector3, radius: number, outPoolIdx: number) => void;
         },
         water: WaterSystem | null,
+        ground: any, // GroundSystem
+        session: any,
         delta: number,
         simTime: number,
         renderTime: number
     ) => {
-        const distSq = e.mesh.position.distanceToSquared(playerPos);
+        const dx0 = e.mesh.position.x - playerPos.x;
+        const dz0 = e.mesh.position.z - playerPos.z;
+        let distSq = dx0 * dx0 + dz0 * dz0;
+
 
         if (e.deathState === EnemyDeathState.DEAD || !e.mesh) return;
 
@@ -107,9 +106,10 @@ export const EnemyAI = {
 
             if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
                 const isWeapon = !!weapon;
+                const enemyName = DataResolver.getEnemyName(e.type, e.bossId);
                 const cause = isWeapon
-                    ? `Weapon (${DataResolver.getWeaponName(dmgType as any, true)})`
-                    : `Effect (${DataResolver.getEffectName(dmgType as any, true)})`;
+                    ? `Weapon (${DataResolver.getWeaponName(dmgType as any)})`
+                    : `Effect (${DataResolver.getEffectName(dmgType as any)})`;
                 console.log(`[AI] ${EnemyType[e.type]}_${e.id} killed by: ${cause}`);
             }
 
@@ -190,7 +190,7 @@ export const EnemyAI = {
                         if (e.type === EnemyType.BOMBER && callbacks.queryEnemies && callbacks.applyDamage) {
                             const radius = 10.0;
                             const damage = 60.0;
-                            
+
                             const pool = streamer.getEnemyPool();
                             const poolIdx = pool.nextIndex();
                             callbacks.queryEnemies(pos, radius + 3.0, poolIdx);
@@ -208,7 +208,7 @@ export const EnemyAI = {
                                 const totalRad = radius + (other.originalScale * 0.5);
 
                                 if (dSq < totalRad * totalRad) {
-                                    callbacks.applyDamage(other, damage, DamageID.EXPLOSION, true);
+                                    if (callbacks.applyDamage) callbacks.applyDamage(other, damage, DamageType.EXPLOSION, DamageID.EXPLOSION, true);
                                     const force = 25.0 * (1.0 - Math.min(1.0, dSq / radSq));
                                     const mass = other.originalScale * other.widthScale;
                                     _v2.copy(_v1).normalize().multiplyScalar(force / mass).setY(2.0);
@@ -301,8 +301,7 @@ export const EnemyAI = {
 
             // 4. Floor Collision & Landing Logic
             const isRagdolling = (e.statusFlags & EnemyFlags.RAGDOLLING) !== 0 || e.deathState !== EnemyDeathState.ALIVE;
-            const floorY = isRagdolling ? 0.2 : e.originalScale;
-
+            const floorY = ground.getGroundHeight(e.mesh.position.x, e.mesh.position.z, session);
             if (e.mesh.position.y <= floorY) {
                 const peakY = e.fallStartY || floorY;
                 e.mesh.position.y = floorY;
@@ -315,6 +314,7 @@ export const EnemyAI = {
                     checkedWaterThisFrame = true;
                     if (_buoyancyResult.inWater) {
                         water.spawnRipple(e.mesh.position.x, e.mesh.position.z, 1.5);
+                        callbacks.spawnParticle(e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z, FXParticleType.SPLASH, 8);
                     }
                 }
 
@@ -327,8 +327,8 @@ export const EnemyAI = {
 
                     e.hp -= fallDamage;
                     // Attribute damage to the source of the knockback (Rush/Dodge)
-                    const sourceId = e.lastKnockback || DamageID.FALL;
-                    callbacks.applyDamage(e, fallDamage, sourceId, true);
+                    const sourceId = e.lastKnockback || DamageID.FALL_DAMAGE;
+                    if (callbacks.applyDamage) callbacks.applyDamage(e, fallDamage, DamageType.PHYSICAL, sourceId, true);
 
                     // High Fall Landing Stun (Stay Down)
                     if (fallHeight > 2.5) {
@@ -337,7 +337,7 @@ export const EnemyAI = {
                     }
 
                     if (callbacks.spawnParticle) {
-                        callbacks.spawnParticle(e.mesh.position.x, 0.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, Math.floor(fallHeight * 4));
+                        callbacks.spawnParticle(e.mesh.position.x, floorY + 0.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, Math.floor(fallHeight * 4));
                     }
 
                     if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
@@ -345,7 +345,6 @@ export const EnemyAI = {
                     }
                 }
 
-                // --- Stay Down Mechanic ---
                 e.knockbackVel.set(0, 0, 0);
             }
         } else {
@@ -385,9 +384,11 @@ export const EnemyAI = {
             } else {
                 e.statusFlags &= ~(EnemyFlags.IN_WATER | EnemyFlags.WADING | EnemyFlags.DROWNING);
                 e.swimDistance = 0;
-                if (e.mesh.position.y < 0) {
-                    e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, 0, 8 * delta);
-                    if (e.mesh.position.y > -0.01) e.mesh.position.y = 0;
+                e.statusFlags &= ~EnemyFlags.DROWNING;
+                const groundY = ground.getGroundHeight(e.mesh.position.x, e.mesh.position.z, session);
+                if (e.mesh.position.y < groundY) {
+                    e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, groundY, 8 * delta);
+                    if (e.mesh.position.y > groundY - 0.01) e.mesh.position.y = groundY;
                 }
             }
         }
@@ -415,7 +416,7 @@ export const EnemyAI = {
 
                 const tickDmg = e.maxHp * 0.05;
                 e.hp -= tickDmg;
-                callbacks.applyDamage(e, tickDmg, DamageID.DROWNING);
+                if (callbacks.applyDamage) callbacks.applyDamage(e, tickDmg, DamageType.DROWNING, DamageID.DROWNING);
 
                 if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
                     if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
@@ -434,7 +435,35 @@ export const EnemyAI = {
         if (e.blindDuration > 0) e.blindDuration -= delta;
 
         // Decoupled Attack & Ability timers (Standardized to seconds)
-        if (e.attackTimer > 0) e.attackTimer = Math.max(0, e.attackTimer - delta);
+        if (e.attackTimer > 0) {
+            e.attackTimer -= (delta * (session.state.isTimeFrozen ? 0 : 1));
+            if (isNaN(e.attackTimer)) e.attackTimer = 0; // NaN Guard
+            if (e.attackTimer < 0) e.attackTimer = 0;
+        }
+        
+        // --- VINTERDÖD STABILIZATION: PERCEPTION UPDATE (Visual + Noise) ---
+        // Staggered perception check (once every 15 frames) to minimize CPU overhead
+        if ((e.poolId + Math.floor(simTime * 60)) % 15 === 0 && e.hp > 0) {
+            const dx = playerPos.x - e.mesh.position.x;
+            const dz = playerPos.z - e.mesh.position.z;
+            const distSq = dx * dx + dz * dz;
+            
+            // Visual Perception
+            if (distSq < ENEMY_DETECTION.VISUAL_RANGE_SQ) {
+                const detectionSys = (session as any).detectionSystem;
+                if (detectionSys && detectionSys.canSeePlayer(e, playerPos, streamer)) {
+                    e.awareness = 1.0;
+                    e.lastSeenTime = simTime;
+                    e.lastKnownPosition.copy(playerPos);
+                }
+            }
+        }
+        
+        // Decay awareness over time if player is lost
+        if (e.awareness > 0 && !session.state.isTimeFrozen) {
+            e.awareness = Math.max(0, e.awareness - delta * 0.15);
+        }
+
         if (e.abilityCooldown > 0) e.abilityCooldown = Math.max(0, e.abilityCooldown - delta);
 
         for (let i = 0; i < e.attacks.length; i++) {
@@ -506,7 +535,7 @@ export const EnemyAI = {
         const isFullyAware = e.awareness >= 0.9;
         const seesPlayer = isFullyAware && distSq < 2500;
 
-        _v6.set(0, 0, 0);
+        _v5.set(0, 0, 0);
 
         let shouldCheckSeparation = isTier1;
         if (isTier2) shouldCheckSeparation = (frameOffset % 5 === 0);
@@ -516,7 +545,7 @@ export const EnemyAI = {
             const pool = streamer.getEnemyPool();
             const poolIdx = pool.nextIndex();
             streamer.getNearbyEnemies(e.mesh.position.x, e.mesh.position.z, SEPARATION_RADIUS, poolIdx);
-            
+
             const nearbyEnemies = pool.getPool(poolIdx);
             const nearCount = pool.getCount(poolIdx);
 
@@ -533,17 +562,17 @@ export const EnemyAI = {
                     // Using squared falloff for push strength. No sqrt needed.
                     // (1.0 - (odSq / SEPARATION_RADIUS_SQ)) * 5.0 (tuning factor)
                     const pushFactor = (1.0 - (odSq / SEPARATION_RADIUS_SQ)) * 5.0;
-                    _v6.x += odx * pushFactor;
-                    _v6.z += odz * pushFactor;
+                    _v5.x += odx * pushFactor;
+                    _v5.z += odz * pushFactor;
                 }
             }
-            if (Math.abs(_v6.x) > 0.001 || Math.abs(_v6.z) > 0.001) {
+            if (Math.abs(_v5.x) > 0.001 || Math.abs(_v5.z) > 0.001) {
                 // Limit the shove force using lengthSq
-                const shoveSq = _v6.x * _v6.x + _v6.z * _v6.z;
+                const shoveSq = _v5.x * _v5.x + _v5.z * _v5.z;
                 if (shoveSq > 16.0) { // Limit to 4.0 units
                     const invShove = 4.0 / Math.sqrt(shoveSq); // Still one sqrt but only once per enemy, NOT per neighbor!
-                    _v6.x *= invShove;
-                    _v6.z *= invShove;
+                    _v5.x *= invShove;
+                    _v5.z *= invShove;
                 }
             }
         }
@@ -570,7 +599,8 @@ export const EnemyAI = {
                     e.state = AIState.WANDER;
 
                     const angle = Math.random() * (TWO_PI);
-                    _v1.set(e.spawnPos.x + Math.cos(angle) * 6, 0, e.spawnPos.z + Math.sin(angle) * 6);
+                    const spawnY = ground.getGroundHeight(e.spawnPos.x, e.spawnPos.z, session);
+                    _v1.set(e.spawnPos.x + Math.cos(angle) * 6, spawnY, e.spawnPos.z + Math.sin(angle) * 6);
                     e.velocity.subVectors(_v1, e.mesh.position).normalize().multiplyScalar(e.speed * 0.5);
                     e.searchTimer = 2.0 + Math.random() * 3.0;
                 }
@@ -582,7 +612,7 @@ export const EnemyAI = {
 
                 // Movement Lock Guard applied ONLY to physical displacement
                 if (!isTier4 && !isKnockedBackH) {
-                    moveEntity(e, _v1, delta, e.speed * 0.5, streamer, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                    moveEntity(e, _v1, delta, e.speed * 0.5, streamer, ground, session, _v5, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                 }
 
                 if (seesPlayer) {
@@ -617,7 +647,7 @@ export const EnemyAI = {
                 } else if (e.mesh.position.distanceToSquared(e.lastKnownPosition) > 2.25) { // 1.5m threshold (squared)
                     // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, streamer, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                        moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, streamer, ground, session, _v5, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                     }
                 } else {
                     e.mesh.rotation.y += delta * 2.5;
@@ -650,7 +680,11 @@ export const EnemyAI = {
 
                     // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, target, delta, chaseSpeed, streamer, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                        moveEntity(e, target, delta, chaseSpeed, streamer, ground, session, _v5, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+
+                        const dx = e.mesh.position.x - playerPos.x;
+                        const dz = e.mesh.position.z - playerPos.z;
+                        distSq = dx * dx + dz * dz;
                     }
 
                     const chaseStepInterval = e.type === EnemyType.RUNNER ? 250 : 400;
@@ -665,13 +699,13 @@ export const EnemyAI = {
                             const cooldown = e.attackCooldowns[att.type] || 0;
                             if (cooldown > 0) continue;
 
-                            const range = (att.type === EnemyAttackType.HIT && !att.range) ? ENEMY_ATTACK_RANGE[e.type] : (att.range || ENEMY_ATTACK_RANGE[e.type]);
-                            // VINTERDÖD STABILIZATION: 15% buffer prevents "running-in-place" without attacking
-                            const bufferedRangeSq = (range * 1.15) * (range * 1.15);
+                            const rawRange = (att.type === EnemyAttackType.HIT && !att.range) ? ENEMY_ATTACK_RANGE[e.type] : (att.range || ENEMY_ATTACK_RANGE[e.type]);
+                            // VINTERDÖD STABILIZATION: buffer prevents "running-in-place" stalls
+                            const bufferedRangeSq = (rawRange * COMBAT.HYSTERESIS) * (rawRange * COMBAT.HYSTERESIS);
 
                             if (distSq < bufferedRangeSq) {
                                 bestAttackIndex = i;
-                                // Prioritize special attacks (Bite, Smash) over basic hits
+                                // Prioritize special attacks (Bite, Smash, etc.)
                                 if (att.type !== EnemyAttackType.HIT) break;
                             }
                         }
@@ -685,11 +719,11 @@ export const EnemyAI = {
                             if (att.chargeTime && att.chargeTime > 0) {
                                 logStateChange(simTime, e, AIState.ATTACK_CHARGE);
                                 e.state = AIState.ATTACK_CHARGE;
-                                e.attackTimer = Math.max(0.001, att.chargeTime * 0.001); // Harden: Ensure timer is non-zero
+                                e.attackTimer = Math.max(0.016, att.chargeTime * 0.001); // Harden: Ensure timer is non-zero (min 1 frame)
                             } else {
                                 // Immediate execution for 0-charge attacks (HIT, etc.)
                                 const success = EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, streamer, callbacks, delta, simTime, renderTime);
-                                
+
                                 // Ensure we transition to ATTACKING if executeAttack succeeded and didn't switch to a special state (like GRAPPLE)
                                 if (success && e.state === AIState.CHASE) {
                                     logStateChange(simTime, e, AIState.ATTACKING);
@@ -708,7 +742,11 @@ export const EnemyAI = {
 
                     // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, playerPos, delta, e.speed * 0.25, streamer, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                        moveEntity(e, playerPos, delta, e.speed * 0.25, streamer, ground, session, _v5, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+
+                        const dx = e.mesh.position.x - playerPos.x;
+                        const dz = e.mesh.position.z - playerPos.z;
+                        distSq = dx * dx + dz * dz;
                     }
 
                     if (e.attackTimer <= 0) {
@@ -735,7 +773,11 @@ export const EnemyAI = {
 
                     // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, playerPos, delta, e.speed * 0.15, streamer, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                        moveEntity(e, playerPos, delta, e.speed * 0.15, streamer, ground, session, _v5, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+
+                        const dx = e.mesh.position.x - playerPos.x;
+                        const dz = e.mesh.position.z - playerPos.z;
+                        distSq = dx * dx + dz * dz;
                     }
 
                     if (att && att.activeTime) {
@@ -752,7 +794,6 @@ export const EnemyAI = {
             case AIState.GRAPPLE:
                 // Advanced attachment & Inertia-driven Pendulum
                 e.grappleDuration -= delta;
-
 
                 // 1. Break Check (Rush = 1<<4, Dodge = 1<<8)
                 const isRushing = (playerStatusFlags & 16) !== 0;
@@ -838,7 +879,7 @@ export const EnemyAI = {
                 // 4. Periodic Damage & Visuals
                 if (simTime > (e.lastGrappleDmg || 0) + 600) {
                     e.lastGrappleDmg = simTime;
-                    callbacks.onPlayerHit(4, e, DamageID.BITE, true, undefined, undefined, undefined, EnemyAttackType.GRAPPLE_BITE);
+                    callbacks.onPlayerHit(4, e, DamageType.PHYSICAL, DamageID.BITE, true, undefined, undefined, undefined, EnemyAttackType.GRAPPLE_BITE);
 
                     if (callbacks.spawnParticle) {
                         // Improved blood feedback for grapple
@@ -850,11 +891,14 @@ export const EnemyAI = {
 
         // --- 10. PROCEDURAL ANIMATION ---
         EnemyAnimator.updateAttackAnim(e, renderTime, delta);
+
+        // --- 11. PROCESS STATUS EFFECTS ---
+        handleStatusEffects(e, delta, simTime, callbacks);
     }
 };
 
 // --- HELPERS ---
-function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, streamer: WorldStreamer, sepForce: THREE.Vector3, simTime: number, renderTime: number, isChasing: boolean, isTier1: boolean, isTier2: boolean, frameOffset: number) {
+function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, streamer: WorldStreamer, ground: any, session: any, sepForce: THREE.Vector3, simTime: number, renderTime: number, isChasing: boolean, isTier1: boolean, isTier2: boolean, frameOffset: number) {
     // 1. NAVIGATION: Get desired steering vector from FlowField
     NavigationSystem.getFlowVector(e.mesh.position.x, e.mesh.position.z, _v1);
 
@@ -868,7 +912,8 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     }
 
     // 2. STATUS EFFECTS: Apply Slows (50% reduction)
-    if (e.slowDuration > 0 || (e.statusFlags & EnemyFlags.SLOWED) !== 0) {
+    const isSlowingMaterial = (e.statusFlags & (EnemyFlags.SLOWED | EnemyFlags.WADING)) !== 0;
+    if (e.slowDuration > 0 || isSlowingMaterial) {
         speed *= 0.5;
     }
 
@@ -922,7 +967,8 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
 
     const hijackY = e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING;
     if ((e.statusFlags & EnemyFlags.AIRBORNE) === 0 && !hijackY) {
-        _v4.y = (1.0 * (e.originalScale || 1.0)) + bounceOffset;
+        const groundHeight = ground.getGroundHeight(_v4.x, _v4.z, session);
+        _v4.y = groundHeight + bounceOffset;
     }
 
     e.mesh.position.copy(_v4);
@@ -942,7 +988,7 @@ function handleStatusEffects(e: Enemy, delta: number, simTime: number, callbacks
             const dmg = 5;
             e.hp -= dmg;
             callbacks.onEffectTick(e, EnemyEffectType.FLAME);
-            callbacks.applyDamage(e, dmg, DamageID.BURN, false, e.burnSource);
+            callbacks.applyDamage(e, dmg, DamageType.BURN, e.burnSource || DamageID.BURN, false);
             e.lastBurnTick = simTime;
         }
     }

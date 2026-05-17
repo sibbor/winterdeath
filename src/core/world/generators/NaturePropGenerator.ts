@@ -4,7 +4,7 @@ import { SectorContext, NatureFillType } from '../../../game/session/SectorTypes
 import { SectorBuilder } from '../SectorBuilder';
 import { VegetationGenerator } from './VegetationGenerator';
 import { MaterialType } from '../../../content/environment';
-import { InteractionShape } from '../../../systems/ui/UIEventBridge';
+import { ColliderType } from '../CollisionResolution';
 import { ChunkManager } from '../ChunkManager';
 import { GeneratorUtils } from './GeneratorUtils';
 
@@ -168,7 +168,7 @@ export const NaturePropGenerator = {
 
                 SectorBuilder.addObstacle(ctx, {
                     position: new THREE.Vector3(x, s / 2, z),
-                    collider: { type: InteractionShape.SPHERE, radius: s },
+                    collider: { type: ColliderType.SPHERE, radius: s },
                     materialId: MaterialType.STONE
                 });
             } else {

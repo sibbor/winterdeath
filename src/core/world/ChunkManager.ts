@@ -6,21 +6,23 @@ import { SPATIAL_CONFIG } from '../../config/SpatialConfig';
  * ChunkManager
  * 
  * Handles spatial subdivision of 2000x2000m sectors into chunks.
- * Uses SMI-based bitwise keys for O(1) lookups without GC pressure.
+ * Refactored to use flat array layouts for Zero-GC performance during chunk transitions.
  */
 
 const SECTOR_SIZE = 2000;
 const HALF_SECTOR = SECTOR_SIZE / 2;
 const GRID_DIM = SECTOR_SIZE / SPATIAL_CONFIG.CHUNK_SIZE; // 8x8 grid if size is 250
+const MAX_CHUNKS = 256; // Safe buffer for adaptive grids
 
 export class ChunkManager {
-    static readonly systemId = SystemID.NONE; // Using generic if no specific ID
+    static readonly systemId = SystemID.NONE;
     static readonly id = 'chunk_manager';
+    static readonly MAX_CHUNKS = MAX_CHUNKS;
+    static readonly GRID_DIM = GRID_DIM;
 
-    // SMI Key -> Object3D[] (Meshes in this chunk)
-    // We use a Map but only with SMI keys to keep it fast and SMI-packed in V8
-    private static chunks = new Map<number, THREE.Object3D[]>();
-    private static activeKeys = new Set<number>();
+    // Flat Memory Layout (Zero-GC / Data-Oriented Design)
+    private static readonly chunkLists: THREE.Object3D[][] = Array.from({ length: MAX_CHUNKS }, () => []);
+    private static readonly activeStates = new Uint8Array(MAX_CHUNKS); // 1 = active/visible, 0 = hidden
 
     // Scratchpads for Zero-GC update
     private static _lastChunkX = -100;
@@ -30,26 +32,25 @@ export class ChunkManager {
      * Resets the manager for a new sector.
      */
     static clear() {
-        for (const meshes of this.chunks.values()) {
-            for (let i = 0; i < meshes.length; i++) {
-                const m = meshes[i];
+        for (let i = 0; i < MAX_CHUNKS; i++) {
+            const meshes = this.chunkLists[i];
+            for (let j = 0; j < meshes.length; j++) {
+                const m = meshes[j];
                 if (m.parent) m.parent.remove(m);
             }
             meshes.length = 0;
+            this.activeStates[i] = 0;
         }
-        this.chunks.clear();
-        this.activeKeys.clear();
         this._lastChunkX = -100;
         this._lastChunkZ = -100;
     }
 
     /**
-     * Converts world coordinates to a chunk index (0-7).
+     * Converts world coordinates to a chunk index.
      */
     static getCoordIndex(val: number): number {
-        // Map -1000...1000 to 0...7
         const idx = Math.floor((val + HALF_SECTOR) / SPATIAL_CONFIG.CHUNK_SIZE);
-        return Math.max(0, Math.min(GRID_DIM - 1, idx));
+        return Math.max(0, Math.min(GRID_DIM - 1, idx)) | 0;
     }
 
     /**
@@ -59,73 +60,94 @@ export class ChunkManager {
         return (ix << 8) | iz;
     }
 
-    static getActiveKeys(): Set<number> {
-        return this.activeKeys;
+    /**
+     * Decodes the X coordinate index from an SMI key.
+     */
+    static getIxFromKey(key: number): number {
+        return key >> 8;
+    }
+
+    /**
+     * Decodes the Z coordinate index from an SMI key.
+     */
+    static getIzFromKey(key: number): number {
+        return key & 0xFF;
+    }
+
+    /**
+     * High-speed visibility check.
+     */
+    static isActive(idx: number): boolean {
+        return this.activeStates[idx] === 1;
+    }
+
+    /**
+     * Maps flat index back to SMI key for compatibility with other systems.
+     */
+    static getKeyFromIdx(idx: number): number {
+        const ix = idx % GRID_DIM;
+        const iz = (idx / GRID_DIM) | 0;
+        return (ix << 8) | iz;
     }
 
     /**
      * Registers a mesh to a specific chunk.
      */
     static registerMesh(ix: number, iz: number, mesh: THREE.Object3D) {
-        const key = this.getSmiKey(ix, iz);
-        let list = this.chunks.get(key);
-        if (!list) {
-            list = [];
-            this.chunks.set(key, list);
-        }
-        list.push(mesh);
+        const idx = (iz * GRID_DIM) + ix;
+        if (idx < 0 || idx >= MAX_CHUNKS) return;
 
-        // Initial state: hidden until player update
+        this.chunkLists[idx].push(mesh);
         mesh.visible = false;
     }
 
     /**
      * Main update loop: manages chunk visibility based on player position.
-     * ZERO-GC hot path.
+     * ZERO-GC hot path: avoids Map/Set iteration and destructuring.
      */
     static update(playerPos: THREE.Vector3, scene: THREE.Scene) {
         const cx = this.getCoordIndex(playerPos.x);
         const cz = this.getCoordIndex(playerPos.z);
 
-        // Optimization: Only re-evaluate if player changed chunks
         if (cx === this._lastChunkX && cz === this._lastChunkZ) return;
 
         this._lastChunkX = cx;
         this._lastChunkZ = cz;
 
-        // Determine which keys should be active
-        // We use a frame-based visibility toggle instead of clearing the Set to avoid GC
         const radius = SPATIAL_CONFIG.RENDER_DISTANCE_CHUNKS;
-        const startX = Math.max(0, cx - radius);
-        const endX = Math.min(GRID_DIM - 1, cx + radius);
-        const startZ = Math.max(0, cz - radius);
-        const endZ = Math.min(GRID_DIM - 1, cz + radius);
+        const startX = (cx - radius) | 0;
+        const endX = (cx + radius) | 0;
+        const startZ = (cz - radius) | 0;
+        const endZ = (cz + radius) | 0;
 
-        // 1. Hide all currently active chunks that are now out of range
-        for (const [key, meshes] of this.chunks) {
-            const kx = key >> 8;
-            const kz = key & 0xFF;
+        // Bounded loop over the fixed grid dimensions
+        for (let iz = 0; iz < GRID_DIM; iz++) {
+            const rowOffset = iz * GRID_DIM;
+            const inRangeZ = iz >= startZ && iz <= endZ;
 
-            const inRange = kx >= startX && kx <= endX && kz >= startZ && kz <= endZ;
+            for (let ix = 0; ix < GRID_DIM; ix++) {
+                const idx = rowOffset + ix;
+                const meshes = this.chunkLists[idx];
+                if (meshes.length === 0) continue;
 
-            if (inRange) {
-                // If in range and not visible, show it
-                if (!this.activeKeys.has(key)) {
-                    this.activeKeys.add(key);
-                    for (let i = 0; i < meshes.length; i++) {
-                        const m = meshes[i];
-                        m.visible = true;
-                        if (!m.parent) scene.add(m);
+                const inRange = inRangeZ && ix >= startX && ix <= endX;
+                const wasActive = this.activeStates[idx] === 1;
+
+                if (inRange) {
+                    if (!wasActive) {
+                        this.activeStates[idx] = 1;
+                        for (let j = 0; j < meshes.length; j++) {
+                            const m = meshes[j];
+                            m.visible = true;
+                            if (!m.parent) scene.add(m);
+                        }
                     }
-                }
-            } else {
-                // If out of range and visible, hide it
-                if (this.activeKeys.has(key)) {
-                    this.activeKeys.delete(key);
-                    for (let i = 0; i < meshes.length; i++) {
-                        meshes[i].visible = false;
-                        // Optional: remove from scene to reduce traversal overhead
-                        // meshes[i].removeFromParent(); 
+                } else {
+                    if (wasActive) {
+                        this.activeStates[idx] = 0;
+                        for (let j = 0; j < meshes.length; j++) {
+                            meshes[j].visible = false;
+                        }
                     }
                 }
             }

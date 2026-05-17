@@ -154,7 +154,7 @@ export class DeathSystem implements System {
             const isBurning = state.playerDeathState === PlayerDeathState.BURNED;
             const isDrowning = state.playerDeathState === PlayerDeathState.DROWNED;
             const isElectrocuted = state.playerDeathState === PlayerDeathState.ELECTROCUTED;
-            const isBiting = state.killerType === DamageID.BITE;
+            const isBiting = state.killerSource === DamageID.BITE;
 
             if (pgPos.y <= 0.0) {
                 pgPos.y = 0.0;

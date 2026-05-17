@@ -52,8 +52,10 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
             {
                 type: EnemyAttackType.BITE,
                 damage: 5,
-                range: 3,
-                cooldown: 10000,
+                range: 2.5,
+                chargeTime: 400,
+                activeTime: 600,
+                cooldown: 8000,
                 effect: StatusEffectID.BLEEDING,
             }
         ]
@@ -76,7 +78,9 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
             {
                 type: EnemyAttackType.JUMP,
                 damage: 5,
-                range: 5,
+                range: 6,
+                chargeTime: 600,
+                activeTime: 800,
                 cooldown: 5000,
                 effect: StatusEffectID.SLOWED,
             }

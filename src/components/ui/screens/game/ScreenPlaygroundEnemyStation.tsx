@@ -7,7 +7,7 @@ import { WinterEngine } from '../../../../core/engine/WinterEngine';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { HudStore } from '../../../../store/HudStore';
 import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
-import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { DataResolver } from '../../../../core/data/DataResolver';
 import { SoundID } from '../../../../utils/audio/AudioTypes';
 import { audioEngine } from '../../../../utils/audio/AudioEngine';
 import { BossID } from '../../../../game/session/SectorTypes';

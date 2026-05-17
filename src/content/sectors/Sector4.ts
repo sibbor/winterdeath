@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, AtmosphereZone, GroundType, SectorID } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, EnvironmentalZone } from '../../game/session/SectorTypes';
+import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { MATERIALS } from '../../utils/assets';
 import { t } from '../../utils/i18n';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
@@ -13,22 +14,16 @@ import { ToneType, SoundID } from '../../utils/audio/AudioTypes';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { NoiseType } from '../../entities/enemies/EnemyBase';
 import { VEGETATION_TYPE } from '../../content/environment';
-import { WeatherType } from '../../core/engine/EngineTypes';
+import { WeatherType, GroundType } from '../../core/engine/EngineTypes';
 import { CAMERA_HEIGHT } from '../constants';
 import { StatusEffectID } from '../../content/perks';
 import { DamageID } from '../../entities/player/CombatTypes';
 import { FXParticleType } from '../../types/FXTypes';
 import { EnemyFlags } from '../../entities/enemies/EnemyTypes';
 import { OverlayType } from '../../components/ui/hud/HudTypes';
+import { ColliderType } from '../../core/world/CollisionResolution';
 
 const _v1 = new THREE.Vector3();
-const _v2 = new THREE.Vector3();
-const _v3 = new THREE.Vector3();
-const _v4 = new THREE.Vector3();
-const _c1 = new THREE.Color();
-const _c2 = new THREE.Color();
-const _q1 = new THREE.Quaternion();
-const _boatPos = new THREE.Vector3();
 
 // Zero-GC for the bus experiment
 const _busOriginalPos = new THREE.Vector3();
@@ -37,6 +32,10 @@ const _position = new THREE.Vector3();
 const _rotation = new THREE.Euler();
 const _quat = new THREE.Quaternion();
 const _scale = new THREE.Vector3();
+
+// --- PHYSICS SCRATCHPADS (Zero-GC) ---
+const _activeMeshesScratch: THREE.InstancedMesh[] = new Array(16);
+let _activeMeshCount = 0;
 
 const EXPLODING_BUS_ID = 'playground_bus_explode';
 const EXPLODING_BUS_POS = { x: 40, y: 1.5, z: -40 };
@@ -47,13 +46,21 @@ const _v2_pz = new THREE.Vector3();
 
 // --- PERK ZONE CONFIGURATION ---
 const PERK_ZONES = [
-    { id: 'pz_gib', x: -120, z: 0, radius: 15, effect: StatusEffectID.GIB_MASTER, type: 'buff', color: 0xaa55ff, particle: FXParticleType.GORE },
-    { id: 'pz_fire', x: -120, z: 40, radius: 15, effect: StatusEffectID.BURNING, type: 'debuff', color: 0xff3300, particle: FXParticleType.FIRE },
-    { id: 'pz_water', x: -85, z: 20, radius: 15, effect: StatusEffectID.DROWNING, type: 'debuff', color: 0x0066ff, particle: FXParticleType.SPLASH },
-    { id: 'pz_elec', x: -85, z: -20, radius: 15, effect: StatusEffectID.ELECTRIFIED, type: 'debuff', color: 0x00ffff, particle: FXParticleType.SPARK },
-    { id: 'pz_bleed', x: -120, z: -40, radius: 15, effect: StatusEffectID.BLEEDING, type: 'debuff', color: 0xcc0000, particle: FXParticleType.BLOOD_SPLATTER },
-    { id: 'pz_frost', x: -155, z: -20, radius: 15, effect: StatusEffectID.FREEZING, type: 'debuff', color: 0xffffff, particle: FXParticleType.SNOW_PUFF },
-    { id: 'pz_quick', x: -155, z: 20, radius: 15, effect: StatusEffectID.QUICK_FINGER, type: 'buff', color: 0xffcc00, particle: FXParticleType.FLASH }
+    // --- BUFFS ---
+    { x: -120, z: 0, radius: 10, effect: StatusEffectID.GIB_MASTER, type: 'buff', color: 0xaa55ff, particle: FXParticleType.GORE },
+    { x: -145, z: 25, radius: 10, effect: StatusEffectID.QUICK_FINGER, type: 'buff', color: 0xffcc00, particle: FXParticleType.FLASH },
+    { x: -145, z: -25, radius: 10, effect: StatusEffectID.REFLEX_SHIELD, type: 'buff', color: 0x4488ff, particle: FXParticleType.ELECTRIC_FLASH },
+    { x: -170, z: 0, radius: 10, effect: StatusEffectID.ADRENALINE_PATCH, type: 'buff', color: 0xffffff, particle: FXParticleType.SHOCKWAVE },
+
+    // --- DEBUFFS ---
+    { x: -120, z: 45, radius: 10, effect: StatusEffectID.BURNING, type: 'debuff', color: 0xff3300, particle: FXParticleType.FIRE },
+    { x: -95, z: 25, radius: 10, effect: StatusEffectID.DROWNING, type: 'debuff', color: 0x0066ff, particle: FXParticleType.SPLASH },
+    { x: -95, z: -25, radius: 10, effect: StatusEffectID.ELECTRIFIED, type: 'debuff', color: 0x00ffff, particle: FXParticleType.SPARK },
+    { x: -120, z: -45, radius: 10, effect: StatusEffectID.BLEEDING, type: 'debuff', color: 0xcc0000, particle: FXParticleType.BLOOD_SPLATTER },
+    { x: -145, z: -50, radius: 10, effect: StatusEffectID.FREEZING, type: 'debuff', color: 0x88ccff, particle: FXParticleType.SNOW_PUFF },
+    { x: -95, z: 50, radius: 10, effect: StatusEffectID.SLOWED, type: 'debuff', color: 0x666666, particle: FXParticleType.SMOKE },
+    { x: -70, z: 0, radius: 10, effect: StatusEffectID.STUNNED, type: 'debuff', color: 0xaaaa00, particle: FXParticleType.ENEMY_EFFECT_STUN },
+    { x: -120, z: -80, radius: 10, effect: StatusEffectID.DISORIENTED, type: 'debuff', color: 0xff00ff, particle: FXParticleType.MAGNETIC_SPARKS }
 ];
 
 function createPerkZone(ctx: SectorContext) {
@@ -88,7 +95,7 @@ function createPerkZone(ctx: SectorContext) {
         scene.add(border);
 
         // Label Sprite
-        const labelText = zone.id.replace('pz_', '').toUpperCase().replace('_', ' ');
+        const labelText = StatusEffectID[zone.effect].replace(/_/g, ' ');
         const sprite = ObjectGenerator.createTextSprite(labelText);
         sprite.position.set(zone.x, 5, zone.z);
         sprite.scale.set(zone.radius * 0.8, zone.radius * 0.2, 1);
@@ -96,15 +103,39 @@ function createPerkZone(ctx: SectorContext) {
     }
 }
 
-export const SECTOR6_ZONES: AtmosphereZone[] = [
-    { label: "FOREST OF SHADOWS", x: 0, z: -360, weather: WeatherType.RAIN, bgColor: 0xff0000, fogDensity: 0.005, ambient: 0.2 },
-    { label: "ABANDONED FARM", x: 342, z: 111, weather: WeatherType.NONE, bgColor: 0xff00ff, fogDensity: 0.005, ambient: 0.5 },
-    { label: "THE VILLAGE", x: 211, z: -291, weather: WeatherType.ASH, bgColor: 0xffeeee, fogDensity: 0.004, ambient: 0.3 },
-    { label: "CRYSTAL LAKE", x: -211, z: -291, weather: WeatherType.SNOW, bgColor: 0x111133, fogDensity: 0.002, ambient: 0.35 },
-    { label: "ANCIENT RUINS", x: -342, z: 111, weather: WeatherType.EMBER, bgColor: 0x0000ff, fogDensity: 0.003, ambient: 0.4 }
+export const ENVIRONMENTAL_ZONES: EnvironmentalZone[] = [
+    {
+        label: "FOREST OF SHADOWS",
+        polygon: [
+            { x: -150, z: -450 },
+            { x: 150, z: -450 },
+            { x: 150, z: -250 },
+            { x: -150, z: -250 }
+        ],
+        weather: WeatherType.RAIN,
+        bgColor: 0x111122,
+        fogDensity: 0.005,
+        ambient: 0.2
+    },
+    { label: "ABANDONED FARM", x: 342, z: 111, outerRadius: 150, innerRadius: 80, weather: WeatherType.NONE, bgColor: 0x221122, fogDensity: 0.005, ambient: 0.5 },
+    { label: "THE VILLAGE", x: 211, z: -291, outerRadius: 180, innerRadius: 100, weather: WeatherType.ASH, bgColor: 0x222222, fogDensity: 0.004, ambient: 0.3 },
+    { label: "CRYSTAL LAKE", x: -211, z: -291, outerRadius: 200, innerRadius: 120, weather: WeatherType.SNOW, bgColor: 0x111133, fogDensity: 0.002, ambient: 0.35 },
+    { label: "ANCIENT RUINS", x: -342, z: 111, outerRadius: 160, innerRadius: 90, weather: WeatherType.EMBER, bgColor: 0x331111, fogDensity: 0.003, ambient: 0.4 }
 ];
 
+function getDamageTypeForEffect(effectId: StatusEffectID): DamageID {
+    switch (effectId) {
+        case StatusEffectID.BURNING: return DamageID.BURN;
+        case StatusEffectID.BLEEDING: return DamageID.BLEED;
+        case StatusEffectID.ELECTRIFIED: return DamageID.ELECTRIC;
+        case StatusEffectID.FREEZING: return DamageID.FROST;
+        case StatusEffectID.DROWNING: return DamageID.DROWNING;
+        default: return DamageID.NONE;
+    }
+}
+
 export const Sector4: SectorDef = {
+
     id: 4,
     spawnZombiesOnSector: false,
     environment: {
@@ -114,11 +145,25 @@ export const Sector4: SectorDef = {
             color: 0x020208,
             height: 10
         },
-        ambientIntensity: 0.4,
-        ambientColor: 0x404050,
         groundColor: 0x111111,
+        ambient: 0.4,
         fov: 50,
-        skyLight: { visible: true, color: 0x6688ff, intensity: 1.0, position: { x: 50, y: 35, z: 50 } },
+        sky: {
+            time: 0.8,
+            timeScale: 0.8, // Really fast day cycle for testing
+            atmosphereColor: 0x0a0a0c,
+            celestial: {
+                radius: 150, // Scaled up due to distance
+                color: 0xffffff,
+                position: { x: 500, y: 350, z: 500 }
+            },
+            light: {
+                visible: true,
+                color: 0x444444,
+                intensity: 1.0,
+                castShadow: true
+            }
+        },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: {
@@ -132,7 +177,7 @@ export const Sector4: SectorDef = {
             angleVariance: Math.PI / 4
         }
     },
-    atmosphereZones: SECTOR6_ZONES,
+    environmentalZones: ENVIRONMENTAL_ZONES,
     ground: GroundType.SNOW,
     ambientLoop: SoundID.AMBIENT_METAL,
 
@@ -231,12 +276,12 @@ export const Sector4: SectorDef = {
 
         // --- BIOME GENERATION ---
         // Iterate through ZONES to generate content
-        for (let i = 0; i < SECTOR6_ZONES.length; i++) {
-            const zone = SECTOR6_ZONES[i];
-            const angle = (i / SECTOR6_ZONES.length) * Math.PI * 2;
+        for (let i = 0; i < ENVIRONMENTAL_ZONES.length; i++) {
+            const zone = ENVIRONMENTAL_ZONES[i];
+            const angle = (i / ENVIRONMENTAL_ZONES.length) * Math.PI * 2;
 
-            const x = zone.x;
-            const z = zone.z;
+            const x = zone.x || (zone.polygon ? (zone.polygon[0].x + zone.polygon[2].x) / 2 : 0);
+            const z = zone.z || (zone.polygon ? (zone.polygon[0].z + zone.polygon[2].z) / 2 : 0);
 
             // Curved Path from Center to Zone
             const curve = new THREE.QuadraticBezierCurve3(
@@ -255,28 +300,30 @@ export const Sector4: SectorDef = {
         }
 
         // 1. FOREST
-        const p0 = SECTOR6_ZONES[0];
-        const forestPoly = [
-            new THREE.Vector3(p0.x - 90, 0, p0.z - 90),
-            new THREE.Vector3(p0.x + 90, 0, p0.z - 90),
-            new THREE.Vector3(p0.x + 90, 0, p0.z + 90),
-            new THREE.Vector3(p0.x - 90, 0, p0.z + 90),
-        ];
-        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.PINE, forestPoly, 8);
+        const p0 = ENVIRONMENTAL_ZONES[0];
+        const center0X = (p0.polygon![0].x + p0.polygon![2].x) / 2;
+        const center0Z = (p0.polygon![0].z + p0.polygon![2].z) / 2;
+
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.PINE, [
+            new THREE.Vector3(p0.polygon![0].x, 0, p0.polygon![0].z),
+            new THREE.Vector3(p0.polygon![1].x, 0, p0.polygon![1].z),
+            new THREE.Vector3(p0.polygon![2].x, 0, p0.polygon![2].z),
+            new THREE.Vector3(p0.polygon![3].x, 0, p0.polygon![3].z),
+        ], 8);
         await yieldIfBudgetExceeded();
         for (let j = 0; j < 30; j++) {
-            const rX = p0.x + (Math.random() - 0.5) * 160;
-            const rZ = p0.z + (Math.random() - 0.5) * 160;
-            if (Math.abs(rX - p0.x) < 15 && Math.abs(rZ - p0.z) < 15) continue;
+            const rX = center0X + (Math.random() - 0.5) * 160;
+            const rZ = center0Z + (Math.random() - 0.5) * 160;
+            if (Math.abs(rX - center0X) < 15 && Math.abs(rZ - center0Z) < 15) continue;
             const rock = NaturePropGenerator.createRock(4 + Math.random() * 4, 2 + Math.random() * 2);
             rock.position.set(rX, 0, rZ);
             scene.add(rock);
-            await SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 4, collider: { type: InteractionShape.SPHERE, radius: 3 } });
+            await SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 4, collider: { type: ColliderType.SPHERE, radius: 3 } });
             await yieldIfBudgetExceeded();
         }
 
         // 2. FARM
-        const p1 = SECTOR6_ZONES[1];
+        const p1 = ENVIRONMENTAL_ZONES[1];
         const farmRect = [
             new THREE.Vector3(p1.x - 90, 0, p1.z - 90),
             new THREE.Vector3(p1.x + 90, 0, p1.z - 90),
@@ -291,7 +338,7 @@ export const Sector4: SectorDef = {
         await yieldIfBudgetExceeded();
 
         // 3. VILLAGE
-        const p2 = SECTOR6_ZONES[2];
+        const p2 = ENVIRONMENTAL_ZONES[2];
         for (let dx = -2; dx <= 2; dx++) {
             for (let dz = -2; dz <= 2; dz++) {
                 if (dx === 0 && dz === 0) continue;
@@ -308,7 +355,7 @@ export const Sector4: SectorDef = {
                 });
 
                 scene.add(house);
-                await SectorBuilder.addObstacle(ctx, { mesh: house, position: house.position, collider: { type: InteractionShape.BOX, size: new THREE.Vector3(10, 8, 10) } });
+                await SectorBuilder.addObstacle(ctx, { mesh: house, position: house.position, collider: { type: ColliderType.BOX, size: new THREE.Vector3(10, 8, 10) } });
                 await yieldIfBudgetExceeded();
             }
         }
@@ -318,7 +365,7 @@ export const Sector4: SectorDef = {
         await yieldIfBudgetExceeded();
 
         // 4. WATER
-        const p3 = SECTOR6_ZONES[3];
+        const p3 = ENVIRONMENTAL_ZONES[3];
 
         // 4.1. Create the water body (The Lake) + Recessed Bed
         const lake = await SectorBuilder.addLake(ctx, p3.x, p3.z, 75, 5.0);
@@ -334,7 +381,7 @@ export const Sector4: SectorDef = {
             mesh: bigStone,
             position: bigStone.position,
             radius: 10,
-            collider: { type: InteractionShape.SPHERE, radius: 10 }
+            collider: { type: ColliderType.SPHERE, radius: 10 }
         });
         await yieldIfBudgetExceeded();
 
@@ -376,7 +423,7 @@ export const Sector4: SectorDef = {
             mesh: ball,
             position: ball.position,
             radius: 1.5,
-            collider: { type: InteractionShape.SPHERE, radius: 1.5 },
+            collider: { type: ColliderType.SPHERE, radius: 1.5 },
             type: 'Ball'
         };
         await SectorBuilder.addObstacle(ctx, ballObstacle);
@@ -387,7 +434,7 @@ export const Sector4: SectorDef = {
         ctx.state.interactiveBallObs = ballObstacle;
 
         // 5. SURPRISE
-        const p4 = SECTOR6_ZONES[4];
+        const p4 = ENVIRONMENTAL_ZONES[4];
         // Ruins / Pillars
         for (let k = 0; k < 12; k++) { // More pillars
             const ang = (k / 12) * Math.PI * 2;
@@ -397,7 +444,7 @@ export const Sector4: SectorDef = {
             pillar.position.set(px, 8, pz);
             pillar.castShadow = true;
             scene.add(pillar);
-            await SectorBuilder.addObstacle(ctx, { mesh: pillar, position: pillar.position, collider: { type: InteractionShape.BOX, size: new THREE.Vector3(4, 30, 4) } });
+            await SectorBuilder.addObstacle(ctx, { mesh: pillar, position: pillar.position, collider: { type: ColliderType.BOX, size: new THREE.Vector3(4, 30, 4) } });
             await yieldIfBudgetExceeded();
         }
         // Add a small pond in the center of the ruins
@@ -420,7 +467,7 @@ export const Sector4: SectorDef = {
                 pondCenter.z + Math.sin(angle) * (pondRadius + 5)
             );
             scene.add(rock);
-            await SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 5, collider: { type: InteractionShape.SPHERE, radius: 5 } });
+            await SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 5, collider: { type: ColliderType.SPHERE, radius: 5 } });
             await yieldIfBudgetExceeded();
         }
 
@@ -443,7 +490,7 @@ export const Sector4: SectorDef = {
         GeneratorUtils.freezeStatic(colMesh);
         scene.add(colMesh);
 
-        const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: InteractionShape.BOX, size: busSize } };
+        const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: ColliderType.BOX, size: busSize } };
         await SectorBuilder.addObstacle(ctx, obstacle_bus);
         await yieldIfBudgetExceeded();
         await SectorBuilder.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });
@@ -529,32 +576,47 @@ export const Sector4: SectorDef = {
             state.sectorState.busPlantingTime = state.simTime;
             object.userData.isInteractable = false;
 
-            if (events.spawnBubble) events.spawnBubble(t("ui.planting_explosives"), 3000);
+            if (events.setBubble) events.setBubble(t("ui.planting_explosives"), 3000);
             if (events.playSound) events.playSound(SoundID.IMPACT_METAL);
         }
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
-        // --- PERK ZONE LOGIC (Zero-GC) ---
+    setupContent: async (ctx: SectorContext) => {
+        // Register Perk Zones as centralized triggers
+        const triggers: any[] = [];
         for (let i = 0; i < PERK_ZONES.length; i++) {
             const zone = PERK_ZONES[i];
+            triggers.push({
+                id: zone.effect,
+                position: { x: zone.x, z: zone.z },
+                radius: zone.radius,
+                type: TriggerType.ZONE,
+                statusFlags: TriggerStatus.ACTIVE | TriggerStatus.REPEATABLE,
+                repeatInterval: 1.0, // Tick once per second to prevent PerkSystem spam
+                actions: [{
+                    type: TriggerActionType.APPLY_EFFECT,
+                    id: zone.effect,
+                    amount: zone.type === 'buff' ? 0 : 0.5, // Reduced damage for testing
+                    duration: 3000,
+                    damageType: getDamageTypeForEffect(zone.effect)
+                }]
+            });
+        }
+        SectorBuilder.addTriggers(ctx, triggers);
+    },
+
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
+        // --- PERK ZONE LOGIC (Zero-GC) ---
+        // Optimization: Player effects are now handled by TriggerSystem.
+        // We only handle visual feedback and Enemy debuffs here.
+        for (let i = 0; i < PERK_ZONES.length; i++) {
+            const zone = PERK_ZONES[i];
+
             _v1_pz.set(zone.x, 0, zone.z);
+            const distSq = playerPos.distanceToSquared(_v1_pz);
+            const isInside = distSq < zone.radius * zone.radius;
 
-            const dx = playerPos.x - zone.x;
-            const dz = playerPos.z - zone.z;
-            const distSq = dx * dx + dz * dz;
-
-            if (distSq < zone.radius * zone.radius) {
-                // Apply continuous effect to player
-                events.onPlayerHit(
-                    zone.type === 'debuff' ? 1.0 * delta : 0, // Scale damage by delta for continuous tick
-                    null,
-                    zone.type === 'debuff' ? (zone.effect === StatusEffectID.DROWNING ? DamageID.DROWNING : DamageID.BURN) : DamageID.NONE,
-                    true, // isDoT
-                    zone.effect,
-                    1500 // duration (refreshed every frame)
-                );
-
+            if (isInside) {
                 // Visual feedback (Throttle particle spawning to ~4Hz)
                 if ((simTime % 250) < delta * 1000) {
                     events.spawnParticle(
@@ -567,35 +629,39 @@ export const Sector4: SectorDef = {
                 }
             }
 
-            // Apply debuffs to enemies
-            if (zone.type === 'debuff') {
+            // Apply effects to enemies (Still manual until TriggerSystem supports multi-entity)
+            if (zone.type === 'debuff' || zone.type === 'buff') {
                 const enemies = gameState.enemies;
                 const eLen = enemies.length;
                 for (let j = 0; j < eLen; j++) {
                     const e = enemies[j];
                     if (!e || e.hp <= 0) continue;
 
-                    const edx = e.mesh.position.x - zone.x;
-                    const edz = e.mesh.position.z - zone.z;
-                    const eDistSq = edx * edx + edz * edz;
+                    _v2_pz.set(zone.x, 0, zone.z);
+                    const eDistSq = e.mesh.position.distanceToSquared(_v2_pz);
 
                     if (eDistSq < zone.radius * zone.radius) {
                         // Apply effect to enemy based on zone type
-                        if (zone.effect === StatusEffectID.BURNING) {
+                        // [VINTERDÖD HARDENING] We map player buffs to enemy debuffs where applicable
+                        const effect = zone.effect;
+
+                        if (effect === StatusEffectID.BURNING) {
                             e.statusFlags |= EnemyFlags.BURNING;
                             e.burnDuration = 1.0;
-                        } else if (zone.effect === StatusEffectID.DROWNING) {
-                            // Force drowning state
+                        } else if (effect === StatusEffectID.DROWNING) {
                             e.statusFlags |= EnemyFlags.DROWNING;
-                            e.hp -= 20 * delta; // Faster drowning damage in test zone
-                        } else if (zone.effect === StatusEffectID.FREEZING || zone.effect === StatusEffectID.ELECTRIFIED) {
+                            e.hp -= 20 * delta;
+                        } else if (effect === StatusEffectID.FREEZING || effect === StatusEffectID.ELECTRIFIED) {
                             e.statusFlags |= EnemyFlags.STUNNED;
                             e.stunDuration = Math.max(e.stunDuration, 0.5);
-                        } else if (zone.effect === StatusEffectID.BLEEDING) {
+                        } else if (effect === StatusEffectID.BLEEDING) {
                             e.hp -= 15 * delta;
                             if ((simTime % 500) < delta * 1000) {
                                 events.spawnParticle(e.mesh.position.x, 1.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 2);
                             }
+                        } else if (effect === StatusEffectID.QUICK_FINGER) {
+                            // Quick Finger zones SLOW DOWN enemies (Chronostatic imbalance)
+                            e.stunDuration = Math.max(e.stunDuration, 0.2);
                         }
                     }
                 }
@@ -758,14 +824,15 @@ export const Sector4: SectorDef = {
         }
 
         // --- RUBBLE & TIRE PHYSICS ---
-        const activeMeshes = [];
+        _activeMeshCount = 0;
         const busRubble = (ctx as any).busRubble;
         const busTires = (ctx as any).busTires;
-        
-        if (busRubble && busRubble.userData.active) activeMeshes.push(busRubble);
-        if (busTires && busTires.userData.active) activeMeshes.push(busTires);
 
-        for (const rubble of activeMeshes) {
+        if (busRubble && busRubble.userData.active) _activeMeshesScratch[_activeMeshCount++] = busRubble;
+        if (busTires && busTires.userData.active) _activeMeshesScratch[_activeMeshCount++] = busTires;
+
+        for (let mIdx = 0; mIdx < _activeMeshCount; mIdx++) {
+            const rubble = _activeMeshesScratch[mIdx];
             const isTire = rubble === busTires;
             const rubbleWeight = isTire ? 35.0 : 18.0;
             const bouncy = isTire ? 0.7 : 0.4;

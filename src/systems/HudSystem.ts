@@ -3,25 +3,20 @@ import { SystemID } from './System';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { InteractionType, MetaActionId } from './ui/UIEventBridge';
 import { HudStore, HudStateSoA } from '../store/HudStore';
-import {
-    MAX_STATUS_EFFECTS,
-    MAX_PASSIVES,
-    MAX_BUFFS,
-    MAX_DEBUFFS,
-    MAX_MAP_ITEMS
-} from '../components/ui/hud/HudTypes';
+import { MAX_STATUS_EFFECTS, MAX_PASSIVES, MAX_BUFFS, MAX_DEBUFFS, MAX_MAP_ITEMS } from '../components/ui/hud/HudTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
-import { DataResolver } from '../utils/ui/DataResolver';
-import { WeaponType } from '../content/weapons';
+import { DataResolver } from '../core/data/DataResolver';
+import { WeaponID, ToolID } from '../entities/player/CombatTypes';
 import { InputAction } from '../core/engine/InputManager';
 import { CLUES } from '../content/clues';
 import { POIS } from '../content/pois';
 import { COLLECTIBLES } from '../content/collectibles';
 import { UIEventBridge } from './ui/UIEventBridge';
+import { PERKS, PerkCategory } from '../content/perks';
+import { MAX_ENTITIES } from '../content/constants';
 
 // Performance Scratchpads (Zero-GC)
 const _v1 = new THREE.Vector3();
-
 
 // ============================================================================
 // ZERO-GC DOUBLE BUFFERING
@@ -54,8 +49,7 @@ const _fastUpdateDetail = {
     scrap: 0,
     challengePoints: 0,
     spEarned: 0,
-    // Phase 12 Expansion
-    isCritical: false,
+    hasCriticalHp: false,
     interactionActive: false,
     interactionId: 0,
     interactionType: 0,
@@ -99,24 +93,25 @@ export const HudSystem = {
             bossHpP = (target > 0) ? kills / target : 0;
         }
 
-        _fastUpdateDetail.hp = stats[PlayerStatID.HP];
-        _fastUpdateDetail.maxHp = stats[PlayerStatID.MAX_HP];
-        _fastUpdateDetail.stamina = stats[PlayerStatID.STAMINA];
-        _fastUpdateDetail.maxStamina = stats[PlayerStatID.MAX_STAMINA];
+        _fastUpdateDetail.hp = stats[PlayerStatID.HP] || 0;
+        _fastUpdateDetail.maxHp = stats[PlayerStatID.MAX_HP] || 100;
+        _fastUpdateDetail.stamina = stats[PlayerStatID.STAMINA] || 0;
+        _fastUpdateDetail.maxStamina = stats[PlayerStatID.MAX_STAMINA] || 100;
         _fastUpdateDetail.ammo = state.weaponAmmo[state.activeWeapon] || 0;
-        _fastUpdateDetail.currentXp = stats[PlayerStatID.CURRENT_XP];
-        _fastUpdateDetail.nextLevelXp = stats[PlayerStatID.NEXT_LEVEL_XP];
-        _fastUpdateDetail.reloadProgress = reloadProgress;
-        _fastUpdateDetail.bossHpP = bossHpP;
-        _fastUpdateDetail.vehicleSpeed = state.vehicle.active ? state.vehicle.speed : 0;
-        _fastUpdateDetail.throttleState = state.vehicle.active ? state.vehicle.throttle : 0;
-        _fastUpdateDetail.kills = state.sessionStats.kills;
-        _fastUpdateDetail.scrap = (props.stats?.statsBuffer?.[PlayerStatID.SCRAP] || 0) + state.statsBuffer[PlayerStatID.SCRAP];
-        _fastUpdateDetail.challengePoints = (props.stats?.statsBuffer?.[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0) + state.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS];
-        _fastUpdateDetail.spEarned = state.sessionStats.spGained;
-
-        // Phase 12 Additions
-        _fastUpdateDetail.isCritical = _fastUpdateDetail.hp > 0 && _fastUpdateDetail.hp < _fastUpdateDetail.maxHp * 0.25;
+        _fastUpdateDetail.currentXp = stats[PlayerStatID.CURRENT_XP] || 0;
+        _fastUpdateDetail.nextLevelXp = stats[PlayerStatID.NEXT_LEVEL_XP] || 1000;
+        _fastUpdateDetail.reloadProgress = isFinite(reloadProgress) ? reloadProgress : 0;
+        _fastUpdateDetail.bossHpP = isFinite(bossHpP) ? bossHpP : -1;
+        _fastUpdateDetail.vehicleSpeed = state.vehicle.active ? (state.vehicle.speed || 0) : 0;
+        _fastUpdateDetail.throttleState = state.vehicle.active ? (state.vehicle.throttle || 0) : 0;
+        _fastUpdateDetail.kills = state.sessionStats.kills || 0;
+        _fastUpdateDetail.scrap = state.statsBuffer[PlayerStatID.SCRAP] || 0;
+        _fastUpdateDetail.challengePoints = state.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0;
+        const directSp = state.sessionStats.spGained || 0;
+        const collSp = state.sessionStats.collectiblesDiscovered?.length || 0;
+        const poiSp = state.sessionStats.discoveredPOIs?.length || 0;
+        _fastUpdateDetail.spEarned = directSp + collSp + poiSp;
+        _fastUpdateDetail.hasCriticalHp = _fastUpdateDetail.hp > 0 && _fastUpdateDetail.hp < _fastUpdateDetail.maxHp * 0.25;
 
         if (state.hasInteractionTarget && state.interactionTargetPos) {
             _fastUpdateDetail.interactionActive = true;
@@ -192,7 +187,7 @@ export const HudSystem = {
         }
 
         let famSignal = 0;
-        if (state.activeWeapon === WeaponType.RADIO && familyMemberMesh) {
+        if (state.activeWeapon === ToolID.RADIO && familyMemberMesh) {
             const distSq = playerPos.distanceToSquared(familyMemberMesh.position);
             if (distSq < 40000) {
                 famSignal = Math.max(0, 1 - (Math.sqrt(distSq) / 200));
@@ -214,11 +209,28 @@ export const HudSystem = {
         // Status Effects (Zero-GC SoA Mutation)
         const effectDurations = state.effectDurations;
         const effectIntensities = state.effectIntensities;
+        const activePassives = state.activePassives;
+        const activePassivesCount = state.activePassivesCount;
         let effectCount = 0;
 
-        for (let i = 0; i < 32; i++) { // Engine supports 32, we display up to 16
+        // Safety check for PERKS array bounds
+        const maxPerks = Math.min(MAX_ENTITIES.PERKS, PERKS.length);
+        for (let i = 0; i < maxPerks; i++) {
             const duration = effectDurations[i];
             if (duration > 0 && effectCount < MAX_STATUS_EFFECTS) {
+                const perk = PERKS[i];
+
+                // [VINTERDÖD FIX] Passives have their own persistent circular icons.
+                // We MUST skip them here even if they accidentally have a duration.
+                if (perk && perk.category === PerkCategory.PASSIVE) continue;
+
+                // Double-guard: Check if it's already in the active passives list
+                let isPassive = false;
+                for (let j = 0; j < activePassivesCount; j++) {
+                    if (activePassives[j] === i) { isPassive = true; break; }
+                }
+                if (isPassive) continue;
+
                 const maxDur = state.effectMaxDurations[i] || 1;
 
                 _current.StatusEffectIDs[effectCount] = i;
@@ -244,7 +256,7 @@ export const HudSystem = {
         let pCount = 0;
         const passives = state.activePassives;
         if (passives) {
-            const len = Math.min(passives.length, MAX_PASSIVES);
+            const len = Math.min(state.activePassivesCount, MAX_PASSIVES);
             for (let i = 0; i < len; i++) _current.activePassives[pCount++] = passives[i];
         }
         _current.activePassivesCount = pCount;
@@ -252,7 +264,7 @@ export const HudSystem = {
         let bCount = 0;
         const buffs = state.activeBuffs;
         if (buffs) {
-            const len = Math.min(buffs.length, MAX_BUFFS);
+            const len = Math.min(state.activeBuffsCount, MAX_BUFFS);
             for (let i = 0; i < len; i++) _current.activeBuffs[bCount++] = buffs[i];
         }
         _current.activeBuffsCount = bCount;
@@ -260,35 +272,38 @@ export const HudSystem = {
         let dCount = 0;
         const debuffs = state.activeDebuffs;
         if (debuffs) {
-            const len = Math.min(debuffs.length, MAX_DEBUFFS);
+            const len = Math.min(state.activeDebuffsCount, MAX_DEBUFFS);
             for (let i = 0; i < len; i++) _current.activeDebuffs[dCount++] = debuffs[i];
         }
         _current.activeDebuffsCount = dCount;
 
         _current.statsBuffer.set(state.statsBuffer);
 
-        _current.hp = state.statsBuffer[PlayerStatID.HP];
-        _current.maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
-        _current.stamina = state.statsBuffer[PlayerStatID.STAMINA];
-        _current.maxStamina = state.statsBuffer[PlayerStatID.MAX_STAMINA];
+        _current.hp = state.statsBuffer[PlayerStatID.HP] || 0;
+        _current.maxHp = state.statsBuffer[PlayerStatID.MAX_HP] || 100;
+        _current.stamina = state.statsBuffer[PlayerStatID.STAMINA] || 0;
+        _current.maxStamina = state.statsBuffer[PlayerStatID.MAX_STAMINA] || 100;
         _current.ammo = state.weaponAmmo[state.activeWeapon] || 0;
         _current.magSize = wep?.magSize || 0;
-        _current.score = state.statsBuffer[PlayerStatID.SCORE];
-        _current.scrap = (props.stats?.statsBuffer?.[PlayerStatID.SCRAP] || 0) + state.statsBuffer[PlayerStatID.SCRAP];
-        _current.challengePoints = (props.stats?.statsBuffer?.[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0) + state.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS];
-
+        _current.score = state.statsBuffer[PlayerStatID.SCORE] || 0;
+        _current.scrap = state.statsBuffer[PlayerStatID.SCRAP] || 0;
+        _current.challengePoints = state.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0;
         _current.activeWeapon = state.activeWeapon;
         _current.isReloading = state.isReloading;
         _current.bossSpawned = state.bossSpawned;
         _current.bossDefeated = activeBossObj ? activeBossObj.dead : false;
         _current.familyFound = state.familyFound;
-        _current.familySignal = famSignal;
-        _current.level = state.statsBuffer[PlayerStatID.LEVEL];
-        _current.currentXp = state.statsBuffer[PlayerStatID.CURRENT_XP];
-        _current.nextLevelXp = state.statsBuffer[PlayerStatID.NEXT_LEVEL_XP];
+        _current.familySignal = isFinite(famSignal) ? famSignal : 0;
+        _current.level = state.statsBuffer[PlayerStatID.LEVEL] || 1;
+        _current.currentXp = state.statsBuffer[PlayerStatID.CURRENT_XP] || 0;
+        _current.nextLevelXp = state.statsBuffer[PlayerStatID.NEXT_LEVEL_XP] || 1000;
         _current.throwableAmmo = state.weaponAmmo[props.loadout?.throwable] || 0;
-        _current.distanceTraveled = Math.floor(distanceTraveled);
-        _current.kills = state.sessionStats.kills;
+        _current.distanceTraveled = Math.floor(distanceTraveled) || 0;
+        _current.kills = state.sessionStats.kills || 0;
+        _current.spEarned = state.sessionStats.spGained || 0;
+        _current.cluesFoundCount = state.sessionStats.cluesFound?.length || 0;
+        _current.poisFoundCount = state.sessionStats.discoveredPOIs?.length || 0;
+        _current.collectiblesFoundCount = state.sessionStats.collectiblesDiscovered?.length || 0;
 
         // Sync persistent telemetry
         if (state.stats) {
@@ -355,7 +370,8 @@ export const HudSystem = {
         let cCount = 0;
         if (state.discoverySets?.clues) {
             for (const id of state.discoverySets.clues) {
-                if (CLUES[id]?.sector === _current.currentSector) cCount++;
+                const resolved = DataResolver.resolveClueID(id);
+                if (resolved !== undefined && CLUES[resolved]?.sector === _current.currentSector) cCount++;
             }
         }
         _current.cluesFoundCount = cCount;
@@ -363,7 +379,8 @@ export const HudSystem = {
         let poiCount = 0;
         if (state.discoverySets?.pois) {
             for (const id of state.discoverySets.pois) {
-                if (POIS[id]?.sector === _current.currentSector) poiCount++;
+                const resolved = DataResolver.resolvePoiID(id);
+                if (resolved !== undefined && POIS[resolved]?.sector === _current.currentSector) poiCount++;
             }
         }
         _current.poisFoundCount = poiCount;
@@ -371,7 +388,8 @@ export const HudSystem = {
         let colCount = 0;
         if (state.discoverySets?.collectibles) {
             for (const id of state.discoverySets.collectibles) {
-                if (COLLECTIBLES[id]?.sector === _current.currentSector) colCount++;
+                const resolved = DataResolver.resolveCollectibleID(id);
+                if (resolved !== undefined && COLLECTIBLES[resolved]?.sector === _current.currentSector) colCount++;
             }
         }
         _current.collectiblesFoundCount = colCount;
@@ -380,9 +398,7 @@ export const HudSystem = {
 
         const hp = _current.hp;
         const maxHp = _current.maxHp;
-        _current.isCritical = hp > 0 && hp < maxHp * 0.25;
-        _current.isGibMaster = (state.statusFlags & PlayerStatusFlags.GIB_MASTER) !== 0;
-        _current.isQuickFinger = (state.statusFlags & PlayerStatusFlags.QUICK_FINGER) !== 0;
+        _current.hasCriticalHp = hp > 0 && hp < maxHp * 0.25;
 
         // Sync interaction (BOTH buffers)
         if (state.hasInteractionTarget && state.interactionTargetPos) {
@@ -413,12 +429,12 @@ export const HudSystem = {
         }
 
         _bufferA.cinematicActive = !!state.cinematicActive;
-        _bufferA.dialogueActive = !!state.cinematicActive;
-        _bufferA.dialogueSpeaker = state.cinematicLine.speaker || '';
+        _bufferA.dialogueActive = !!state.cinematicLine.active;
+        _bufferA.dialogueSpeaker = state.cinematicLine.speaker !== undefined ? state.cinematicLine.speaker : '';
         _bufferA.dialogueText = state.cinematicLine.text || '';
         _bufferB.cinematicActive = !!state.cinematicActive;
-        _bufferB.dialogueActive = !!state.cinematicActive;
-        _bufferB.dialogueSpeaker = state.cinematicLine.speaker || '';
+        _bufferB.dialogueActive = !!state.cinematicLine.active;
+        _bufferB.dialogueSpeaker = state.cinematicLine.speaker !== undefined ? state.cinematicLine.speaker : '';
         _bufferB.dialogueText = state.cinematicLine.text || '';
 
         // --- ZERO-GC NAVIGATION SIGNAL SYNC ---

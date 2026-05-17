@@ -3,7 +3,7 @@ import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { HudStore } from '../../../../store/HudStore';
 import { useHudStore } from '../../../../hooks/useHudStore';
-import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { DataResolver } from '../../../../core/data/DataResolver';
 import { HORIZONTAL_HATCHING_STYLE_DARK } from '../../layout/ScreenModalLayout';
 import { StatusEffectID } from '../../../../types/StatusEffects';
 import { MetaActionId } from '../../../../systems/ui/UIEventBridge';
@@ -21,8 +21,8 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
     const killerName = useHudStore(s => s.killerName || t('ui.unknown'));
     const deathReason = useHudStore(s => s.killerAttackName || '');
     const killedByEnemy = useHudStore(s => s.killedByEnemy || false);
-    const lethalSourceId = useHudStore(s => s.lethalSourceId ?? -1);
-    const lethalStatusEffect = useHudStore(s => s.lethalStatusEffect ?? -1);
+    const lethalSourceId = useHudStore(s => s.lethalSourceId ?? StatusEffectID.NONE);
+    const lethalStatusEffect = useHudStore(s => s.lethalStatusEffect ?? StatusEffectID.NONE);
 
     useEffect(() => {
         UiSounds.playDefeat();
@@ -56,7 +56,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
 
         // Granular Attribution Logic
         if (killedByEnemy) {
-            if (lethalStatusEffect !== -1) {
+            if (lethalStatusEffect !== StatusEffectID.NONE) {
                 // Killed by Enemy via DoT (e.g. Walker (Bite [Bleeding]))
                 const effectName = t(DataResolver.getPerkName(lethalStatusEffect));
                 const attackType = lethalStatusEffect === StatusEffectID.BLEEDING ? 'BITE' : 'HIT'; // Improved mapping
@@ -68,14 +68,14 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
             }
         } else {
             // Environmental Death
-            if (lethalStatusEffect !== -1) {
+            if (lethalStatusEffect !== StatusEffectID.NONE) {
                 displayName = t(DataResolver.getPerkName(lethalStatusEffect)).toUpperCase();
             } else {
                 displayName = nameResolved.toUpperCase();
             }
         }
 
-        const description = (killedByEnemy || lethalStatusEffect === -1)
+        const description = (killedByEnemy || lethalStatusEffect === StatusEffectID.NONE)
             ? t(DataResolver.getAttackDescription(deathReason as any))
             : t(DataResolver.getPerkDescription(lethalStatusEffect));
 
@@ -111,11 +111,11 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
                     <span className="text-zinc-500 font-bold uppercase tracking-[0.2em] text-sm">
                         {deathPhrase}
                     </span>
-                    <p className={`${isMobileDevice ? 'text-3xl' : 'text-4xl md:text-5xl'} font-light italic leading-relaxed text-gray-100 drop-shadow-[0_0_15px_rgba(0,0,0,1)] z-20`}>
+                    <p className={`${isMobileDevice ? 'text-3xl' : 'text-4xl md:text-5xl'} font-light font-mono italic leading-relaxed text-gray-100 drop-shadow-[0_0_15px_rgba(0,0,0,1)] z-20`}>
                         {deathDisplayText}
                     </p>
                     {deathDescription && deathDescription !== 'ui.description_missing' && !deathDescription.startsWith('attacks.') && (
-                        <p className={`${isMobileDevice ? 'text-base' : 'text-lg'} text-gray-400 font-medium italic max-w-2xl mt-4 leading-relaxed tracking-wide opacity-80 animate-fadeIn`}>
+                        <p className={`${isMobileDevice ? 'text-base' : 'text-lg'} text-gray-400 font-medium font-mono italic max-w-2xl mt-4 leading-relaxed tracking-wide opacity-80 animate-fadeIn`}>
                             "{deathDescription}"
                         </p>
                     )}

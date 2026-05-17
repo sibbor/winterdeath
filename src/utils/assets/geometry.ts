@@ -212,6 +212,7 @@ export const GEOMETRY = {
     gore: new THREE.BoxGeometry(0.25, 0.25, 0.25),
     box: new THREE.BoxGeometry(1, 1, 1),
     sphere: new THREE.SphereGeometry(1, 12, 12),
+    celestialBody: new THREE.SphereGeometry(1, 16, 16),
     scrap: new THREE.OctahedronGeometry(0.3),
     stone: new THREE.DodecahedronGeometry(1),
     treeTrunk: new THREE.CylinderGeometry(0.3, 0.5, 3.5, 7),

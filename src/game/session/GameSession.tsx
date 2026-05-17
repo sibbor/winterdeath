@@ -22,19 +22,20 @@ import { HudStore } from '../../store/HudStore';
 import { PlayerStatsSystem } from '../../systems/PlayerStatsSystem';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { PlayerStatID } from '../../entities/player/PlayerTypes';
-import { DataResolver } from '../../utils/ui/DataResolver';
-import { TriggerType } from '../../types/TriggerTypes';
+import { DataResolver } from '../../core/data/DataResolver';
+import { TriggerType, TriggerActionType } from '../../types/TriggerTypes';
 import { BossID, SectorID } from './SectorTypes';
 import { OverlayType, DiscoveryType } from '../../components/ui/hud/HudTypes';
-import { PERKS } from '../../content/perks';
+import { PERKS, PerkCategory } from '../../content/perks';
 import { DeathPhase } from '../../types/SessionTypes';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { SystemID } from '../../systems/SystemID';
-import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
+import { DamageID, DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
+import { StatusEffectID } from '../../types/StatusEffects';
 import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 import { useUIEventBridge } from '../../hooks/useUIEventBridge';
-import { InteractionPromptId, MetaActionId } from '../../systems/ui/UIEventBridge';
-import { GAME_CHALLENGES } from '../../content/ChallengeTypes';
+import { InteractionType, InteractionSubType, InteractionPromptId, MetaActionId } from '../../systems/ui/UIEventBridge';
+import { safeCopyBuffer } from '../../core/RuntimeState';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -101,10 +102,25 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         stats.accuracy = (stats.shotsFired > 0 ? (stats.shotsHit / stats.shotsFired) : 1) * 100;
         stats.distanceTraveled = refs.distanceTraveledRef.current;
 
-        // Sync active perks for Pause/Recap screens
-        stats.activePassives = [...state.activePassives];
-        stats.activeBuffs = [...state.activeBuffs];
-        stats.activeDebuffs = [...state.activeDebuffs];
+        // Sync active perks for Pause/Recap screens (Zero-GC Buffer Sync)
+        safeCopyBuffer(stats.activePassives, state.activePassives);
+        stats.activePassivesCount = state.activePassivesCount;
+        safeCopyBuffer(stats.activeBuffs, state.activeBuffs);
+        stats.activeBuffsCount = state.activeBuffsCount;
+        safeCopyBuffer(stats.activeDebuffs, state.activeDebuffs);
+        stats.activeDebuffsCount = state.activeDebuffsCount;
+
+        // --- PERK TELEMETRY SYNC (Sector-specific delta calculations) ---
+        const pStats = state.stats;
+        if (pStats) {
+            const pLen = stats.perkTimesGained.length;
+            for (let i = 0; i < pLen; i++) {
+                stats.perkTimesGained[i] = Math.max(0, state.perkTimesGained[i] - (pStats.perkTimesGained[i] || 0));
+                stats.perkDamageAbsorbed[i] = Math.max(0, state.perkDamageAbsorbed[i] - (pStats.perkDamageAbsorbed[i] || 0));
+                stats.perkDamageDealt[i] = Math.max(0, state.perkDamageDealt[i] - (pStats.perkDamageDealt[i] || 0));
+                stats.perkDebuffsCleansed[i] = Math.max(0, state.perkDebuffsCleansed[i] - (pStats.perkDebuffsCleansed[i] || 0));
+            }
+        }
 
         return stats;
     }, [refs]);
@@ -121,7 +137,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
     }, [getSectorStats, refs]);
 
-    const spawnBubble = useCallback((text: string, duration?: number) => {
+    const setBubble = useCallback((text: string, duration?: number) => {
         UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration);
     }, []);
 
@@ -129,10 +145,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const session = refs.gameSessionRef.current;
         if (!session) return;
 
-        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-        if (tracker) tracker.recordXp(session, amount);
+        const state = session.state;
+        const statsBuffer = state.statsBuffer;
 
-        const statsBuffer = session.state.statsBuffer;
+        // Telemetry
+        state.sessionStats.xpGained += amount;
 
         // --- DOD Progression Fix: Zero-GC ---
         statsBuffer[PlayerStatID.SCORE] += amount;
@@ -140,7 +157,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         statsBuffer[PlayerStatID.XP] += amount;
 
         let levelUps = 0;
-        const maxLevel = LEVEL_CAP || 100;
+        const maxLevel = 100;
 
         // Process level-ups in a single pass
         while (statsBuffer[PlayerStatID.CURRENT_XP] >= statsBuffer[PlayerStatID.NEXT_LEVEL_XP] && statsBuffer[PlayerStatID.LEVEL] < maxLevel) {
@@ -175,22 +192,21 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const session = refs.gameSessionRef.current;
         if (!session) return;
 
-        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-        if (tracker) tracker.recordSp(session, amount);
+        session.state.sessionStats.spGained += amount;
         session.state.statsBuffer[PlayerStatID.SKILL_POINTS] += amount;
+        UIEventRingBuffer.push(UIEventType.SP_GAIN, amount);
     }, [refs]);
 
     const gainScrap = useCallback((amount: number) => {
         const session = refs.gameSessionRef.current;
         if (!session) return;
 
+        session.state.sessionStats.scrapLooted += amount;
+
         const statsBuffer = session.state.statsBuffer;
         statsBuffer[PlayerStatID.SCRAP] += amount;
         statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += amount;
-
-        if (session.state.sessionStats) {
-            session.state.sessionStats.scrapLooted += amount;
-        }
+        UIEventRingBuffer.push(UIEventType.SCRAP_GAIN, amount);
     }, [refs]);
 
     const closeModal = useCallback(() => {
@@ -225,48 +241,100 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             return;
         }
 
-        const actionType = typeof action === 'string' ? action : action.type;
         const payload = typeof action === 'object' ? (action.payload || action) : {};
 
-        switch (actionType) {
-            case 'HEAL':
-                const hp = state.statsBuffer[PlayerStatID.HP];
-                const maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
-                state.statsBuffer[PlayerStatID.HP] = Math.min(maxHp, hp + (payload.amount || 20));
-                UiSounds.playConfirm();
-                break;
-
-            case 'SOUND':
-            case 'PLAY_SOUND':
+        switch (action.type) {
+            case TriggerActionType.PLAY_SOUND: {
                 const soundId = payload.id || action.id;
-                if (soundId === 'explosion') {
+                if (soundId === SoundID.EXPLOSION) {
                     WeaponSounds.playExplosion(refs.playerGroupRef.current?.position || _spawnPosScratch.set(0, 0, 0));
                     if ((window as any).haptic) (window as any).haptic.explosion();
                 } else {
                     audioEngine.playSound(soundId || SoundID.UI_HOVER);
                 }
                 break;
+            }
 
-            case 'GIVE_REWARD':
-                if (payload.scrap) {
-                    state.statsBuffer[PlayerStatID.SCRAP] += payload.scrap;
-                    state.statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += payload.scrap;
-                    state.sessionStats.scrapLooted += payload.scrap;
-                }
+            case TriggerActionType.GIVE_REWARD: {
+                if (payload.scrap) gainScrap(payload.scrap);
                 if (payload.xp) gainXp(payload.xp);
                 if (payload.sp) gainSp(payload.sp);
+                if (payload.amount) {
+                    // Generic amount treated as HP if not otherwise specified
+                    const hp = state.statsBuffer[PlayerStatID.HP];
+                    const maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
+                    state.statsBuffer[PlayerStatID.HP] = Math.min(maxHp, hp + payload.amount);
+                }
                 UiSounds.playConfirm();
                 break;
+            }
 
-            case 'SPAWN_BOSS':
+            case TriggerActionType.APPLY_EFFECT: {
+                const perkSystem = refs.gameSessionRef.current?.getSystem<any>(SystemID.PERK_SYSTEM);
+                if (perkSystem) {
+                    const effectId = payload.id;
+                    const perk = PERKS[effectId];
+                    const amount = payload.amount || 0;
+
+                    // Support Buffs: If it's a buff and no damage is specified, apply purely as an effect
+                    if (perk && perk.category === PerkCategory.BUFF && amount <= 0) {
+                        perkSystem.applyPerk(
+                            refs.gameSessionRef.current!,
+                            effectId,
+                            payload.duration || 1500
+                        );
+                    } else {
+                        // Standard Damage/Hazard Effect via Stats System (which then calls applyPerk for the debuff)
+                        const statsSystem = refs.gameSessionRef.current?.getSystem<PlayerStatsSystem>(SystemID.PLAYER_STATS);
+                        if (statsSystem) {
+                            statsSystem.handlePlayerHit(
+                                refs.gameSessionRef.current!,
+                                amount,
+                                null,
+                                payload.damageType || DamageID.NONE,
+                                true, // isDoT
+                                effectId, // StatusEffectID
+                                payload.duration || 1500
+                            );
+                        }
+                    }
+                }
+                break;
+            }
+
+            case TriggerActionType.SPAWN_ENEMY: {
+                if (payload) {
+                    const count = payload.count || 1;
+                    for (let i = 0; i < count; i++) {
+                        const spread = payload.spread || 0;
+                        if (payload.pos) {
+                            _spawnPosScratch.set(payload.pos.x, 0, payload.pos.z);
+                        } else if (refs.playerGroupRef.current) {
+                            _spawnPosScratch.copy(refs.playerGroupRef.current.position);
+                        } else {
+                            _spawnPosScratch.set(0, 0, 0);
+                        }
+                        if (spread > 0) {
+                            _spawnPosScratch.x += (Math.random() - 0.5) * spread;
+                            _spawnPosScratch.z += (Math.random() - 0.5) * spread;
+                        }
+                        refs.sectorContextRef.current?.spawnZombie(payload.type, _spawnPosScratch);
+                    }
+                }
+                break;
+            }
+
+            case TriggerActionType.SPAWN_BOSS: {
                 UIEventRingBuffer.push(UIEventType.BOSS_SPAWN, payload.type === 'BOSS' ? 1 : 0);
                 break;
+            }
 
-            case 'FAMILY_MEMBER_FOLLOW':
+            case TriggerActionType.FAMILY_MEMBER_FOLLOW: {
                 UIEventRingBuffer.push(UIEventType.FAMILY_FOLLOW, 1);
                 break;
+            }
 
-            case 'FAMILY_MEMBER_FOUND': {
+            case TriggerActionType.FAMILY_MEMBER_FOUND: {
                 let targetName = payload?.name;
                 let targetId = payload?.id;
 
@@ -284,17 +352,21 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 if (!props.familyAlreadyRescued) {
                     UIEventRingBuffer.push(UIEventType.FAMILY_FOUND, targetId || 0);
 
+                    // Permanent Base Upgrade: Refresh passives immediately upon rescue
+                    const perkSystem = refs.gameSessionRef.current?.getSystem<any>(SystemID.PERK_SYSTEM);
+                    if (perkSystem) {
+                        perkSystem.refreshBaseStats(refs.gameSessionRef.current!);
+                    }
+
                     if (targetName) {
-                        spawnBubble(targetName + " " + t('ui.saved'), 3000);
+                        setBubble(targetName + " " + t('ui.saved'), 3000);
                         audioEngine.playSound(SoundID.UI_CHIME);
                     }
-                } else {
-                    UIEventRingBuffer.push(UIEventType.FAMILY_FOUND, targetId || 0, 1);
                 }
                 break;
             }
 
-            case 'START_CINEMATIC':
+            case TriggerActionType.START_CINEMATIC: {
                 const engine = refs.engineRef.current;
                 let target: THREE.Object3D | null = null;
                 const currentFMDef = refs.familyMemberRef.current;
@@ -316,7 +388,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     const bossPos = sectorData?.bossSpawn;
 
                     if (bossPos) {
-                        onAction({ type: 'SPAWN_BOSS', payload: { pos: bossPos } });
+                        onAction({ type: TriggerActionType.SPAWN_BOSS, payload: { pos: bossPos } });
                     }
                     return;
                 }
@@ -357,26 +429,27 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
-                if (target) {
-                    const cinematicSystem = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
-                    if (cinematicSystem) {
-                        const sectorId = payload.sectorId ?? (latestStateRef.current.props.currentSector ?? 0);
-                        const dialogueId = payload.scriptId ?? 0;
-                        cinematicSystem.startCinematic(
-                            target,
-                            sectorId,
-                            dialogueId,
-                            payload
-                        );
-                    }
+                const cinematic = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
+                if (cinematic) {
+                    const sectorId = payload.sectorId !== undefined ? payload.sectorId : props.currentSector;
+                    cinematic.startCinematic(target, sectorId, payload.dialogueId, payload);
                 }
                 break;
+            }
 
-            case 'CAMERA_SHAKE':
+            case TriggerActionType.SET_SECTOR_FLAG: {
+                if (payload && payload.flag) {
+                    state.sectorState.pendingTrigger = payload.flag;
+                }
+                break;
+            }
+
+            case TriggerActionType.CAMERA_SHAKE: {
                 if (payload.amount) refs.engineRef.current?.camera.shake(payload.amount);
                 break;
+            }
 
-            case 'CAMERA_PAN':
+            case TriggerActionType.CAMERA_PAN: {
                 if (payload.target && payload.duration) {
                     const cam = refs.engineRef.current?.camera;
                     if (cam) {
@@ -389,52 +462,29 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
                 break;
+            }
 
-            case 'START_WAVE':
+            case TriggerActionType.START_WAVE: {
                 if (payload.count) {
                     state.sectorState.zombiesKilled = 0;
                     state.sectorState.targetKills = payload.count;
                     state.sectorState.waveActive = true;
-                    spawnBubble(t('ui.wave_start'), 3000);
+                    setBubble(t('ui.wave_start'), 3000);
                 }
                 break;
+            }
 
-            case 'SHOW_TEXT':
-                if (payload?.text) spawnBubble(t(payload.text), payload.duration || 3000);
-                break;
-
-            case 'SPAWN_ENEMY':
-                if (payload) {
-                    const count = payload.count || 1;
-                    for (let i = 0; i < count; i++) {
-                        const spread = payload.spread || 0;
-                        if (payload.pos) {
-                            _spawnPosScratch.set(payload.pos.x, 0, payload.pos.z);
-                        } else if (refs.playerGroupRef.current) {
-                            _spawnPosScratch.copy(refs.playerGroupRef.current.position);
-                        } else {
-                            _spawnPosScratch.set(0, 0, 0);
-                        }
-                        if (spread > 0) {
-                            _spawnPosScratch.x += (Math.random() - 0.5) * spread;
-                            _spawnPosScratch.z += (Math.random() - 0.5) * spread;
-                        }
-                        refs.sectorContextRef.current?.spawnZombie(payload.type, _spawnPosScratch);
-                    }
-                }
-                break;
-
-            case 'CONCLUDE_SECTOR':
+            case TriggerActionType.CONCLUDE_SECTOR: {
                 concludeSector(payload?.isExtraction ?? false);
                 break;
+            }
 
-            default:
-                if (actionType) {
-                    state.sectorState.pendingTrigger = actionType;
-                }
+            default: {
+                // ZERO-GC: No string fallback. Use SET_SECTOR_FLAG for custom flags.
                 break;
+            }
         }
-    }, [concludeSector, gainXp, props.currentSectorData, props.familyAlreadyRescued, refs, spawnBubble, gainSp]);
+    }, [concludeSector, gainXp, props.currentSectorData, props.familyAlreadyRescued, refs, setBubble, gainSp]);
 
     const handleDiscovery = useCallback((type: DiscoveryType, id: any, titleKey: string = '', detailsKey: string = '', payload?: any, fromBridge: boolean = false) => {
         const state = refs.stateRef.current;
@@ -533,6 +583,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     if (state.sessionStats.discoveredPerksMap) {
                         state.sessionStats.discoveredPerksMap[perkId] = 1;
                     }
+                    if (currentProps.onPerkDiscovered) currentProps.onPerkDiscovered(perkId);
                 }
                 break;
             }
@@ -572,30 +623,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 updateUiState({ deathPhase: DeathPhase.FADEOUT });
                 UiSounds.playConfirm();
                 setTimeout(() => {
-                    currentProps.onSectorEnded({
-                        timeElapsed: 0,
-                        shotsFired: 0,
-                        shotsHit: 0,
-                        throwablesThrown: 0,
-                        scrapLooted: 0,
-                        xpGained: 0,
-                        bonusXp: 0,
-                        familyFound: false,
-                        familyExtracted: false,
-                        damageDealt: 0,
-                        damageTaken: 0,
-                        bossDamageDealt: 0,
-                        bossDamageTaken: 0,
-                        distanceTraveled: refs.distanceTraveledRef.current,
-                        cluesFound: [],
-                        collectiblesDiscovered: [],
-                        isExtraction: false,
-                        spEarned: 0,
-                        seenEnemies: [],
-                        discoveredPOIs: [],
-                        aborted: true,
-                        seenBosses: []
-                    });
+                    const finalStats = getSectorStats(false, true);
+                    currentProps.onSectorEnded(finalStats);
                 }, 1000);
             } else {
                 updateUiState({ deathPhase: DeathPhase.CONTINUE });
@@ -662,13 +691,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (refs.engineRef.current) refs.engineRef.current.weather.sync(weather, 1000);
             if (currentProps.onEnvironmentOverrideChange) currentProps.onEnvironmentOverrideChange(overrides, weather);
         },
-        spawnBubble,
+        setBubble,
         spawnZombie: (type: number, pos: THREE.Vector3) => {
             refs.sectorContextRef.current?.spawnZombie(type, pos);
         },
         onAction,
         gainXp
-    }), [closeModal, gainXp, onAction, refs, spawnBubble, updateUiState]);
+    }), [closeModal, gainXp, onAction, refs, setBubble, updateUiState]);
 
     const handleUIEvent = useCallback((type: UIEventType, p1: any, p2: number) => {
         switch (type) {
@@ -838,6 +867,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 case InputAction.SLOT_3: HudStore.triggerMetaAction(MetaActionId.WEAPON_SLOT_3); break;
                 case InputAction.SLOT_4: HudStore.triggerMetaAction(MetaActionId.WEAPON_SLOT_4); break;
                 case InputAction.SLOT_5: HudStore.triggerMetaAction(MetaActionId.WEAPON_SLOT_5); break;
+                case InputAction.FLASHLIGHT: HudStore.triggerMetaAction(MetaActionId.TOGGLE_FLASHLIGHT); break;
                 case InputAction.MAP: HudStore.triggerMetaAction(MetaActionId.TOGGLE_MAP); break;
                 case InputAction.ESCAPE: HudStore.triggerMetaAction(MetaActionId.TOGGLE_PAUSE); break;
             }
@@ -894,6 +924,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             switch (actionId) {
                 case MetaActionId.TOGGLE_PAUSE:
+                case MetaActionId.NAV_BACK:
                     if (currentOverlay === OverlayType.PAUSE) props.onInteractionStateChange?.(OverlayType.NONE);
                     else if (currentOverlay === OverlayType.NONE) props.onInteractionStateChange?.(OverlayType.PAUSE);
                     break;
@@ -925,6 +956,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         if (refs.playerGroupRef.current) {
             session.playerPos = refs.playerGroupRef.current.position;
+            (session as any).playerGroup = refs.playerGroupRef.current;
         }
 
         engine.onUpdateContext = session;
@@ -973,7 +1005,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     t,
                     showDamageText,
                     onDiscovery: handleDiscovery,
-                    spawnBubble: (text: string, duration?: number) => {
+                    setBubble: (text: string, duration?: number) => {
                         UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000);
                     },
                     spawnParticle: (x, y, z, type: FXParticleType, count, customMesh, customVel, color, scale) => {
@@ -992,21 +1024,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     spawnHorde: (count: number, type: any, pos: any) => refs.sectorContextRef.current?.spawnHorde(count, type, pos),
                     playSound: (id: any) => audioEngine.playSound(id),
                     onAction: (action: any) => onAction(action),
-                    handleTriggerAction: (action: any, scene: THREE.Scene) => {
-                        onAction(action);
-                    },
                     startCinematic: (mesh: any, sectorId?: number, dialogueId?: number, params?: any) => {
-                        const sys = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
-                        sys?.startCinematic(mesh, sectorId ?? 0, dialogueId ?? 0, params);
+                        refs.gameSessionRef.current?.startCinematic(mesh, sectorId ?? 0, dialogueId ?? 0, params);
                     },
                     playCinematicLine: (index: number) => {
-                        const sys = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
-                        sys?.playLine(index);
+                        refs.gameSessionRef.current?.playCinematicLine(index);
                     },
                     endCinematic: () => {
-                        const cinematicSystem = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
-                        if (!cinematicSystem) return;
-                        cinematicSystem.stop();
+                        refs.gameSessionRef.current?.stopCinematic();
                     },
                     spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => {
                         const sectorData = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
@@ -1021,6 +1046,23 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     gainScrap,
                     onSectorLoaded: props.onSectorLoaded,
                     collectedCluesRef: refs.collectedCluesRef,
+                    setInteraction: (interaction: any) => {
+                        const s = refs.stateRef.current;
+                        if (interaction) {
+                            s.interaction.active = true;
+                            s.interaction.targetId = interaction.id;
+                            s.interaction.type = interaction.type || InteractionType.SECTOR_SPECIFIC;
+                            s.interaction.subType = interaction.subType || InteractionSubType.NONE;
+                            s.interaction.label = interaction.label;
+                            s.interaction.promptId = interaction.promptId || InteractionPromptId.INTERACT;
+                            if (interaction.position) s.interactionTargetPos.copy(interaction.position);
+                            s.hasInteractionTarget = true;
+                        } else {
+                            s.interaction.active = false;
+                            s.interaction.promptId = InteractionPromptId.NONE;
+                            s.hasInteractionTarget = false;
+                        }
+                    },
                     onBossKilled: (id: number) => {
                         audioEngine.stopMusic();
                         const pProps = latestStateRef.current.props;
@@ -1052,31 +1094,25 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             propsRef: refs.propsRef,
             callbacks: {
                 concludeSector,
-                gainXp,
                 spawnParticle,
                 spawnDecal,
                 showDamageText,
                 t,
-                spawnBubble: (text: string, duration?: number) => {
-                    UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000);
-                },
                 onAction: (action: any) => setupContextRef.current?.callbacks.onAction(action),
                 onDiscovery: handleDiscovery,
                 onDeathStateChange: props.onDeathStateChange,
-                gainSp,
-                gainScrap,
-                onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, sourceAttack?: EnemyAttackType) => {
+                onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
                     const session = refs.gameSessionRef.current;
                     if (!session) return;
                     const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
                     if (statsSystem) {
-                        statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, sourceAttack);
+                        statsSystem.handlePlayerHit(session, damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
                     }
                 },
                 spawnZombie: (type: any, pos: any) => refs.sectorContextRef.current?.spawnZombie(type, pos),
                 spawnHorde: (count: number, type: any, pos: any) => refs.sectorContextRef.current?.spawnHorde(count, type, pos),
-                setNotification: (n: any) => {
-                    UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, n.text, n.duration || 3000);
+                setBubble: (text: string, duration?: number) => {
+                    UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000);
                 },
                 setInteraction: (interaction: any) => {
                     const s = refs.stateRef.current;
@@ -1099,13 +1135,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 playTone: (freq: number, type: any, duration: number, vol?: number) => (audioEngine as any).playTone?.(freq, type, duration, vol),
                 cameraShake: (amount: number, type?: any) => engine.camera.shake(amount, type || 'general'),
                 startCinematic: (target: any, sectorId: number, dialogueId?: number, params?: any) => {
-                    const sys = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
-                    if (sys) sys.startCinematic(target, sectorId, dialogueId ?? 0, params);
+                    refs.gameSessionRef.current?.startCinematic(target, sectorId, dialogueId ?? 0, params);
                 },
                 setCameraOverride: (params: any) => {
                     refs.cameraOverrideRef.current = params;
                 },
-                makeNoise: (pos: any, type: any, radius?: number) => session.makeNoise(pos, type, radius || 10)
+                makeNoise: (pos: any, type: any, radius?: number) => session.makeNoise(pos, type, radius || 10),
+                gainXp,
+                gainSp,
+                gainScrap
             }
         });
 

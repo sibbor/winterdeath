@@ -1,40 +1,60 @@
 import { ClueType } from '../game/session/SectorTypes';
 
+export enum ClueID {
+    // Sector 0 (0x00)
+    S0_START_TRACKS = (0 << 8) | 0,
+    S0_BLOOD_STAINS = (0 << 8) | 1,
+    S0_THEY_MUST_BE_SCARED = (0 << 8) | 2,
+    S0_STILL_TRACKING = (0 << 8) | 3,
+    S0_TOWN_CENTER = (0 << 8) | 4,
+    S0_EVENT_BUS_RUBBLE = (0 << 8) | 5,
+
+    // Sector 1 (0x01)
+    S1_START = (1 << 8) | 0,
+    S1_COMBAT = (1 << 8) | 1,
+    S1_CAVE_LIGHTS = (1 << 8) | 2,
+    S1_CAVE_LOOT = (1 << 8) | 3,
+    S1_CAVE_LOOT_MORE = (1 << 8) | 4,
+
+    // Sector 2 (0x02)
+    S2_FOREST_NOISE = (2 << 8) | 0,
+    S2_TRACTOR = (2 << 8) | 1,
+
+    // Sector 3 (0x03)
+    S3_CREEPY_NOISE = (3 << 8) | 0
+}
+
 export interface ClueDefinition {
-    id: string;
+    id: ClueID;
     sector: number;
     index: number;
     type: ClueType;
 }
 
-export const CLUES: Record<string, ClueDefinition> = {
+export const CLUES: Record<ClueID, ClueDefinition> = {
     // Sector 0
-    's0_start_tracks': { id: 's0_start_tracks', sector: 0, index: 0, type: ClueType.THOUGHT },
-    's0_blood_stains': { id: 's0_blood_stains', sector: 0, index: 1, type: ClueType.THOUGHT },
-    's0_they_must_be_scared': { id: 's0_they_must_be_scared', sector: 0, index: 2, type: ClueType.THOUGHT },
-    's0_still_tracking': { id: 's0_still_tracking', sector: 0, index: 3, type: ClueType.THOUGHT },
-    's0_town_center': { id: 's0_town_center', sector: 0, index: 4, type: ClueType.THOUGHT },
-    's0_event_tunnel_blocked': { id: 's0_event_tunnel_blocked', sector: 0, index: 5, type: ClueType.SPEAK },
-    's0_event_tunnel_whats_happening': { id: 's0_event_tunnel_whats_happening', sector: 0, index: 6, type: ClueType.THOUGHT },
-    's0_event_tunnel_plant_explosives': { id: 's0_event_tunnel_plant_explosives', sector: 0, index: 7, type: ClueType.SPEAK },
-    's0_event_tunnel_cleared': { id: 's0_event_tunnel_cleared', sector: 0, index: 8, type: ClueType.SPEAK },
-    's0_event_tunnel_explosion_attracted_zombies': { id: 's0_event_tunnel_explosion_attracted_zombies', sector: 0, index: 9, type: ClueType.SPEAK },
+    [ClueID.S0_START_TRACKS]: { id: ClueID.S0_START_TRACKS, sector: 0, index: 0, type: ClueType.THOUGHT },
+    [ClueID.S0_BLOOD_STAINS]: { id: ClueID.S0_BLOOD_STAINS, sector: 0, index: 1, type: ClueType.THOUGHT },
+    [ClueID.S0_THEY_MUST_BE_SCARED]: { id: ClueID.S0_THEY_MUST_BE_SCARED, sector: 0, index: 2, type: ClueType.THOUGHT },
+    [ClueID.S0_STILL_TRACKING]: { id: ClueID.S0_STILL_TRACKING, sector: 0, index: 3, type: ClueType.THOUGHT },
+    [ClueID.S0_TOWN_CENTER]: { id: ClueID.S0_TOWN_CENTER, sector: 0, index: 4, type: ClueType.THOUGHT },
+    [ClueID.S0_EVENT_BUS_RUBBLE]: { id: ClueID.S0_EVENT_BUS_RUBBLE, sector: 0, index: 5, type: ClueType.THOUGHT },
 
     // Sector 1
-    's1_start': { id: 's1_start', sector: 1, index: 0, type: ClueType.THOUGHT },
-    's1_combat': { id: 's1_combat', sector: 1, index: 1, type: ClueType.SPEAK },
-    's1_cave_lights': { id: 's1_cave_lights', sector: 1, index: 2, type: ClueType.SPEAK },
-    's1_cave_loot': { id: 's1_cave_loot', sector: 1, index: 3, type: ClueType.SPEAK },
-    's1_cave_loot_more': { id: 's1_cave_loot_more', sector: 1, index: 4, type: ClueType.SPEAK },
+    [ClueID.S1_START]: { id: ClueID.S1_START, sector: 1, index: 0, type: ClueType.THOUGHT },
+    [ClueID.S1_COMBAT]: { id: ClueID.S1_COMBAT, sector: 1, index: 1, type: ClueType.SPEAK },
+    [ClueID.S1_CAVE_LIGHTS]: { id: ClueID.S1_CAVE_LIGHTS, sector: 1, index: 2, type: ClueType.SPEAK },
+    [ClueID.S1_CAVE_LOOT]: { id: ClueID.S1_CAVE_LOOT, sector: 1, index: 3, type: ClueType.SPEAK },
+    [ClueID.S1_CAVE_LOOT_MORE]: { id: ClueID.S1_CAVE_LOOT_MORE, sector: 1, index: 4, type: ClueType.SPEAK },
 
     // Sector 2
-    's2_forest_noise': { id: 's2_forest_noise', sector: 2, index: 0, type: ClueType.SPEAK },
-    's2_tractor': { id: 's2_tractor', sector: 2, index: 1, type: ClueType.SPEAK },
+    [ClueID.S2_FOREST_NOISE]: { id: ClueID.S2_FOREST_NOISE, sector: 2, index: 0, type: ClueType.SPEAK },
+    [ClueID.S2_TRACTOR]: { id: ClueID.S2_TRACTOR, sector: 2, index: 1, type: ClueType.SPEAK },
 
     // Sector 3
-    's3_creepy_noise': { id: 's3_creepy_noise', sector: 3, index: 0, type: ClueType.THOUGHT }
+    [ClueID.S3_CREEPY_NOISE]: { id: ClueID.S3_CREEPY_NOISE, sector: 3, index: 0, type: ClueType.THOUGHT }
 };
 
-export function getClueById(id: string): ClueDefinition | undefined {
+export function getClueById(id: ClueID): ClueDefinition | undefined {
     return CLUES[id];
 }

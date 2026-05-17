@@ -1,18 +1,17 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../../../utils/assets/materials';
 import { SectorContext } from '../../../game/session/SectorTypes';
+import { GroundType } from '../../engine/EngineTypes';
 import { SectorBuilder } from '../SectorBuilder';
 import { GeneratorUtils } from './GeneratorUtils';
-import { PhysicsGroup } from '../CollisionResolution';
+import { PhysicsGroup, ColliderType } from '../CollisionResolution';
 import { MaterialType } from '../../../content/environment';
-import { InteractionShape } from '../../../systems/ui/UIEventBridge';
 import { MapItemType } from '../../../components/ui/hud/HudTypes';
 import { ChunkManager } from '../ChunkManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
-const _v3 = new THREE.Vector3();
 const _pos = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
 const _scale = new THREE.Vector3();
@@ -144,15 +143,15 @@ export const PathGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: _pos.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: InteractionShape.BOX, size: _scale.clone() },
+                collider: { type: ColliderType.BOX, size: _scale.clone() },
                 physicsGroup: PhysicsGroup.WALL,
                 materialId: MaterialType.CONCRETE,
-                id: `${name}_bound_${i}`
+                id: `${name}_boundry_${i}`
             });
         }
     },
 
-    createRoad: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 8, texture: THREE.Texture = null, matType: number = 8, spawnLoot: boolean = false): Promise<THREE.CatmullRomCurve3> => {
+    createRoad: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 8, texture: THREE.Texture = null, matType: MaterialType = MaterialType.ASPHALT, spawnLoot: boolean = false): Promise<THREE.CatmullRomCurve3> => {
         if (points.length < 2) return null;
 
         const curve = new THREE.CatmullRomCurve3(points);
@@ -164,7 +163,7 @@ export const PathGenerator = {
         const yOff = 0.15 + (_pathLayerIndex * 0.001);
         const geo = buildRibbonGeometry(pts, width, yOff);
 
-        const mat = matType === 7 ? MATERIALS.gravel : MATERIALS.asphalt;
+        const mat = matType === MaterialType.GRAVEL ? MATERIALS.gravel : MATERIALS.asphalt;
         const road = new THREE.Mesh(geo, mat);
         road.receiveShadow = true;
         road.userData.isEngineStatic = true;
@@ -186,7 +185,7 @@ export const PathGenerator = {
     },
 
     createGravelRoad: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 6): Promise<THREE.CatmullRomCurve3> => {
-        return PathGenerator.createRoad(ctx, points, width, null, 1); // 1 = GRAVEL from GroundType
+        return PathGenerator.createRoad(ctx, points, width, null, MaterialType.GRAVEL);
     },
 
     createDirtPath: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, texture: THREE.Texture = null, showBorder: boolean = false, spawnLoot: boolean = false): Promise<THREE.CatmullRomCurve3> => {
@@ -437,7 +436,7 @@ export const PathGenerator = {
                 SectorBuilder.addObstacle(ctx, {
                     position: new THREE.Vector3().copy(_pos),
                     quaternion: new THREE.Quaternion().copy(_quat),
-                    collider: { type: InteractionShape.BOX, size: new THREE.Vector3().copy(_v2) },
+                    collider: { type: ColliderType.BOX, size: new THREE.Vector3().copy(_v2) },
                     physicsGroup: PhysicsGroup.WALL,
                     materialId: color === 'mesh' ? MaterialType.METAL : MaterialType.WOOD
                 });
@@ -509,12 +508,12 @@ export const PathGenerator = {
             }
 
             _pos.copy(_v1).setY(height / 2);
-            _scale.set(dist, height, thickness);
+            _scale.set(thickness, height, dist);
 
             SectorBuilder.addObstacle(ctx, {
                 position: _pos.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: InteractionShape.BOX, size: _scale.clone() },
+                collider: { type: ColliderType.BOX, size: _scale.clone() },
                 physicsGroup: PhysicsGroup.WALL,
                 materialId: MaterialType.METAL
             });
@@ -525,6 +524,12 @@ export const PathGenerator = {
         if (points.length < 2) return;
 
         let startTime = performance.now();
+
+        // Use a consistent unit geometry for all segments (Zero-GC optimization)
+        // Radius 0.5 means diameter is 1.0. We scale it later by width/height.
+        const geo = new THREE.CylinderGeometry(0.1, 0.5, 1.0, 4, 1, false);
+        geo.rotateX(Math.PI / 2); // Lay the "mound" along the Z axis
+        geo.rotateZ(Math.PI / 4); // Align the 4-sided cylinder to have a flat bottom
 
         for (let i = 0; i < points.length - 1; i++) {
             if (performance.now() - startTime > 12) {
@@ -538,28 +543,27 @@ export const PathGenerator = {
 
             _v1.lerpVectors(p1, p2, 0.5);
             _v2.subVectors(p2, p1).normalize();
-
-            _v3.set(-_v2.z, 0, _v2.x).normalize().multiplyScalar(width / 2);
-
-            const geo = new THREE.CylinderGeometry(width * 0.1, width, height, 4, 1, false);
-            geo.rotateY(Math.atan2(_v2.x, _v2.z) + Math.PI / 4);
+            const angle = Math.atan2(_v2.x, _v2.z);
+            _quat.setFromAxisAngle(_axisY, angle);
 
             const mesh = new THREE.Mesh(geo, material);
             mesh.position.copy(_v1);
             mesh.position.y += height / 2 - 0.5;
-            mesh.scale.set(1, 1, dist / (width * 0.7));
+            mesh.quaternion.copy(_quat);
+            // SCALE: width (X), height (Y), dist (Z)
+            mesh.scale.set(width, height, dist);
             mesh.receiveShadow = true;
             GeneratorUtils.freezeStatic(mesh);
             ctx.scene.add(mesh);
 
+            // Match Collision Obstacle to the visual mesh
             _pos.copy(_v1).setY(height / 2);
-            _quat.setFromUnitVectors(_axisX, _v2);
-            _scale.set(dist, height, width * 0.6);
+            _scale.set(width * 0.6, height, dist); // Box collider matching the mound
 
             SectorBuilder.addObstacle(ctx, {
                 position: _pos.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: InteractionShape.BOX, size: _scale.clone() },
+                collider: { type: ColliderType.BOX, size: _scale.clone() },
                 physicsGroup: PhysicsGroup.WALL,
                 materialId: MaterialType.STONE
             });

@@ -4,6 +4,7 @@
 // --- TYPES ---
 
 import { VehicleDrivetrain, VehicleCategory, VehicleID } from '../entities/vehicles/VehicleTypes';
+import { DamageID, DamageType } from '../entities/player/CombatTypes';
 
 export type VehicleType = VehicleID;
 export type Drivetrain = VehicleDrivetrain;
@@ -33,6 +34,8 @@ export interface VehicleDef {
 
     // Collision Damage
     collisionDamageMultiplier: number; // Scales speed-based damage to enemies
+    defaultDamageID: number;           // DamageID (e.g., VEHICLE_SPLATTER)
+    defaultDamageType: number;         // DamageType (e.g., PHYSICAL)
 
     // Dimensions (Full Size) - UPPKALA 1.5X FÖR ATT MATCHA VISUALS
     // NOTE: X = Width, Y = Height, Z = Length (Forward)
@@ -62,6 +65,8 @@ export const VEHICLES: Record<number, VehicleDef> = {
         suspensionStiffness: 6.0,
         suspensionDamping: 0.6,
         collisionDamageMultiplier: 1.0,
+        defaultDamageID: DamageID.VEHICLE_SPLATTER,
+        defaultDamageType: DamageType.PHYSICAL,
         size: { x: 3.0, y: 2.7, z: 7.2 },
         seatOffset: { x: 0.6, y: 1.5, z: -0.6 }, // PLUS X = Vänster sida
         dismountOffset: { x: 3.0, y: 0, z: 0 }   // PLUS X = Kliver ut vänster
@@ -83,6 +88,8 @@ export const VEHICLES: Record<number, VehicleDef> = {
         suspensionStiffness: 8.0,
         suspensionDamping: 0.7,
         collisionDamageMultiplier: 1.0,
+        defaultDamageID: DamageID.VEHICLE_SPLATTER,
+        defaultDamageType: DamageType.PHYSICAL,
         size: { x: 3.0, y: 2.7, z: 7.05 },
         seatOffset: { x: 0.6, y: 1.5, z: -0.6 },
         dismountOffset: { x: 3.0, y: 0, z: 0 }
@@ -104,6 +111,8 @@ export const VEHICLES: Record<number, VehicleDef> = {
         suspensionStiffness: 10.0,
         suspensionDamping: 0.8,
         collisionDamageMultiplier: 1.2,
+        defaultDamageID: DamageID.VEHICLE_SPLATTER,
+        defaultDamageType: DamageType.PHYSICAL,
         size: { x: 3.0, y: 2.7, z: 7.2 },
         seatOffset: { x: 0.6, y: 1.5, z: -0.6 },
         dismountOffset: { x: 3.0, y: 0, z: 0 }
@@ -125,6 +134,8 @@ export const VEHICLES: Record<number, VehicleDef> = {
         suspensionStiffness: 5.0,
         suspensionDamping: 0.5,
         collisionDamageMultiplier: 1.5,
+        defaultDamageID: DamageID.VEHICLE_SPLATTER,
+        defaultDamageType: DamageType.PHYSICAL,
         size: { x: 3.6, y: 3.9, z: 8.4 },
         seatOffset: { x: 0.9, y: 1.95, z: 1.8 },
         dismountOffset: { x: 3.75, y: 0, z: 1.5 }
@@ -146,6 +157,8 @@ export const VEHICLES: Record<number, VehicleDef> = {
         suspensionStiffness: 4.0,
         suspensionDamping: 0.4,
         collisionDamageMultiplier: 2.5,
+        defaultDamageID: DamageID.VEHICLE_SPLATTER,
+        defaultDamageType: DamageType.PHYSICAL,
         size: { x: 5.25, y: 5.25, z: 18.0 },
         seatOffset: { x: 1.2, y: 2.7, z: 7.5 },
         dismountOffset: { x: 4.5, y: 0, z: 7.5 }
@@ -167,6 +180,8 @@ export const VEHICLES: Record<number, VehicleDef> = {
         suspensionStiffness: 3.0,
         suspensionDamping: 0.3,
         collisionDamageMultiplier: 1.8,
+        defaultDamageID: DamageID.VEHICLE_SPLATTER,
+        defaultDamageType: DamageType.PHYSICAL,
         size: { x: 3.75, y: 3.75, z: 5.25 },
         seatOffset: { x: 0.4, y: 2.25, z: -0.75 },
         dismountOffset: { x: 3.0, y: 0, z: -0.75 }
@@ -188,6 +203,8 @@ export const VEHICLES: Record<number, VehicleDef> = {
         suspensionStiffness: 3.0,
         suspensionDamping: 0.3,
         collisionDamageMultiplier: 3.0,
+        defaultDamageID: DamageID.VEHICLE_SPLATTER,
+        defaultDamageType: DamageType.PHYSICAL,
         size: { x: 4.5, y: 5.25, z: 19.5 },
         seatOffset: { x: 1.2, y: 2.7, z: 6.0 },
         dismountOffset: { x: 3.75, y: 0, z: 6.0 }
@@ -207,6 +224,8 @@ export const VEHICLES: Record<number, VehicleDef> = {
         lateralFriction: 0.45,
         drivetrain: VehicleDrivetrain.RWD,
         collisionDamageMultiplier: 0.3,
+        defaultDamageID: DamageID.VEHICLE_SPLATTER,
+        defaultDamageType: DamageType.PHYSICAL,
         size: { x: 3.75, y: 2.25, z: 9.75 },
         seatOffset: { x: 0, y: 0.75, z: -1.5 },
         dismountOffset: { x: 3.0, y: 0, z: 0 }

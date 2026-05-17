@@ -19,16 +19,22 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
     const [bgColor, setBgColor] = useState(currentOverride?.bgColor ? '#' + currentOverride.bgColor.toString(16).padStart(6, '0') : '#000000');
     const [fogColor, setFogColor] = useState(currentOverride?.fogColor ? '#' + currentOverride.fogColor.toString(16).padStart(6, '0') : '#050510');
     const [fogDensity, setFogDensity] = useState(currentOverride?.fogDensity ?? 0.01);
-    const [ambientIntensity, setAmbientIntensity] = useState(currentOverride?.ambientIntensity ?? 0.4);
     const [groundColor, setGroundColor] = useState(currentOverride?.groundColor ? '#' + currentOverride.groundColor.toString(16).padStart(6, '0') : '#111111');
     const [fov, setFov] = useState(currentOverride?.fov ?? 50);
 
-    const [skyLightVisible, setSkyLightVisible] = useState(currentOverride?.skyLightVisible ?? true);
-    const [skyLightColor, setSkyLightColor] = useState(currentOverride?.skyLightColor ? '#' + currentOverride.skyLightColor.toString(16).padStart(6, '0') : '#4444ff');
-    const [skyLightIntensity, setSkyLightIntensity] = useState(currentOverride?.skyLightIntensity ?? 0.5);
-    const [skyLightX, setSkyLightX] = useState(currentOverride?.skyLightPosition?.x ?? 80);
-    const [skyLightY, setSkyLightY] = useState(currentOverride?.skyLightPosition?.y ?? 50);
-    const [skyLightZ, setSkyLightZ] = useState(currentOverride?.skyLightPosition?.z ?? 50);
+    // --- SKY SYSTEM ---
+    const [skyTime, setSkyTime] = useState(currentOverride?.sky?.time ?? 0.5);
+    const [skyLightVisible, setSkyLightVisible] = useState(currentOverride?.sky?.light?.visible ?? true);
+    const [skyLightColor, setSkyLightColor] = useState(currentOverride?.sky?.light?.color ? '#' + currentOverride.sky.light.color.toString(16).padStart(6, '0') : '#4444ff');
+    const [skyLightIntensity, setSkyLightIntensity] = useState(currentOverride?.sky?.light?.intensity ?? 0.5);
+    
+    const [hemiIntensity, setHemiIntensity] = useState(currentOverride?.sky?.hemi?.intensity ?? 0.6);
+    const [hemiSkyColor, setHemiSkyColor] = useState(currentOverride?.sky?.hemi?.skyColor ? '#' + currentOverride.sky.hemi.skyColor.toString(16).padStart(6, '0') : '#87ceeb');
+
+    const [atmosphereColor, setAtmosphereColor] = useState(currentOverride?.sky?.atmosphereColor ? '#' + currentOverride.sky.atmosphereColor.toString(16).padStart(6, '0') : '#161629');
+    const [stars, setStars] = useState(currentOverride?.sky?.stars ?? 1000);
+    const [celestialRadius, setCelestialRadius] = useState(currentOverride?.sky?.celestial?.radius ?? 20);
+    const [celestialColor, setCelestialColor] = useState(currentOverride?.sky?.celestial?.color ? '#' + currentOverride.sky.celestial.color.toString(16).padStart(6, '0') : '#fff9e6');
 
     const [weatherDensity, setWeatherDensity] = useState(currentOverride?.weatherDensity ?? 500);
     const [windStrength, setWindStrength] = useState(currentOverride?.windStrength ?? 1.0);
@@ -40,13 +46,26 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
             bgColor: parseInt(bgColor.replace('#', ''), 16),
             fogColor: parseInt(fogColor.replace('#', ''), 16),
             fogDensity,
-            ambientIntensity,
             groundColor: parseInt(groundColor.replace('#', ''), 16),
             fov,
-            skyLightVisible,
-            skyLightPosition: { x: skyLightX, y: skyLightY, z: skyLightZ },
-            skyLightColor: parseInt(skyLightColor.replace('#', ''), 16),
-            skyLightIntensity,
+            sky: {
+                time: skyTime,
+                stars,
+                atmosphereColor: parseInt(atmosphereColor.replace('#', ''), 16),
+                hemi: {
+                    intensity: hemiIntensity,
+                    skyColor: parseInt(hemiSkyColor.replace('#', ''), 16)
+                },
+                celestial: {
+                    radius: celestialRadius,
+                    color: parseInt(celestialColor.replace('#', ''), 16)
+                },
+                light: {
+                    visible: skyLightVisible,
+                    color: parseInt(skyLightColor.replace('#', ''), 16),
+                    intensity: skyLightIntensity
+                }
+            },
             weather: currentWeather,
             weatherDensity,
             windStrength,
@@ -63,17 +82,21 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
         setBgColor('#' + def.bgColor.toString(16).padStart(6, '0'));
         setFogColor(def.fog?.color ? '#' + def.fog.color.toString(16).padStart(6, '0') : '#' + def.bgColor.toString(16).padStart(6, '0'));
         setFogDensity(def.fog?.density ?? 0.01);
-        setAmbientIntensity(def.ambientIntensity);
         setGroundColor('#' + def.groundColor.toString(16).padStart(6, '0'));
         setFov(def.fov);
-        setSkyLightVisible(def.skyLight.visible);
-        setSkyLightColor('#' + def.skyLight.color.toString(16).padStart(6, '0'));
-        setSkyLightIntensity(def.skyLight.intensity);
-        if (def.skyLight.position) {
-            setSkyLightX(def.skyLight.position.x);
-            setSkyLightY(def.skyLight.position.y);
-            setSkyLightZ(def.skyLight.position.z);
+        
+        if (def.sky) {
+            setSkyTime(def.sky.time ?? 0.5);
+            setSkyLightVisible(def.sky.light?.visible ?? true);
+            setSkyLightColor('#' + (def.sky.light?.color ?? 0xffffff).toString(16).padStart(6, '0'));
+            setSkyLightIntensity(def.sky.light?.intensity ?? 1.0);
+            setHemiIntensity(def.sky.hemi?.intensity ?? 0.6);
+            setAtmosphereColor('#' + (def.sky.atmosphereColor ?? 0x000000).toString(16).padStart(6, '0'));
+            setStars(def.sky.stars ?? 1000);
+            setCelestialRadius(def.sky.celestial?.radius ?? 20);
+            setCelestialColor('#' + (def.sky.celestial?.color ?? 0xffffff).toString(16).padStart(6, '0'));
         }
+        
         onWeatherChange(def.weather as any);
         setWeatherDensity(500);
         setWindStrength(1.0);
@@ -102,8 +125,9 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                 {/* Global Settings */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div className="flex flex-col gap-2 bg-zinc-900/40 p-4 border border-zinc-800 rounded-lg">
-                        <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest leading-none mb-2">{t('ui.background')}</label>
-                        <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="w-full h-8 cursor-pointer bg-black border border-zinc-700" title={t('ui.background_color')} />
+                        <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest leading-none mb-2">{t('ui.time_of_day')}: <span className="text-white font-mono">{skyTime.toFixed(2)}</span></label>
+                        <input type="range" min="0" max="1" step="0.01" value={skyTime} onChange={(e) => setSkyTime(parseFloat(e.target.value))} className="w-full accent-cyan-500" />
+                        
                         <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest leading-none mt-4 mb-2">{t('ui.ground')}</label>
                         <input type="color" value={groundColor} onChange={(e) => setGroundColor(e.target.value)} className="w-full h-8 cursor-pointer bg-black border border-zinc-700" title={t('ui.ground_color')} />
                     </div>
@@ -114,8 +138,8 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                             <input type="range" min="30" max="120" value={fov} onChange={(e) => setFov(Number(e.target.value))} className="w-full accent-cyan-500" />
                         </div>
                         <div className="flex flex-col gap-1">
-                            <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">{t('ui.ambient')}: <span className="text-white font-mono">{ambientIntensity.toFixed(1)}</span></label>
-                            <input type="range" min="0" max="2" step="0.1" value={ambientIntensity} onChange={(e) => setAmbientIntensity(parseFloat(e.target.value))} className="w-full accent-cyan-500" />
+                            <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">{t('ui.hemi_intensity')}: <span className="text-white font-mono">{hemiIntensity.toFixed(1)}</span></label>
+                            <input type="range" min="0" max="2" step="0.1" value={hemiIntensity} onChange={(e) => setHemiIntensity(parseFloat(e.target.value))} className="w-full accent-cyan-500" />
                         </div>
                     </div>
 
@@ -144,7 +168,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                 {/* Weather */}
                 <div className="bg-zinc-900/40 p-6 border border-zinc-800 rounded-lg">
                     <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-4 block">{t('ui.weather')}</label>
-                    <div className="flex gap-2 flex-wrap mb-6">
+                    <div className="flex flex-nowrap gap-2 overflow-x-auto mb-6 pb-2 scrollbar-hide">
                         {[
                             { id: WeatherType.NONE, key: 'none' },
                             { id: WeatherType.RAIN, key: 'rain' },
@@ -182,35 +206,45 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                         </div>
                     </div>
 
-                    {/* Sky Light */}
+                    {/* Sky & Celestial System */}
                     <div className="bg-yellow-950/10 p-6 border border-yellow-900/30 rounded-lg">
                         <div className="flex justify-between items-center mb-4">
                             <label className="text-yellow-500 uppercase text-[10px] font-bold tracking-widest">{t('ui.skylight_calibration')}</label>
                             <input type="checkbox" checked={skyLightVisible} onChange={(e) => setSkyLightVisible(e.target.checked)} className="w-4 h-4 accent-yellow-500" />
                         </div>
-                        <div className={`flex flex-col gap-4 transition-opacity ${skyLightVisible ? 'opacity-100' : 'opacity-20 pointer-events-none'}`}>
-                            <div className="flex gap-6 items-end">
-                                <div className="flex-none">
-                                    <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-2 block">{t('ui.color')}</label>
-                                    <input type="color" value={skyLightColor} onChange={(e) => setSkyLightColor(e.target.value)} className="w-12 h-12 cursor-pointer bg-black border border-zinc-800" />
+                        <div className={`flex flex-col gap-6 transition-opacity ${skyLightVisible ? 'opacity-100' : 'opacity-20 pointer-events-none'}`}>
+                            {/* Stars & Body */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">{t('ui.stars')}: <span className="text-white font-mono">{stars}</span></label>
+                                    <input type="range" min="0" max="5000" step="100" value={stars} onChange={(e) => setStars(Number(e.target.value))} className="w-full accent-yellow-500" />
                                 </div>
-                                <div className="flex-1">
-                                    <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-2 block">{t('ui.intensity')}: <span className="text-white font-mono">{skyLightIntensity.toFixed(1)}</span></label>
-                                    <input type="range" min="0" max="5" step="0.1" value={skyLightIntensity} onChange={(e) => setSkyLightIntensity(parseFloat(e.target.value))} className="w-full accent-yellow-500" />
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">{t('ui.radius')}: <span className="text-white font-mono">{celestialRadius}</span></label>
+                                    <input type="range" min="1" max="100" step="1" value={celestialRadius} onChange={(e) => setCelestialRadius(Number(e.target.value))} className="w-full accent-yellow-500" />
                                 </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">X: <span className="text-white">{skyLightX}</span></label>
-                                    <input type="range" min="-500" max="500" value={skyLightX} onChange={e => setSkyLightX(Number(e.target.value))} className="w-full accent-yellow-500" />
+
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="flex gap-4 items-end">
+                                    <div className="flex-none">
+                                        <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-1 block">{t('ui.light_color')}</label>
+                                        <input type="color" value={skyLightColor} onChange={(e) => setSkyLightColor(e.target.value)} className="w-10 h-10 cursor-pointer bg-black border border-zinc-800" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-1 block">{t('ui.intensity')}: <span className="text-white font-mono">{skyLightIntensity.toFixed(1)}</span></label>
+                                        <input type="range" min="0" max="5" step="0.1" value={skyLightIntensity} onChange={(e) => setSkyLightIntensity(parseFloat(e.target.value))} className="w-full accent-yellow-500" />
+                                    </div>
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Y: <span className="text-white">{skyLightY}</span></label>
-                                    <input type="range" min="0" max="500" value={skyLightY} onChange={e => setSkyLightY(Number(e.target.value))} className="w-full accent-yellow-500" />
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Z: <span className="text-white">{skyLightZ}</span></label>
-                                    <input type="range" min="-500" max="500" value={skyLightZ} onChange={e => setSkyLightZ(Number(e.target.value))} className="w-full accent-yellow-500" />
+                                <div className="flex gap-4 items-end">
+                                    <div className="flex-none">
+                                        <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-1 block">{t('ui.body_color')}</label>
+                                        <input type="color" value={celestialColor} onChange={(e) => setCelestialColor(e.target.value)} className="w-10 h-10 cursor-pointer bg-black border border-zinc-800" />
+                                    </div>
+                                    <div className="flex-none">
+                                        <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-1 block">{t('ui.hemi_color')}</label>
+                                        <input type="color" value={hemiSkyColor} onChange={(e) => setHemiSkyColor(e.target.value)} className="w-10 h-10 cursor-pointer bg-black border border-zinc-800" />
+                                    </div>
                                 </div>
                             </div>
                         </div>

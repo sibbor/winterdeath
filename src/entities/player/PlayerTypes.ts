@@ -62,21 +62,29 @@ export enum PlayerStatID {
     MULTIPLIER_DMG_RESIST = 37,
     MULTIPLIER_RANGE = 38,
 
+    // --- BASE PASSIVE MULTIPLIERS (Phase 11 Refactor) ---
+    BASE_MULTIPLIER_SPEED = 39,
+    BASE_MULTIPLIER_RELOAD = 40,
+    BASE_MULTIPLIER_FIRERATE = 41,
+    BASE_MULTIPLIER_DMG_RESIST = 42,
+    BASE_MULTIPLIER_RANGE = 43,
+
     // Pre-calculated stats (Zero-GC / O(1))
-    FINAL_SPEED = 39,
+    FINAL_SPEED = 44,
 
     // --- CHALLENGE TRACKING ---
-    TOTAL_ITEMS_COLLECTED = 40,
-    TOTAL_LONG_RANGE_KILLS = 41,
-    TOTAL_SECTORS_COMPLETED = 42,
-    TOTAL_CRITICAL_HITS = 43,
-    TOTAL_CHALLENGE_POINTS = 44,
-    TOTAL_GIBBED = 45,
-    TOTAL_UNIQUE_ENEMIES_HIT_BY_EXPLOSIVES = 46,
+    TOTAL_ITEMS_COLLECTED = 45,
+    TOTAL_LONG_RANGE_KILLS = 46,
+    TOTAL_SECTORS_COMPLETED = 47,
+    TOTAL_CRITICAL_HITS = 48,
+    TOTAL_CHALLENGE_POINTS = 49,
+    TOTAL_GIBBED = 50,
+    TOTAL_UNIQUE_ENEMIES_HIT_BY_EXPLOSIVES = 51,
 
     // Buffer Size
-    COUNT = 50
+    COUNT = 64
 }
+
 
 /**
  * SMI-indexed index for weapon-specific statistics.
@@ -85,6 +93,8 @@ export enum PlayerStatID {
  */
 export enum StatWeaponIndex {
     NONE = 0,
+
+    // --- WEAPONS (1-11) ---
     SMG = 1,
     SHOTGUN = 2,
     RIFLE = 3,
@@ -96,28 +106,32 @@ export enum StatWeaponIndex {
     MINIGUN = 9,
     FLAMETHROWER = 10,
     ARC_CANNON = 11,
-    RADIO = 12,
-    RUSH = 13,
-    VEHICLE = 14,
-    DODGE = 15,
 
-    // --- TACTICAL & ENVIRONMENTAL (Synced with DamageID) ---
-    PHYSICAL = 21,
-    BURN = 22,
-    BLEED = 23,
-    DROWNING = 24,
-    FALL = 25,
-    EXPLOSION = 26,
-    BITE = 27,
-    ELECTRIC = 28,
-    BOSS = 29,
-    VEHICLE_SPLATTER = 30,
-    VEHICLE_RAM = 31,
-    VEHICLE_PUSH = 32,
-    FIRE = 33,
-    FALL_DAMAGE = 34,
-    OTHER = 35,
-    BOSS_GENERIC = 36,
+    // --- TOOLS (12-20) ---
+    RADIO = 12,
+
+    // --- ABILITIES (20-29) ---
+    RUSH = 22,
+    DODGE = 21,
+
+    // --- VEHICLES (33-36) ---
+    VEHICLE = 30,
+    VEHICLE_SPLATTER = 31,
+    VEHICLE_RAM = 32,
+    VEHICLE_PUSH = 33,
+
+    // --- ENVIRONMENT & MASTER (41+) ---
+    PHYSICAL = 41,
+    BURN = 42,
+    BLEED = 43,
+    DROWNING = 44,
+    FALL_DAMAGE = 45,
+    EXPLOSION = 46,
+    BITE = 47,
+    ELECTRIC = 48,
+    FROST = 49,
+    BOSS_GENERIC = 50,
+    OTHER = 51,
 
     COUNT = 64
 }
@@ -152,10 +166,10 @@ export enum StatEnemyIndex {
 
 /**
  * SMI-indexed index for perk-specific performance metrics.
- * Sized to 32 to match StatusEffectID bitmasking capacity.
+ * Sized to 128 to match the expanded StatusEffectID range.
  */
 export enum StatPerkIndex {
-    COUNT = 32
+    COUNT = 128
 }
 
 /**
@@ -169,14 +183,22 @@ export enum PlayerStatusFlags {
     INVULNERABLE = 1 << 2,
     IN_VEHICLE = 1 << 3,
     RUSHING = 1 << 4,
+    BLEEDING = 1 << 5,
+    BURNING = 1 << 6,
     STUNNED = 1 << 7,
     DODGING = 1 << 8,
 
-    // --- BUFFS (Phase 11) ---
+    // --- BUFFS ---
     REFLEX_SHIELD = 1 << 9,
-    ADRENALINE_SHOT = 1 << 10,
+    ADRENALINE_PATCH = 1 << 10,
     GIB_MASTER = 1 << 11,
-    QUICK_FINGER = 1 << 12
+    QUICK_FINGER = 1 << 12,
+
+    // --- ADDITIONAL DEBUFFS ---
+    SLOWED = 1 << 13,
+    FREEZING = 1 << 14,
+    ELECTRIFIED = 1 << 15,
+    DROWNING = 1 << 16
 }
 
 /**
@@ -234,7 +256,6 @@ export interface PlayerStats {
 
     // --- SMI STATE ---
     statusFlags: number;            // Bitmask (PlayerStatusFlags)
-    statusMask: number;             // SMI bitmask (StatusEffectID)
     activePassives: StatusEffectID[];
     activeBuffs: StatusEffectID[];
     activeDebuffs: StatusEffectID[];

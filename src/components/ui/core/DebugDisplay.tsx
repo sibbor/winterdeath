@@ -4,24 +4,43 @@ import { WinterEngine } from '../../../core/engine/WinterEngine';
 import { HudStore } from '../../../store/HudStore';
 import { SystemID } from '../../../systems/SystemID';
 import { t } from '../../../utils/i18n';
+import { checkIsMobileDevice } from '../../../utils/device';
 
-interface DebugDisplayProps {}
+interface DebugDisplayProps { }
+
+const getPeriodName = (time: number): string => {
+    const tVal = ((time % 1) + 1) % 1;
+    if (tVal < 0.1 || tVal >= 0.9) return 'Midnight';
+    if (tVal >= 0.1 && tVal < 0.35) return 'Dawn';
+    if (tVal >= 0.35 && tVal < 0.65) return 'Noon';
+    return 'Dusk';
+};
 
 const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
     const [debugMode, setDebugMode] = useState(() => (window as any).HudStore?.getState().debugMode || false);
+    const [hudVisible, setHudVisible] = useState(() => (window as any).HudStore?.getState().hudVisible || false);
     const [isMinimized, setIsMinimized] = useState(() => localStorage.getItem('vinterdod_debug_minimized') === 'true');
     const [systemsExpanded, setSystemsExpanded] = useState(true);
+    const [cpuExpanded, setCpuExpanded] = useState(false);
     const [showLogs, setShowLogs] = useState(false);
+    const [isMobile] = useState(() => checkIsMobileDevice());
     const [tick, setTick] = useState(0);
+
+
     const forceUpdate = () => setTick(t => t + 1);
 
     // --- HIGH-FREQUENCY REFS ---
     const fpsRef = useRef<HTMLSpanElement>(null);
+    const logicFpsRef = useRef<HTMLSpanElement>(null);
     const playerXRef = useRef<HTMLSpanElement>(null);
     const playerZRef = useRef<HTMLSpanElement>(null);
     const camXRef = useRef<HTMLSpanElement>(null);
     const camYRef = useRef<HTMLSpanElement>(null);
     const camZRef = useRef<HTMLSpanElement>(null);
+
+    // Sky Time Refs
+    const skyTimeRef = useRef<HTMLSpanElement>(null);
+    const skyFactorRef = useRef<HTMLSpanElement>(null);
 
     // Renderer Stats Refs
     const drawCallsRef = useRef<HTMLSpanElement>(null);
@@ -38,60 +57,92 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
     const heapLimitRef = useRef<HTMLSpanElement>(null);
     const gcAlertRef = useRef<HTMLSpanElement>(null);
 
+    // Recording State Tracking
+    const lastRecordState = useRef({ active: false, pending: false });
+
     useEffect(() => {
         const monitor = PerformanceMonitor.getInstance();
+        let rafId: number;
         let lastUpdate = 0;
 
-        const unsubscribe = HudStore.subscribe((state) => {
-            if (state.debugMode !== debugMode) {
-                setDebugMode(state.debugMode);
-            }
-            
-            if (!state.debugMode) return;
-
+        const updateRefs = () => {
             const now = performance.now();
 
-            // ZERO-GC: Throttle ALL DOM updates to ~4 times per second (250ms).
-            if (now - lastUpdate < 250) return;
-            lastUpdate = now;
-
-            // ZERO-GC: Use textContent instead of innerText to prevent layout reflows
-            if (fpsRef.current) fpsRef.current.textContent = Math.round(monitor.getFps()).toString();
-
-            const world = monitor.getFormattedGameState();
-            const render = monitor.getFormattedRendererStats();
-            const gc = monitor.getFormattedGcInfo();
-
-            if (playerXRef.current) playerXRef.current.textContent = world.playerX.toString();
-            if (playerZRef.current) playerZRef.current.textContent = world.playerZ.toString();
-            if (camXRef.current) camXRef.current.textContent = world.camX.toString();
-            if (camYRef.current) camYRef.current.textContent = world.camY.toString();
-            if (camZRef.current) camZRef.current.textContent = world.camZ.toString();
-
-            if (drawCallsRef.current) drawCallsRef.current.textContent = render.drawCalls.toString();
-            if (trisRef.current) trisRef.current.textContent = render.triangles.toString();
-            if (shadersRef.current) shadersRef.current.textContent = render.shaderPrograms.toString();
-            if (recompRef.current) {
-                recompRef.current.textContent = render.shaderRecompiles.toString();
-                recompRef.current.className = render.shaderRecompiles > 0 ? 'text-yellow-400 font-bold' : 'text-white';
+            // Check for recording state changes to trigger React re-render for the button
+            if (monitor.isRecordingActive !== lastRecordState.current.active || monitor._recordingPending !== lastRecordState.current.pending) {
+                lastRecordState.current.active = monitor.isRecordingActive;
+                lastRecordState.current.pending = monitor._recordingPending;
+                forceUpdate();
             }
-            if (texRef.current) texRef.current.textContent = render.textures.toString();
-            if (geoRef.current) geoRef.current.textContent = render.geometries.toString();
 
-            if (enemiesRef.current) enemiesRef.current.textContent = world.enemies.toString();
-            if (objectsRef.current) objectsRef.current.textContent = world.objects.toString();
+            if (now - lastUpdate > 100) {
+                lastUpdate = now;
 
-            if (heapRef.current) heapRef.current.textContent = gc.heapUsedMB.toString();
-            if (heapLimitRef.current) heapLimitRef.current.textContent = `/ ${gc.heapLimitMB}MB`;
+                if (fpsRef.current) fpsRef.current.textContent = Math.round(monitor.getFps()).toString();
+                if (logicFpsRef.current) logicFpsRef.current.textContent = Math.round(monitor.getLogicFps()).toString();
 
-            if (gcAlertRef.current) {
-                const recentGC = gc.timeSinceDetection < 2000;
-                gcAlertRef.current.textContent = recentGC ? `⚠️ ~${gc.droppedMB}MB freed` : '—';
-                gcAlertRef.current.className = recentGC ? 'text-yellow-400 font-bold' : 'text-white/20';
+                const world = monitor.getFormattedGameState();
+                const render = monitor.getFormattedRendererStats();
+                const gc = monitor.getFormattedGcInfo();
+
+                if (playerXRef.current) playerXRef.current.textContent = world.playerX.toString();
+                if (playerZRef.current) playerZRef.current.textContent = world.playerZ.toString();
+                if (camXRef.current) camXRef.current.textContent = world.camX.toString();
+                if (camYRef.current) camYRef.current.textContent = world.camY.toString();
+                if (camZRef.current) camZRef.current.textContent = world.camZ.toString();
+
+                const engine = WinterEngine.getInstance();
+                if (engine && engine.sky) {
+                    const sky = engine.sky;
+                    const skyTime = sky.currentTime;
+                    const skyFactor = sky.timeScale;
+
+                    if (skyTimeRef.current) {
+                        const period = getPeriodName(skyTime);
+                        skyTimeRef.current.textContent = `${period} (${skyTime.toFixed(4)})`;
+                    }
+                    if (skyFactorRef.current) {
+                        skyFactorRef.current.textContent = skyFactor.toFixed(4);
+                    }
+                }
+
+                if (drawCallsRef.current) drawCallsRef.current.textContent = render.drawCalls.toString();
+                if (trisRef.current) trisRef.current.textContent = render.triangles.toString();
+                if (shadersRef.current) shadersRef.current.textContent = render.shaderPrograms.toString();
+                if (recompRef.current) {
+                    recompRef.current.textContent = render.shaderRecompiles.toString();
+                    recompRef.current.className = render.shaderRecompiles > 0 ? 'text-yellow-400 font-bold' : 'text-white';
+                }
+                if (texRef.current) texRef.current.textContent = render.textures.toString();
+                if (geoRef.current) geoRef.current.textContent = render.geometries.toString();
+
+                if (enemiesRef.current) enemiesRef.current.textContent = world.enemies.toString();
+                if (objectsRef.current) objectsRef.current.textContent = world.objects.toString();
+
+                if (heapRef.current) heapRef.current.textContent = gc.heapUsedMB.toString();
+                if (heapLimitRef.current) heapLimitRef.current.textContent = `/ ${gc.heapLimitMB}MB`;
+
+                if (gcAlertRef.current) {
+                    const recentGC = gc.timeSinceDetection < 2000;
+                    gcAlertRef.current.textContent = recentGC ? `⚠️ ~${gc.droppedMB}MB freed` : '—';
+                    gcAlertRef.current.className = recentGC ? 'text-yellow-400 font-bold' : 'text-white/20';
+                }
             }
+            rafId = requestAnimationFrame(updateRefs);
+        };
+
+        rafId = requestAnimationFrame(updateRefs);
+
+        const unsubscribe = HudStore.subscribe((state) => {
+            if (state.debugMode !== debugMode) setDebugMode(state.debugMode);
+            if (state.hudVisible !== hudVisible) setHudVisible(state.hudVisible);
         });
-        return unsubscribe;
-    }, [debugMode]);
+
+        return () => {
+            cancelAnimationFrame(rafId);
+            unsubscribe();
+        };
+    }, [debugMode, hudVisible]);
 
     const toggleMinimized = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -100,20 +151,30 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
         localStorage.setItem('vinterdod_debug_minimized', String(next));
     };
 
-    if (!debugMode) return null;
+    if (!debugMode || !hudVisible) return null;
 
-    // --- ZERO-GC READS ---
     const monitor = PerformanceMonitor.getInstance();
     const engine = WinterEngine.getInstance();
-    const fps = Math.round(monitor.getFps());
 
     if (isMinimized) {
         return (
             <div
                 onClick={toggleMinimized}
-                className="fixed top-0 right-0 z-[9998] bg-black/40 text-white/50 px-2 py-0.5 font-mono text-[12px] select-none backdrop-blur-[2px] border border-white/5 rounded-sm cursor-pointer pointer-events-auto">
-                <div className="font-mono font-bold text-white text-[12px]">
-                    <span ref={fpsRef}>0</span> {t('ui.fps')}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="fixed top-0 right-0 z-[9998] bg-black/80 text-white/70 px-3 py-1 font-mono text-[11px] select-none backdrop-blur-md border border-white/10 rounded-bl-lg shadow-2xl cursor-pointer pointer-events-auto flex items-center gap-3">
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                        <span ref={fpsRef} className="font-bold">0</span> <span className="opacity-60 text-[9px]">FPS</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 opacity-60">
+                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                        <span ref={logicFpsRef} className="font-bold">0</span> <span className="opacity-60 text-[9px]">LOGIC</span>
+                    </div>
+                </div>
+                <div className="w-px h-3 bg-white/10"></div>
+                <div className="opacity-40 hover:opacity-100 transition-opacity">
+                    [+]
                 </div>
             </div>
         );
@@ -126,14 +187,13 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
     const systems = engine ? engine.getSystems() : [];
     const logs = showLogs ? monitor.getLogs() : [];
 
-    // ZERO-GC: Avoid .map() by using standard for-loops for JSX generation
     const systemElements = [];
     if (systemsExpanded && systems.length > 0) {
         for (let i = 0; i < systems.length; i++) {
             const sys = systems[i];
             const timing = timings.breakdown[sys.systemId];
             systemElements.push(
-                <div key={sys.systemId} onClick={(e) => { e.stopPropagation(); engine?.setSystemEnabled(sys.systemId as SystemID, !sys.enabled); forceUpdate(); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'}`}>
+                <div key={sys.systemId} onClick={(e) => { e.stopPropagation(); engine?.setSystemEnabled(sys.systemId as SystemID, !sys.enabled); forceUpdate(); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled !== false ? 'text-green-400' : 'text-red-400/60'}`}>
                     <span className="truncate mr-2">{SystemID[sys.systemId] || `SYS_${sys.systemId}`}</span>
                     <span className="text-white/40">{timing !== undefined ? `${timing}ms` : '–'}</span>
                 </div>
@@ -157,7 +217,6 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
     const timingElements = [];
     if (timings) {
         for (const key in timings.breakdown) {
-            // ZERO-GC: Avoid Object.entries() which creates arrays. Use direct for...in for iteration.
             const val = (timings.breakdown as any)[key];
             timingElements.push(
                 <div key={key} className="flex justify-between border-b border-white/5 py-0.5">
@@ -168,29 +227,62 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
         }
     }
 
+
+
+    const showDebugButtons = isMobile;
+
+    // Record button text logic
+    let recordText = 'START RECORDING';
+    if (monitor.isRecordingActive) recordText = 'STOP RECORDING';
+    else if (monitor.isRecordingPending) recordText = 'STARTING IN 2 SEC';
+
     return (
         <>
-            <div onClick={toggleMinimized} className="fixed top-0 bottom-0 right-0 w-56 bg-black/75 border-l border-white/10 shadow-2xl z-[9998] font-mono text-[11px] text-green-400 pointer-events-auto cursor-pointer hover:border-green-500/20 transition-all flex flex-col overflow-hidden">
-                <div className="p-3 shrink-0 space-y-2">
-                    <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
-                        <span className="font-bold text-white uppercase tracking-wider">{t('ui.debug_monitor')}</span>
-                        <span className="bg-green-500 text-black px-1 rounded font-bold"><span ref={fpsRef}>0</span> {t('ui.fps')}</span>
+            <div
+                className="fixed top-0 bottom-0 right-0 w-56 bg-black/75 border-l border-white/10 shadow-2xl z-[9998] font-mono text-[11px] text-green-400 pointer-events-auto transition-all flex flex-col overflow-hidden"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="p-3 shrink-0 space-y-2 overflow-y-auto flex-1">
+                    <div
+                        onClick={toggleMinimized}
+                        className="flex justify-between items-center mb-2 border-b border-white/10 pb-1 cursor-pointer group select-none"
+                        title="Minimize"
+                    >
+                        <span className="font-bold text-white uppercase tracking-wider group-hover:text-green-400 transition-colors">{t('ui.debug_monitor')}</span>
+                        <div className="flex items-center gap-2">
+                            <span className="bg-green-500 text-black px-1 rounded font-bold"><span ref={fpsRef}>0</span> {t('ui.fps')}</span>
+                            <div className="opacity-40 group-hover:opacity-100 transition-opacity font-bold text-white px-1">
+                                [-]
+                            </div>
+                        </div>
                     </div>
 
-                    <>
-                        <div className="flex items-center justify-between">
-                            <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">{t('ui.player')}</div>
-                            <span className="text-white tabular-nums">
-                                X: <span ref={playerXRef}>0</span>, Z: <span ref={playerZRef}>0</span>
-                            </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">{t('ui.camera')}</div>
-                            <span className="text-white tabular-nums text-[10px]">
-                                <span ref={camXRef}>0</span>, <span ref={camYRef}>0</span>, <span ref={camZRef}>0</span>
-                            </span>
-                        </div>
-                    </>
+                    <div className="flex items-center justify-between">
+                        <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">{t('ui.time_of_day')}</div>
+                        <span className="text-white tabular-nums text-[10px]">
+                            <span ref={skyTimeRef}>Midnight (0.0000)</span>
+                        </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">{t('ui.time_factor')}</div>
+                        <span className="text-white tabular-nums text-[10px]">
+                            <span ref={skyFactorRef}>0.0000</span>
+                        </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                        <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">{t('ui.player')}</div>
+                        <span className="text-white tabular-nums">
+                            X: <span ref={playerXRef}>0</span>, Z: <span ref={playerZRef}>0</span>
+                        </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">{t('ui.camera')}</div>
+                        <span className="text-white tabular-nums text-[10px]">
+                            <span ref={camXRef}>0</span>, <span ref={camYRef}>0</span>, <span ref={camZRef}>0</span>
+                        </span>
+                    </div>
 
                     <div>
                         <div className="text-white/40 uppercase text-[10px] mb-0.5">{t('ui.renderer')}</div>
@@ -204,8 +296,8 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
                         </div>
                     </div>
 
-                    <div className="mt-1 flex items-center justify-between">
-                        <span className="text-white/40">GC</span>
+                    <div className="flex items-center justify-between">
+                        <span className="text-white/40 uppercase text-[10px]">GC</span>
                         <span ref={gcAlertRef} className="text-white/20">—</span>
                     </div>
 
@@ -221,57 +313,60 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
                         </div>
                     )}
 
-                    {systems && systems.length > 0 && (
-                        <div>
-                            <div onClick={(e) => { e.stopPropagation(); setSystemsExpanded(v => !v); }} className="flex items-center justify-between text-white/40 uppercase text-[10px] mb-0.5 cursor-pointer hover:text-white/70 select-none">
-                                <span>{t('ui.systems')}</span>
-                                <span className="text-[10px]">{systemsExpanded ? '▾' : '▸'}</span>
-                            </div>
-                            {systemsExpanded && (
-                                <div className="space-y-0.5">
-                                    {systemElements}
-                                </div>
-                            )}
+                    <div>
+                        <div
+                            className="text-white/40 uppercase text-[10px] mb-0.5 cursor-pointer hover:text-white flex justify-between select-none"
+                            onClick={(e) => { e.stopPropagation(); setCpuExpanded(!cpuExpanded); }}
+                        >
+                            <span>{t('ui.cpu_timings')}</span>
+                            <span className="opacity-40">{cpuExpanded ? '▼' : '▶'}</span>
                         </div>
-                    )}
+                        {cpuExpanded && (
+                            <div className="space-y-0.5 pr-1">
+                                {timingElements}
+                            </div>
+                        )}
+                    </div>
 
-                    <div className="border-t border-white/10 pt-1 space-y-0.5">
-                        <div className="flex justify-between items-center mb-1">
-                            <div className="text-white/40 uppercase text-[10px]">{t('ui.logging')}</div>
-                            <div className="flex gap-1">
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        monitor.logsHijackEnabled = !monitor.logsHijackEnabled;
-                                        if (monitor.logsHijackEnabled) setShowLogs(true);
-                                        forceUpdate();
-                                    }}
-                                    className={`px-2 py-0.5 rounded transition-colors font-bold tracking-wider ${monitor.logsHijackEnabled ? 'bg-blue-500 text-white' : 'bg-white/10 text-white/40 hover:bg-white/20'}`}
-                                >
-                                    {t('ui.hijack')}
-                                </button>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); setShowLogs(v => !v); forceUpdate(); }}
-                                    className={`px-2 py-0.5 rounded transition-colors font-bold tracking-wider ${showLogs ? 'bg-green-500 text-black' : 'bg-white/10 text-white/40 hover:bg-white/20'}`}
-                                >
-                                    {t('ui.log')}
-                                </button>
-                                <button
-                                    disabled={monitor.isRecordingActive}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        monitor.startRecording();
-                                        forceUpdate();
-                                    }}
-                                    className={`px-2 py-0.5 rounded transition-colors font-bold tracking-wider ${monitor.isRecordingActive
-                                        ? 'bg-gray-500/20 text-gray-400 cursor-not-allowed animate-pulse'
-                                        : 'bg-red-500/20 text-red-300 hover:bg-red-500/40 cursor-pointer'
-                                        }`}
-                                >
-                                    {t('ui.rec')}
-                                </button>
-                            </div>
+                    <div>
+                        <div
+                            className="text-white/40 uppercase text-[10px] mb-0.5 cursor-pointer hover:text-white flex justify-between select-none"
+                            onClick={(e) => { e.stopPropagation(); setSystemsExpanded(!systemsExpanded); }}
+                        >
+                            <span>{t('ui.systems')}</span>
+                            <span className="opacity-40">{systemsExpanded ? '▼' : '▶'}</span>
                         </div>
+                        {systemsExpanded && (
+                            <div className="space-y-0.5 pr-1">
+                                {systemElements}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="pt-1 border-t border-white/10 shrink-0">
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-white/40 uppercase text-[10px]">{t('ui.logging')}</span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-1 mb-2">
+                            {showDebugButtons && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setShowLogs(!showLogs); }}
+                                    className={`px-1 py-0.5 rounded text-[9px] font-bold ${showLogs ? 'bg-blue-500 text-white' : 'bg-white/10 text-white/40'}`}
+                                >
+                                    LOG
+                                </button>
+                            )}
+                            <button
+                                onClick={(e) => { e.stopPropagation(); monitor.isRecordingActive ? monitor.stopRecording() : monitor.startRecording(); forceUpdate(); }}
+                                className={`px-1 py-0.5 rounded text-[9px] font-bold transition-all ${monitor.isRecordingActive ? 'bg-red-500 text-white animate-pulse-red shadow-[0_0_8px_rgba(239,68,68,0.5)]' : (monitor.isRecordingPending ? 'bg-orange-500 text-black' : 'bg-white/10 text-white/40')}`}
+                            >
+                                {recordText}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="pt-1 border-t border-white/10 text-[9px] space-y-1">
                         <div onClick={(e) => { e.stopPropagation(); monitor.consoleLoggingEnabled = !monitor.consoleLoggingEnabled; forceUpdate(); }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
                             <span className="text-white/60">{t('ui.engine_perf')}</span>
                             <span className={`font-bold ${monitor.consoleLoggingEnabled ? 'text-green-400' : 'text-red-400'}`}>{monitor.consoleLoggingEnabled ? t('ui.on') : t('ui.off')}</span>
@@ -286,35 +381,43 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
                         </div>
                     </div>
                 </div>
-
-                {timings && (
-                    <div className="flex flex-col flex-1 min-h-0 border-t border-white/10 p-3">
-                        <div className="flex justify-between items-center mb-1 shrink-0">
-                            <div className="text-white/40 uppercase text-[10px]">{t('ui.cpu_timings')}</div>
-                            <div className="text-green-400 text-[10px] font-bold">
-                                {timings.total}ms
-                            </div>
-                        </div>
-                        <div className="overflow-y-auto flex-1 space-y-0.5 pr-1">
-                            {timingElements}
-                        </div>
-                    </div>
-                )}
             </div>
 
-            {/* STANDALONE LOG WINDOW */}
-            {showLogs && (
-                <div className="fixed inset-0 z-[99999] bg-black/95 flex flex-col pointer-events-auto backdrop-blur-md pb-safe">
-                    <div className="flex justify-between items-center bg-white/10 p-3 border-b border-white/20 shadow-lg shrink-0 pt-safe">
-                        <span className="text-white font-bold tracking-widest uppercase text-xs">{t('ui.system_logs')}</span>
-                        <div className="flex gap-2">
-                            <button onClick={() => monitor.clearLogs()} className="px-3 py-1 font-bold text-red-300 bg-red-500/20 hover:bg-red-500/40 rounded transition-colors">{t('ui.clear')}</button>
-                            <button onClick={() => setShowLogs(false)} className="px-3 py-1 font-bold text-white bg-white/20 hover:bg-white/30 rounded transition-colors">{t('ui.close')}</button>
-                        </div>
+            {/* FULLSCREEN LOG WINDOW (Mobile Only) */}
+            {showLogs && isMobile && (
+                <div className="fixed inset-0 z-[99999] bg-black/95 flex flex-col pointer-events-auto backdrop-blur-md pb-safe" onPointerDown={(e) => e.stopPropagation()}>
+                    {/* ROW 1: Header + Close */}
+                    <div className="flex justify-between items-center bg-white/10 p-2 border-b border-white/20 shadow-lg shrink-0 pt-safe">
+                        <span className="text-white font-bold tracking-widest uppercase text-[10px] ml-1">{t('ui.system_logs')}</span>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowLogs(false);
+                            }}
+                            className="px-3 py-1 font-bold text-white bg-white/10 hover:bg-white/20 rounded transition-colors text-[10px]"
+                        >
+                            {t('ui.close')}
+                        </button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] space-y-2 break-words">
-                        {logs.length > 0 ? (
+                    {/* ROW 2: Controls */}
+                    <div className="flex items-center gap-1.5 p-1.5 bg-white/5 border-b border-white/10 shrink-0 overflow-x-auto">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); monitor.clearLogs(); forceUpdate(); }}
+                            className="px-2 py-1 font-bold text-red-300 bg-red-500/20 rounded text-[9px] uppercase"
+                        >
+                            {t('ui.clear')}
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); monitor.logsHijackEnabled = !monitor.logsHijackEnabled; forceUpdate(); }}
+                            className={`px-2 py-1 font-bold rounded text-[9px] uppercase ${monitor.logsHijackEnabled ? 'bg-orange-500 text-black' : 'bg-white/10 text-white/40'}`}
+                        >
+                            HIJACK
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] space-y-1 break-words">
+                        {logElements.length > 0 ? (
                             logElements
                         ) : (
                             <div className="text-white/20 italic text-center py-20 uppercase tracking-widest text-sm">{t('ui.no_logs')}</div>
@@ -322,6 +425,17 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
                     </div>
                 </div>
             )}
+
+            <style dangerouslySetInnerHTML={{
+                __html: `
+                @keyframes pulse-red-anim {
+                    0%, 100% { background-color: #ef4444; }
+                    50% { background-color: #f87171; }
+                }
+                .animate-pulse-red {
+                    animation: pulse-red-anim 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+                }
+            `}} />
         </>
     );
 });

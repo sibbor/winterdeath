@@ -67,19 +67,6 @@ export const useGameInput = (
 
             if (!isInputEnabled) return;
 
-            // Flashlight Toggle
-            if (action === InputAction.FLASHLIGHT) {
-                if (state.flashlightOn === undefined) state.flashlightOn = true;
-                state.flashlightOn = !state.flashlightOn;
-
-                const flashlight = refs.flashlightRef.current as THREE.SpotLight;
-                if (flashlight) {
-                    const intensity = state.vehicle.active ? FLASHLIGHT.intensity * 2 : FLASHLIGHT.intensity;
-                    flashlight.intensity = state.flashlightOn ? intensity : 0;
-                }
-                UiSounds.playClick();
-            }
-
             if (state.statusFlags & PlayerStatusFlags.DEAD) return;
             state.lastActionTime = state.simTime;
         };

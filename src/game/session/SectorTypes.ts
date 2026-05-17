@@ -2,35 +2,32 @@ import * as THREE from 'three';
 import { TriggerSystem } from '../../systems/TriggerSystem';
 import { MapItem } from '../../components/ui/hud/HudTypes';
 import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
-import { WeatherType } from '../../core/engine/EngineTypes';
+import { WeatherType, GroundType, SectorEnvironment, EnvironmentalZone } from '../../core/engine/EngineTypes';
 import { SectorState } from '../../types/StateTypes';
-import { EnemyType } from '../../entities/enemies/EnemyTypes';
-import { NoiseType } from '../../entities/enemies/EnemyTypes';
-import { SectorEnvironment, EnvironmentalZone as AtmosphereZone } from '../../core/engine/EngineTypes';
-import { TriggerAction } from '../../types/TriggerTypes';
+import { EnemyType, NoiseType } from '../../entities/enemies/EnemyTypes';
+import { TriggerAction, SectorTrigger } from '../../types/TriggerTypes';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
-import { DamageID, EnemyAttackType } from '../../entities/player/CombatTypes';
+import { DamageID, EnemyAttackType, DamageType } from '../../entities/player/CombatTypes';
 import { InteractionPromptId } from '../../systems/ui/UIEventBridge';
 import { WorldStreamer } from '../../core/world/WorldStreamer';
+import { StatusEffectID } from '../../types/StatusEffects';
+import { CollectibleID } from '@/src/content/collectibles';
 
 export enum SectorID {
     VILLAGE = 0,
     MOUNTAIN_VAULT = 1,
-    THE_MAST = 2,
+    MAST = 2,
     SCRAPYARD = 3,
     PLAYGROUND = 4
 }
 
-export enum GroundType {
-    SNOW = 0,
-    GRAVEL = 1,
-    DIRT = 2,
-    ASPHALT = 3,
-    WOOD = 4,
-    METAL = 5,
-    ICE = 6,
-    WATER = 7
-}
+export const SECTOR_THEMES = [
+    { id: SectorID.VILLAGE, name: 'sectors.sector_0_name', briefing: 'story.sector_0_briefing', familyMemberId: 0 },
+    { id: SectorID.MOUNTAIN_VAULT, name: 'sectors.sector_1_name', briefing: 'story.sector_1_briefing', familyMemberId: 1 },
+    { id: SectorID.MAST, name: 'sectors.sector_2_name', briefing: 'story.sector_2_briefing', familyMemberId: 2 },
+    { id: SectorID.SCRAPYARD, name: 'sectors.sector_3_name', briefing: 'story.sector_3_briefing', familyMemberId: 3 },
+    { id: SectorID.PLAYGROUND, name: 'sectors.sector_4_name', briefing: 'story.sector_4_briefing' },
+];
 
 export enum BossID {
     NONE = -1,
@@ -78,7 +75,7 @@ export enum DialogueLineType {
     THOUGHT = 4
 }
 
-export enum CollectibleModelType {
+export enum CollectibleType {
     PHONE = 0,
     PACIFIER = 1,
     AXE = 2,
@@ -90,7 +87,7 @@ export enum CollectibleModelType {
     TEDDY = 8
 }
 
-export type { AtmosphereZone };
+export type { EnvironmentalZone };
 
 export interface SpawnPoint {
     x: number;
@@ -114,7 +111,7 @@ export interface SectorContext {
     chests: any[];
     flickeringLights: any[];
     burningObjects: any[];
-    triggers: TriggerSystem;
+    triggers: SectorTrigger[]; // [VINTERDÖD] Buffered triggers for batch registration
     mapItems: MapItem[]; // For the Map Screen
     interactables: THREE.Object3D[]; // Explicit list of interactive objects (Boats, Stations, etc)
     rng: () => number;
@@ -132,6 +129,7 @@ export interface SectorContext {
     sectorState: SectorState;
     state: any; // RuntimeState (for systems like waterSystem, windSystem)
     activeFamilyMembers: any[]; // List for the FamilySystem to track
+    environmentalZones: EnvironmentalZone[]; // Dynamic environmental regions
     uniqueMeshes?: any[]; // For instanced meshes or unique geometry
     yield: () => Promise<void>;
     isWarmup?: boolean; // When true: skip triggers, enemies, and story logic (preloader ghost-render mode)
@@ -143,9 +141,12 @@ export interface SectorContext {
     setCameraOverride?: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
     shakeCamera?: (amount: number, type?: CameraShakeType) => void;
     makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
+    applyDamage?: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
 
     // Required action bridge for triggers
     onAction: (action: TriggerAction | string | any[]) => void;
+    spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D | null, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
+    spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
 }
 
 export interface SectorDef {
@@ -172,13 +173,13 @@ export interface SectorDef {
     initialAim?: { x: number, y: number }; // Optional initial aim direction for player
 
     // Collectibles (Automatic Spawning)
-    collectibles?: { id: string, x: number, z: number }[];
+    collectibles?: { id: CollectibleID, x: number, z: number }[];
 
     // Cinematic
     cinematic?: CinematicConfig;
 
     // Atmosphere Zones (Data-driven environmental changes)
-    atmosphereZones?: AtmosphereZone[];
+    environmentalZones?: EnvironmentalZone[];
 
     // Logic
     setupEnvironment?: (ctx: SectorContext) => Promise<void> | void;
@@ -196,32 +197,46 @@ export interface SectorUpdateContext {
     simTime: number;
     renderTime: number;
     playerPos: THREE.Vector3;
-    gameState: any; // RuntimeState
+    triggerSystem: TriggerSystem; // [VINTERDÖD] Live system for simulation checks
+    state: any; // [VINTERDÖD] RuntimeState reference for systems
+    gameState: any; // RuntimeState (Legacy compat)
     sectorState: SectorState;
     ctx: SectorContext;
+    engine: any;
+    worldStreamer: WorldStreamer;
+    scene: THREE.Scene;
+    handleDiscovery: (type: any, id: any, uiSmi?: number, titleKey?: string, detailsKey?: string, payload?: any) => boolean;
 
     // --- CALLBACKS & HELPERS ---
     onAction: (action: any) => void;
     spawnZombie: (type?: EnemyType, pos?: THREE.Vector3) => void;
     spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
-    setNotification: (n: { text: string, duration?: number }) => void;
+    setBubble: (text: string, duration?: number) => void;
     setInteraction: (interaction: { id: string, type: any, label: string, promptId?: InteractionPromptId, position?: THREE.Vector3 } | null) => void;
     setOverlay: (type: number | null) => void;
     playSound: (id: SoundID) => void;
     playTone: (freq: number, type: ToneType, duration: number, vol?: number) => void;
     cameraShake: (amount: number, type?: CameraShakeType) => void;
     t: (key: string) => string;
-    scene: THREE.Scene;
     spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D | null, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
     spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
-    onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, sourceAttack?: EnemyAttackType) => void;
-    startCinematic: (target: THREE.Object3D, sectorId: number, dialogueId?: number, params?: any) => void;
+    onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
+    startCinematic: (target?: THREE.Object3D | null, sectorId?: number, dialogueId?: number, params?: any) => void;
     setCameraOverride: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
     makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
+    applyDamage?: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
+    gainXp: (amount: number) => void;
+    gainSp: (amount: number) => void;
+    gainScrap: (amount: number) => void;
 
     // --- ENVIRONMENT CONTROLS ---
     setWeather?: (type: WeatherType, count?: number) => void;
-    setLight?: (params: { skyLightColor?: THREE.Color; skyLightIntensity?: number; ambientIntensity?: number; skyLightPosition?: { x: number, y: number, z: number }; skyLightVisible?: boolean }) => void;
+    setWindStrength?: (strength: number) => void;
+    setLight?: (params: {
+        skyLightColor?: THREE.Color; skyLightIntensity?: number;
+        skyLightPosition?: { x: number, y: number, z: number };
+        skyLightVisible?: boolean
+    }) => void;
     setBackgroundColor?: (color: number) => void;
     setGroundColor?: (color: number) => void;
     setFOV?: (fov: number) => void;

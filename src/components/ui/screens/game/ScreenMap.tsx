@@ -5,7 +5,7 @@ import { UiSounds } from '../../../../utils/audio/AudioLib';
 import ScreenModalLayout, { TacticalCard } from '../../layout/ScreenModalLayout';
 import { useHudStore } from '../../../../hooks/useHudStore';
 import { HudStore } from '../../../../store/HudStore';
-import { DamageID } from '../../../../entities/player/CombatTypes';
+import { DamageID, ToolID } from '../../../../entities/player/CombatTypes';
 import { colorToHex } from '../../../../utils/ui/ColorUtils';
 
 interface ScreenMapProps {
@@ -282,7 +282,7 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
 
             // Update Family
             if (familyRef.current) {
-                if (state.activeWeapon === DamageID.RADIO && state.familyPos) {
+                if (state.activeWeapon === ToolID.RADIO && state.familyPos) {
                     const posF = getMapPercent(state.familyPos.x, state.familyPos.z, bounds);
                     familyRef.current.style.display = 'block';
                     familyRef.current.style.left = `${posF.x}%`;
@@ -353,7 +353,7 @@ const LONG_PRESS_DURATION = 600;
 
 export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, isMobileDevice }) => {
     const { mapItems, mapItemsCount } = useHudStore(s => ({ mapItems: s.mapItems, mapItemsCount: s.mapItemsCount }), true);
-    const sectorName = useHudStore(s => s.sectorName);
+    const sectorName = t(useHudStore(s => s.sectorName));
 
     const [mouseCoords, setMouseCoords] = useState<{ x: number, z: number } | null>(null);
     const [tooltipData, setTooltipData] = useState<any>(null);

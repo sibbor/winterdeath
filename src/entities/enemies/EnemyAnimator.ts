@@ -392,18 +392,26 @@ export const EnemyAnimator = {
             mesh.rotation.z += (Math.random() - 0.5) * jitter;
         }
 
-        // --- ELECTRIC JITTER (Phase 15 Visual Polish) ---
-        if (e.statusFlags & EnemyFlags.ELECTROCUTED) {
-            const jitterTime = renderTime * 0.06;
-            const jitterY = Math.sin(jitterTime) * 0.12;
-            const jitterScale = 1.0 + Math.sin(jitterTime * 1.3) * 0.08;
+        // --- STATUS PANIC JITTER (Phase 15 Visual Polish) ---
+        const isBurning = (e.statusFlags & EnemyFlags.BURNING) !== 0;
+        const isElectrocuted = (e.statusFlags & EnemyFlags.ELECTROCUTED) !== 0;
+        const isDeadFlag = (e.statusFlags & EnemyFlags.DEAD) !== 0;
 
-            mesh.position.y += jitterY;
-            mesh.scale.set(
-                _animState.targetScaleX * jitterScale,
-                _animState.targetScaleY * jitterScale,
-                _animState.targetScaleZ * jitterScale
-            );
+        if ((isBurning || isElectrocuted) && !isDeadFlag) {
+            const jitterTime = renderTime * 0.01;
+            // Burning is a flailing/shivering wave, Electrocuted is a high-frequency buzz
+            const intensity = isBurning ? (0.08 + Math.sin(jitterTime) * 0.04) : 0.15;
+            
+            mesh.rotation.x += (Math.random() - 0.5) * intensity;
+            mesh.rotation.z += (Math.random() - 0.5) * intensity;
+            mesh.position.y += (Math.random() - 0.5) * intensity * 0.5;
+
+            if (isElectrocuted) {
+                const buzzScale = 1.0 + Math.sin(renderTime * 0.08) * 0.08;
+                _animState.targetScaleX *= buzzScale;
+                _animState.targetScaleY *= buzzScale;
+                _animState.targetScaleZ *= buzzScale;
+            }
         }
     }
 };

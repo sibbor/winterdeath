@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SectorDef, SectorContext, GroundType, ChestType } from '../../game/session/SectorTypes';
+import { SectorContext, ChestType } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
-import { InteractionShape } from '../../systems/ui/UIEventBridge';
+import { ColliderType } from '@/src/core/world/CollisionResolution';
 
 export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Group) => {
-    const { scene, obstacles, flickeringLights, triggers } = ctx;
+    const { scene } = ctx;
 
     interface Box { x: number; z: number; w: number; d: number; rotation?: number; }
     interface RoomData extends Box {
@@ -189,7 +189,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
             // Simple collider for props
             SectorGenerator.addObstacle(ctx, {
                 mesh: prop.children[0] as THREE.Mesh,
-                collider: { type: InteractionShape.BOX, size: new THREE.Vector3(1, 2, 1) }
+                collider: { type: ColliderType.BOX, size: new THREE.Vector3(1, 2, 1) }
             });
         }
     };
@@ -232,7 +232,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
         SectorBuilder.addObstacle(ctx, {
             mesh: dummy,
-            collider: { type: InteractionShape.BOX, size: new THREE.Vector3(width, height, depth) }
+            collider: { type: ColliderType.BOX, size: new THREE.Vector3(width, height, depth) }
         });
     };
 
@@ -381,7 +381,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
     // --- PART 3: THE SHELTER PORT ---
     // 1. Frame - Hollow construction to allow seeing through
     const frameGroup = new THREE.Group();
-    frameGroup.name = 's2_shelter_port_frame';
+    frameGroup.name = 's1_shelter_port_frame';
     frameGroup.position.set(41, 8.5, -193); // Centered on the boss room West wall
     frameGroup.rotation.y = Math.PI / 2; // Rotate 90 deg to face East/West
 
@@ -400,31 +400,31 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
     frameGroup.add(rightPost);
     SectorBuilder.addObstacle(ctx, {
         mesh: frameGroup,
-        collider: { type: InteractionShape.BOX, size: new THREE.Vector3(22, 17, 4) }
+        collider: { type: ColliderType.BOX, size: new THREE.Vector3(22, 17, 4) }
     });
 
     scene.add(frameGroup);
 
     const doorL = new THREE.Mesh(new THREE.BoxGeometry(10, 17, 1), MATERIALS.metalPanel);
-    doorL.name = 's2_shelter_port_left';
+    doorL.name = 's1_shelter_port_left';
     doorL.position.set(-5, -1, 0); // Relative to frame, positioned to close gap
     frameGroup.add(doorL);
 
     const doorObstacleL = {
         mesh: doorL,
-        collider: { type: InteractionShape.BOX, size: new THREE.Vector3(10, 17, 1) }
+        collider: { type: ColliderType.BOX, size: new THREE.Vector3(10, 17, 1) }
     };
     SectorBuilder.addObstacle(ctx, doorObstacleL);
     (ctx as any).sectorState.doorObstacleL = doorObstacleL;
 
     const doorR = new THREE.Mesh(new THREE.BoxGeometry(10, 17, 1), MATERIALS.metalPanel);
-    doorR.name = 's2_shelter_port_right';
+    doorR.name = 's1_shelter_port_right';
     doorR.position.set(5, -1, 0); // Relative to frame, positioned to close gap
     frameGroup.add(doorR);
 
     const doorObstacleR = {
         mesh: doorR,
-        collider: { type: InteractionShape.BOX, size: new THREE.Vector3(10, 17, 1) }
+        collider: { type: ColliderType.BOX, size: new THREE.Vector3(10, 17, 1) }
     };
     SectorBuilder.addObstacle(ctx, doorObstacleR);
     (ctx as any).sectorState.doorObstacleR = doorObstacleR;

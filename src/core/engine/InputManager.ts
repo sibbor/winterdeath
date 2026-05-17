@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { System, SystemID } from '../../systems/System';
 import { UIEventBridge, MetaActionId } from '../../systems/ui/UIEventBridge';
 import { GameSessionLogic } from '../../game/session/GameSessionLogic';
+import { FLASHLIGHT } from '../../content/constants';
 
 /**
  * Strictly typed numeric enum for engine input actions.
@@ -87,6 +88,8 @@ export interface InputState {
     joystickAim: THREE.Vector2;
     /** Whether the pointer is currently locked by the browser */
     locked: boolean;
+    /** Current state of the player's flashlight */
+    flashlightOn: boolean;
 }
 
 // Pre-calculated math constants
@@ -103,6 +106,7 @@ export class InputManager implements System {
     persistent = true;
     public state: InputState;
     private physicalActions: Uint8Array;
+    private prevActions: Uint8Array;
     private isEnabled: boolean = false;
     private virtualAimPos: THREE.Vector2 = new THREE.Vector2(0, -200);
 
@@ -140,10 +144,12 @@ export class InputManager implements System {
             cursorPos: { x: this.screenHalfWidth, y: this.screenHalfHeight },
             joystickMove: new THREE.Vector2(0, 0),
             joystickAim: new THREE.Vector2(0, 0),
-            locked: false
+            locked: false,
+            flashlightOn: true
         };
 
         this.physicalActions = new Uint8Array(InputAction.COUNT);
+        this.prevActions = new Uint8Array(InputAction.COUNT);
 
         // --- ZERO-GC PRE-BINDING ---
         this.handleKeyDown = this.handleKeyDown.bind(this);
@@ -158,6 +164,7 @@ export class InputManager implements System {
         this.handleBlur = this.handleBlur.bind(this);
 
         this.bindEvents();
+        (window as any).inputManager = this;
     }
 
     public enable() {
@@ -185,6 +192,16 @@ export class InputManager implements System {
      */
     public isPressed(action: InputAction): boolean {
         return this.state.actions[action] === 1;
+    }
+
+    /**
+     * Allows external systems (like TouchController) to trigger actions.
+     * These persist until released.
+     */
+    public handleVirtualAction(action: InputAction, pressed: boolean) {
+        if (action >= 0 && action < InputAction.COUNT) {
+            this.physicalActions[action] = pressed ? 1 : 0;
+        }
     }
 
     private bindEvents() {
@@ -239,6 +256,33 @@ export class InputManager implements System {
         if (uiAction !== MetaActionId.NONE) {
             this.handleMetaAction(uiAction);
         }
+
+        // --- RISING EDGE DETECTOR (Toggles) ---
+        // Vinterdöd Hardening: Detect the exact frame a button is pressed 
+        // to handle toggles centrally without leaking logic into other systems.
+        const flashlightPressed = this.state.actions[InputAction.FLASHLIGHT] === 1;
+        if (flashlightPressed && this.prevActions[InputAction.FLASHLIGHT] === 0) {
+            this.state.flashlightOn = !this.state.flashlightOn;
+
+            // Sync to game state immediately if available
+            if (session.state) {
+                session.state.flashlightOn = this.state.flashlightOn;
+
+                // Update 3D scene representation
+                const playerGroup = (session as any).playerGroup || (session as any)._playerGroup;
+                if (playerGroup) {
+                    const flashlight = playerGroup.getObjectByName('FLASHLIGHT') as THREE.SpotLight;
+                    if (flashlight) {
+                        const baseIntensity = FLASHLIGHT.intensity;
+                        const multiplier = session.state.vehicle?.active ? 2.0 : 1.0;
+                        flashlight.intensity = session.state.flashlightOn ? (baseIntensity * multiplier) : 0;
+                    }
+                }
+            }
+        }
+
+        // Update previous state for next frame
+        this.prevActions.set(this.state.actions);
     }
 
     /**
@@ -268,6 +312,9 @@ export class InputManager implements System {
                 break;
             case MetaActionId.WEAPON_SLOT_5:
                 this.state.actions[InputAction.SLOT_5] = 1;
+                break;
+            case MetaActionId.TOGGLE_FLASHLIGHT:
+                this.state.actions[InputAction.FLASHLIGHT] = 1;
                 break;
         }
 
@@ -354,12 +401,17 @@ export class InputManager implements System {
 
     private handleMouseDown(e: MouseEvent) {
         if (!this.isEnabled) return;
-        this.physicalActions[InputAction.FIRE] = 1;
+        // Button 0 = Left Click
+        if (e.button === 0) {
+            this.physicalActions[InputAction.FIRE] = 1;
+        }
     }
 
     private handleMouseUp(e: MouseEvent) {
         if (!this.isEnabled) return;
-        this.physicalActions[InputAction.FIRE] = 0;
+        if (e.button === 0) {
+            this.physicalActions[InputAction.FIRE] = 0;
+        }
     }
 
     private handleWheel(e: WheelEvent) {
@@ -418,4 +470,5 @@ export class InputManager implements System {
     public setJoystickAim(x: number, y: number) {
         this.state.joystickAim.set(x, y);
     }
+
 }

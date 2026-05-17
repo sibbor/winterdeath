@@ -3,7 +3,8 @@ import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
 import { FXParticleType } from '../types/FXTypes';
-import { DamageID } from '../entities/player/CombatTypes';
+import { DamageID, AbilityID, DamageType } from '../entities/player/CombatTypes';
+import { ABILITIES } from '../content/abilities';
 import { PERKS, StatusEffectID } from '../content/perks';
 import { applyCollisionResolution } from '../core/world/CollisionResolution';
 import { audioEngine } from '../utils/audio/AudioEngine';
@@ -45,13 +46,12 @@ export class PlayerMovementSystem implements System {
         applyDamage: null,
         scene: null,
         engine: null,
-        particles: null
+        spawnParticle: null
     };
 
     private _invincibilityMesh: THREE.Mesh | null = null;
     private _buffShieldMesh: THREE.Mesh | null = null;
     private _statsSystem: PlayerStatsSystem | null = null;
-
 
     constructor(private playerGroup: THREE.Group) {
         // 100% Zero-GC Mesh Pre-allocation
@@ -86,12 +86,8 @@ export class PlayerMovementSystem implements System {
         const disableInput = session.inputDisabled || false;
 
         // --- 1. SSoT SPEED AGGREGATION (Zero-GC) ---
-        // Vinterdöd Refactor: We resolve the 'Rush Perk' bug by explicitly aggregating 
-        // speed multipliers from the StatsBridge to ensure all perks (e.g. Adrenaline)
-        // are universally applied to both normal walking and rushing states.
-        const baseMoveSpeed = stats[PlayerStatID.SPEED] * KMH_TO_MS;
-        const moveMult = stats[PlayerStatID.MULTIPLIER_SPEED];
-        const currentSpeed = baseMoveSpeed * moveMult;
+        // Vinterdöd Refactor: Use the frame-perfect baked speed calculated by the PerkSystem.
+        const currentSpeed = stats[PlayerStatID.FINAL_SPEED];
 
         if (state.vehicle.active) {
             state.isMoving = false;
@@ -125,13 +121,9 @@ export class PlayerMovementSystem implements System {
         this.updateInvincibleGlow(state, session.state.renderTime);
     }
 
-
     private checkReflexShield(session: GameSessionLogic, simTime: number) {
         const state = session.state;
         const perkID = StatusEffectID.REFLEX_SHIELD;
-
-        // ONLY trigger if the player has unlocked the perk!
-        if (!StatsBridge.hasPerk(session.state, perkID)) return;
 
         const perk = PERKS[perkID];
         const cooldown = perk?.cooldown ?? 10000;
@@ -140,8 +132,9 @@ export class PlayerMovementSystem implements System {
             state.lastReflexShieldTime = simTime;
 
             // Centralized Trigger (Clears debuffs!)
-            if (this._statsSystem) {
-                this._statsSystem.triggerReflexShield(session, simTime);
+            const perkSystem = session.getSystem<any>(SystemID.PERK_SYSTEM);
+            if (perkSystem) {
+                perkSystem.applyPerk(session, perkID);
             }
         }
     }
@@ -181,9 +174,10 @@ export class PlayerMovementSystem implements System {
                 const pressDuration = simTime - state.spacePressTime;
 
                 // Increased window (150->200ms) and added '!state.isDodging' check
+                const dodgeCost = ABILITIES[AbilityID.DODGE].staminaCost || 20;
                 if (!state.isRushing && !state.isDodging && pressDuration < PLAYER.DODGE_PRESS_THRESHOLD) {
-                    if (stats[PlayerStatID.STAMINA] >= COMBAT.STAMINA_COST_DODGE) {
-                        stats[PlayerStatID.STAMINA] -= COMBAT.STAMINA_COST_DODGE;
+                    if (stats[PlayerStatID.STAMINA] >= dodgeCost) {
+                        stats[PlayerStatID.STAMINA] -= dodgeCost;
                         state.lastStaminaUseTime = simTime;
                         state.isDodging = true;
                         state.dodgeStartTime = simTime; // Logic MUST use simTime for parity
@@ -192,6 +186,8 @@ export class PlayerMovementSystem implements System {
                         // --- TRACK NEW METRIC (UNIFIED) ---
                         const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                         if (tracker) tracker.recordDodge(session);
+
+                        this.checkReflexShield(session, simTime);
                     }
                 }
             }
@@ -248,6 +244,8 @@ export class PlayerMovementSystem implements System {
             session.engine.water.checkBuoyancy(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z, session.state.renderTime);
             inWater = _buoyancyResult.inWater && !state.vehicle.active;
 
+            const groundY = session.engine.ground ? session.engine.ground.getGroundHeight(playerGroup.position.x, playerGroup.position.z, session) : 0;
+
             if (inWater) {
                 const flatDepth = _buoyancyResult.baseWaterLevel - _buoyancyResult.groundY;
 
@@ -267,14 +265,14 @@ export class PlayerMovementSystem implements System {
                 }
 
                 const swimY = _buoyancyResult.waterLevel - PHYSICS.SWIM_Y_OFFSET;
-                const targetY = isSwimming ? swimY : _buoyancyResult.groundY;
+                const targetY = isSwimming ? swimY : groundY;
                 playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, targetY, 4 * delta);
             } else {
                 isSwimming = false;
                 isWading = false;
-                if (playerGroup.position.y !== 0) {
-                    playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, 0, 15 * delta);
-                    if (Math.abs(playerGroup.position.y) < 0.01) playerGroup.position.y = 0;
+                if (playerGroup.position.y !== groundY) {
+                    playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, groundY, 15 * delta);
+                    if (Math.abs(playerGroup.position.y - groundY) < 0.01) playerGroup.position.y = groundY;
                 }
             }
         }
@@ -300,12 +298,11 @@ export class PlayerMovementSystem implements System {
                 // --- Unified Drowning Logic ---
                 // We only apply the status effect here. The PlayerStatsSystem handles the damage tick.
                 if (state.callbacks && state.callbacks.onPlayerHit) {
-                    state.callbacks.onPlayerHit(0, null, DamageID.DROWNING, true, StatusEffectID.DROWNING, 1500);
+                    state.callbacks.onPlayerHit(0, null, DamageType.DROWNING, DamageID.DROWNING, true, StatusEffectID.DROWNING, 1500);
                 }
             }
         }
 
-        const isMoving = state.isMoving;
         const rushRampSpeed = delta * PLAYER.RUSH_RAMP_SPEED; // 2 seconds for full ramp
 
         if (state.isRushing) {
@@ -314,8 +311,9 @@ export class PlayerMovementSystem implements System {
             // --- PROGRESSIVE RAMP-UP (2.0s) ---
             state.rushFactor = Math.min(1.0, state.rushFactor + rushRampSpeed);
 
-            // --- DYNAMIC STAMINA DRAIN (Ramping from 5/sec to 22/sec) ---
-            const drainRate = 5 + (state.rushFactor * 17);
+            // --- DYNAMIC STAMINA DRAIN (Ramping based on Ability DB) ---
+            const ability = ABILITIES[AbilityID.RUSH];
+            const drainRate = (ability.staminaCost || 5) + (state.rushFactor * 17);
             stats[PlayerStatID.STAMINA] = Math.max(0, stats[PlayerStatID.STAMINA] - delta * drainRate);
             state.lastStaminaUseTime = simTime;
             state.statusFlags |= PlayerStatusFlags.RUSHING;
@@ -377,15 +375,17 @@ export class PlayerMovementSystem implements System {
                 audioEngine.playSound(SoundID.DASH);
                 session.makeNoise(playerGroup.position, NoiseType.PLAYER_DODGING, NOISE_RADIUS[NoiseType.PLAYER_DODGING]);
 
-                // Proximity-Based Quick Finger (Witch Time)
+                // Perk: Quick Finger
+                // Proximity-Based perfect dodge mechanic
                 if (session.worldStreamer) {
                     const pool = session.worldStreamer.getEnemyPool();
                     const poolIdx = pool.nextIndex();
-                    session.worldStreamer.getNearbyEnemies(playerGroup.position.x, playerGroup.position.z, 1.0, poolIdx);
-                    
+                    session.worldStreamer.getNearbyEnemies(playerGroup.position.x, playerGroup.position.z, 5, poolIdx);
+
                     if (pool.getCount(poolIdx) > 0) {
-                        if (this._statsSystem) {
-                            this._statsSystem.triggerPerfectDodge(session);
+                        const perkSystem = session.getSystem<any>(SystemID.PERK_SYSTEM);
+                        if (perkSystem) {
+                            perkSystem.applyPerk(session, StatusEffectID.QUICK_FINGER);
                         }
                     }
                 }
@@ -545,7 +545,7 @@ export class PlayerMovementSystem implements System {
             this._knockbackCtx.applyDamage = state.callbacks?.applyDamage;
             this._knockbackCtx.scene = session.engine.scene;
             this._knockbackCtx.engine = session.engine;
-            this._knockbackCtx.particles = state.particles;
+            this._knockbackCtx.spawnParticle = session.spawnParticle;
 
             // UNIFIED PLOW PHYSICS (Data-driven ragdoll scaling)
             EnemyManager.knockbackEnemies(
@@ -554,6 +554,7 @@ export class PlayerMovementSystem implements System {
                 searchRadius,
                 state.isDodging ? 15 : 50, // Max Force
                 0,                         // Max Damage (Damage only applied on landing!)
+                DamageType.PHYSICAL,
                 state.isDodging ? DamageID.DODGE : DamageID.RUSH
             );
         }

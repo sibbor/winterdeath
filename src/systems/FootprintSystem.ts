@@ -130,7 +130,8 @@ class FootprintSystemClass implements System {
         const streamer = session.state.worldStreamer;
         if (!streamer) return;
 
-        const groundHeight = streamer.getGroundHeight(position.x, position.z);
+        const ground = session.engine.ground;
+        const groundHeight = ground ? ground.getGroundHeight(position.x, position.z, session) : (streamer ? streamer.getGroundHeight(position.x, position.z) : 0);
 
         // Extremely fast mathematical X/Z offset avoiding trig overhead where possible
         const offsetDist = isRight ? 0.15 : -0.15;
@@ -165,7 +166,8 @@ class FootprintSystemClass implements System {
         this.index = (this.index + 1) % MAX_FOOTPRINTS;
 
         // 3. Audio & Particle Feedback
-        let playMaterial: number = groundMaterial || MaterialType.SNOW;
+        const groundMat = session.engine.ground ? session.engine.ground.getGroundMaterial(position.x, position.z, streamer) : groundMaterial;
+        let playMaterial: number = groundMat || MaterialType.SNOW;
         if (inWater || isSwimming) playMaterial = MaterialType.WATER;
 
         GamePlaySounds.playFootstep(playMaterial, isRight, isRushing);
@@ -230,13 +232,20 @@ class FootprintSystemClass implements System {
         }
     }
 
-    cleanup() {
+    public clear() {
         if (this.scene && this.instancedMesh) {
             this.scene.remove(this.instancedMesh);
             this.instancedMesh.dispose();
             this.instancedMesh = null;
-            this.footprintData = [];
+            this.footprintData.length = 0;
             this.scene = null;
+        }
+    }
+
+    public reAttach(scene: THREE.Scene) {
+        this.scene = scene;
+        if (this.instancedMesh) {
+            scene.add(this.instancedMesh);
         }
     }
 }

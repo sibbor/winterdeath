@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { t } from '../../../utils/i18n';
 import { HudStore } from '../../../store/HudStore';
-import { DataResolver } from '../../../utils/ui/DataResolver';
+import { DataResolver } from '../../../core/data/DataResolver';
 
 interface CinematicBubbleProps {
     isMobileDevice?: boolean;
@@ -71,12 +71,12 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
         return HudStore.subscribe(() => {
             const state = HudStore.getState();
             const active = state.cinematicActive && state.dialogueActive && !!state.dialogueText;
-            
+
             if (active) {
                 const newText = t(state.dialogueText);
                 if (newText !== rawTextRef.current) {
                     rawTextRef.current = newText;
-                    
+
                     // Tokenize (Once per line)
                     const regex = /(\([^)]+\)|\/[^/]+\/)/g;
                     const parts = newText.split(regex);
@@ -87,9 +87,9 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
                     }).filter(t => t.content.length > 0);
 
                     totalCharsRef.current = currentTokens.current.reduce((acc, t) => acc + t.cleanContent.length, 0);
-                    
-                    setSpeakerName(state.dialogueSpeaker || '');
-                    setBgColor(DataResolver.getSpeakerColor(state.dialogueSpeaker));
+
+                    setSpeakerName(DataResolver.getFamilyMemberName(state.dialogueSpeaker || ''));
+                    setBgColor(DataResolver.getSpeakerColor(state.dialogueSpeaker || ''));
                     setIsVisible(true);
                     startTyping();
                 }

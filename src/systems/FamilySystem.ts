@@ -46,7 +46,6 @@ export class FamilySystem implements System {
     private isCinematicRef: React.MutableRefObject<{ active: boolean }>;
     private callbacks: {
         setFoundMember: (id: FamilyMemberID) => void;
-        startCinematic: (mesh: THREE.Group) => void;
     };
 
     constructor(
@@ -55,7 +54,6 @@ export class FamilySystem implements System {
         isCinematicRef: React.MutableRefObject<{ active: boolean }>,
         callbacks: {
             setFoundMember: (id: FamilyMemberID) => void;
-            startCinematic: (mesh: THREE.Group) => void;
         }
     ) {
         this.playerGroup = playerGroup;

@@ -28,6 +28,7 @@ export interface PerkStats {
     displayName: string;
     description: string;
     category: PerkCategory;
+    prerequisite?: string;
     duration?: number; // ms
     cooldown?: number; // ms
 
@@ -53,6 +54,7 @@ PERKS[StatusEffectID.TRICKSTERS_HASTE] = {
     icon: '🔁',
     displayName: 'perks.TRICKSTERS_HASTE.title',
     description: 'perks.TRICKSTERS_HASTE.description',
+    prerequisite: 'perks.TRICKSTERS_HASTE.prerequisite',
     category: PerkCategory.PASSIVE,
     reloadModifier: 20, // 20% faster reload
 };
@@ -61,6 +63,7 @@ PERKS[StatusEffectID.EAGLES_SIGHT] = {
     icon: '🎯',
     displayName: 'perks.EAGLES_SIGHT.title',
     description: 'perks.EAGLES_SIGHT.description',
+    prerequisite: 'perks.EAGLES_SIGHT.prerequisite',
     category: PerkCategory.PASSIVE,
     rangeModifier: 15, // 15% more range
 };
@@ -69,6 +72,7 @@ PERKS[StatusEffectID.LEAD_FEVER] = {
     icon: '🔫',
     displayName: 'perks.LEAD_FEVER.title',
     description: 'perks.LEAD_FEVER.description',
+    prerequisite: 'perks.LEAD_FEVER.prerequisite',
     category: PerkCategory.PASSIVE,
     fireRateModifier: 20, // 20% faster fire rate
 };
@@ -77,6 +81,7 @@ PERKS[StatusEffectID.WINTERS_BONE] = {
     icon: '🛡️',
     displayName: 'perks.WINTERS_BONE.title',
     description: 'perks.WINTERS_BONE.description',
+    prerequisite: 'perks.WINTERS_BONE.prerequisite',
     category: PerkCategory.PASSIVE,
     damageResistModifier: 10, // 10% damage resistance
 };
@@ -87,6 +92,7 @@ PERKS[StatusEffectID.REFLEX_SHIELD] = {
     icon: '🛡️',
     displayName: 'perks.REFLEX_SHIELD.title',
     description: 'perks.REFLEX_SHIELD.description',
+    prerequisite: 'perks.REFLEX_SHIELD.prerequisite',
     category: PerkCategory.BUFF,
     duration: 1000, // Linger duration
     cooldown: 10000,
@@ -97,6 +103,7 @@ PERKS[StatusEffectID.ADRENALINE_PATCH] = {
     icon: '💉',
     displayName: 'perks.ADRENALINE_PATCH.title',
     description: 'perks.ADRENALINE_PATCH.description',
+    prerequisite: 'perks.ADRENALINE_PATCH.prerequisite',
     category: PerkCategory.BUFF,
     duration: 3000,
     cooldown: 30000,
@@ -108,6 +115,7 @@ PERKS[StatusEffectID.GIB_MASTER] = {
     icon: '🎯',
     displayName: 'perks.GIB_MASTER.title',
     description: 'perks.GIB_MASTER.description',
+    prerequisite: 'perks.GIB_MASTER.prerequisite',
     category: PerkCategory.BUFF,
     duration: 3000,
     cooldown: 30000
@@ -117,6 +125,7 @@ PERKS[StatusEffectID.QUICK_FINGER] = {
     icon: '⏱️',
     displayName: 'perks.QUICK_FINGER.title',
     description: 'perks.QUICK_FINGER.description',
+    prerequisite: 'perks.QUICK_FINGER.prerequisite',
     category: PerkCategory.BUFF,
     duration: 5000,
     cooldown: 30000,
@@ -129,6 +138,7 @@ PERKS[StatusEffectID.BLEEDING] = {
     icon: '🩸',
     displayName: 'perks.BLEEDING.title',
     description: 'perks.BLEEDING.description',
+    prerequisite: 'perks.BLEEDING.prerequisite',
     category: PerkCategory.DEBUFF,
     duration: 3000,
     dotDamage: 5
@@ -138,6 +148,7 @@ PERKS[StatusEffectID.BURNING] = {
     icon: '🔥',
     displayName: 'perks.BURNING.title',
     description: 'perks.BURNING.description',
+    prerequisite: 'perks.BURNING.prerequisite',
     category: PerkCategory.DEBUFF,
     duration: 3000,
     dotDamage: 10
@@ -147,6 +158,7 @@ PERKS[StatusEffectID.STUNNED] = {
     icon: '😵',
     displayName: 'perks.STUNNED.title',
     description: 'perks.STUNNED.description',
+    prerequisite: 'perks.STUNNED.prerequisite',
     category: PerkCategory.DEBUFF,
     duration: 3000,
 };
@@ -155,6 +167,7 @@ PERKS[StatusEffectID.DISORIENTED] = {
     icon: '😵‍💫',
     displayName: 'perks.DISORIENTED.title',
     description: 'perks.DISORIENTED.description',
+    prerequisite: 'perks.DISORIENTED.prerequisite',
     category: PerkCategory.DEBUFF,
     duration: 2000,
     speedModifier: -20,
@@ -164,6 +177,7 @@ PERKS[StatusEffectID.SLOWED] = {
     icon: '🐌',
     displayName: 'perks.SLOWED.title',
     description: 'perks.SLOWED.description',
+    prerequisite: 'perks.SLOWED.prerequisite',
     category: PerkCategory.DEBUFF,
     duration: 2500,
     speedModifier: -40,
@@ -173,6 +187,7 @@ PERKS[StatusEffectID.FREEZING] = {
     icon: '❄️',
     displayName: 'perks.FREEZING.title',
     description: 'perks.FREEZING.description',
+    prerequisite: 'perks.FREEZING.prerequisite',
     category: PerkCategory.DEBUFF,
     duration: 2000,
     dotDamage: 10,
@@ -183,6 +198,7 @@ PERKS[StatusEffectID.ELECTRIFIED] = {
     icon: '⚡',
     displayName: 'perks.ELECTRIFIED.title',
     description: 'perks.ELECTRIFIED.description',
+    prerequisite: 'perks.ELECTRIFIED.prerequisite',
     category: PerkCategory.DEBUFF,
     duration: 2000,
     dotDamage: 10,
@@ -193,20 +209,10 @@ PERKS[StatusEffectID.DROWNING] = {
     icon: '🫧',
     displayName: 'perks.DROWNING.title',
     description: 'perks.DROWNING.description',
+    prerequisite: 'perks.DROWNING.prerequisite',
     category: PerkCategory.DEBUFF,
     duration: 3000,
     dotDamage: 10,
-};
-
-// --- SYSTEM STATES (Unifying SSoT) ---
-PERKS[StatusEffectID.INFECTED] = {
-    id: StatusEffectID.INFECTED,
-    icon: '🤢',
-    displayName: 'status.INFECTED.title',
-    description: 'status.INFECTED.description',
-    category: PerkCategory.DEBUFF,
-    duration: 30000,
-    dotDamage: 2
 };
 
 /**

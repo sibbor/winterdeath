@@ -5,7 +5,8 @@ import ScreenModalLayout, { TacticalCard } from '../../layout/ScreenModalLayout'
 import { SectorStats } from '../../../../types/StateTypes';
 import { StatWeaponIndex, TelemetrySourceOffset, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../../entities/player/PlayerTypes';
 import { StatsBridge } from '../../../../core/data/StatsBridge';
-import { DataResolver } from '../../../../utils/ui/DataResolver';
+import { DataResolver } from '../../../../core/data/DataResolver';
+import { COLORS } from '../../../../utils/ui/ColorUtils';
 
 interface ScreenBossKilledProps {
     sectorIndex: number;
@@ -33,7 +34,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                 <span className="text-base md:text-2xl text-red-500 font-light tracking-[0.2em] mb-1 md:mb-2 uppercase opacity-90">{t('ui.boss_killed')}</span>
             </div>
 
-            <TacticalCard color={0xef4444} className={`${isMobileDevice ? 'p-4' : 'p-8'} mb-6 md:mb-10 shadow-[0_0_30px_rgba(153,27,27,0.2)]`}>
+            <TacticalCard color={COLORS.RED} className={`${isMobileDevice ? 'p-4' : 'p-8'} mb-6 md:mb-10 shadow-[0_0_30px_rgba(153,27,27,0.2)]`}>
                 <p className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} leading-relaxed font-light italic mb-4 md:mb-8 text-gray-200`}>
                     "{t(DataResolver.getBossDeathStory(sectorIndex))}"
                 </p>

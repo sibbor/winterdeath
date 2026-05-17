@@ -3,13 +3,6 @@ import { InputAction, InputState } from '../../../core/engine/InputManager';
 import { useOrientation } from '../../../hooks/useOrientation';
 import { useHudStore } from '../../../hooks/useHudStore';
 
-/**
- * ZERO-GC PIXEL POOL
- * Pre-allocated strings for -100px to 100px to avoid string building in joystick loops.
- * Access via: PIXEL_STRINGS[Math.round(val) + 100]
- */
-const PIXEL_STRINGS = Array.from({ length: 201 }, (_, i) => (i - 100).toString() + 'px');
-
 interface TouchControllerProps {
     inputState: InputState;
     onPause?: () => void;
@@ -44,11 +37,35 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
 
     /**
      * SMI-Hardened action handler.
-     * Updates the shared input buffer directly.
+     * Updates the shared input buffer via the InputManager.
      */
     const handleAction = useCallback((action: InputAction, pressed: boolean) => {
-        if (action < InputAction.COUNT) {
-            inputState.actions[action] = pressed ? 1 : 0;
+        // --- VINTERDÖD FIX: Use centralized virtual action handler ---
+        const engine = (window as any).engine; // The engine instance is usually attached or accessible
+        // Better: access via winterEngine singleton or the passed inputState if we can get the manager
+        // Since we have inputState, we can't directly get the manager unless we pass it.
+        // But wait, App.tsx has the engineRef.
+        // Actually, I'll just look for the manager in the window or similar if possible, 
+        // but wait, I can just use a custom event or a bridge.
+
+        // RE-EVALUATION: InputManager.ts's handleVirtualAction is exactly what we need.
+        // We need a way to call it. I'll use a global bridge or just reach into the engine.
+        const inputManager = (window as any).inputManager;
+        if (inputManager) {
+            inputManager.handleVirtualAction(action, pressed);
+        } else {
+            // Fallback to direct state mutation (may be overwritten)
+            if (action < InputAction.COUNT) {
+                inputState.actions[action] = pressed ? 1 : 0;
+            }
+        }
+
+        // DODGE -> RUSH logic
+        if (action === InputAction.DODGE) {
+            // [VINTERDÖD] The PlayerMovementSystem handles the hold-to-rush logic 
+            // based on the DODGE action's duration. We just set the state.
+            if (inputManager) inputManager.handleVirtualAction(InputAction.DODGE, pressed);
+            else inputState.actions[InputAction.DODGE] = pressed ? 1 : 0;
         }
     }, [inputState]);
 
@@ -81,8 +98,6 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
             // --- LEFT ZONE (Movement) ---
             if (x < w * 0.4 && y > h * 0.3 && leftTouchId.current === null) {
                 leftTouchId.current = t.identifier;
-
-                // ZERO-GC: Mutating existing ref properties instead of object assignment
                 leftCenter.current.x = x;
                 leftCenter.current.y = y;
 
@@ -94,8 +109,6 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
             // --- RIGHT ZONE (Aiming) ---
             else if (x > w * 0.5 && y > h * 0.3 && rightTouchId.current === null) {
                 rightTouchId.current = t.identifier;
-
-                // ZERO-GC: Mutating existing ref properties
                 rightCenter.current.x = x;
                 rightCenter.current.y = y;
 
@@ -109,19 +122,18 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
 
     const handleTouchMove = useCallback((e: React.TouchEvent) => {
         if (e.cancelable) e.preventDefault();
-        const touches = e.changedTouches;
+        const touches = e.touches; // Use all active touches for more stable tracking
 
         for (let i = 0; i < touches.length; i++) {
             const t = touches[i];
 
-            // Uppdatera vänster spak
+            // 1. UPDATE LEFT STICK (Movement)
             if (t.identifier === leftTouchId.current && inputState?.joystickMove) {
-                let dx = t.clientX - leftCenter.current.x;
-                let dy = t.clientY - leftCenter.current.y;
+                const dx = t.clientX - leftCenter.current.x;
+                const dy = t.clientY - leftCenter.current.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
-                // --- ABSOLUTE NORMALIZATION ---
-                if (dist > 0.001) {
+                if (dist > 2) {
                     const normMag = Math.min(1.0, dist / MAX_DIST);
                     const angle = Math.atan2(dy, dx);
                     inputState.joystickMove.set(Math.cos(angle) * normMag, Math.sin(angle) * normMag);
@@ -129,23 +141,23 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                     inputState.joystickMove.set(0, 0);
                 }
 
-                const visualDist = Math.min(dist, MAX_DIST);
-                const visualAngle = Math.atan2(dy, dx);
                 if (leftStickKnobRef.current) {
-                    const tx = Math.max(0, Math.min(200, Math.round(Math.cos(visualAngle) * visualDist) + 100));
-                    const ty = Math.max(0, Math.min(200, Math.round(Math.sin(visualAngle) * visualDist) + 100));
-                    leftStickKnobRef.current.style.setProperty('--tx', PIXEL_STRINGS[tx]);
-                    leftStickKnobRef.current.style.setProperty('--ty', PIXEL_STRINGS[ty]);
+                    const visualDist = Math.min(dist, MAX_DIST);
+                    const visualAngle = Math.atan2(dy, dx);
+                    const vx = Math.cos(visualAngle) * visualDist;
+                    const vy = Math.sin(visualAngle) * visualDist;
+                    // Direct DOM manipulation is safer and faster than CSS variables in this context
+                    leftStickKnobRef.current.style.transform = `translate3d(${vx}px, ${vy}px, 0)`;
                 }
             }
 
-            // Uppdatera höger spak
+            // 2. UPDATE RIGHT STICK (Aiming / Firing)
             if (t.identifier === rightTouchId.current && inputState?.joystickAim) {
-                let dx = t.clientX - rightCenter.current.x;
-                let dy = t.clientY - rightCenter.current.y;
+                const dx = t.clientX - rightCenter.current.x;
+                const dy = t.clientY - rightCenter.current.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
-                if (dist > 0.001) {
+                if (dist > 2) {
                     const normMag = Math.min(1.0, dist / MAX_DIST);
                     const angle = Math.atan2(dy, dx);
                     inputState.joystickAim.set(Math.cos(angle) * normMag, Math.sin(angle) * normMag);
@@ -153,15 +165,18 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                     inputState.joystickAim.set(0, 0);
                 }
 
-                inputState.actions[InputAction.FIRE] = dist > 5 ? 1 : 0;
+                // Fire trigger logic
+                const inputManager = (window as any).inputManager;
+                if (inputManager) {
+                    inputManager.handleVirtualAction(InputAction.FIRE, dist > 8);
+                }
 
-                const visualDist = Math.min(dist, MAX_DIST);
-                const visualAngle = Math.atan2(dy, dx);
                 if (rightStickKnobRef.current) {
-                    const tx = Math.max(0, Math.min(200, Math.round(Math.cos(visualAngle) * visualDist) + 100));
-                    const ty = Math.max(0, Math.min(200, Math.round(Math.sin(visualAngle) * visualDist) + 100));
-                    rightStickKnobRef.current.style.setProperty('--tx', PIXEL_STRINGS[tx]);
-                    rightStickKnobRef.current.style.setProperty('--ty', PIXEL_STRINGS[ty]);
+                    const visualDist = Math.min(dist, MAX_DIST);
+                    const visualAngle = Math.atan2(dy, dx);
+                    const vx = Math.cos(visualAngle) * visualDist;
+                    const vy = Math.sin(visualAngle) * visualDist;
+                    rightStickKnobRef.current.style.transform = `translate3d(${vx}px, ${vy}px, 0)`;
                 }
             }
         }
@@ -181,7 +196,9 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 rightTouchId.current = null;
                 if (inputState?.joystickAim) {
                     inputState.joystickAim.set(0, 0);
-                    inputState.actions[InputAction.FIRE] = 0;
+                    const inputManager = (window as any).inputManager;
+                    if (inputManager) inputManager.handleVirtualAction(InputAction.FIRE, false);
+                    else inputState.actions[InputAction.FIRE] = 0;
                 }
                 if (rightStickContainerRef.current) rightStickContainerRef.current.style.display = 'none';
             }
@@ -192,7 +209,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
         <div className={`absolute inset-0 pointer-events-none z-[100] overflow-hidden select-none touch-none transition-opacity duration-1000 ${hudVisible ? 'opacity-100' : 'opacity-0'}`}>
             {/* LEFT TOUCH ZONE (Movement) */}
             <div
-                className="absolute left-0 w-[40%] h-[80%] pointer-events-auto"
+                className="absolute left-0 w-[45%] h-[75%] pointer-events-auto"
                 style={{ top: HUD_GUTTER, touchAction: 'none' }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
@@ -202,7 +219,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
 
             {/* RIGHT TOUCH ZONE (Aiming) */}
             <div
-                className="absolute right-0 w-[50%] h-[80%] pointer-events-auto"
+                className="absolute right-0 w-[45%] h-[75%] pointer-events-auto"
                 style={{ top: HUD_GUTTER, touchAction: 'none' }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
@@ -212,23 +229,27 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
 
             {/* LEFT JOYSTICK VISUAL */}
             <div
-                ref={leftStickKnobRef}
-                className="absolute rounded-full bg-white/40 shadow-[0_0_15px_rgba(255,255,255,0.3)]"
-                style={{
-                    left: STICK_RADIUS - 25,
-                    top: STICK_RADIUS - 25,
-                    width: 50,
-                    height: 50,
-                    // Zero-GC: Static string, values updated via CSS vars
-                    transform: 'translate3d(var(--tx, 0px), var(--ty, 0px), 0)'
-                }}
-            />
+                ref={leftStickContainerRef}
+                className="absolute rounded-full border-2 border-white/20 bg-white/5 pointer-events-none animate-in fade-in zoom-in duration-200"
+                style={{ width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, display: 'none', left: 0, top: 0 }}
+            >
+                <div
+                    ref={leftStickKnobRef}
+                    className="absolute rounded-full bg-white/40 shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+                    style={{
+                        left: STICK_RADIUS - 25,
+                        top: STICK_RADIUS - 25,
+                        width: 50,
+                        height: 50
+                    }}
+                />
+            </div>
 
             {/* RIGHT JOYSTICK VISUAL */}
             <div
                 ref={rightStickContainerRef}
                 className="absolute rounded-full border-2 border-red-500/20 bg-red-900/5 pointer-events-none animate-in fade-in zoom-in duration-200"
-                style={{ width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, display: 'none' }}
+                style={{ width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, display: 'none', left: 0, top: 0 }}
             >
                 <div
                     ref={rightStickKnobRef}
@@ -237,25 +258,23 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                         left: STICK_RADIUS - 25,
                         top: STICK_RADIUS - 25,
                         width: 50,
-                        height: 50,
-                        // LÄGG TILL: Statisk sträng för Zero-GC
-                        transform: 'translate3d(var(--tx, 0px), var(--ty, 0px), 0)'
+                        height: 50
                     }}
                 />
             </div>
 
             {/* Action Buttons */}
-            <div className={`absolute pointer-events-auto flex z-40 pr-safe pb-safe ${isLandscapeMode ? 'bottom-2 right-4 flex-col gap-2' : 'bottom-24 right-4 flex-col gap-2'}`}>
+            <div className={`absolute pointer-events-auto flex z-40 pr-safe pb-safe ${isLandscapeMode ? 'bottom-4 right-4 flex-col gap-3' : 'bottom-24 right-4 flex-col gap-3'}`}>
                 <div className="flex justify-end">
-                    <button data-action={InputAction.FLASHLIGHT} className="w-12 h-12 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
+                    <button data-action={InputAction.FLASHLIGHT} className="w-14 h-14 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2.5 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
                         <img src="/assets/icons/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain pointer-events-none" />
                     </button>
                 </div>
-                <div className="flex items-end gap-2">
-                    <button data-action={InputAction.RELOAD} className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
+                <div className="flex items-end gap-3">
+                    <button data-action={InputAction.RELOAD} className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3.5 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
                         <img src="/assets/icons/ui/icon_reload.png" alt="R" className="w-full h-full object-contain pointer-events-none" />
                     </button>
-                    <button data-action={InputAction.DODGE} className="w-20 h-20 md:w-24 md:h-24 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 shadow-[0_0_20px_rgba(255,0,0,0.4)] opacity-80 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
+                    <button data-action={InputAction.DODGE} className="w-20 h-20 md:w-24 md:h-24 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4.5 shadow-[0_0_20px_rgba(255,0,0,0.4)] opacity-80 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
                         <img src="/assets/icons/ui/icon_dodge.png" alt="Dodge" className="w-full h-full object-contain pointer-events-none" />
                     </button>
                 </div>

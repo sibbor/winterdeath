@@ -212,6 +212,16 @@ canvas {
     }
 }
 
+@keyframes level-up-shimmer {
+    0% { filter: brightness(1); box-shadow: 0 0 0px var(--hud-cyan); }
+    30% { filter: brightness(2.5); box-shadow: 0 0 20px var(--hud-cyan); }
+    100% { filter: brightness(1); box-shadow: 0 0 0px var(--hud-cyan); }
+}
+
+.hud-level-up-shimmer {
+    animation: level-up-shimmer 1.5s ease-out;
+}
+
 @keyframes pulse-fast {
 
     0%,

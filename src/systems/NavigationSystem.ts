@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SystemID } from './SystemID';
 import { SectorContext } from '../game/session/SectorTypes';
-import { Obstacle } from '../core/world/CollisionResolution';
+import { Obstacle, ColliderType } from '../core/world/CollisionResolution';
 import { InteractionShape } from './ui/UIEventBridge';
 
 /**
@@ -56,21 +56,21 @@ export const NavigationSystem = {
         // Instead of 40,000 sequential spatial queries, we perform ONE broad-phase query
         // and mathematically project obstacle footprints onto the grid indices.
         costMap.fill(0);
-        
+
         const obsPool = streamer.getObstaclePool();
         const poolIdx = obsPool.nextIndex();
         streamer.getNearbyObstacles(0, 0, 150, poolIdx);
-        
+
         const obstacles = obsPool.getPool(poolIdx);
         const obsLen = obsPool.getCount(poolIdx);
 
         for (let i = 0; i < obsLen; i++) {
             const obs = obstacles[i];
-            
+
             // Derive half-extents for footprint projection
             let hW = 0;
             let hD = 0;
-            if (obs.collider && obs.collider.type === InteractionShape.BOX && obs.collider.size) {
+            if (obs.collider && obs.collider.type === ColliderType.BOX && obs.collider.size) {
                 hW = obs.collider.size.x * 0.5;
                 hD = obs.collider.size.z * 0.5;
             } else {
@@ -163,16 +163,12 @@ export const NavigationSystem = {
             }
         }
 
-        // Flow Calculation: 8-way local gradient search
-        for (let i = 0; i < TOTAL_CELLS; i++) {
-            if (costMap[i] === 255) {
-                flowX[i] = 0;
-                flowZ[i] = 0;
-                continue;
-            }
+        // Flow Calculation: 8-way local gradient search (Optimized: Bounded to visited cells)
+        for (let k = 0; k < queueTail; k++) {
+            const i = bfsQueue[k];
 
             const x = i % GRID_SIZE;
-            const z = Math.floor(i / GRID_SIZE);
+            const z = (i / GRID_SIZE) | 0;
 
             let minVal = integrationMap[i];
             let targetX = 0;
@@ -195,11 +191,17 @@ export const NavigationSystem = {
                 }
             }
 
-            // Normalize steering vector
+            // Normalize steering vector (Zero-GC: Conditional Jump-table avoids Math.sqrt)
             if (targetX !== 0 || targetZ !== 0) {
-                const len = Math.sqrt(targetX * targetX + targetZ * targetZ);
-                flowX[i] = targetX / len;
-                flowZ[i] = targetZ / len;
+                if (targetX !== 0 && targetZ !== 0) {
+                    // Diagonal movement
+                    flowX[i] = targetX * 0.7071;
+                    flowZ[i] = targetZ * 0.7071;
+                } else {
+                    // Cardinal movement
+                    flowX[i] = targetX;
+                    flowZ[i] = targetZ;
+                }
             } else {
                 flowX[i] = 0;
                 flowZ[i] = 0;
@@ -232,7 +234,7 @@ function isCellBlocked(wx: number, wz: number, obs: Obstacle): boolean {
 
     if (distSq > r * r) return false;
 
-    if (obs.collider && obs.collider.type === InteractionShape.BOX && obs.collider.size) {
+    if (obs.collider && obs.collider.type === ColliderType.BOX && obs.collider.size) {
         // Correcting access: size is THREE.Vector3
         const hx = (obs.collider.size.x * 0.5) + 0.5;
         const hz = (obs.collider.size.z * 0.5) + 0.5;

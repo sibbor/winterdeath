@@ -46,9 +46,10 @@ export class DamageNumberSystem implements System {
             case DamageID.DROWNING:
                 return 0x3b82f6;
 
-            case DamageID.FALL:
+            case DamageID.FALL_DAMAGE:
             case DamageID.PHYSICAL:
             case DamageID.RUSH:
+            case DamageID.DODGE:
                 return 0xe887a7;
 
             case DamageID.VEHICLE:

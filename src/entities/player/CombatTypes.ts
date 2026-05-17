@@ -1,4 +1,45 @@
-import { StatusEffectID } from "../../content/perks";
+import { StatusEffectID } from "../../types/StatusEffects";
+import { DamageType, PlayerDeathState } from "./CombatBase";
+
+
+// Re-export fundamental types for convenience (keeps existing imports working)
+export { DamageType, PlayerDeathState };
+
+// ============================================================================
+// 1. INVENTORY & ABILITY DOMAINS (SMI Aligned with DamageID)
+// ============================================================================
+
+export enum WeaponID {
+    NONE = 0,
+    SMG = 1,
+    SHOTGUN = 2,
+    RIFLE = 3,
+    PISTOL = 4,
+    REVOLVER = 5,
+    GRENADE = 6,
+    MOLOTOV = 7,
+    FLASHBANG = 8,
+    MINIGUN = 9,
+    FLAMETHROWER = 10,
+    ARC_CANNON = 11
+}
+
+export enum ToolID {
+    RADIO = 12
+}
+
+export enum AbilityID {
+    RUSH = 21,
+    DODGE = 22,
+    VEHICLE = 23
+}
+
+// Union för det spelaren kan hålla i handen (V8 ser bara en siffra)
+export type HoldableID = WeaponID | ToolID;
+
+// ============================================================================
+// 2. ENEMY & COMBAT STATES
+// ============================================================================
 
 export enum EnemyAttackType {
     HIT = 0,
@@ -28,81 +69,87 @@ export const ENEMY_ATTACK_NAMES: Record<EnemyAttackType, string> = {
     [EnemyAttackType.ENVIRONMENTAL]: 'ui.environmental',
 };
 
-export enum PlayerDeathState {
-    ALIVE = 0,
-    NORMAL = 1,
-    GIBBED = 2,
-    BURNED = 3,
-    FREEZED = 4,
-    DROWNED = 5,
-    ELECTROCUTED = 6
-}
-
-/**
- * Unified DamageID (Step 3: Phase 7)
- * Consolidates WeaponType and the previous DamageType into a single SMI enum.
- * This eliminates polymorphism (was WeaponType | DamageType) and optimizes
- * the hot-path in ProjectileSystem and EnemyAI.
- */
+// ============================================================================
+// 3. MASTER DAMAGE ID - Används för Combat Logs, UI-ikoner, DoTs och Kill-screens.
+// Optimerad O(1) konvertering från WeaponID/AbilityID.
+// ============================================================================
 export enum DamageID {
     NONE = 0,
 
-    // --- WEAPONS (1-20) ---
-    SMG = 1,
-    SHOTGUN = 2,
-    RIFLE = 3,
-    PISTOL = 4,
-    REVOLVER = 5,
-    GRENADE = 6,
-    MOLOTOV = 7,
-    FLASHBANG = 8,
-    MINIGUN = 9,
-    FLAMETHROWER = 10,
-    ARC_CANNON = 11,
-    RADIO = 12,
-    RUSH = 13,
-    VEHICLE = 14,
-    DODGE = 15,
+    // --- ARSENAL (1-20) ---
+    SMG = WeaponID.SMG,
+    SHOTGUN = WeaponID.SHOTGUN,
+    RIFLE = WeaponID.RIFLE,
+    PISTOL = WeaponID.PISTOL,
+    REVOLVER = WeaponID.REVOLVER,
+    GRENADE = WeaponID.GRENADE,
+    MOLOTOV = WeaponID.MOLOTOV,
+    FLASHBANG = WeaponID.FLASHBANG,
+    MINIGUN = WeaponID.MINIGUN,
+    FLAMETHROWER = WeaponID.FLAMETHROWER,
+    ARC_CANNON = WeaponID.ARC_CANNON,
+    RADIO = ToolID.RADIO,
 
-    // --- ENVIRONMENT & EFFECTS (20+) ---
-    PHYSICAL = 21,
-    BURN = 22,
-    BLEED = 23,
-    DROWNING = 24,
-    FALL = 25,
-    EXPLOSION = 26,
-    BITE = 27,
-    ELECTRIC = 28,
-    BOSS = 29,
-    VEHICLE_SPLATTER = 30,
-    VEHICLE_RAM = 31,
-    VEHICLE_PUSH = 32,
-    FIRE = 33,
-    FALL_DAMAGE = 34,
-    OTHER = 35,
-    BOSS_GENERIC = 36,
-    FROST = 37
+    // --- TACTICS (21-22) ---
+    RUSH = AbilityID.RUSH,
+    DODGE = AbilityID.DODGE,
+
+    // --- VEHICLES (23-30) ---
+    VEHICLE = 23,
+    VEHICLE_SPLATTER = 24,
+    VEHICLE_RAM = 25,
+    VEHICLE_PUSH = 26,
+
+    // --- ENVIRONMENT & HAZARDS (41-60) ---
+    PHYSICAL = 41,
+    BURN = 42,
+    BLEED = 43,
+    DROWNING = 44,
+    FALL_DAMAGE = 45,
+    EXPLOSION = 46,
+    BITE = 47,
+    ELECTRIC = 48,
+    FROST = 49,
+    BOSS_GENERIC = 50,
+    OTHER = 51
 }
+
+// --- DOMAIN RANGES (Magic Number Elimination) ---
+export const DAMAGE_DOMAIN = {
+    ARSENAL_MIN: 1,
+    ARSENAL_MAX: 20,
+    TACTICS_MIN: 21,
+    TACTICS_MAX: 22,
+    VEHICLES_MIN: 23,
+    VEHICLES_MAX: 30,
+    ENVIRONMENT_MIN: 41,
+    ENVIRONMENT_MAX: 60
+} as const;
+
+export const ABILITY_DAMAGE_NAMES: Partial<Record<DamageID, string>> = {
+    [DamageID.RUSH]: 'ui.rush',
+    [DamageID.DODGE]: 'ui.dodge',
+};
+
+export const VEHICLE_DAMAGE_NAMES: Partial<Record<DamageID, string>> = {
+    [DamageID.VEHICLE]: 'ui.vehicle',
+    [DamageID.VEHICLE_SPLATTER]: 'ui.vehicle',
+    [DamageID.VEHICLE_RAM]: 'ui.vehicle',
+    [DamageID.VEHICLE_PUSH]: 'ui.vehicle',
+};
 
 export const ENVIRONMENTAL_DAMAGE_NAMES: Partial<Record<DamageID, string>> = {
     [DamageID.PHYSICAL]: 'ui.physical',
     [DamageID.BURN]: 'ui.burn',
-    [DamageID.FIRE]: 'ui.fire',
     [DamageID.BLEED]: 'ui.bleed',
     [DamageID.DROWNING]: 'ui.drowning',
-    [DamageID.FALL]: 'ui.fall',
     [DamageID.FALL_DAMAGE]: 'ui.fall_damage',
     [DamageID.EXPLOSION]: 'ui.explosion',
     [DamageID.BITE]: 'ui.bite',
     [DamageID.ELECTRIC]: 'ui.electric',
     [DamageID.FROST]: 'ui.frost',
-    [DamageID.BOSS]: 'ui.boss',
     [DamageID.BOSS_GENERIC]: 'ui.boss',
     [DamageID.OTHER]: 'ui.other',
-    [DamageID.VEHICLE_SPLATTER]: 'ui.vehicle_splatter',
-    [DamageID.VEHICLE_RAM]: 'ui.vehicle_ram',
-    [DamageID.VEHICLE_PUSH]: 'ui.vehicle_push',
-    [DamageID.DODGE]: 'ui.dodge',
 };
 
 // Attack Definition
@@ -121,11 +168,11 @@ export interface AttackDefinition {
 }
 
 export interface ActiveStatusEffect {
-    duration: number;     // Remaining time in ms
-    maxDuration: number;  // Original time in ms
-    intensity: number;  // Multiplier or value
-    damage: number;     // Damage per tick
-    lastTick: number;   // Timestamp of last DoT tick
-    sourceType?: number; // e.g. EnemyType
-    sourceAttack?: EnemyAttackType; // e.g. EnemyAttackType.BITE
+    duration: number;     // Återstående tid i ms
+    maxDuration: number;  // Ursprunglig tid i ms
+    intensity: number;    // Multiplikator eller värde
+    damage: number;       // Skada per tick
+    lastTick: number;     // Timestamp för senaste DoT-tick
+    sourceType?: number;  // t.ex. EnemyType
+    sourceAttack?: EnemyAttackType;
 }

@@ -11,8 +11,9 @@ import {
     HudVector2,
     DebugInfoData
 } from '../components/ui/hud/HudTypes';
-import { WeaponType } from '../content/weapons';
 import { InteractionType, InteractionPromptId, MetaActionId, UIEventBridge } from '../systems/ui/UIEventBridge';
+import { HoldableID, DamageID } from '../entities/player/CombatTypes';
+import { StatusEffectID } from '../types/StatusEffects';
 
 /**
  * HudState Implementation
@@ -34,7 +35,7 @@ export class HudStateSoA implements IHudState {
     public scrap = 0;
     public challengePoints = 0;
     public multiplier = 1;
-    public activeWeapon = WeaponType.PISTOL;
+    public activeWeapon: HoldableID = 4; // PISTOL
     public isReloading = false;
 
     // Complex slices (Flattened for Zero-GC)
@@ -103,8 +104,8 @@ export class HudStateSoA implements IHudState {
     public killerName = '';
     public killerAttackName = '';
     public killedByEnemy = false;
-    public lethalSourceId = 0;
-    public lethalStatusEffect = 0;
+    public lethalSourceId = DamageID.NONE;
+    public lethalStatusEffect = StatusEffectID.NONE;
 
     public mapItems: MapItem[];
     public mapItemsCount = 0;
@@ -152,9 +153,7 @@ export class HudStateSoA implements IHudState {
     public challengeTiers = new Int32Array(64);
     public lastMetaSignal: MetaActionId = MetaActionId.NONE;
     public metaSignalTimestamp = 0;
-    public isCritical = false;
-    public isGibMaster = false;
-    public isQuickFinger = false;
+    public hasCriticalHp = false;
 
     constructor() {
         // Initialize map items pool
@@ -314,9 +313,7 @@ export class HudStateSoA implements IHudState {
         this.lastMetaSignal = src.lastMetaSignal;
         this.metaSignalTimestamp = src.metaSignalTimestamp;
 
-        this.isCritical = src.isCritical;
-        this.isGibMaster = src.isGibMaster;
-        this.isQuickFinger = src.isQuickFinger;
+        this.hasCriticalHp = src.hasCriticalHp;
     }
 }
 

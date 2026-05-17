@@ -1,4 +1,4 @@
-import { WeaponType } from '../content/weapons';
+import { WeaponID } from '../entities/player/CombatTypes';
 import { PlayerStats } from '../entities/player/PlayerTypes';
 import { GameSettings, WeatherType, EnvironmentOverride } from '../core/engine/EngineTypes';
 import { GameScreen } from './SessionTypes';
@@ -57,9 +57,14 @@ export interface SectorStats {
   enemyDeaths: Float64Array;
   incomingDamageBuffer: Float64Array;
 
-  // cluesFound is an array of objects {id, content}, not strings
-  cluesFound: any[];
+  activePassives: Int32Array;
+  activePassivesCount: number;
+  activeBuffs: Int32Array;
+  activeBuffsCount: number;
+  activeDebuffs: Int32Array;
+  activeDebuffsCount: number;
 
+  cluesFound: any[];
   discoveredPOIs: string[];
   seenEnemies: number[];
   seenBosses: number[];
@@ -74,9 +79,6 @@ export interface SectorStats {
   familyExtracted: boolean;
   isExtraction: boolean;
   discoveredPerksMap: Uint8Array;
-  activePassives: number[];
-  activeBuffs: number[];
-  activeDebuffs: number[];
 
   // Standardized wave naming
   waveActive?: boolean;
@@ -113,12 +115,12 @@ export interface GameState {
   currentSector: number;
   stats: PlayerStats;
   loadout: {
-    primary: WeaponType;
-    secondary: WeaponType;
-    throwable: WeaponType;
-    special: WeaponType;
+    primary: WeaponID;
+    secondary: WeaponID;
+    throwable: WeaponID;
+    special: WeaponID;
   };
-  weaponLevels: Partial<Record<WeaponType, number>>;
+  weaponLevels: Partial<Record<WeaponID, number>>;
 
   settings: GameSettings;
   deadBossIndices: number[];
@@ -126,7 +128,6 @@ export interface GameState {
   sectorState?: SectorState;
   showFps?: boolean;
   sectorBriefing?: string;
-  midRunCheckpoint: { x: number, z: number, timestamp: number } | null;
   debugMode?: boolean;
   weather: WeatherType;
   environmentOverrides?: Record<number, EnvironmentOverride>;

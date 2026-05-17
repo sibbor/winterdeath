@@ -93,20 +93,24 @@ const InteractionPrompt = React.forwardRef<any, InteractionPromptProps>(({
     // Handle mouse click for desktop debugging/PC
     const handleClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!isMobileDevice && onInteract) {
+        if (onInteract) {
             onInteract(true);
+            // Pulse the interaction for single-click devices/browsers
             setTimeout(() => onInteract(false), 50);
         }
-    }, [onInteract, isMobileDevice]);
+    }, [onInteract]);
 
     return (
         <div
-            className="flex flex-col items-center gap-2 pointer-events-auto z-[100] transition-opacity duration-200 cursor-pointer select-none active:scale-95"
+            className={`flex flex-col items-center gap-2 pointer-events-auto z-[100] transition-all duration-200 cursor-pointer select-none active:scale-90 ${isMobileDevice ? 'scale-50 origin-center' : 'scale-100'}`}
             onClick={handleClick}
-            onTouchStart={isMobileDevice ? handleTouchStart : undefined}
-            onTouchEnd={isMobileDevice ? handleTouchEnd : undefined}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
         >
-            <div ref={containerRef} className={`hud-bar-container bg-black/80 backdrop-blur-md px-4 py-2 border flex items-center gap-3 shadow-2xl ${DEFAULT_CONFIG.color}`}>
+            {/* Added a transparent padding layer to increase mobile tap target area */}
+            <div className="absolute inset-[-20px] pointer-events-auto" />
+
+            <div ref={containerRef} className={`hud-bar-container bg-black/80 backdrop-blur-md px-4 py-2 border flex items-center gap-3 shadow-2xl relative z-10 ${DEFAULT_CONFIG.color}`}>
                 <span className="w-6 h-6 flex items-center justify-center bg-white/20 border border-white/40 text-[10px] font-black text-white">
                     {inputKey}
                 </span>

@@ -87,11 +87,11 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
                     </TacticalButton>
 
                     <div className="grid grid-cols-2 gap-2 md:gap-4">
-                        <TacticalButton onClick={onOpenAdventureLog} variant="secondary" className="w-full">
+                        <TacticalButton onClick={() => onOpenAdventureLog()} variant="secondary" className="w-full">
                             {t('ui.adventure_log')}
                         </TacticalButton>
 
-                        <TacticalButton onClick={onOpenStatistics} variant="secondary" className="w-full">
+                        <TacticalButton onClick={() => onOpenStatistics()} variant="secondary" className="w-full">
                             {t('ui.statistics')}
                         </TacticalButton>
                     </div>
@@ -129,7 +129,7 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
                                     return (
                                         <div
                                             key={perk.id}
-                                            data-tooltip={t(perk.displayName)}
+                                            data-tooltip={t(perk.displayName) + ": " + t(perk.description)}
                                             onMouseEnter={handleActionEnter}
                                             onMouseLeave={handleActionLeave}
                                             className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 flex items-center gap-2 rounded shadow-inner group relative overflow-hidden cursor-help"

@@ -22,7 +22,24 @@ export enum UIEventType {
     AMMO_LOW = 10,      // P1: Remaining Ammo
     CHALLENGE_COMPLETE = 11, // P1: Challenge ID
     SYNC_STATUS = 12,        // P1: Status Bitmask (StatusEffect SMI)
+    SP_GAIN = 13,            // P1: Amount
+    SCRAP_GAIN = 14,         // P1: Amount
+    CP_GAIN = 15,            // P1: Amount
+    BUFF_GAIN = 16,          // P1: StatusEffectID
+    DEBUFF_GAIN = 17,        // P1: StatusEffectID
 }
+
+export enum ChatBubbleSubtype {
+    GENERIC = 0,
+    THOUGHT = 1,
+    SPEAK = 2,
+}
+
+export const CHAT_BUBBLE_DURATIONS = {
+    [ChatBubbleSubtype.GENERIC]: 3000,
+    [ChatBubbleSubtype.THOUGHT]: 3000,
+    [ChatBubbleSubtype.SPEAK]: 4000,
+} as const;
 
 const BUFFER_SIZE = 1024; // 256 events total (4 ints each)
 const PACKET_SIZE = 4;
@@ -38,6 +55,7 @@ const stringPool = new Array<string>(64).fill('');
 let stringPoolIdx = 0;
 
 export const UIEventRingBuffer = {
+
     /**
      * Pushes a new event packet into the buffer.
      * Zero-GC: No allocations.
@@ -47,6 +65,10 @@ export const UIEventRingBuffer = {
         // to maximize performance in the hot loop.
         const writeIdx = head;
         const nextHead = (head + PACKET_SIZE) & (BUFFER_SIZE - 1);
+
+        //if (process.env.NODE_ENV === 'development') {
+        console.log(`[UIEvent] ${UIEventType[type]} | P1: ${p1} | P2: ${p2} | TS: ${timestamp.toFixed(2)}`);
+        //}
 
         // Overflow check: If head catches tail, we drop the oldest event to maintain real-time stability
         if (nextHead === tail) {

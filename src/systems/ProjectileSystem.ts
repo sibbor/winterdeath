@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { ProjectilePoolState, MAX_PROJECTILES } from '../core/state/ProjectilePool';
-import { DamageID } from '../entities/player/CombatTypes';
+import { DamageID, DamageType, WeaponID } from '../entities/player/CombatTypes';
 import { PlayerStatID } from '../entities/player/PlayerTypes';
+import { StatusEffectID } from '../content/perks';
 import { System, SystemID } from './System';
 import { ENTITY_STATUS, PHYSICS, COMBAT, MAX_ENTITIES } from '../content/constants';
-import { EnemyDeathState, EnemyFlags } from '../entities/enemies/EnemyTypes';
+import { EnemyDeathState, EnemyFlags, NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
 import { EnemyPoolState } from '../core/state/EnemyPool';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
@@ -21,10 +22,9 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
-const _v6 = new THREE.Vector3();
 
 /**
- * Projectile System (Phase 8)
+ * Projectile System
  * 
  * High-performance, Zero-GC projectile simulation.
  * Replaces legacy ProjectileSystem.ts with a contiguous SoA pool.
@@ -48,43 +48,50 @@ export class ProjectileSystem implements System {
      * Main update loop for all active projectiles.
      * ZERO-GC hot path.
      */
-    update(session: GameSessionLogic, dt: number, simTime: number, renderTime: number) {
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         this.session = session;
         // Lifecycle Guard - Ensure we don't run simulation in non-combat contexts (Camp/UI)
         if (!session || !session.state) return;
 
+        // Synchronize weapon visual effects pools (Lightning/Dynamic Lights)
+        WeaponFX.updateFX(session, delta);
+
         // --- PHASE 1: CONTINUOUS FIRE (DoD Ray-free) ---
-        this.handleContinuousFire(dt, simTime);
+        this.handleContinuousFire(delta, simTime);
 
         const pool = ProjectilePoolState;
         const state = session.state;
-        const enemies = EnemyManager.getActiveEnemies();
 
         // --- PHASE 2: PERSISTENT FIRE ZONES (Audit Fix) ---
-        this.processFireZones(dt, simTime, state);
+        this.processFireZones(delta, simTime, state);
 
         for (let i = 0; i < pool.activeCount; i++) {
             // 1. Physics Update (SoA)
             if (pool.hasGravity[i]) {
-                pool.velY[i] -= PHYSICS.GRAVITY * dt;
+                pool.velY[i] -= PHYSICS.GRAVITY * delta;
             }
 
-            pool.posX[i] += pool.velX[i] * dt;
-            pool.posY[i] += pool.velY[i] * dt;
-            pool.posZ[i] += pool.velZ[i] * dt;
-            pool.life[i] -= dt;
+            pool.posX[i] += pool.velX[i] * delta;
+            pool.posY[i] += pool.velY[i] * delta;
+            pool.posZ[i] += pool.velZ[i] * delta;
+            pool.life[i] -= delta;
 
             let despawn = pool.life[i] <= 0;
+
+            if (despawn && pool.type[i] === 1) {
+                // Throwable reached target/fuse limit! Trigger explosion immediately.
+                this.triggerExplosion(i, false);
+            }
 
             // 2. Environment Collision (O(1) Obstacle Check)
             const streamer = session.worldStreamer;
             if (!despawn && streamer) {
                 _v1.set(pool.posX[i], pool.posY[i], pool.posZ[i]);
-                _v2.set(pool.velX[i], pool.velY[i], pool.velZ[i]).multiplyScalar(dt);
+                _v2.set(pool.velX[i], pool.velY[i], pool.velZ[i]).multiplyScalar(delta);
 
                 const poolIdx = streamer.getObstaclePool().nextIndex();
                 streamer.getNearbyObstacles(pool.posX[i], pool.posZ[i], 2.0, poolIdx);
-                
+
                 const obstacles = streamer.getObstaclePool().getPool(poolIdx);
                 const obsCount = streamer.getObstaclePool().getCount(poolIdx);
 
@@ -99,6 +106,7 @@ export class ProjectileSystem implements System {
                     if (_v5.distanceToSquared(_v3) < rad * rad) {
                         despawn = true;
                         GamePlaySounds.playImpact(obs.materialId || MaterialType.GENERIC);
+                        session.makeNoise(_v5, NoiseType.BULLET_HIT, NOISE_RADIUS[NoiseType.BULLET_HIT]);
                         break;
                     }
                 }
@@ -106,22 +114,46 @@ export class ProjectileSystem implements System {
 
             // 3. Enemy Hit Detection (Phase 7 Spatial Grid)
             if (!despawn) {
-                // Ground / Water check for throwables
-                if (pool.hasGravity[i] && pool.posY[i] <= 0.1) {
+                const groundY = session.engine.ground ? session.engine.ground.getGroundHeight(pool.posX[i], pool.posZ[i], session) : 0;
+
+                // --- WATER IMPACT DETECTION ---
+                if (session.engine.water) {
+                    session.engine.water.checkBuoyancy(pool.posX[i], pool.posY[i], pool.posZ[i], renderTime);
+                    const b = session.engine.water.getBuoyancyResult();
+
+                    // Impact the surface if moving downwards
+                    if (b.inWater && pool.posY[i] <= b.waterLevel + 0.1 && pool.velY[i] <= 0) {
+                        despawn = true;
+
+                        // Surface Ripple
+                        session.engine.water.spawnRipple(pool.posX[i], pool.posZ[i], renderTime, 0.8);
+
+                        // Splash FX
+                        if (this.session) {
+                            this.session.spawnParticle(pool.posX[i], b.waterLevel + 0.1, pool.posZ[i], FXParticleType.SPLASH, 8);
+                        }
+
+                        this.triggerExplosion(i, true);
+                    }
+                }
+
+                if (!despawn && pool.hasGravity[i] && pool.posY[i] <= groundY + 0.1) {
                     despawn = true;
-                    this.triggerExplosion(i);
-                } else {
+                    this.triggerExplosion(i, false);
+                } else if (!despawn) {
                     const streamer = state.worldStreamer;
                     const poolIdx = streamer.getEnemyPool().nextIndex();
                     streamer.getNearbyEnemies(pool.posX[i], pool.posZ[i], 0.8, poolIdx);
-                    
+
                     const nearby = streamer.getEnemyPool().getPool(poolIdx);
                     const nearCount = streamer.getEnemyPool().getCount(poolIdx);
 
-                    if (nearCount > 0) {
-                        const enemy = nearby[0];
+                    for (let n = 0; n < nearCount; n++) {
+                        const enemy = nearby[n];
+                        if (!enemy || EnemyPoolState.hp[enemy.poolId] <= 0) continue;
+
                         const enemyIdx = enemy.poolId | 0;
-                        if (enemy && state.applyDamage) {
+                        if (state.applyDamage) {
                             const halfHeight = enemy.originalScale || 1.0;
                             const enemyY = enemy.mesh.position.y;
                             if (pool.posY[i] >= enemyY - halfHeight && pool.posY[i] <= enemyY + halfHeight) {
@@ -131,8 +163,13 @@ export class ProjectileSystem implements System {
                                     EnemyPoolState.statusFlags[enemyIdx] = (EnemyPoolState.statusFlags[enemyIdx] | ENTITY_STATUS.DEAD) | 0;
                                 }
 
+                                // 1. Calculate impact intensity (Tactile Feedback)
+                                const wepStats = WEAPONS[pool.weaponId[i]];
+                                const isKill = EnemyPoolState.hp[enemyIdx] <= 0;
+                                const isHighImpact = pool.damage[i] > 50 || isKill || (wepStats?.impactType === EnemyDeathState.GIBBED);
+
                                 // 2. Trigger Legacy Callback (For FX and Telemetry)
-                                state.applyDamage(enemy, pool.damage[i], pool.weaponId[i]);
+                                state.applyDamage(enemy, pool.damage[i], wepStats?.defaultDamageType || 1, pool.weaponId[i], isHighImpact);
 
                                 if (this.session) {
                                     this.session.spawnParticle(pool.posX[i], pool.posY[i], pool.posZ[i], FXParticleType.BLOOD_SPLATTER, 3);
@@ -140,14 +177,9 @@ export class ProjectileSystem implements System {
                                 GamePlaySounds.playImpact(MaterialType.FLESH);
 
                                 // --- PIERCING & HIT-STOP ---
-                                const wepStats = WEAPONS[pool.weaponId[i]];
                                 const canPierce = wepStats?.piercing && pool.pierceCount[i] < 3;
 
-                                // 1. Hit-Stop Logic (Tactile Feedback)
-                                const isKill = EnemyPoolState.hp[enemyIdx] <= 0;
-                                const isHighImpact = pool.damage[i] > 50 || isKill || (wepStats?.impactType === EnemyDeathState.GIBBED);
-
-                                // 2. Kinetic Feedback (Knockback)
+                                // 3. Kinetic Feedback (Knockback)
                                 const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
                                 const force = (pool.damage[i] / 3) / Math.max(0.3, mass);
                                 _v1.set(pool.velX[i], 0, pool.velZ[i]).normalize().multiplyScalar(force);
@@ -169,6 +201,7 @@ export class ProjectileSystem implements System {
                                 } else {
                                     despawn = true;
                                 }
+                                break; // Hit handled, move to next projectile
                             }
                         }
                     }
@@ -188,7 +221,7 @@ export class ProjectileSystem implements System {
         }
     }
 
-    private triggerExplosion(idx: number) {
+    private triggerExplosion(idx: number, hitWater: boolean = false) {
         const pool = ProjectilePoolState;
         const radius = pool.weaponId[idx] === DamageID.GRENADE ? 8 : 5;
         const damage = pool.damage[idx];
@@ -205,7 +238,7 @@ export class ProjectileSystem implements System {
             const distSq = dx * dx + dz * dz;
             if (distSq < radius * radius) {
                 EnemyPoolState.hp[i] -= damage;
-                this.session?.state.applyDamage(EnemyManager.getActiveEnemies()[i], damage, pool.weaponId[idx], true);
+                this.session?.state.applyDamage(EnemyManager.getActiveEnemies()[i], damage, DamageType.EXPLOSION, pool.weaponId[idx], true);
                 hitCount++;
             }
         }
@@ -218,26 +251,40 @@ export class ProjectileSystem implements System {
             }
         }
 
-        // Trigger FX
-        _v1.set(px, 0.1, pz);
+        _v1.set(px, hitWater ? (this.session?.engine.water?.getBuoyancyResult().waterLevel || 0.1) : 0.1, pz);
+
+        let noiseType = NoiseType.OTHER;
+        if (pool.weaponId[idx] === DamageID.GRENADE) {
+            noiseType = NoiseType.GRENADE;
+        } else if (pool.weaponId[idx] === DamageID.MOLOTOV) {
+            noiseType = NoiseType.MOLOTOV;
+        } else if (pool.weaponId[idx] === DamageID.FLASHBANG) {
+            noiseType = NoiseType.FLASHBANG;
+        }
+        if (noiseType !== NoiseType.OTHER && this.session) {
+            this.session.makeNoise(_v1, noiseType, NOISE_RADIUS[noiseType]);
+        }
+
         if (this.session) {
             if (pool.weaponId[idx] === DamageID.GRENADE) {
-                WeaponFX.createGrenadeImpact(_v1, radius, false, this.session);
+                WeaponFX.createGrenadeImpact(_v1, radius, hitWater, this.session);
             } else if (pool.weaponId[idx] === DamageID.MOLOTOV) {
-                WeaponFX.createMolotovImpact(_v1, radius, false, this.session);
+                WeaponFX.createMolotovImpact(_v1, radius, hitWater, this.session);
 
-                // --- CREATE PERSISTENT FIRE ZONE ---
-                const fZones = this.session.state.fireZones;
-                const fCount = this.session.state.fireZoneCount | 0;
-                if (fCount < MAX_ENTITIES.FIRE_ZONES) {
-                    const fz = fZones[fCount];
-                    fz.x = px;
-                    fz.z = pz;
-                    fz.radius = radius;
-                    fz.life = 8.0;
-                    fz.damage = damage * 0.2;
-                    fz.sourceId = pool.weaponId[idx];
-                    this.session.state.fireZoneCount = (fCount + 1) | 0;
+                // --- CREATE PERSISTENT FIRE ZONE (Land Only) ---
+                if (!hitWater) {
+                    const fZones = this.session.state.fireZones;
+                    const fCount = this.session.state.fireZoneCount | 0;
+                    if (fCount < MAX_ENTITIES.FIRE_ZONES) {
+                        const fz = fZones[fCount];
+                        fz.x = px;
+                        fz.z = pz;
+                        fz.radius = radius;
+                        fz.life = 8.0;
+                        fz.damage = damage * 0.2;
+                        fz.sourceId = pool.weaponId[idx];
+                        this.session.state.fireZoneCount = (fCount + 1) | 0;
+                    }
                 }
             } else if (pool.weaponId[idx] === DamageID.FLASHBANG) {
                 WeaponFX.createFlashbangImpact(_v1, false, this.session);
@@ -283,7 +330,20 @@ export class ProjectileSystem implements System {
                 const dmg = fz.damage * tickRate;
                 const radSq = fz.radius * fz.radius;
 
+                // --- PLAYER COLLISION ---
+                if (ctx) {
+                    const pdx = ctx.playerPos.x - fz.x;
+                    const pdz = ctx.playerPos.z - fz.z;
+                    if (pdx * pdx + pdz * pdz <= radSq) {
+                        const perkSystem = ctx.getSystem<any>(SystemID.PERK_SYSTEM);
+                        if (perkSystem) {
+                            perkSystem.applyPerk(ctx, StatusEffectID.BURNING, 1500, 1.0);
+                        }
+                    }
+                }
+
                 for (let j = 0; j < EnemyPoolState.activeCount; j++) {
+
                     if ((EnemyPoolState.statusFlags[j] & EnemyFlags.DEAD) !== 0) continue;
 
                     const dx = EnemyPoolState.posX[j] - fz.x;
@@ -300,7 +360,7 @@ export class ProjectileSystem implements System {
                             enemy.burnSource = fz.sourceId || DamageID.BURN;
                         }
 
-                        state.applyDamage(enemy, dmg, DamageID.BURN, false, fz.sourceId);
+                        state.applyDamage(enemy, dmg, DamageType.BURN, fz.sourceId, false);
                     }
                 }
             }
@@ -310,27 +370,25 @@ export class ProjectileSystem implements System {
     /**
      * Compatibility Bridge: launchBullet
      */
-    static launchBullet(scene: THREE.Scene, projectiles: any, origin: THREE.Vector3, dir: THREE.Vector3, weapon: DamageID, damage?: number, life: number = 1.5) {
-        const speed = WEAPONS[weapon]?.bulletSpeed || 70;
+    static launchBullet(projectiles: any, origin: THREE.Vector3, dir: THREE.Vector3, damageSource: DamageID, damage?: number, life: number = 1.5) {
+        const speed = (WEAPONS as any)[damageSource]?.bulletSpeed || 70;
         const vx = dir.x * speed;
         const vy = dir.y * speed;
         const vz = dir.z * speed;
 
-        // Weapon Muzzle FX (Phase 13 optimized)
-        WeaponFX.createMuzzleFlash(origin, dir);
-        WeaponFX.createMuzzleFire(origin, dir);
+        // Weapon Muzzle FX (Handled by WeaponHandler to avoid double-triggering in projectile loops)
 
         this.spawnProjectile(
             origin.x, origin.y, origin.z,
             vx, vy, vz,
-            life, damage || 10, weapon, true, false, 0
+            life, damage || 10, damageSource, true, false, 0
         );
     }
 
     /**
      * Compatibility Bridge: launchThrowable
      */
-    static launchThrowable(scene: THREE.Scene, projectiles: any, origin: THREE.Vector3, target: THREE.Vector3, weapon: DamageID, time: number, damage: number) {
+    static launchThrowable(scene: THREE.Scene, projectiles: any, origin: THREE.Vector3, target: THREE.Vector3, damageSource: DamageID, time: number, damage: number) {
         const g = PHYSICS.GRAVITY;
         const vx = (target.x - origin.x) / time;
         const vy = (target.y - origin.y + 0.5 * g * time * time) / time;
@@ -339,7 +397,7 @@ export class ProjectileSystem implements System {
         this.spawnProjectile(
             origin.x, origin.y, origin.z,
             vx, vy, vz,
-            time, damage, weapon, true, true, 1
+            time, damage, damageSource, true, true, 1
         );
     }
 
@@ -402,7 +460,7 @@ export class ProjectileSystem implements System {
 
         // Only process when firing continuous weapons
         if (!state.inputState.fire || state.isReloading) return;
-        if (wepId !== DamageID.FLAMETHROWER && wepId !== DamageID.ARC_CANNON) return;
+        if (wepId !== WeaponID.FLAMETHROWER && wepId !== WeaponID.ARC_CANNON) return;
 
         // Verify ammo (WeaponHandler handles consumption, we just gate damage here)
         if (state.weaponAmmo[wepId] <= 0) return;
@@ -415,7 +473,7 @@ export class ProjectileSystem implements System {
         const aimX = state.inputState.aimVector.x;
         const aimZ = state.inputState.aimVector.y; // Map V2.y to V3.z
 
-        const isFlame = wepId === DamageID.FLAMETHROWER;
+        const isFlame = wepId === WeaponID.FLAMETHROWER;
         const baseRange = isFlame ? 10 : 14;
         const range = baseRange * (state.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0);
         const rangeSq = range * range;
@@ -428,6 +486,7 @@ export class ProjectileSystem implements System {
 
         const enemies = EnemyManager.getActiveEnemies();
 
+        let anyHit = false;
         for (let i = 0; i < EnemyPoolState.activeCount; i++) {
             if (((EnemyPoolState.statusFlags[i] | 0) & (ENTITY_STATUS.DEAD | 0)) !== 0) continue;
 
@@ -445,11 +504,13 @@ export class ProjectileSystem implements System {
                 const invDist = 1.0 / Math.sqrt(dSq);
                 if ((ex * invDist * aimX + ez * invDist * aimZ) > cosHalfAngle) {
                     hit = true;
+                    anyHit = true;
                 }
             } else {
                 const cross = ex * aimZ - ez * aimX;
                 if (Math.abs(cross) < beamWidth) {
                     hit = true;
+                    anyHit = true;
 
                     // --- ARC CHAINING ---
                     let currentChain = enemies[i];
@@ -466,7 +527,7 @@ export class ProjectileSystem implements System {
 
                         if (cDistSq < 64) { // 8m chain range
                             EnemyPoolState.hp[j] -= damage * 0.7;
-                            state.applyDamage(enemies[j], damage * 0.7, wepId, false);
+                            state.applyDamage(enemies[j], damage * 0.7, DamageType.ELECTRIC, wepId as unknown as DamageID, false);
                             WeaponFX.drawArcLightning(this.session!.engine.scene, _v3, enemies[j].mesh.position, false);
                             _v3.copy(enemies[j].mesh.position);
                             chainCount++;
@@ -479,7 +540,7 @@ export class ProjectileSystem implements System {
             if (hit) {
                 EnemyPoolState.hp[i] -= damage;
 
-                state.applyDamage(enemies[i], damage, wepId, false);
+                state.applyDamage(enemies[i], damage, isFlame ? DamageType.BURN : DamageType.ELECTRIC, wepId as unknown as DamageID, false);
 
                 if (EnemyPoolState.hp[i] <= 0) {
                     EnemyPoolState.statusFlags[i] = (EnemyPoolState.statusFlags[i] | ENTITY_STATUS.DEAD) | 0;
@@ -503,6 +564,13 @@ export class ProjectileSystem implements System {
                     this.session.spawnParticle(EnemyPoolState.posX[i], 1.2, EnemyPoolState.posZ[i], FXParticleType.BLOOD_SPLATTER, 3);
                 }
             }
+        }
+
+        // --- ARC CANNON IDLE BEAM (Audit Fix) ---
+        if (!isFlame && !anyHit) {
+            _v1.set(aimX, 0, aimZ).multiplyScalar(range);
+            _v2.copy(this.session.playerPos).add(_v1);
+            WeaponFX.drawArcLightning(this.session.engine.scene, this.session.playerPos, _v2, true);
         }
     }
 

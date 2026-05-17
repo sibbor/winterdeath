@@ -6,34 +6,32 @@
  */
 
 export enum StatusEffectID {
-    // --- PASSIVES (Perks) ---
+    NONE = -1,
+
+    // --- PERKS: PASSIVES [0-9] ---
     TRICKSTERS_HASTE = 0,
     EAGLES_SIGHT = 1,
     LEAD_FEVER = 2,
     WINTERS_BONE = 3,
 
-    // --- BUFFS (Perks) ---
-    REFLEX_SHIELD = 4,
-    ADRENALINE_PATCH = 5,
+    // --- PERKS: BUFFS [10-49] ---
+    REFLEX_SHIELD = 10,
+    ADRENALINE_PATCH = 11,
+    GIB_MASTER = 12,
+    QUICK_FINGER = 13,
 
-    // --- DEBUFFS (Perks) ---
-    BLEEDING = 6,
-    SLOWED = 7,
-    STUNNED = 8,
-    BURNING = 9,
-    DISORIENTED = 10,
-    FREEZING = 11,
-    ELECTRIFIED = 12,
-    DROWNING = 13,
-
-    // --- NEW SYSTEM BUFFS (Phase 11) ---
-    GIB_MASTER = 14,
-    QUICK_FINGER = 15,
+    // --- PERKS: DEBUFFS [50-98] ---
+    BLEEDING = 50,
+    SLOWED = 51,
+    STUNNED = 52,
+    BURNING = 53,
+    DISORIENTED = 54,
+    FREEZING = 55,
+    ELECTRIFIED = 56,
+    DROWNING = 57,
 
     // --- SYSTEM STATES (No Perk definition needed) ---
-    INFECTED = 16,
-    INVULNERABLE = 17,
-    ADRENALINE_SHOT = 18,
+    INVULNERABLE = 99,
 }
 
 /**
@@ -48,7 +46,6 @@ export const StatusEffect = {
     ADRENALINE_PATCH: 1 << StatusEffectID.ADRENALINE_PATCH,
     GIB_MASTER: 1 << StatusEffectID.GIB_MASTER,
     QUICK_FINGER: 1 << StatusEffectID.QUICK_FINGER,
-    ADRENALINE: 1 << StatusEffectID.ADRENALINE_SHOT,
     INVULNERABLE: 1 << StatusEffectID.INVULNERABLE,
 
     // --- DEBUFFS ---
@@ -60,7 +57,6 @@ export const StatusEffect = {
     FREEZING: 1 << StatusEffectID.FREEZING,
     ELECTRIFIED: 1 << StatusEffectID.ELECTRIFIED,
     DROWNING: 1 << StatusEffectID.DROWNING,
-    INFECTED: 1 << StatusEffectID.INFECTED,
 } as const;
 
 export type StatusEffectBit = number;

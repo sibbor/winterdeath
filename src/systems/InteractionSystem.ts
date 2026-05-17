@@ -6,10 +6,9 @@ import { UiSounds, GamePlaySounds } from '../utils/audio/AudioLib';
 import { LootSystem } from './LootSystem';
 import { getCollectibleById } from '../content/collectibles';
 import { FXSystem } from './FXSystem';
-import { UIEventBridge, InteractionType, InteractionShape, InteractionPromptId } from './ui/UIEventBridge';
+import { UIEventBridge, InteractionType, InteractionSubType, InteractionShape, InteractionPromptId } from './ui/UIEventBridge';
 import { FXParticleType } from '../types/FXTypes';
 import { TriggerType, TriggerStatus } from '../types/TriggerTypes';
-import { PlayerStatID } from '../entities/player/PlayerTypes';
 import { VehicleID } from '../entities/vehicles/VehicleTypes';
 import { InputAction } from '../core/engine/InputManager';
 import { TriggerSystem } from './TriggerSystem';
@@ -24,6 +23,7 @@ const _traverseStack: THREE.Object3D[] = [];
 // Shared object for detection returns to eliminate garbage allocation
 const _detectionResult = {
     type: InteractionType.NONE,
+    subType: InteractionSubType.NONE,
     promptId: InteractionPromptId.NONE,
     position: new THREE.Vector3(),
     id: '',
@@ -117,30 +117,37 @@ export class InteractionSystem implements System {
             _detectionResult.object = null;
             _detectionResult.label = '';
 
-            let triggers: any[] | TriggerSystem;
+            let triggerIndices: any = null;
             let interactables: any[];
+            let tCount = 0;
+            let iCount = 0;
 
             if (session.worldStreamer) {
                 const ws = session.worldStreamer;
                 const tPoolIdx = ws.getTriggerPool().nextIndex();
                 ws.getNearbyTriggers(this.playerGroup.position.x, this.playerGroup.position.z, 15.0, tPoolIdx);
-                triggers = ws.getTriggerPool().getPool(tPoolIdx);
-                (triggers as any)._count = ws.getTriggerPool().getCount(tPoolIdx);
+                triggerIndices = ws.getTriggerPool().getPool(tPoolIdx);
+                tCount = ws.getTriggerPool().getCount(tPoolIdx);
 
                 const iPoolIdx = ws.getInteractablePool().nextIndex();
                 ws.getNearbyInteractables(this.playerGroup.position.x, this.playerGroup.position.z, 15.0, iPoolIdx);
                 interactables = ws.getInteractablePool().getPool(iPoolIdx);
-                (interactables as any)._count = ws.getInteractablePool().getCount(iPoolIdx);
+                iCount = ws.getInteractablePool().getCount(iPoolIdx);
             } else {
-                triggers = state.triggers || this.EMPTY_ARRAY;
+                triggerIndices = null;
+                tCount = session.triggerSystem.capacity;
                 interactables = (state.sectorState.ctx?.interactables || this.EMPTY_ARRAY);
+                iCount = interactables.length || 0;
             }
 
             this.detectInteraction(
                 this.playerGroup.position,
-                triggers,
+                session.triggerSystem,
+                triggerIndices,
+                tCount,
                 state,
-                interactables
+                interactables,
+                iCount
             );
 
             if (_detectionResult.type !== InteractionType.NONE) {
@@ -149,8 +156,6 @@ export class InteractionSystem implements System {
                 state.interaction.promptId = _detectionResult.promptId;
                 state.interaction.label = _detectionResult.label || '';
                 state.interaction.targetId = _detectionResult.id || '';
-
-                if (!state.interactionTargetPos) state.interactionTargetPos = new THREE.Vector3();
                 state.interactionTargetPos.copy(_detectionResult.position);
                 state.hasInteractionTarget = true;
             } else {
@@ -202,10 +207,10 @@ export class InteractionSystem implements System {
 
             // Smooth braking (ease-out)
             const easeOut = 1.0 - Math.pow(1.0 - anim.progress, 3);
-
-            _v1.set(anim.startX, anim.startY, anim.startZ);
-            anim.obj.position.copy(_v1);
+ 
+            anim.obj.position.set(anim.startX, anim.startY, anim.startZ);
             anim.obj.rotation.set(0, 0, 0);
+
 
             const targetX = (this.playerGroup.position.x - anim.startX) * easeOut;
             const targetZ = (this.playerGroup.position.z - anim.startZ) * easeOut;
@@ -281,7 +286,10 @@ export class InteractionSystem implements System {
                     }
                 }
 
-                anim.obj.userData.effects = [];
+                if (anim.obj.userData.effects) {
+                    anim.obj.userData.effects.length = 0;
+                }
+
 
                 // Remove from scene registry
                 const collIdx = this.collectibles.indexOf(anim.obj);
@@ -328,9 +336,12 @@ export class InteractionSystem implements System {
 
     private detectInteraction(
         playerPos: THREE.Vector3,
-        triggers: any[] | TriggerSystem,
+        ts: TriggerSystem,
+        triggerIndices: any,
+        tCount: number,
         state: any,
-        nearbyInteractables: THREE.Object3D[]
+        nearbyInteractables: THREE.Object3D[],
+        iCount: number
     ): void {
 
         // --- Priority 1: Active Vehicle (Exit Prompt) ---
@@ -345,8 +356,8 @@ export class InteractionSystem implements System {
         }
 
         // --- Priority 2: Spatial Grid Objects ---
-        const iLen = (nearbyInteractables as any)._count ?? nearbyInteractables.length;
-        for (let i = 0; i < iLen; i = (i + 1) | 0) {
+        for (let i = 0; i < iCount; i = (i + 1) | 0) {
+
             const obj = nearbyInteractables[i];
             if (!obj || !obj.userData?.isInteractable) continue;
             if (obj.userData.interactionType === InteractionType.COLLECTIBLE && obj.userData.pickedUp) continue;
@@ -414,131 +425,78 @@ export class InteractionSystem implements System {
                     _detectionResult.id = obj.userData.interactionId || '';
                     _detectionResult.object = obj;
                     _detectionResult.label = obj.userData.interactionLabel || '';
+                    _detectionResult.subType = obj.userData.interactionSubType || InteractionSubType.NONE;
 
                     // Specific Prompt Overrides based on Type if not explicitly provided
                     if (!obj.userData.interactionPromptId) {
-                        if (_detectionResult.type === InteractionType.COLLECTIBLE) _detectionResult.promptId = InteractionPromptId.PICKUP_COLLECTIBLE;
-                        else if (_detectionResult.type === InteractionType.CHEST) _detectionResult.promptId = InteractionPromptId.OPEN_CHEST;
-                        else if (_detectionResult.type === InteractionType.KNOCK_ON_PORT) _detectionResult.promptId = InteractionPromptId.KNOCK_ON_PORT;
-                        else if (_detectionResult.type === InteractionType.PLANT_EXPLOSIVE) _detectionResult.promptId = InteractionPromptId.PLANT_EXPLOSIVE;
+                        if (_detectionResult.type === InteractionType.COLLECTIBLE)
+                            _detectionResult.promptId = InteractionPromptId.PICKUP_COLLECTIBLE;
+                        else if (_detectionResult.type === InteractionType.CHEST)
+                            _detectionResult.promptId = InteractionPromptId.OPEN_CHEST;
+                        else if (_detectionResult.type === InteractionType.SECTOR_SPECIFIC) {
+                            if (_detectionResult.subType === InteractionSubType.KNOCK_ON_PORT)
+                                _detectionResult.promptId = InteractionPromptId.KNOCK_ON_PORT;
+                            else if (_detectionResult.subType === InteractionSubType.PLANT_EXPLOSIVE)
+                                _detectionResult.promptId = InteractionPromptId.PLANT_EXPLOSIVE;
+                        }
                     }
                     return;
                 }
             }
         }
 
-        // --- Priority 3: Mission Triggers (SoA Compliant) ---
-        if (triggers instanceof Array) {
-            const tLen = (triggers as any)._count ?? triggers.length;
-            for (let i = 0; i < tLen; i = (i + 1) | 0) {
-                const t = triggers[i];
-                if (!((t.statusFlags & TriggerStatus.ACTIVE) !== 0)) continue;
+        // --- Priority 3: Mission Triggers (Unified SoA Loop) ---
+        const activeFlags = ts.getActiveFlags();
+        const types = ts.getTriggerTypes();
+        const statusFlags = ts.getStatusFlags();
+        const posX = ts.getPositionsX();
+        const posZ = ts.getPositionsZ();
+        const radiiSq = ts.getRadiiSq();
+        const metadata = ts.metadata;
 
-                if (t.type === TriggerType.INTERACTION || t.type === TriggerType.STATION) {
-                    let tx = t.position.x;
-                    let tz = t.position.z;
+        for (let i = 0; i < tCount; i++) {
+            const idx = triggerIndices ? (triggerIndices[i] | 0) : i;
 
-                    if (t.familyId !== undefined && this.activeFamilyMembers) {
-                        const members = this.activeFamilyMembers.current;
-                        for (let mIdx = 0; mIdx < members.length; mIdx++) {
-                            if (members[mIdx].id === t.familyId) {
-                                tx = members[mIdx].mesh.position.x;
-                                tz = members[mIdx].mesh.position.z;
-                                break;
-                            }
-                        }
-                    } else if (t.ownerId && this.scene) {
-                        _traverseStack.length = 0;
-                        _traverseStack.push(this.scene);
-                        while (_traverseStack.length > 0) {
-                            const node = _traverseStack.pop()!;
-                            if (node.name === t.ownerId || node.userData.id === t.ownerId) {
-                                tx = node.position.x;
-                                tz = node.position.z;
-                                break;
-                            }
-                            for (let cIdx = 0; cIdx < node.children.length; cIdx++) _traverseStack.push(node.children[cIdx]);
+            if (activeFlags[idx] === 0) continue;
+            if (!((statusFlags[idx] & TriggerStatus.ACTIVE) !== 0)) continue;
+
+            const type = types[idx];
+            if (type === TriggerType.INTERACTION || type === TriggerType.STATION) {
+                const meta = metadata[idx];
+                let tx = posX[idx];
+                let tz = posZ[idx];
+
+                // Resolve dynamic positions (family/owner)
+                if (meta.familyId !== undefined && this.activeFamilyMembers) {
+                    const members = this.activeFamilyMembers.current;
+                    for (let mIdx = 0; mIdx < members.length; mIdx++) {
+                        if (members[mIdx].id === meta.familyId) {
+                            tx = members[mIdx].mesh.position.x;
+                            tz = members[mIdx].mesh.position.z;
+                            break;
                         }
                     }
-
-                    const dx = playerPos.x - tx;
-                    const dz = playerPos.z - tz;
-                    const distSq = dx * dx + dz * dz;
-
-                    let inRange = false;
-                    if (t.size) {
-                        const maxDim = Math.max(t.size.width, t.size.depth) * 0.7;
-                        if (distSq < maxDim * maxDim) inRange = true;
-                    } else {
-                        const r = t.radius || 2.0;
-                        if (distSq < r * r) inRange = true;
-                    }
-
-                    if (inRange) {
-                        _detectionResult.position.set(tx, playerPos.y, tz);
-                        _detectionResult.type = InteractionType.SECTOR_SPECIFIC;
-                        _detectionResult.promptId = t.interactionPromptId ?? InteractionPromptId.INTERACT;
-                        _detectionResult.id = t.id || '';
-                        _detectionResult.object = null;
-                        _detectionResult.label = t.label || '';
-                        return;
+                } else if (meta.ownerId && this.scene) {
+                    const obj = this.scene.getObjectByName(meta.ownerId);
+                    if (obj) {
+                        tx = obj.position.x;
+                        tz = obj.position.z;
                     }
                 }
-            }
-        } else {
-            // TriggerSystem (SoA Path)
-            const ts = triggers;
-            const activeFlags = ts.getActiveFlags();
-            const types = ts.getTriggerTypes();
-            const statusFlags = ts.getStatusFlags();
-            const posX = ts.getPositionsX();
-            const posZ = ts.getPositionsZ();
-            const radiiSq = ts.getRadiiSq();
-            const metadata = ts.metadata;
 
-            for (let i = 0; i < ts.capacity; i++) {
-                if (activeFlags[i] === 0) continue;
-                if (!((statusFlags[i] & TriggerStatus.ACTIVE) !== 0)) continue;
+                const dx = playerPos.x - tx;
+                const dz = playerPos.z - tz;
+                const distSq = dx * dx + dz * dz;
 
-                const type = types[i];
-                if (type === TriggerType.INTERACTION || type === TriggerType.STATION) {
-                    const meta = metadata[i];
-                    let tx = posX[i];
-                    let tz = posZ[i];
-
-                    // Resolve dynamic positions (family/owner)
-                    if (meta.familyId !== undefined && this.activeFamilyMembers) {
-                        const members = this.activeFamilyMembers.current;
-                        for (let mIdx = 0; mIdx < members.length; mIdx++) {
-                            if (members[mIdx].id === meta.familyId) {
-                                tx = members[mIdx].mesh.position.x;
-                                tz = members[mIdx].mesh.position.z;
-                                break;
-                            }
-                        }
-                    } else if (meta.ownerId && this.scene) {
-                        const obj = this.scene.getObjectByName(meta.ownerId);
-                        if (obj) {
-                            tx = obj.position.x;
-                            tz = obj.position.z;
-                        }
-                    }
-
-                    const dx = playerPos.x - tx;
-                    const dz = playerPos.z - tz;
-                    const distSq = dx * dx + dz * dz;
-
-                    // Sphere-only for now in detection bridge for simplicity, 
-                    // or we could implement full OBB check here too.
-                    if (distSq < radiiSq[i]) {
-                        _detectionResult.position.set(tx, playerPos.y, tz);
-                        _detectionResult.type = InteractionType.SECTOR_SPECIFIC;
-                        _detectionResult.promptId = meta.interactionPromptId ?? InteractionPromptId.INTERACT;
-                        _detectionResult.id = meta.id || '';
-                        _detectionResult.object = null;
-                        _detectionResult.label = meta.label || '';
-                        return;
-                    }
+                // Unified detection check
+                if (distSq < radiiSq[idx]) {
+                    _detectionResult.position.set(tx, playerPos.y, tz);
+                    _detectionResult.type = InteractionType.SECTOR_SPECIFIC;
+                    _detectionResult.promptId = meta.interactionPromptId ?? InteractionPromptId.INTERACT;
+                    _detectionResult.id = String(meta.id || '');
+                    _detectionResult.object = null;
+                    _detectionResult.label = meta.label || '';
+                    return;
                 }
             }
         }
@@ -635,28 +593,28 @@ export class InteractionSystem implements System {
         }
 
         if (chestData && !chestData.opened) {
-            const c = chestData;
-            c.opened = true;
+            const chest = chestData;
+            chest.opened = true;
             GamePlaySounds.playChestOpen();
 
             let inRegistry = false;
             for (let i = 0; i < chests.length; i++) {
-                if (chests[i] === c) { inRegistry = true; break; }
+                if (chests[i] === chest) { inRegistry = true; break; }
             }
-            if (!inRegistry) chests.push(c);
+            if (!inRegistry) chests.push(chest);
 
-            LootSystem.spawnScrapExplosion(session.engine.scene, c.mesh.position.x, c.mesh.position.z, c.scrap);
+            LootSystem.spawnScrapExplosion(session.engine.scene, chest.mesh.position.x, chest.mesh.position.z, chest.scrap);
 
-            const glowRing = c.mesh.getObjectByName('chestGlow');
+            const glowRing = chest.mesh.getObjectByName('chestGlow');
             if (glowRing) {
                 glowRing.visible = false;
             }
 
-            FXSystem.spawnParticle(session.engine.scene, state.particles, c.mesh.position.x, 1.0, c.mesh.position.z, FXParticleType.SPARK, 15);
+            FXSystem.spawnParticle(session.engine.scene, state.particles, chest.mesh.position.x, 1.0, chest.mesh.position.z, FXParticleType.SPARK, 15);
 
-            const lid = c.mesh.children[1];
+            const lid = chest.mesh.children[1];
             if (lid) {
-                c.mesh.matrixAutoUpdate = true;
+                chest.mesh.matrixAutoUpdate = true;
                 lid.matrixAutoUpdate = true;
 
                 if (this.chestPool.length > 0) {
@@ -670,14 +628,12 @@ export class InteractionSystem implements System {
                 }
             }
 
-            if (c.type === 'big') {
+            if (chest.subType === InteractionSubType.BIG_CHEST) {
                 state.bigChestsOpened++;
                 if (state.sessionStats) state.sessionStats.bigChestsOpened++;
-                state.statsBuffer[PlayerStatID.TOTAL_BIG_CHESTS_OPENED]++;
             } else {
                 state.chestsOpened++;
                 if (state.sessionStats) state.sessionStats.chestsOpened++;
-                state.statsBuffer[PlayerStatID.TOTAL_CHESTS_OPENED]++;
             }
         }
     }

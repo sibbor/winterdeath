@@ -1,6 +1,6 @@
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System, SystemID } from './System';
-import { GAME_CHALLENGES, ChallengeID } from '../content/ChallengeTypes';
+import { GAME_CHALLENGES, ChallengeID, MAX_CHALLENGE_TIER } from '../content/ChallengeTypes';
 import { PlayerStatID, StatWeaponIndex, StatEnemyIndex } from '../entities/player/PlayerTypes';
 import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 
@@ -30,7 +30,7 @@ export class ChallengeSystem implements System {
         // to save CPU cycles, as challenges are long-term goals.
         const frameCount = session.engine.frameCount;
         const isFirstEval = frameCount < 5; // Initial burst to sync tiers silently
-        
+
         if (!isFirstEval && frameCount % 30 !== 0) return;
 
         this.evaluateAll(session, isFirstEval);
@@ -48,7 +48,7 @@ export class ChallengeSystem implements System {
 
         for (let i = 0; i < ChallengeID.COUNT; i++) {
             const currentTier = tiers[i];
-            if (currentTier >= 3) continue; // Already Gold (Max tier)
+            if (currentTier >= MAX_CHALLENGE_TIER) continue; // Already Gold (Max tier)
 
             const def = GAME_CHALLENGES[i];
             const currentValue = this.getChallengeValue(session, def.id);
@@ -106,13 +106,11 @@ export class ChallengeSystem implements System {
             case ChallengeID.ZOMBIE_HUNTER:
                 return buffer[PlayerStatID.TOTAL_KILLS];
             case ChallengeID.WALKER_EXTERMINATOR:
-                // Use Index 1 (SMG/Walker often aligned but we use explicit EnemyType if available)
-                // Assuming StatEnemyIndex maps correctly
-                return ek[0]; // Walker
+                return ek[StatEnemyIndex.WALKER];
             case ChallengeID.KNEE_CAPPER:
-                return ek[1]; // Runner
+                return ek[StatEnemyIndex.RUNNER];
             case ChallengeID.TANK_BUSTER:
-                return ek[2]; // Tank
+                return ek[StatEnemyIndex.TANK];
             case ChallengeID.BOSS_SLAYER:
                 return ek[StatEnemyIndex.BOSS];
 
@@ -120,7 +118,7 @@ export class ChallengeSystem implements System {
             case ChallengeID.GIBBER:
                 return buffer[PlayerStatID.TOTAL_GIBBED];
             case ChallengeID.PYROMANIAC:
-                return wk[StatWeaponIndex.FIRE] + wk[StatWeaponIndex.BURN] +
+                return wk[StatWeaponIndex.BURN] + wk[StatWeaponIndex.BURN] +
                     wk[StatWeaponIndex.MOLOTOV] + wk[StatWeaponIndex.FLAMETHROWER];
             case ChallengeID.SHOCK_THERAPY:
                 return wk[StatWeaponIndex.ELECTRIC] + wk[StatWeaponIndex.ARC_CANNON];

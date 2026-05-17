@@ -8,12 +8,16 @@ import { RuntimeState } from '../core/RuntimeState';
 import { FamilyMemberID } from '../content/constants';
 import { System, SystemID } from './System';
 import { DialogueLineType } from '../game/session/SectorTypes';
+import { DataResolver } from '../core/data/DataResolver';
+import { InputAction } from '../core/engine/InputManager';
+import { CinematicBubbleHandle } from '../components/ui/hud/CinematicBubble';
 
-// Zero-GC Vektorer för kameramatte
+// Zero-GC Vectors for camera math (Allocated only at startup)
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 
+// Locked V8 Hidden Class for animator data
 const _animState = {
     isMoving: false, isRushing: false, isDodging: false,
     dodgeStartTime: 0, staminaRatio: 1.0,
@@ -33,14 +37,13 @@ export class CinematicSystem implements System {
     public cinematicRef: React.MutableRefObject<any>;
     private camera: CameraSystem;
     private playerMeshRef: React.MutableRefObject<THREE.Group | null>;
-    private bubbleRef: React.RefObject<any>;
+    private bubbleRef: React.RefObject<CinematicBubbleHandle>;
     private activeFamilyMembers: React.MutableRefObject<any[]>;
     private callbacks: {
         setCurrentLine: (line: any) => void;
         setCinematicActive: (active: boolean) => void;
         endCinematic: () => void;
         playCinematicLine: (index: number) => void;
-        setTailPosition: (pos: 'bottom' | 'top' | 'left' | 'right') => void;
         onAction: (action: any) => void;
     };
     private state: RuntimeState;
@@ -49,14 +52,13 @@ export class CinematicSystem implements System {
         cinematicRef: React.MutableRefObject<any>;
         camera: CameraSystem;
         playerMeshRef: React.MutableRefObject<THREE.Group | null>;
-        bubbleRef: React.RefObject<any>;
+        bubbleRef: React.RefObject<CinematicBubbleHandle>;
         activeFamilyMembers: React.MutableRefObject<any[]>;
         callbacks: {
             setCurrentLine: (line: any) => void;
             setCinematicActive: (active: boolean) => void;
             endCinematic: () => void;
             playCinematicLine: (index: number) => void;
-            setTailPosition: (pos: 'bottom' | 'top' | 'left' | 'right') => void;
             onAction: (action: any) => void;
         };
         state: RuntimeState;
@@ -70,146 +72,197 @@ export class CinematicSystem implements System {
         this.state = opts.state;
     }
 
-    // Tar nu emot både sectorId och dialogueId för att matcha den nästlade arrayen
-    public startCinematic(target: THREE.Object3D, sectorId: number, dialogueId: number, params: any = {}) {
+    public startCinematic(session: any, target: THREE.Object3D, sectorId: number, dialogueId?: number, params: any = {}) {
         const sectorScripts = STORY_SCRIPTS[sectorId];
 
+        console.log(`[CinematicSystem] startCinematic called: Sector=${sectorId}, Dialogue=${dialogueId}`);
+
         if (!sectorScripts) {
-            console.error(`[CinematicSystem] Kritiskt fel: Hittar inget manus för Sektor ${sectorId}!`);
+            console.error(`[CinematicSystem] Critical error: No script found for Sector ${sectorId}!`);
             this.callbacks.setCinematicActive(false);
             return;
         }
 
-        const script = sectorScripts[dialogueId];
+        const safeDialogueId = Number(dialogueId || 0);
+        const script = (sectorScripts as any)[safeDialogueId];
 
         if (!script || script.length === 0) {
-            console.error(`[CinematicSystem] Kritiskt fel: Dialog ${dialogueId} saknas i Sektor ${sectorId}!`);
+            console.error(`[CinematicSystem] Critical error: Dialogue ${safeDialogueId} missing in Sector ${sectorId}!`, {
+                passedDialogueId: dialogueId,
+                safeDialogueId,
+                sectorScriptsKeys: Object.keys(sectorScripts),
+                storyScriptsKeys: Object.keys(STORY_SCRIPTS)
+            });
             this.callbacks.setCinematicActive(false);
             return;
         }
 
         const cinematic = this.cinematicRef.current;
+        if (!cinematic) {
+            console.error("[CinematicSystem] Critical error: cinematicRef.current is null!");
+            return;
+        }
 
-        if (cinematic.active && cinematic.script === script) return;
-
+        console.log(`[CinematicSystem] Starting cinematic: Sector ${sectorId}, Dialogue ${safeDialogueId}, Script Length: ${script.length}`);
+        
         cinematic.active = true;
         cinematic.isClosing = false;
-        cinematic.target = target;
+        cinematic.target = target || null;
+        cinematic.hasTarget = !!target;
         cinematic.script = script;
         cinematic.sectorId = sectorId;
-        cinematic.dialogueId = dialogueId;
+        cinematic.dialogueId = safeDialogueId;
         cinematic.lineIndex = -1;
+        cinematic.fadingOut = false;
 
         const currentNow = this.state.renderTime;
         cinematic.startTime = currentNow;
         cinematic.lastFrameTime = currentNow;
         cinematic.lastVoiceTime = 0;
+        cinematic.lastSkipTime = 0;
 
         cinematic.zoom = params.zoom || 0.4;
         cinematic.rotationSpeed = params.rotationSpeed || 0.00015;
         cinematic.customPath = params.customPath || null;
         cinematic.pathDuration = params.pathDuration || 0;
+        cinematic.lookAtPos = params.lookAtPos ? new THREE.Vector3().copy(params.lookAtPos) : null;
+        cinematic.targetPos = params.targetPos ? new THREE.Vector3().copy(params.targetPos) : null;
 
         this.camera.setCinematic(true);
 
         cinematic.startPos = this.camera.position.clone();
         cinematic.startLookAt = this.camera.lookAtTarget ? this.camera.lookAtTarget.clone() : new THREE.Vector3();
 
+        this.state.cinematicActive = true;
         this.callbacks.setCinematicActive(true);
 
         const startLine = params.lineIndex || 0;
         if (cinematic.script && cinematic.script.length > 0) {
+            console.log(`[CinematicSystem] Playing initial line: ${startLine}`);
             this.playLine(startLine);
         } else {
-            // STANDALONE PROCEDURAL PATH (No dialogue)
+            console.log(`[CinematicSystem] No script found or empty script. Ending.`);
             cinematic.lineIndex = 0;
             cinematic.lineStartTime = currentNow;
             cinematic.lineDuration = cinematic.pathDuration || 5500;
         }
     }
 
+    /**
+     * Executes a specific dialogue line by index.
+     * Handles typing speed, duration, voice playback, and engine-to-sector triggers.
+     */
     public playLine(index: number) {
         const cinematic = this.cinematicRef.current;
         const currentNow = this.state.renderTime;
 
-        // 1. RPG SKIP: Spola texten om spelaren trycker förbi
-        if (index === cinematic.lineIndex + 1) {
-            const timeInLine = currentNow - cinematic.lineStartTime;
-            if (timeInLine < cinematic.typingDuration) {
-                cinematic.lineStartTime = currentNow - cinematic.typingDuration;
-                return;
-            }
+        if (!cinematic || !cinematic.active) return;
+
+        console.log(`[CinematicSystem] playLine called: index=${index}, CurrentIndex=${cinematic.lineIndex}`);
+
+        // 1. Debounce and bounds checking (RPG Fast-Forward Guard)
+        if (cinematic.lineIndex === index && (currentNow - cinematic.lineStartTime) < 100) {
+            console.log(`[CinematicSystem] playLine debounced for index=${index}`);
+            return;
         }
-
-        // Anti-spam skydd
-        if (cinematic.lineIndex === index && (currentNow - cinematic.lineStartTime) < 50) return;
-
-        // 2. TRIGGERS: Kör eventuella händelser på den FÖRRA raden (som vi nu lämnar)
-        // Detta måste ske innan vi kollar script.length så att sista raden triggar!
-        if (cinematic.lineIndex >= 0 && cinematic.lineIndex < cinematic.script.length) {
-            const prevLine = cinematic.script[cinematic.lineIndex];
-            if (prevLine.trigger && !cinematic.fadingOut) {
-                cinematic.fadingOut = true;
-                if (this.callbacks.onAction) this.callbacks.onAction(prevLine.trigger);
-            }
-        }
-
-        // 3. SKYDD: Stoppar loopen om vi når slutet
+        
         if (index >= cinematic.script.length) {
-            this.endCinematic();
+            console.log(`[CinematicSystem] End of script reached at index=${index}`);
+            this.stop(); // End cinematic if we reach the end
             return;
         }
 
-        // 4. Ladda in nästa rad
         const line = cinematic.script[index];
+        if (!line) {
+            console.warn(`[CinematicSystem] No line found at index=${index}`);
+            return;
+        }
+
+        // 2. Handle Trigger-based pauses (Sector logic / Cutscenes)
+        if (line.trigger && !cinematic.fadingOut) {
+            console.log(`[CinematicSystem] Line ${index} has trigger. Fading out.`);
+            cinematic.fadingOut = true;
+
+            // Immediately clear the previous line to give the transition space
+            this.state.cinematicLine.active = false;
+            this.state.cinematicLine.text = '';
+
+            // Run triggers
+            const triggers = Array.isArray(line.trigger) ? line.trigger : [line.trigger];
+            triggers.forEach(t => {
+                if (this.callbacks.onAction) this.callbacks.onAction(typeof t === 'string' ? { type: t } : t);
+            });
+
+            setTimeout(() => {
+                // [VINTERDÖD FIX] Only advance if we haven't already moved to this line (e.g. via click)
+                if (cinematic.active && cinematic.lineIndex < index) {
+                    this.playLine(index);
+                }
+            }, 800);
+            return;
+        }
+
+        // --- LINE ACTIVATION ---
+        console.log(`[CinematicSystem] Activating line ${index}: "${line.text}"`);
+
         cinematic.lineIndex = index;
-        cinematic.lineStartTime = currentNow;
+        cinematic.lineStartTime = Date.now();
         cinematic.fadingOut = false;
 
-        // Fast tidslängd. Längden på översättningsnyckeln fungerar inte för matte.
+        // 4. Calculate durations (Zero-GC)
+        // Defaults to 2.5s typing and 4s total duration if not specified.
         cinematic.typingDuration = line.typingDuration || 2500;
         cinematic.lineDuration = line.duration || Math.max(4000, cinematic.typingDuration + 1500);
 
+        // 5. Update Telemetry and UI Bridge (SMI-Safe)
+        const resolvedId = DataResolver.resolveSpeaker(line.speaker);
+        cinematic.currentSpeakerId = resolvedId;
+        
+        // Sync to the high-performance telemetry bridge for React/HUD
+        this.state.cinematicLine.currentSpeakerId = resolvedId;
         this.state.cinematicLine.active = true;
-        this.state.cinematicLine.speaker = line.speaker || '';
+        this.state.cinematicLine.speaker = line.speaker !== undefined ? line.speaker : '';
         this.state.cinematicLine.text = line.text || '';
 
+        // Notify the React layer (Triggers re-render of the CinematicBubble typewriter)
         this.callbacks.setCurrentLine(line);
-
-        if (line.tail) this.callbacks.setTailPosition(line.tail);
     }
 
     public getScript(sectorId: number, dialogueId: number) {
         if (!STORY_SCRIPTS[sectorId]) return null;
-        return STORY_SCRIPTS[sectorId][dialogueId] || null;
+        // Handle both numeric and string keys for robustness
+        const scripts = STORY_SCRIPTS[sectorId];
+        return (scripts as any)[dialogueId] || (scripts as any)[String(dialogueId)] || null;
     }
 
     public stop() {
         const cinematic = this.cinematicRef.current;
         if (!cinematic.active) return;
 
+        console.log(`[CinematicSystem] Stopping cinematic.`);
         cinematic.active = false;
         cinematic.isClosing = true;
         cinematic.closeStartTime = this.state.renderTime;
 
-        this.camera.setCinematic(false);
+        // Reset state & Flush pending triggers
+        this.state.sectorState.pendingTrigger = null;
 
         this.state.cinematicLine.active = false;
         this.state.cinematicLine.speaker = '';
         this.state.cinematicLine.text = '';
 
+        this.state.cinematicActive = false;
         this.callbacks.setCurrentLine(null);
         this.callbacks.setCinematicActive(false);
 
-        //cinematic.target = null;
         cinematic.lineIndex = -1;
+        cinematic.fadingOut = false;
         if (cinematic.script) {
             cinematic.script.length = 0;
         }
     }
 
     public endCinematic() {
-        // Ingen this.stop() här. GameSession hanterar nedstängningen!
         this.callbacks.endCinematic();
     }
 
@@ -220,7 +273,6 @@ export class CinematicSystem implements System {
         const now = renderTime;
         const totalElapsed = now - cinematic.startTime;
 
-        // Use the standardized renderDelta for camera and animation smoothing
         cinematic.lastFrameTime = now;
 
         const playerPos = _v2;
@@ -231,19 +283,21 @@ export class CinematicSystem implements System {
         // --- CAMERA ORBIT MATH ---
         if (cinematic.active || cinematic.isClosing) {
             let t = 0;
+            // NOTE: t is computed FIRST so all camera branches can use it.
+            // There must be NO early return before the auto-advance check at the bottom.
             if (cinematic.active && !cinematic.isClosing) {
                 t = Math.min(1.0, totalElapsed / 2000);
-                t = 1.0 - Math.pow(1.0 - t, 3);
+                t = 1.0 - Math.pow(1.0 - t, 3); // Cubic ease-out
             } else if (cinematic.isClosing) {
                 const elapsedSinceClose = now - cinematic.closeStartTime;
                 t = 1.0 - Math.min(1.0, Math.pow(elapsedSinceClose / 1500, 2));
                 if (elapsedSinceClose >= 1500) {
                     cinematic.isClosing = false;
-                    return;
+                    this.camera.setCinematic(false); // Strictly Inject here to avoid matrix fighting
+                    return; // Only safe early-return: closing animation fully done
                 }
             }
 
-            // --- VINTERDÖD SPECIAL: Prodedural Paths ---
             if (cinematic.customPath === 'mast_flyover' && cinematic.target) {
                 const targetPos = _v3;
                 cinematic.target.getWorldPosition(targetPos);
@@ -253,7 +307,6 @@ export class CinematicSystem implements System {
                 const lookAtTop = _v3.copy(targetPos).add({ x: 0, y: 60, z: 0 } as any);
 
                 if (totalElapsed < 1500) {
-                    // Stage 1: Fly to base (1500ms)
                     const p1 = totalElapsed / 1500;
                     const smoothP = THREE.MathUtils.smoothstep(p1, 0, 1);
                     this.camera.setPosition(
@@ -267,7 +320,6 @@ export class CinematicSystem implements System {
                         THREE.MathUtils.lerp(cinematic.startLookAt.z, targetPos.z, smoothP)
                     );
                 } else if (totalElapsed < 3500) {
-                    // Stage 2: Climb mast (2000ms)
                     const p2 = (totalElapsed - 1500) / 2000;
                     const smoothP = THREE.MathUtils.smoothstep(p2, 0, 1);
                     this.camera.setPosition(
@@ -281,9 +333,8 @@ export class CinematicSystem implements System {
                         THREE.MathUtils.lerp(targetPos.z, lookAtTop.z, smoothP)
                     );
                 } else {
-                    // Stage 3: Circle top (2000ms+)
                     const circleElapsed = totalElapsed - 3500;
-                    const angle = circleElapsed * 0.0005; // Circular speed
+                    const angle = circleElapsed * 0.0005;
                     const radius = 15;
                     const focusPosX = lookAtTop.x + Math.sin(angle) * radius;
                     const focusPosY = lookAtTop.y + 5;
@@ -292,29 +343,26 @@ export class CinematicSystem implements System {
                     this.camera.setPosition(focusPosX, focusPosY, focusPosZ);
                     this.camera.lookAt(lookAtTop);
 
-                    // Auto-end after 5500ms total if no script
                     if (totalElapsed > 5500 && (!cinematic.script || cinematic.script.length === 0)) {
                         this.endCinematic();
                     }
                 }
             } else if (cinematic.hasTarget && cinematic.target) {
-                const targetPos = _v3;
-                cinematic.target.getWorldPosition(targetPos);
+                // Mesh orbit: smooth entry from player camera into midpoint orbit between
+                // the player and the target NPC.
+                cinematic.target.getWorldPosition(_v3);
 
                 _v1.set(
-                    (targetPos.x + playerPos.x) * 0.5,
-                    (targetPos.y + playerPos.y) * 0.5,
-                    (targetPos.z + playerPos.z) * 0.5
+                    (_v3.x + playerPos.x) * 0.5,
+                    (_v3.y + playerPos.y) * 0.5,
+                    (_v3.z + playerPos.z) * 0.5
                 );
 
                 const zoomFactor = 1.0 - (t * (cinematic.zoom || 0.4));
-                const orbitRadius = 15 * zoomFactor;
-                const orbitHeight = 12 * zoomFactor;
-                const angle = (totalElapsed * (cinematic.rotationSpeed || 0.00015));
-
-                const focusPosX = _v1.x + Math.sin(angle) * orbitRadius;
-                const focusPosY = _v1.y + orbitHeight;
-                const focusPosZ = _v1.z + Math.cos(angle) * orbitRadius;
+                const angle = totalElapsed * (cinematic.rotationSpeed || 0.00015);
+                const focusPosX = _v1.x + Math.sin(angle) * (15 * zoomFactor);
+                const focusPosY = _v1.y + (12 * zoomFactor);
+                const focusPosZ = _v1.z + Math.cos(angle) * (15 * zoomFactor);
 
                 this.camera.setPosition(
                     THREE.MathUtils.lerp(cinematic.startPos.x, focusPosX, t),
@@ -322,15 +370,33 @@ export class CinematicSystem implements System {
                     THREE.MathUtils.lerp(cinematic.startPos.z, focusPosZ, t)
                 );
 
+                // Lerp lookAt from startLookAt — NOT from the lagged camera.lookAtTarget,
+                // which would compound drift further every frame.
                 _v1.y += 1.5;
-                const currentLookAt = this.camera.lookAtTarget || _v1;
-
-                _v2.set(
-                    THREE.MathUtils.lerp(currentLookAt.x, _v1.x, t),
-                    THREE.MathUtils.lerp(currentLookAt.y, _v1.y, t),
-                    THREE.MathUtils.lerp(currentLookAt.z, _v1.z, t)
+                this.camera.lookAt(
+                    THREE.MathUtils.lerp(cinematic.startLookAt.x, _v1.x, t),
+                    THREE.MathUtils.lerp(cinematic.startLookAt.y, _v1.y, t),
+                    THREE.MathUtils.lerp(cinematic.startLookAt.z, _v1.z, t)
                 );
-                this.camera.lookAt(_v2);
+            } else if (cinematic.hasTarget && cinematic.targetPos) {
+                // Mesh-less orbit: fixed world coordinate (Sector 3 path triggers).
+                _v1.copy(cinematic.targetPos);
+                const tFast = Math.min(1.0, t * 2); // faster entry for static positions
+                const angle = totalElapsed * (cinematic.rotationSpeed || 0.00015);
+                const radius = 25 * (cinematic.zoom || 0.4);
+
+                this.camera.setPosition(
+                    THREE.MathUtils.lerp(cinematic.startPos.x, _v1.x + Math.cos(angle) * radius, tFast),
+                    THREE.MathUtils.lerp(cinematic.startPos.y, _v1.y + 15 * (cinematic.zoom || 0.4), tFast),
+                    THREE.MathUtils.lerp(cinematic.startPos.z, _v1.z + Math.sin(angle) * radius, tFast)
+                );
+
+                const lookTarget = cinematic.lookAtPos || _v1;
+                this.camera.lookAt(
+                    THREE.MathUtils.lerp(cinematic.startLookAt.x, lookTarget.x, tFast),
+                    THREE.MathUtils.lerp(cinematic.startLookAt.y, lookTarget.y, tFast),
+                    THREE.MathUtils.lerp(cinematic.startLookAt.z, lookTarget.z, tFast)
+                );
             }
         }
 
@@ -339,25 +405,44 @@ export class CinematicSystem implements System {
         const timeInLine = now - cinematic.lineStartTime;
         const activeScriptLine = cinematic.script[cinematic.lineIndex];
         const familyMembers = this.activeFamilyMembers.current;
-
         const speakerId = activeScriptLine?.speaker ?? FamilyMemberID.UNKNOWN;
 
-        // --- VINTERDÖD FIX: Audio Sync ---
+        // --- INPUT SKIP HANDLING (RPG Fast-Forward) ---
+        const input = context.input || (context.engine?.input);
+        if (input && (input.isPressed(InputAction.INTERACT) || input.isPressed(InputAction.FIRE))) {
+            const skipNow = now;
+            if (skipNow - (cinematic.lastSkipTime || 0) > 250) {
+                cinematic.lastSkipTime = skipNow;
+                this.state.cinematicLine.lastSkipTime = skipNow;
+
+                if (timeInLine < cinematic.typingDuration) {
+                    // Skip typing
+                    cinematic.lineStartTime = now - cinematic.typingDuration;
+                    this.bubbleRef.current?.finishTyping();
+                } else {
+                    // Advance to next line (This flushes triggers of the current line)
+                    this.playLine(cinematic.lineIndex + 1);
+                }
+            }
+        }
+
+        // --- AUDIO SYNC ---
         const timeSinceLastVoice = now - (cinematic.lastVoiceTime || 0);
         if (timeInLine < cinematic.typingDuration && timeSinceLastVoice > 150) {
             cinematic.lastVoiceTime = now;
             VoiceSounds.playDialogueBeep(speakerId);
         }
 
-        // --- VINTERDÖD FIX: Zero-GC Animator Sync ---
+        // --- ZERO-GC ANIMATOR SYNC ---
+        const currentSpeakerId = cinematic.currentSpeakerId;
+
         for (let i = -1; i < familyMembers.length; i++) {
             const mesh = i === -1 ? this.playerMeshRef.current : familyMembers[i]?.mesh;
             const memberId = i === -1 ? FamilyMemberID.ROBERT : familyMembers[i]?.id;
 
             if (!mesh) continue;
 
-            // Match speaker by ID directly (Zero-GC SMI comparison)
-            const isCurrentSpeaker = memberId === speakerId;
+            const isCurrentSpeaker = memberId === currentSpeakerId;
             const isSpeaking = isCurrentSpeaker && timeInLine < cinematic.typingDuration;
             const isThinking = isCurrentSpeaker && activeScriptLine?.type === DialogueLineType.THOUGHT;
 
@@ -368,15 +453,15 @@ export class CinematicSystem implements System {
                 _animState.isThinking = isThinking;
                 _animState.seed = mesh.userData.seed || 0;
                 _animState.renderTime = now;
-                _animState.simTime = now; // Cinematic uses render clock for visuals
+                _animState.simTime = now;
 
                 PlayerAnimator.update(body as THREE.Mesh, _animState, now, delta);
             }
         }
 
-        // Auto-avancera till nästa rad
         if (timeInLine > cinematic.lineDuration && !cinematic.fadingOut) {
             const nextIdx = cinematic.lineIndex + 1;
+            console.log(`[CinematicSystem] Auto-advancing to index ${nextIdx} (TimeInLine: ${timeInLine}, Duration: ${cinematic.lineDuration})`);
             this.playLine(nextIdx);
         }
     }

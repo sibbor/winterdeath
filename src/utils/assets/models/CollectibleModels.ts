@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { getSharedGlowTexture } from '../materials';
-import { CollectibleModelType } from '../../../game/session/SectorTypes';
+import { CollectibleType } from '../../../game/session/SectorTypes';
 
 // --- PERFORMANCE CACHE (Zero-GC) ---
 const cache: Record<string, any> = {};
@@ -30,7 +30,7 @@ export const CollectibleModels = {
         group.userData = { type };
 
         switch (Number(type)) {
-            case CollectibleModelType.PACIFIER: {
+            case CollectibleType.PACIFIER: {
                 const colorSageGreen = 0x8a9a86;
                 const colorNaturalRubber = 0xe0b976;
 
@@ -73,7 +73,7 @@ export const CollectibleModels = {
                 break;
             }
 
-            case CollectibleModelType.AXE: {
+            case CollectibleType.AXE: {
                 const matWood = getMat('axe_wood_mat', () => new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.85 }));
                 const matForged = getMat('axe_forged_mat', () => new THREE.MeshStandardMaterial({ color: 0x2b2b2c, metalness: 0.7, roughness: 0.7 }));
                 const matEdge = getMat('axe_edge_mat', () => new THREE.MeshStandardMaterial({ color: 0xcdd2d6, metalness: 0.9, roughness: 0.2 }));
@@ -125,7 +125,7 @@ export const CollectibleModels = {
                 break;
             }
 
-            case CollectibleModelType.BADGE: {
+            case CollectibleType.BADGE: {
                 const badgeGroup = new THREE.Group();
 
                 const matGold = getMat('badge_gold_mat', () => new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.9, roughness: 0.1 }));
@@ -188,7 +188,7 @@ export const CollectibleModels = {
                 break;
             }
 
-            case CollectibleModelType.PHONE: {
+            case CollectibleType.PHONE: {
                 const phoneGroup = new THREE.Group();
                 const phoneW = 0.22; const phoneH = 0.50; const phoneD = 0.03;
 
@@ -293,7 +293,7 @@ export const CollectibleModels = {
                 break;
             }
 
-            case CollectibleModelType.JACKET: {
+            case CollectibleType.JACKET: {
                 const jacketGroup = new THREE.Group();
 
                 const matJacket = getMat('jacket_mat', () => new THREE.MeshStandardMaterial({ color: 0xbe6baf, roughness: 0.8 }));
@@ -336,7 +336,7 @@ export const CollectibleModels = {
                 break;
             }
 
-            case CollectibleModelType.DIARY: {
+            case CollectibleType.DIARY: {
                 const bookGroup = new THREE.Group();
 
                 const matCover = getMat('diary_cover_pink', () => new THREE.MeshStandardMaterial({ color: 0xffb6c1, roughness: 0.8 }));
@@ -392,7 +392,7 @@ export const CollectibleModels = {
                 break;
             }
 
-            case CollectibleModelType.RING: {
+            case CollectibleType.RING: {
                 const ringGroup = new THREE.Group();
 
                 const matGold = getMat('ring_gold_pure', () => new THREE.MeshStandardMaterial({ color: 0xffc000, metalness: 1.0, roughness: 0.1 }));
@@ -452,7 +452,7 @@ export const CollectibleModels = {
                 break;
             }
 
-            case CollectibleModelType.TEDDY: {
+            case CollectibleType.TEDDY: {
                 const brownMat = getMat('teddy_brown', () => new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.9 }));
                 const whiteMat = getMat('teddy_white', () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 }));
                 const blackMat = getMat('teddy_black', () => new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 }));
@@ -502,7 +502,7 @@ export const CollectibleModels = {
                 break;
             }
 
-            case CollectibleModelType.SCARF: {
+            case CollectibleType.SCARF: {
                 const matScarf = getMat('scarf_mat', () => new THREE.MeshStandardMaterial({ color: 0xaa0000, roughness: 0.9 }));
                 const scarf = new THREE.Mesh(getGeo('scarf_placeholder', () => new THREE.TorusGeometry(0.15, 0.05, 8, 16)), matScarf);
                 scarf.rotation.x = Math.PI / 2;

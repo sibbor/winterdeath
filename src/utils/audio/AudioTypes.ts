@@ -32,7 +32,6 @@ export enum SoundID {
     IMPACT_CONCRETE = 15,
     IMPACT_STONE = 16,
     IMPACT_WATER = 105,
-    HEAVY_SMASH = 104,
 
     CHEST_OPEN = 17,
     LOOT_SCRAP = 18,
@@ -40,6 +39,7 @@ export enum SoundID {
     DOOR_SHUT = 20,
     DOOR_KNOCK = 21,
 
+    // --- EXPLOSIONS & THROWABLES ---
     EXPLOSION = 22,
     GRENADE_IMPACT = 23,
     MOLOTOV_IMPACT = 24,
@@ -47,7 +47,7 @@ export enum SoundID {
     WATER_EXPLOSION = 26,
     WATER_SPLASH = 27,
 
-    // --- WEAPONS ---
+    // --- WEAPONS & PROJECTILES ---
     SHOT_PISTOL = 30,
     SHOT_SMG = 31,
     SHOT_RIFLE = 32,
@@ -57,6 +57,7 @@ export enum SoundID {
     SHOT_ARC_CANNON = 36,
     SHOT_FLAMETHROWER = 37,
 
+    // --- WEAPONS ACTIONS & AMMO ---
     WEAPON_EMPTY = 39,
     WEAPON_RELOAD = 40,
     WEAPON_SWITCH = 41,
@@ -66,12 +67,10 @@ export enum SoundID {
     ZOMBIE_GROWL_RUNNER = 51,
     ZOMBIE_GROWL_TANK = 52,
     ZOMBIE_GROWL_BOMBER = 53,
-
     ZOMBIE_ATTACK_HIT = 54,
     ZOMBIE_ATTACK_BITE = 55,
     ZOMBIE_ATTACK_SMASH = 56,
     ZOMBIE_ATTACK_SCREECH = 57,
-
     ZOMBIE_DEATH_SHOT = 60,
     ZOMBIE_DEATH_EXPLODE = 61,
     ZOMBIE_DEATH_BURN = 62,

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DEFAULT_SETTINGS, LIGHT_SYSTEM } from '../../content/constants';
+import { DEFAULT_SETTINGS, SKY_SYSTEM } from '../../content/constants';
 import { GameSettings } from '../../core/engine/EngineTypes';
 import { InputManager } from './InputManager';
 import { CameraSystem } from '../../systems/CameraSystem';
@@ -10,19 +10,26 @@ import { FogSystem } from '../../systems/FogSystem';
 import { WaterSystem } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { AssetPreloader } from '../../systems/AssetPreloader';
+import { SkySystem } from '../../systems/SkySystem';
+import { EnvironmentManager } from '../../systems/EnvironmentManager';
+import { GroundSystem } from '../../systems/GroundSystem';
+import { FootprintSystem } from '../../systems/FootprintSystem';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { System, SystemID } from '../../systems/System';
-import { SectorEnvironment, EnvironmentOverride, EnvironmentalZone, EnvironmentalWeather, WeatherType } from '../../core/engine/EngineTypes';
+import { GroundType, SectorEnvironment, EnvironmentOverride } from '../../core/engine/EngineTypes';
 import { ChunkManager } from '../world/ChunkManager';
+import { clearEffects } from '../../systems/EffectManager';
 
 // Module-level scratchpads for Zero-GC operations
-const _c1 = new THREE.Color();
-const _c2 = new THREE.Color();
-const _v1 = new THREE.Vector3();
 const _traverseStack: THREE.Object3D[] = [];
 
-// Pre-allocated instances for Zero-GC render loop
-const _fallbackContext = { scene: null as any, state: {} };
+// Pre-allocated instances for Zero-GC render loop to prevent V8 polymorphic deoptimization.
+const _fallbackContext = {
+    scene: null as any,
+    state: { hitStopTime: 0 },
+    playerPos: new THREE.Vector3(0, 0, 0),
+    dynamicLights: []
+};
 const _screenQuadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
 export type { GameSettings };
@@ -56,6 +63,9 @@ export class WinterEngine {
     public fog: FogSystem;
     public water: WaterSystem;
     public light: LightSystem;
+    public sky: SkySystem;
+    public ground: GroundSystem;
+    public environment: EnvironmentManager;
 
     private sceneStack: THREE.Scene[] = [];
     public settings: GameSettings;
@@ -121,22 +131,8 @@ export class WinterEngine {
     private _systems: (System | any)[] = new Array(SystemID.COUNT).fill(null);
     private _tickableSystems: System[] = []; // Sub-list of systems that implement update()
 
-    // Fast lookup for environment systems that must run during cinematics
-    private _envSystemIds: Set<SystemID> = new Set([
-        SystemID.WIND,
-        SystemID.WEATHER,
-        SystemID.FOG,
-        SystemID.WATER,
-        SystemID.LIGHT,
-        SystemID.CINEMATIC,
-        SystemID.CAMP_EFFECT_MANAGER,
-        SystemID.FAMILY,
-        SystemID.CAMP_CHATTER
-    ]);
-
     // --- CACHED SCENE REFERENCES ---
     private _cachedSkyLight: THREE.DirectionalLight | null = null;
-    private _cachedAmbientLight: THREE.AmbientLight | null = null;
     private _cachedGround: THREE.Mesh | null = null;
 
     constructor(initialSettings?: Partial<GameSettings>) {
@@ -154,6 +150,13 @@ export class WinterEngine {
         this.weather = new WeatherSystem(this.scene, this.wind, this.camera.threeCamera);
         this.fog = new FogSystem(this.scene, this.wind, this.camera.threeCamera);
         this.water = new WaterSystem(this.scene);
+        this.sky = new SkySystem();
+        this.ground = new GroundSystem();
+
+        // 3. Environment Orchestrator (The Master Sync System)
+        this.environment = new EnvironmentManager(
+            this.sky, this.fog, this.weather, this.water, this.light, this.wind, this.ground
+        );
 
         // --- GATE SYSTEMS TO VARIABLE STEP (Visual Smoothness) ---
         this.wind.isFixedStep = false;
@@ -165,11 +168,16 @@ export class WinterEngine {
 
         this.registerSystem(SystemID.CAMERA, this.camera);
         this.registerSystem(SystemID.INPUT, this.input);
-        this.registerSystem(SystemID.LIGHT, this.light);
-        this.registerSystem(SystemID.WIND, this.wind);
-        this.registerSystem(SystemID.WEATHER, this.weather);
-        this.registerSystem(SystemID.FOG, this.fog);
-        this.registerSystem(SystemID.WATER, this.water);
+        this.registerSystem(SystemID.GROUND, this.ground, false);
+        this.registerSystem(SystemID.WATER, this.water, false);
+        this.registerSystem(SystemID.WEATHER, this.weather, false);
+        this.registerSystem(SystemID.FOG, this.fog, false);
+        this.registerSystem(SystemID.LIGHT, this.light, false);
+        this.registerSystem(SystemID.ENVIRONMENT_MANAGER, this.environment);
+        this.registerSystem(SystemID.FOOTPRINT, FootprintSystem, true);
+
+        // Perform init logic once system is assigned a property
+        this.sky.init();
 
         // Register the singleton monitor as a passive system
         this.registerSystem(SystemID.PERFORMANCE_MONITOR, PerformanceMonitor.getInstance());
@@ -236,6 +244,10 @@ export class WinterEngine {
         // All interactions are captured by the GameSessionUI click-catcher overlay,
         // ensuring the HUD and custom cursors remain reachable.
         this.renderer.domElement.style.pointerEvents = 'none';
+
+        // Vinterdöd Fix: Disable auto-reset to allow accumulation across multiple passes
+        // (Volumetric Fog, UI overlays, etc.) in a single engine frame.
+        this.renderer.info.autoReset = false;
     }
 
     public updateSettings(newSettings: Partial<GameSettings>) {
@@ -320,6 +332,11 @@ export class WinterEngine {
         }
         container.appendChild(this.renderer.domElement);
         this.handleResize();
+
+        // Vinterdöd Cold-Boot Fix: Force an initial sync of all environmental systems
+        // to the default scene to ensure fog, sky, and weather are visible on launch.
+        this.syncSystemsToScene(this.scene);
+
         this.start();
     }
 
@@ -456,11 +473,12 @@ export class WinterEngine {
 
         // Reset references
         this._cachedSkyLight = null;
-        this._cachedAmbientLight = null;
         this._cachedGround = null;
 
         // --- VINTERDÖD FIX: Clear static chunk cache to prevent leaks across sectors ---
         ChunkManager.clear();
+        if (this.light) this.light.clear();
+        clearEffects();
 
         monitor.end('cleanup');
         if (monitor.consoleLoggingEnabled) {
@@ -468,7 +486,29 @@ export class WinterEngine {
         }
     }
 
+    private _activeScene: THREE.Scene | null = null;
+
     // --- Scene Management ---
+
+    public mountScene(scene: THREE.Scene, env?: any, groundType: number = 0, isWarmup: boolean = false) {
+        this.scene = scene;
+        this._activeScene = scene;
+
+        // --- CONSOLIDATED ENVIRONMENTAL LIFECYCLE ---
+        // 1. Clear previous state (orphaned buffers, decals, etc.)
+        this.environment.clear();
+
+        // 2. Synchronize new scene context
+        if (env) {
+            this.environment.sync(env, groundType, scene, isWarmup);
+        }
+
+        // 3. Re-attach all tickable systems (Footprints, FX, etc.)
+        this.syncSystemsToScene(scene);
+
+        this.applySettings();
+        this.cacheSceneReferences();
+    }
 
     public pushScene(newScene: THREE.Scene) {
         this.sceneStack.push(this.scene);
@@ -503,7 +543,6 @@ export class WinterEngine {
      */
     private cacheSceneReferences() {
         this._cachedSkyLight = null;
-        this._cachedAmbientLight = null;
         this._cachedGround = null;
 
         _traverseStack.length = 0;
@@ -512,8 +551,7 @@ export class WinterEngine {
         while (_traverseStack.length > 0) {
             const node = _traverseStack.pop() as THREE.Object3D;
 
-            if (node.name === LIGHT_SYSTEM.SKY_LIGHT) this._cachedSkyLight = node as THREE.DirectionalLight;
-            else if (node.name === LIGHT_SYSTEM.AMBIENT_LIGHT) this._cachedAmbientLight = node as THREE.AmbientLight;
+            if (node.name === SKY_SYSTEM.SKY_LIGHT) this._cachedSkyLight = node as THREE.DirectionalLight;
             else if (node.name === 'GROUND') this._cachedGround = node as THREE.Mesh;
 
             for (let i = 0; i < node.children.length; i++) {
@@ -548,6 +586,9 @@ export class WinterEngine {
     private animate = () => {
         if (!this.isRunning) return;
         this.requestID = requestAnimationFrame(this.animate);
+
+        // Vinterdöd Hardening: Manual reset of renderer stats for multi-pass accuracy
+        this.renderer.info.reset();
 
         this.frameCount++;
         const now = performance.now();
@@ -603,6 +644,9 @@ export class WinterEngine {
 
             // B. Update Logic Systems (Fixed-Step)
             this.updateSystems(context, FIXED_DT, true);
+
+            // Vinterdöd Hardening: Track logic simulation health
+            PerformanceMonitor.getInstance().tickLogic();
 
             this._accumulator -= FIXED_DT;
 
@@ -707,24 +751,21 @@ export class WinterEngine {
         return { ...this.settings };
     }
 
-    public registerSystem(id: SystemID, sys: any) {
+    public registerSystem(id: SystemID, sys: any, isTickable: boolean = true) {
         if (!sys) return;
 
         // --- STRICT MISMATCH VALIDATION ---
         if (sys.systemId !== undefined && sys.systemId !== id) {
-            const errorMsg = `[WinterEngine] Kritiskt fel: System ID mismatch! Försöker registrera ${sys.id || 'okänt system'} (ID: ${sys.systemId}) som ID ${id}. Detta förhindrar cross-wiring buggar.`;
+            const errorMsg = `[WinterEngine] Critical error: System ID mismatch when trying to register ${sys.id || 'unknown system'} (ID: ${sys.systemId}) as ID ${id}. This prevents cross-wiring bugs.`;
             console.error(errorMsg);
             if (process.env.NODE_ENV === 'development') {
                 throw new Error(errorMsg);
             }
         }
 
-        if (!this._systems[id]) {
-            this._systems[id] = sys;
-
-            if (typeof sys.update === 'function') {
-                this._tickableSystems.push(sys);
-            }
+        this._systems[id] = sys;
+        if (isTickable && typeof sys.update === 'function') {
+            this._tickableSystems.push(sys);
         }
     }
 
@@ -803,10 +844,9 @@ export class WinterEngine {
             // Skip systems that don't match the current loop cycle
             if (fixedOnly !== undefined && isFixed !== fixedOnly) continue;
 
-            // Miljösystem (vind, vatten, etc.) körs alltid med renderTime.
-            // Logiksystem (fiender, spelare) pausas om isSimulationPaused är true.
-            const isEnvSystem = this._envSystemIds.has(systemId);
-            if (!isEnvSystem && this.isSimulationPaused) continue;
+            // Vinterdöd Hardening: Generalized pause logic.
+            // Logic systems (isFixedStep) are paused; Visual/Narrative systems (Cinematics, Environment) bypass pause.
+            if (this.isSimulationPaused && sys.isFixedStep) continue;
 
             monitor.begin(sys.id);
             // Architectural Correctness: Only call update if it exists
@@ -824,289 +864,29 @@ export class WinterEngine {
         }
     }
 
-    public syncEnvironment(env: SectorEnvironment | EnvironmentOverride, targetScene?: THREE.Scene) {
+    /**
+     * Synchronizes the entire environmental suite.
+     * Delegates to EnvironmentManager for authoritative state control.
+     */
+    public syncEnvironment(env: SectorEnvironment | EnvironmentOverride, groundType?: GroundType, targetScene?: THREE.Scene) {
         const scene = targetScene || this.scene;
-        let requiresRecache = false;
+        const isWarmup = !!targetScene && targetScene !== this.scene;
 
-        // 1. Light Setup (Ambient)
-        if (env.ambientIntensity !== undefined) {
-            let ambient = this._cachedAmbientLight;
-            if (!ambient && targetScene) ambient = targetScene.getObjectByName(LIGHT_SYSTEM.AMBIENT_LIGHT) as THREE.AmbientLight;
+        // VINTERDÖD FIX: Delegation of Authority
+        this.environment.sync(env as SectorEnvironment, groundType, scene, isWarmup);
 
-            if (ambient) {
-                ambient.intensity = env.ambientIntensity;
-                if (env.ambientColor !== undefined) ambient.color.setHex(env.ambientColor);
-            } else {
-                const amb = new THREE.AmbientLight(env.ambientColor || 0x404050, env.ambientIntensity);
-                amb.name = LIGHT_SYSTEM.AMBIENT_LIGHT;
-                scene.add(amb);
-                requiresRecache = true;
-            }
-        }
-
-        // 2. Wind Configuration
-        if (env.wind && this.wind) {
-            const w = env.wind;
-            const minStrength = w.strengthMin ?? 0.02;
-            const maxStrength = w.strengthMax ?? 0.05;
-            let baseAngle = 0;
-            let angleVariance = w.angleVariance ?? Math.PI;
-
-            if (w.direction && (w.direction.x !== 0 || w.direction.z !== 0)) {
-                baseAngle = Math.atan2(w.direction.z, w.direction.x);
-                angleVariance = w.angleVariance ?? (Math.PI / 4);
-            }
-            this.wind.sync(minStrength, maxStrength, baseAngle, angleVariance);
-        }
-
-        // 3. Fog & Background Color
-        if (env.bgColor !== undefined) {
-            if (!targetScene) this.renderer.setClearColor(env.bgColor);
-            _c1.setHex(env.bgColor);
-        }
-
-        let volDensity = 0;
-        let fogHeight: number | undefined = undefined;
-        let fogColorHex = env.bgColor || 0x000000;
-
-        if (env.fog) {
-            fogColorHex = env.fog.color !== undefined ? env.fog.color : (env.bgColor || 0x000000);
-            volDensity = env.fog.density;
-            fogHeight = env.fog.height;
-        } else if ((env as any).fogDensity !== undefined) {
-            fogColorHex = (env as any).fogColor !== undefined ? (env as any).fogColor : (env.bgColor || 0x000000);
-            volDensity = (env as any).fogDensity;
-        }
-
-        _c1.setHex(fogColorHex);
-
-        if (this.fog) {
-            this.fog.reAttach(scene);
-            if (this.settings.volumetricFog) {
-                this.fog.sync(volDensity, fogHeight, _c1);
-
-                if (volDensity > 0) {
-                    const fallbackDensity = volDensity < 1.0 ? volDensity : volDensity * 0.0005;
-                    if (scene.fog && (scene.fog as THREE.FogExp2).isFogExp2) {
-                        (scene.fog as THREE.FogExp2).color.setHex(fogColorHex);
-                        (scene.fog as THREE.FogExp2).density = fallbackDensity;
-                    } else {
-                        scene.fog = new THREE.FogExp2(fogColorHex, fallbackDensity);
-                    }
-                } else {
-                    scene.fog = null;
-                }
-            } else {
-                this.fog.sync(0, undefined, _c1);
-                if (volDensity > 0) {
-                    const fallbackDensity = volDensity < 1.0 ? volDensity : volDensity * 0.0005;
-                    scene.fog = new THREE.FogExp2(fogColorHex, fallbackDensity);
-                } else {
-                    scene.fog = null;
-                }
-            }
-        }
-
-        if (scene.background && (scene.background as THREE.Color).isColor) {
-            (scene.background as THREE.Color).copy(_c1);
-        } else {
-            scene.background = _c1.clone();
-        }
-
-        // 4. Weather Sync
-        if (env.weather !== undefined && this.weather) {
-            this.weather.reAttach(scene);
-            const w = env.weather as EnvironmentalWeather;
-            const type: WeatherType = (typeof w === 'number') ? w : w.type;
-            const count = (typeof w === 'number') ? 2000 : w.particles;
-            this.weather.sync(type, count);
-        }
-
-        // 5. Water Sync
-        if (this.water) {
-            this.water.reAttach(scene);
-            if (env.skyLight?.visible && env.skyLight.position) {
-                _v1.set(env.skyLight.position.x, env.skyLight.position.y || 100, env.skyLight.position.z);
-                this.water.setLightPosition(_v1);
-            }
-        }
-
-        // 6. Camera Settings
+        // Update camera FOV if provided (managed by CameraSystem but synced here)
         if (env.fov !== undefined) {
             this.camera.set('fov', env.fov);
         }
 
-        // 7. SkyLight Setup
-        if (env.skyLight) {
-            let sky = this._cachedSkyLight;
-            if (!sky && targetScene) sky = targetScene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
+        if (isWarmup) return; // Skip recaching during background warmups
 
-            if (!sky) {
-                sky = new THREE.DirectionalLight(env.skyLight.color, env.skyLight.intensity);
-                sky.name = LIGHT_SYSTEM.SKY_LIGHT;
-                scene.add(sky);
-                scene.add(sky.target);
-                requiresRecache = true;
-            }
-
-            sky.color.setHex(env.skyLight.color);
-            sky.intensity = env.skyLight.visible ? env.skyLight.intensity : 0;
-
-            if (env.skyLight.position) {
-                sky.position.set(env.skyLight.position.x, env.skyLight.position.y || 100, env.skyLight.position.z);
-            }
-
-            if (this.settings.shadows) {
-                sky.castShadow = true;
-                const shadowRes = this.settings.shadowResolution;
-                sky.shadow.camera.left = -100;
-                sky.shadow.camera.right = 100;
-                sky.shadow.camera.top = 100;
-                sky.shadow.camera.bottom = -100;
-                sky.shadow.camera.far = 300;
-                sky.shadow.bias = -0.0005;
-                sky.shadow.mapSize.width = shadowRes * 2;
-                sky.shadow.mapSize.height = shadowRes * 2;
-                sky.shadow.camera.updateProjectionMatrix();
-            } else {
-                sky.castShadow = false;
-            }
-        }
-
-        if (requiresRecache) this.cacheSceneReferences();
+        this.cacheSceneReferences();
     }
 
-    /**
-     * Updates the atmosphere blending based on player position and zones.
-     * High-performance, Zero-GC loop executed every frame.
-     */
-    public updateAtmosphere(playerPos: THREE.Vector3, defaultEnv: SectorEnvironment, zones: EnvironmentalZone[] | undefined, sectorState: any, dt: number) {
-        if (!playerPos) return;
-
-        // 1. Determine Default Target Values
-        const targetFogColor = _c1.setHex(defaultEnv.bgColor);
-        if (defaultEnv.fog?.color !== undefined) targetFogColor.setHex(defaultEnv.fog.color);
-
-        let targetFogDensity = defaultEnv.fog?.density ?? 0;
-        let targetAmbient = defaultEnv.ambientIntensity;
-        let targetGroundColor = defaultEnv.groundColor ?? 0xffffff;
-        let activeWeather: WeatherType = defaultEnv.weather?.type ?? WeatherType.NONE;
-        let maxWeight = 0;
-
-        const px = playerPos.x;
-        const pz = playerPos.z;
-
-        // 2. Zone Blending
-        const override = sectorState.envOverride;
-        if (!override && zones && zones.length > 0) {
-            let totalWeight = 0;
-            let blendedR = 0, blendedG = 0, blendedB = 0;
-            let blendedDensity = 0;
-            let blendedAmbient = 0;
-
-            for (let i = 0; i < zones.length; i++) {
-                const z = zones[i];
-                const dx = px - z.x;
-                const dz = pz - z.z;
-                const distSq = dx * dx + dz * dz;
-
-                const inner = z.innerRadius || 250;
-                const outer = z.outerRadius || 450;
-                const outerSq = outer * outer;
-
-                if (distSq < outerSq) {
-                    const dist = Math.sqrt(distSq);
-                    let weight = 1.0;
-                    if (dist > inner) {
-                        weight = 1.0 - ((dist - inner) / (outer - inner));
-                    }
-                    weight = weight * weight;
-
-                    _c2.setHex(z.bgColor);
-                    blendedR += _c2.r * weight;
-                    blendedG += _c2.g * weight;
-                    blendedB += _c2.b * weight;
-
-                    const zFogDensity = z.fogDensity ?? 0;
-                    blendedDensity += zFogDensity * weight;
-                    blendedAmbient += z.ambient * weight;
-                    totalWeight += weight;
-
-                    if (weight > maxWeight) {
-                        maxWeight = weight;
-                        activeWeather = z.weather;
-                    }
-                }
-            }
-
-            if (totalWeight > 0) {
-                const lerpFactor = Math.min(1.0, totalWeight);
-                const invWeight = 1 / totalWeight;
-                _c2.setRGB(blendedR * invWeight, blendedG * invWeight, blendedB * invWeight);
-
-                targetFogColor.lerp(_c2, lerpFactor);
-                targetFogDensity = THREE.MathUtils.lerp(targetFogDensity, blendedDensity * invWeight, lerpFactor);
-                targetAmbient = THREE.MathUtils.lerp(targetAmbient, blendedAmbient * invWeight, lerpFactor);
-            }
-        }
-
-        // 3. Apply Overrides
-        if (override) {
-            if (override.bgColor !== undefined) targetFogColor.setHex(override.bgColor);
-            if (override.fog?.color !== undefined) targetFogColor.setHex(override.fog.color);
-            if (override.fog?.density !== undefined) targetFogDensity = override.fog.density;
-            if (override.ambientIntensity !== undefined) targetAmbient = override.ambientIntensity;
-            if (override.groundColor !== undefined) targetGroundColor = override.groundColor;
-
-            if (override.fov !== undefined) this.camera.set('fov', override.fov);
-            if (override.weather !== undefined) {
-                const type: WeatherType = (typeof override.weather === 'number') ? override.weather : (override.weather as EnvironmentalWeather).type;
-                const count = (typeof override.weather === 'number') ? (override.weatherDensity ?? 1.0) * 2000 : (override.weather as EnvironmentalWeather).particles;
-                this.weather.sync(type, count);
-            }
-
-            const skyLight = this._cachedSkyLight;
-            if (skyLight) {
-                if (override.skyLightColor !== undefined) skyLight.color.setHex(override.skyLightColor);
-                if (override.skyLightIntensity !== undefined) skyLight.intensity = override.skyLightIntensity;
-                if (override.skyLightVisible !== undefined) skyLight.visible = override.skyLightVisible;
-                if (override.skyLightPosition) skyLight.position.set(override.skyLightPosition.x, override.skyLightPosition.y, override.skyLightPosition.z);
-            }
-        }
-
-        // 4. Apply Blended Values to systems (Lerped for smoothness)
-        const sceneFog = this.scene.fog as THREE.FogExp2;
-        if (sceneFog && sceneFog.isFogExp2) {
-            sceneFog.color.lerp(targetFogColor, 0.05);
-
-            const camY = this.camera.position.y;
-            const FOG_HEIGHT_MIN = 25;
-            const FOG_HEIGHT_MAX = 90;
-            const heightFactor = 1.0 - Math.max(0, Math.min(1, (camY - FOG_HEIGHT_MIN) / (FOG_HEIGHT_MAX - FOG_HEIGHT_MIN)));
-            const baseDistanceDensity = targetFogDensity * 0.0001;
-            sceneFog.density = THREE.MathUtils.lerp(sceneFog.density, baseDistanceDensity * heightFactor, 0.05);
-        }
-
-        if (this.fog && (this.fog as any).fogMaterial) {
-            (this.fog as any).fogMaterial.uniforms.uColor.value.lerp(targetFogColor, 0.05);
-        }
-
-        const ambient = this._cachedAmbientLight;
-        if (ambient) {
-            ambient.intensity = THREE.MathUtils.lerp(ambient.intensity, targetAmbient, 0.05);
-        }
-
-        const ground = this._cachedGround;
-        if (ground && ground.material) {
-            (ground.material as THREE.MeshStandardMaterial).color.lerp(_c2.setHex(targetGroundColor), 0.05);
-        }
-
-        // 5. Auto-Weather Sync
-        if (!override && zones && zones.length > 0) {
-            if (maxWeight > 0.5 && this.weather.type !== activeWeather) {
-                this.weather.sync(activeWeather as WeatherType, 2000);
-            }
-        }
+    public clear() {
+        if (this.renderer) this.renderer.dispose();
+        this.scene.clear();
     }
-
 }

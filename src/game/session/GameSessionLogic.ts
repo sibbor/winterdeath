@@ -7,21 +7,29 @@ import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { WorldStreamer } from '../../core/world/WorldStreamer';
 import { RuntimeState } from '../../core/RuntimeState';
 import { System, SystemID } from '../../systems/System';
-import { DamageID } from '../../entities/player/CombatTypes';
-import { WEAPONS } from '../../content/constants';
+import { DamageID, WeaponID, ToolID } from '../../entities/player/CombatTypes';
+import { WEAPONS } from '../../content/weapons';
 import { PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
 import { VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
+import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 import { allocateRuntimeState, resetRuntimeState } from '../../core/RuntimeState';
 import { FXSystem } from '../../systems/FXSystem';
 import { SectorID } from './SectorTypes';
 import { FXParticleType } from '../../types/FXTypes';
 import { clearEffects } from '../../systems/EffectManager';
+import { TriggerSystem } from '../../systems/TriggerSystem';
+import { MAX_ENTITIES } from '../../content/constants';
 
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
     public isMobileDevice: boolean = false;
     public debugMode: boolean = false;
+    public onAction(action: any): void {
+        if (this.callbacks?.onAction) {
+            this.callbacks.onAction(action);
+        }
+    }
     public cameraAngle: number = 0;
     public sectorId: number = 0;
     public cinematicActive: boolean = false;
@@ -30,6 +38,8 @@ export class GameSessionLogic {
     public playerPos: THREE.Vector3 | null = null;
     public detectionSystem!: EnemyDetectionSystem;
     public worldStreamer!: WorldStreamer;
+    public triggerSystem!: TriggerSystem;
+    public sectorCtx!: any; // Set during GameSessionSetup
 
     /**
      * Zero-GC Reset Logic
@@ -56,6 +66,11 @@ export class GameSessionLogic {
 
         state.discoverySets.seenBosses.clear();
         (props.stats.seenBosses || []).forEach(b => state.discoverySets.seenBosses.add(b));
+
+        // [VINTERDÖD FIX] Seed perk discovery from global stats to prevent repeat popups
+        if (props.stats.discoveredPerksMap) {
+            state.sessionStats.discoveredPerksMap.set(props.stats.discoveredPerksMap);
+        }
 
         // Re-calculate Session Stats
         this.resetSessionStats(state.sessionStats, props);
@@ -129,9 +144,6 @@ export class GameSessionLogic {
         stats.seenEnemies.length = 0;
         stats.seenBosses.length = 0;
         stats.collectiblesDiscovered.length = 0;
-        stats.activePassives = [];
-        stats.activeBuffs = [];
-        stats.activeDebuffs = [];
         stats.aborted = false;
         stats.familyFound = !!props.familyAlreadyRescued;
         stats.familyExtracted = false;
@@ -139,6 +151,13 @@ export class GameSessionLogic {
         stats.bossDamageDealt = 0;
         stats.bossDamageTaken = 0;
         stats.discoveredPerksMap.fill(0);
+
+        stats.activePassives.fill(0);
+        stats.activePassivesCount = 0;
+        stats.activeBuffs.fill(0);
+        stats.activeBuffsCount = 0;
+        stats.activeDebuffs.fill(0);
+        stats.activeDebuffsCount = 0;
     }
 
     static allocateState(): RuntimeState {
@@ -199,12 +218,15 @@ export class GameSessionLogic {
             isExtraction: false,
             bossDamageDealt: 0,
             bossDamageTaken: 0,
-            discoveredPerksMap: new Uint8Array(256),
-            activePassives: [],
-            activeBuffs: [],
-            activeDebuffs: [],
+            discoveredPerksMap: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
             gibbedEnemies: 0,
             uniqueEnemiesHitByExplosives: 0,
+            activePassives: new Int32Array(MAX_ENTITIES.PERKS),
+            activePassivesCount: 0,
+            activeBuffs: new Int32Array(MAX_ENTITIES.PERKS),
+            activeBuffsCount: 0,
+            activeDebuffs: new Int32Array(MAX_ENTITIES.PERKS),
+            activeDebuffsCount: 0
         };
     }
 
@@ -223,22 +245,22 @@ export class GameSessionLogic {
         this.state = state;
 
         const originalApplyDamage = this.state.applyDamage || (() => false);
-        this.state.applyDamage = (enemy: Enemy, amount: number, type: DamageID, isHighImpact?: boolean, attributionOverride?: DamageID) => {
+        this.state.applyDamage = (enemy: Enemy, amount: number, type: number, source: number, isHighImpact?: boolean) => {
             if (!enemy || enemy.hp <= 0 || enemy.deathState !== EnemyDeathState.ALIVE) return false;
 
             // Dual-Clock Visual Jitter
             // Set the visual hit timestamp so EnemyAnimator knows to shake the mesh 
             // even if the simulation clock (now) is paused or slowed.
             enemy.hitRenderTime = this.state.renderTime;
-            const result = originalApplyDamage(enemy, amount, type, isHighImpact, attributionOverride);
+            const result = originalApplyDamage(enemy, amount, type, source, isHighImpact);
 
             if (result && enemy.hp <= 0) {
                 const statsSys = this.getSystem<any>(SystemID.PLAYER_STATS);
                 if (statsSys) {
-                    const dx = enemy.mesh.position.x - this.playerPos.x;
-                    const dz = enemy.mesh.position.z - this.playerPos.z;
+                    const dx = enemy.mesh.position.x - this.playerPos!.x;
+                    const dz = enemy.mesh.position.z - this.playerPos!.z;
                     const distSq = dx * dx + dz * dz;
-                    statsSys.onEnemyKilled(this, enemy, this.engine.simTime, attributionOverride || type, distSq);
+                    statsSys.onEnemyKilled(this, enemy, this.engine.simTime, source, distSq);
                 }
             }
 
@@ -262,29 +284,94 @@ export class GameSessionLogic {
         this.state.sessionStats.timePlayed += dt;
         this.state.sessionStats.timeElapsed = this.state.sessionStats.timePlayed;
 
-        // Sync player position for systems (TriggerSystem, EnemySystem, etc.)
-        if (this.state.nodes.gun) {
-            this.playerPos = this.state.nodes.gun.position;
+        // Sync player position from the playerGroup reference (live fallback)
+        const pg = (this as any).playerGroup;
+        if (pg) {
+            this.playerPos = pg.position;
         }
-    }
-
-    /**
-     * Registers a discovery (POI, Clue, Perk, etc.) and triggers the HUD popup.
-     */
-    triggerDiscovery(type: DiscoveryType, id: string | number, title: string, details: string) {
-        if (!this.state) return;
-        this.state.discovery.active = true;
-        this.state.discovery.type = type;
-        this.state.discovery.id = id;
-        this.state.discovery.title = title;
-        this.state.discovery.details = details;
-        this.state.discovery.timestamp = performance.now();
     }
 
     /**
      * Registers a sound event in the world for AI to react to.
      * Delegates to the centralized EnemyDetectionSystem.
      */
+    public callbacks?: any;
+
+    public handleDiscovery(type: DiscoveryType, id: any, uiSmi: number = 0, titleKey: string = '', detailsKey: string = '', payload?: any): boolean {
+        if (!this.state) return false;
+        
+        const state = this.state;
+        const sets = state.discoverySets;
+        const stats = state.sessionStats;
+        let isNew = false;
+        
+        const idKey = String(id);
+        
+        switch (type) {
+            case DiscoveryType.ZOMBIE:
+                if (!sets.seenEnemies.has(id)) {
+                    sets.seenEnemies.add(id);
+                    stats.seenEnemies.push(Number(id));
+                    isNew = true;
+                }
+                break;
+            case DiscoveryType.BOSS:
+                if (!sets.seenBosses.has(id)) {
+                    sets.seenBosses.add(id);
+                    stats.seenBosses.push(Number(id));
+                    isNew = true;
+                }
+                break;
+            case DiscoveryType.CLUE:
+                if (!sets.clues.has(idKey)) {
+                    sets.clues.add(idKey);
+                    stats.cluesFound.push(idKey);
+                    isNew = true;
+                }
+                break;
+            case DiscoveryType.POI:
+                if (!sets.pois.has(idKey)) {
+                    sets.pois.add(idKey);
+                    stats.discoveredPOIs.push(idKey);
+                    isNew = true;
+                }
+                break;
+            case DiscoveryType.COLLECTIBLE:
+                if (!sets.collectibles.has(idKey)) {
+                    sets.collectibles.add(idKey);
+                    stats.collectiblesDiscovered.push(idKey);
+                    isNew = true;
+                }
+                break;
+            case DiscoveryType.PERK:
+                const perkSmi = Number(uiSmi !== undefined ? uiSmi : id);
+                // [VINTERDÖD FIX] Check both session map AND global props map
+                const globalDiscovered = state.stats?.discoveredPerksMap ? state.stats.discoveredPerksMap[perkSmi] === 1 : false;
+                
+                if (stats.discoveredPerksMap && perkSmi < stats.discoveredPerksMap.length && !stats.discoveredPerksMap[perkSmi] && !globalDiscovered) {
+                    stats.discoveredPerksMap[perkSmi] = 1;
+                    if (state.stats?.discoveredPerksMap) state.stats.discoveredPerksMap[perkSmi] = 1; // Immediate global update
+                    isNew = true;
+                    // Force SMI ID for the ring buffer
+                    uiSmi = perkSmi;
+                }
+                break;
+        }
+        
+        if (isNew) {
+            // [VINTERDÖD] Always notify the ring buffer for the React UI DiscoveryPopup
+            const smi = uiSmi || (typeof id === 'number' ? id : 0);
+            UIEventRingBuffer.push(UIEventType.DISCOVERY, smi, type, state.simTime);
+            
+            // Invoke the higher-level callback if registered (e.g. for persistence/stats)
+            if (state.callbacks?.onDiscovery) {
+                state.callbacks.onDiscovery(type, id, titleKey, detailsKey, payload);
+            }
+        }
+        
+        return isNew;
+    }
+
     makeNoise(pos: THREE.Vector3, type: NoiseType = NoiseType.OTHER, radius?: number) {
         if (this.detectionSystem) {
             this.detectionSystem.makeNoise(pos, type, radius);
@@ -310,6 +397,25 @@ export class GameSessionLogic {
     /** Find a system by its ID. */
     getSystem<T extends System>(id: SystemID): T | undefined {
         return (this.engine.getSystem(id) as T) || undefined;
+    }
+
+    /**
+     * NARRATIVE BRIDGE: Centralized cinematic orchestration.
+     * Prevents callback hell by providing a single entry point for all narrative triggers.
+     */
+    startCinematic(target?: THREE.Object3D | null, sectorId?: number, dialogueId?: number, params?: any) {
+        const sys = this.getSystem<any>(SystemID.CINEMATIC);
+        if (sys) sys.startCinematic(this, target || null, sectorId ?? this.sectorId, dialogueId || 0, params);
+    }
+
+    stopCinematic() {
+        const sys = this.getSystem<any>(SystemID.CINEMATIC);
+        if (sys) sys.stop();
+    }
+
+    playCinematicLine(index: number) {
+        const sys = this.getSystem<any>(SystemID.CINEMATIC);
+        if (sys) sys.playLine(index);
     }
 
     /** Convenience methods for FX spawning (delegates to FXSystem) */
@@ -349,7 +455,7 @@ export class GameSessionLogic {
             this.state.bloodDecals.length = 0;
 
             this.state.bossesDefeated.length = 0;
-            this.state.triggers.reset();
+            this.triggerSystem.reset();
             this.state.obstacles.length = 0;
             this.state.sessionCollectiblesDiscovered.length = 0;
             this.state.collectiblesDiscovered.length = 0;

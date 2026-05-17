@@ -1,9 +1,13 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, GroundType, ChestType, SectorID } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, ChestType } from '../../game/session/SectorTypes';
+import { GroundType } from '../../core/engine/EngineTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { VEGETATION_TYPE } from '../../content/environment';
-import { POI_TYPE } from '../../content/pois'
+import { PoiType, PoiID } from '../../content/pois';
+import { ClueID } from '../../content/clues';
+import { SectorEventID } from '../../content/events';
+import { CollectibleID } from '../../content/collectibles';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
@@ -19,6 +23,15 @@ import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuff
 // ─── Zero-GC Scratchpads ──────────────────────────────────────────────────────
 const _vS3a = new THREE.Vector3();
 const _vS3b = new THREE.Vector3();
+const _animState = {
+    isMoving: false, isRushing: false, isDodging: false, dodgeStartTime: 0,
+    staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false, isCelebrating: false, isHugging: false,
+    isSwimming: false, isWading: false, seed: 0, renderTime: 0, simTime: 0
+};
+const _familyMembers: THREE.Object3D[] = [];
+const _camOnBuilding = new THREE.Vector3(-40, 14, -140);
+const _camLookBuilding = new THREE.Vector3(-40, 1, -155);
+const _carPos = new THREE.Vector3(); // Initialized in onSectorUpdate or constant
 
 // ─── Epilogue state enum (stored as integer in sectorState.epilogueState) ─────
 const EP = {
@@ -85,11 +98,25 @@ export const Sector3: SectorDef = {
             color: 0x020208,
             height: 10
         },
-        ambientIntensity: 0.6,
-        ambientColor: 0x404050,
         groundColor: 0x2a1a11,
+        ambient: 0.6,
         fov: 40,
-        skyLight: { visible: true, color: 0xffaa00, intensity: 3.0 },
+        sky: {
+            time: 0.5,
+            timeScale: 0.05,
+            atmosphereColor: 0x110500,
+            celestial: {
+                radius: 20,
+                color: 0xffffff,
+                position: { x: 50, y: 35, z: 50 }
+            },
+            light: {
+                visible: true,
+                color: 0xffaa00,
+                intensity: 3.0,
+                castShadow: true
+            }
+        },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: {
@@ -109,8 +136,8 @@ export const Sector3: SectorDef = {
     bossSpawn: LOCATIONS.SPAWN.BOSS,
 
     collectibles: [
-        { id: 's3_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
-        { id: 's3_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
+        { id: CollectibleID.S3_COLLECTIBLE_1, x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
+        { id: CollectibleID.S3_COLLECTIBLE_2, x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
     ],
 
     cinematic: {
@@ -156,7 +183,7 @@ export const Sector3: SectorDef = {
         }
 
         // The Dealership Building (Nathalie hiding here)
-        await SectorBuilder.spawnPoi(ctx, POI_TYPE.DEALERSHIP, -40, -150, 0);
+        await SectorBuilder.spawnPoi(ctx, PoiType.DEALERSHIP, -40, -150, 0);
         await yieldIfBudgetExceeded();
 
         // Escape car parked next to the building — starts NOT interactable.
@@ -204,41 +231,41 @@ export const Sector3: SectorDef = {
         SectorBuilder.addTriggers(ctx, [
             // Part 1 — on the gravel path
             {
-                id: 's3_dialogue_1',
+                id: SectorEventID.S3_DIALOGUE_1,
                 position: LOCATIONS.TRIGGERS.DIALOGUE_1,
                 radius: 15,
                 type: TriggerType.EVENT,
                 content: '',
                 statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 3, scriptId: 0 } }]
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 3, dialogueId: 0 } }]
             },
             // Part 2 — deeper into the scrapyard
             {
-                id: 's3_dialogue_2',
+                id: SectorEventID.S3_DIALOGUE_2,
                 position: LOCATIONS.TRIGGERS.DIALOGUE_2,
                 radius: 15,
                 type: TriggerType.EVENT,
                 content: '',
                 statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 3, scriptId: 1 } }]
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 3, dialogueId: 1 } }]
             },
             // Part 3 — close to the building where Nathalie is hiding.
             // Starts INACTIVE so it only fires after the player has explored.
             // Activated in onUpdate after dialogue_2 has played.
             {
-                id: 's3_found_nathalie',
+                id: FamilyMemberID.NATHALIE,
                 position: LOCATIONS.TRIGGERS.FOUND_NATHALIE,
                 familyId: FamilyMemberID.NATHALIE,
                 radius: 18,
                 type: TriggerType.EVENT,
                 content: '',
                 statusFlags: TriggerStatus.ONCE, // INACTIVE — activated after Part 2
-                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.NATHALIE, sectorId: 3, scriptId: 2 } }]
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.NATHALIE, sectorId: 3, dialogueId: 2 } }]
             },
 
-            { id: 's3_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: TriggerType.THOUGHT, content: "clues.3.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.PLAY_SOUND, payload: { id: SoundID.AMBIENT_METAL } }, { type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-            { id: 's3_poi_shed', position: LOCATIONS.TRIGGERS.SHED_SIGHT, radius: 25, type: TriggerType.POI, content: "pois.3.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: 's3_poi_scrapyard', position: { x: 0, z: -100 }, radius: 100, type: TriggerType.POI, content: "pois.3.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
+            { id: ClueID.S3_CREEPY_NOISE, position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: TriggerType.CLUE, content: "clues.3.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.PLAY_SOUND, payload: { id: SoundID.AMBIENT_METAL } }, { type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            { id: PoiID.S3_SHED, position: LOCATIONS.TRIGGERS.SHED_SIGHT, radius: 25, type: TriggerType.POI, content: "pois.3.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+            { id: PoiID.S3_SCRAPYARD, position: { x: 0, z: -100 }, radius: 100, type: TriggerType.POI, content: "pois.3.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
         ]);
     },
 
@@ -250,7 +277,7 @@ export const Sector3: SectorDef = {
         spawnSectorHordes(ctx);
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, triggerSystem, ctx, ...events }) => {
         // --- SECTOR 3: NATHALIE MISSION LOGIC ---
         if (Math.random() < 0.015 && gameState.enemies.length < 12 && !sectorState.epilogueBossDefeated) {
             const angle = Math.random() * Math.PI * 2;
@@ -265,17 +292,20 @@ export const Sector3: SectorDef = {
         // ── Activate Part 3 trigger after Part 2 has played ──
         if (!sectorState.nathalieUnlocked && sectorState.pendingTrigger === null && sectorState.part2Played) {
             sectorState.nathalieUnlocked = true;
-            const t = gameState.triggers?.find((t: any) => t.id === 's3_found_nathalie');
+            const t = triggerSystem.metadata.find((t: any) => t.id === FamilyMemberID.NATHALIE);
             if (t) {
-                t.statusFlags = TriggerStatus.ACTIVE | TriggerStatus.ONCE;
-                t.triggered = false; // Maintain boolean compatibility
+                const idx = triggerSystem.getTriggerById(FamilyMemberID.NATHALIE);
+                if (idx !== -1) {
+                    triggerSystem.setStatusFlag(idx, TriggerStatus.ACTIVE, true);
+                    triggerSystem.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);
+                }
             }
         }
         // Stamp when Part 2 cinematic has started
         if (!sectorState.part2Played && sectorState.pendingTrigger === null) {
             // Mark Part 2 as played once s3_dialogue_2 trigger fires
-            const d2 = gameState.triggers?.find((t: any) => t.id === 's3_dialogue_2');
-            if (d2?.triggered) sectorState.part2Played = true;
+            const idx = triggerSystem.getTriggerById(SectorEventID.S3_DIALOGUE_2);
+            if (idx !== -1 && triggerSystem.isTriggered(idx)) sectorState.part2Played = true;
         }
 
         // ── RUSH_TO_NATHALIE signal from dialogue's last line ──
@@ -306,21 +336,18 @@ export const Sector3: SectorDef = {
         const sceneHost = (events as any).scene || (gameState as any).scene;
         const scene = sceneHost as THREE.Scene;
 
-        // Helper: gather all family members from scene
-        const getFamilyMembers = () => {
-            const result: any[] = [];
-            if (!scene) return result;
+        // Helper: gather all family members from scene (Zero-GC)
+        const updateFamilyMembers = () => {
+            _familyMembers.length = 0;
+            if (!scene) return;
             const ch = scene.children;
             for (let i = 0; i < ch.length; i++) {
-                if (ch[i].userData.isFamilyMember || ch[i].userData.type === 'family') result.push(ch[i]);
+                if (ch[i].userData.isFamilyMember || ch[i].userData.type === 'family') _familyMembers.push(ch[i]);
             }
-            return result;
         };
 
-        // Camera positions for the rush sequence
-        const camOnBuilding = new THREE.Vector3(-40, 14, -140); // wide shot: player + family + building
-        const camLookBuilding = new THREE.Vector3(-40, 1, -155);
-        const carPos = new THREE.Vector3(LOCATIONS.ESCAPE_CAR.x, 0, LOCATIONS.ESCAPE_CAR.z);
+        // Static positions already hoisted as _camOnBuilding, _camLookBuilding
+        _carPos.set(LOCATIONS.ESCAPE_CAR.x, 0, LOCATIONS.ESCAPE_CAR.z);
 
         // ── EP.RUSH_TO_NATHALIE ─────────────────────────────────────────────
         if (ep === EP.RUSH_TO_NATHALIE) {
@@ -328,14 +355,15 @@ export const Sector3: SectorDef = {
             if (elapsed < 100 && events.setCameraOverride) {
                 events.setCameraOverride({
                     active: true,
-                    targetPos: camOnBuilding,
-                    lookAtPos: camLookBuilding,
+                    targetPos: _camOnBuilding,
+                    lookAtPos: _camLookBuilding,
                     endTime: renderTime + 60000
                 });
             }
 
             // Move all following family members toward the dealership entrance
-            const family = getFamilyMembers();
+            updateFamilyMembers();
+            const family = _familyMembers;
             const buildingPos = _vS3a.set(
                 LOCATIONS.POIS.SHED.x,
                 0,
@@ -360,12 +388,23 @@ export const Sector3: SectorDef = {
                     const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
                     fm.userData.cachedBody = body;
                     if (body) {
-                        PlayerAnimator.update(body, {
-                            isMoving: true, isRushing: true, isDodging: false, dodgeStartTime: 0,
-                            staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false,
-                            isSwimming: false, isWading: false, seed: fm.userData.seed || 0,
-                            renderTime, simTime
-                        }, renderTime, delta);
+                        _animState.isMoving = true;
+                        _animState.isRushing = true;
+                        _animState.isDodging = false;
+                        _animState.dodgeStartTime = 0;
+                        _animState.staminaRatio = 1.0;
+                        _animState.isSpeaking = false;
+                        _animState.isThinking = false;
+                        _animState.isCelebrating = false;
+                        _animState.isHugging = false;
+                        _animState.isIdleLong = false;
+                        _animState.isSwimming = false;
+                        _animState.isWading = false;
+                        _animState.seed = fm.userData.seed || 0;
+                        _animState.renderTime = renderTime;
+                        _animState.simTime = simTime;
+
+                        PlayerAnimator.update(body, _animState, renderTime, delta);
                     }
                 } else {
                     // Hide them once at the door (they've "entered")
@@ -401,14 +440,15 @@ export const Sector3: SectorDef = {
             if (elapsed < 100 && events.setCameraOverride) {
                 events.setCameraOverride({
                     active: true,
-                    targetPos: camOnBuilding,
-                    lookAtPos: camLookBuilding,
+                    targetPos: _camOnBuilding,
+                    lookAtPos: _camLookBuilding,
                     endTime: renderTime + 60000
                 });
                 UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 0); // 0 = HIDE
             }
 
-            const family = getFamilyMembers();
+            updateFamilyMembers();
+            const family = _familyMembers;
 
             // Reveal all family members and walk them out of the building
             const exitTarget = _vS3a.set(LOCATIONS.REUNION_CENTER.x, 0, LOCATIONS.REUNION_CENTER.z + 5);
@@ -427,11 +467,23 @@ export const Sector3: SectorDef = {
                     const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
                     fm.userData.cachedBody = body;
                     if (body) {
-                        PlayerAnimator.update(body, {
-                            isMoving: true, isRushing: false, isDodging: false, dodgeStartTime: 0,
-                            staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false,
-                            isSwimming: false, isWading: false, seed: fm.userData.seed || 0, renderTime, simTime
-                        }, renderTime, delta);
+                        _animState.isMoving = true;
+                        _animState.isRushing = false;
+                        _animState.isDodging = false;
+                        _animState.dodgeStartTime = 0;
+                        _animState.staminaRatio = 1.0;
+                        _animState.isSpeaking = false;
+                        _animState.isThinking = false;
+                        _animState.isCelebrating = false;
+                        _animState.isHugging = false;
+                        _animState.isIdleLong = false;
+                        _animState.isSwimming = false;
+                        _animState.isWading = false;
+                        _animState.seed = fm.userData.seed || 0;
+                        _animState.renderTime = renderTime;
+                        _animState.simTime = simTime;
+
+                        PlayerAnimator.update(body, _animState, renderTime, delta);
                     }
                 }
             }
@@ -467,7 +519,8 @@ export const Sector3: SectorDef = {
         else if (ep === EP.RING_FORM) {
             const cx = LOCATIONS.REUNION_CENTER.x;
             const cz = LOCATIONS.REUNION_CENTER.z;
-            const family = getFamilyMembers();
+            updateFamilyMembers();
+            const family = _familyMembers;
             let allFormed = true;
 
             for (let i = 0; i < family.length; i++) {
@@ -487,11 +540,23 @@ export const Sector3: SectorDef = {
                 fm.lookAt(cx, 0, cz);
                 const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
                 if (body) {
-                    PlayerAnimator.update(body, {
-                        isMoving: dist > 0.3, isRushing: false, isDodging: false, dodgeStartTime: 0,
-                        staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false,
-                        isSwimming: false, isWading: false, seed: fm.userData.seed || 0, renderTime, simTime
-                    }, renderTime, delta);
+                    _animState.isMoving = dist > 0.3;
+                    _animState.isRushing = false;
+                    _animState.isDodging = false;
+                    _animState.dodgeStartTime = 0;
+                    _animState.staminaRatio = 1.0;
+                    _animState.isSpeaking = false;
+                    _animState.isThinking = false;
+                    _animState.isCelebrating = false;
+                    _animState.isHugging = false;
+                    _animState.isIdleLong = false;
+                    _animState.isSwimming = false;
+                    _animState.isWading = false;
+                    _animState.seed = fm.userData.seed || 0;
+                    _animState.renderTime = renderTime;
+                    _animState.simTime = simTime;
+
+                    PlayerAnimator.update(body, _animState, renderTime, delta);
                 }
             }
 
@@ -510,16 +575,28 @@ export const Sector3: SectorDef = {
                 audioEngine.playSound(SoundID.UI_VICTORY, 0.5);
             }
 
-            const family = getFamilyMembers();
+            const family = _familyMembers; // Already updated in RING_FORM
             for (let i = 0; i < family.length; i++) {
                 const fm = family[i];
                 const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
                 if (body) {
-                    PlayerAnimator.update(body, {
-                        isMoving: false, isRushing: false, isDodging: false, dodgeStartTime: 0,
-                        staminaRatio: 1.0, isSpeaking: true, isCelebrating: true, isThinking: false, isIdleLong: false,
-                        isSwimming: false, isWading: false, seed: fm.userData.seed || 0, renderTime, simTime
-                    }, renderTime, delta);
+                    _animState.isMoving = false;
+                    _animState.isRushing = false;
+                    _animState.isDodging = false;
+                    _animState.dodgeStartTime = 0;
+                    _animState.staminaRatio = 1.0;
+                    _animState.isSpeaking = true;
+                    _animState.isCelebrating = true;
+                    _animState.isThinking = false;
+                    _animState.isHugging = false;
+                    _animState.isIdleLong = false;
+                    _animState.isSwimming = false;
+                    _animState.isWading = false;
+                    _animState.seed = fm.userData.seed || 0;
+                    _animState.renderTime = renderTime;
+                    _animState.simTime = simTime;
+
+                    PlayerAnimator.update(body, _animState, renderTime, delta);
                 }
             }
 
@@ -537,16 +614,28 @@ export const Sector3: SectorDef = {
                 audioEngine.playSound(SoundID.VO_FAMILY_KISS, 0.85);
             }
 
-            const family = getFamilyMembers();
+            const family = _familyMembers;
             for (let i = 0; i < family.length; i++) {
                 const fm = family[i];
                 const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
                 if (body) {
-                    PlayerAnimator.update(body, {
-                        isMoving: false, isRushing: false, isDodging: false, dodgeStartTime: 0,
-                        staminaRatio: 1.0, isSpeaking: false, isHugging: true, isThinking: false, isIdleLong: false,
-                        isSwimming: false, isWading: false, seed: fm.userData.seed || 0, renderTime, simTime
-                    }, renderTime, delta);
+                    _animState.isMoving = false;
+                    _animState.isRushing = false;
+                    _animState.isDodging = false;
+                    _animState.dodgeStartTime = 0;
+                    _animState.staminaRatio = 1.0;
+                    _animState.isSpeaking = false;
+                    _animState.isHugging = true;
+                    _animState.isThinking = false;
+                    _animState.isCelebrating = false;
+                    _animState.isIdleLong = false;
+                    _animState.isSwimming = false;
+                    _animState.isWading = false;
+                    _animState.seed = fm.userData.seed || 0;
+                    _animState.renderTime = renderTime;
+                    _animState.simTime = simTime;
+
+                    PlayerAnimator.update(body, _animState, renderTime, delta);
                 }
             }
 
@@ -580,11 +669,11 @@ export const Sector3: SectorDef = {
         else if (ep === EP.CAR_ZOOM) {
             if (elapsed < 100 && events.setCameraOverride) {
                 // Pan camera to frame the escape car
-                const carCamPos = carPos.clone().add(new THREE.Vector3(0, 8, 10));
+                const carCamPos = _vS3a.copy(_carPos).add(_vS3b.set(0, 8, 10));
                 events.setCameraOverride({
                     active: true,
                     targetPos: carCamPos,
-                    lookAtPos: carPos,
+                    lookAtPos: _carPos,
                     endTime: renderTime + 1700
                 });
             }
@@ -607,7 +696,7 @@ export const Sector3: SectorDef = {
                 sectorState.epilogueState = EP.DONE;
                 // Drive into the sunset — trigger ScreenSectorReport (final epilogue screen)
                 events.onAction([
-                    { type: 'CONCLUDE_SECTOR', payload: { isExtraction: true } }
+                    { type: TriggerActionType.CONCLUDE_SECTOR, payload: { isExtraction: true } }
                 ]);
             }
         }

@@ -3,7 +3,7 @@ import { GEOMETRY, MATERIALS, ModelFactory, CAMP_PROP_PALETTE } from '../../util
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { ChunkManager } from '../../core/world/ChunkManager';
 import { WinterEngine } from '../../core/engine/WinterEngine';
-import { WIND_SYSTEM, WEATHER_SYSTEM } from '../../content/constants';
+import { WEATHER_SYSTEM } from '../../content/constants';
 import { WeatherType } from '../../core/engine/EngineTypes';
 import { LogicalLight } from '../../systems/LightSystem';
 
@@ -11,34 +11,51 @@ import { LogicalLight } from '../../systems/LightSystem';
 // CONFIGURATION CONSTANTS (Source of truth for Camp & AssetPreloader)
 // ============================================================================
 export const CAMP_SCENE = {
-    starCount: 1200,
-
     // Fog & Background
     bgColor: 0x161629,
     fog: {
-        color: 0x161629,
+        color: 0x161629, // 0x161629
         density: 20,
         height: 0.2
     },
-    ambientIntensity: 0.4,
-    skyLight: {
-        visible: true,
-        color: 0xaaccff,
-        intensity: 0.4
+    sky: {
+        time: 0.0, // Midnight start
+        timeScale: 0.02, // Dynamic time-of-day progression
+        //atmosphereColor: 0x161629,
+        celestial: {
+            radius: 20,
+            //color: 0xfff9e6,
+            position: { x: -120, y: 80, z: -350 }
+        },
+        light: {
+            visible: true,
+            //color: 0xaaccff,
+            //intensity: 0.2,
+            castShadow: true
+        },
+        clouds: {
+            count: 6,         // Soft, scattered look
+            height: 90,       // Floating slightly above tree line height
+            speed: 0.8,       // Dreamy slow drift
+            opacity: 0.4      // Mood-appropriate blending
+        }
     },
-    wind: { minStrength: 0.01, maxStrength: 0.05 },
+    wind: { strengthMin: 0.01, strengthMax: 0.05 },
     weather: {
         type: WeatherType.SNOW,
-        count: WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES
+        particles: WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES
     },
+    ambient: 0.4,
+    groundColor: 0xddddff,
+    fov: 50,
+    cameraOffsetZ: 40,
+    cameraHeight: 25,
 
     // Cameras
     cameraBaseLookAt: new THREE.Vector3(0, 2, -5),
     cameraCinematicLookAt: new THREE.Vector3(0, 8, -5),
 
     // Lighting
-    hemiLight: { sky: 0x444455, ground: 0x111115, intensity: 0.6 },
-    dirLight: { color: 0xaaccff, intensity: 0.4, bias: -0.0002 },
     campfireLight: {
         color: 0xff7722,
         intensity: 100,
@@ -88,6 +105,7 @@ interface Textures {
     halo: THREE.Texture;
     moon_halo?: THREE.Texture;
     tacticalMap: THREE.Texture;
+    [key: string]: any;
 }
 
 export interface CampEffectsState {
@@ -100,7 +118,6 @@ export interface CampEffectsState {
         sparkleData: Float32Array;
         smokeData: Float32Array;
     };
-    starSystem: THREE.Points;
     fireLight: LogicalLight;
     timers: { flames: number, sparkles: number, smokes: number };
 }
@@ -138,7 +155,6 @@ export const stationGeometries: Record<string, THREE.BufferGeometry> = {};
 
 
 const CAMP_ENV_CACHE = {
-    sky: null as any,
     fire: null as any
 };
 
@@ -243,87 +259,6 @@ const setupTrees = async (scene: THREE.Scene) => {
     for (const key in darkMatrices) VegetationGenerator.addInstancedTrees({ scene } as any, key, darkMatrices[key], silhouetteMat);
 };
 
-const setupSky = (scene: THREE.Object3D, textures: Textures, isWarmup = false) => {
-    // 1. Generate or reuse cached heavy assets (Zero-GC approach)
-    if (!CAMP_ENV_CACHE.sky) {
-        const skyGeo = new THREE.SphereGeometry(15, 32, 32);
-        const skyMat = MATERIALS.camp_sky;
-        const moonHaloMat = MATERIALS.camp_moonHalo;
-        if (textures.halo || textures.moon_halo) moonHaloMat.map = textures.halo || textures.moon_halo;
-
-        // Pre-calculate stars once
-        const starCount = CAMP_SCENE.starCount;
-        const starGeo = new THREE.BufferGeometry();
-        const positions = new Float32Array(starCount * 3);
-        const sizes = new Float32Array(starCount);
-        const phases = new Float32Array(starCount);
-        const twinkleSpeeds = new Float32Array(starCount);
-
-        for (let i = 0; i < starCount; i++) {
-            const r = 1800 + Math.random() * 200;
-            const theta = Math.random() * Math.PI * 2;
-            const phi = (Math.PI / 2) - Math.random() * 1.2;
-            positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-            positions[i * 3 + 1] = r * Math.cos(phi);
-            positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-            sizes[i] = Math.random() > 0.95 ? 3.0 : (Math.random() > 0.85 ? 2.5 : 2.0);
-            phases[i] = Math.random() * Math.PI * 2;
-            twinkleSpeeds[i] = Math.random() > 0.9 ? 0.3 + Math.random() * 0.4 : 0.0;
-        }
-
-        starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        starGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-        starGeo.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
-        starGeo.setAttribute('twinkleSpeed', new THREE.BufferAttribute(twinkleSpeeds, 1));
-
-        const starMat = MATERIALS.camp_star;
-
-        // Tag to prevent disposal sweeps if any global GC runs
-        skyGeo.userData = { isSharedAsset: true };
-        skyMat.userData = { isSharedAsset: true };
-        starGeo.userData = { isSharedAsset: true };
-        starMat.userData = { isSharedAsset: true };
-
-        CAMP_ENV_CACHE.sky = { skyGeo, skyMat, moonHaloMat, starGeo, starMat };
-    }
-
-    const { skyGeo, skyMat, moonHaloMat, starGeo, starMat } = CAMP_ENV_CACHE.sky;
-
-    // 2. Assemble Scene
-    const skyBody = new THREE.Mesh(skyGeo, skyMat);
-    skyBody.position.set(-120, 80, -350);
-    scene.add(skyBody);
-
-    const moonHaloSprite = new THREE.Sprite(moonHaloMat);
-    moonHaloSprite.scale.set(120, 120, 1);
-    moonHaloSprite.position.copy(skyBody.position);
-    scene.add(moonHaloSprite);
-
-    const starSystem = new THREE.Points(starGeo, starMat);
-    starSystem.rotation.z = 0.1;
-    scene.add(starSystem);
-
-    const skyLight = new THREE.DirectionalLight(CAMP_SCENE.skyLight.color, CAMP_SCENE.skyLight.intensity);
-    skyLight.name = 'SKY_LIGHT';
-    skyLight.position.set(-80, 150, -100);
-    skyLight.castShadow = true;
-    skyLight.shadow.mapSize.width = 1024;
-    skyLight.shadow.mapSize.height = 1024;
-    skyLight.shadow.camera.near = 0.5;
-    skyLight.shadow.camera.far = 1000;
-    skyLight.shadow.camera.left = -100;
-    skyLight.shadow.camera.right = 100;
-    skyLight.shadow.camera.top = 100;
-    skyLight.shadow.camera.bottom = -100;
-    skyLight.shadow.bias = CAMP_SCENE.dirLight.bias;
-    scene.add(skyLight);
-
-    return {
-        objects: { moon: skyBody, halo: moonHaloSprite, stars: starSystem, light: skyLight },
-        geometries: { moon: skyGeo, stars: starGeo },
-        materials: { moon: skyMat, halo: moonHaloMat, stars: starMat }
-    };
-};
 
 const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false) => {
 
@@ -402,7 +337,11 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false)
 // ============================================================================
 export const CampWorld = {
 
-    setupSky,
+    setupSky: (scene: THREE.Scene, config: any, textures: Textures) => {
+        const engine = WinterEngine.getInstance();
+        engine.sky.reAttach(scene);
+        engine.sky.sync(config);
+    },
 
     build: async (scene: THREE.Scene, textures: Textures, weather: WeatherType, isWarmup = false) => {
 
@@ -420,51 +359,19 @@ export const CampWorld = {
             camera.set('far', 2500);
             camera.lookAt(CAMP_SCENE.cameraBaseLookAt.x, CAMP_SCENE.cameraBaseLookAt.y, CAMP_SCENE.cameraBaseLookAt.z, true);
 
-            // --- FOG SYSTEM INTEGRATION ---
-            const fogConfig = CAMP_SCENE.fog || { color: CAMP_SCENE.bgColor, density: 25, height: 22.0 };
-            const fogColorHex = fogConfig.color !== undefined ? fogConfig.color : CAMP_SCENE.bgColor;
-            const fogColor = new THREE.Color(fogColorHex);
-
-            const volDensity = fogConfig.density;
-            const fogHeight = fogConfig.height !== undefined ? fogConfig.height : 22.0;
-
-            if (engine.settings.volumetricFog) {
-                // Modern fog
-                if (engine.fog) engine.fog.sync(volDensity, fogHeight, fogColor);
-
-                if (volDensity > 0) {
-                    scene.fog = new THREE.FogExp2(fogColorHex, volDensity * 0.0001);
-                } else {
-                    scene.fog = null;
-                }
-            } else {
-                // Fallback fog
-                if (engine.fog) engine.fog.sync(0, undefined, fogColor);
-
-                if (volDensity > 0) {
-                    const fallbackDensity = volDensity < 1.0 ? volDensity : volDensity * 0.0005;
-                    scene.fog = new THREE.FogExp2(fogColorHex, fallbackDensity);
-                } else {
-                    scene.fog = null;
-                }
-            }
+            // --- AUTHORITATIVE ENVIRONMENT SYNC ---
+            // Orchestrates the transition using the centralized engine pipeline.
+            const envConfig = { ...CAMP_SCENE, weather: { ...CAMP_SCENE.weather, type: weather } };
+            engine.mountScene(scene, envConfig, undefined, isWarmup);
         } else {
-            // Safe fallback for warmup phase (AssetPreloader)
-            const fogConfig = CAMP_SCENE.fog || { color: CAMP_SCENE.bgColor, density: 25 };
-            const fogColorHex = fogConfig.color !== undefined ? fogConfig.color : CAMP_SCENE.bgColor;
-            const volDensity = fogConfig.density;
-            const fallbackDensity = volDensity < 1.0 ? volDensity : volDensity * 0.0005;
-            scene.fog = new THREE.FogExp2(fogColorHex, fallbackDensity);
+            // Safe fallback for warmup phase (AssetPreloader) using FogSystem authority
+            if (engine.fog) {
+                const fogConfig = CAMP_SCENE.fog || { color: CAMP_SCENE.bgColor, density: 25 };
+                _c1.setHex(fogConfig.color !== undefined ? fogConfig.color : CAMP_SCENE.bgColor);
+                engine.fog.sync(fogConfig.density, undefined, _c1);
+            }
+            scene.background = new THREE.Color(CAMP_SCENE.bgColor);
         }
-
-        scene.background = new THREE.Color(CAMP_SCENE.bgColor);
-
-        const hemiLight = new THREE.HemisphereLight(
-            CAMP_SCENE.hemiLight.sky,
-            CAMP_SCENE.hemiLight.ground,
-            CAMP_SCENE.hemiLight.intensity
-        );
-        scene.add(hemiLight);
 
         if (!isWarmup) {
             // Flush any stale chunk registrations from the AssetPreloader warmup pass.
@@ -678,18 +585,9 @@ export const CampWorld = {
     initEffects: (scene: THREE.Scene, textures: Textures, weatherType: WeatherType, isWarmup = false): CampEffectsState => {
         const engine = WinterEngine.getInstance();
 
-        if (!isWarmup) {
-            // Restore the low-wind breeze feel in camp (data-driven from CAMP_SCENE)
-            engine.wind.setRandomWind(CAMP_SCENE.wind.minStrength, CAMP_SCENE.wind.maxStrength);
-            engine.weather.reAttach(scene);
+        // ARCHITECTURAL UNIFICATION: Environmental sync is now handled by the engine during mountScene.
+        const envConfig = { ...CAMP_SCENE, weather: { ...CAMP_SCENE.weather, type: weatherType } };
 
-            // ARCHITECTURAL UNIFICATION: Use CAMP_SCENE weather definition
-            const finalType = (weatherType !== undefined && weatherType !== WeatherType.NONE) ? weatherType : CAMP_SCENE.weather.type;
-            engine.weather.sync(finalType, CAMP_SCENE.weather.count, 60);
-        }
-
-        const { objects: skyObjects } = CampWorld.setupSky(scene, textures, isWarmup);
-        const starSystem = skyObjects.stars;
         const fireData = setupCampfire(scene, textures, isWarmup);
 
         const flameCount = 40;
@@ -720,7 +618,6 @@ export const CampWorld = {
 
         const state: CampEffectsState = {
             particles: { flames, sparkles, smokes, flameData, sparkleData, smokeData },
-            starSystem,
             fireLight: fireData,
             timers: { flames: 0, sparkles: 0, smokes: 0 }
         };
@@ -737,11 +634,6 @@ export const CampWorld = {
         const wind = engine.wind.current;
         const camera = engine.camera.threeCamera;
 
-        if (state.starSystem) {
-            // Delta används för jämn stjärnrotation
-            (state.starSystem.material as THREE.ShaderMaterial).uniforms.uTime.value = now * 0.001;
-            state.starSystem.rotateY(-0.005 * delta);
-        }
 
         const { flames, sparkles, smokes, flameData, sparkleData, smokeData } = state.particles;
 

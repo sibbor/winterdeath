@@ -2,16 +2,17 @@ import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { PERKS, PerkCategory, StatusEffectID } from '../content/perks';
-import { StatusEffect } from '../types/StatusEffects';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
+import { StatsBridge } from '../core/data/StatsBridge';
 import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 import { FXSystem } from './FXSystem';
 import { FXParticleType } from '../types/FXTypes';
-import { DamageID } from '../entities/player/CombatTypes';
+import { DamageID, DamageType } from '../entities/player/CombatTypes';
 import { FamilyMemberID } from '../content/constants';
 import { audioEngine } from '../utils/audio/AudioEngine';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
+import { KMH_TO_MS, MAX_ENTITIES } from '../content/constants';
 
 /**
  * PerkSystem
@@ -34,32 +35,140 @@ export class PerkSystem implements System {
     ) { }
 
     init(session: GameSessionLogic) {
-        this.updatePassives(session);
+        this.refreshBaseStats(session);
+        this.processEffects(session, 0);
+    }
+
+    /**
+     * Unified Perk/Buff/Debuff Activation
+     * Centralized Source of Truth for all state transitions.
+     */
+    public applyPerk(session: GameSessionLogic, id: StatusEffectID, duration?: number, intensity?: number) {
+        if (id === undefined || id < 0) return;
+
+        const state = session.state;
+        const perk = PERKS[id];
+        if (!perk) return;
+
+        const isAlreadyActive = state.effectDurations[id] > 0;
+
+        // 1. Duration Management (Zero-GC Array Access)
+        const finalDuration = duration || perk.duration || 3000;
+        state.effectDurations[id] = finalDuration;
+        state.effectMaxDurations[id] = finalDuration;
+        state.effectIntensities[id] = intensity !== undefined ? intensity : 1;
+
+        // 2. Telemetry & Discovery Signal
+        if (state.perkTimesGained[id] === 0) {
+            session.handleDiscovery(DiscoveryType.PERK, id, id, perk.displayName, perk.description);
+        }
+
+        if (!isAlreadyActive) {
+            state.perkTimesGained[id]++;
+
+            // Visual/Audio Feedback based on category
+            if (perk.category === PerkCategory.BUFF) {
+                audioEngine.playSound(SoundID.BUFF_GAINED);
+            } else if (perk.category === PerkCategory.DEBUFF) {
+                audioEngine.playSound(SoundID.DEBUFF_GAINED);
+            } else if (perk.category === PerkCategory.PASSIVE) {
+                audioEngine.playSound(SoundID.PASSIVE_GAINED);
+            }
+        }
+
+        // 3. Perk-Specific Trigger Logic (Phase 11 Refactor)
+        switch (id) {
+            case StatusEffectID.REFLEX_SHIELD:
+                this.handleReflexShieldActivation(session);
+                break;
+
+            case StatusEffectID.ADRENALINE_PATCH:
+                this.handleAdrenalinePatchActivation(session);
+                break;
+
+            case StatusEffectID.QUICK_FINGER:
+                // Perfect Dodge slows time significantly
+                state.globalTimeScale = 0.2;
+                break;
+
+            case StatusEffectID.GIB_MASTER:
+                break;
+        }
+    }
+
+    private handleReflexShieldActivation(session: GameSessionLogic) {
+        const state = session.state;
+        const perkID = StatusEffectID.REFLEX_SHIELD;
+
+        // SPECIFIC: Reflex Shield cleanses all active debuffs on trigger
+        let cleansedCount = 0;
+        for (let i = 0; i < MAX_ENTITIES.PERKS; i++) {
+            const p = PERKS[i];
+            if (p && p.category === PerkCategory.DEBUFF && state.effectDurations[i] > 0) {
+                state.effectDurations[i] = 0;
+                cleansedCount++;
+            }
+        }
+
+        if (cleansedCount > 0) {
+            state.perkDebuffsCleansed[perkID] += cleansedCount;
+            const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+            if (tracker) tracker.recordDebuffsResisted(session, cleansedCount);
+        }
+
+        audioEngine.playSound(SoundID.UI_CHIME);
+    }
+
+    private handleAdrenalinePatchActivation(session: GameSessionLogic) {
+        const state = session.state;
+        const perkID = StatusEffectID.ADRENALINE_PATCH;
+
+        // SPECIFIC: Adrenaline Patch cleanses all active debuffs on trigger
+        let cleansedCount = 0;
+        for (let i = 0; i < MAX_ENTITIES.PERKS; i++) {
+            const p = PERKS[i];
+            if (p && p.category === PerkCategory.DEBUFF && state.effectDurations[i] > 0) {
+                state.effectDurations[i] = 0;
+                cleansedCount++;
+            }
+        }
+
+        if (cleansedCount > 0) {
+            state.perkDebuffsCleansed[perkID] += cleansedCount;
+            const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+            if (tracker) tracker.recordDebuffsResisted(session, cleansedCount);
+        }
+
+        audioEngine.playSound(SoundID.UI_CHIME);
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number) {
         if (!session || !session.state) return;
-        const state = session.state;
 
-        // 1. Update Active Passives (Based on following family members)
-        this.updatePassives(session);
-
-        // 2. Process Timers and Aggregate Modifiers
+        // 1. Process Active Buffs/Debuffs (Passives are handled via event-driven BASE_MULTIPLIER)
         this.processEffects(session, delta);
 
-        // 3. Apply DoT Ticks
+        // 2. Apply DoT Ticks
         this.applyStatusTicks(session, simTime);
-
-        // 4. Synchronize High-Frequency HUD Mask
-        this.syncStatusMask(session);
     }
 
-    private updatePassives(session: GameSessionLogic) {
-        const state = session.state;
+    /**
+     * Permanent Base Upgrade: Refreshes multipliers from following family members.
+     * Called ONLY on sector load and when a family member is rescued.
+     */
+    public refreshBaseStats(session: GameSessionLogic) {
         const family = this.activeFamilyMembers.current;
+        const state = session.state;
+        const stats = state.statsBuffer;
 
-        // Zero-GC clear
-        state.activePassives.length = 0;
+        // Reset Base Multipliers
+        stats[PlayerStatID.BASE_MULTIPLIER_SPEED] = 1.0;
+        stats[PlayerStatID.BASE_MULTIPLIER_RELOAD] = 1.0;
+        stats[PlayerStatID.BASE_MULTIPLIER_FIRERATE] = 1.0;
+        stats[PlayerStatID.BASE_MULTIPLIER_DMG_RESIST] = 1.0;
+        stats[PlayerStatID.BASE_MULTIPLIER_RANGE] = 1.0;
+
+        state.activePassivesCount = 0;
 
         for (let i = 0; i < family.length; i++) {
             const member = family[i];
@@ -72,12 +181,21 @@ export class PerkSystem implements System {
             else if (member.id === FamilyMemberID.NATHALIE) passiveId = StatusEffectID.WINTERS_BONE;
 
             if (passiveId !== null) {
-                state.activePassives.push(passiveId);
+                state.activePassives[state.activePassivesCount++] = passiveId;
 
-                // Track discovery
-                if (state.discoveredPerksMap[passiveId] === 0) {
-                    state.discoveredPerksMap[passiveId] = 1;
-                    UIEventRingBuffer.push(UIEventType.DISCOVERY, passiveId, DiscoveryType.PERK);
+                // Discovery & Feedback (Only triggers the first time per sector if newly found)
+                if (state.perkTimesGained[passiveId] === 0) {
+                    this.applyPerk(session, passiveId);
+                }
+
+                // Apply permanent base upgrade
+                const perk = PERKS[passiveId];
+                if (perk) {
+                    if (perk.speedModifier) stats[PlayerStatID.BASE_MULTIPLIER_SPEED] += (perk.speedModifier / 100);
+                    if (perk.reloadModifier) stats[PlayerStatID.BASE_MULTIPLIER_RELOAD] *= (1.0 / (1.0 + perk.reloadModifier / 100));
+                    if (perk.fireRateModifier) stats[PlayerStatID.BASE_MULTIPLIER_FIRERATE] *= (1.0 / (1.0 + perk.fireRateModifier / 100));
+                    if (perk.damageResistModifier) stats[PlayerStatID.BASE_MULTIPLIER_DMG_RESIST] *= (1.0 - (perk.damageResistModifier / 100));
+                    if (perk.rangeModifier) stats[PlayerStatID.BASE_MULTIPLIER_RANGE] += (perk.rangeModifier / 100);
                 }
             }
         }
@@ -88,45 +206,44 @@ export class PerkSystem implements System {
         const stats = state.statsBuffer;
         const durations = state.effectDurations;
 
-        // Reset modifiers for stacking
-        let speedMod = 0, reloadMod = 0, fireRateMod = 0, resistMod = 0, rangeMod = 0;
+        // 1. Initialize Multipliers from Permanent Base Layer (Phase 11 Refactor)
+        stats[PlayerStatID.MULTIPLIER_SPEED] = stats[PlayerStatID.BASE_MULTIPLIER_SPEED];
+        stats[PlayerStatID.MULTIPLIER_RELOAD] = stats[PlayerStatID.BASE_MULTIPLIER_RELOAD];
+        stats[PlayerStatID.MULTIPLIER_FIRERATE] = stats[PlayerStatID.BASE_MULTIPLIER_FIRERATE];
+        stats[PlayerStatID.MULTIPLIER_DMG_RESIST] = stats[PlayerStatID.BASE_MULTIPLIER_DMG_RESIST];
+        stats[PlayerStatID.MULTIPLIER_RANGE] = stats[PlayerStatID.BASE_MULTIPLIER_RANGE];
 
-        // Phase 1: Sum from Passives
-        for (let i = 0; i < state.activePassives.length; i++) {
-            const perk = PERKS[state.activePassives[i]];
-            if (perk) {
-                if (perk.speedModifier) speedMod += perk.speedModifier;
-                if (perk.reloadModifier) reloadMod += perk.reloadModifier;
-                if (perk.fireRateModifier) fireRateMod += perk.fireRateModifier;
-                if (perk.damageResistModifier) resistMod += perk.damageResistModifier;
-                if (perk.rangeModifier) rangeMod += perk.rangeModifier;
-            }
-        }
-
-        // Phase 2: Process Timed Effects (Buffs & Debuffs)
-        state.activeBuffs.length = 0;
-        state.activeDebuffs.length = 0;
-
-        // Clear high-frequency flags that are driven by perks
+        // 2. Clear high-frequency flags driven by perks
         state.statusFlags &= ~(
             PlayerStatusFlags.REFLEX_SHIELD |
-            PlayerStatusFlags.ADRENALINE_SHOT |
+            PlayerStatusFlags.ADRENALINE_PATCH |
             PlayerStatusFlags.GIB_MASTER |
             PlayerStatusFlags.QUICK_FINGER |
             PlayerStatusFlags.STUNNED |
-            PlayerStatusFlags.DISORIENTED
+            PlayerStatusFlags.DISORIENTED |
+            PlayerStatusFlags.BLEEDING |
+            PlayerStatusFlags.BURNING |
+            PlayerStatusFlags.SLOWED |
+            PlayerStatusFlags.FREEZING |
+            PlayerStatusFlags.ELECTRIFIED |
+            PlayerStatusFlags.DROWNING
         );
 
-        for (let i = 0; i < 32; i++) {
+        // Reset UI category counts
+        state.activeBuffsCount = 0;
+        state.activeDebuffsCount = 0;
+
+        // 3. Iterate All Buffs & Debuffs
+        for (let i = 0; i < MAX_ENTITIES.PERKS; i++) {
             if (durations[i] <= 0) continue;
 
             // Decrement duration
             durations[i] = Math.max(0, durations[i] - delta * 1000);
 
             if (durations[i] <= 0) {
-                // Post-expiration cleanup
+                // Expiry Logic: Reset timescale if Quick Finger expires
                 if (i === StatusEffectID.QUICK_FINGER && state.globalTimeScale < 1.0) {
-                    state.globalTimeScale = 1.0; // Reset slowmo instantly
+                    state.globalTimeScale = 1.0;
                 }
                 continue;
             }
@@ -134,46 +251,60 @@ export class PerkSystem implements System {
             const perk = PERKS[i];
             if (!perk) continue;
 
-            // Category tracking
-            if (perk.category === PerkCategory.BUFF) state.activeBuffs.push(i);
-            else if (perk.category === PerkCategory.DEBUFF) state.activeDebuffs.push(i);
+            // Category tracking for UI
+            if (perk.category === PerkCategory.BUFF) state.activeBuffs[state.activeBuffsCount++] = i;
+            else if (perk.category === PerkCategory.DEBUFF) state.activeDebuffs[state.activeDebuffsCount++] = i;
 
             // Modifier stacking
-            if (perk.speedModifier) speedMod += perk.speedModifier;
-            if (perk.reloadModifier) reloadMod += perk.reloadModifier;
-            if (perk.fireRateModifier) fireRateMod += perk.fireRateModifier;
-            if (perk.damageResistModifier) resistMod += perk.damageResistModifier;
-            if (perk.rangeModifier) rangeMod += perk.rangeModifier;
+            this.aggregateModifiers(stats, perk);
 
-            // Flag syncing
-            if (i === StatusEffectID.REFLEX_SHIELD) state.statusFlags |= PlayerStatusFlags.REFLEX_SHIELD;
-            if (i === StatusEffectID.ADRENALINE_PATCH) state.statusFlags |= PlayerStatusFlags.ADRENALINE_SHOT;
-            if (i === StatusEffectID.GIB_MASTER) state.statusFlags |= PlayerStatusFlags.GIB_MASTER;
-            if (i === StatusEffectID.QUICK_FINGER) state.statusFlags |= PlayerStatusFlags.QUICK_FINGER;
-            if (i === StatusEffectID.STUNNED) state.statusFlags |= PlayerStatusFlags.STUNNED;
-            if (i === StatusEffectID.DISORIENTED) state.statusFlags |= PlayerStatusFlags.DISORIENTED;
+            // Flag syncing for systems
+            this.syncPerkFlags(state, i);
         }
 
-        // --- FINAL MULTIPLIER BAKE (Zero-GC) ---
-        stats[PlayerStatID.MULTIPLIER_SPEED] = Math.max(0.1, 1.0 + (speedMod / 100));
-        stats[PlayerStatID.MULTIPLIER_RANGE] = Math.max(0.1, 1.0 + (rangeMod / 100));
-        stats[PlayerStatID.MULTIPLIER_RELOAD] = Math.max(0.1, 1.0 - (reloadMod / 100));
-        stats[PlayerStatID.MULTIPLIER_FIRERATE] = Math.max(0.1, 1.0 - (fireRateMod / 100));
-        stats[PlayerStatID.MULTIPLIER_DMG_RESIST] = Math.max(0.0, 1.0 - (resistMod / 100));
+        // --- FINAL BAKE ---
+        stats[PlayerStatID.FINAL_SPEED] = stats[PlayerStatID.SPEED] * stats[PlayerStatID.MULTIPLIER_SPEED] * KMH_TO_MS;
 
         // Track Buff Uptime for Statistics
-        if (state.activeBuffs.length > 0) {
+        if (state.activeBuffsCount > 0) {
             const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
             if (tracker) tracker.recordBuffTime(session, delta);
         }
     }
+
+    private aggregateModifiers(stats: Float32Array, perk: any) {
+        if (perk.speedModifier) stats[PlayerStatID.MULTIPLIER_SPEED] += (perk.speedModifier / 100);
+        if (perk.reloadModifier) stats[PlayerStatID.MULTIPLIER_RELOAD] *= (1.0 / (1.0 + perk.reloadModifier / 100));
+        if (perk.fireRateModifier) stats[PlayerStatID.MULTIPLIER_FIRERATE] *= (1.0 / (1.0 + perk.fireRateModifier / 100));
+        if (perk.damageResistModifier) stats[PlayerStatID.MULTIPLIER_DMG_RESIST] *= (1.0 - (perk.damageResistModifier / 100));
+        if (perk.rangeModifier) stats[PlayerStatID.MULTIPLIER_RANGE] += (perk.rangeModifier / 100);
+    }
+
+    private syncPerkFlags(state: any, id: StatusEffectID) {
+        switch (id) {
+            case StatusEffectID.REFLEX_SHIELD: state.statusFlags |= PlayerStatusFlags.REFLEX_SHIELD; break;
+            case StatusEffectID.ADRENALINE_PATCH: state.statusFlags |= PlayerStatusFlags.ADRENALINE_PATCH; break;
+            case StatusEffectID.GIB_MASTER: state.statusFlags |= PlayerStatusFlags.GIB_MASTER; break;
+            case StatusEffectID.QUICK_FINGER: state.statusFlags |= PlayerStatusFlags.QUICK_FINGER; break;
+            case StatusEffectID.STUNNED: state.statusFlags |= PlayerStatusFlags.STUNNED; break;
+            case StatusEffectID.DISORIENTED: state.statusFlags |= PlayerStatusFlags.DISORIENTED; break;
+            case StatusEffectID.BLEEDING: state.statusFlags |= PlayerStatusFlags.BLEEDING; break;
+            case StatusEffectID.BURNING: state.statusFlags |= PlayerStatusFlags.BURNING; break;
+            case StatusEffectID.SLOWED: state.statusFlags |= PlayerStatusFlags.SLOWED; break;
+            case StatusEffectID.FREEZING: state.statusFlags |= PlayerStatusFlags.FREEZING; break;
+            case StatusEffectID.ELECTRIFIED: state.statusFlags |= PlayerStatusFlags.ELECTRIFIED; break;
+            case StatusEffectID.DROWNING: state.statusFlags |= PlayerStatusFlags.DROWNING; break;
+        }
+    }
+
+
 
     private applyStatusTicks(session: GameSessionLogic, simTime: number) {
         const state = session.state;
         const durations = state.effectDurations;
         const tickRate = 1.0; // Fixed 1Hz tick rate
 
-        for (let i = 0; i < 32; i++) {
+        for (let i = 0; i < MAX_ENTITIES.PERKS; i++) {
             if (durations[i] <= 0) continue;
 
             const perk = PERKS[i];
@@ -183,19 +314,21 @@ export class PerkSystem implements System {
             if (isTick) {
                 const intensity = state.effectIntensities[i] || 1.0;
                 const totalDamage = perk.dotDamage * intensity;
-                const dmgType = this.getStatusDamageID(i);
+                const dmgType = this.getDebuffDamageID(i);
 
                 // Apply damage through PlayerStatsSystem
                 const statsSys = session.getSystem<any>(SystemID.PLAYER_STATS);
                 if (statsSys) {
-                    statsSys.handlePlayerHit(session, totalDamage, null, dmgType, true, i);
+                    const dmgID = this.getDebuffDamageID(i);
+                    const dmgType = this.getDebuffDamageType(i);
+                    statsSys.handlePlayerHit(session, totalDamage, null, dmgType, dmgID, true, i);
                 }
 
                 // Telemetry: Perk Damage Dealt (DoT)
                 state.perkDamageDealt[i] += totalDamage;
 
                 // Visual Feedback
-                this.spawnTickFX(session, i);
+                this.spawnTickFX(session, perk.id);
             }
         }
     }
@@ -210,16 +343,16 @@ export class PerkSystem implements System {
                 FXSystem.spawnParticle(scene, state.particles, pos.x, 1.5, pos.z, FXParticleType.BLOOD_SPLATTER, 3);
                 break;
             case StatusEffectID.BURNING:
-                this._v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.5, pos.z + (Math.random() - 0.5) * 0.5);
-                FXSystem.spawnParticle(scene, state.particles, this._v1.x, this._v1.y, this._v1.z, FXParticleType.FLAME, 1);
+                this._v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.2, pos.z + (Math.random() - 0.5) * 0.5);
+                FXSystem.spawnParticle(scene, state.particles, this._v1.x, this._v1.y, this._v1.z, FXParticleType.FLAME, 4 + Math.floor(Math.random() * 3));
                 break;
             case StatusEffectID.ELECTRIFIED:
-                this._v1.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 1.5, pos.z + (Math.random() - 0.5) * 0.4);
-                FXSystem.spawnParticle(scene, state.particles, this._v1.x, this._v1.y, this._v1.z, FXParticleType.SPARK, 2);
+                this._v1.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 1.2, pos.z + (Math.random() - 0.5) * 0.4);
+                FXSystem.spawnParticle(scene, state.particles, this._v1.x, this._v1.y, this._v1.z, FXParticleType.SPARK, 3);
                 break;
             case StatusEffectID.FREEZING:
                 this._v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.5, pos.z + (Math.random() - 0.5) * 0.5);
-                FXSystem.spawnParticle(scene, state.particles, this._v1.x, this._v1.y, this._v1.z, FXParticleType.SNOW_PUFF, 2);
+                FXSystem.spawnParticle(scene, state.particles, this._v1.x, this._v1.y, this._v1.z, FXParticleType.SNOW_PUFF, 3);
                 break;
             case StatusEffectID.DROWNING:
                 FXSystem.spawnParticle(scene, state.particles, pos.x, 0.2, pos.z, FXParticleType.SPLASH, 3);
@@ -227,7 +360,7 @@ export class PerkSystem implements System {
         }
     }
 
-    private getStatusDamageID(effectId: StatusEffectID): DamageID {
+    private getDebuffDamageID(effectId: StatusEffectID): DamageID {
         switch (effectId) {
             case StatusEffectID.BURNING: return DamageID.BURN;
             case StatusEffectID.BLEEDING: return DamageID.BLEED;
@@ -238,30 +371,18 @@ export class PerkSystem implements System {
         }
     }
 
-    private syncStatusMask(session: GameSessionLogic) {
-        const state = session.state;
-        const oldMask = state.statusMask;
-        let newMask = 0;
-
-        // 1. System States (Driven by stats/flags)
-        const flags = state.statusFlags;
-        if ((flags & PlayerStatusFlags.INVULNERABLE) !== 0) newMask |= StatusEffect.INVULNERABLE;
-        if ((flags & PlayerStatusFlags.ADRENALINE_SHOT) !== 0) newMask |= StatusEffect.ADRENALINE;
-
-        // 2. Perk Bits (Driven by durations)
-        const durations = state.effectDurations;
-        for (let i = 0; i < 32; i++) {
-            if (durations[i] > 0) {
-                newMask |= (1 << i);
-            }
-        }
-
-        // Only sync if changed
-        if (newMask !== oldMask) {
-            state.statusMask = newMask;
-            UIEventRingBuffer.push(UIEventType.SYNC_STATUS, newMask, 0, session.engine.simTime);
+    private getDebuffDamageType(effectId: StatusEffectID): DamageType {
+        switch (effectId) {
+            case StatusEffectID.BURNING: return DamageType.BURN;
+            case StatusEffectID.BLEEDING: return DamageType.BLEED;
+            case StatusEffectID.ELECTRIFIED: return DamageType.ELECTRIC;
+            case StatusEffectID.FREEZING: return DamageType.FROST;
+            case StatusEffectID.DROWNING: return DamageType.DROWNING;
+            default: return DamageType.PHYSICAL;
         }
     }
+
+
 
     clear() { }
 }

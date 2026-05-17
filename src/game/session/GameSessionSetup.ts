@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TriggerSystem } from '../../systems/TriggerSystem';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { MapItem, DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { DeathPhase } from '../../types/SessionTypes';
@@ -19,11 +20,12 @@ import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
-import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, PLAYER_BASE_SPEED, FamilyMemberID, INITIAL_ENEMY_POOL } from '../../content/constants';
+import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, PLAYER_BASE_SPEED, FamilyMemberID, INITIAL_ENEMY_POOL, MAX_ENTITIES } from '../../content/constants';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { SubEffectType } from '../../systems/EffectManager';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
-import { PlayerDeathState, DamageID } from '../../entities/player/CombatTypes';
+import { PlayerDeathState, DamageID, DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
+import { StatusEffectID } from '../../types/StatusEffects';
 import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { audioEngine } from '../../utils/audio/AudioEngine';
@@ -40,7 +42,7 @@ import { SectorSystem } from '../../systems/SectorSystem';
 import { FamilySystem } from '../../systems/FamilySystem';
 import { CinematicSystem } from '../../systems/CinematicSystem';
 import { DeathSystem } from '../../systems/DeathSystem';
-import { DataResolver } from '../../utils/ui/DataResolver';
+import { DataResolver } from '../../core/data/DataResolver';
 import { HudStore } from '../../store/HudStore';
 import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
@@ -50,7 +52,7 @@ import { RuntimeState } from '../../core/RuntimeState';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { PerkFX } from '../../systems/PerkFX';
 import { PerkSystem } from '../../systems/PerkSystem';
-import { InteractionType } from '../../systems/ui/UIEventBridge';
+import { InteractionType, InteractionSubType } from '../../systems/ui/UIEventBridge';
 
 const seededRandom = (seed: number) => {
     let s = seed % 2147483647;
@@ -77,7 +79,7 @@ export interface SetupContext {
     };
     callbacks: {
         t: (k: string) => string;
-        spawnBubble: (text: string, duration?: number) => void;
+        setBubble: (text: string, duration?: number) => void;
         startCinematic: (mesh: any, sectorId?: number, dialogueId?: number, params?: any) => void;
         endCinematic: () => void;
         playCinematicLine: (index: number) => void;
@@ -86,17 +88,17 @@ export interface SetupContext {
         showDamageText: (x: number, y: number, z: number, text: string, color?: number) => void;
         spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => void;
         concludeSector: (isExtraction: boolean) => void;
-        handleTriggerAction: (action: any, scene: THREE.Scene) => void;
         onSectorLoaded?: () => void;
-        gainXp: (amount: number) => void;
         onTrigger: (type: TriggerType, duration: number) => void;
         onBossKilled: (id: number) => void;
         onAction: (action: any) => void;
         spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
         playSound: (id: SoundID) => void;
+        setInteraction: (interaction: any) => void;
         collectedCluesRef: any;
 
         onDiscovery?: (type: DiscoveryType, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
+        gainXp: (amount: number) => void;
         gainSp: (amount: number) => void;
         gainScrap: (amount: number) => void;
     }
@@ -105,7 +107,7 @@ export interface SetupContext {
 export class GameSessionSetup {
 
     static async runSectorSetup(ctx: SetupContext, currentSetupId: number) {
-        const { engine, state, props, refs, callbacks } = ctx;
+        const { engine, session, state, props, refs, callbacks } = ctx;
         const scene = engine.scene;
         const isMounted = refs.isMounted;
         const setupIdRef = refs.setupIdRef;
@@ -120,6 +122,11 @@ export class GameSessionSetup {
 
         // Centralized Zero-GC Reset
         GameSessionLogic.resetState(state, props);
+
+        // [VINTERDÖD FIX] Purge Triggers to prevent sector pollution
+        if (session.triggerSystem) {
+            session.triggerSystem.clear();
+        }
 
         let sectorLoaded = false;
 
@@ -160,14 +167,20 @@ export class GameSessionSetup {
             const flickeringLights: any[] = [];
             const textures = createProceduralTextures();
 
+            const triggerSystem = new TriggerSystem(MAX_ENTITIES.TRIGGERS);
+
             // 2. Setup Player & Camera
             const playerGroup = this.setupPlayerAndCamera(engine, currentSector, refs, state);
+            refs.playerGroupRef.current = playerGroup;
+            (session as any).playerGroup = playerGroup;
+            session.playerPos = playerGroup.position;
 
             // 3. Create Sector Context
             refs.activeFamilyMembers.current.length = 0;
             const sectorCtx = this.createSectorContext(ctx, currentSector, textures, flickeringLights, burningObjects, mapItems, rng, playerGroup, yielder);
             refs.sectorContextRef.current = sectorCtx;
             state.sectorState.ctx = sectorCtx;
+            session.sectorCtx = sectorCtx;
 
             // 4. Bind State Callbacks
             this.bindStateCallbacks(ctx, sectorCtx);
@@ -195,7 +208,7 @@ export class GameSessionSetup {
             await yielder();
 
             // 7. Initialize Systems
-            this.setupSystems(ctx, playerGroup, sectorCtx);
+            this.setupSystems(ctx, playerGroup, sectorCtx, triggerSystem);
 
 
             await yielder();
@@ -203,7 +216,7 @@ export class GameSessionSetup {
             // --- VINTERDÖD FIX: BYPASS INTRO TRIGGERS ---
             // If the sector is already cleared, mark the intro triggers as completed
             if (state.familyAlreadyRescued || state.bossPermanentlyDefeated) {
-                const triggers = state.triggers;
+                const triggers = ctx.session.triggerSystem;
                 const activeFlags = triggers.getActiveFlags();
                 const types = triggers.getTriggerTypes();
                 const metadata = triggers.metadata;
@@ -232,6 +245,9 @@ export class GameSessionSetup {
 
             FXSystem.preload(scene);
             await yielder();
+
+            // VINTERDÖD FIX: Ensure static light buckets are optimized post-build
+            engine.light.rebuildBuckets(sectorCtx.dynamicLights as any);
 
             // If we are building LIVE (not warmup), activate systems immediately.
             if (!props.isWarmup) {
@@ -302,34 +318,11 @@ export class GameSessionSetup {
 
     private static prepareScene(engine: WinterEngine, isWarmup: boolean | undefined, refs: any, env: any) {
         // Aggressively clear the scene. KEEP persistent systems alive (false).
-        engine.clearActiveScene(false);
-        engine.syncSystemsToScene(engine.scene);
-
-        const engineSystems = engine.getSystems();
-        for (let i = engineSystems.length - 1; i >= 0; i--) {
-            const sys = engineSystems[i];
-            if (sys && !sys.persistent &&
-                sys.systemId !== SystemID.LIGHT &&
-                sys.systemId !== SystemID.WIND &&
-                sys.systemId !== SystemID.WEATHER &&
-                sys.systemId !== SystemID.FOG &&
-                sys.systemId !== SystemID.WATER) {
-                engine.unregisterSystem(sys.systemId);
-            }
-        }
-
         engine.camera.reset();
         engine.camera.set('fov', env.fov);
 
-        if (!isWarmup) {
-            engine.syncEnvironment(env);
-            const skyLight = engine.scene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
-            if (skyLight) {
-                refs.skyLightRef.current = skyLight;
-                if (!refs.skyLightOffsetRef.current) refs.skyLightOffsetRef.current = new THREE.Vector3();
-                refs.skyLightOffsetRef.current.copy(skyLight.position);
-            }
-        }
+        // [VINTERDÖD] Orchestrate the transition via the authoritative engine pipeline.
+        engine.mountScene(engine.scene, env, undefined, !!isWarmup);
     }
 
     private static setupPlayerAndCamera(engine: WinterEngine, currentSector: any, refs: any, state: RuntimeState) {
@@ -416,11 +409,9 @@ export class GameSessionSetup {
 
         const spawnHorde = (count: number, type?: EnemyType, pos?: THREE.Vector3) => {
             const startPos = pos || playerGroup.position;
-            const newEnemies = EnemyManager.spawnHorde(engine.scene, startPos, count, state.bossSpawned, state.enemies.length, type);
-            if (newEnemies) {
-                const len = newEnemies.length;
-                for (let i = 0; i < len; i++) state.enemies.push(newEnemies[i]);
-            }
+            EnemyManager.spawnHorde(engine.scene, startPos, count, state.bossSpawned, state.enemies.length, type, false, (e) => {
+                state.enemies.push(e);
+            });
         };
 
         const realSpawnZombie = (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => {
@@ -459,16 +450,20 @@ export class GameSessionSetup {
         return {
             scene: engine.scene, engine, obstacles: state.obstacles, chests: state.chests,
             worldStreamer: state.worldStreamer,
-            flickeringLights, burningObjects, rng, triggers: state.triggers, mapItems, debugMode: props.debugMode,
+            flickeringLights, burningObjects, rng, mapItems, debugMode: props.debugMode,
             textures: textures, spawnZombie: realSpawnZombie, spawnHorde, spawnBoss,
             cluesFound: (props.stats.cluesFound || []) as string[], collectiblesDiscovered: (props.stats.collectiblesDiscovered || []) as string[],
-            collectibles: [], dynamicLights: [], interactables: [], sectorId: props.currentSector, smokeEmitters: [],
+            collectibles: [], dynamicLights: [], interactables: [], triggers: [], sectorId: props.currentSector, smokeEmitters: [],
             sectorState: state.sectorState, state: state, activeFamilyMembers: ctx.refs.activeFamilyMembers.current, yield: yielder,
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => ctx.session.makeNoise(pos, type, radius),
             isWarmup: props.isWarmup,
 
             // --- VINTERDÖD FIX: Injecting the generic bridge into the sector events API ---
-            onAction: callbacks.onAction
+            onAction: callbacks.onAction,
+            spawnParticle: callbacks.spawnParticle,
+            spawnDecal: callbacks.spawnDecal,
+            applyDamage: state.applyDamage,
+            environmentalZones: []
         };
     }
 
@@ -480,17 +475,12 @@ export class GameSessionSetup {
             spawnParticle: callbacks.spawnParticle,
             spawnDecal: callbacks.spawnDecal,
             showDamageText: callbacks.showDamageText,
-            spawnBubble: callbacks.spawnBubble,
+            setBubble: callbacks.setBubble,
             onTrigger: callbacks.onTrigger,
             onAction: (action: any) => {
-                if (action.type === 'HEAL') {
-                    const hp = state.statsBuffer[PlayerStatID.HP];
-                    const maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
-                    state.statsBuffer[PlayerStatID.HP] = Math.min(maxHp, hp + action.amount);
-                    UiSounds.playConfirm();
-                }
-                if (action.type === 'SOUND' && action.id) audioEngine.playSound(action.id);
-                callbacks.handleTriggerAction(action, engine.scene);
+                if (!action) return;
+                // Delegate all logic (Stats, Healing, Rewards) to the authoritative GameSession context
+                callbacks.onAction(action);
             },
             playSound: (id: SoundID) => audioEngine.playSound(id),
             resolveDynamicPos: (familyId?: number, ownerId?: string) => {
@@ -509,19 +499,13 @@ export class GameSessionSetup {
                 }
                 return null;
             },
-            explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, sectorCtx, force),
-            gainXp: (amount: number) => {
-                const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                if (tracker) tracker.recordXp(session, amount);
-            },
-            gainSp: (amount: number) => {
-                const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                if (tracker) tracker.recordSp(session, amount);
-            },
-            onPlayerHit: (damage: number, attacker: any, type: DamageID, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
+            gainXp: (amount: number) => callbacks.gainXp(amount),
+            gainSp: (amount: number) => callbacks.gainSp(amount),
+            gainScrap: (amount: number) => callbacks.gainScrap(amount),
+            onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
                 const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
                 if (statsSystem) {
-                    statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName);
+                    statsSystem.handlePlayerHit(session, damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
                 }
             },
             onDiscovery: (type: DiscoveryType, id: string, titleKey: string, detailsKey: string, payload?: any) => {
@@ -590,11 +574,7 @@ export class GameSessionSetup {
                 if (shouldShowUI) {
                     // Only award SP and save if NOT respawnable and NOT already found
                     if (!alreadyFound && !isRespawnable) {
-                        // Update session stats (for end-of-sector report)
-                        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                        if (tracker) tracker.recordSp(session, 1);
-
-                        // Update live DOD buffer (for HUD)
+                        // Update live DOD buffer and telemetry via unified callback
                         callbacks.gainSp(1);
                     }
 
@@ -602,6 +582,14 @@ export class GameSessionSetup {
                         // Pass specific payload if it's a collectible for the UI logic in App.tsx
                         callbacks.onDiscovery(type, id, titleKey, detailsKey, payload);
                     }
+
+                    // Patch HudStore so DiscoveryPopup can pull the strings if needed
+                    HudStore.patch({
+                        discoveryTitle: titleKey,
+                        discoveryDetails: detailsKey,
+                        discoveryId: id,
+                        discoveryType: type
+                    });
                 }
             },
             onBossKilled: (idStr: string) => {
@@ -770,7 +758,7 @@ export class GameSessionSetup {
         }
     }
 
-    private static setupSystems(ctx: SetupContext, playerGroup: THREE.Group, sectorCtx: SectorContext) {
+    private static setupSystems(ctx: SetupContext, playerGroup: THREE.Group, sectorCtx: SectorContext, triggerSystem: TriggerSystem) {
         const { engine, session, state, callbacks, refs, props, ui } = ctx;
 
         if (engine.water) {
@@ -798,11 +786,25 @@ export class GameSessionSetup {
         session.detectionSystem = detectionSys;
 
         // Register the SoA TriggerSystem
-        session.addSystem(state.triggers);
+        session.triggerSystem = triggerSystem;
+        if (state.worldStreamer) {
+            session.triggerSystem.setStreamer(state.worldStreamer);
+        }
+        session.addSystem(session.triggerSystem);
+
+        // [VINTERDÖD] Batch register buffered triggers from construction phase
+        if (sectorCtx.triggers && sectorCtx.triggers.length > 0) {
+            session.triggerSystem.addTriggers(sectorCtx.triggers);
+        }
 
         // Register passive global managers in the system registry
         engine.registerSystem(SystemID.ENEMY_MANAGER, EnemyManager);
         engine.registerSystem(SystemID.HUD, HudSystem);
+
+        const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
+        session.addSystem(playerStatsSystem);
+        session.addSystem(new PerkSystem(playerGroup, refs.activeFamilyMembers));
+        PerkFX.init(playerGroup);
 
         session.addSystem(new PlayerMovementSystem(playerGroup));
         session.addSystem(new VehicleMovementSystem(playerGroup));
@@ -819,17 +821,10 @@ export class GameSessionSetup {
             }
         ));
 
-        session.addSystem(new PerkSystem(playerGroup, refs.activeFamilyMembers));
-        const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
-        session.addSystem(playerStatsSystem);
-
-        PerkFX.init(playerGroup);
-
         session.addSystem(new EnemySystem({
-            spawnBubble: callbacks.spawnBubble,
+            setBubble: callbacks.setBubble,
             gainXp: callbacks.gainXp,
             t: callbacks.t,
-            onDiscovery: callbacks.onDiscovery,
             onBossKilled: (id: number) => {
                 let seen = false;
                 for (let j = 0; j < state.bossesDefeated.length; j++) {
@@ -853,25 +848,18 @@ export class GameSessionSetup {
                 const curSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
                 if (curSector?.ambientLoop) audioEngine.playMusic(curSector.ambientLoop);
             },
-            onPlayerHit: (damage, attacker, type, isDoT, effect, dur, intense, attackName) =>
-                playerStatsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName),
+            onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) =>
+                playerStatsSystem.handlePlayerHit(session, damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType),
         } as any, INITIAL_ENEMY_POOL));
 
         session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
-            setNotification: (n: any) => { if (n && n.visible && n.text) callbacks.spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000); },
-            t: callbacks.t, spawnParticle: callbacks.spawnParticle, startCinematic: callbacks.startCinematic,
-            setInteraction: (interaction: any) => {
-                if (interaction) {
-                    state.interaction.active = true;
-                    state.interaction.type = InteractionType.PLANT_EXPLOSIVE;
-                    state.hasCurrentInteraction = true;
-                    state.currentInteractionPayload = interaction;
-                } else {
-                    state.interaction.active = false;
-                    state.interaction.type = InteractionType.NONE;
-                    state.hasCurrentInteraction = false;
-                }
+            setBubble: (text: string, duration?: number) => {
+                callbacks.setBubble(text, duration || 3000);
             },
+            t: callbacks.t,
+            spawnParticle: callbacks.spawnParticle,
+            startCinematic: callbacks.startCinematic,
+            setInteraction: callbacks.setInteraction,
 
             playSound: (id: SoundID) => audioEngine.playSound(id),
             playTone: (freq: number, type: ToneType, duration: number, vol?: number) => { },
@@ -880,23 +868,46 @@ export class GameSessionSetup {
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
             spawnZombie: (type: EnemyType, pos?: THREE.Vector3) => callbacks.spawnZombie(type, pos),
             spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => sectorCtx.spawnHorde(count, type, pos),
-            setOverlay: ui.setOverlay
+            setOverlay: ui.setOverlay,
+            onAction: (action: any) => callbacks.onAction(action),
+            gainXp: (amount: number) => callbacks.gainXp(amount),
+            gainSp: (amount: number) => callbacks.gainSp(amount),
+            gainScrap: (amount: number) => callbacks.gainScrap(amount),
+            onDiscovery: (type: any, id: string, titleKey: string, detailsKey: string, payload?: any) => {
+                // Bridge to the GameSessionSetup internal onDiscovery logic if needed, 
+                // or just call the props/callbacks version.
+                if (callbacks.onDiscovery) {
+                    callbacks.onDiscovery(type, id, titleKey, detailsKey, payload);
+                    return true;
+                }
+                return false;
+            },
+            onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
+                const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
+                if (statsSystem) {
+                    statsSystem.handlePlayerHit(session, damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
+                }
+            },
+            applyDamage: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => {
+                return state.applyDamage(enemy, amount, damageType, damageSource, isHighImpact);
+            }
         }));
 
         session.addSystem(new LootSystem(playerGroup, engine.scene, { gainScrap: callbacks.gainScrap }));
 
         session.addSystem(new FamilySystem(playerGroup, refs.activeFamilyMembers, refs.cinematicRef, {
-            setFoundMember: (id: FamilyMemberID) => ctx.ui.setFoundMember && ctx.ui.setFoundMember(id),
-            startCinematic: callbacks.startCinematic
+            setFoundMember: (id: FamilyMemberID) => ctx.ui.setFoundMember && ctx.ui.setFoundMember(id)
         }));
 
         session.addSystem(new CinematicSystem({
             cinematicRef: refs.cinematicRef, camera: engine.camera as any, playerMeshRef: refs.playerMeshRef as any,
             bubbleRef: refs.bubbleRef, activeFamilyMembers: refs.activeFamilyMembers,
             callbacks: {
-                setCurrentLine: ui.setCurrentLine, setCinematicActive: ui.setCinematicActive, endCinematic: callbacks.endCinematic,
-                playCinematicLine: callbacks.playCinematicLine, setTailPosition: ui.setBubbleTailPosition,
-                onAction: callbacks.onAction // Hooked up!
+                setCurrentLine: ui.setCurrentLine,
+                setCinematicActive: ui.setCinematicActive,
+                endCinematic: callbacks.endCinematic,
+                playCinematicLine: callbacks.playCinematicLine,
+                onAction: callbacks.onAction
             },
             state: state
         }));
@@ -1019,15 +1030,22 @@ export class GameSessionSetup {
         state.effectIntensities.fill(0);
 
         // Clear Dynamic Status Effect Collections
-        state.activePassives.length = 0;
-        state.activeBuffs.length = 0;
-        state.activeDebuffs.length = 0;
+        state.activePassivesCount = 0;
+        state.activeBuffsCount = 0;
+        state.activeDebuffsCount = 0;
+        state.fireZoneCount = 0;
 
         // Reset Killer Metadata
         state.killedByEnemy = false;
-        state.killerType = DamageID.NONE;
+        state.killerType = DamageType.NONE;
         state.killerName = '';
         state.killerAttackName = '';
+        state.incomingDamageBuffer.fill(0);
+
+        // Zero-out contiguous status arrays
+        state.activePassives.fill(0);
+        state.activeBuffs.fill(0);
+        state.activeDebuffs.fill(0);
 
         // Reset simulation timers to prevent lockout
         state.simTime = 0;
@@ -1069,23 +1087,57 @@ export class GameSessionSetup {
         }
 
         // --- 3. PASSIVES, BUFFS & DEBUFFS ---
-        const statsSystem = engine.getSystem<any>(SystemID.PLAYER_STATS);
-        if (statsSystem && statsSystem.updatePassives) {
-            statsSystem.updatePassives(session);
+        const perkSystem = engine.getSystem<any>(SystemID.PERK_SYSTEM);
+        if (perkSystem) {
+            // Corrected method name to match PerkSystem.ts implementation (refreshBaseStats)
+            if (perkSystem.refreshBaseStats) {
+                perkSystem.refreshBaseStats(session);
+            }
         }
 
         // --- 4. SYSTEM CLEARING ---
         ProjectileSystem.clear(scene, state.projectiles, state.fireZones);
         FXSystem.reset();
-        //EnemyManager.clear();
+        session.triggerSystem.resetTriggerStates();
+        EnemyManager.clear();
 
         // --- 5. CLEAR DYNAMIC OBJECTS ---
         this.clearDynamicNodes(scene);
 
         // --- 6. SECTOR DATA ---
         const currentSectorData = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
+        const currentSectorId = props.currentSector || 0;
+        const currentFMId = DataResolver.getSectorFamilyMemberId(currentSectorId);
 
-        // 6.1 RESPAWN ZOMBIES
+        // --- 6.1 RESET FAMILY MEMBERS (VINTERDÖD FIX) ---
+        // Ensure unrescued members don't follow and previously rescued members are positioned correctly.
+        const fmArr = refs.activeFamilyMembers.current;
+        for (let i = 0; i < fmArr.length; i++) {
+            const fm = fmArr[i];
+            if (fm.id === currentFMId) {
+                // Current sector's member MUST be reset to un-rescued state
+                fm.following = false;
+                fm.rescued = false;
+                fm.found = false;
+                if (fm.mesh) {
+                    fm.mesh.visible = (fm.spawnPos && fm.spawnPos.y > -500);
+                    if (fm.spawnPos) fm.mesh.position.copy(fm.spawnPos);
+                    else fm.mesh.position.set(0, -1000, 0);
+                }
+            } else {
+                // Previously rescued members keep following but reset position to player cluster
+                fm.following = true;
+                fm.rescued = true;
+                if (fm.mesh) {
+                    fm.mesh.visible = true;
+                    fm.mesh.position.copy(playerGroup.position);
+                    fm.mesh.position.x += (Math.random() - 0.5) * 4;
+                    fm.mesh.position.z += 5 + Math.random() * 2;
+                }
+            }
+        }
+
+        // 6.2 RESPAWN ZOMBIES
         const sCtx = refs.sectorContextRef.current;
         if (sCtx && currentSectorData.setupZombies) {
             currentSectorData.setupZombies(sCtx);
@@ -1162,7 +1214,7 @@ export class GameSessionSetup {
         state.enemies.length = 0;
         state.obstacles.length = 0;
         state.chests.length = 0;
-        state.triggers.reset();
+        ctx.session.triggerSystem.clear();
         state.bloodDecals.length = 0;
 
         state.statusFlags &= ~PlayerStatusFlags.DEAD;
