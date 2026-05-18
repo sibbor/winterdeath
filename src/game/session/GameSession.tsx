@@ -501,7 +501,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         switch (type) {
             case DiscoveryType.ZOMBIE: {
                 const enemyId = Number(id);
-                if (!sets.seenEnemies.has(enemyId)) {
+                if (fromBridge || !sets.seenEnemies.has(enemyId)) {
                     sets.seenEnemies.add(enemyId);
 
                     let foundEnemy = false;
@@ -520,7 +520,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             case DiscoveryType.BOSS: {
                 const bossId = Number(id);
-                if (!sets.seenBosses.has(bossId)) {
+                if (fromBridge || !sets.seenBosses.has(bossId)) {
                     sets.seenBosses.add(bossId);
 
                     let foundBoss = false;
@@ -544,7 +544,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.COLLECTIBLE);
                     detailsKey = detailsKey || payload?.detailsKey || DataResolver.getCollectibleName(strId);
 
-                    if (!sets.collectibles.has(colSmi)) {
+                    if (fromBridge || !sets.collectibles.has(colSmi)) {
                         sets.collectibles.add(colSmi);
                         if (!stats.collectiblesDiscovered.includes(strId)) {
                             stats.collectiblesDiscovered.push(strId);
@@ -564,7 +564,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     const strId = DataResolver.resolvePoiId(poiSmi);
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.POI);
                     detailsKey = payload?.detailsKey || DataResolver.getPoiName(strId);
-                    if (!sets.pois.has(poiSmi)) {
+                    if (fromBridge || !sets.pois.has(poiSmi)) {
                         sets.pois.add(poiSmi);
 
                         if (!stats.discoveredPOIs.includes(strId)) {
@@ -580,7 +580,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             case DiscoveryType.PERK: {
                 const perkId = Number(id);
-                if (state.discoveredPerksMap[perkId] === 0) {
+                if (fromBridge || state.discoveredPerksMap[perkId] === 0) {
                     state.discoveredPerksMap[perkId] = 1;
                     isNew = true;
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.PERK);
@@ -601,7 +601,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     const strId = DataResolver.resolveClueId(clueSmi);
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.CLUE);
                     detailsKey = detailsKey || 'ui.clue_found';
-                    if (!sets.clues.has(clueSmi)) {
+                    if (fromBridge || !sets.clues.has(clueSmi)) {
                         sets.clues.add(clueSmi);
                         const cluePayload = payload || { id: strId, content: detailsKey };
 

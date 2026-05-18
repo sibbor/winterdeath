@@ -470,7 +470,7 @@ export class GameSessionSetup {
     private static bindStateCallbacks(ctx: SetupContext, sectorCtx: SectorContext) {
         const { engine, session, state, callbacks, refs, props } = ctx;
 
-        state.callbacks = {
+        Object.assign(state.callbacks || (state.callbacks = {} as any), {
             t: callbacks.t,
             spawnParticle: callbacks.spawnParticle,
             spawnDecal: callbacks.spawnDecal,
@@ -519,51 +519,63 @@ export class GameSessionSetup {
 
                 // Replaced .some() and .includes() with Zero-GC for-loops
                 switch (type) {
-                    case DiscoveryType.CLUE:
-                        alreadyFound = sets.clues.has(id);
-                        if (!alreadyFound) {
-                            if (!isRespawnable) sets.clues.add(id);
+                    case DiscoveryType.CLUE: {
+                        const clueSmi = DataResolver.resolveClueID(id);
+                        if (clueSmi !== undefined) {
+                            alreadyFound = sets.clues.has(clueSmi);
+                            if (!alreadyFound) {
+                                if (!isRespawnable) sets.clues.add(clueSmi);
 
-                            let foundClue = false;
-                            for (let i = 0; i < stats.cluesFound.length; i++) {
-                                const c = stats.cluesFound[i];
-                                if ((typeof c === 'string' ? c : c.id) === id) { foundClue = true; break; }
-                            }
-                            if (!isRespawnable && !foundClue) {
-                                stats.cluesFound.push(id as string);
+                                let foundClue = false;
+                                for (let i = 0; i < stats.cluesFound.length; i++) {
+                                    const c = stats.cluesFound[i];
+                                    if ((typeof c === 'string' ? c : c.id) === id) { foundClue = true; break; }
+                                }
+                                if (!isRespawnable && !foundClue) {
+                                    stats.cluesFound.push(id as string);
+                                }
                             }
                         }
                         break;
+                    }
 
-                    case DiscoveryType.POI:
-                        alreadyFound = sets.pois.has(id);
-                        if (!alreadyFound) {
-                            if (!isRespawnable) sets.pois.add(id);
+                    case DiscoveryType.POI: {
+                        const poiSmi = DataResolver.resolvePoiID(id);
+                        if (poiSmi !== undefined) {
+                            alreadyFound = sets.pois.has(poiSmi);
+                            if (!alreadyFound) {
+                                if (!isRespawnable) sets.pois.add(poiSmi);
 
-                            let foundPOI = false;
-                            for (let i = 0; i < stats.discoveredPOIs.length; i++) {
-                                if (stats.discoveredPOIs[i] === id) { foundPOI = true; break; }
-                            }
-                            if (!isRespawnable && !foundPOI) {
-                                stats.discoveredPOIs.push(id);
-                            }
-                        }
-                        break;
-
-                    case DiscoveryType.COLLECTIBLE:
-                        alreadyFound = sets.collectibles.has(id);
-                        if (!alreadyFound) {
-                            if (!isRespawnable) sets.collectibles.add(id);
-
-                            let foundCol = false;
-                            for (let i = 0; i < stats.collectiblesDiscovered.length; i++) {
-                                if (stats.collectiblesDiscovered[i] === id) { foundCol = true; break; }
-                            }
-                            if (!isRespawnable && !foundCol) {
-                                stats.collectiblesDiscovered.push(id);
+                                let foundPOI = false;
+                                for (let i = 0; i < stats.discoveredPOIs.length; i++) {
+                                    if (stats.discoveredPOIs[i] === id) { foundPOI = true; break; }
+                                }
+                                if (!isRespawnable && !foundPOI) {
+                                    stats.discoveredPOIs.push(id);
+                                }
                             }
                         }
                         break;
+                    }
+
+                    case DiscoveryType.COLLECTIBLE: {
+                        const colSmi = DataResolver.resolveCollectibleID(id);
+                        if (colSmi !== undefined) {
+                            alreadyFound = sets.collectibles.has(colSmi);
+                            if (!alreadyFound) {
+                                if (!isRespawnable) sets.collectibles.add(colSmi);
+
+                                let foundCol = false;
+                                for (let i = 0; i < stats.collectiblesDiscovered.length; i++) {
+                                    if (stats.collectiblesDiscovered[i] === id) { foundCol = true; break; }
+                                }
+                                if (!isRespawnable && !foundCol) {
+                                    stats.collectiblesDiscovered.push(id);
+                                }
+                            }
+                        }
+                        break;
+                    }
                 }
 
                 // First time discovery awards SP (Plan overhaul)
@@ -572,8 +584,9 @@ export class GameSessionSetup {
                 const shouldShowUI = !alreadyFound || isRespawnable;
 
                 if (shouldShowUI) {
-                    // Only award SP and save if NOT respawnable and NOT already found
-                    if (!alreadyFound && !isRespawnable) {
+                    // Only award SP and save if NOT respawnable and NOT already found, and is an SP-awarding discovery
+                    const awardsSp = type === DiscoveryType.CLUE || type === DiscoveryType.POI || type === DiscoveryType.COLLECTIBLE;
+                    if (awardsSp && !alreadyFound && !isRespawnable) {
                         // Update live DOD buffer and telemetry via unified callback
                         callbacks.gainSp(1);
                     }
@@ -625,7 +638,7 @@ export class GameSessionSetup {
             },
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
             collectedCluesRef: refs.collectedCluesRef
-        };
+        });
     }
 
     private static finalizeStateLimits(state: RuntimeState, mapItems: MapItem[], flickeringLights: any[], scene: THREE.Scene, sectorCtx: SectorContext) {

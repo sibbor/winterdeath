@@ -94,15 +94,16 @@ export class GameSessionLogic {
         state.isPlayground = props.currentSector === SectorID.PLAYGROUND;
 
         // Register callbacks
-        state.callbacks = {
-            onEnemyDiscovered: props.onEnemyDiscovered,
-            onBossDiscovered: props.onBossDiscovered,
-            onCollectibleDiscovered: props.onCollectibleDiscovered,
-            onClueDiscovered: props.onClueDiscovered,
-            onPOIdiscovered: props.onPOIdiscovered,
-            onUpdateLoadout: props.onUpdateLoadout,
-            onInteractionStateChange: props.onInteractionStateChange
-        };
+        if (!state.callbacks) {
+            state.callbacks = {} as any;
+        }
+        state.callbacks.onEnemyDiscovered = props.onEnemyDiscovered;
+        state.callbacks.onBossDiscovered = props.onBossDiscovered;
+        state.callbacks.onCollectibleDiscovered = props.onCollectibleDiscovered;
+        state.callbacks.onClueDiscovered = props.onClueDiscovered;
+        state.callbacks.onPOIdiscovered = props.onPOIdiscovered;
+        state.callbacks.onUpdateLoadout = props.onUpdateLoadout;
+        state.callbacks.onInteractionStateChange = props.onInteractionStateChange;
     }
 
     static resetSessionStats(stats: SectorStats, props: GameCanvasProps): void {
@@ -315,29 +316,20 @@ export class GameSessionLogic {
         const stats = state.sessionStats;
         let isNew = false;
         
-        const idKey = String(id);
-        
         switch (type) {
             case DiscoveryType.ZOMBIE:
                 if (!sets.seenEnemies.has(id)) {
-                    sets.seenEnemies.add(id);
-                    stats.seenEnemies.push(Number(id));
                     isNew = true;
                 }
                 break;
             case DiscoveryType.BOSS:
                 if (!sets.seenBosses.has(id)) {
-                    sets.seenBosses.add(id);
-                    stats.seenBosses.push(Number(id));
                     isNew = true;
                 }
                 break;
             case DiscoveryType.CLUE: {
                 const clueSmi = DataResolver.resolveClueID(id);
                 if (clueSmi !== undefined && !sets.clues.has(clueSmi)) {
-                    sets.clues.add(clueSmi);
-                    const strId = DataResolver.resolveClueId(clueSmi);
-                    stats.cluesFound.push(strId);
                     isNew = true;
                 }
                 break;
@@ -345,9 +337,6 @@ export class GameSessionLogic {
             case DiscoveryType.POI: {
                 const poiSmi = DataResolver.resolvePoiID(id);
                 if (poiSmi !== undefined && !sets.pois.has(poiSmi)) {
-                    sets.pois.add(poiSmi);
-                    const strId = DataResolver.resolvePoiId(poiSmi);
-                    stats.discoveredPOIs.push(strId);
                     isNew = true;
                 }
                 break;
@@ -355,26 +344,20 @@ export class GameSessionLogic {
             case DiscoveryType.COLLECTIBLE: {
                 const colSmi = DataResolver.resolveCollectibleID(id);
                 if (colSmi !== undefined && !sets.collectibles.has(colSmi)) {
-                    sets.collectibles.add(colSmi);
-                    const strId = DataResolver.resolveCollectibleId(colSmi);
-                    stats.collectiblesDiscovered.push(strId);
                     isNew = true;
                 }
                 break;
             }
-            case DiscoveryType.PERK:
+            case DiscoveryType.PERK: {
                 const perkSmi = Number(uiSmi !== undefined ? uiSmi : id);
-                // [VINTERDÖD FIX] Check both session map AND global props map
                 const globalDiscovered = state.stats?.discoveredPerksMap ? state.stats.discoveredPerksMap[perkSmi] === 1 : false;
                 
                 if (stats.discoveredPerksMap && perkSmi < stats.discoveredPerksMap.length && !stats.discoveredPerksMap[perkSmi] && !globalDiscovered) {
-                    stats.discoveredPerksMap[perkSmi] = 1;
-                    if (state.stats?.discoveredPerksMap) state.stats.discoveredPerksMap[perkSmi] = 1; // Immediate global update
                     isNew = true;
-                    // Force SMI ID for the ring buffer
                     uiSmi = perkSmi;
                 }
                 break;
+            }
         }
         
         if (isNew) {
@@ -385,6 +368,51 @@ export class GameSessionLogic {
             // Invoke the higher-level callback if registered (e.g. for persistence/stats)
             if (state.callbacks?.onDiscovery) {
                 state.callbacks.onDiscovery(type, id, titleKey, detailsKey, payload);
+            } else {
+                // FALLBACK: Headless / test context fallback mutation
+                switch (type) {
+                    case DiscoveryType.ZOMBIE:
+                        sets.seenEnemies.add(id);
+                        stats.seenEnemies.push(Number(id));
+                        break;
+                    case DiscoveryType.BOSS:
+                        sets.seenBosses.add(id);
+                        stats.seenBosses.push(Number(id));
+                        break;
+                    case DiscoveryType.CLUE: {
+                        const clueSmi = DataResolver.resolveClueID(id);
+                        if (clueSmi !== undefined) {
+                            sets.clues.add(clueSmi);
+                            const strId = DataResolver.resolveClueId(clueSmi);
+                            stats.cluesFound.push(strId);
+                        }
+                        break;
+                    }
+                    case DiscoveryType.POI: {
+                        const poiSmi = DataResolver.resolvePoiID(id);
+                        if (poiSmi !== undefined) {
+                            sets.pois.add(poiSmi);
+                            const strId = DataResolver.resolvePoiId(poiSmi);
+                            stats.discoveredPOIs.push(strId);
+                        }
+                        break;
+                    }
+                    case DiscoveryType.COLLECTIBLE: {
+                        const colSmi = DataResolver.resolveCollectibleID(id);
+                        if (colSmi !== undefined) {
+                            sets.collectibles.add(colSmi);
+                            const strId = DataResolver.resolveCollectibleId(colSmi);
+                            stats.collectiblesDiscovered.push(strId);
+                        }
+                        break;
+                    }
+                    case DiscoveryType.PERK: {
+                        const perkSmi = Number(uiSmi !== undefined ? uiSmi : id);
+                        stats.discoveredPerksMap[perkSmi] = 1;
+                        if (state.stats?.discoveredPerksMap) state.stats.discoveredPerksMap[perkSmi] = 1;
+                        break;
+                    }
+                }
             }
         }
         

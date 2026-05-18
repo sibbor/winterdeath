@@ -259,10 +259,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             const sets = state.discoverySets;
 
             if (sets && !sets.seenEnemies.has(enemy.type)) {
-                sets.seenEnemies.add(enemy.type);
-
-                if (state.sessionStats) state.sessionStats.seenEnemies.push(enemy.type);
-
                 if (!isBoss && callbacks.onDiscovery) {
                     callbacks.onDiscovery(
                         DiscoveryType.ZOMBIE,
