@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ChunkManager } from './ChunkManager';
 import { QueryResultPool } from './QueryResultPool';
-import { Obstacle } from './CollisionResolution';
+import { Obstacle, ColliderType } from './CollisionResolution';
 import { worldStateRegistry } from './WorldStateRegistry';
 import { Enemy } from '../../entities/enemies/EnemyTypes';
 import { FXSystem } from '../../systems/FXSystem';
@@ -485,7 +485,19 @@ export class WorldStreamer implements System {
     public registerObstacle(obstacle: Obstacle) {
         const x = obstacle.position.x;
         const z = obstacle.position.z;
-        const radius = obstacle.radius || (obstacle.collider?.radius) || 2.0;
+        
+        // Calculate correct bounding radius based on collider type if not pre-defined (VINTERDÖD FIX)
+        if (obstacle.radius === undefined) {
+            const col = obstacle.collider;
+            if (col) {
+                if (col.type === ColliderType.BOX && col.size) {
+                    obstacle.radius = Math.sqrt(col.size.x * col.size.x + col.size.z * col.size.z) * 0.5;
+                } else if (col.radius !== undefined) {
+                    obstacle.radius = col.radius;
+                }
+            }
+        }
+        const radius = obstacle.radius || 2.0;
 
         // --- HYDRATION CHECK (Phase 5) ---
         // If the obstacle has a logicId, check if it was previously mutated (destroyed)

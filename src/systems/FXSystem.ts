@@ -64,7 +64,8 @@ const initTypedArrays = () => {
         FXParticleType.FLASH, FXParticleType.ELECTRIC_FLASH, FXParticleType.SPARK,
         FXParticleType.SPLASH, FXParticleType.BLOOD_SPLATTER, FXParticleType.BLOOD_SPLAT,
         FXParticleType.IMPACT, FXParticleType.ENEMY_EFFECT_STUN, FXParticleType.MUZZLE,
-        FXParticleType.MUZZLE_FLASH, FXParticleType.MUZZLE_SPARK, FXParticleType.MUZZLE_SMOKE
+        FXParticleType.MUZZLE_FLASH, FXParticleType.MUZZLE_SPARK, FXParticleType.MUZZLE_SMOKE,
+        FXParticleType.GORE, FXParticleType.MEAT
     ].forEach(t => ESSENTIAL_FLAGS[t] = 1);
 
     // --- COLORS ---
@@ -103,6 +104,8 @@ const initTypedArrays = () => {
     PARTICLE_TTL[FXParticleType.BLOOD_SPLATTER] = 1.8;
     PARTICLE_TTL[FXParticleType.SPLASH] = 1.0;
     PARTICLE_TTL[FXParticleType.DEBRIS] = 2.0;
+    PARTICLE_TTL[FXParticleType.GORE] = 4.0;
+    PARTICLE_TTL[FXParticleType.MEAT] = 4.0;
     PARTICLE_TTL[FXParticleType.LARGE_FIRE] = 1.6;
     PARTICLE_TTL[FXParticleType.LARGE_SMOKE] = 1.6;
     PARTICLE_TTL[FXParticleType.FLAME] = 1.4;
@@ -853,6 +856,7 @@ export const FXSystem = {
                     mat = MATERIALS.bullet;
                     break;
                 case FXParticleType.GORE:
+                case FXParticleType.MEAT:
                     geo = GEOMETRY.gore;
                     mat = _whiteGoreMaterial as THREE.Material;
                     break;
@@ -861,7 +865,7 @@ export const FXSystem = {
             if (!mat) mat = MATERIALS.bullet;
             const imesh = new THREE.InstancedMesh(geo, mat, MAX_INSTANCES_PER_MESH);
             imesh.frustumCulled = false;
-            if (type === FXParticleType.DEBRIS || type === FXParticleType.GLASS || type === FXParticleType.GORE) {
+            if (type === FXParticleType.DEBRIS || type === FXParticleType.GLASS || type === FXParticleType.GORE || type === FXParticleType.MEAT) {
                 imesh.castShadow = true; imesh.receiveShadow = !(imesh.material as any).isMeshBasicMaterial;
             } else { imesh.castShadow = false; imesh.receiveShadow = false; }
             imesh.renderOrder = 60;

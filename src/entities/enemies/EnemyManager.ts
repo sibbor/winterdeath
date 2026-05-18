@@ -352,7 +352,11 @@ export const EnemyManager = {
                     case EnemyDeathState.DEAD:
                         break;
                     default:
-                        if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !(e.statusFlags & EnemyFlags.EXPLODED)) {
+                        const isDying = deathState !== EnemyDeathState.ALIVE;
+                        if (isDying) {
+                            e.mesh.visible = false;
+                            e.mesh.matrixAutoUpdate = true;
+                        } else if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !(e.statusFlags & EnemyFlags.EXPLODED)) {
                             let isVisible = true;
                             if (cameraPos && cameraDir) {
                                 _v2.subVectors(e.mesh.position, cameraPos);
@@ -972,6 +976,17 @@ export const EnemyManager = {
                     }
 
                     e.deathVel.set(0, 0, 0);
+                }
+
+                // --- PROCEDURAL PHYSICS DEATH FALL (VINTERDÖD STABILIZATION) ---
+                // Rotate the zombie so it actually tips over and drops to the ground
+                const fallProgress = Math.min(1.0, age / 400.0); // Tip over completely in 400ms
+                const targetRotX = e.fallForward ? -Math.PI / 2 : Math.PI / 2;
+                e.mesh.rotation.x = THREE.MathUtils.lerp(0, targetRotX, fallProgress);
+
+                // Spin slowly while falling for extra gritty realism
+                if (age < 400) {
+                    e.mesh.rotation.y += (e.fallForward ? 1 : -1) * 2.0 * delta * (1.0 - fallProgress);
                 }
 
                 e.mesh.quaternion.setFromEuler(e.mesh.rotation);
