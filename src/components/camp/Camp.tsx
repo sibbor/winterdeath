@@ -13,7 +13,7 @@ import { CampWorld } from './CampWorld';
 import { CampEffectsState, CAMP_SCENE } from './CampWorld';
 import { WeatherType } from '../../core/engine/EngineTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
-import { CampEffectsSystem, FamilyAnimationSystem, CampChatterSystem } from './CampSystems';
+import { CampEffectsSystem, CampFamilyAnimationSystem, CampChatterSystem } from './CampSystems';
 import { SystemID } from '../../systems/System';
 
 // Zero-GC Scratchpads
@@ -143,6 +143,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
         setupCounterRef.current++;
         const currentSetupId = setupCounterRef.current;
+        let active = true;
 
         while (container.firstChild) container.removeChild(container.firstChild);
 
@@ -180,7 +181,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             engine.resetTime();
             const { interactables, outlines, envState } = await CampWorld.build(scene, textures, weather);
 
-            if (setupCounterRef.current !== currentSetupId || !container.parentElement) return;
+            if (!active || setupCounterRef.current !== currentSetupId || !container.parentElement) return;
 
             // Register the campfire light into the persistent dynamic lights array.
             // We push into _campCtx.dynamicLights directly (not reassign campState.dynamicLights)
@@ -250,7 +251,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 }
             });
 
-            if (setupCounterRef.current !== currentSetupId) return;
+            if (!active || setupCounterRef.current !== currentSetupId) return;
 
             engine.syncSystemsToScene(scene);
 
@@ -269,7 +270,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             sceneActiveMembersRef.current = activeMembers;
 
             engine.registerSystem(SystemID.CAMP_EFFECT_MANAGER, new CampEffectsSystem());
-            engine.registerSystem(SystemID.FAMILY_ANIMATION, new FamilyAnimationSystem());
+            engine.registerSystem(SystemID.CAMP_FAMILY_ANIMATION, new CampFamilyAnimationSystem());
             engine.registerSystem(SystemID.CAMP_CHATTER, new CampChatterSystem());
 
             // --- VINTERDÖD FIX: Signal ready only AFTER async build is complete ---
@@ -279,7 +280,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         setup();
 
         return () => {
+            active = false;
             if (debugUnsubscribeRef.current) debugUnsubscribeRef.current();
+            const engine = WinterEngine.getInstance();
+            engine.unregisterSystem(SystemID.CAMP_EFFECT_MANAGER);
+            engine.unregisterSystem(SystemID.CAMP_FAMILY_ANIMATION);
+            engine.unregisterSystem(SystemID.CAMP_CHATTER);
         };
 
     }, [rescuedFamilyIndices, textures]);

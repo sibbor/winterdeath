@@ -120,11 +120,11 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
                 if (objectsRef.current) objectsRef.current.textContent = world.objects.toString();
 
                 if (heapRef.current) heapRef.current.textContent = gc.heapUsedMB.toString();
-                if (heapLimitRef.current) heapLimitRef.current.textContent = `/ ${gc.heapLimitMB}MB`;
+                if (heapLimitRef.current) heapLimitRef.current.textContent = `/ ${gc.heapLimitMB} MB`;
 
                 if (gcAlertRef.current) {
                     const recentGC = gc.timeSinceDetection < 2000;
-                    gcAlertRef.current.textContent = recentGC ? `⚠️ ~${gc.droppedMB}MB freed` : '—';
+                    gcAlertRef.current.textContent = recentGC ? `⚠️ ~${gc.droppedMB} MB freed` : '—';
                     gcAlertRef.current.className = recentGC ? 'text-yellow-400 font-bold' : 'text-white/20';
                 }
             }
@@ -195,7 +195,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
             systemElements.push(
                 <div key={sys.systemId} onClick={(e) => { e.stopPropagation(); engine?.setSystemEnabled(sys.systemId as SystemID, !sys.enabled); forceUpdate(); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled !== false ? 'text-green-400' : 'text-red-400/60'}`}>
                     <span className="truncate mr-2">{SystemID[sys.systemId] || `SYS_${sys.systemId}`}</span>
-                    <span className="text-white/40">{timing !== undefined ? `${timing}ms` : '–'}</span>
+                    <span className="text-white/40">{timing !== undefined ? `${timing} ms` : '–'}</span>
                 </div>
             );
         }

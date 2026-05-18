@@ -441,7 +441,7 @@ export class GameSessionSetup {
                 }
 
                 if (!seen && callbacks.onDiscovery) {
-                    callbacks.onDiscovery(DiscoveryType.BOSS as any, bossId as any, 'ui.boss_encountered', DataResolver.getBossName(bossId));
+                    callbacks.onDiscovery(DiscoveryType.BOSS as any, bossId as any, 'ui.discovered_boss', DataResolver.getBossName(bossId));
                 }
             }
             return boss;

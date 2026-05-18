@@ -10,7 +10,7 @@ import { DataResolver } from '../../../../core/data/DataResolver';
 import { SectorID } from '../../../../game/session/SectorTypes';
 import { GAME_CHALLENGES, ChallengeCategory, ChallengeDef } from '../../../../content/ChallengeTypes';
 import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputManager';
-import { ColorPair, COLORS, adjustColor } from '../../../../utils/ui/ColorUtils';
+import { ColorPair, COLORS } from '../../../../utils/ui/ColorUtils';
 import { StatsBridge } from '../../../../core/data/StatsBridge';
 import { FormatUtils } from '../../../../utils/ui/FormatUtils';
 

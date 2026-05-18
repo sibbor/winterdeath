@@ -538,36 +538,42 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             case DiscoveryType.COLLECTIBLE: {
-                titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.COLLECTIBLE);
-                detailsKey = detailsKey || payload?.detailsKey || DataResolver.getCollectibleName(id);
+                const colSmi = DataResolver.resolveCollectibleID(id);
+                if (colSmi !== undefined) {
+                    const strId = DataResolver.resolveCollectibleId(colSmi);
+                    titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.COLLECTIBLE);
+                    detailsKey = detailsKey || payload?.detailsKey || DataResolver.getCollectibleName(strId);
 
-                if (!sets.collectibles.has(id)) {
-                    sets.collectibles.add(id);
-                    const strId = DataResolver.resolveCollectibleId(id);
-                    if (!stats.collectiblesDiscovered.includes(strId)) {
-                        stats.collectiblesDiscovered.push(strId);
-                        isNew = true;
+                    if (!sets.collectibles.has(colSmi)) {
+                        sets.collectibles.add(colSmi);
+                        if (!stats.collectiblesDiscovered.includes(strId)) {
+                            stats.collectiblesDiscovered.push(strId);
+                            isNew = true;
+                        }
+                        state.sessionCollectiblesDiscovered.push(strId);
                     }
-                    state.sessionCollectiblesDiscovered.push(id);
-                }
 
-                if (currentProps.onCollectibleDiscovered) currentProps.onCollectibleDiscovered(id);
+                    if (currentProps.onCollectibleDiscovered) currentProps.onCollectibleDiscovered(strId);
+                }
                 break;
             }
 
             case DiscoveryType.POI: {
-                titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.POI);
-                detailsKey = payload?.detailsKey || DataResolver.getPoiName(id);
-                if (!sets.pois.has(id)) {
-                    sets.pois.add(id);
+                const poiSmi = DataResolver.resolvePoiID(id);
+                if (poiSmi !== undefined) {
+                    const strId = DataResolver.resolvePoiId(poiSmi);
+                    titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.POI);
+                    detailsKey = payload?.detailsKey || DataResolver.getPoiName(strId);
+                    if (!sets.pois.has(poiSmi)) {
+                        sets.pois.add(poiSmi);
 
-                    const strId = DataResolver.resolvePoiId(id);
-                    if (!stats.discoveredPOIs.includes(strId)) {
-                        stats.discoveredPOIs.push(strId);
-                        isNew = true;
+                        if (!stats.discoveredPOIs.includes(strId)) {
+                            stats.discoveredPOIs.push(strId);
+                            isNew = true;
+                        }
+
+                        if (currentProps.onPOIdiscovered) currentProps.onPOIdiscovered(payload || strId);
                     }
-
-                    if (currentProps.onPOIdiscovered) currentProps.onPOIdiscovered(payload || id);
                 }
                 break;
             }
@@ -590,28 +596,43 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             case DiscoveryType.CLUE:
             default: {
-                titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.CLUE);
-                detailsKey = detailsKey || 'ui.clue_found';
-                if (!sets.clues.has(id)) {
-                    sets.clues.add(id);
-                    const cluePayload = payload || { id, content: detailsKey };
+                const clueSmi = DataResolver.resolveClueID(id);
+                if (clueSmi !== undefined) {
+                    const strId = DataResolver.resolveClueId(clueSmi);
+                    titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.CLUE);
+                    detailsKey = detailsKey || 'ui.clue_found';
+                    if (!sets.clues.has(clueSmi)) {
+                        sets.clues.add(clueSmi);
+                        const cluePayload = payload || { id: strId, content: detailsKey };
 
-                    const strId = DataResolver.resolveClueId(id);
-                    if (!stats.cluesFound.includes(strId)) {
-                        stats.cluesFound.push(strId);
-                        isNew = true;
+                        if (!stats.cluesFound.includes(strId)) {
+                            stats.cluesFound.push(strId);
+                            isNew = true;
+                        }
+
+                        if (currentProps.onClueDiscovered) currentProps.onClueDiscovered(cluePayload);
                     }
-
-                    if (currentProps.onClueDiscovered) currentProps.onClueDiscovered(cluePayload);
                 }
                 break;
             }
         }
 
-        if (isNew && currentProps.settings?.showDiscoveryPopups !== false) {
-            audioEngine.playSound(SoundID.PASSIVE_GAINED);
-            if (!fromBridge && typeof id === 'number') {
-                UIEventRingBuffer.push(UIEventType.DISCOVERY, id, type);
+        if (isNew) {
+            // Immediately patch HudStore with the updated count to prevent stale display in the popup
+            const hudState = HudStore.getState();
+            if (type === DiscoveryType.CLUE) {
+                HudStore.patch({ cluesFoundCount: hudState.cluesFoundCount + 1 });
+            } else if (type === DiscoveryType.POI) {
+                HudStore.patch({ poisFoundCount: hudState.poisFoundCount + 1 });
+            } else if (type === DiscoveryType.COLLECTIBLE) {
+                HudStore.patch({ collectiblesFoundCount: hudState.collectiblesFoundCount + 1 });
+            }
+
+            if (currentProps.settings?.showDiscoveryPopups !== false) {
+                audioEngine.playSound(SoundID.PASSIVE_GAINED);
+                if (!fromBridge && typeof id === 'number') {
+                    UIEventRingBuffer.push(UIEventType.DISCOVERY, id, type);
+                }
             }
         }
     }, [refs, t]);

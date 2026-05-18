@@ -499,7 +499,7 @@ export const DataResolver = {
       const index = resolved & 0xFF;
       return `pois.${sector}.${index}.title`;
     }
-    return 'ui.poi';
+    return '';
   },
 
   getPoiDescription(id: string | number | PoiID): string {
@@ -511,7 +511,7 @@ export const DataResolver = {
       const index = resolved & 0xFF;
       return `pois.${sector}.${index}.description`;
     }
-    return 'ui.description_missing';
+    return '';
   },
 
   getPoiReaction(id: string | number | PoiID): string {
@@ -535,7 +535,7 @@ export const DataResolver = {
       const index = resolved & 0xFF;
       return `collectibles.${sector}.${index}.title`;
     }
-    return `collectibles.${id}.title`;
+    return '';
   },
 
   getCollectibleDescription(id: string | number | CollectibleID): string {
@@ -547,7 +547,7 @@ export const DataResolver = {
       const index = resolved & 0xFF;
       return `collectibles.${sector}.${index}.description`;
     }
-    return `collectibles.${id}.description`;
+    return '';
   },
 
   getClueReaction(id: string | number | ClueID): string {
@@ -559,19 +559,7 @@ export const DataResolver = {
       const index = resolved & 0xFF;
       return `clues.${sector}.${index}.reaction`;
     }
-    return `clues.${id}.reaction`;
-  },
-
-  getClueDescription(id: string | number | ClueID): string {
-    const resolved = resolveClueID(id);
-    if (resolved !== undefined) {
-      const clue = CLUES[resolved];
-      if (clue) return `clues.${clue.sector}.${clue.index}.description`;
-      const sector = (resolved >> 8) & 0xFF;
-      const index = resolved & 0xFF;
-      return `clues.${sector}.${index}.description`;
-    }
-    return `clues.${id}.description`;
+    return '';
   },
 
   getDiscoveryTitle(type: DiscoveryType): string {
@@ -580,8 +568,8 @@ export const DataResolver = {
       case DiscoveryType.POI: return 'ui.discovered_poi';
       case DiscoveryType.COLLECTIBLE: return 'ui.discovered_collectible';
       case DiscoveryType.ZOMBIE: return 'ui.discovered_enemy';
-      case DiscoveryType.BOSS: return 'ui.boss_encountered';
-      case DiscoveryType.PERK: return 'ui.skill_point';
+      case DiscoveryType.BOSS: return 'ui.discovered_boss';
+      case DiscoveryType.PERK: return 'ui.discovered_perk';
       default: return 'ui.discovery';
     }
   },

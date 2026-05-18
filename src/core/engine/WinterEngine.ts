@@ -585,7 +585,11 @@ export class WinterEngine {
      */
     private animate = () => {
         if (!this.isRunning) return;
-        this.requestID = requestAnimationFrame(this.animate);
+        try {
+            this.requestID = requestAnimationFrame(this.animate);
+        } catch (e) {
+            //console.error(e);
+        }
 
         // Vinterdöd Hardening: Manual reset of renderer stats for multi-pass accuracy
         this.renderer.info.reset();
@@ -790,7 +794,7 @@ export class WinterEngine {
         const result: { systemId: SystemID; enabled: boolean; persistent: boolean }[] = [];
         for (let i = 0; i < SystemID.COUNT; i++) {
             const sys = this._systems[i];
-            if (sys) {
+            if (sys && sys.systemId !== SystemID.PERFORMANCE_MONITOR && typeof sys.update === 'function') {
                 result.push({ systemId: sys.systemId, enabled: sys.enabled, persistent: sys.persistent });
             }
         }

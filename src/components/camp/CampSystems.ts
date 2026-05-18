@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { System, SystemID } from '../../systems/System';
 import { CampWorld } from './CampWorld';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
-import { UiSounds, VoiceSounds } from '../../utils/audio/AudioLib';
+import { VoiceSounds } from '../../utils/audio/AudioLib';
 import { DataResolver } from '../../core/data/DataResolver';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { SoundID } from '../../utils/audio/AudioTypes';
@@ -26,8 +26,8 @@ export class CampEffectsSystem implements System {
 /**
  * Handles Family Member animations and highlights
  */
-export class FamilyAnimationSystem implements System {
-    readonly systemId = SystemID.FAMILY_ANIMATION;
+export class CampFamilyAnimationSystem implements System {
+    readonly systemId = SystemID.CAMP_FAMILY_ANIMATION;
     id = 'family_anim';
     enabled = true;
 

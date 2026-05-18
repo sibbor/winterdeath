@@ -484,16 +484,16 @@ export class TriggerSystem implements System {
             case TriggerType.POI: {
                 const poi = DataResolver.getPois()[m.id as any];
                 const poiSmi = poi ? poi.id : 0;
-                if (session.handleDiscovery(DiscoveryType.POI, m.id, poiSmi)) {
-                    const duration = CHAT_BUBBLE_DURATIONS[ChatBubbleSubtype.SPEAK];
-                    const encodedP2 = duration | (ChatBubbleSubtype.SPEAK << 16);
-                    UIEventRingBuffer.push(
-                        UIEventType.CHAT_BUBBLE,
-                        poiSmi,
-                        encodedP2,
-                        simTime
-                    );
-                }
+                session.handleDiscovery(DiscoveryType.POI, m.id, poiSmi);
+
+                const duration = CHAT_BUBBLE_DURATIONS[ChatBubbleSubtype.SPEAK];
+                const encodedP2 = duration | (ChatBubbleSubtype.SPEAK << 16);
+                UIEventRingBuffer.push(
+                    UIEventType.CHAT_BUBBLE,
+                    poiSmi,
+                    encodedP2,
+                    simTime
+                );
                 break;
             }
 

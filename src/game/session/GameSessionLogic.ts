@@ -20,6 +20,7 @@ import { FXParticleType } from '../../types/FXTypes';
 import { clearEffects } from '../../systems/EffectManager';
 import { TriggerSystem } from '../../systems/TriggerSystem';
 import { MAX_ENTITIES } from '../../content/constants';
+import { DataResolver } from '../../core/data/DataResolver';
 
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
@@ -53,13 +54,22 @@ export class GameSessionLogic {
 
         // Update Discovery Sets (Zero-GC: reuse Sets)
         state.discoverySets.clues.clear();
-        (props.stats.cluesFound || []).forEach((c: any) => state.discoverySets.clues.add(typeof c === 'string' ? c : (c.id || '')));
+        (props.stats.cluesFound || []).forEach((c: any) => {
+            const resolved = DataResolver.resolveClueID(c);
+            if (resolved !== undefined) state.discoverySets.clues.add(resolved);
+        });
 
         state.discoverySets.pois.clear();
-        (props.stats.discoveredPOIs || []).forEach((p: any) => state.discoverySets.pois.add(typeof p === 'string' ? p : (p.id || '')));
+        (props.stats.discoveredPOIs || []).forEach((p: any) => {
+            const resolved = DataResolver.resolvePoiID(p);
+            if (resolved !== undefined) state.discoverySets.pois.add(resolved);
+        });
 
         state.discoverySets.collectibles.clear();
-        (props.stats.collectiblesDiscovered || []).forEach((c: any) => state.discoverySets.collectibles.add(typeof c === 'string' ? c : (c.id || '')));
+        (props.stats.collectiblesDiscovered || []).forEach((c: any) => {
+            const resolved = DataResolver.resolveCollectibleID(c);
+            if (resolved !== undefined) state.discoverySets.collectibles.add(resolved);
+        });
 
         state.discoverySets.seenEnemies.clear();
         (props.stats.seenEnemies || []).forEach(e => state.discoverySets.seenEnemies.add(e));
@@ -322,27 +332,36 @@ export class GameSessionLogic {
                     isNew = true;
                 }
                 break;
-            case DiscoveryType.CLUE:
-                if (!sets.clues.has(idKey)) {
-                    sets.clues.add(idKey);
-                    stats.cluesFound.push(idKey);
+            case DiscoveryType.CLUE: {
+                const clueSmi = DataResolver.resolveClueID(id);
+                if (clueSmi !== undefined && !sets.clues.has(clueSmi)) {
+                    sets.clues.add(clueSmi);
+                    const strId = DataResolver.resolveClueId(clueSmi);
+                    stats.cluesFound.push(strId);
                     isNew = true;
                 }
                 break;
-            case DiscoveryType.POI:
-                if (!sets.pois.has(idKey)) {
-                    sets.pois.add(idKey);
-                    stats.discoveredPOIs.push(idKey);
+            }
+            case DiscoveryType.POI: {
+                const poiSmi = DataResolver.resolvePoiID(id);
+                if (poiSmi !== undefined && !sets.pois.has(poiSmi)) {
+                    sets.pois.add(poiSmi);
+                    const strId = DataResolver.resolvePoiId(poiSmi);
+                    stats.discoveredPOIs.push(strId);
                     isNew = true;
                 }
                 break;
-            case DiscoveryType.COLLECTIBLE:
-                if (!sets.collectibles.has(idKey)) {
-                    sets.collectibles.add(idKey);
-                    stats.collectiblesDiscovered.push(idKey);
+            }
+            case DiscoveryType.COLLECTIBLE: {
+                const colSmi = DataResolver.resolveCollectibleID(id);
+                if (colSmi !== undefined && !sets.collectibles.has(colSmi)) {
+                    sets.collectibles.add(colSmi);
+                    const strId = DataResolver.resolveCollectibleId(colSmi);
+                    stats.collectiblesDiscovered.push(strId);
                     isNew = true;
                 }
                 break;
+            }
             case DiscoveryType.PERK:
                 const perkSmi = Number(uiSmi !== undefined ? uiSmi : id);
                 // [VINTERDÖD FIX] Check both session map AND global props map

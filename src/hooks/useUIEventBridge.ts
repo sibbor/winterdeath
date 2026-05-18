@@ -76,7 +76,7 @@ const pump = () => {
                     break;
                 case DiscoveryType.CLUE:
                     title = t(DataResolver.getDiscoveryTitle(discoveryType));
-                    details = t(DataResolver.getClueDescription(resolvedId));
+                    details = t(DataResolver.getClueReaction(resolvedId));
                     break;
                 case DiscoveryType.COLLECTIBLE:
                     title = t(DataResolver.getDiscoveryTitle(discoveryType));

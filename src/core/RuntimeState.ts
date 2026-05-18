@@ -192,9 +192,9 @@ export interface RuntimeState {
     // --- TELEMETRY & PROGRESSION ---
     sessionStats: SectorStats;
     discoverySets: {
-        clues: Set<string>;
-        pois: Set<string>;
-        collectibles: Set<string>;
+        clues: Set<number>;
+        pois: Set<number>;
+        collectibles: Set<number>;
         seenEnemies: Set<number>;
         seenBosses: Set<number>;
     };
