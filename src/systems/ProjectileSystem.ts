@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ColliderType } from '../core/world/CollisionResolution';
 import { ProjectilePoolState, MAX_PROJECTILES } from '../core/state/ProjectilePool';
 import { DamageID, DamageType, WeaponID } from '../entities/player/CombatTypes';
 import { PlayerStatID } from '../entities/player/PlayerTypes';
@@ -22,6 +23,9 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
+const _v5Local = new THREE.Vector3();
+const _m1 = new THREE.Matrix4();
+const _q1 = new THREE.Quaternion();
 
 /**
  * Projectile System
@@ -97,16 +101,64 @@ export class ProjectileSystem implements System {
 
                 for (let o = 0; o < obsCount; o++) {
                     const obs = obstacles[o];
+                    if (obs.isMutated) continue;
+
                     _v3.set(obs.position.x, 0, obs.position.z);
                     _v4.subVectors(_v3, _v1);
                     const t = Math.max(0, Math.min(1, _v4.dot(_v2) / _v2.lengthSq()));
                     _v5.copy(_v1).addScaledVector(_v2, t);
 
-                    const rad = obs.radius || 1.0;
-                    if (_v5.distanceToSquared(_v3) < rad * rad) {
+                    let hit = false;
+                    const col = obs.collider;
+
+                    if (col && col.type === ColliderType.BOX && col.size) {
+                        // --- ORIENTED BOUNDING BOX COLLISION (Zero-GC O(1)) ---
+                        if (obs.mesh) {
+                            _m1.copy(obs.mesh.matrixWorld).invert();
+                            _v5Local.copy(_v5).applyMatrix4(_m1);
+                        } else {
+                            _v5Local.subVectors(_v5, obs.position);
+                            if (obs.quaternion) {
+                                _q1.copy(obs.quaternion).conjugate();
+                                _v5Local.applyQuaternion(_q1);
+                            }
+                            if (obs.scale) {
+                                if (obs.scale.x !== 0) _v5Local.x *= (1.0 / obs.scale.x);
+                                if (obs.scale.y !== 0) _v5Local.y *= (1.0 / obs.scale.y);
+                                if (obs.scale.z !== 0) _v5Local.z *= (1.0 / obs.scale.z);
+                            }
+                        }
+
+                        if (col.center) {
+                            _v5Local.sub(col.center);
+                        }
+
+                        const hX = col.size.x * 0.5;
+                        const hY = col.size.y * 0.5;
+                        const hZ = col.size.z * 0.5;
+
+                        if (_v5Local.x >= -hX && _v5Local.x <= hX &&
+                            _v5Local.y >= -hY && _v5Local.y <= hY &&
+                            _v5Local.z >= -hZ && _v5Local.z <= hZ) {
+                            hit = true;
+                        }
+                    } else {
+                        // --- SPHERE COLLISION ---
+                        const rad = obs.radius || 1.0;
+                        if (_v5.distanceToSquared(_v3) < rad * rad) {
+                            hit = true;
+                        }
+                    }
+
+                    if (hit) {
                         despawn = true;
-                        GamePlaySounds.playImpact(obs.materialId || MaterialType.GENERIC);
-                        session.makeNoise(_v5, NoiseType.BULLET_HIT, NOISE_RADIUS[NoiseType.BULLET_HIT]);
+                        if (pool.type[i] === 1) {
+                            // Throwable hit obstacle: explode immediately
+                            this.triggerExplosion(i, false);
+                        } else {
+                            GamePlaySounds.playImpact(obs.materialId || MaterialType.GENERIC);
+                            session.makeNoise(_v5, NoiseType.BULLET_HIT, NOISE_RADIUS[NoiseType.BULLET_HIT]);
+                        }
                         break;
                     }
                 }

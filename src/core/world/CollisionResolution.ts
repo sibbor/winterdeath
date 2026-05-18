@@ -66,7 +66,7 @@ export const applyCollisionResolution = (
     height: number = 2.0,
     centerOffset: number = 0
 ): boolean => {
-    if (!obstacle) return false;
+    if (!obstacle || obstacle.isMutated) return false;
 
     // 0. High-Speed Broad-phase Check (IMMEDIATE)
     // Perform scalar-only calculation before any object property access or matrix math.
