@@ -54,15 +54,8 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
     if (!visible || !activeDiscovery) return;
     UiSounds.playDiscovery();
 
-    const isPerkVal = activeDiscovery.type === DiscoveryType.PERK;
-    if (isPerkVal) {
-      window.dispatchEvent(new CustomEvent('open-statistics', {
-        detail: { tab: 'perks', itemId: activeDiscovery.id }
-      }));
-    } else {
-      const tab = DataResolver.getAdventureLogTab(activeDiscovery.type);
-      onOpenAdventureLog(tab, activeDiscovery.id);
-    }
+    const tab = DataResolver.getAdventureLogTab(activeDiscovery.type);
+    onOpenAdventureLog(tab, activeDiscovery.id);
     const closeDiscovery = () => {
       setVisible(false);
       const state = HudStore.getState();

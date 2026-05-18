@@ -13,6 +13,7 @@ import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputManager
 import { ColorPair, COLORS } from '../../../../utils/ui/ColorUtils';
 import { StatsBridge } from '../../../../core/data/StatsBridge';
 import { FormatUtils } from '../../../../utils/ui/FormatUtils';
+import { PerkCategory } from '../../../../content/perks';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
@@ -28,6 +29,7 @@ interface ScreenAdventureLogProps {
 // --- ZERO-GC STATIC ARRAYS & CONFIGS (PRESERVES REACT.MEMO STABILITY) ---
 const TABS: { id: DiscoveryType, label: string }[] = [
     { id: DiscoveryType.CHALLENGE, label: 'challenges.title' },
+    { id: DiscoveryType.PERK, label: 'ui.perks' },
     { id: DiscoveryType.CLUE, label: 'ui.log_clues' },
     { id: DiscoveryType.COLLECTIBLE, label: 'ui.log_collectibles' },
     { id: DiscoveryType.POI, label: 'ui.log_poi' },
@@ -163,6 +165,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 {/* Content Area - DYNAMIC MOUNTING */}
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar relative">
                     {activeTab === DiscoveryType.CHALLENGE && <ChallengesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={showAllData} onToggleTracking={onToggleChallengeTracking} />}
+                    {activeTab === DiscoveryType.PERK && <PerksTab stats={stats} effectiveLandscape={effectiveLandscape} isDebug={showAllData} />}
                     {activeTab === DiscoveryType.ZOMBIE && <ZombiesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={showAllData} />}
                     {activeTab === DiscoveryType.BOSS && <BossesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={showAllData} />}
                     {activeTab === DiscoveryType.COLLECTIBLE && <CollectiblesTab stats={stats} isMobileDevice={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={showAllData} />}
@@ -866,6 +869,134 @@ const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effective
                     </div>
                 );
             })}
+        </div>
+    );
+});
+
+const PerkItem: React.FC<{ perk: any, stats: PlayerStats, isSeen: boolean }> = React.memo(({ perk, stats, isSeen }) => {
+    const activations = StatsBridge.getPerkTimesGained(stats, perk.id);
+    const categoryLabel = perk.category === PerkCategory.PASSIVE ? 'ui.passive' : (perk.category === PerkCategory.BUFF ? 'ui.buff' : 'ui.debuff');
+    const color = perk.category === PerkCategory.PASSIVE ? COLORS.BLUE : (perk.category === PerkCategory.BUFF ? COLORS.GREEN : COLORS.RED);
+
+    return (
+        <TacticalCard key={perk.id} id={`log-item-${perk.id}`} isLocked={!isSeen} color={color} showHatching={isSeen} showHover={true}>
+            <div className="flex flex-col relative z-10">
+                <div className="flex justify-between items-start mb-4 border-b border-zinc-800 pb-2">
+                    <div className="flex flex-col">
+                        <span className="text-lg font-black uppercase tracking-widest mb-1" style={{ color: isSeen ? color.str : COLORS.GRAY.str }}>
+                            {isSeen ? t(perk.displayName) : '???'}
+                        </span>
+                        <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">
+                            {t(categoryLabel)}
+                        </span>
+                    </div>
+                    {isSeen && (
+                        <div className="flex flex-col items-end">
+                            <span className="text-lg font-mono text-white">{activations}</span>
+                            <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{t('ui.activations')}</span>
+                        </div>
+                    )}
+                </div>
+                <p className="text-sm text-zinc-400 mb-3 text-white">
+                    {isSeen ? t(perk.description) : '???'}
+                </p>
+                {isSeen && perk.prerequisite && (
+                    <p className="text-sm text-zinc-400 italic mb-3">"{t(perk.prerequisite)}"</p>
+                )}
+                {isSeen && (StatsBridge.getPerkDamageAbsorbed(stats, perk.id) > 0 || StatsBridge.getPerkDamageDealt(stats, perk.id) > 0 || StatsBridge.getPerkDebuffsCleansed(stats, perk.id) > 0) && (
+                    <div className="grid grid-cols-3 gap-4 border-t border-zinc-800 pt-4">
+                        {StatsBridge.getPerkDamageAbsorbed(stats, perk.id) > 0 && (
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-blue-500/70 uppercase tracking-wider">{t('ui.damage_absorbed')}</span>
+                                <span className="text-sm font-mono text-blue-400">{Math.floor(StatsBridge.getPerkDamageAbsorbed(stats, perk.id)).toLocaleString()}</span>
+                            </div>
+                        )}
+                        {StatsBridge.getPerkDamageDealt(stats, perk.id) > 0 && (
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-red-500/70 uppercase tracking-wider">{t('ui.damage_dealt')}</span>
+                                <span className="text-sm font-mono text-red-400">{Math.floor(StatsBridge.getPerkDamageDealt(stats, perk.id)).toLocaleString()}</span>
+                            </div>
+                        )}
+                        {StatsBridge.getPerkDebuffsCleansed(stats, perk.id) > 0 && (
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-green-500/70 uppercase tracking-wider">{t('ui.debuffs_cleansed')}</span>
+                                <span className="text-sm font-mono text-green-400">{StatsBridge.getPerkDebuffsCleansed(stats, perk.id)}</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </TacticalCard>
+    );
+});
+
+const PerksTab: React.FC<{ stats: PlayerStats, effectiveLandscape: boolean, isDebug?: boolean }> = React.memo(({ stats, effectiveLandscape, isDebug }) => {
+    const discovered = useMemo(() => StatsBridge.getPerkDiscoveredMap(stats), [stats]);
+    const gained = useMemo(() => StatsBridge.getPerkTimesGainedMap(stats), [stats]);
+
+    const getDiscoveredPerks = useCallback((category: PerkCategory) => {
+        const list = DataResolver.getPerksByCategory(category);
+        return list.filter(p => {
+            if (!p) return false;
+            const isDiscovered = (discovered && discovered[p.id] > 0) ||
+                (gained && gained[p.id] > 0) ||
+                (StatsBridge.getPerkDamageDealt(stats, p.id) > 0) ||
+                (StatsBridge.getPerkDamageAbsorbed(stats, p.id) > 0);
+            return isDebug || isDiscovered;
+        });
+    }, [stats, discovered, gained, isDebug]);
+
+    const passives = useMemo(() => getDiscoveredPerks(PerkCategory.PASSIVE), [getDiscoveredPerks]);
+    const buffs = useMemo(() => getDiscoveredPerks(PerkCategory.BUFF), [getDiscoveredPerks]);
+    const debuffs = useMemo(() => getDiscoveredPerks(PerkCategory.DEBUFF), [getDiscoveredPerks]);
+
+    const hasData = passives.length > 0 || buffs.length > 0 || debuffs.length > 0;
+
+    if (!hasData) {
+        return <NoDataMessage message={t('ui.continue_to_play_perks')} />;
+    }
+
+    const checkSeen = (perk: any) => {
+        return (discovered && discovered[perk.id] > 0) ||
+            (gained && gained[perk.id] > 0) ||
+            (StatsBridge.getPerkDamageDealt(stats, perk.id) > 0) ||
+            (StatsBridge.getPerkDamageAbsorbed(stats, perk.id) > 0);
+    };
+
+    return (
+        <div className="space-y-12 pb-12 h-full overflow-y-auto pr-2 custom-scrollbar">
+            <div className="space-y-12">
+                {passives.length > 0 && (
+                    <div className="space-y-6">
+                        <div className="border-b-2 border-zinc-800 pb-2">
+                            <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.passives')}</h3>
+                        </div>
+                        <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
+                            {passives.map(perk => <PerkItem key={perk.id} perk={perk} stats={stats} isSeen={isDebug || checkSeen(perk)} />)}
+                        </div>
+                    </div>
+                )}
+                {buffs.length > 0 && (
+                    <div className="space-y-6">
+                        <div className="border-b-2 border-zinc-800 pb-2">
+                            <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.buffs')}</h3>
+                        </div>
+                        <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
+                            {buffs.map(perk => <PerkItem key={perk.id} perk={perk} stats={stats} isSeen={isDebug || checkSeen(perk)} />)}
+                        </div>
+                    </div>
+                )}
+                {debuffs.length > 0 && (
+                    <div className="space-y-6">
+                        <div className="border-b-2 border-zinc-800 pb-2">
+                            <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.debuffs')}</h3>
+                        </div>
+                        <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
+                            {debuffs.map(perk => <PerkItem key={perk.id} perk={perk} stats={stats} isSeen={isDebug || checkSeen(perk)} />)}
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 });

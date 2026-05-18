@@ -863,39 +863,6 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
                     </div>
                 </div>
             </div>
-
-            <div className="space-y-12">
-                {passives.length > 0 && (
-                    <div className="space-y-6">
-                        <div className="border-b-2 border-zinc-800 pb-2">
-                            <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.passives')}</h3>
-                        </div>
-                        <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                            {passives.map(perk => <PerkItem key={perk.id} perk={perk} stats={stats} t={t} />)}
-                        </div>
-                    </div>
-                )}
-                {buffs.length > 0 && (
-                    <div className="space-y-6">
-                        <div className="border-b-2 border-zinc-800 pb-2">
-                            <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.buffs')}</h3>
-                        </div>
-                        <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                            {buffs.map(perk => <PerkItem key={perk.id} perk={perk} stats={stats} t={t} />)}
-                        </div>
-                    </div>
-                )}
-                {debuffs.length > 0 && (
-                    <div className="space-y-6">
-                        <div className="border-b-2 border-zinc-800 pb-2">
-                            <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.debuffs')}</h3>
-                        </div>
-                        <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                            {debuffs.map(perk => <PerkItem key={perk.id} perk={perk} stats={stats} t={t} />)}
-                        </div>
-                    </div>
-                )}
-            </div>
         </div>
     );
 });

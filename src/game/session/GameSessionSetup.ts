@@ -49,6 +49,9 @@ import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { ChallengeSystem } from '../../systems/ChallengeSystem';
 import { HudSystem } from '../../systems/HudSystem';
 import { RuntimeState } from '../../core/RuntimeState';
+import { CLUES } from '../../content/clues';
+import { POIS } from '../../content/pois';
+import { COLLECTIBLES } from '../../content/collectibles';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { PerkFX } from '../../systems/PerkFX';
 import { PerkSystem } from '../../systems/PerkSystem';
@@ -589,6 +592,52 @@ export class GameSessionSetup {
                     if (awardsSp && !alreadyFound && !isRespawnable) {
                         // Update live DOD buffer and telemetry via unified callback
                         callbacks.gainSp(1);
+
+                        // Authoritative Sector-Specific Recalculation (Immune to double-registration!)
+                        const currentSector = sectorCtx.sectorId;
+                        
+                        if (type === DiscoveryType.CLUE) {
+                            let cCount = 0;
+                            if (state.discoverySets?.clues) {
+                                for (const cid of state.discoverySets.clues) {
+                                    const resolved = DataResolver.resolveClueID(cid);
+                                    if (resolved !== undefined && CLUES[resolved]?.sector === currentSector) cCount++;
+                                }
+                            }
+                            const thisClueSmi = DataResolver.resolveClueID(id);
+                            if (thisClueSmi !== undefined && (!state.discoverySets?.clues || !state.discoverySets.clues.has(thisClueSmi))) {
+                                if (CLUES[thisClueSmi]?.sector === currentSector) cCount++;
+                            }
+                            HudStore.patch({ cluesFoundCount: cCount });
+                            
+                        } else if (type === DiscoveryType.POI) {
+                            let poiCount = 0;
+                            if (state.discoverySets?.pois) {
+                                for (const pid of state.discoverySets.pois) {
+                                    const resolved = DataResolver.resolvePoiID(pid);
+                                    if (resolved !== undefined && POIS[resolved]?.sector === currentSector) poiCount++;
+                                }
+                            }
+                            const thisPoiSmi = DataResolver.resolvePoiID(id);
+                            if (thisPoiSmi !== undefined && (!state.discoverySets?.pois || !state.discoverySets.pois.has(thisPoiSmi))) {
+                                if (POIS[thisPoiSmi]?.sector === currentSector) poiCount++;
+                            }
+                            HudStore.patch({ poisFoundCount: poiCount });
+                            
+                        } else if (type === DiscoveryType.COLLECTIBLE) {
+                            let colCount = 0;
+                            if (state.discoverySets?.collectibles) {
+                                for (const colid of state.discoverySets.collectibles) {
+                                    const resolved = DataResolver.resolveCollectibleID(colid);
+                                    if (resolved !== undefined && COLLECTIBLES[resolved]?.sector === currentSector) colCount++;
+                                }
+                            }
+                            const thisColSmi = DataResolver.resolveCollectibleID(id);
+                            if (thisColSmi !== undefined && (!state.discoverySets?.collectibles || !state.discoverySets.collectibles.has(thisColSmi))) {
+                                if (COLLECTIBLES[thisColSmi]?.sector === currentSector) colCount++;
+                            }
+                            HudStore.patch({ collectiblesFoundCount: colCount });
+                        }
                     }
 
                     if (callbacks.onDiscovery) {
