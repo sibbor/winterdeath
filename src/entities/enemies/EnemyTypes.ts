@@ -153,6 +153,7 @@ export interface Enemy {
     mesh: THREE.Group;
     indicatorRing: THREE.Mesh | null;
     ashPile: THREE.Object3D | null;
+    bodyMesh: THREE.Object3D | null;
 
     // Identity & Stats
     type: EnemyType;

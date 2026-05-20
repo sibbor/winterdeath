@@ -14,7 +14,7 @@ const LOGIC_CELLS_PER_CHUNK = 25;
 const LOGIC_CELL_SIZE = 10;
 const BUCKET_CAPACITY = 16;
 const QUERY_BUDGET_PER_FRAME = 30000;
-const CHUNK_POOL_SIZE = 64;
+const CHUNK_POOL_SIZE = 256;
 const QUERY_POOL_CAPACITY = 32; // handle deep nesting during init
 
 // Ground resolution 1m = 256x256 (overscan for 250m to avoid edge artifacts)
@@ -153,10 +153,14 @@ export class WorldStreamer implements System {
      */
     public clear() {
         // Safe pool restoration: do not recreate the array, just reset the pointer
-        for (const grid of this.chunks.values()) {
-            grid.clear();
-            if (this._poolPtr < CHUNK_POOL_SIZE) {
-                this._chunkPool[this._poolPtr++] = grid;
+        for (let i = 0; i < this._activeChunkCount; i++) {
+            const key = this._activeChunkKeys[i];
+            const grid = this.chunks.get(key);
+            if (grid) {
+                grid.clear();
+                if (this._poolPtr < CHUNK_POOL_SIZE) {
+                    this._chunkPool[this._poolPtr++] = grid;
+                }
             }
         }
         this.chunks.clear();
@@ -170,10 +174,14 @@ export class WorldStreamer implements System {
      * Use this when transitioning sectors or purging dynamic trigger sets.
      */
     public clearTriggers(): void {
-        for (const grid of this.chunks.values()) {
-            grid.triggerCounts.fill(0);
-            for (let i = 0; i < grid.triggerBuckets.length; i++) {
-                grid.triggerBuckets[i].fill(0);
+        for (let i = 0; i < this._activeChunkCount; i++) {
+            const key = this._activeChunkKeys[i];
+            const grid = this.chunks.get(key);
+            if (grid) {
+                grid.triggerCounts.fill(0);
+                for (let j = 0; j < grid.triggerBuckets.length; j++) {
+                    grid.triggerBuckets[j].fill(0);
+                }
             }
         }
     }
@@ -473,8 +481,12 @@ export class WorldStreamer implements System {
      * Note: This is a heavy operation and should be used sparingly during sector init.
      */
     public fillGroundMaterial(material: number) {
-        for (const grid of this.chunks.values()) {
-            grid.ground.fill(material);
+        for (let i = 0; i < this._activeChunkCount; i++) {
+            const key = this._activeChunkKeys[i];
+            const grid = this.chunks.get(key);
+            if (grid) {
+                grid.ground.fill(material);
+            }
         }
     }
 
@@ -1031,6 +1043,16 @@ export class WorldStreamer implements System {
                             if ((o._sqf | 0) === (frame | 0)) continue;
                             o._sqf = frame | 0;
 
+                            const combinedRad = (o.radius || 2.0) + 0.5; // Small margin
+
+                            // Fast 2D AABB Early-Out Check
+                            const ox = o.position.x;
+                            const oz = o.position.z;
+                            if (ox + combinedRad < minX || ox - combinedRad > maxX ||
+                                oz + combinedRad < minZ || oz - combinedRad > maxZ) {
+                                continue;
+                            }
+
                             // Line-Point distance check
                             const dxAP = o.position.x - start.x;
                             const dzAP = o.position.z - start.z;
@@ -1045,8 +1067,6 @@ export class WorldStreamer implements System {
                             const pdx = o.position.x - projX;
                             const pdz = o.position.z - projZ;
                             const distSq = pdx * pdx + pdz * pdz;
-
-                            const combinedRad = (o.radius || 2.0) + 0.5; // Small margin
 
                             if (distSq < combinedRad * combinedRad) {
                                 this.obstaclePool.add(outPoolIdx, o);

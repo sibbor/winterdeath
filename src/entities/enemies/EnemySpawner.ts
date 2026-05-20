@@ -110,6 +110,9 @@ export const EnemySpawner = {
 
         const currentPoolId = _nextPoolId++;
 
+        const body = g.children.find((c: any) => c.userData?.isBody) || null;
+        g.userData.cachedBody = body;
+
         // V8 Shape Locking: All properties declared explicitly as SMIs or pre-allocated objects
         const baseScale = (typeData.scale || 1.0) * (typeData.widthScale || 1.0);
         const enemy: Enemy = {
@@ -118,6 +121,7 @@ export const EnemySpawner = {
             mesh: g,
             indicatorRing: null as any,
             ashPile: (ashPile as THREE.Object3D) || null,
+            bodyMesh: body,
 
             type: typeKey,
             maxHp: ENEMY_HP[typeKey],
@@ -235,6 +239,9 @@ export const EnemySpawner = {
 
         const currentPoolId = _nextPoolId++;
 
+        const body = boss.children.find((c: any) => c.userData?.isBody) || null;
+        boss.userData.cachedBody = body;
+
         // V8 Shape Locking: All properties declared explicitly as SMIs or pre-allocated objects
         const enemy: Enemy = {
             id: `boss_${bossData.id}`,
@@ -242,6 +249,7 @@ export const EnemySpawner = {
             mesh: boss,
             indicatorRing: null as any,
             ashPile: null,
+            bodyMesh: body,
             type: EnemyType.BOSS,
             statusFlags: EnemyFlags.BOSS,
             hp: bossData.hp,

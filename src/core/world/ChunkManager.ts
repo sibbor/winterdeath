@@ -128,7 +128,6 @@ export class ChunkManager {
             for (let ix = 0; ix < GRID_DIM; ix++) {
                 const idx = rowOffset + ix;
                 const meshes = this.chunkLists[idx];
-                if (meshes.length === 0) continue;
 
                 const inRange = inRangeZ && ix >= startX && ix <= endX;
                 const wasActive = this.activeStates[idx] === 1;
@@ -136,17 +135,21 @@ export class ChunkManager {
                 if (inRange) {
                     if (!wasActive) {
                         this.activeStates[idx] = 1;
-                        for (let j = 0; j < meshes.length; j++) {
-                            const m = meshes[j];
-                            m.visible = true;
-                            if (!m.parent) scene.add(m);
+                        if (meshes.length > 0) {
+                            for (let j = 0; j < meshes.length; j++) {
+                                const m = meshes[j];
+                                m.visible = true;
+                                if (!m.parent) scene.add(m);
+                            }
                         }
                     }
                 } else {
                     if (wasActive) {
                         this.activeStates[idx] = 0;
-                        for (let j = 0; j < meshes.length; j++) {
-                            meshes[j].visible = false;
+                        if (meshes.length > 0) {
+                            for (let j = 0; j < meshes.length; j++) {
+                                meshes[j].visible = false;
+                            }
                         }
                     }
                 }

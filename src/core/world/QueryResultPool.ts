@@ -32,6 +32,14 @@ export class QueryResultPool<T> {
     public nextIndex(): number {
         const idx = this.index % this.poolSize;
         this.index++;
+        
+        // Nullify the references from the previous use of this pool
+        const prevCount = this.counts[idx];
+        const p = this.pools[idx];
+        for (let i = 0; i < prevCount; i++) {
+            p[i] = null as any;
+        }
+
         this.counts[idx] = 0;
         
         RuntimeStressHarness.checkPoolCapacity("QueryResultPool", this.index, this.poolSize, true);
@@ -57,6 +65,13 @@ export class QueryResultPool<T> {
 
     public reset(): void {
         this.index = 0;
+        for (let idx = 0; idx < this.poolSize; idx++) {
+            const prevCount = this.counts[idx];
+            const p = this.pools[idx];
+            for (let i = 0; i < prevCount; i++) {
+                p[i] = null as any;
+            }
+        }
         this.counts.fill(0);
     }
 }

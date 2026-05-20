@@ -83,6 +83,7 @@ export class SectorSystem implements System {
     private _lastEnvQueryZ = Infinity;
     private _lastEnvPoolIdx = 0;
     private _lastEnvCount = 0;
+    private _lastEnvIndices = new Int32Array(64);
 
     constructor(
         private playerGroup: THREE.Group,
@@ -367,6 +368,12 @@ export class SectorSystem implements System {
                 const pool = streamer.getEnvironmentalZonePool();
                 this._lastEnvPoolIdx = 0;
                 this._lastEnvCount = pool.getCount(0);
+
+                const indices = pool.getPool(this._lastEnvPoolIdx);
+                for (let i = 0; i < this._lastEnvCount; i++) {
+                    this._lastEnvIndices[i] = indices[i];
+                }
+
                 this._lastEnvQueryX = playerPos.x;
                 this._lastEnvQueryZ = playerPos.z;
             }
@@ -374,8 +381,7 @@ export class SectorSystem implements System {
             const count = this._lastEnvCount;
 
             if (count > 0) {
-                const pool = streamer.getEnvironmentalZonePool();
-                const indices = pool.getPool(this._lastEnvPoolIdx);
+                const indices = this._lastEnvIndices;
 
                 let totalWeight = 0;
                 let blendedR = 0, blendedG = 0, blendedB = 0;

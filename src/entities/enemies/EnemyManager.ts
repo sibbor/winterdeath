@@ -346,7 +346,7 @@ export const EnemyManager = {
                         e.mesh.matrixAutoUpdate = true;
                         
                         // Ensure the standalone body mesh is temporarily visible for dying animations
-                        const dBody = e.mesh.userData.cachedBody || e.mesh.children.find((c: any) => c.userData?.isBody);
+                        const dBody = e.bodyMesh;
                         if (dBody) dBody.visible = true;
                         break;
                     case EnemyDeathState.DEAD:
@@ -610,6 +610,7 @@ export const EnemyManager = {
         }
 
         activeCount--;
+        activeEnemies[activeCount] = null!;
         EnemyPoolState.activeCount = activeCount;
     },
 
@@ -687,9 +688,8 @@ export const EnemyManager = {
         e.mesh.scale.set(s * w, s, s * w);
 
         // Reset the body visibility based on whether it is a Boss (regular zombies are instanced and hidden)
-        const body = e.mesh.userData.cachedBody || e.mesh.children.find((c: any) => c.userData?.isBody);
+        const body = e.bodyMesh;
         if (body) {
-            e.mesh.userData.cachedBody = body;
             body.visible = (e.statusFlags & EnemyFlags.BOSS) !== 0;
         }
 
