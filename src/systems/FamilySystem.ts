@@ -80,6 +80,9 @@ export class FamilySystem implements System {
         const activeVehicle = state.vehicle.active ? state.vehicle.mesh : null;
         const inVehicle = !!activeVehicle;
 
+        // Hoist singleton outside the loop — one lookup per update, not per member.
+        const engine = WinterEngine.getInstance();
+
         for (let i = 0; i < members.length; i++) {
             const familyMember = members[i];
             if (!familyMember.mesh) continue;
@@ -184,7 +187,6 @@ export class FamilySystem implements System {
                 let localZ = -backDist;
 
                 // --- AIM-AVOIDANCE LOGIC ---
-                const engine = WinterEngine.getInstance();
                 const input = engine?.input?.state;
                 if (input?.aimVector && input.aimVector.lengthSq() > 0.1) {
                     const camAngle = (engine as any).session?.cameraAngle || 0;
@@ -219,9 +221,8 @@ export class FamilySystem implements System {
 
                 const distSq = fm.position.distanceToSquared(_v1);
 
-                const dist = Math.sqrt(distSq);
-
-                if (dist > 0.15) { // Tightened epsilon for near-instant reaction
+                if (distSq > 0.0225) { // 0.15m threshold, using squared to avoid sqrt
+                    const dist = Math.sqrt(distSq);
                     fmIsMoving = true;
 
                     // --- ELASTIC CATCH-UP BOOST ---
@@ -249,7 +250,7 @@ export class FamilySystem implements System {
                 const distSq = fm.position.distanceToSquared(familyMember.spawnPos);
                 if (distSq > 1.0) {
                     fmIsMoving = true;
-                    const dist = Math.sqrt(distSq);
+                    const dist = Math.sqrt(distSq); // Only computed when branch is entered
                     const step = followSpeed * 0.8 * delta;
 
                     _v3.subVectors(familyMember.spawnPos, fm.position).normalize();
@@ -290,7 +291,6 @@ export class FamilySystem implements System {
                 _animState.isSpeaking = simTime < (familyMember.speakingUntil || 0);
                 _animState.isThinking = simTime < (familyMember.thinkingUntil || 0);
 
-                const engine = WinterEngine.getInstance();
                 if (engine?.water) {
                     engine.water.checkBuoyancy(fm.position.x, fm.position.y, fm.position.z, renderTime);
                     _animState.isSwimming = _buoyancyResult.depth > 1.2;

@@ -195,6 +195,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             if (envState && envState.fireLight) {
                 _campCtx.dynamicLights.push(envState.fireLight);
             }
+            campState.dynamicLights = _campCtx.dynamicLights;
 
             envStateRef.current = envState;
 
@@ -420,9 +421,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
             // ARCHITECTURAL FIX: LightSystem prioritizes 'state.dynamicLights'.
             // By updating the campState directly, we ensure the lights are picked up even before React re-renders.
-            if (campState) {
-                campState.dynamicLights = envStateRef.current?.fireLight ? [envStateRef.current.fireLight] : [];
-            }
+            // campState.dynamicLights is assigned to _campCtx.dynamicLights once during setup to be 100% Zero-GC.
 
             _campCtx.playerPos = camera.threeCamera.position;
             _campCtx.familyMembers = familyMembers;

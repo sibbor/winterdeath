@@ -21,10 +21,10 @@ export class FogSystem implements System {
 
     // --- PERFORMANCE SCRATCHPADS ---
     private static _sizeScratch = new THREE.Vector2();
-    private _fogNodes: THREE.Object3D[] = [];
     private scene: THREE.Scene;
     private wind: WindSystem;
     private camera: THREE.Camera;
+    private _engine: WinterEngine | null = null;
 
     public fogMesh: THREE.InstancedMesh | null = null;
     private fogMaterial: THREE.ShaderMaterial | null = null;
@@ -50,7 +50,7 @@ export class FogSystem implements System {
      * Manages baseline FogExp2 and Volumetric planes.
      */
     public sync(density: number, height?: number, color?: THREE.Color) {
-        const engine = WinterEngine.getInstance();
+        const engine = this._engine || (this._engine = WinterEngine.getInstance());
 
         // 1. BASELINE FOG (FogExp2)
         // VINTERDÖD FIX: Smart Density Normalization.
@@ -134,7 +134,7 @@ export class FogSystem implements System {
     }
 
     public update(_ctx: any, delta: number, simTime: number, renderTime: number): void {
-        const engine = WinterEngine.getInstance();
+        const engine = this._engine || (this._engine = WinterEngine.getInstance());
 
         // Settings Guard: Check for setting change mid-session
         const wantsVolumetric = engine?.settings?.volumetricFog ?? true;
@@ -165,11 +165,11 @@ export class FogSystem implements System {
             uniforms.uTime.value = renderTime * 0.001;
             uniforms.uWind.value.set(this.wind.current.x, this.wind.current.y);
 
-            if (engine.depthTexture) uniforms.uDepthTexture.value = engine.depthTexture;
-            if (engine.renderer) {
-                engine.renderer.getSize(FogSystem._sizeScratch);
-                uniforms.uResolution.value.copy(FogSystem._sizeScratch);
+            if (engine.depthTexture && uniforms.uDepthTexture.value !== engine.depthTexture) {
+                uniforms.uDepthTexture.value = engine.depthTexture;
             }
+            uniforms.uResolution.value.set(engine.screenWidth, engine.screenHeight);
+
             if (this.camera instanceof THREE.PerspectiveCamera) {
                 uniforms.uCameraNear.value = this.camera.near;
                 uniforms.uCameraFar.value = this.camera.far;

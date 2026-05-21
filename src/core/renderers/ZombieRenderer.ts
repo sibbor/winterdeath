@@ -102,10 +102,9 @@ export class ZombieRenderer {
 
             // --- MATRIX SYNC ---
             // Eftersom EnemyAnimator redan snurrar, poserar och skalar e.mesh,
-            // uppdaterar vi dess world matrix och lånar den direkt till instansen!
-            // Det sparar CPU eftersom vi slipper räkna matrisen två gånger.
-            e.mesh.updateMatrixWorld(true);
-            instMesh.setMatrixAt(idx, e.mesh.matrixWorld);
+            // lånar vi dess lokala matris direkt till instansen!
+            // Det sparar CPU eftersom vi slipper räkna matrisen två gånger och slipper rekursiva träduppdateringar.
+            instMesh.setMatrixAt(idx, e.mesh.matrix);
 
             // --- HIT FLASH LOGIC ---
             // Calculate color based on hit feedback. Arc-Cannon has a unique cyan-white flash.

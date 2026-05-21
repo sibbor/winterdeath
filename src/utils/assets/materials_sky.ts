@@ -68,11 +68,32 @@ export interface SkyKeyframe {
 }
 
 export const SKY_KEYFRAMES: SkyKeyframe[] = [
-    { time: 0.0, atmosphereColor: 0x080816, celestialColor: 0xfff9e6, celestialType: CelestialType.MOON, lightIntensity: 0.4, lightColor: 0xaaccff, hemiIntensity: 0.5, hemiSkyColor: 0x1a2233 }, // Midnight
-    { time: 0.2, atmosphereColor: 0x8d4b38, celestialColor: 0xffaa44, celestialType: CelestialType.SUN, lightIntensity: 0.6, lightColor: 0xffaa66, hemiIntensity: 0.7, hemiSkyColor: 0x8d4b38 }, // Dawn
-    { time: 0.5, atmosphereColor: 0x7ac1eb, celestialColor: 0xffffff, celestialType: CelestialType.SUN, lightIntensity: 1.2, lightColor: 0xffffff, hemiIntensity: 0.9, hemiSkyColor: 0x7ac1eb }, // Noon
-    { time: 0.8, atmosphereColor: 0x4a285a, celestialColor: 0xff4422, celestialType: CelestialType.SUN, lightIntensity: 0.5, lightColor: 0xff5522, hemiIntensity: 0.5, hemiSkyColor: 0x4a285a }, // Dusk
-    { time: 1.0, atmosphereColor: 0x080816, celestialColor: 0xfff9e6, celestialType: CelestialType.MOON, lightIntensity: 0.4, lightColor: 0xaaccff, hemiIntensity: 0.5, hemiSkyColor: 0x1a2233 }, // Midnight
+    // Midnight start
+    { time: 0.0, atmosphereColor: 0x050510, celestialColor: 0xfff9e6, celestialType: CelestialType.MOON, lightIntensity: 0.4, lightColor: 0xaaccff, hemiIntensity: 0.5, hemiSkyColor: 0x111622 },
+    
+    // Late Night (stays completely dark, cold and moonlit)
+    { time: 0.20, atmosphereColor: 0x050510, celestialColor: 0xfff9e6, celestialType: CelestialType.MOON, lightIntensity: 0.4, lightColor: 0xaaccff, hemiIntensity: 0.5, hemiSkyColor: 0x111622 },
+    
+    // Dawn / Sunrise (warm dawn color peaks right on the horizon)
+    { time: 0.25, atmosphereColor: 0x8d4b38, celestialColor: 0xffaa44, celestialType: CelestialType.SUN, lightIntensity: 0.6, lightColor: 0xffaa66, hemiIntensity: 0.7, hemiSkyColor: 0x8d4b38 },
+    
+    // Morning (rapid, vibrant clear blue sky build up)
+    { time: 0.35, atmosphereColor: 0x70bce8, celestialColor: 0xffffff, celestialType: CelestialType.SUN, lightIntensity: 1.0, lightColor: 0xffffff, hemiIntensity: 0.8, hemiSkyColor: 0x70bce8 },
+    
+    // Noon (bright clear day sky)
+    { time: 0.50, atmosphereColor: 0x7ac1eb, celestialColor: 0xffffff, celestialType: CelestialType.SUN, lightIntensity: 1.2, lightColor: 0xffffff, hemiIntensity: 0.9, hemiSkyColor: 0x7ac1eb },
+    
+    // Afternoon (retains clear vibrant day sky)
+    { time: 0.65, atmosphereColor: 0x70bce8, celestialColor: 0xffffff, celestialType: CelestialType.SUN, lightIntensity: 1.0, lightColor: 0xffffff, hemiIntensity: 0.8, hemiSkyColor: 0x70bce8 },
+    
+    // Dusk / Sunset (rich, warm sunset red peaks right on the horizon)
+    { time: 0.75, atmosphereColor: 0x943d3d, celestialColor: 0xff4422, celestialType: CelestialType.SUN, lightIntensity: 0.5, lightColor: 0xff5522, hemiIntensity: 0.5, hemiSkyColor: 0x943d3d },
+    
+    // Early Night (quickly cools down to dark navy)
+    { time: 0.80, atmosphereColor: 0x050510, celestialColor: 0xfff9e6, celestialType: CelestialType.MOON, lightIntensity: 0.4, lightColor: 0xaaccff, hemiIntensity: 0.5, hemiSkyColor: 0x111622 },
+    
+    // Midnight end
+    { time: 1.0, atmosphereColor: 0x050510, celestialColor: 0xfff9e6, celestialType: CelestialType.MOON, lightIntensity: 0.4, lightColor: 0xaaccff, hemiIntensity: 0.5, hemiSkyColor: 0x111622 },
 ];
 
 // ============================================================================

@@ -362,7 +362,10 @@ export class InteractionSystem implements System {
             if (!obj || !obj.userData?.isInteractable) continue;
             if (obj.userData.interactionType === InteractionType.COLLECTIBLE && obj.userData.pickedUp) continue;
 
-            obj.updateMatrixWorld(true);
+            // Cheaper than updateMatrixWorld(true): only updates this node's local->world matrix
+            // without recursively traversing the entire parent chain. Static world objects have
+            // stable parent transforms, so a non-forced, non-recursive update is sufficient.
+            obj.updateWorldMatrix(false, false);
             const els = obj.matrixWorld.elements;
             _v1.set(els[12], els[13], els[14]);
 

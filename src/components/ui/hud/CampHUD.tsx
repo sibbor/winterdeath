@@ -31,17 +31,17 @@ interface CampHUDProps {
     isMobileDevice?: boolean;
 }
 
-// PERFORMANCE FIX: En anpassad jämförelsefunktion för React.memo
-// Denna hindrar HUD:en från att ritas om 60 gånger i sekunden bara för att
-// en obskyr statistik (typ "tid spelad") uppdateras i stats-objektet.
+// PERFORMANCE FIX: A custom comparison function for React.memo.
+// This prevents the HUD from re-rendering 60 times per second just because
+// an obscure statistic (such as "time played") is updated in the stats object.
 const areEqual = (prevProps: CampHUDProps, nextProps: CampHUDProps) => {
-    // Om UI-state ändras, måste vi rita om
+    // If UI state changes, we must re-render
     if (prevProps.isIdle !== nextProps.isIdle) return false;
     if (prevProps.isMobileDevice !== nextProps.isMobileDevice) return false;
     if (prevProps.currentSectorName !== nextProps.currentSectorName) return false;
     if (prevProps.hoveredStation !== nextProps.hoveredStation) return false;
 
-    //  PERFORMANCE FIX: Stats and DebugMode are now handled via useRef bypass.
+    // PERFORMANCE FIX: Stats and DebugMode are now handled via useRef bypass.
     return prevProps.stats === nextProps.stats;
 };
 

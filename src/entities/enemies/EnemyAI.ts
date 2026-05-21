@@ -440,14 +440,14 @@ export const EnemyAI = {
             if (isNaN(e.attackTimer)) e.attackTimer = 0; // NaN Guard
             if (e.attackTimer < 0) e.attackTimer = 0;
         }
-        
+
         // --- VINTERDÖD STABILIZATION: PERCEPTION UPDATE (Visual + Noise) ---
         // Staggered perception check (once every 15 frames) to minimize CPU overhead
         if ((e.poolId + Math.floor(simTime * 60)) % 15 === 0 && e.hp > 0) {
             const dx = playerPos.x - e.mesh.position.x;
             const dz = playerPos.z - e.mesh.position.z;
             const distSq = dx * dx + dz * dz;
-            
+
             // Visual Perception
             if (distSq < ENEMY_DETECTION.VISUAL_RANGE_SQ) {
                 const detectionSys = (session as any).detectionSystem;
@@ -458,7 +458,7 @@ export const EnemyAI = {
                 }
             }
         }
-        
+
         // Decay awareness over time if player is lost
         if (e.awareness > 0 && !session.state.isTimeFrozen) {
             e.awareness = Math.max(0, e.awareness - delta * 0.15);
@@ -893,7 +893,7 @@ export const EnemyAI = {
         EnemyAnimator.updateAttackAnim(e, renderTime, delta);
 
         // --- 11. PROCESS STATUS EFFECTS ---
-        handleStatusEffects(e, delta, simTime, callbacks);
+        //handleStatusEffects(e, delta, simTime, callbacks);
     }
 };
 
@@ -944,16 +944,29 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     );
 
     // 6. COLLISION RESOLUTION: Harden path against world obstacles
-    const obsPool = streamer.getObstaclePool();
-    const poolIdx = obsPool.nextIndex();
-    streamer.getNearbyObstacles(_v4.x, _v4.z, 4.0, poolIdx);
+    // Throttle queries: only re-query spatial grid if enemy moved >0.5m (0.25m^2)
+    const dqx = _v4.x - e.lastObsQueryPos.x;
+    const dqz = _v4.z - e.lastObsQueryPos.z;
+    if (dqx * dqx + dqz * dqz > 0.25 || e.lastObsQueryPos.y < -500) {
+        const obsPool = streamer.getObstaclePool();
+        const poolIdx = obsPool.nextIndex();
+        streamer.getNearbyObstacles(_v4.x, _v4.z, 4.0, poolIdx);
 
-    const nearbyObs = obsPool.getPool(poolIdx);
-    const obsCount = obsPool.getCount(poolIdx);
+        const nearbyObs = obsPool.getPool(poolIdx);
+        const obsCount = obsPool.getCount(poolIdx);
+        const limit = Math.min(obsCount, 16);
+        for (let i = 0; i < limit; i++) {
+            e.cachedObstacles[i] = nearbyObs[i];
+        }
+        e.cachedObstacleCount = limit;
+        e.lastObsQueryPos.copy(_v4);
+    }
 
     const rad = (e.originalScale || 1.0) * (e.widthScale || 1.0) * 0.5;
-    for (let i = 0; i < obsCount; i++) {
-        applyCollisionResolution(_v4, rad, nearbyObs[i]);
+    const count = e.cachedObstacleCount;
+    for (let i = 0; i < count; i++) {
+        const obs = e.cachedObstacles[i];
+        if (obs) applyCollisionResolution(_v4, rad, obs);
     }
 
     // 7. ANIMATION & ROTATION

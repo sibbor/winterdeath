@@ -446,7 +446,9 @@ export class WaterSystem implements System {
         // --- 2. Update Surfaces ---
         for (let i = 0; i < this.surfaces.length; i++) {
             this.surfaces[i].update(renderTime);
-            this.surfaces[i].material.uniforms.uObjectPositions.value = this.objectPositions;
+            
+            // Zero-GC: uObjectPositions is a pre-allocated array whose elements are mutated in-place.
+            // Assigning it every frame is redundant and triggers uniform lookup thrashing.
             if (this.surfaces[i].material.uniforms.uClarity) {
                 this.surfaces[i].material.uniforms.uClarity.value = this.clarity;
             }
@@ -479,7 +481,7 @@ export class WaterSystem implements System {
                 const isPassive = p.userData.isBall; // Water lilies
 
                 if (speedSq > 0.1 && !isPassive) {
-                    // Throttling: Kör bara plask/ljud om tiden passerat vår cooldown
+                    // Throttling: Only run splash/sound if the cooldown time has passed
                     if (!p.userData.nextSplash || renderTime > p.userData.nextSplash) {
 
                         this.spawnRipple(p.position.x, p.position.z, renderTime, 0.7);
@@ -489,7 +491,7 @@ export class WaterSystem implements System {
                             this.spawnParticleCb(p.position.x, p.position.y + 0.2, p.position.z, FXParticleType.SPLASH, 3);
                         }
 
-                        // Sätt nästa tillåtna plask till om 150-250 millisekunder
+                        // Set the next allowed splash to 150-250 milliseconds from now
                         p.userData.nextSplash = renderTime + 150 + (Math.random() * 100);
                     }
                 }
@@ -580,26 +582,25 @@ export class WaterSystem implements System {
         this.checkBuoyancy(pos.x, pos.y, pos.z, now);
         if (_buoyancyResult.inWater) {
             const distSq = pos.distanceToSquared(this.lastPlayerPos);
-            const isMoving = distSq > 0.001;
 
-            if (isMoving) {
+            if (distSq > 0.49) { // ~0.7m (0.7 * 0.7 = 0.49)
                 // Distance-based: spawn a ripple every ~0.7 units of movement.
                 // FPS-independent — the ripple always anchors to the current position.
-                if (distSq > 0.5) {
-                    this.spawnRipple(pos.x, pos.z, now, 0.7);
-                    // lastPlayerPos is copied at the end of this function,
-                    // so the next check resets from the current position.
-                }
-            } else {
+                this.spawnRipple(pos.x, pos.z, now, 0.7);
+                this.lastPlayerPos.copy(pos);
+                this.stepTimer = 0;
+            } else if (distSq < 0.001) {
                 // Gentle rhythmic idle pulse — time-based is fine when not moving
                 this.stepTimer += dt;
                 if (this.stepTimer > 0.4) {
                     this.spawnRipple(pos.x, pos.z, now, 0.5);
                     this.stepTimer = 0;
+                    this.lastPlayerPos.copy(pos);
                 }
             }
+        } else {
+            this.lastPlayerPos.copy(pos);
         }
-        this.lastPlayerPos.copy(pos);
     }
 
     public spawnRipple(x: number, z: number, now: number, strength: number = 1.0): void {
@@ -631,6 +632,7 @@ export class WaterSystem implements System {
                 if (dx * dx + dz * dz > throttleSq) continue;
             }
 
+            let elementNeedsUpdate = false;
             this.checkBuoyancy(data.position.x, data.position.y, data.position.z, now);
             data.velocity -= 19.8 * dt;
 
@@ -639,19 +641,20 @@ export class WaterSystem implements System {
                 const targetY = _buoyancyResult.waterLevel - 0.05; // Stay flush
                 if (Math.abs(targetY - data.position.y) > 0.005) {
                     data.position.y += (targetY - data.position.y) * 8.0 * dt;
-                    needsUpdate = true;
+                    elementNeedsUpdate = true;
                 }
                 data.velocity = 0;
             } else {
                 if (data.position.y < 0) {
                     data.position.y = 0;
                     data.velocity = 0;
-                    needsUpdate = true;
+                    elementNeedsUpdate = true;
                 }
             }
             data.position.y += data.velocity * dt;
 
-            if (needsUpdate) {
+            if (elementNeedsUpdate) {
+                needsUpdate = true;
                 // Rebuild Matrix Pad
                 _sharedDummy.position.copy(data.position);
                 _sharedDummy.rotation.set(0, data.rotationY, 0);

@@ -331,6 +331,8 @@ export const EnemyManager = {
                 EnemyPoolState.velX[i] = e.velocity.x;
                 EnemyPoolState.velY[i] = e.velocity.y;
                 EnemyPoolState.velZ[i] = e.velocity.z;
+
+                e.mesh.updateMatrix();
             }
 
             // --- 3. RENDER SYNC ---
@@ -365,7 +367,10 @@ export const EnemyManager = {
                                 if (dot < AI_LOD.CULL_DOT_THRESHOLD && dSq > AI_LOD.THROTTLED_RADIUS_SQ) isVisible = false;
                             }
                             const isTelegraphing = e.indicatorRing && e.indicatorRing.visible;
-                            if (isVisible && !isTelegraphing) {
+                            if (!isVisible && !isTelegraphing) {
+                                e.mesh.visible = false;
+                                e.mesh.matrixAutoUpdate = false;
+                            } else if (isVisible && !isTelegraphing) {
                                 e.mesh.visible = false;
                                 e.mesh.matrixAutoUpdate = false;
                                 e.mesh.updateMatrix();
@@ -677,6 +682,12 @@ export const EnemyManager = {
 
         e.prevP.set(0, -1000, 0);
 
+        if (!e.lastObsQueryPos) e.lastObsQueryPos = new THREE.Vector3(0, -1000, 0);
+        else e.lastObsQueryPos.set(0, -1000, 0);
+        if (!e.cachedObstacles) e.cachedObstacles = new Array(16);
+        else e.cachedObstacles.fill(null);
+        e.cachedObstacleCount = 0;
+
         e.lastTrailPos.set(0, 0, 0);
         e.hasLastTrailPos = false;
 
@@ -726,6 +737,8 @@ export const EnemyManager = {
         e.bucketIndex = -1;
         e._internalBucketIdx = -1;
         e._sqf = 0;
+
+        e.mesh.updateMatrix();
     },
 
     spawnBoss: (scene: THREE.Scene, pos: { x: number, z: number }, bossData: any, isForced: boolean = false) => {

@@ -20,6 +20,12 @@ export class TriggerSystem implements System {
     private activeCount: number = 0;
     private streamer: WorldStreamer | null = null;
 
+    // --- SPATIAL QUERY THROTTLING (Zero-GC) ---
+    private _lastQueryX: number = -999999;
+    private _lastQueryZ: number = -999999;
+    private readonly _cachedNearbyTriggers: Int32Array;
+    private _cachedTriggerCount: number = 0;
+
     // --- Struct of Arrays (SoA) ---
     private readonly activeFlags: Uint8Array;
     private readonly triggerTypes: Uint8Array;
@@ -80,6 +86,8 @@ export class TriggerSystem implements System {
         for (let i = 0; i < maxCapacity; i++) {
             this.metadata[i] = { id: '', content: '', contentId: 0, actions: [] };
         }
+
+        this._cachedNearbyTriggers = new Int32Array(128);
     }
 
     public setStreamer(streamer: WorldStreamer): void {
@@ -140,6 +148,9 @@ export class TriggerSystem implements System {
         this.activeFlags.fill(0);
         this.statusFlags.fill(0);
         this.lastTriggerTimes.fill(0);
+        this._lastQueryX = -999999;
+        this._lastQueryZ = -999999;
+        this._cachedTriggerCount = 0;
         for (let i = 0; i < this.maxTriggers; i++) {
             const m = this.metadata[i];
             m.id = '';
@@ -276,6 +287,9 @@ export class TriggerSystem implements System {
                     DataResolver.registerReaction(config.id, config.content);
                 }
 
+                this._lastQueryX = -999999;
+                this._lastQueryZ = -999999;
+
                 return i;
             }
         }
@@ -332,6 +346,9 @@ export class TriggerSystem implements System {
                     DataResolver.registerReaction(id, content);
                 }
 
+                this._lastQueryX = -999999;
+                this._lastQueryZ = -999999;
+
                 return i;
             }
         }
@@ -342,6 +359,9 @@ export class TriggerSystem implements System {
         this.activeFlags.fill(0);
         this.statusFlags.fill(0);
         this.activeCount = 0;
+        this._lastQueryX = -999999;
+        this._lastQueryZ = -999999;
+        this._cachedTriggerCount = 0;
 
         // Zero-GC: Clear metadata references to allow GC of actions/strings
         for (let i = 0; i < this.maxTriggers; i++) {
@@ -405,11 +425,27 @@ export class TriggerSystem implements System {
         if (!playerPos) return;
 
         if (this.streamer) {
-            const poolIdx = this.streamer.getTriggerPool().nextIndex();
-            this.streamer.getNearbyTriggers(playerPos.x, playerPos.z, 50, poolIdx);
+            const dqx = playerPos.x - this._lastQueryX;
+            const dqz = playerPos.z - this._lastQueryZ;
+            if (dqx * dqx + dqz * dqz >= 0.25) {
+                const poolIdx = this.streamer.getTriggerPool().nextIndex();
+                this.streamer.getNearbyTriggers(playerPos.x, playerPos.z, 50, poolIdx);
 
-            const nearby = this.streamer.getTriggerPool().getPool(poolIdx);
-            const nearCount = this.streamer.getTriggerPool().getCount(poolIdx);
+                const pool = this.streamer.getTriggerPool();
+                const nearby = pool.getPool(poolIdx);
+                const nearCount = pool.getCount(poolIdx);
+
+                const limit = Math.min(nearCount, 128);
+                for (let j = 0; j < limit; j++) {
+                    this._cachedNearbyTriggers[j] = nearby[j];
+                }
+                this._cachedTriggerCount = limit;
+                this._lastQueryX = playerPos.x;
+                this._lastQueryZ = playerPos.z;
+            }
+
+            const nearCount = this._cachedTriggerCount;
+            const nearby = this._cachedNearbyTriggers;
 
             for (let j = 0; j < nearCount; j++) {
                 const i = nearby[j] | 0;
@@ -419,8 +455,9 @@ export class TriggerSystem implements System {
                 if (!(status & TriggerStatus.ACTIVE)) continue;
                 if ((status & TriggerStatus.TRIGGERED) && !(status & TriggerStatus.REPEATABLE)) continue;
 
-                if ((status & TriggerStatus.REPEATABLE) && this.repeatIntervals[i] > 0) {
-                    if (simTime - this.lastTriggerTimes[i] < this.repeatIntervals[i]) continue;
+                if (status & TriggerStatus.REPEATABLE) {
+                    const interval = Math.max(1000, this.repeatIntervals[i]);
+                    if (simTime - this.lastTriggerTimes[i] < interval) continue;
                 }
 
                 let isInside = false;

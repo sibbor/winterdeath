@@ -402,14 +402,21 @@ export class SectorSystem implements System {
                         // If not cached, fall through directly to isPointInPolygon (safe fallback).
                         const poly = z.polygon;
                         const len = poly.length;
-                        let minX = poly[0].x, maxX = poly[0].x;
-                        let minZ = poly[0].z, maxZ = poly[0].z;
-                        for (let j = 1; j < len; j++) {
-                            if (poly[j].x < minX) minX = poly[j].x;
-                            if (poly[j].x > maxX) maxX = poly[j].x;
-                            if (poly[j].z < minZ) minZ = poly[j].z;
-                            if (poly[j].z > maxZ) maxZ = poly[j].z;
+                        if (z.minX === undefined) {
+                            let minX = poly[0].x, maxX = poly[0].x;
+                            let minZ = poly[0].z, maxZ = poly[0].z;
+                            for (let j = 1; j < len; j++) {
+                                if (poly[j].x < minX) minX = poly[j].x;
+                                if (poly[j].x > maxX) maxX = poly[j].x;
+                                if (poly[j].z < minZ) minZ = poly[j].z;
+                                if (poly[j].z > maxZ) maxZ = poly[j].z;
+                            }
+                            z.minX = minX; z.maxX = maxX; z.minZ = minZ; z.maxZ = maxZ;
                         }
+                        const minX = z.minX;
+                        const maxX = z.maxX;
+                        const minZ = z.minZ;
+                        const maxZ = z.maxZ;
                         const px = playerPos.x;
                         const pz = playerPos.z;
                         // Fade distance for smooth polygon edge blending

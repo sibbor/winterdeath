@@ -28,23 +28,24 @@ export class WindSystem implements System {
   private angleVariance: number = Math.PI;
 
   private overrideActive: boolean = false;
+  private materialsBound: boolean = false;
 
-  // Här lagrar detta specifika WindSystem sina referenser
+  // Here this specific WindSystem stores its references
   private boundUniforms: WindBind[] = [];
   private currentInteractors: THREE.Vector4[] = new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0));
 
   constructor() { }
 
   /**
-   * [VINTERDÖD] Binder ett materials uniforms till detta WindSystem.
-   * Eftersom vi pre-allokerar i userData, slipper vi oroa oss för när shadern kompileras.
+   * [VINTERDÖD] Binds a material's uniforms to this WindSystem.
+   * Since we pre-allocate in userData, we don't have to worry about when the shader compiles.
    */
   public bindMaterial(mat: THREE.Material | undefined) {
     if (!mat || !mat.userData.windUniforms) return;
 
     const uniforms = mat.userData.windUniforms as WindBind;
 
-    // Undvik dubbletter (O(N) check är ok här då listan är pytteliten)
+    // Avoid duplicates (O(N) check is fine here since the list is tiny)
     for (let i = 0; i < this.boundUniforms.length; i++) {
       if (this.boundUniforms[i].uTime === uniforms.uTime) return;
     }
@@ -90,22 +91,25 @@ export class WindSystem implements System {
   }
 
   update(ctx: any, delta: number, simTime: number, renderTime: number): THREE.Vector2 {
-    // Ensure all core materials are bound. bindMaterial handles duplicates internally.
-    this.bindMaterial(MATERIALS.hedge);
-    this.bindMaterial(MATERIALS.grass);
-    this.bindMaterial(MATERIALS.flower);
-    this.bindMaterial(MATERIALS.wheat);
-    this.bindMaterial(MATERIALS.treeFirNeedles);
-    this.bindMaterial(MATERIALS.treeLeavesOak);
-    this.bindMaterial(MATERIALS.treeLeavesBirch);
-    this.bindMaterial(MATERIALS.treeTrunk);
-    this.bindMaterial(MATERIALS.treeTrunkOak);
-    this.bindMaterial(MATERIALS.treeTrunkBirch);
-    this.bindMaterial(MATERIALS.deadWood);
-    this.bindMaterial(MATERIALS.treeSilhouette);
-    this.bindMaterial(MATERIALS.sunflowerStem);
-    this.bindMaterial(MATERIALS.sunflowerHead);
-    this.bindMaterial(MATERIALS.sunflowerCenter);
+    // Ensure all core materials are bound once.
+    if (!this.materialsBound) {
+      this.bindMaterial(MATERIALS.hedge);
+      this.bindMaterial(MATERIALS.grass);
+      this.bindMaterial(MATERIALS.flower);
+      this.bindMaterial(MATERIALS.wheat);
+      this.bindMaterial(MATERIALS.treeFirNeedles);
+      this.bindMaterial(MATERIALS.treeLeavesOak);
+      this.bindMaterial(MATERIALS.treeLeavesBirch);
+      this.bindMaterial(MATERIALS.treeTrunk);
+      this.bindMaterial(MATERIALS.treeTrunkOak);
+      this.bindMaterial(MATERIALS.treeTrunkBirch);
+      this.bindMaterial(MATERIALS.deadWood);
+      this.bindMaterial(MATERIALS.treeSilhouette);
+      this.bindMaterial(MATERIALS.sunflowerStem);
+      this.bindMaterial(MATERIALS.sunflowerHead);
+      this.bindMaterial(MATERIALS.sunflowerCenter);
+      this.materialsBound = true;
+    }
 
     if (!this.overrideActive && renderTime > this.nextChange) {
       if (Math.random() > 0.4) {
@@ -126,7 +130,7 @@ export class WindSystem implements System {
     this.direction.set(this.current.x, 0, this.current.y).normalize();
     this.strength = this.current.length();
 
-    // Brutal iterations-loop för just DETTA WindSystem
+    // High-performance iteration loop for this specific WindSystem
     const timeSec = renderTime * 0.001; // renderTime is already small and synchronized
     const windX = this.current.x;
     const windY = this.current.y;
@@ -151,6 +155,7 @@ export class WindSystem implements System {
   public clear(): void {
     this.boundUniforms.length = 0;
     this.overrideActive = false;
+    this.materialsBound = false;
   }
 
 }

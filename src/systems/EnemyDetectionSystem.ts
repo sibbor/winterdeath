@@ -186,10 +186,6 @@ export class EnemyDetectionSystem implements System {
                     } else {
                         context.handleDiscovery(DiscoveryType.ZOMBIE, e.type);
                     }
-                } else {
-                    if (e.awareness > 0) {
-                        e.awareness = Math.max(0, e.awareness - delta * 0.2);
-                    }
                 }
             }
 

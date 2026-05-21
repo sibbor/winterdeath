@@ -254,6 +254,11 @@ export interface Enemy {
     drownDmgTimer: number;
     fallStartY: number;
 
+    // --- OBSTACLE CACHING ---
+    lastObsQueryPos: THREE.Vector3;
+    cachedObstacles: any[];
+    cachedObstacleCount: number;
+
     // --- SPATIAL CHUNKING ---
     currentChunkKey: number;
     bucketIndex: number;

@@ -471,7 +471,7 @@ export const CampWorld = {
             deskGroup.add(l);
         }
         for (let i = 0; i < 3; i++) {
-            // Återanvänd färgpalett för att undvika "new Material()"
+            // Reuse color palette to avoid "new Material()"
             const b = new THREE.Mesh(GEOMETRY.box, CAMP_PROP_PALETTE[i % CAMP_PROP_PALETTE.length]);
             b.scale.set(0.7, 0.12, 0.9);
             b.position.set(-0.6, dH + 0.06 + (i * 0.13), -0.1);
@@ -520,7 +520,7 @@ export const CampWorld = {
             const shelf = new THREE.Mesh(GEOMETRY.box, darkerWoodMat); shelf.scale.set(cW - th * 2, th / 2, cD - th); shelf.position.set(0, yBase, 0); medGroup.add(shelf);
             for (let f = 0; f < 3; f++) {
                 const isRound = Math.random() > 0.5;
-                // Återanvänd färgpalett för flaskor
+                // Reuse color palette for bottles
                 const bMat = CAMP_PROP_PALETTE[(f + h) % CAMP_PROP_PALETTE.length];
                 const b = new THREE.Mesh(isRound ? new THREE.SphereGeometry(0.12, 8, 8) : new THREE.BoxGeometry(0.15, 0.4, 0.15), bMat);
                 b.position.set(-0.7 + f * 0.28, yBase + 0.25, 0);
@@ -637,17 +637,17 @@ export const CampWorld = {
 
         const { flames, sparkles, smokes, flameData, sparkleData, smokeData } = state.particles;
 
-        // Skapa en TimeScale (1.0 vid 60 FPS, 2.0 vid 30 FPS)
+        // Create a TimeScale (1.0 at 60 FPS, 2.0 at 30 FPS)
         const timeScale = delta * 60.0;
 
-        // Uppdatera våra timers
+        // Update our timers
         state.timers.flames += delta;
         state.timers.sparkles += delta;
         state.timers.smokes += delta;
 
-        // 1. FLAMES (Spawnade förut varannan frame = ~0.033s)
+        // 1. FLAMES (Previously spawned every second frame = ~0.033s)
         if (state.timers.flames > 0.033) {
-            state.timers.flames = 0; // Nollställ
+            state.timers.flames = 0; // Reset
             for (let i = 0; i < flames.count; i++) {
                 const idx = i * FLAME_VARS;
                 if (flameData[idx] <= 0) {
@@ -667,7 +667,7 @@ export const CampWorld = {
         for (let i = 0; i < flames.count; i++) {
             const idx = i * FLAME_VARS;
             if (flameData[idx] > 0) {
-                // Applicera timeScale på alla rörelser!
+                // Apply timeScale to all movements:
                 flameData[idx] -= 0.015 * timeScale;
                 flameData[idx + 1] += wind.x * timeScale;
                 flameData[idx + 2] += flameData[idx + 4] * timeScale;
@@ -691,7 +691,7 @@ export const CampWorld = {
         flames.instanceMatrix.needsUpdate = true;
         if (flames.instanceColor) flames.instanceColor.needsUpdate = true;
 
-        // 2. SPARKLES (Samma logik, spawna var ~0.033s)
+        // 2. SPARKLES (Same logic, spawn every ~0.033s)
         if (state.timers.sparkles > 0.033) {
             state.timers.sparkles = 0;
             for (let i = 0; i < sparkles.count; i++) {
@@ -727,7 +727,7 @@ export const CampWorld = {
         }
         sparkles.instanceMatrix.needsUpdate = true;
 
-        // 3. SMOKES (Spawnade förut var 10:e frame = ~0.16s)
+        // 3. SMOKES (Previously spawned every 10th frame = ~0.16s)
         if (state.timers.smokes > 0.166) {
             state.timers.smokes = 0;
             for (let i = 0; i < smokes.count; i++) {
@@ -755,7 +755,7 @@ export const CampWorld = {
                 _v1.set(smokeData[idx + 1], smokeData[idx + 2], smokeData[idx + 3]);
 
                 const age = (1.0 - smokeData[idx]);
-                const s = 1.2 + age * 2.5; // Scale behöver inte timeScale, den är baserad på 'age'
+                const s = 1.2 + age * 2.5; // Scale does not need timeScale, it is based on 'age'
                 _s1.set(s, s, s);
 
                 _q1.copy(camera.quaternion);

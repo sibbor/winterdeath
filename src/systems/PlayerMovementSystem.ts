@@ -560,18 +560,30 @@ export class PlayerMovementSystem implements System {
         }
 
         const distMoved = _v2.length();
+
+        // Hoist per-frame work outside the relaxation loop:
+        // - Distance tracking fires once per move call, not per sub-step.
+        // - Enemy spatial query: enemies don't relocate between sub-steps of a single frame.
+        //   Query once at the player's current position with a small radius (1.2m).
+        const streamer = session.worldStreamer;
+
+        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+        if (tracker) {
+            tracker.recordDistance(session, distMoved);
+            if (state.isRushing) {
+                tracker.recordRushDistance(session, distMoved);
+            }
+        }
+
+        const enPool = streamer.getEnemyPool();
+        const enPoolIdx = enPool.nextIndex();
+        streamer.getNearbyEnemies(playerGroup.position.x, playerGroup.position.z, 1.2, enPoolIdx);
+        const nearbyEnemies = enPool.getPool(enPoolIdx);
+        const enCount = enPool.getCount(enPoolIdx);
+
         for (let s = 0; s < steps; s++) {
             _v3.copy(playerGroup.position).add(_v2);
 
-            const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-            if (tracker) {
-                tracker.recordDistance(session, distMoved);
-                if (state.isRushing) {
-                    tracker.recordRushDistance(session, distMoved);
-                }
-            }
-
-            const streamer = session.worldStreamer;
             const obsPool = streamer.getObstaclePool();
             const obsPoolIdx = obsPool.nextIndex();
             streamer.getNearbyObstacles(_v3.x, _v3.z, 2.5, obsPoolIdx);
@@ -583,13 +595,6 @@ export class PlayerMovementSystem implements System {
                 let adjusted = false;
 
                 // --- 1. ENEMY COLLISION RESOLUTION (Standard Soft Shove) ---
-                const enPool = streamer.getEnemyPool();
-                const enPoolIdx = enPool.nextIndex();
-                streamer.getNearbyEnemies(_v3.x, _v3.z, 1.2, enPoolIdx);
-
-                const nearbyEnemies = enPool.getPool(enPoolIdx);
-                const enCount = enPool.getCount(enPoolIdx);
-
                 for (let j = 0; j < enCount; j++) {
                     const enemy = nearbyEnemies[j];
                     const distSq = _v3.distanceToSquared(enemy.mesh.position);

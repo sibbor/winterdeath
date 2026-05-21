@@ -259,11 +259,11 @@ export class LightSystem implements System {
         let currentIntensity = logicLight.intensity;
 
         // --- EDGE PROTECTION: SOFT CULLING FADE (Prevents popping) ---
-        // Fadning påbörjas vid 50 enheter (2500 sqDist) och når noll vid 60 enheter (3600 sqDist)
+        // Fading starts at 50 units (2500 sqDist) and reaches zero at 60 units (3600 sqDist)
         const sqDist = logicLight._sqDist || 0;
         if (sqDist > 2500) {
             const fadeFactor = 1.0 - (sqDist - 2500) / (3600 - 2500);
-            // Tvinga faktorn att hålla sig strikt mellan 0.0 och 1.0 utan if-satser
+            // Force the factor to stay strictly between 0.0 and 1.0 without if-statements
             currentIntensity *= (fadeFactor < 0.0 ? 0.0 : (fadeFactor > 1.0 ? 1.0 : fadeFactor));
         }
 

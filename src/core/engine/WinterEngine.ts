@@ -114,7 +114,7 @@ export class WinterEngine {
         this.isRenderingPaused = false;
     }
 
-    // Hard Paused stänger av allt (även miljö).
+    // Hard Paused turns off everything (even environment):
     public isRenderingPaused: boolean = false;
     public isSimulationPaused: boolean = false;
 
