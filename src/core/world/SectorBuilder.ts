@@ -485,7 +485,7 @@ export const SectorBuilder = {
 
         if (!group.userData.effects) group.userData.effects = [];
         group.userData.effects.push({
-            type: 'emitter', particle: 'spark', interval: 100, count: 1,
+            type: SubEffectType.EMITTER, particle: FXParticleType.SPARK, interval: 100, count: 1,
             offset: new THREE.Vector3(0, 0.2, 0), spread: 0.2, color: colorPrimary, velocity: new THREE.Vector3(0, 2, 0)
         });
 

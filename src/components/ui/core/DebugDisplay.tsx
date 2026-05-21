@@ -24,10 +24,23 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
     const [cpuExpanded, setCpuExpanded] = useState(false);
     const [showLogs, setShowLogs] = useState(false);
     const [isMobile] = useState(() => checkIsMobileDevice());
-    const [tick, setTick] = useState(0);
 
-
+    // Manual force update trigger for low-frequency user actions (toggling logs, toggling engine systems, etc.)
+    const [, setTick] = useState(0);
     const forceUpdate = () => setTick(t => t + 1);
+
+    // Slow panel state — drives React re-renders at 200ms, not 60fps.
+    // Keeps all JSX-array-building data out of the rAF hot path.
+    const [slowState, setSlowState] = useState<{
+        world: ReturnType<PerformanceMonitor['getFormattedGameState']>;
+        render: ReturnType<PerformanceMonitor['getFormattedRendererStats']>;
+        gc: ReturnType<PerformanceMonitor['getFormattedGcInfo']>;
+        timings: ReturnType<PerformanceMonitor['getFormattedTimings']>;
+        systems: any[];
+        logs: any[];
+        recordActive: boolean;
+        recordPending: boolean;
+    } | null>(null);
 
     // --- HIGH-FREQUENCY REFS ---
     const fpsRef = useRef<HTMLSpanElement>(null);
@@ -59,24 +72,21 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
 
     // Recording State Tracking
     const lastRecordState = useRef({ active: false, pending: false });
+    const isMinimizedRef = useRef(isMinimized);
+    isMinimizedRef.current = isMinimized;
 
     useEffect(() => {
         const monitor = PerformanceMonitor.getInstance();
         let rafId: number;
-        let lastUpdate = 0;
+        let lastRefUpdate = 0;
 
+        // --- HIGH-FREQUENCY PATH (rAF, 60fps) ---
+        // ONLY writes to DOM refs. Zero React allocations.
         const updateRefs = () => {
             const now = performance.now();
 
-            // Check for recording state changes to trigger React re-render for the button
-            if (monitor.isRecordingActive !== lastRecordState.current.active || monitor._recordingPending !== lastRecordState.current.pending) {
-                lastRecordState.current.active = monitor.isRecordingActive;
-                lastRecordState.current.pending = monitor._recordingPending;
-                forceUpdate();
-            }
-
-            if (now - lastUpdate > 100) {
-                lastUpdate = now;
+            if (now - lastRefUpdate > 100) {
+                lastRefUpdate = now;
 
                 if (fpsRef.current) fpsRef.current.textContent = Math.round(monitor.getFps()).toString();
                 if (logicFpsRef.current) logicFpsRef.current.textContent = Math.round(monitor.getLogicFps()).toString();
@@ -133,6 +143,41 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
 
         rafId = requestAnimationFrame(updateRefs);
 
+        // --- SLOW PANEL UPDATE (200ms interval) ---
+        // Drives React re-renders for JSX-heavy sections (systems list, timings, logs).
+        // Separated from rAF to prevent 60fps React reconciliation.
+        const engine = WinterEngine.getInstance();
+        let lastRecActive = monitor.isRecordingActive;
+        let lastRecPending = monitor._recordingPending;
+
+        const slowUpdate = () => {
+            const recActive = monitor.isRecordingActive;
+            const recPending = monitor._recordingPending;
+            const changed = recActive !== lastRecActive || recPending !== lastRecPending;
+            lastRecActive = recActive;
+            lastRecPending = recPending;
+
+            // Only rebuild state if panel is expanded or recording state changed.
+            // This is the ONLY path that triggers a React re-render.
+            if (isMinimizedRef.current && !changed) {
+                return;
+            }
+
+            setSlowState({
+                world: monitor.getFormattedGameState(),
+                render: monitor.getFormattedRendererStats(),
+                gc: monitor.getFormattedGcInfo(),
+                timings: monitor.getFormattedTimings(),
+                systems: engine ? engine.getSystems() : [],
+                logs: showLogs ? monitor.getLogs() : [],
+                recordActive: recActive,
+                recordPending: recPending,
+            });
+        };
+
+        const slowIntervalId = setInterval(slowUpdate, 200);
+        slowUpdate(); // Populate immediately on mount
+
         const unsubscribe = HudStore.subscribe((state) => {
             if (state.debugMode !== debugMode) setDebugMode(state.debugMode);
             if (state.hudVisible !== hudVisible) setHudVisible(state.hudVisible);
@@ -140,9 +185,10 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
 
         return () => {
             cancelAnimationFrame(rafId);
+            clearInterval(slowIntervalId);
             unsubscribe();
         };
-    }, [debugMode, hudVisible]);
+    }, [debugMode, hudVisible, showLogs]);
 
     const toggleMinimized = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -152,9 +198,6 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
     };
 
     if (!debugMode || !hudVisible) return null;
-
-    const monitor = PerformanceMonitor.getInstance();
-    const engine = WinterEngine.getInstance();
 
     if (isMinimized) {
         return (
@@ -180,18 +223,24 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
         );
     }
 
-    const world = monitor.getFormattedGameState();
-    const render = monitor.getFormattedRendererStats();
-    const gc = monitor.getFormattedGcInfo();
-    const timings = monitor.getFormattedTimings();
-    const systems = engine ? engine.getSystems() : [];
-    const logs = showLogs ? monitor.getLogs() : [];
+    const monitor = PerformanceMonitor.getInstance();
+    const engine = WinterEngine.getInstance();
+
+    // Use slow-polled state for JSX building. Falls back to live reads on first frame.
+    const panelWorld = slowState?.world ?? monitor.getFormattedGameState();
+    const panelRender = slowState?.render ?? monitor.getFormattedRendererStats();
+    const panelGc = slowState?.gc ?? monitor.getFormattedGcInfo();
+    const panelTimings = slowState?.timings ?? monitor.getFormattedTimings();
+    const systems = slowState?.systems ?? (engine ? engine.getSystems() : []);
+    const logs = slowState?.logs ?? [];
+    const recActive = slowState?.recordActive ?? monitor.isRecordingActive;
+    const recPending = slowState?.recordPending ?? monitor._recordingPending;
 
     const systemElements = [];
     if (systemsExpanded && systems.length > 0) {
         for (let i = 0; i < systems.length; i++) {
             const sys = systems[i];
-            const timing = timings.breakdown[sys.systemId];
+            const timing = panelTimings.breakdown[sys.systemId];
             systemElements.push(
                 <div key={sys.systemId} onClick={(e) => { e.stopPropagation(); engine?.setSystemEnabled(sys.systemId as SystemID, !sys.enabled); forceUpdate(); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled !== false ? 'text-green-400' : 'text-red-400/60'}`}>
                     <span className="truncate mr-2">{SystemID[sys.systemId] || `SYS_${sys.systemId}`}</span>
@@ -215,9 +264,9 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
     }
 
     const timingElements = [];
-    if (timings) {
-        for (const key in timings.breakdown) {
-            const val = (timings.breakdown as any)[key];
+    if (panelTimings) {
+        for (const key in panelTimings.breakdown) {
+            const val = (panelTimings.breakdown as any)[key];
             timingElements.push(
                 <div key={key} className="flex justify-between border-b border-white/5 py-0.5">
                     <span className="text-white/60 truncate mr-2">{key.replace('render_', '')}</span>
@@ -233,8 +282,8 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
 
     // Record button text logic
     let recordText = 'START RECORDING';
-    if (monitor.isRecordingActive) recordText = 'STOP RECORDING';
-    else if (monitor.isRecordingPending) recordText = 'STARTING IN 2 SEC';
+    if (recActive) recordText = 'STOP RECORDING';
+    else if (recPending) recordText = 'STARTING IN 2 SEC';
 
     return (
         <>
@@ -301,7 +350,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
                         <span ref={gcAlertRef} className="text-white/20">—</span>
                     </div>
 
-                    {parseFloat(String(gc.heapUsedMB)) > 0 && (
+                    {parseFloat(String(panelGc.heapUsedMB)) > 0 && (
                         <div>
                             <div className="text-white/40 uppercase text-[10px] mb-0.5">{t('ui.world_memory')}</div>
                             <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
@@ -357,9 +406,9 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
                                     LOG
                                 </button>
                             )}
-                            <button
-                                onClick={(e) => { e.stopPropagation(); monitor.isRecordingActive ? monitor.stopRecording() : monitor.startRecording(); forceUpdate(); }}
-                                className={`px-1 py-0.5 rounded text-[9px] font-bold transition-all ${monitor.isRecordingActive ? 'bg-red-500 text-white animate-pulse-red shadow-[0_0_8px_rgba(239,68,68,0.5)]' : (monitor.isRecordingPending ? 'bg-orange-500 text-black' : 'bg-white/10 text-white/40')}`}
+                        <button
+                                onClick={(e) => { e.stopPropagation(); recActive ? monitor.stopRecording() : monitor.startRecording(); }}
+                                className={`px-1 py-0.5 rounded text-[9px] font-bold transition-all ${recActive ? 'bg-red-500 text-white animate-pulse-red shadow-[0_0_8px_rgba(239,68,68,0.5)]' : (recPending ? 'bg-orange-500 text-black' : 'bg-white/10 text-white/40')}`}
                             >
                                 {recordText}
                             </button>

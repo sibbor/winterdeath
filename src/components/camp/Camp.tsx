@@ -20,6 +20,11 @@ import { SystemID } from '../../systems/System';
 const _v1 = new THREE.Vector3();
 const _campCtx: any = { dynamicLights: [] };
 
+// Pre-allocated timer context objects — set callbacks wired once per mount.
+// Avoids creating { val, set } + arrow-function allocations on every frame.
+const _nextChatterTimeCtx: { val: number; set: (v: number) => void } = { val: 0, set: () => {} };
+const _nextWildlifeTimeCtx: { val: number; set: (v: number) => void } = { val: 0, set: () => {} };
+
 /** Safe O(1) WEAPONS lookup via DataResolver */
 const weaponName = (id: number): string => DataResolver.getDamageName(id);
 
@@ -299,6 +304,13 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         const scene = engine.scene;
         const camera = engine.camera;
 
+        // Wire up Zero-GC timer context callbacks once per mount.
+        // The closures capture stable React refs — safe to assign once.
+        _nextChatterTimeCtx.set = (v: number) => { nextChatterTime.current = v; _nextChatterTimeCtx.val = v; };
+        _nextWildlifeTimeCtx.set = (v: number) => { nextWildlifeTime.current = v; _nextWildlifeTimeCtx.val = v; };
+        _campCtx.nextChatterTime = _nextChatterTimeCtx;
+        _campCtx.nextWildlifeTime = _nextWildlifeTimeCtx;
+
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2(-1000, -1000);
         let mouseMoved = false;
@@ -418,8 +430,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             _campCtx.activeChats = activeChats.current;
             _campCtx.chatOverlay = chatOverlayRef.current;
             _campCtx.isGameRunning = isGameRunning;
-            _campCtx.nextChatterTime = { val: nextChatterTime.current, set: (v: number) => nextChatterTime.current = v };
-            _campCtx.nextWildlifeTime = { val: nextWildlifeTime.current, set: (v: number) => nextWildlifeTime.current = v };
+            // Zero-GC: mutate pre-allocated objects — no new objects or closures per frame.
+            _nextChatterTimeCtx.val = nextChatterTime.current;
+            _nextWildlifeTimeCtx.val = nextWildlifeTime.current;
             _campCtx.hoveredId = hoveredRef.current
 
             // Tell engine to update the systems:

@@ -454,7 +454,10 @@ export const HudSystem = {
             _current.debugInfo.aim.x = 0; _current.debugInfo.aim.y = 0;
         }
 
+        const perfMon = PerformanceMonitor.getInstance();
+        const gcInfo = perfMon.getFormattedGcInfo();
         const dbgActs = input.actions;
+
         _current.debugInfo.input.w = dbgActs[InputAction.UP] ? 1 : 0;
         _current.debugInfo.input.a = dbgActs[InputAction.LEFT] ? 1 : 0;
         _current.debugInfo.input.s = dbgActs[InputAction.DOWN] ? 1 : 0;
@@ -473,13 +476,10 @@ export const HudSystem = {
         _current.debugInfo.camera.fov = (camera as THREE.PerspectiveCamera).fov;
         _current.debugInfo.coords.x = truncate1(playerPos.x);
         _current.debugInfo.coords.z = truncate1(playerPos.z);
-        _current.debugInfo.performance.cpu = PerformanceMonitor.getInstance().getTimings();
-        const perfMem = (performance as any).memory;
-        if (perfMem) {
-            _current.debugInfo.performance.memory.heapLimit = Math.round(perfMem.jsHeapSizeLimit / 1048576);
-            _current.debugInfo.performance.memory.heapTotal = Math.round(perfMem.totalJSHeapSize / 1048576);
-            _current.debugInfo.performance.memory.heapUsed = Math.round(perfMem.usedJSHeapSize / 1048576);
-        }
+        _current.debugInfo.performance.cpu = perfMon.getTimings();
+        _current.debugInfo.performance.memory.heapLimit = gcInfo.heapLimitMB;
+        _current.debugInfo.performance.memory.heapTotal = gcInfo.heapLimitMB;
+        _current.debugInfo.performance.memory.heapUsed = gcInfo.heapUsedMB;
         _current.debugInfo.modes = state.interaction.active ? state.interaction.type : InteractionType.NONE;
         _current.debugInfo.enemies = enemies.length;
         _current.debugInfo.objects = state.obstacles?.length || 0;

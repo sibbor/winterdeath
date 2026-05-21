@@ -558,7 +558,7 @@ export const FXSystem = {
         }
 
         let req = DECAL_REQUEST_POOL.pop();
-        if (!req) req = { scene, x, y: 0, z, type, customVel: new THREE.Vector3(), hasCustomVel: false };
+        if (!req) req = { scene, x, y: 0, z, type, customVel: _UP, hasCustomVel: false };
         else { req.scene = scene; req.x = x; req.z = z; req.type = type; }
         req.scale = scale; req.material = material;
         FXSystem.decalQueue.push(req);

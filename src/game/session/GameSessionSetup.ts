@@ -332,11 +332,6 @@ export class GameSessionSetup {
         const playerGroup = ModelFactory.createPlayer();
         refs.playerGroupRef.current = playerGroup;
 
-        // --- PERFORMANCE CACHE (Phase 13) ---
-        // Purging getObjectByName from hot-paths by caching nodes during setup
-        state.baseScale = playerGroup.userData.baseScale || 1.0;
-        state.baseY = playerGroup.userData.baseY || 0;
-
         let bodyMesh = playerGroup.children[0];
         const pLen = playerGroup.children.length;
         for (let i = 0; i < pLen; i++) {
@@ -346,6 +341,11 @@ export class GameSessionSetup {
             }
         }
         refs.playerMeshRef.current = bodyMesh as THREE.Group;
+
+        // --- PERFORMANCE CACHE ---
+        // Purging getObjectByName from hot-paths by caching nodes during setup
+        state.baseScale = bodyMesh.userData.baseScale !== undefined ? bodyMesh.userData.baseScale : 1.0;
+        state.baseY = bodyMesh.userData.baseY !== undefined ? bodyMesh.userData.baseY : 0;
 
         // Cache Equipment Nodes for O(1) access
         state.nodes.gun = bodyMesh.getObjectByName('gun') || null;
@@ -595,7 +595,7 @@ export class GameSessionSetup {
 
                         // Authoritative Sector-Specific Recalculation (Immune to double-registration!)
                         const currentSector = sectorCtx.sectorId;
-                        
+
                         if (type === DiscoveryType.CLUE) {
                             let cCount = 0;
                             if (state.discoverySets?.clues) {
@@ -609,7 +609,7 @@ export class GameSessionSetup {
                                 if (CLUES[thisClueSmi]?.sector === currentSector) cCount++;
                             }
                             HudStore.patch({ cluesFoundCount: cCount });
-                            
+
                         } else if (type === DiscoveryType.POI) {
                             let poiCount = 0;
                             if (state.discoverySets?.pois) {
@@ -623,7 +623,7 @@ export class GameSessionSetup {
                                 if (POIS[thisPoiSmi]?.sector === currentSector) poiCount++;
                             }
                             HudStore.patch({ poisFoundCount: poiCount });
-                            
+
                         } else if (type === DiscoveryType.COLLECTIBLE) {
                             let colCount = 0;
                             if (state.discoverySets?.collectibles) {

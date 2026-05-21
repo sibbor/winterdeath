@@ -14,7 +14,7 @@ export const CAMP_SCENE = {
     // Fog & Background
     bgColor: 0x161629,
     fog: {
-        color: 0x161629, // 0x161629
+        color: 0x161629,
         density: 20,
         height: 0.2
     },

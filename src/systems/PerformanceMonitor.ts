@@ -66,13 +66,24 @@ export class PerformanceMonitor {
     private _logicFrameCount: number = 0;
     private _lastLogicFpsUpdate: number = 0;
 
-    // GC Tracking
+    // GC Tracking (live state)
     private lastHeapSize: number = 0;
     private gcDetected: boolean = false;
     private gcDroppedMB: number = 0;
     private heapUsedMB: number = 0;
     private heapLimitMB: number = 0;
     private _lastGcTime: number = 0;
+    private _lastMemUpdate: number = 0;
+
+    // GC Recording accumulators
+    private _recordingTotalGcMB: number = 0;
+    private _recordingGcEventCount: number = 0;
+
+    // Pre-allocated GC event ring buffer (Zero-GC — slots created once)
+    private static readonly GC_RING_SIZE = 32;
+    private _gcRing: { time: number; droppedMB: number; heapBefore: number; heapAfter: number }[];
+    private _gcRingHead: number = 0;
+    private _gcRingCount: number = 0;
 
     // Renderer Stat Tracking
     private _drawCalls: number = 0;
@@ -95,6 +106,12 @@ export class PerformanceMonitor {
     constructor() {
         this.timings = new Float32Array(this.MAX_SYSTEMS);
         this.startTimes = new Float32Array(this.MAX_SYSTEMS);
+
+        // Pre-allocate GC ring buffer slots (done once — Zero-GC in hot-path)
+        this._gcRing = new Array(PerformanceMonitor.GC_RING_SIZE);
+        for (let i = 0; i < PerformanceMonitor.GC_RING_SIZE; i++) {
+            this._gcRing[i] = { time: 0, droppedMB: 0, heapBefore: 0, heapAfter: 0 };
+        }
 
         const now = performance.now();
         this._lastLogicFpsUpdate = now;
@@ -151,22 +168,40 @@ export class PerformanceMonitor {
             this._lastRenderFpsUpdate = now;
         }
 
-        const mem = (performance as any).memory;
-        if (mem) {
-            const currentHeap = mem.usedJSHeapSize;
-            this.heapUsedMB = currentHeap / 1048576;
-            this.heapLimitMB = mem.jsHeapSizeLimit / 1048576;
-            if (this.lastHeapSize > 0) {
-                const diff = this.lastHeapSize - currentHeap;
-                if (diff > 1048576) {
-                    this.gcDetected = true;
-                    this.gcDroppedMB = diff / 1048576;
-                    this._lastGcTime = now;
-                } else {
-                    this.gcDetected = false;
+        if (now - this._lastMemUpdate > 500) {
+            this._lastMemUpdate = now;
+            const mem = (performance as any).memory;
+            if (mem) {
+                const currentHeap = mem.usedJSHeapSize;
+                this.heapUsedMB = currentHeap / 1048576;
+                this.heapLimitMB = mem.jsHeapSizeLimit / 1048576;
+                if (this.lastHeapSize > 0) {
+                    const diff = this.lastHeapSize - currentHeap;
+                    if (diff > 1048576) {
+                        this.gcDetected = true;
+                        this.gcDroppedMB = diff / 1048576;
+                        this._lastGcTime = now;
+
+                        // --- Recording: accumulate total and push to ring buffer ---
+                        if (this._isRecording) {
+                            this._recordingTotalGcMB += this.gcDroppedMB;
+                            this._recordingGcEventCount++;
+
+                            // Zero-GC: mutate pre-allocated slot
+                            const slot = this._gcRing[this._gcRingHead];
+                            slot.time = now - this._recordingStartTime;
+                            slot.droppedMB = this.gcDroppedMB;
+                            slot.heapBefore = this.lastHeapSize / 1048576;
+                            slot.heapAfter = currentHeap / 1048576;
+                            this._gcRingHead = (this._gcRingHead + 1) % PerformanceMonitor.GC_RING_SIZE;
+                            if (this._gcRingCount < PerformanceMonitor.GC_RING_SIZE) this._gcRingCount++;
+                        }
+                    } else {
+                        this.gcDetected = false;
+                    }
                 }
+                this.lastHeapSize = currentHeap;
             }
-            this.lastHeapSize = currentHeap;
         }
     }
 
@@ -298,6 +333,13 @@ export class PerformanceMonitor {
             this._reports = {};
             this._recordingStartRecompiles = this._shaderRecompileCount;
             this._recordingStartTime = performance.now();
+
+            // Reset GC recording accumulators
+            this._recordingTotalGcMB = 0;
+            this._recordingGcEventCount = 0;
+            this._gcRingHead = 0;
+            this._gcRingCount = 0;
+
             console.log(`🔴 [WinterEngine] Recording started! Click REC again to stop and dump report.`);
         }, 2000);
     }
@@ -335,7 +377,24 @@ export class PerformanceMonitor {
         console.log("🌍 [WORLD & MEMORY]");
         console.log(`   Player: X: ${world.playerX}, Z: ${world.playerZ} | Cam: ${world.camX}, ${world.camY}, ${world.camZ}`);
         console.log(`   Entities: ${world.enemies} Enemies | ${world.objects} Objects`);
-        console.log(`   Heap: ${gc.heapUsedMB} MB / ${gc.heapLimitMB} MB (Dropped: ${gc.droppedMB} MB)`);
+        console.log(`   Heap: ${gc.heapUsedMB} MB / ${gc.heapLimitMB} MB | Last drop: ${gc.droppedMB} MB`);
+        console.log(`   GC Events during session: ${this._recordingGcEventCount} | Total reclaimed: ${(Math.round(this._recordingTotalGcMB * 10) / 10)} MB`);
+
+        if (this._recordingGcEventCount > 0) {
+            console.log("🗑️  [GC EVENT TIMELINE]");
+            const gcTable: Record<string, string> = {};
+            // Reconstruct chronological order from ring buffer
+            const start = this._gcRingCount < PerformanceMonitor.GC_RING_SIZE
+                ? 0
+                : this._gcRingHead; // wrapped — oldest is at head
+            for (let i = 0; i < this._gcRingCount; i++) {
+                const idx = (start + i) % PerformanceMonitor.GC_RING_SIZE;
+                const ev = this._gcRing[idx];
+                const label = `GC #${i + 1} @ +${(ev.time / 1000).toFixed(2)}s`;
+                gcTable[label] = `↓ ${(Math.round(ev.droppedMB * 10) / 10)} MB  (${(Math.round(ev.heapBefore * 10) / 10)} → ${(Math.round(ev.heapAfter * 10) / 10)} MB)`;
+            }
+            console.table(gcTable);
+        }
 
         console.log("🎨 [RENDERER]");
         console.log(`   Draw Calls: ${render.drawCalls}`);
@@ -396,10 +455,27 @@ export class PerformanceMonitor {
 
     public getFormattedGcInfo() {
         this._gcInfoCache.timeSinceDetection = Math.round(performance.now() - this._lastGcTime);
-        this._gcInfoCache.droppedMB = Math.round(this.gcDroppedMB * 10) / 10;
+        // During recording, show the session-accumulated total; otherwise show last single drop.
+        this._gcInfoCache.droppedMB = this._isRecording
+            ? Math.round(this._recordingTotalGcMB * 10) / 10
+            : Math.round(this.gcDroppedMB * 10) / 10;
         this._gcInfoCache.heapUsedMB = Math.round(this.heapUsedMB * 10) / 10;
         this._gcInfoCache.heapLimitMB = Math.round(this.heapLimitMB);
         return this._gcInfoCache;
+    }
+
+    /**
+     * Returns the GC event ring buffer in chronological order.
+     * Read-only view — do not mutate the returned slots.
+     */
+    public getGcEvents(): { time: number; droppedMB: number; heapBefore: number; heapAfter: number }[] {
+        // Returns a sorted snapshot — only called from dev tooling, not hot-path.
+        const result: { time: number; droppedMB: number; heapBefore: number; heapAfter: number }[] = [];
+        const start = this._gcRingCount < PerformanceMonitor.GC_RING_SIZE ? 0 : this._gcRingHead;
+        for (let i = 0; i < this._gcRingCount; i++) {
+            result.push(this._gcRing[(start + i) % PerformanceMonitor.GC_RING_SIZE]);
+        }
+        return result;
     }
 
     public getFormattedTimings() {

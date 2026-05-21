@@ -2,6 +2,11 @@ import * as THREE from 'three';
 import { CAMERA_HEIGHT } from '../content/constants';
 import { System, SystemID } from './System';
 
+export enum CameraShakeType {
+    GENERAL = 0,
+    HURT = 1
+}
+
 /**
  * CameraSystem
  * Centralized manager for the PerspectiveCamera.
@@ -142,8 +147,8 @@ export class CameraSystem implements System {
         if (immediate) this._followHeightMod = mod;
     }
 
-    public shake(amount: number, type: 'general' | 'hurt' = 'general') {
-        if (type === 'hurt') {
+    public shake(amount: number, type: CameraShakeType = CameraShakeType.GENERAL) {
+        if (type === CameraShakeType.HURT) {
             this._hurtIntensity = Math.max(this._hurtIntensity, amount);
         } else {
             this._shakeIntensity = Math.max(this._shakeIntensity, amount);

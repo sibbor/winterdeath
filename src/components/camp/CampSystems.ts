@@ -7,6 +7,9 @@ import { DataResolver } from '../../core/data/DataResolver';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { SoundID } from '../../utils/audio/AudioTypes';
 
+// Module-level scratchpads for Zero-GC
+const _v1 = new THREE.Vector3();
+
 /**
  * Wraps CampWorld effects (Fire, Smoke, Stars, Wind)
  */
@@ -54,12 +57,28 @@ export class CampFamilyAnimationSystem implements System {
                 if (fm.bounce < 0) fm.bounce = 0;
             }
 
-            PlayerAnimator.update(fm.mesh as any, {
-                isMoving: false, isRushing: false, isDodging: false, dodgeStartTime: 0, staminaRatio: 1.0,
-                isSpeaking, isThinking: false, isIdleLong: renderTime > 5000, seed: fm.seed,
-                renderTime: renderTime,
-                simTime: simTime
-            }, renderTime, dt);
+            if (!fm.animState) {
+                fm.animState = {
+                    isMoving: false,
+                    isRushing: false,
+                    isDodging: false,
+                    dodgeStartTime: 0,
+                    staminaRatio: 1.0,
+                    isSpeaking: false,
+                    isThinking: false,
+                    isIdleLong: false,
+                    seed: fm.seed,
+                    renderTime: 0,
+                    simTime: 0
+                };
+            }
+
+            fm.animState.isSpeaking = isSpeaking;
+            fm.animState.isIdleLong = renderTime > 5000;
+            fm.animState.renderTime = renderTime;
+            fm.animState.simTime = simTime;
+
+            PlayerAnimator.update(fm.mesh as any, fm.animState, renderTime, dt);
 
             const isHov = hoveredId === (fm.mesh.userData.id);
             const emissiveIntensity = isHov ? 0.5 + Math.sin(renderTime * 0.005) * 0.5 : 0;
@@ -122,7 +141,8 @@ export class CampChatterSystem implements System {
                     element: el,
                     playedSound: false,
                     _lastX: -9999,
-                    _lastY: -9999
+                    _lastY: -9999,
+                    _lastOpacity: -1  // Zero-GC: numeric cache avoids String() per frame
                 });
                 delayOffset += 2500 + Math.random() * 2000;
             }
@@ -141,7 +161,9 @@ export class CampChatterSystem implements System {
         }
 
         // 2. Chat Bubble Positioning & Expiry
-        const _v1 = new THREE.Vector3();
+        // Guard the window size reads — zero cost when no chats are active.
+        if (activeChats.length === 0) return;
+
         const screenWidth = window.innerWidth;
         const screenHeight = window.innerHeight;
 
@@ -156,10 +178,22 @@ export class CampChatterSystem implements System {
 
             else if (renderTime >= c.startTime) {
 
-                // 1. Opacity - update only if it actually changes
-                const targetOpacity = renderTime < c.startTime + 500 ? String((renderTime - c.startTime) / 500) : (renderTime > c.startTime + c.duration - 500 ? String((c.startTime + c.duration - renderTime) / 500) : '1');
-                if (c.element.style.opacity !== targetOpacity) {
-                    c.element.style.opacity = targetOpacity;
+                // 1. Opacity — numeric cache avoids String() allocation every frame.
+                // A string is only written during the fade-in/out ramps (first/last 500ms).
+                const elapsed = renderTime - c.startTime;
+                let targetOpacity: number;
+                if (elapsed < 500) {
+                    targetOpacity = elapsed / 500;
+                } else if (renderTime > c.startTime + c.duration - 500) {
+                    targetOpacity = (c.startTime + c.duration - renderTime) / 500;
+                } else {
+                    targetOpacity = 1.0;
+                }
+                // Round to 2 dp — avoids micro-updates and keeps the string short
+                const roundedOpacity = Math.round(targetOpacity * 100) / 100;
+                if (roundedOpacity !== c._lastOpacity) {
+                    c._lastOpacity = roundedOpacity;
+                    c.element.style.opacity = roundedOpacity.toFixed(2);
                 }
 
                 // 2. Positioning (Hardware accelerated & Zero-GC)

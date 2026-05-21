@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
+import { CameraShakeType } from '../../systems/CameraSystem';
 import { RuntimeState } from '../../core/RuntimeState';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { HudSystem } from '../../systems/HudSystem';
@@ -10,10 +11,9 @@ import { FootprintSystem } from '../../systems/FootprintSystem';
 import { FXSystem } from '../../systems/FXSystem';
 import { CAMERA_HEIGHT, HEALTH_CRITICAL_THRESHOLD } from '../../content/constants';
 import { audioEngine } from '../../utils/audio/AudioEngine';
-import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { WEAPONS, WeaponBehavior } from '../../content/weapons';
 import { Enemy, EnemyFlags, EnemyDeathState, NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
-import { StatusEffect, StatusEffectID } from '../../types/StatusEffects';
+import { StatusEffectID } from '../../types/StatusEffects';
 import { DeathPhase } from '../../types/SessionTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 import { DamageID, DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
@@ -29,7 +29,6 @@ import { EffectPool, SubEffectType } from '../../systems/EffectManager';
 import { SystemID } from '../../systems/System';
 import { WeaponFX } from '../../systems/WeaponFX';
 import { PerkFX } from '../../systems/PerkFX';
-import { SectorSystem } from '../../systems/SectorSystem';
 import { SectorUpdateContext } from './SectorTypes';
 import { ChunkManager } from '../../core/world/ChunkManager';
 
@@ -712,15 +711,17 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 }
             } else {
                 if (state.hurtShake > 0) {
-                    engine.camera.shake(state.hurtShake, 'hurt');
-                    state.hurtShake = Math.max(0, state.hurtShake - 2.0 * delta);
+                    engine.camera.shake(state.hurtShake, CameraShakeType.HURT);
+                    state.hurtShake *= Math.exp(-4.0 * delta);
+                    if (state.hurtShake < 0.01) state.hurtShake = 0;
                 }
                 if (state.cameraShake > 0) {
-                    engine.camera.shake(state.cameraShake, 'general');
-                    state.cameraShake = Math.max(0, state.cameraShake - 5.0 * delta);
+                    engine.camera.shake(state.cameraShake, CameraShakeType.GENERAL);
+                    state.cameraShake *= Math.exp(-10.0 * delta);
+                    if (state.cameraShake < 0.01) state.cameraShake = 0;
                 }
                 if ((state.statusFlags & PlayerStatusFlags.DISORIENTED) !== 0) {
-                    engine.camera.shake(0.20, 'general');
+                    engine.camera.shake(0.20, CameraShakeType.GENERAL);
                 }
 
                 const envCameraZ = propsRef.current.currentSectorData?.environment.cameraOffsetZ || 25;
@@ -840,7 +841,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 const effects = obj.userData.effects;
                 for (let j = 0; j < effects.length; j++) {
                     const eff = effects[j];
-                    if (eff.type === 'emitter') {
+                    if (eff.type === SubEffectType.EMITTER) {
                         if (isBacklogged && !eff.essential) continue;
 
                         if (!eff.lastEmit) eff.lastEmit = 0;

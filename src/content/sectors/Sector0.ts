@@ -318,14 +318,14 @@ export const Sector0: SectorDef = {
             time: 0.05,
             atmosphereColor: 0x050510,
             celestial: {
-                radius: 15,
+                radius: 40,
                 color: 0x88ccff,
-                position: { x: 50, y: 35, z: 50 }
+                position: { x: -80, y: 220, z: -350 }
             },
             light: {
                 visible: true,
-                color: 0x4466aa,
-                intensity: 0.2,
+                color: 0x88ccff,
+                intensity: 1.5,
                 castShadow: true
             }
         },

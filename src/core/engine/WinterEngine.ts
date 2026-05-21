@@ -130,6 +130,11 @@ export class WinterEngine {
     // --- HYBRID SYSTEM REGISTRY (Zero-GC) ---
     private _systems: (System | any)[] = new Array(SystemID.COUNT).fill(null);
     private _tickableSystems: System[] = []; // Sub-list of systems that implement update()
+    private _preallocatedSystemItems = Array.from(
+        { length: SystemID.COUNT },
+        () => ({ systemId: SystemID.NONE, enabled: false, persistent: false })
+    );
+    private _cachedSystemsList: { systemId: SystemID; enabled: boolean; persistent: boolean }[] = [];
 
     // --- CACHED SCENE REFERENCES ---
     private _cachedSkyLight: THREE.DirectionalLight | null = null;
@@ -791,14 +796,20 @@ export class WinterEngine {
     }
 
     public getSystems() {
-        const result: { systemId: SystemID; enabled: boolean; persistent: boolean }[] = [];
+        let count = 0;
         for (let i = 0; i < SystemID.COUNT; i++) {
             const sys = this._systems[i];
             if (sys && sys.systemId !== SystemID.PERFORMANCE_MONITOR && typeof sys.update === 'function') {
-                result.push({ systemId: sys.systemId, enabled: sys.enabled, persistent: sys.persistent });
+                const item = this._preallocatedSystemItems[count];
+                item.systemId = sys.systemId;
+                item.enabled = sys.enabled;
+                item.persistent = sys.persistent;
+                this._cachedSystemsList[count] = item;
+                count++;
             }
         }
-        return result;
+        this._cachedSystemsList.length = count;
+        return this._cachedSystemsList;
     }
 
     public clearSystems() {

@@ -117,13 +117,17 @@ const MapCanvas = React.memo(({ mapItems, mapItemsCount, bounds, groupedEntities
 
     return (
         <div
-            className="absolute inset-0 bg-slate-900 border-2 border-blue-900/50 cursor-crosshair overflow-hidden"
+            className="absolute inset-0 bg-slate-950 border-2 border-blue-900/50 cursor-crosshair overflow-hidden"
             onMouseMove={handleMouseMove}
             onMouseDown={handleMouseDown}
             onTouchStart={handleTouchStart}
             onTouchEnd={onInteractionEnd}
         >
             <div className="absolute inset-0 pointer-events-none">{gridLines}</div>
+
+            {/* Gritty radar ambient sweep & CRT glass/scanline overlays */}
+            <div className="radar-sonar-sweep" />
+            <div className="radar-crt-overlay" />
 
             {/* Polygon Layer (Terrain/Buildings) */}
             <svg className="absolute inset-0 pointer-events-none w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -175,16 +179,40 @@ const MapCanvas = React.memo(({ mapItems, mapItemsCount, bounds, groupedEntities
             {groupedEntities.map((group: any, i: number) => {
                 const topItem = group[0];
                 const pos = getMapPercent(topItem.x, topItem.z, bounds);
-                let content = <div className="w-2 h-2 rounded-full" style={{ backgroundColor: topItem.color || 'white' }} />;
+                let content = (
+                    <div 
+                        className="w-2.5 h-2.5 rounded-full border border-white/40 shadow-[0_0_4px_currentColor]" 
+                        style={{ backgroundColor: topItem.color || 'white', color: topItem.color || 'white' }} 
+                    />
+                );
 
-                if (topItem.type === MapItemType.POI) content = <span className="text-lg">📍</span>;
-                if (topItem.type === MapItemType.CHEST) content = <span className="text-lg">📦</span>;
-                if (topItem.type === MapItemType.TRIGGER || topItem.label?.includes('clue')) content = <span className="text-lg">🔍</span>;
+                if (topItem.type === MapItemType.POI) {
+                    content = (
+                        <svg className="w-6 h-6 drop-shadow-[0_0_6px_rgba(59,130,246,0.8)] stroke-blue-400 stroke-2 fill-none" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="8" />
+                            <path d="M12 8v8 M8 12h8" />
+                        </svg>
+                    );
+                } else if (topItem.type === MapItemType.CHEST) {
+                    content = (
+                        <svg className="w-6 h-6 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)] stroke-yellow-500 stroke-2 fill-none" viewBox="0 0 24 24">
+                            <rect x="4" y="4" width="16" height="16" rx="2" />
+                            <path d="M4 10h16 M10 20V10 M14 20V10" />
+                        </svg>
+                    );
+                } else if (topItem.type === MapItemType.TRIGGER || topItem.label?.includes('clue')) {
+                    content = (
+                        <svg className="w-6 h-6 drop-shadow-[0_0_6px_rgba(236,72,153,0.8)] stroke-pink-500 stroke-2 fill-none animate-pulse" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="5" />
+                            <path d="M16 16l4 4" />
+                        </svg>
+                    );
+                }
 
                 return (
                     <div
                         key={i}
-                        className="absolute -translate-x-1/2 -translate-y-1/2 cursor-help z-10"
+                        className="absolute -translate-x-1/2 -translate-y-1/2 cursor-help z-10 flex items-center justify-center"
                         style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
                         onMouseEnter={(e) => setTooltipData({ rect: e.currentTarget.getBoundingClientRect(), items: group })}
                         onMouseLeave={() => setTooltipData(null)}
@@ -211,6 +239,9 @@ const LiveEnemyDots = React.memo(({ bounds }: { bounds: any }) => {
             if (!containerRef.current) return;
             const state = HudStore.getState();
             const vecBuf = state.vectorBuffer; // 256 length (x, z pairs)
+            const width = bounds.maxX - bounds.minX;
+            const height = bounds.maxZ - bounds.minZ;
+            if (width === 0 || height === 0) return;
 
             const pool = poolRef.current;
             for (let i = 0; i < 128; i++) {
@@ -225,10 +256,11 @@ const LiveEnemyDots = React.memo(({ bounds }: { bounds: any }) => {
                 if (ex < -90000) {
                     dot.style.display = 'none';
                 } else {
-                    const pos = getMapPercent(ex, ez, bounds);
+                    const px = ((ex - bounds.minX) / width) * 100;
+                    const py = ((ez - bounds.minZ) / height) * 100;
                     dot.style.display = 'block';
-                    dot.style.left = `${pos.x}%`;
-                    dot.style.top = `${pos.y}%`;
+                    dot.style.left = `${px}%`;
+                    dot.style.top = `${py}%`;
                 }
             }
         };
@@ -243,7 +275,7 @@ const LiveEnemyDots = React.memo(({ bounds }: { bounds: any }) => {
                 <div
                     key={i}
                     ref={el => { if (el) poolRef.current[i] = el; }}
-                    className="absolute w-1.5 h-1.5 bg-red-500 rounded-full border border-black/40 -translate-x-1/2 -translate-y-1/2 will-change-[left,top]"
+                    className="absolute w-2 h-2 bg-red-600 rounded-full border border-red-400 shadow-[0_0_6px_#ef4444] -translate-x-1/2 -translate-y-1/2 will-change-[left,top]"
                     style={{ display: 'none' }}
                 />
             ))}
@@ -260,21 +292,26 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
     useEffect(() => {
         const handleUpdate = (data: any) => {
             const state = HudStore.getState();
+            const width = bounds.maxX - bounds.minX;
+            const height = bounds.maxZ - bounds.minZ;
+            if (width === 0 || height === 0) return;
 
             // Update Player
             if (playerRef.current) {
-                const posP = getMapPercent(state.playerPos.x, state.playerPos.z, bounds);
-                playerRef.current.style.left = `${posP.x}%`;
-                playerRef.current.style.top = `${posP.y}%`;
+                const px = ((state.playerPos.x - bounds.minX) / width) * 100;
+                const py = ((state.playerPos.z - bounds.minZ) / height) * 100;
+                playerRef.current.style.left = `${px}%`;
+                playerRef.current.style.top = `${py}%`;
             }
 
             // Update Boss
             if (bossRef.current) {
                 if (state.bossActive && !state.bossDefeated && state.bossPos) {
-                    const posB = getMapPercent(state.bossPos.x, state.bossPos.z, bounds);
+                    const bx = ((state.bossPos.x - bounds.minX) / width) * 100;
+                    const bz = ((state.bossPos.z - bounds.minZ) / height) * 100;
                     bossRef.current.style.display = 'block';
-                    bossRef.current.style.left = `${posB.x}%`;
-                    bossRef.current.style.top = `${posB.y}%`;
+                    bossRef.current.style.left = `${bx}%`;
+                    bossRef.current.style.top = `${bz}%`;
                 } else {
                     bossRef.current.style.display = 'none';
                 }
@@ -283,10 +320,11 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
             // Update Family
             if (familyRef.current) {
                 if (state.activeWeapon === ToolID.RADIO && state.familyPos) {
-                    const posF = getMapPercent(state.familyPos.x, state.familyPos.z, bounds);
+                    const fx = ((state.familyPos.x - bounds.minX) / width) * 100;
+                    const fz = ((state.familyPos.z - bounds.minZ) / height) * 100;
                     familyRef.current.style.display = 'block';
-                    familyRef.current.style.left = `${posF.x}%`;
-                    familyRef.current.style.top = `${posF.y}%`;
+                    familyRef.current.style.left = `${fx}%`;
+                    familyRef.current.style.top = `${fz}%`;
                 } else {
                     familyRef.current.style.display = 'none';
                 }
@@ -301,26 +339,33 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
             <LiveEnemyDots bounds={bounds} />
             <div
                 ref={playerRef}
-                className="absolute -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none will-change-[left,top]"
+                className="absolute -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none will-change-[left,top] flex items-center justify-center w-8 h-8"
                 style={{ left: '50%', top: '50%' }}
             >
-                <div className="w-3 h-3 bg-blue-500 rotate-45 border border-white shadow-[0_0_10px_white] scale-125" />
+                <svg className="w-6 h-6 drop-shadow-[0_0_8px_rgba(59,130,246,0.85)] fill-blue-500 stroke-white animate-pulse" viewBox="0 0 24 24">
+                    <polygon points="12,2 22,22 12,17 2,22" />
+                </svg>
             </div>
 
             <div
                 ref={bossRef}
-                className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none will-change-[left,top]"
+                className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none will-change-[left,top] flex items-center justify-center w-10 h-10"
                 style={{ display: 'none' }}
             >
-                <span className="text-2xl">💀</span>
+                <svg className="w-8 h-8 drop-shadow-[0_0_8px_rgba(239,68,68,0.9)] fill-red-600 stroke-red-400 animate-[pulse_1.5s_infinite]" viewBox="0 0 24 24">
+                    <path d="M12 2C8.69 2 6 4.69 6 8C6 11.31 8.69 14 12 14C15.31 14 18 11.31 18 8C18 4.69 15.31 2 12 2M8.5 7.5C8.5 6.67 9.17 6 10 6C10.83 6 11.5 6.67 11.5 7.5C11.5 8.33 10.83 9 10 9C9.17 9 8.5 8.33 8.5 7.5M14 6C14.83 6 15.5 6.67 15.5 7.5C15.5 8.33 14.83 9 14 9C13.17 9 12.5 8.33 12.5 7.5C12.5 6.67 13.17 6 14 6M10 16V18H14V16H10Z" />
+                </svg>
             </div>
 
             <div
                 ref={familyRef}
-                className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none will-change-[left,top]"
+                className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none will-change-[left,top] flex items-center justify-center w-10 h-10"
                 style={{ display: 'none' }}
             >
-                <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+                <svg className="w-8 h-8 drop-shadow-[0_0_8px_rgba(34,197,94,0.9)] stroke-green-500 stroke-2 fill-none" viewBox="0 0 24 24">
+                    <path d="M4 8V4h4 M16 4h4v4 M20 16v4h-4 M8 20H4v-4" />
+                    <circle cx="12" cy="12" r="3" className="fill-green-500 animate-ping" />
+                </svg>
             </div>
         </>
     );
@@ -355,7 +400,8 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
     const { mapItems, mapItemsCount } = useHudStore(s => ({ mapItems: s.mapItems, mapItemsCount: s.mapItemsCount }), true);
     const sectorName = t(useHudStore(s => s.sectorName));
 
-    const [mouseCoords, setMouseCoords] = useState<{ x: number, z: number } | null>(null);
+    const mouseCoordsTextRef = useRef<HTMLSpanElement>(null);
+    const mouseCoordsCardRef = useRef<HTMLDivElement>(null);
     const [tooltipData, setTooltipData] = useState<any>(null);
     const longPressTimer = useRef<any>(null);
     const pressCoords = useRef<{ x: number, z: number } | null>(null);
@@ -394,8 +440,12 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
     }, [mapItems, mapItemsCount]);
 
     const handleSetMouseCoords = useCallback((x: number, z: number) => {
-        // Debounce or reduce resolution if needed, but standard mouse move is fine for occasional overlay
-        setMouseCoords({ x, z });
+        if (mouseCoordsTextRef.current) {
+            mouseCoordsTextRef.current.innerText = `${Math.round(x)}, ${Math.round(z)}`;
+        }
+        if (mouseCoordsCardRef.current && mouseCoordsCardRef.current.style.display === 'none') {
+            mouseCoordsCardRef.current.style.display = 'flex';
+        }
     }, []);
 
     const handleInteractionStart = useCallback((x: number, z: number) => {
@@ -437,17 +487,19 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
                     <span className="text-[10px] text-blue-400 font-bold uppercase">{t('ui.player')}</span>
                     <LivePlayerCoordinates />
                 </TacticalCard>
-                {!isMobileDevice && mouseCoords && (
-                    <TacticalCard color={0x94a3b8} className="px-3 py-1 flex items-center gap-2">
-                        <span className="text-[10px] text-gray-400 font-bold uppercase">{t('ui.coordinates')}</span>
-                        <span className="text-sm font-mono text-white font-bold">
-                            {`${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}`}
-                        </span>
-                    </TacticalCard>
+                {!isMobileDevice && (
+                    <div ref={mouseCoordsCardRef} style={{ display: 'none' }} className="flex items-center">
+                        <TacticalCard color={0x94a3b8} className="px-3 py-1 flex items-center gap-2">
+                            <span className="text-[10px] text-gray-400 font-bold uppercase">{t('ui.coordinates')}</span>
+                            <span ref={mouseCoordsTextRef} className="text-sm font-mono text-white font-bold">
+                                0, 0
+                            </span>
+                        </TacticalCard>
+                    </div>
                 )}
             </div>
         </div>
-    ), [isMobileDevice, mouseCoords]);
+    ), [isMobileDevice]);
 
     return (
         <ScreenModalLayout
@@ -461,6 +513,47 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
             contentClass="flex flex-col p-0 !px-0 !pb-0 overflow-hidden"
             footer={footerNode}
         >
+            <style>{`
+                .radar-crt-overlay {
+                    position: absolute;
+                    inset: 0;
+                    pointer-events: none;
+                    background: 
+                        linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                        radial-gradient(circle, rgba(0,0,0,0) 55%, rgba(0,0,0,0.85) 100%);
+                    background-size: 100% 4px, 100% 100%;
+                    z-index: 40;
+                    opacity: 0.85;
+                }
+                
+                @keyframes sonar-sweep {
+                    from {
+                        transform: rotate(0deg);
+                    }
+                    to {
+                        transform: rotate(360deg);
+                    }
+                }
+                
+                .radar-sonar-sweep {
+                    position: absolute;
+                    width: 200%;
+                    height: 200%;
+                    top: -50%;
+                    left: -50%;
+                    pointer-events: none;
+                    background: conic-gradient(
+                        from 0deg,
+                        rgba(59, 130, 246, 0.12) 0deg,
+                        rgba(59, 130, 246, 0.04) 90deg,
+                        transparent 180deg
+                    );
+                    animation: sonar-sweep 8s linear infinite;
+                    transform-origin: center center;
+                    z-index: 15;
+                    mix-blend-mode: screen;
+                }
+            `}</style>
             <div className="relative flex-1 w-full bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center">
                 <div
                     className="relative shadow-2xl"
