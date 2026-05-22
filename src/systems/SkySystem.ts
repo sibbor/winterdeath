@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { CelestialType, MATERIALS_SKY, SkyConfig, SKY_KEYFRAMES, SkyCloudConfig } from '../utils/assets/materials_sky';
 import { GEOMETRY } from '../utils/assets';
-import { SKY_SYSTEM } from '../content/constants';
+import { LIGHT_SYSTEM, SKY_SYSTEM } from '../content/constants';
 
 // Zero-GC Module Scratchpads and Mathematical Constants
 const _c1 = new THREE.Color();
@@ -14,10 +14,10 @@ const PI05 = Math.PI * 0.5;
 /**
  * SkySystem: Procedural Environmental Controller (V2)
  *
- * INCLUDES:
+ * OWNS:
  * - Stars (THREE.Points)
- * - Celestial body mesh + halo sprite (Moon / Sun)
- * - Dynamic Cloud Sprites (procedurally generated/recycled)
+ * - Celestial body meshes & halos (Moon / Sun Groups)
+ * - Instanced Cloud System (THREE.InstancedMesh) -> High-performance cache locality
  * - HemisphereLight (ambient fill)
  * - DirectionalLight (sun/moon shadows) — authoritative global shadowing
  *
@@ -45,26 +45,39 @@ export class SkySystem implements System {
     public root: THREE.Group;
     private currentScene: THREE.Scene | null = null;
     private starSystem!: THREE.Points;
-    
-    // Dual celestial body support (Sun & Moon)
+
+    // Dual celestial body nodes
     private sunGroup!: THREE.Group;
     private sunMesh!: THREE.Mesh;
     private sunHalo!: THREE.Sprite;
+    private sunRays!: THREE.Sprite;
     private moonGroup!: THREE.Group;
     private moonMesh!: THREE.Mesh;
     private moonHalo!: THREE.Sprite;
 
     private sunMaterial!: THREE.MeshBasicMaterial;
     private sunHaloMaterial!: THREE.SpriteMaterial;
+    private sunRaysMaterial!: THREE.ShaderMaterial;
     private moonMaterial!: THREE.MeshBasicMaterial;
     private moonHaloMaterial!: THREE.SpriteMaterial;
+
+    // Scale caches for procedural pulsing
+    private sunHaloBaseScale: number = 0;
+    private moonHaloBaseScale: number = 0;
 
     private hemiLight!: THREE.HemisphereLight;
     private skyLight!: THREE.DirectionalLight;
 
-    // Procedural Dynamic Clouds Pool
-    private clouds: THREE.Sprite[] = [];
-    private cloudVelocities: number[] = [];
+    // High-Performance Instanced Cloud Engine
+    private cloudMesh: THREE.InstancedMesh | null = null;
+    private cloudMaterial!: THREE.MeshBasicMaterial; // Managed internally as an instanced material path
+    private cloudCount: number = 0;
+    private maxCloudInstances: number = 12;
+
+    // Flat TypedArrays maximizing CPU cache locality (L1/L2)
+    private _cloudPositions!: Float32Array;
+    private _cloudVelocities!: Float32Array;
+    private _cloudBaseScales!: Float32Array;
 
     // --- STATIC ASSETS CACHE ---
     private static STATIC_SKY_CACHE = {
@@ -116,25 +129,44 @@ export class SkySystem implements System {
         this.starSystem.userData.isEngineStatic = true;
         this.root.add(this.starSystem);
 
-        // 2. CELESTIAL BODIES (Sun & Moon)
-        // Clone materials to allow independent, seamless opacity/halo size adjustment without affecting shared materials
-        this.sunMaterial = MATERIALS_SKY.sun.clone();
-        this.sunMaterial.transparent = true;
-        this.sunMaterial.userData = { isSharedAsset: true };
+        // 2. CELESTIAL MATERIAL PROXIES (Allocation-free structure instantiation)
+        this.sunMaterial = new THREE.MeshBasicMaterial({
+            color: MATERIALS_SKY.sun.color,
+            fog: false,
+            blending: THREE.AdditiveBlending,
+            transparent: true,
+            depthWrite: false
+        });
 
-        this.sunHaloMaterial = MATERIALS_SKY.moonHalo.clone();
-        this.sunHaloMaterial.transparent = true;
-        this.sunHaloMaterial.userData = { isSharedAsset: true };
+        this.sunHaloMaterial = new THREE.SpriteMaterial({
+            map: MATERIALS_SKY.moonHalo.map,
+            color: MATERIALS_SKY.moonHalo.color,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            fog: false,
+            depthWrite: false
+        });
 
-        this.moonMaterial = MATERIALS_SKY.moon.clone();
-        this.moonMaterial.transparent = true;
-        this.moonMaterial.userData = { isSharedAsset: true };
+        this.sunRaysMaterial = MATERIALS_SKY.sunRays.clone();
 
-        this.moonHaloMaterial = MATERIALS_SKY.moonHalo.clone();
-        this.moonHaloMaterial.transparent = true;
-        this.moonHaloMaterial.userData = { isSharedAsset: true };
+        this.moonMaterial = new THREE.MeshBasicMaterial({
+            color: MATERIALS_SKY.moon.color,
+            fog: false,
+            transparent: true
+        });
 
-        // Sun Group Setup
+        this.moonHaloMaterial = new THREE.SpriteMaterial({
+            map: MATERIALS_SKY.moonHalo.map,
+            color: MATERIALS_SKY.moonHalo.color,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            fog: false,
+            depthWrite: false
+        });
+
+        // Sun Hierarchy Setup
         this.sunGroup = new THREE.Group();
         this.sunGroup.name = 'SUN_GROUP';
 
@@ -148,9 +180,14 @@ export class SkySystem implements System {
         this.sunHalo.userData.isEngineStatic = true;
         this.sunGroup.add(this.sunHalo);
 
+        this.sunRays = new THREE.Sprite(this.sunRaysMaterial as any);
+        this.sunRays.position.set(0, 0, 8);
+        this.sunRays.userData.isEngineStatic = true;
+        this.sunGroup.add(this.sunRays);
+
         this.root.add(this.sunGroup);
 
-        // Moon Group Setup
+        // Moon Hierarchy Setup
         this.moonGroup = new THREE.Group();
         this.moonGroup.name = 'MOON_GROUP';
 
@@ -166,13 +203,13 @@ export class SkySystem implements System {
 
         this.root.add(this.moonGroup);
 
-        // 3. HEMISPHERE LIGHT (Authoritative ambient fill owned by SkySystem)
+        // 3. HEMISPHERE LIGHT
         this.hemiLight = new THREE.HemisphereLight(0x9ab0cc, 0x333322, 0.6);
         this.hemiLight.name = SKY_SYSTEM.HEMI_LIGHT;
         this.hemiLight.userData.isEngineStatic = true;
         this.root.add(this.hemiLight);
 
-        // 4. DIRECTIONAL LIGHT (Authoritative shadow caster mirroring proven setup)
+        // 4. DIRECTIONAL LIGHT shadow mapping configurations
         this.skyLight = new THREE.DirectionalLight(0xaaccff, 0.4);
         this.skyLight.name = SKY_SYSTEM.SKY_LIGHT;
         this.skyLight.userData.isEngineStatic = true;
@@ -190,57 +227,51 @@ export class SkySystem implements System {
         this.root.add(this.skyLight);
         this.root.add(this.skyLight.target);
 
-        // 5. PROCEDURAL CLOUDS POOL (Zero-GC, canvas-based sprites)
-        this.clouds = [];
-        this.cloudVelocities = [];
-        const cloudCount = 12; // High-performance buffer
-        for (let i = 0; i < cloudCount; i++) {
-            const sprite = new THREE.Sprite(MATERIALS_SKY.cloud.clone());
-            sprite.name = `SkySystem_Cloud_${i}`;
-            sprite.userData.isEngineStatic = true;
+        // 5. INSTANCED CLOUD ENGINE INLINE ALLOCATION
+        this.cloudMaterial = new THREE.MeshBasicMaterial({
+            map: MATERIALS_SKY.cloud.map,
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.5,
+            blending: THREE.NormalBlending,
+            fog: false,
+            depthWrite: false
+        });
 
-            // Random initial placement in the background layer
-            const cx = (Math.random() - 0.5) * 600;
-            const cy = 120 + Math.random() * 50; // Distributed Y base
-            const cz = -250 - Math.random() * 80;
-            sprite.position.set(cx, cy, cz);
+        // Pack primitive states into flat matrices for absolute memory locality
+        this._cloudPositions = new Float32Array(this.maxCloudInstances * 3);
+        this._cloudVelocities = new Float32Array(this.maxCloudInstances);
+        this._cloudBaseScales = new Float32Array(this.maxCloudInstances * 2);
 
-            // Fluffy, elongated scales
-            const w = 120 + Math.random() * 80;
-            const h = w * 0.5;
-            sprite.scale.set(w, h, 1);
+        // Seed initial simulation coordinates linearly
+        for (let i = 0; i < this.maxCloudInstances; i++) {
+            const i2 = i * 2;
+            const i3 = i * 3;
 
-            this.root.add(sprite);
-            this.clouds.push(sprite);
+            this._cloudPositions[i3 + 0] = (Math.random() - 0.5) * 800;
+            this._cloudPositions[i3 + 1] = 120 + Math.random() * 50;
+            this._cloudPositions[i3 + 2] = -250 - Math.random() * 80;
 
-            // Drift speed (1 to 2.5 units per second)
-            this.cloudVelocities.push(1.0 + Math.random() * 1.5);
+            const baseW = 120 + Math.random() * 80;
+            this._cloudBaseScales[i2 + 0] = baseW;
+            this._cloudBaseScales[i2 + 1] = baseW * 0.5;
+
+            this._cloudVelocities[i] = 5.0 + Math.random() * 7.0;
         }
     }
 
-    /**
-     * Returns allocation-free world-space vector of the celestial body.
-     */
     public getCelestialPosition(): THREE.Vector3 {
-        // Return position of the dominant visible celestial body
-        if (this.sunGroup && this.sunGroup.visible && 
+        if (this.sunGroup && this.sunGroup.visible &&
             (!this.moonGroup.visible || this.sunMaterial.opacity >= this.moonMaterial.opacity)) {
             this.sunGroup.getWorldPosition(_v1);
         } else if (this.moonGroup && this.moonGroup.visible) {
             this.moonGroup.getWorldPosition(_v1);
         } else {
-            if (this.sunGroup) {
-                this.sunGroup.getWorldPosition(_v1);
-            } else {
-                _v1.set(0, 0, 0);
-            }
+            this.sunGroup.getWorldPosition(_v1);
         }
         return _v1;
     }
 
-    /**
-     * Authoritative lifecycle sync hook.
-     */
     public sync(config: SkyConfig): void {
         this.activeConfig = config;
 
@@ -249,79 +280,127 @@ export class SkySystem implements System {
         }
         this.timeScale = config.timeScale || 0;
 
-        // Apply dynamic cloud configurations (visibility, base Y height, and drift speed scaling)
-        this.applyCloudConfig(config.clouds);
+        // Sync instance draw layer context
+        this.syncCloudMeshLayer(config.clouds);
 
-        // Force an immediate layout update by invalidating the temporal cache
         this.lastLerpTime = -1;
         this.processProcedural(this.currentTime);
     }
 
-    private applyCloudConfig(cfg?: Partial<SkyCloudConfig>): void {
-        const count = cfg?.count !== undefined ? Math.min(cfg.count, this.clouds.length) : 6;
-        const height = cfg?.height !== undefined ? cfg.height : 120; // Default altitude from ground
+    /**
+     * Reconfigures instance layout boundary counts without pipeline recreation.
+     */
+    private syncCloudMeshLayer(cfg?: Partial<SkyCloudConfig>): void {
+        const targetCount = cfg?.count !== undefined ? Math.min(cfg.count, this.maxCloudInstances) : 6;
+        this.cloudCount = targetCount;
 
-        for (let i = 0; i < this.clouds.length; i++) {
-            const cloud = this.clouds[i];
-            if (i < count) {
-                cloud.visible = true;
-                // Layer heights elegantly around the base height to prevent flat lining
-                cloud.position.y = height + (i % 3) * 15;
-            } else {
-                cloud.visible = false;
-            }
+        if (this.cloudCount <= 0) {
+            if (this.cloudMesh) this.cloudMesh.visible = false;
+            return;
+        }
+
+        // Lazy initialization of the singular cloud InstancedMesh node
+        if (!this.cloudMesh) {
+            const planeGeo = new THREE.PlaneGeometry(1, 1);
+            planeGeo.rotateX(-Math.atan2(50, 40));
+            this.cloudMesh = new THREE.InstancedMesh(planeGeo, this.cloudMaterial, this.maxCloudInstances);
+            this.cloudMesh.name = 'SkySystem_Cloud_Mesh';
+            this.cloudMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            this.cloudMesh.frustumCulled = false;
+            this.cloudMesh.userData.isEngineStatic = true;
+            this.root.add(this.cloudMesh);
+        }
+
+        this.cloudMesh.visible = true;
+        this.cloudMesh.count = this.cloudCount;
+
+        const baseHeight = cfg?.height !== undefined ? cfg.height : 120;
+        for (let i = 0; i < this.cloudCount; i++) {
+            this._cloudPositions[i * 3 + 1] = baseHeight + (i % 3) * 15;
         }
     }
 
     public update(ctx: any, delta: number, _simTime: number, renderTime: number): void {
         if (!this.activeConfig) return;
 
-        // Continuous smooth axial drift (runs even when invisible to prevent snapping on transitions)
-        if (this.starSystem) {
-            (this.starSystem.material as THREE.ShaderMaterial).uniforms.uTime.value = renderTime * 0.001;
-            _v1.set(0.2, 1, 0.1).normalize();
-            this.starSystem.rotateOnAxis(_v1, SKY_SYSTEM.DRIFT_SPEED * delta);
+        // 1. CELESTIAL SCALING & WARPING PULSES
+        if (this.sunGroup && this.sunGroup.visible) {
+            const pulseHalo = 1.0 + Math.sin(renderTime * 0.003) * 0.15;
+            const hScale = this.sunHaloBaseScale * pulseHalo;
+            this.sunHalo.scale.set(hScale, hScale, 1);
+
+            this.sunRaysMaterial.uniforms.uTime.value = renderTime * 0.001;
+            const pulseRays = 1.0 + Math.sin(renderTime * 0.0025) * 0.06;
+            this.sunRays.scale.setScalar(this.sunHaloBaseScale * 1.6 * pulseRays);
         }
 
-        // Infinite-world parallax tracking
-        const pPos = ctx.playerPos || ctx.state?.playerPos;
+        if (this.moonGroup && this.moonGroup.visible) {
+            const pulse = 1.0 + Math.sin(renderTime * 0.002) * 0.10;
+            const hScale = this.moonHaloBaseScale * pulse;
+            this.moonHalo.scale.set(hScale, hScale, 1);
+        }
 
-        // Spatial Gating: Block redundant root transformations if movement drift is below threshold (10.0 units)
+        // 2. PARALLAX GRAPH TRACKING
+        const pPos = ctx.playerPos || ctx.state?.playerPos;
         if (pPos && this.lastTrackedPos.distanceToSquared(pPos) > 100.0) {
             this.lastTrackedPos.copy(pPos);
             this.root.position.copy(pPos);
 
-            // Securely align shadow target matrix without object instantiation
             this.skyLight.target.position.set(0, 0, 0);
             this.skyLight.target.updateMatrixWorld();
         }
 
-        // Procedural timeline streaming
+        // 3. TIMELINE INTERPOLATION STEPPING
         if (this.timeScale !== 0) {
             this.currentTime = (this.currentTime + this.timeScale * delta) % 1.0;
-
-            // Temporal Gating: Only recalculate heavy visual lerps if time drift exceeds threshold
             if (Math.abs(this.currentTime - this.lastLerpTime) > 0.0001) {
                 this.processProcedural(this.currentTime);
             }
         }
 
-        // 3. Dynamic cloud drift (wrapping around screen bounds)
-        const cloudCfg = this.activeConfig.clouds;
-        const cloudSpeedScale = cloudCfg?.speed !== undefined ? cloudCfg.speed : 1.0;
-        const cloudBaseHeight = cloudCfg?.height !== undefined ? cloudCfg.height : 120;
+        // 4. INSTANCED CLOUD SIMULATION LOOP (Linear Array Buffer Access)
+        if (this.cloudMesh && this.cloudMesh.visible && this.cloudCount > 0) {
+            const cloudCfg = this.activeConfig.clouds;
+            const speedScale = cloudCfg?.speed !== undefined ? cloudCfg.speed : 1.0;
+            const baseHeight = cloudCfg?.height !== undefined ? cloudCfg.height : 120;
+            const timeMultiplier = this.timeScale === 0 ? 1.0 : Math.max(1.0, Math.abs(this.timeScale) * 50.0);
 
-        const cloudCount = this.clouds.length;
-        for (let i = 0; i < cloudCount; i++) {
-            const cloud = this.clouds[i];
-            if (!cloud.visible) continue;
+            const pos = this._cloudPositions;
+            const vel = this._cloudVelocities;
+            const scales = this._cloudBaseScales;
+            const matrixArray = this.cloudMesh.instanceMatrix.array;
 
-            cloud.position.x += this.cloudVelocities[i] * cloudSpeedScale * delta;
-            if (cloud.position.x > 350) {
-                cloud.position.x = -350;
-                // Distribute vertical offset around base height on wrapping
-                cloud.position.y = cloudBaseHeight + Math.random() * 50;
+            for (let i = 0; i < this.cloudCount; i++) {
+                const i2 = i * 2;
+                const i3 = i * 3;
+                const matIdx = i * 16;
+
+                // Advance translation along horizontal drift path
+                pos[i3 + 0] += vel[i] * speedScale * timeMultiplier * delta;
+
+                // Enforce bounding volumes via wrapping logic
+                if (pos[i3 + 0] > 450) {
+                    pos[i3 + 0] = -450;
+                    pos[i3 + 1] = baseHeight + Math.random() * 50;
+                    scales[i2 + 0] = 120 + Math.random() * 80;
+                    scales[i2 + 1] = scales[i2 + 0] * (0.4 + Math.random() * 0.2);
+                }
+
+                // Compute async mathematical stretching/morphing values
+                const morphW = 1.0 + Math.sin(renderTime * 0.0005 * timeMultiplier + i) * 0.2;
+                const morphH = 1.0 + Math.cos(renderTime * 0.0007 * timeMultiplier + i) * 0.15;
+                const finalScaleW = scales[i2 + 0] * morphW;
+                const finalScaleH = scales[i2 + 1] * morphH;
+
+                // Write transformation components directly into InstancedMesh ArrayBuffer matrix positions
+                matrixArray[matIdx + 0] = finalScaleW;
+                matrixArray[matIdx + 5] = finalScaleH;
+                matrixArray[matIdx + 10] = 1.0;
+                matrixArray[matIdx + 12] = pos[i3 + 0];
+                matrixArray[matIdx + 13] = pos[i3 + 1];
+                matrixArray[matIdx + 14] = pos[i3 + 2];
             }
+            this.cloudMesh.instanceMatrix.needsUpdate = true;
         }
     }
 
@@ -329,10 +408,7 @@ export class SkySystem implements System {
         const config = this.activeConfig;
         if (!config) return;
 
-        // Temporal safety: Clamp time to standard [0.0, 1.0] interval to prevent keyframe index out of bounds
         const normalizedTime = Math.max(0.0, Math.min(1.0, ((time % 1.0) + 1.0) % 1.0));
-
-        // Update temporal validation cache
         this.lastLerpTime = time;
 
         // 1. RESOLVE DNA INTERVAL
@@ -348,12 +424,28 @@ export class SkySystem implements System {
 
         const range = k2.time - k1.time;
         const alpha = range > 0 ? (normalizedTime - k1.time) / range : 0;
+        const baseColor = config.atmosphereColor;
 
         // 2. ATMOSPHERE TINTING
-        this.currentAtmosphereColor = config.atmosphereColor ?? this.lerpColor(k1.atmosphereColor, k2.atmosphereColor, alpha);
+        const kfAtmosphere = this.lerpColor(k1.atmosphereColor, k2.atmosphereColor, alpha);
+        if (baseColor !== undefined) {
+            this.currentAtmosphereColor = this.blendAtmosphereColors(baseColor, kfAtmosphere);
+        } else {
+            this.currentAtmosphereColor = kfAtmosphere;
+        }
+
+        if (this.currentScene) {
+            _c1.setHex(this.currentAtmosphereColor);
+            if (this.currentScene.background instanceof THREE.Color) {
+                this.currentScene.background.copy(_c1);
+            } else {
+                this.currentScene.background = new THREE.Color(_c1);
+            }
+        }
 
         // 3. HEMISPHERE FILL
-        const hemiSky = config.hemi?.skyColor ?? this.lerpColor(k1.hemiSkyColor, k2.hemiSkyColor, alpha);
+        const kfHemiSky = this.lerpColor(k1.hemiSkyColor, k2.hemiSkyColor, alpha);
+        const hemiSky = config.hemi?.skyColor ?? (baseColor !== undefined ? this.blendAtmosphereColors(baseColor, kfHemiSky) : kfHemiSky);
         const hemiGround = config.hemi?.groundColor ?? 0x333322;
         const hemiIntensity = config.hemi?.intensity ?? this.lerpScalar(k1.hemiIntensity, k2.hemiIntensity, alpha);
 
@@ -361,32 +453,30 @@ export class SkySystem implements System {
         this.hemiLight.groundColor.setHex(hemiGround);
         this.hemiLight.intensity = hemiIntensity;
 
-        // 4. CELESTIAL VISUALS
-        // Determine day cycle state (0.25 = Dawn, 0.5 = Noon, 0.75 = Dusk, 0.0/1.0 = Midnight)
+        // 4. CELESTIAL VISUALS TRACKING
         const isDay = normalizedTime > 0.25 && normalizedTime < 0.75;
         const celColor = config.celestial?.color ?? this.lerpColor(k1.celestialColor, k2.celestialColor, alpha);
-        
-        const celRadiusSun = (config.celestial?.type === CelestialType.SUN && config.celestial?.radius !== undefined)
-            ? config.celestial.radius
-            : 25;
-        const celRadiusMoon = (config.celestial?.type === CelestialType.MOON && config.celestial?.radius !== undefined)
-            ? config.celestial.radius
-            : 18;
+
+        const lightCfg = config.light;
+        const litColor = lightCfg?.color ?? this.lerpColor(k1.lightColor, k2.lightColor, alpha);
+        const cloudCfg = config.clouds;
+        const cloudColorHex = cloudCfg?.color ?? this.lerpColor(this.currentAtmosphereColor, litColor, 0.85);
+
+        const celRadiusSun = (config.celestial?.type === CelestialType.SUN && config.celestial?.radius !== undefined) ? config.celestial.radius : 25;
+        const celRadiusMoon = (config.celestial?.type === CelestialType.MOON && config.celestial?.radius !== undefined) ? config.celestial.radius : 18;
 
         _c1.setHex(celColor);
 
-        // Calculate continuous orbital angles (opposite trajectories with 180 phase drift)
+        // Circular vinkel-bana positioning layout maps
         const angleSun = (normalizedTime * PI2) - PI05;
         const angleMoon = angleSun + Math.PI;
 
         const sinSun = Math.sin(angleSun);
         const sinMoon = Math.sin(angleMoon);
 
-        // Fade range near horizon: 0.15 is about 8.6 degrees above horizon
         let sunOpacity = Math.max(0, Math.min(1, sinSun / 0.15));
         let moonOpacity = Math.max(0, Math.min(1, sinMoon / 0.15));
 
-        // Respect explicit celestial type override from config if defined
         if (config.celestial?.type !== undefined) {
             if (config.celestial.type === CelestialType.SUN) {
                 moonOpacity = 0.0;
@@ -395,7 +485,6 @@ export class SkySystem implements System {
             }
         }
 
-        // Apply orbital coordinates or check for static overrides
         let refX = 0;
         let refY = 150;
         let refZ = -300;
@@ -421,27 +510,27 @@ export class SkySystem implements System {
                 sunOpacity = 0.0;
             }
         } else {
-            // Standard continuous, dual orbits
-            const swingSunX = Math.cos(angleSun) * orbitDist;
-            const swingSunY = Math.sin(angleSun) * refY;
-            this.sunGroup.position.set(refX + swingSunX, swingSunY, refZ);
-
-            const swingMoonX = Math.cos(angleMoon) * orbitDist;
-            const swingMoonY = Math.sin(angleMoon) * refY;
-            this.moonGroup.position.set(refX + swingMoonX, swingMoonY, refZ);
+            this.sunGroup.position.set(refX + Math.cos(angleSun) * orbitDist, Math.sin(angleSun) * refY, refZ);
+            this.moonGroup.position.set(refX + Math.cos(angleMoon) * orbitDist, Math.sin(angleMoon) * refY, refZ);
         }
 
-        // Apply visual properties (colors, opacities, and halo sizes dynamically)
+        // Apply parameterizations to compiled materials
         if (sunOpacity > 0) {
             this.sunGroup.visible = true;
             this.sunMaterial.color.copy(_c1);
             this.sunMaterial.opacity = sunOpacity;
             this.sunMesh.scale.setScalar(celRadiusSun * (0.8 + 0.2 * sunOpacity));
 
-            this.sunHaloMaterial.color.copy(_c1);
-            this.sunHaloMaterial.opacity = 0.5 * sunOpacity;
-            const sunHScale = celRadiusSun * 12 * (0.5 + 0.5 * sunOpacity);
+            _c2.setHex(cloudColorHex);
+            this.sunHaloMaterial.color.copy(_c1).lerp(_c2, 0.20);
+            this.sunHaloMaterial.opacity = sunOpacity;
+
+            const sunHScale = celRadiusSun * 6 * (0.5 + 0.5 * sunOpacity);
+            this.sunHaloBaseScale = sunHScale;
             this.sunHalo.scale.set(sunHScale, sunHScale, 1);
+
+            this.sunRaysMaterial.uniforms.uColor.value.copy(_c1).lerp(_c2, 0.10);
+            this.sunRaysMaterial.uniforms.uOpacity.value = 0.7 * sunOpacity;
         } else {
             this.sunGroup.visible = false;
         }
@@ -452,18 +541,18 @@ export class SkySystem implements System {
             this.moonMaterial.opacity = moonOpacity;
             this.moonMesh.scale.setScalar(celRadiusMoon * (0.8 + 0.2 * moonOpacity));
 
-            this.moonHaloMaterial.color.copy(_c1);
+            _c2.setHex(cloudColorHex);
+            this.moonHaloMaterial.color.copy(_c1).lerp(_c2, 0.35);
             this.moonHaloMaterial.opacity = 0.8 * moonOpacity;
+
             const moonHScale = celRadiusMoon * 6 * (0.5 + 0.5 * moonOpacity);
+            this.moonHaloBaseScale = moonHScale;
             this.moonHalo.scale.set(moonHScale, moonHScale, 1);
         } else {
             this.moonGroup.visible = false;
         }
 
-        // 5. DIRECTIONAL LIGHTING (Physical Shadow Caster tracking dominant body)
-        const lightCfg = config.light;
-        const litColor = lightCfg?.color ?? this.lerpColor(k1.lightColor, k2.lightColor, alpha);
-
+        // 5. DIRECTIONAL LIGHTING SHADOW CONTROL
         if (lightCfg?.visible === false) {
             this.skyLight.visible = false;
             this.skyLight.intensity = 0;
@@ -471,20 +560,15 @@ export class SkySystem implements System {
             this.skyLight.visible = true;
             const litIntensity = lightCfg?.intensity ?? this.lerpScalar(k1.lightIntensity, k2.lightIntensity, alpha);
 
-            // Determine dominant celestial body above the horizon
             const isSunDominant = (sunOpacity >= moonOpacity);
             const dominantGroup = isSunDominant ? this.sunGroup : this.moonGroup;
             const dominantAngle = isSunDominant ? angleSun : angleMoon;
-
-            // Smooth horizon fade to prevent shadow popping/glitches as dominant body sets
             const horizonFade = Math.pow(Math.max(0, Math.min(1, Math.sin(dominantAngle))), 2.0);
 
             this.skyLight.castShadow = lightCfg?.castShadow ?? true;
             _c1.setHex(litColor);
             this.skyLight.color.copy(_c1);
             this.skyLight.intensity = litIntensity * horizonFade;
-
-            // Align physical rays securely to the dominant body position
             this.skyLight.position.copy(dominantGroup.position);
         }
 
@@ -495,31 +579,21 @@ export class SkySystem implements System {
         if (this.starSystem.visible) {
             this.starSystem.geometry.setDrawRange(0, targetStars);
 
-            // Smooth starfield fading aligned with mathematical dawn/dusk transitions
             let starOpacity = 0.0;
-            if (normalizedTime >= 0.75) {
-                // Fade in early over a 0.10 timeline window starting at dusk (0.75 to 0.85)
-                starOpacity = Math.max(0.0, Math.min(1.0, (normalizedTime - 0.75) / 0.10));
-            } else if (normalizedTime <= 0.25) {
-                // Fade out late over a 0.10 timeline window leading to dawn (0.15 to 0.25)
-                starOpacity = Math.max(0.0, Math.min(1.0, (0.25 - normalizedTime) / 0.10));
+            if (normalizedTime >= 0.78) {
+                starOpacity = Math.max(0.0, Math.min(1.0, (normalizedTime - 0.78) / 0.05));
+            } else if (normalizedTime <= 0.22) {
+                starOpacity = Math.max(0.0, Math.min(1.0, (0.22 - normalizedTime) / 0.05));
             }
             (this.starSystem.material as THREE.ShaderMaterial).uniforms.uOpacity.value = starOpacity;
         }
 
-        // 7. DYNAMIC CLOUD TINTING & OPACITY
-        const cloudCfg = config.clouds;
-        const cloudColorHex = cloudCfg?.color ?? this.lerpColor(this.currentAtmosphereColor, litColor, 0.4);
-        _c1.setHex(cloudColorHex);
-        const cloudBaseOpacity = cloudCfg?.opacity ?? (isDay ? 0.45 : 0.22);
-
-        for (let i = 0; i < this.clouds.length; i++) {
-            const cloud = this.clouds[i];
-            if (!cloud.visible) continue;
-
-            const mat = cloud.material;
-            mat.color.copy(_c1);
-            mat.opacity = cloudBaseOpacity;
+        // 7. INSTANCED CLOUD UNIFORM TINTING
+        if (this.cloudMesh && this.cloudMesh.visible) {
+            _c1.setHex(cloudColorHex);
+            const cloudBaseOpacity = cloudCfg?.opacity ?? (isDay ? 1.0 : 0.50);
+            this.cloudMaterial.color.copy(_c1);
+            this.cloudMaterial.opacity = cloudBaseOpacity;
         }
     }
 
@@ -528,6 +602,13 @@ export class SkySystem implements System {
         _c2.setHex(c2);
         _c1.lerp(_c2, alpha);
         return _c1.getHex();
+    }
+
+    private blendAtmosphereColors(baseHex: number, kfHex: number): number {
+        _c1.setHex(baseHex);
+        _c2.setHex(kfHex);
+        _c2.lerp(_c1, 0.4);
+        return _c2.getHex();
     }
 
     private lerpScalar(s1: number, s2: number, alpha: number): number {
@@ -542,8 +623,13 @@ export class SkySystem implements System {
     public clear(): void {
         if (this.sunMaterial) this.sunMaterial.dispose();
         if (this.sunHaloMaterial) this.sunHaloMaterial.dispose();
+        if (this.sunRaysMaterial) this.sunRaysMaterial.dispose();
         if (this.moonMaterial) this.moonMaterial.dispose();
         if (this.moonHaloMaterial) this.moonHaloMaterial.dispose();
+        if (this.cloudMaterial) this.cloudMaterial.dispose();
+        if (this.cloudMesh) {
+            this.cloudMesh.dispose();
+            this.cloudMesh = null;
+        }
     }
-
 }
