@@ -12,7 +12,7 @@ import { LogicalLight } from '../../systems/LightSystem';
 // ============================================================================
 export const CAMP_SCENE = {
     // Fog & Background
-    bgColor: 0x161629,
+    //bgColor: 0x161629,
     fog: {
         color: 0x161629,
         density: 20,
@@ -21,7 +21,7 @@ export const CAMP_SCENE = {
     sky: {
         time: 0.0, // Midnight start
         timeScale: 0.02, // Dynamic time-of-day progression
-        //atmosphereColor: 0x161629,
+        //atmosphereColor: 0xff0000, //0x161629
         celestial: {
             radius: 20,
             //color: 0xfff9e6,
@@ -29,7 +29,7 @@ export const CAMP_SCENE = {
         },
         light: {
             visible: true,
-            //color: 0xaaccff,
+            //color: 0xff0000, //0xaaccff
             //intensity: 0.2,
             castShadow: true
         },
@@ -52,7 +52,8 @@ export const CAMP_SCENE = {
     cameraHeight: 25,
 
     // Cameras
-    cameraBaseLookAt: new THREE.Vector3(0, 2, -5),
+    cameraBaseLookAt: new THREE.Vector3(0, 8, -5),
+    //cameraBaseLookAt: new THREE.Vector3(0, 2, -5),
     cameraCinematicLookAt: new THREE.Vector3(0, 8, -5),
 
     // Lighting
@@ -76,6 +77,7 @@ export const CAMP_SCENE = {
         { id: 'adventure_log', pos: new THREE.Vector3(-2.25, 0, -7.125) }
     ],
 
+    /*
     // Global Colors (Centralized from hardcoded instances)
     colors: {
         white: 0xffffff,
@@ -95,6 +97,7 @@ export const CAMP_SCENE = {
         campfireSpark: 0xffaa00,
         campfireSmoke: 0x333333
     }
+    */
 };
 
 interface Textures {
@@ -363,14 +366,20 @@ export const CampWorld = {
             // Orchestrates the transition using the centralized engine pipeline.
             const envConfig = { ...CAMP_SCENE, weather: { ...CAMP_SCENE.weather, type: weather } };
             engine.mountScene(scene, envConfig, undefined, isWarmup);
-        } else {
-            // Safe fallback for warmup phase (AssetPreloader) using FogSystem authority
+        }
+        // Safe fallback for warmup phase (AssetPreloader)
+        else {
+            // FogSystem:
             if (engine.fog) {
-                const fogConfig = CAMP_SCENE.fog || { color: CAMP_SCENE.bgColor, density: 25 };
-                _c1.setHex(fogConfig.color !== undefined ? fogConfig.color : CAMP_SCENE.bgColor);
+                const fogDefaultColor = 0x161629;
+                const fogConfig = CAMP_SCENE.fog || { color: fogDefaultColor, density: 25 };
+                _c1.setHex(fogConfig.color !== undefined ? fogConfig.color : fogDefaultColor);
                 engine.fog.sync(fogConfig.density, undefined, _c1);
             }
-            scene.background = new THREE.Color(CAMP_SCENE.bgColor);
+            // Background color
+            if (CAMP_SCENE && (CAMP_SCENE as any).bgColor !== undefined) {
+                scene.background = new THREE.Color((CAMP_SCENE as any).bgColor);
+            }
         }
 
         if (!isWarmup) {
@@ -633,7 +642,6 @@ export const CampWorld = {
         const engine = WinterEngine.getInstance();
         const wind = engine.wind.current;
         const camera = engine.camera.threeCamera;
-
 
         const { flames, sparkles, smokes, flameData, sparkleData, smokeData } = state.particles;
 
