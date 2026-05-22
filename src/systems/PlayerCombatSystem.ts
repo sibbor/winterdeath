@@ -82,6 +82,11 @@ export class PlayerCombatSystem implements System {
                 // Reset inputs internally to prevent holding a trigger through a cinematic
                 input.actions[InputAction.FIRE] = 0;
                 input.actions[InputAction.RELOAD] = 0;
+                input.actions[InputAction.SLOT_1] = 0;
+                input.actions[InputAction.SLOT_2] = 0;
+                input.actions[InputAction.SLOT_3] = 0;
+                input.actions[InputAction.SLOT_4] = 0;
+                input.actions[InputAction.SLOT_5] = 0;
 
                 this._wasLocked = true;
             }
@@ -91,6 +96,9 @@ export class PlayerCombatSystem implements System {
         // Restore state when waking up or cinematic ends
         if (this._wasLocked) {
             this._wasLocked = false;
+            // Prevent immediate actions from UI clicks that woke us up
+            input.actions[InputAction.FIRE] = 0;
+            input.actions[InputAction.RELOAD] = 0;
         }
 
         // --- Weapon Slot Switching ---
