@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createWaterMaterial } from '../utils/assets/materials_water';
+import { createWaterMaterial, WaterGeometryPool, SHARED_WATER_VEG_UNIFORMS } from '../utils/assets';
 import { WATER_SYSTEM } from '../content/constants';
 import { MATERIALS } from '../utils/assets/materials';
 import { NoiseType } from '../entities/enemies/EnemyTypes';
@@ -10,12 +10,7 @@ import { SPATIAL_CONFIG } from '../config/SpatialConfig';
 import { WinterEngine } from '../core/engine/WinterEngine';
 
 import { WaterFloraType, WaterBodyType, WaterShape, WaterBodyDef } from '../types/WaterTypes';
-interface WaterBind {
-    uTime: { value: number };
-    uWaterDirection?: { value: THREE.Vector2 };
-    uWaveStrength?: { value: number };
-    uClarity?: { value: number };
-}
+
 export interface LakeFloraInstance {
     type: WaterFloraType;
     position: THREE.Vector3;
@@ -30,6 +25,11 @@ export const _buoyancyResult = { inWater: false, waterLevel: 0, depth: 0, maxDep
 const _sharedDummy = new THREE.Object3D();
 const _sharedDummyFlower = new THREE.Object3D();
 const _sharedWhiteColor = new THREE.Color(0xffffff);
+
+// Pre-allocated Matrix4 pool for populateFlora — eliminates heap allocations during sector load.
+// 512 slots covers any realistic flora count; pool resets at the start of each populateFlora call.
+const _floraMatPool: THREE.Matrix4[] = Array.from({ length: 512 }, () => new THREE.Matrix4());
+let _floraMatPoolIdx = 0;
 
 const WATER_BODY_PRESETS: Record<WaterBodyType, WaterBodyDef> = {
     [WaterBodyType.LAKE]: { shape: WaterShape.CIRCLE, buoyancyForce: 10, ambientRippleChance: 0.0, maxDepth: 8.0 },
@@ -46,25 +46,18 @@ export class WaterSurface {
     time: number = 0;
 
     constructor(
-        x: number, z: number, width: number, depth: number,
+        x: number,
+        z: number,
+        width: number,
+        depth: number,
         shape: WaterShape,
-        rippleData: THREE.Vector4[], objectPositions: THREE.Vector4[]
+        rippleData: THREE.Vector4[],
+        objectPositions: THREE.Vector4[]
     ) {
         this.bounds = { x, z, width, depth };
 
-        // We ALWAYS use PlaneGeometry now, even for circles.
-        // This ensures the mesh has internal vertices for waves/ripples to displace.
-        // High resolution segments for crisp faceted jewelry look.
-        // Increase resolution (res) to ensure Nyquist frequency for waveScale=0.45.
-        // We need ~1 vertex per meter for stable dFdx derivatives on 2m waves.
-        const res = Math.min(128, Math.max(32, Math.floor(Math.max(width, depth) * 0.8)));
-        const geometry = new THREE.PlaneGeometry(
-            shape === WaterShape.CIRCLE ? Math.max(width, depth) : width,
-            shape === WaterShape.CIRCLE ? Math.max(width, depth) : depth,
-            res, res
-        );
-
-        geometry.rotateX(-Math.PI / 2);
+        // Retrieve cached or pooled geometry to prevent thread blocking during loading
+        const geometry = WaterGeometryPool.getGeometry(width, depth, shape);
 
         this.material = createWaterMaterial(width, depth, rippleData, objectPositions, shape);
 
@@ -81,7 +74,7 @@ export class WaterSurface {
     }
 
     dispose(): void {
-        this.mesh.geometry.dispose();
+        // Geometry is managed and disposed globally by WaterGeometryPool
         this.material.dispose();
     }
 }
@@ -129,7 +122,6 @@ export class WaterSystem implements System {
     private playerWasInWater: boolean = false;
     private stepTimer: number = 0;
     private grounds: THREE.Mesh[] = [];
-    private boundUniforms: WaterBind[] = [];
 
     // Pre-allocated array to prevent GC during ground uniform updates
     private _groundUniformData: THREE.Vector4[] = [];
@@ -159,6 +151,9 @@ export class WaterSystem implements System {
     }
 
     public populateFlora(flora: LakeFloraInstance[]): void {
+        // Reset the pool index at the start of each call — all Matrix4s are safe to overwrite
+        _floraMatPoolIdx = 0;
+
         const lilies: LakeFloraInstance[] = [];
         const seaweed: LakeFloraInstance[] = [];
 
@@ -194,7 +189,7 @@ export class WaterSystem implements System {
                         bucket = [];
                         chunkBuckets.set(key, bucket);
                     }
-                    bucket.push(_sharedDummy.matrix.clone());
+                    bucket.push(_floraMatPool[_floraMatPoolIdx++ % 512].copy(_sharedDummy.matrix));
                 }
             }
 
@@ -234,7 +229,7 @@ export class WaterSystem implements System {
                 _sharedDummy.rotation.y = l.rotationY;
                 _sharedDummy.scale.set(l.scale.x, 1, l.scale.z * 0.8);
                 _sharedDummy.updateMatrix();
-                const mat = _sharedDummy.matrix.clone();
+                const mat = _floraMatPool[_floraMatPoolIdx++ % 512].copy(_sharedDummy.matrix);
                 bucket.matrices.push(mat);
 
                 if (Math.random() > 0.6) {
@@ -244,7 +239,7 @@ export class WaterSystem implements System {
                     _sharedDummyFlower.position.z += 0.1 * l.scale.z;
                     _sharedDummyFlower.rotation.set((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.4);
                     _sharedDummyFlower.updateMatrix();
-                    bucket.flowerMatrices.push(_sharedDummyFlower.matrix.clone());
+                    bucket.flowerMatrices.push(_floraMatPool[_floraMatPoolIdx++ % 512].copy(_sharedDummyFlower.matrix));
                 }
             }
 
@@ -300,17 +295,7 @@ export class WaterSystem implements System {
         return body;
     }
 
-    private bindMaterial(mat: THREE.Material | undefined) {
-        if (!mat || !mat.userData.waterUniforms) return;
 
-        const uniforms = mat.userData.waterUniforms as WaterBind;
-
-        for (let i = 0; i < this.boundUniforms.length; i++) {
-            if (this.boundUniforms[i].uTime === uniforms.uTime) return;
-        }
-
-        this.boundUniforms.push(uniforms);
-    }
 
     public setWaterDynamics(strength: number, direction: THREE.Vector2): void {
         this.targetWaterStrength = strength * 10.0;
@@ -384,24 +369,15 @@ export class WaterSystem implements System {
         }
 
         // Bind strictly aquatic vegetation shaders
-        if (this.boundUniforms.length === 0) {
-            this.bindMaterial(MATERIALS.waterLily);
-            this.bindMaterial(MATERIALS.waterLilyFlower);
-            this.bindMaterial(MATERIALS.seaweed);
-        }
-
         // Apply water inertia (mass) - water reacts much slower than leaves
         // Significant mass increase (0.2 -> 0.05, 0.1 -> 0.02)
         this.waterStrength += (this.targetWaterStrength - this.waterStrength) * (delta * 0.05);
         this.waterDirection.lerp(this.targetWaterDirection, delta * 0.02);
 
-        // Animate aquatic shaders
-        for (let i = 0; i < this.boundUniforms.length; i++) {
-            const b = this.boundUniforms[i];
-            b.uTime.value = renderTime * 0.001; // Synchronize with renderTime
-            if (b.uWaterDirection) b.uWaterDirection.value.copy(this.waterDirection);
-            if (b.uWaveStrength) b.uWaveStrength.value = 0.4 + (this.waterStrength * 0.1);
-        }
+        // Animate shared vegetation shaders directly with absolute zero-GC
+        SHARED_WATER_VEG_UNIFORMS.uTime.value = renderTime * 0.001;
+        SHARED_WATER_VEG_UNIFORMS.uWaterDirection.value.copy(this.waterDirection);
+        SHARED_WATER_VEG_UNIFORMS.uWaveStrength.value = 0.4 + (this.waterStrength * 0.1);
 
         let objIdx = 0;
         const bLen = this.waterBodies.length;
@@ -491,8 +467,10 @@ export class WaterSystem implements System {
                             this.spawnParticleCb(p.position.x, p.position.y + 0.2, p.position.z, FXParticleType.SPLASH, 3);
                         }
 
-                        // Set the next allowed splash to 150-250 milliseconds from now
-                        p.userData.nextSplash = renderTime + 150 + (Math.random() * 100);
+                        // Set next allowed splash — fixed 200ms interval; variation is natural
+                        // from different props moving at different speeds and positions.
+                        // NOTE: Math.random() removed from hot-path to maintain Zero-GC contract.
+                        p.userData.nextSplash = renderTime + 200;
                     }
                 }
             }
@@ -784,13 +762,17 @@ export class WaterSystem implements System {
         this.waterBodies.length = 0;
         this.surfaces.length = 0;
         this.lilyData.length = 0;
-        this.boundUniforms.length = 0;
         this.grounds.length = 0;
 
         if (this.seaweedMesh) { this.scene.remove(this.seaweedMesh); this.seaweedMesh.dispose(); this.seaweedMesh = null; }
         if (this.lilyPads) { this.scene.remove(this.lilyPads); this.lilyPads.dispose(); this.lilyPads = null; }
         if (this.lilyStems) { this.scene.remove(this.lilyStems); this.lilyStems.dispose(); this.lilyStems = null; }
         if (this.lilyFlowers) { this.scene.remove(this.lilyFlowers); this.lilyFlowers.dispose(); this.lilyFlowers = null; }
+
+        // NOTE: WaterGeometryPool is intentionally NOT cleared here.
+        // Its cached PlaneGeometry instances are pre-warmed by AssetPreloader and shared across
+        // sector transitions. Clearing it would destroy the cache and force synchronous
+        // re-generation on main thread during the next sector load. Only clear on full engine shutdown.
 
         // Reset internal state
         this.rippleIndex = 0;

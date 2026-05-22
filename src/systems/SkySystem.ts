@@ -1,12 +1,15 @@
 import * as THREE from 'three';
 import { System, SystemID } from './System';
-import { CelestialType, MATERIALS_SKY, SkyConfig, SKY_KEYFRAMES, SkyCloudConfig } from '../utils/assets/materials_sky';
+import { CelestialType, MATERIALS_SKY, SkyConfig, SKY_KEYFRAMES, SkyCloudConfig, SkyKeyframe } from '../utils/assets/materials_sky';
 import { GEOMETRY } from '../utils/assets';
 import { LIGHT_SYSTEM, SKY_SYSTEM } from '../content/constants';
 
 // Zero-GC Module Scratchpads and Mathematical Constants
 const _c1 = new THREE.Color();
 const _c2 = new THREE.Color();
+const _c3 = new THREE.Color();
+const _c4 = new THREE.Color();
+const _c5 = new THREE.Color();
 const _v1 = new THREE.Vector3();
 const PI2 = Math.PI * 2;
 const PI05 = Math.PI * 0.5;
@@ -33,13 +36,53 @@ export class SkySystem implements System {
     public currentTime: number = 0;
     public timeScale: number = 0;
     private activeConfig: SkyConfig | null = null;
-    public currentAtmosphereColor: number = 0x050510;
+    public currentAtmosphereColor: THREE.Color = new THREE.Color(0x050510);
 
     // Temporal cache to block redundant keyframe interpolations
     private lastLerpTime: number = -1;
 
     // Spatial cache to block redundant scene graph matrix updates
     private lastTrackedPos: THREE.Vector3 = new THREE.Vector3(Infinity, Infinity, Infinity);
+
+    // Runtime caching properties
+    private _cachedKeyframeIndex: number = 0;
+
+    // Pre-resolved active configuration colors & values to achieve true Zero-GC in processProcedural and update
+    private _hasAtmosphereColor: boolean = false;
+    private _activeAtmosphereColor: THREE.Color = new THREE.Color();
+
+    private _hasHemiSkyColor: boolean = false;
+    private _activeHemiSkyColor: THREE.Color = new THREE.Color();
+    private _activeHemiGroundColor: number = 0x333322;
+    private _hasHemiIntensity: boolean = false;
+    private _activeHemiIntensity: number = 0.0;
+
+    private _hasCelestialColor: boolean = false;
+    private _activeCelestialColor: THREE.Color = new THREE.Color();
+    private _hasCelestialTypeOverride: boolean = false;
+    private _celestialTypeOverride: CelestialType = CelestialType.SUN;
+    private _celestialRadiusSun: number = 25;
+    private _celestialRadiusMoon: number = 18;
+    private _hasStaticPos: boolean = false;
+    private _staticPos: THREE.Vector3 = new THREE.Vector3();
+    private _orbitDist: number = 200;
+
+    private _hasLightColor: boolean = false;
+    private _activeLightColor: THREE.Color = new THREE.Color();
+    private _activeLightVisible: boolean = true;
+    private _hasLightIntensity: boolean = false;
+    private _activeLightIntensity: number = 0.0;
+    private _activeLightCastShadow: boolean = true;
+
+    private _hasCloudsColor: boolean = false;
+    private _activeCloudsColor: THREE.Color = new THREE.Color();
+    private _hasCloudsOpacity: boolean = false;
+    private _activeCloudsOpacity: number = 0.5;
+    private _activeCloudsSpeed: number = 1.0;
+    private _activeCloudsHeight: number = 120;
+
+    private _hasStarsOverride: boolean = false;
+    private _starsOverride: number = 0;
 
     // --- SCENE OBJECTS ---
     public root: THREE.Group;
@@ -121,6 +164,7 @@ export class SkySystem implements System {
             geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
             geo.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
             geo.setAttribute('twinkleSpeed', new THREE.BufferAttribute(twinkleSpeeds, 1));
+            geo.userData = { isSharedAsset: true };
             cache.starGeo = geo;
         }
 
@@ -148,7 +192,7 @@ export class SkySystem implements System {
             depthWrite: false
         });
 
-        this.sunRaysMaterial = MATERIALS_SKY.sunRays.clone();
+        this.sunRaysMaterial = MATERIALS_SKY.sunRays;
 
         this.moonMaterial = new THREE.MeshBasicMaterial({
             color: MATERIALS_SKY.moon.color,
@@ -258,6 +302,16 @@ export class SkySystem implements System {
 
             this._cloudVelocities[i] = 5.0 + Math.random() * 7.0;
         }
+
+        // Pre-instantiate and attach THREE.Color objects directly to keyframe elements to completely bypass Map hash lookup in hot-paths
+        for (let i = 0; i < SKY_KEYFRAMES.length; i++) {
+            const kf = SKY_KEYFRAMES[i];
+            
+            kf.atmosphereColorObj = new THREE.Color(kf.atmosphereColor);
+            kf.celestialColorObj = new THREE.Color(kf.celestialColor);
+            kf.lightColorObj = new THREE.Color(kf.lightColor);
+            kf.hemiSkyColorObj = new THREE.Color(kf.hemiSkyColor);
+        }
     }
 
     public getCelestialPosition(): THREE.Vector3 {
@@ -279,6 +333,127 @@ export class SkySystem implements System {
             this.currentTime = config.time;
         }
         this.timeScale = config.timeScale || 0;
+
+        // Resolve optional configuration colors and variables into flat private properties to achieve true Zero-GC
+        if (config.atmosphereColor !== undefined) {
+            this._hasAtmosphereColor = true;
+            this._activeAtmosphereColor.setHex(config.atmosphereColor);
+        } else {
+            this._hasAtmosphereColor = false;
+        }
+
+        if (config.hemi) {
+            if (config.hemi.skyColor !== undefined) {
+                this._hasHemiSkyColor = true;
+                this._activeHemiSkyColor.setHex(config.hemi.skyColor);
+            } else {
+                this._hasHemiSkyColor = false;
+            }
+            this._activeHemiGroundColor = config.hemi.groundColor !== undefined ? config.hemi.groundColor : 0x333322;
+            if (config.hemi.intensity !== undefined) {
+                this._hasHemiIntensity = true;
+                this._activeHemiIntensity = config.hemi.intensity;
+            } else {
+                this._hasHemiIntensity = false;
+            }
+        } else {
+            this._hasHemiSkyColor = false;
+            this._activeHemiGroundColor = 0x333322;
+            this._hasHemiIntensity = false;
+        }
+
+        if (config.celestial) {
+            if (config.celestial.color !== undefined) {
+                this._hasCelestialColor = true;
+                this._activeCelestialColor.setHex(config.celestial.color);
+            } else {
+                this._hasCelestialColor = false;
+            }
+
+            if (config.celestial.type !== undefined) {
+                this._hasCelestialTypeOverride = true;
+                this._celestialTypeOverride = config.celestial.type;
+            } else {
+                this._hasCelestialTypeOverride = false;
+            }
+
+            const celTypeVal = config.celestial.type;
+            const celRadiusVal = config.celestial.radius;
+            this._celestialRadiusSun = (celTypeVal === CelestialType.SUN && celRadiusVal !== undefined) ? celRadiusVal : 25;
+            this._celestialRadiusMoon = (celTypeVal === CelestialType.MOON && celRadiusVal !== undefined) ? celRadiusVal : 18;
+
+            if (config.celestial.position) {
+                this._hasStaticPos = true;
+                this._staticPos.copy(config.celestial.position);
+            } else {
+                this._hasStaticPos = false;
+            }
+
+            this._orbitDist = config.celestial.distance || (this._hasStaticPos ? 180 : 200);
+        } else {
+            this._hasCelestialColor = false;
+            this._hasCelestialTypeOverride = false;
+            this._celestialRadiusSun = 25;
+            this._celestialRadiusMoon = 18;
+            this._hasStaticPos = false;
+            this._orbitDist = 200;
+        }
+
+        if (config.light) {
+            if (config.light.color !== undefined) {
+                this._hasLightColor = true;
+                this._activeLightColor.setHex(config.light.color);
+            } else {
+                this._hasLightColor = false;
+            }
+
+            this._activeLightVisible = config.light.visible !== undefined ? config.light.visible : true;
+
+            if (config.light.intensity !== undefined) {
+                this._hasLightIntensity = true;
+                this._activeLightIntensity = config.light.intensity;
+            } else {
+                this._hasLightIntensity = false;
+            }
+
+            this._activeLightCastShadow = config.light.castShadow !== undefined ? config.light.castShadow : true;
+        } else {
+            this._hasLightColor = false;
+            this._activeLightVisible = true;
+            this._hasLightIntensity = false;
+            this._activeLightCastShadow = true;
+        }
+
+        if (config.clouds) {
+            if (config.clouds.color !== undefined) {
+                this._hasCloudsColor = true;
+                this._activeCloudsColor.setHex(config.clouds.color);
+            } else {
+                this._hasCloudsColor = false;
+            }
+
+            if (config.clouds.opacity !== undefined) {
+                this._hasCloudsOpacity = true;
+                this._activeCloudsOpacity = config.clouds.opacity;
+            } else {
+                this._hasCloudsOpacity = false;
+            }
+
+            this._activeCloudsSpeed = config.clouds.speed !== undefined ? config.clouds.speed : 1.0;
+            this._activeCloudsHeight = config.clouds.height !== undefined ? config.clouds.height : 120;
+        } else {
+            this._hasCloudsColor = false;
+            this._hasCloudsOpacity = false;
+            this._activeCloudsSpeed = 1.0;
+            this._activeCloudsHeight = 120;
+        }
+
+        if (config.stars !== undefined) {
+            this._hasStarsOverride = true;
+            this._starsOverride = config.stars;
+        } else {
+            this._hasStarsOverride = false;
+        }
 
         // Sync instance draw layer context
         this.syncCloudMeshLayer(config.clouds);
@@ -360,9 +535,8 @@ export class SkySystem implements System {
 
         // 4. INSTANCED CLOUD SIMULATION LOOP (Linear Array Buffer Access)
         if (this.cloudMesh && this.cloudMesh.visible && this.cloudCount > 0) {
-            const cloudCfg = this.activeConfig.clouds;
-            const speedScale = cloudCfg?.speed !== undefined ? cloudCfg.speed : 1.0;
-            const baseHeight = cloudCfg?.height !== undefined ? cloudCfg.height : 120;
+            const speedScale = this._activeCloudsSpeed;
+            const baseHeight = this._activeCloudsHeight;
             const timeMultiplier = this.timeScale === 0 ? 1.0 : Math.max(1.0, Math.abs(this.timeScale) * 50.0);
 
             const pos = this._cloudPositions;
@@ -392,82 +566,121 @@ export class SkySystem implements System {
                 const finalScaleW = scales[i2 + 0] * morphW;
                 const finalScaleH = scales[i2 + 1] * morphH;
 
-                // Write transformation components directly into InstancedMesh ArrayBuffer matrix positions
+                // Write transformation components sequentially directly into InstancedMesh ArrayBuffer matrix positions to prevent V8 deoptimization
                 matrixArray[matIdx + 0] = finalScaleW;
+                matrixArray[matIdx + 1] = 0.0;
+                matrixArray[matIdx + 2] = 0.0;
+                matrixArray[matIdx + 3] = 0.0;
+                matrixArray[matIdx + 4] = 0.0;
                 matrixArray[matIdx + 5] = finalScaleH;
+                matrixArray[matIdx + 6] = 0.0;
+                matrixArray[matIdx + 7] = 0.0;
+                matrixArray[matIdx + 8] = 0.0;
+                matrixArray[matIdx + 9] = 0.0;
                 matrixArray[matIdx + 10] = 1.0;
+                matrixArray[matIdx + 11] = 0.0;
                 matrixArray[matIdx + 12] = pos[i3 + 0];
                 matrixArray[matIdx + 13] = pos[i3 + 1];
                 matrixArray[matIdx + 14] = pos[i3 + 2];
+                matrixArray[matIdx + 15] = 1.0;
             }
             this.cloudMesh.instanceMatrix.needsUpdate = true;
         }
     }
 
     private processProcedural(time: number): void {
-        const config = this.activeConfig;
-        if (!config) return;
+        if (!this.activeConfig) return;
 
         const normalizedTime = Math.max(0.0, Math.min(1.0, ((time % 1.0) + 1.0) % 1.0));
         this.lastLerpTime = time;
 
-        // 1. RESOLVE DNA INTERVAL
-        let k1 = SKY_KEYFRAMES[0];
-        let k2 = SKY_KEYFRAMES[1];
-        for (let i = 0; i < SKY_KEYFRAMES.length - 1; i++) {
-            if (normalizedTime >= SKY_KEYFRAMES[i].time && normalizedTime <= SKY_KEYFRAMES[i + 1].time) {
-                k1 = SKY_KEYFRAMES[i];
-                k2 = SKY_KEYFRAMES[i + 1];
-                break;
+        // 1. RESOLVE DNA INTERVAL (Implementing O(1) Temporal Gating boundary checks)
+        let idx = this._cachedKeyframeIndex;
+        let k1 = SKY_KEYFRAMES[idx] as Required<SkyKeyframe>;
+        let k2 = SKY_KEYFRAMES[idx + 1] as Required<SkyKeyframe>;
+
+        if (normalizedTime < k1.time || normalizedTime > k2.time) {
+            let found = false;
+            for (let i = 0; i < SKY_KEYFRAMES.length - 1; i++) {
+                if (normalizedTime >= SKY_KEYFRAMES[i].time && normalizedTime <= SKY_KEYFRAMES[i + 1].time) {
+                    this._cachedKeyframeIndex = i;
+                    idx = i;
+                    k1 = SKY_KEYFRAMES[i] as Required<SkyKeyframe>;
+                    k2 = SKY_KEYFRAMES[i + 1] as Required<SkyKeyframe>;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                this._cachedKeyframeIndex = 0;
+                idx = 0;
+                k1 = SKY_KEYFRAMES[0] as Required<SkyKeyframe>;
+                k2 = SKY_KEYFRAMES[1] as Required<SkyKeyframe>;
             }
         }
 
         const range = k2.time - k1.time;
         const alpha = range > 0 ? (normalizedTime - k1.time) / range : 0;
-        const baseColor = config.atmosphereColor;
 
-        // 2. ATMOSPHERE TINTING
-        const kfAtmosphere = this.lerpColor(k1.atmosphereColor, k2.atmosphereColor, alpha);
-        if (baseColor !== undefined) {
-            this.currentAtmosphereColor = this.blendAtmosphereColors(baseColor, kfAtmosphere);
+        // 2. ATMOSPHERE TINTING (Reference-based copying/lerping using direct Color properties)
+        const kfAtmosphere = _c1.copy(k1.atmosphereColorObj).lerp(k2.atmosphereColorObj, alpha);
+        if (this._hasAtmosphereColor) {
+            this.currentAtmosphereColor.copy(kfAtmosphere).lerp(this._activeAtmosphereColor, 0.4);
         } else {
-            this.currentAtmosphereColor = kfAtmosphere;
+            this.currentAtmosphereColor.copy(kfAtmosphere);
         }
 
-        if (this.currentScene) {
-            _c1.setHex(this.currentAtmosphereColor);
-            if (this.currentScene.background instanceof THREE.Color) {
-                this.currentScene.background.copy(_c1);
-            } else {
-                this.currentScene.background = new THREE.Color(_c1);
-            }
+        if (this.currentScene && this.currentScene.background !== this.currentAtmosphereColor) {
+            this.currentScene.background = this.currentAtmosphereColor;
         }
 
         // 3. HEMISPHERE FILL
-        const kfHemiSky = this.lerpColor(k1.hemiSkyColor, k2.hemiSkyColor, alpha);
-        const hemiSky = config.hemi?.skyColor ?? (baseColor !== undefined ? this.blendAtmosphereColors(baseColor, kfHemiSky) : kfHemiSky);
-        const hemiGround = config.hemi?.groundColor ?? 0x333322;
-        const hemiIntensity = config.hemi?.intensity ?? this.lerpScalar(k1.hemiIntensity, k2.hemiIntensity, alpha);
+        const kfHemiSky = _c2.copy(k1.hemiSkyColorObj).lerp(k2.hemiSkyColorObj, alpha);
+        
+        let hemiSkyColorObj: THREE.Color;
+        if (this._hasHemiSkyColor) {
+            hemiSkyColorObj = _c3.copy(this._activeHemiSkyColor);
+        } else if (this._hasAtmosphereColor) {
+            hemiSkyColorObj = _c3.copy(kfHemiSky).lerp(this._activeAtmosphereColor, 0.4);
+        } else {
+            hemiSkyColorObj = kfHemiSky;
+        }
 
-        this.hemiLight.color.setHex(hemiSky);
+        const hemiGround = this._activeHemiGroundColor;
+        const hemiIntensity = this._hasHemiIntensity ? this._activeHemiIntensity : (k1.hemiIntensity + (k2.hemiIntensity - k1.hemiIntensity) * alpha);
+
+        this.hemiLight.color.copy(hemiSkyColorObj);
         this.hemiLight.groundColor.setHex(hemiGround);
         this.hemiLight.intensity = hemiIntensity;
 
         // 4. CELESTIAL VISUALS TRACKING
         const isDay = normalizedTime > 0.25 && normalizedTime < 0.75;
-        const celColor = config.celestial?.color ?? this.lerpColor(k1.celestialColor, k2.celestialColor, alpha);
+        
+        let celColorObj: THREE.Color;
+        if (this._hasCelestialColor) {
+            celColorObj = _c3.copy(this._activeCelestialColor);
+        } else {
+            celColorObj = _c3.copy(k1.celestialColorObj).lerp(k2.celestialColorObj, alpha);
+        }
 
-        const lightCfg = config.light;
-        const litColor = lightCfg?.color ?? this.lerpColor(k1.lightColor, k2.lightColor, alpha);
-        const cloudCfg = config.clouds;
-        const cloudColorHex = cloudCfg?.color ?? this.lerpColor(this.currentAtmosphereColor, litColor, 0.85);
+        let litColorObj: THREE.Color;
+        if (this._hasLightColor) {
+            litColorObj = _c4.copy(this._activeLightColor);
+        } else {
+            litColorObj = _c4.copy(k1.lightColorObj).lerp(k2.lightColorObj, alpha);
+        }
 
-        const celRadiusSun = (config.celestial?.type === CelestialType.SUN && config.celestial?.radius !== undefined) ? config.celestial.radius : 25;
-        const celRadiusMoon = (config.celestial?.type === CelestialType.MOON && config.celestial?.radius !== undefined) ? config.celestial.radius : 18;
+        let cloudColorObj: THREE.Color;
+        if (this._hasCloudsColor) {
+            cloudColorObj = _c2.copy(this._activeCloudsColor);
+        } else {
+            cloudColorObj = _c2.copy(this.currentAtmosphereColor).lerp(litColorObj, 0.85);
+        }
 
-        _c1.setHex(celColor);
+        const celRadiusSun = this._celestialRadiusSun;
+        const celRadiusMoon = this._celestialRadiusMoon;
 
-        // Circular vinkel-bana positioning layout maps
+        // Circular position calculations
         const angleSun = (normalizedTime * PI2) - PI05;
         const angleMoon = angleSun + Math.PI;
 
@@ -477,8 +690,8 @@ export class SkySystem implements System {
         let sunOpacity = Math.max(0, Math.min(1, sinSun / 0.15));
         let moonOpacity = Math.max(0, Math.min(1, sinMoon / 0.15));
 
-        if (config.celestial?.type !== undefined) {
-            if (config.celestial.type === CelestialType.SUN) {
+        if (this._hasCelestialTypeOverride) {
+            if (this._celestialTypeOverride === CelestialType.SUN) {
                 moonOpacity = 0.0;
             } else {
                 sunOpacity = 0.0;
@@ -488,18 +701,17 @@ export class SkySystem implements System {
         let refX = 0;
         let refY = 150;
         let refZ = -300;
-        const hasStaticPos = !!(config.celestial?.position);
 
-        if (hasStaticPos) {
-            refX = config.celestial.position!.x;
-            refY = config.celestial.position!.y;
-            refZ = config.celestial.position!.z;
+        if (this._hasStaticPos) {
+            refX = this._staticPos.x;
+            refY = this._staticPos.y;
+            refZ = this._staticPos.z;
         }
 
-        const orbitDist = config.celestial?.distance || (hasStaticPos ? 180 : 200);
+        const orbitDist = this._orbitDist;
 
-        if (hasStaticPos && this.timeScale === 0) {
-            const celType = config.celestial?.type ?? (isDay ? CelestialType.SUN : CelestialType.MOON);
+        if (this._hasStaticPos && this.timeScale === 0) {
+            const celType = this._hasCelestialTypeOverride ? this._celestialTypeOverride : (isDay ? CelestialType.SUN : CelestialType.MOON);
             if (celType === CelestialType.SUN) {
                 this.sunGroup.position.set(refX, refY, refZ);
                 sunOpacity = 1.0;
@@ -514,35 +726,34 @@ export class SkySystem implements System {
             this.moonGroup.position.set(refX + Math.cos(angleMoon) * orbitDist, Math.sin(angleMoon) * refY, refZ);
         }
 
-        // Apply parameterizations to compiled materials
+        // Apply parameters to sun visual elements
         if (sunOpacity > 0) {
             this.sunGroup.visible = true;
-            this.sunMaterial.color.copy(_c1);
+            this.sunMaterial.color.copy(celColorObj);
             this.sunMaterial.opacity = sunOpacity;
             this.sunMesh.scale.setScalar(celRadiusSun * (0.8 + 0.2 * sunOpacity));
 
-            _c2.setHex(cloudColorHex);
-            this.sunHaloMaterial.color.copy(_c1).lerp(_c2, 0.20);
+            this.sunHaloMaterial.color.copy(celColorObj).lerp(cloudColorObj, 0.20);
             this.sunHaloMaterial.opacity = sunOpacity;
 
             const sunHScale = celRadiusSun * 6 * (0.5 + 0.5 * sunOpacity);
             this.sunHaloBaseScale = sunHScale;
             this.sunHalo.scale.set(sunHScale, sunHScale, 1);
 
-            this.sunRaysMaterial.uniforms.uColor.value.copy(_c1).lerp(_c2, 0.10);
+            this.sunRaysMaterial.uniforms.uColor.value.copy(celColorObj).lerp(cloudColorObj, 0.10);
             this.sunRaysMaterial.uniforms.uOpacity.value = 0.7 * sunOpacity;
         } else {
             this.sunGroup.visible = false;
         }
 
+        // Apply parameters to moon visual elements
         if (moonOpacity > 0) {
             this.moonGroup.visible = true;
-            this.moonMaterial.color.copy(_c1);
+            this.moonMaterial.color.copy(celColorObj);
             this.moonMaterial.opacity = moonOpacity;
             this.moonMesh.scale.setScalar(celRadiusMoon * (0.8 + 0.2 * moonOpacity));
 
-            _c2.setHex(cloudColorHex);
-            this.moonHaloMaterial.color.copy(_c1).lerp(_c2, 0.35);
+            this.moonHaloMaterial.color.copy(celColorObj).lerp(cloudColorObj, 0.35);
             this.moonHaloMaterial.opacity = 0.8 * moonOpacity;
 
             const moonHScale = celRadiusMoon * 6 * (0.5 + 0.5 * moonOpacity);
@@ -553,28 +764,27 @@ export class SkySystem implements System {
         }
 
         // 5. DIRECTIONAL LIGHTING SHADOW CONTROL
-        if (lightCfg?.visible === false) {
+        if (this._activeLightVisible === false) {
             this.skyLight.visible = false;
             this.skyLight.intensity = 0;
         } else {
             this.skyLight.visible = true;
-            const litIntensity = lightCfg?.intensity ?? this.lerpScalar(k1.lightIntensity, k2.lightIntensity, alpha);
+            const litIntensity = this._hasLightIntensity ? this._activeLightIntensity : (k1.lightIntensity + (k2.lightIntensity - k1.lightIntensity) * alpha);
 
             const isSunDominant = (sunOpacity >= moonOpacity);
             const dominantGroup = isSunDominant ? this.sunGroup : this.moonGroup;
             const dominantAngle = isSunDominant ? angleSun : angleMoon;
             const horizonFade = Math.pow(Math.max(0, Math.min(1, Math.sin(dominantAngle))), 2.0);
 
-            this.skyLight.castShadow = lightCfg?.castShadow ?? true;
-            _c1.setHex(litColor);
-            this.skyLight.color.copy(_c1);
+            this.skyLight.castShadow = this._activeLightCastShadow;
+            this.skyLight.color.copy(litColorObj);
             this.skyLight.intensity = litIntensity * horizonFade;
             this.skyLight.position.copy(dominantGroup.position);
         }
 
         // 6. STAR FIELD TELEMETRY
-        const celType = config.celestial?.type ?? (isDay ? CelestialType.SUN : CelestialType.MOON);
-        const targetStars = config.stars ?? (celType === CelestialType.MOON ? 1500 : 0);
+        const celType = this._hasCelestialTypeOverride ? this._celestialTypeOverride : (isDay ? CelestialType.SUN : CelestialType.MOON);
+        const targetStars = this._hasStarsOverride ? this._starsOverride : (celType === CelestialType.MOON ? 1500 : 0);
         this.starSystem.visible = targetStars > 0;
         if (this.starSystem.visible) {
             this.starSystem.geometry.setDrawRange(0, targetStars);
@@ -590,30 +800,13 @@ export class SkySystem implements System {
 
         // 7. INSTANCED CLOUD UNIFORM TINTING
         if (this.cloudMesh && this.cloudMesh.visible) {
-            _c1.setHex(cloudColorHex);
-            const cloudBaseOpacity = cloudCfg?.opacity ?? (isDay ? 1.0 : 0.50);
-            this.cloudMaterial.color.copy(_c1);
+            const cloudBaseOpacity = this._hasCloudsOpacity ? this._activeCloudsOpacity : (isDay ? 1.0 : 0.50);
+            this.cloudMaterial.color.copy(cloudColorObj);
             this.cloudMaterial.opacity = cloudBaseOpacity;
         }
     }
 
-    private lerpColor(c1: number, c2: number, alpha: number): number {
-        _c1.setHex(c1);
-        _c2.setHex(c2);
-        _c1.lerp(_c2, alpha);
-        return _c1.getHex();
-    }
 
-    private blendAtmosphereColors(baseHex: number, kfHex: number): number {
-        _c1.setHex(baseHex);
-        _c2.setHex(kfHex);
-        _c2.lerp(_c1, 0.4);
-        return _c2.getHex();
-    }
-
-    private lerpScalar(s1: number, s2: number, alpha: number): number {
-        return s1 + (s2 - s1) * alpha;
-    }
 
     public reAttach(newScene: THREE.Scene): void {
         this.currentScene = newScene;
@@ -621,12 +814,14 @@ export class SkySystem implements System {
     }
 
     public clear(): void {
-        if (this.sunMaterial) this.sunMaterial.dispose();
-        if (this.sunHaloMaterial) this.sunHaloMaterial.dispose();
-        if (this.sunRaysMaterial) this.sunRaysMaterial.dispose();
-        if (this.moonMaterial) this.moonMaterial.dispose();
-        if (this.moonHaloMaterial) this.moonHaloMaterial.dispose();
-        if (this.cloudMaterial) this.cloudMaterial.dispose();
+        // [VINTERDÖD FIX] Persistent systems should not dispose of their shared materials
+        // when jumping between sectors, otherwise they become invisible (disposed on GPU).
+        // if (this.sunMaterial) this.sunMaterial.dispose();
+        // if (this.sunHaloMaterial) this.sunHaloMaterial.dispose();
+        // if (this.sunRaysMaterial) this.sunRaysMaterial.dispose();
+        // if (this.moonMaterial) this.moonMaterial.dispose();
+        // if (this.moonHaloMaterial) this.moonHaloMaterial.dispose();
+        // if (this.cloudMaterial) this.cloudMaterial.dispose();
         if (this.cloudMesh) {
             this.cloudMesh.dispose();
             this.cloudMesh = null;

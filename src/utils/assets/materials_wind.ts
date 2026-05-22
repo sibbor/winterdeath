@@ -1,31 +1,54 @@
 import * as THREE from 'three';
 
+// ============================================================================
+// SHARED UNIFORM TYPES & PRE-ALLOCATED STRUCTS
+// ============================================================================
+
+/**
+ * Canonical typed interface for all wind shader uniforms.
+ * Exported so WindSystem can import the type instead of maintaining a local duplicate.
+ */
+export interface WindUniforms {
+    uTime: { value: number };
+    uWind: { value: THREE.Vector2 };
+    uInteractors: { value: THREE.Vector4[] };
+}
+
+const _buildInteractors = (): THREE.Vector4[] =>
+    Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0));
+
+// One pre-allocated struct per wind behavior variant — no allocation ever at patch-time
+export const TREE_WIND_UNIFORMS: WindUniforms = {
+    uTime: { value: 0 },
+    uWind: { value: new THREE.Vector2() },
+    uInteractors: { value: _buildInteractors() }
+};
+
+export const GRASS_WIND_UNIFORMS: WindUniforms = {
+    uTime: { value: 0 },
+    uWind: { value: new THREE.Vector2() },
+    uInteractors: { value: _buildInteractors() }
+};
+
+export const HEDGE_WIND_UNIFORMS: WindUniforms = {
+    uTime: { value: 0 },
+    uWind: { value: new THREE.Vector2() },
+    uInteractors: { value: _buildInteractors() }
+};
+
 /**
  * Optimized vertex shader injection for trees.
  * Calculates wind deformation in World Space and transforms to Local Space.
  */
 export const patchTreeWindMaterial = <T extends THREE.Material>(material: T): T => {
-    // Pre-allocate references so lazy-compilation retains the binding
-    const windUniforms = {
-        uTime: { value: Math.random() * 10.0 },
-        uWind: { value: new THREE.Vector2(0, 0) },
-        uInteractors: { value: new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0)) }
-    };
-
-    material.userData.windUniforms = windUniforms;
+    // Assign pre-allocated shared struct — zero allocation per patch call
+    material.userData.windUniforms = TREE_WIND_UNIFORMS;
 
     material.onBeforeCompile = (shader) => {
-        if (!material.userData.windUniforms || typeof material.userData.windUniforms.uTime.value === 'undefined') {
-            material.userData.windUniforms = {
-                uTime: { value: Math.random() * 10.0 },
-                uWind: { value: new THREE.Vector2(0, 0) },
-                uInteractors: { value: new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0)) }
-            };
-        }
-
-        shader.uniforms.uTime = material.userData.windUniforms.uTime;
-        shader.uniforms.uWind = material.userData.windUniforms.uWind;
-        shader.uniforms.uInteractors = material.userData.windUniforms.uInteractors;
+        // Bind directly from the pre-allocated struct — no defensive re-allocation needed
+        shader.uniforms.uTime = TREE_WIND_UNIFORMS.uTime;
+        shader.uniforms.uWind = TREE_WIND_UNIFORMS.uWind;
+        shader.uniforms.uInteractors = TREE_WIND_UNIFORMS.uInteractors;
 
         shader.vertexShader = `
             uniform float uTime;
@@ -113,18 +136,13 @@ export const patchTreeWindMaterial = <T extends THREE.Material>(material: T): T 
  * Implements an exponential bend curve and dramatic interactor parting.
  */
 export const patchGrassWindMaterial = <T extends THREE.Material>(material: T): T => {
-    const windUniforms = {
-        uTime: { value: Math.random() * 10.0 },
-        uWind: { value: new THREE.Vector2(0, 0) },
-        uInteractors: { value: new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0)) }
-    };
-
-    material.userData.windUniforms = windUniforms;
+    // Assign pre-allocated shared struct — zero allocation per patch call
+    material.userData.windUniforms = GRASS_WIND_UNIFORMS;
 
     material.onBeforeCompile = (shader) => {
-        shader.uniforms.uTime = material.userData.windUniforms.uTime;
-        shader.uniforms.uWind = material.userData.windUniforms.uWind;
-        shader.uniforms.uInteractors = material.userData.windUniforms.uInteractors;
+        shader.uniforms.uTime = GRASS_WIND_UNIFORMS.uTime;
+        shader.uniforms.uWind = GRASS_WIND_UNIFORMS.uWind;
+        shader.uniforms.uInteractors = GRASS_WIND_UNIFORMS.uInteractors;
 
         shader.vertexShader = `
             uniform float uTime;
@@ -206,18 +224,13 @@ export const patchGrassWindMaterial = <T extends THREE.Material>(material: T): T
  * on tall, single-geometry boxes.
  */
 export const patchHedgeWindMaterial = <T extends THREE.Material>(material: T): T => {
-    const windUniforms = {
-        uTime: { value: Math.random() * 10.0 },
-        uWind: { value: new THREE.Vector2(0, 0) },
-        uInteractors: { value: new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0)) }
-    };
-
-    material.userData.windUniforms = windUniforms;
+    // Assign pre-allocated shared struct — zero allocation per patch call
+    material.userData.windUniforms = HEDGE_WIND_UNIFORMS;
 
     material.onBeforeCompile = (shader) => {
-        shader.uniforms.uTime = material.userData.windUniforms.uTime;
-        shader.uniforms.uWind = material.userData.windUniforms.uWind;
-        shader.uniforms.uInteractors = material.userData.windUniforms.uInteractors;
+        shader.uniforms.uTime = HEDGE_WIND_UNIFORMS.uTime;
+        shader.uniforms.uWind = HEDGE_WIND_UNIFORMS.uWind;
+        shader.uniforms.uInteractors = HEDGE_WIND_UNIFORMS.uInteractors;
 
         shader.vertexShader = `
             uniform float uTime;

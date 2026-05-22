@@ -1,12 +1,8 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../utils/assets/materials';
+import { WindUniforms } from '../utils/assets/materials_wind';
 import { System, SystemID } from './System';
 
-interface WindBind {
-  uTime: { value: number };
-  uWind: { value: THREE.Vector2 };
-  uInteractors: { value: THREE.Vector4[] };
-}
 
 export class WindSystem implements System {
   readonly systemId = SystemID.WIND;
@@ -31,7 +27,7 @@ export class WindSystem implements System {
   private materialsBound: boolean = false;
 
   // Here this specific WindSystem stores its references
-  private boundUniforms: WindBind[] = [];
+  private boundUniforms: WindUniforms[] = [];
   private currentInteractors: THREE.Vector4[] = new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0));
 
   constructor() { }
@@ -43,7 +39,7 @@ export class WindSystem implements System {
   public bindMaterial(mat: THREE.Material | undefined) {
     if (!mat || !mat.userData.windUniforms) return;
 
-    const uniforms = mat.userData.windUniforms as WindBind;
+    const uniforms = mat.userData.windUniforms as WindUniforms;
 
     // Avoid duplicates (O(N) check is fine here since the list is tiny)
     for (let i = 0; i < this.boundUniforms.length; i++) {

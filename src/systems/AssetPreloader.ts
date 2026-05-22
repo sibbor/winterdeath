@@ -3,8 +3,10 @@ import { WinterEngine } from '../core/engine/WinterEngine';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProceduralTextures, TREE_DEPTH_MATS } from '../utils/assets';
 import { MATERIALS_SKY } from '../utils/assets/materials_sky';
 import { TEXTURES } from '../utils/assets/AssetLoader';
-import { createWaterMaterial } from '../utils/assets/materials_water';
-import { createFogMaterial } from '../utils/assets/materials_fog';
+import { createWaterMaterial, WaterGeometryPool } from '../utils/assets/materials_water';
+import { MATERIALS_FOG } from '../utils/assets/materials_fog';
+import { MATERIALS_WEATHER } from '../utils/assets/materials_weather';
+import { WeatherType } from '../core/engine/EngineTypes';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, LIGHT_SETTINGS, FLASHLIGHT } from '../content/constants';
 import { VEGETATION_TYPE } from '../content/environment';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
@@ -72,14 +74,6 @@ const FX_GAS = [
 const ALL_FX = [...FX_SOLID, ...FX_GAS];
 const DEAD_BODY_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, EnemyType.BOMBER];
 const TREE_TYPES = [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.OAK, VEGETATION_TYPE.BIRCH, VEGETATION_TYPE.DEAD_TREE];
-// Lazy getter for weather materials to prevent circular dependency ReferenceError
-let _WEATHER_MATS: THREE.MeshBasicMaterial[] | null = null;
-const getWeatherMats = () => {
-    if (!_WEATHER_MATS) {
-        _WEATHER_MATS = [MATERIALS.particle_snow, MATERIALS.particle_rain, MATERIALS.particle_ash, MATERIALS.particle_ember];
-    }
-    return _WEATHER_MATS;
-};
 
 // Reusable dummy scene for compilation
 const _dummyScene = new THREE.Scene();
@@ -634,12 +628,13 @@ export const AssetPreloader = {
         }
 
 
-        // Using globally pre-allocated vectors to prevent GC spikes
+        // Using globally pre-allocated vectors to prevent GC spikes and pre-warm high-density geometry
+        const cachedGeo = WaterGeometryPool.getGeometry(10, 10, WaterShape.RECT);
         const coreWaterMat = createWaterMaterial(10, 10, _dummyRipples, _dummyObjects, WaterShape.RECT);
-        add(new THREE.Mesh(GEOMETRY.plane, coreWaterMat), false);
+        add(new THREE.Mesh(cachedGeo, coreWaterMat), false);
 
         // Volumetric Fog material & geometry (Shared)
-        const dummyFogMat = createFogMaterial(new THREE.Color(0.7, 0.75, 0.8));
+        const dummyFogMat = MATERIALS_FOG.getMaterial();
         add(new THREE.InstancedMesh(GEOMETRY.plane, dummyFogMat, 1), false);
 
         // FX
@@ -660,10 +655,11 @@ export const AssetPreloader = {
             if (yieldToMain) await yieldToMain();
         }
 
-        // Weather materials (instanced)
-        const weatherMats = getWeatherMats();
-        for (let i = 0; i < weatherMats.length; i++) {
-            const iMesh = new THREE.InstancedMesh(GEOMETRY.weatherParticle, weatherMats[i], 1);
+        // Weather materials (instanced volumetric custom ShaderMaterials)
+        const weatherTypes = [WeatherType.RAIN, WeatherType.SNOW, WeatherType.ASH, WeatherType.EMBER];
+        for (let i = 0; i < weatherTypes.length; i++) {
+            const mat = MATERIALS_WEATHER.getMaterial(weatherTypes[i]);
+            const iMesh = new THREE.InstancedMesh(GEOMETRY.weatherParticle, mat, 1);
             iMesh.matrixAutoUpdate = false;
             iMesh.updateMatrix();
             iMesh.setMatrixAt(0, _dummyMatrix);

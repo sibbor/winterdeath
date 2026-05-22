@@ -80,7 +80,8 @@ export class EnvironmentManager implements System {
 
         // 4. Weather System (Snow/Rain)
         if (env.weather) {
-            this.weather.sync(env.weather.type, env.weather.count || 0, env.weather.areaSize || 100);
+            const count = env.weather.particles ?? env.weather.count ?? 0;
+            this.weather.sync(env.weather.type, count, env.weather.areaSize || 100);
         }
 
         // 5. Ground System (Infinite Plane/Materials)
@@ -91,21 +92,20 @@ export class EnvironmentManager implements System {
         // they are persistent and re-attached via the environment.reAttach() call.
 
         // 7. Wind System (Global force)
-        if (env.windSpeed !== undefined) {
+        if (env.wind !== undefined) {
+            this.wind.sync(
+                env.wind.strengthMin || 0.01,
+                env.wind.strengthMax || env.wind.speed || 0.05,
+                env.wind.baseAngle || env.wind.direction?.x || 0.0,
+                env.wind.angleVariance || Math.PI
+            );
+        } else if (env.windSpeed !== undefined) {
             this.wind.sync(env.windSpeed * 0.5, env.windSpeed);
         }
 
         // 8. Sky System
         if (env.sky) {
             this.sky.sync(env.sky);
-        }
-
-        // 9. Unified Scene Background
-        if (scene.background instanceof THREE.Color) {
-            scene.background.setHex(fogColor);
-        } else {
-            _sharedBackground.setHex(fogColor);
-            scene.background = _sharedBackground;
         }
 
         // 10. Inter-System Wiring
@@ -147,28 +147,20 @@ export class EnvironmentManager implements System {
         // We only tick them here during the variable render loop.
         this.sky.update(context, delta, simTime, renderTime);
 
-        // Dynamically synchronize atmosphere and fog colors in real-time
+        // Dynamically drive fog color from live sky atmosphere every frame.
+        // NOTE: SkySystem already owns scene.background via pointer assignment in processProcedural;
+        // copying it here would be a redundant self-copy. Only fog needs manual sync.
         const scene = this.lastScene;
         if (scene) {
-            _c1.setHex(this.sky.currentAtmosphereColor);
+            _c1.copy(this.sky.currentAtmosphereColor);
 
-            // 1. Scene Background Color
-            if (scene.background instanceof THREE.Color) {
-                scene.background.copy(_c1);
-            }
-
-            // 2. Scene Fog Color
+            // FogExp2 baseline color tracks the atmosphere
             if (scene.fog && (scene.fog as THREE.FogExp2).isFogExp2) {
                 (scene.fog as THREE.FogExp2).color.copy(_c1);
             }
 
-            // 3. Volumetric Fog Shader Color
-            if (this.fog.fogMesh && this.fog.fogMesh.material) {
-                const uniforms = (this.fog.fogMesh.material as THREE.ShaderMaterial).uniforms;
-                if (uniforms && uniforms.uColor) {
-                    uniforms.uColor.value.copy(_c1);
-                }
-            }
+            // Volumetric fog shader color — via cached uniform pointer, no property chain overhead
+            this.fog.setVolumetricColor(_c1);
         }
 
         this.fog.update(context, delta, simTime, renderTime);

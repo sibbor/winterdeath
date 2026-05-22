@@ -1,12 +1,19 @@
 import * as THREE from 'three';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { WindSystem } from './WindSystem';
-import { createFogMaterial } from '../utils/assets/materials_fog';
+import { MATERIALS_FOG, FogUniforms } from '../utils/assets';
 import { System, SystemID } from './System';
 
 const MAX_FOG_PLANES = 25; // Optimized for performance
 const FOG_AREA_SIZE = 80.0; // Radius around player
 const FOG_SCALE = 22.0; // Large soft clouds
+
+// Module-level scratchpads — allocated once, reused across all sync() calls
+const _fogMatrix = new THREE.Matrix4();
+
+// Persistent FogExp2 instance reused across sync() calls to prevent per-call allocation
+const _persistentFogExp2 = new THREE.FogExp2(0x000000, 0);
+_persistentFogExp2.color.set(0.7, 0.75, 0.8);
 
 /**
  * FogSystem: Authoritative Atmospheric Fog Controller.
@@ -20,7 +27,6 @@ export class FogSystem implements System {
     public persistent = true;
 
     // --- PERFORMANCE SCRATCHPADS ---
-    private static _sizeScratch = new THREE.Vector2();
     private scene: THREE.Scene;
     private wind: WindSystem;
     private camera: THREE.Camera;
@@ -31,6 +37,9 @@ export class FogSystem implements System {
 
     private positions: Float32Array;
     private velocities: Float32Array;
+
+    // Cache compiled uniforms pointer directly for absolute Zero-GC and fast register updates in hot loops
+    private _activeUniforms: FogUniforms | null = null;
 
     private targetColor: THREE.Color = new THREE.Color(0.7, 0.75, 0.8);
     private fogCount: number = 0;
@@ -66,13 +75,12 @@ export class FogSystem implements System {
             this.targetColor.copy(color);
         }
 
-        // Manage lifecycle of the scene.fog object
+        // Manage lifecycle of the scene.fog object — reuse persistent instance to prevent per-call allocation
         if (fallbackDensity > 0) {
-            if (this.scene.fog && (this.scene.fog as THREE.FogExp2).isFogExp2) {
-                (this.scene.fog as THREE.FogExp2).color.copy(this.targetColor);
-                (this.scene.fog as THREE.FogExp2).density = fallbackDensity;
-            } else {
-                this.scene.fog = new THREE.FogExp2(this.targetColor.getHex(), fallbackDensity);
+            _persistentFogExp2.color.copy(this.targetColor);
+            _persistentFogExp2.density = fallbackDensity;
+            if (this.scene.fog !== _persistentFogExp2) {
+                this.scene.fog = _persistentFogExp2;
             }
         } else {
             this.scene.fog = null;
@@ -89,7 +97,8 @@ export class FogSystem implements System {
 
         // Lazy initialization of volumetric assets
         if (!this.fogMesh) {
-            this.fogMaterial = createFogMaterial(this.targetColor);
+            this.fogMaterial = MATERIALS_FOG.getMaterial();
+            this._activeUniforms = this.fogMaterial.uniforms as FogUniforms;
             const planeGeo = new THREE.PlaneGeometry(1, 1);
 
             this.fogMesh = new THREE.InstancedMesh(planeGeo, this.fogMaterial, MAX_FOG_PLANES);
@@ -101,10 +110,10 @@ export class FogSystem implements System {
 
             this.scene.add(this.fogMesh);
 
-            const dummy = new THREE.Matrix4();
+            // Reuse module-level scratchpad — no allocation per sync() call
+            _fogMatrix.makeScale(FOG_SCALE, FOG_SCALE, FOG_SCALE);
             for (let i = 0; i < MAX_FOG_PLANES; i++) {
-                dummy.makeScale(FOG_SCALE, FOG_SCALE, FOG_SCALE);
-                this.fogMesh.setMatrixAt(i, dummy);
+                this.fogMesh.setMatrixAt(i, _fogMatrix);
             }
         }
 
@@ -112,9 +121,9 @@ export class FogSystem implements System {
         if (!this.fogMesh.parent) this.scene.add(this.fogMesh);
         this.fogMesh.count = this.fogCount;
 
-        if (this.fogMaterial) {
-            this.fogMaterial.uniforms.uColor.value.copy(this.targetColor);
-            this.fogMaterial.uniforms.uDensity.value = Math.min(density * 0.03, 0.8);
+        if (this._activeUniforms) {
+            this._activeUniforms.uColor.value.copy(this.targetColor);
+            this._activeUniforms.uDensity.value = Math.min(density * 0.03, 0.8);
         }
 
         // Initialize particle spatial state
@@ -160,8 +169,8 @@ export class FogSystem implements System {
         const vel = this.velocities;
         const matrixArray = this.fogMesh.instanceMatrix.array;
 
-        if (this.fogMaterial) {
-            const uniforms = this.fogMaterial.uniforms;
+        if (this._activeUniforms) {
+            const uniforms = this._activeUniforms;
             uniforms.uTime.value = renderTime * 0.001;
             uniforms.uWind.value.set(this.wind.current.x, this.wind.current.y);
 
@@ -201,16 +210,24 @@ export class FogSystem implements System {
         this.fogMesh.instanceMatrix.needsUpdate = true;
     }
 
+    /**
+     * Updates the volumetric fog shader color via the cached uniform pointer.
+     * Called by EnvironmentManager.update() every frame to follow the sky atmosphere.
+     */
+    public setVolumetricColor(color: THREE.Color): void {
+        if (this._activeUniforms) {
+            this._activeUniforms.uColor.value.copy(color);
+        }
+    }
+
     public clear() {
         if (this.fogMesh) {
             this.scene.remove(this.fogMesh);
             this.fogMesh.dispose();
             this.fogMesh = null;
         }
-        if (this.fogMaterial) {
-            this.fogMaterial.dispose();
-            this.fogMaterial = null;
-        }
+        this._activeUniforms = null;
+        this.fogMaterial = null;
         if (this.scene.fog) this.scene.fog = null;
     }
 

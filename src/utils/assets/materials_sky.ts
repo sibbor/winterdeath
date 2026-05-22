@@ -65,6 +65,11 @@ export interface SkyKeyframe {
     lightColor: number;
     hemiIntensity: number;
     hemiSkyColor: number;
+
+    atmosphereColorObj?: THREE.Color;
+    celestialColorObj?: THREE.Color;
+    lightColorObj?: THREE.Color;
+    hemiSkyColorObj?: THREE.Color;
 }
 
 export const SKY_KEYFRAMES: SkyKeyframe[] = [
@@ -127,8 +132,6 @@ const createHaloTexture = () => {
     return tex;
 };
 
-const HALO_TEXTURE = createHaloTexture();
-
 // Procedural Sun Rays Generation
 const createRaysTexture = () => {
     const canvas = document.createElement('canvas');
@@ -166,8 +169,6 @@ const createRaysTexture = () => {
     return tex;
 };
 
-const RAYS_TEXTURE = createRaysTexture();
-
 // Procedural Fluffy Cloud Generation (Canvas-based to avoid external texture dependencies)
 const createCloudTexture = () => {
     const canvas = document.createElement('canvas');
@@ -203,187 +204,322 @@ const createCloudTexture = () => {
     return tex;
 };
 
-const CLOUD_TEXTURE = createCloudTexture();
+// Lazy-initialization cache for materials to prevent blocking main-thread parse/load
+let _skyMaterial: THREE.MeshBasicMaterial | null = null;
+let _starMaterial: THREE.ShaderMaterial | null = null;
+let _moonHaloMaterial: THREE.SpriteMaterial | null = null;
+let _moonMaterial: THREE.MeshBasicMaterial | null = null;
+let _sunMaterial: THREE.MeshBasicMaterial | null = null;
+let _cloudMaterial: THREE.MeshBasicMaterial | null = null;
+let _sunRaysMaterial: THREE.ShaderMaterial | null = null;
+
+/**
+ * SkyTextureManager: Deferred texture manager that encapsulates procedural canvas generators.
+ * Prevents synchronous thread blocking during startup, allowing textures to be generated
+ * lazily only when materials are initialized/compiled.
+ */
+export class SkyTextureManager {
+    private static _haloTexture: THREE.CanvasTexture | null = null;
+    private static _raysTexture: THREE.CanvasTexture | null = null;
+    private static _cloudTexture: THREE.CanvasTexture | null = null;
+
+    public static getHaloTexture(): THREE.CanvasTexture {
+        if (!this._haloTexture) {
+            this._haloTexture = createHaloTexture();
+        }
+        return this._haloTexture;
+    }
+
+    public static getRaysTexture(): THREE.CanvasTexture {
+        if (!this._raysTexture) {
+            this._raysTexture = createRaysTexture();
+        }
+        return this._raysTexture;
+    }
+
+    public static getCloudTexture(): THREE.CanvasTexture {
+        if (!this._cloudTexture) {
+            this._cloudTexture = createCloudTexture();
+        }
+        return this._cloudTexture;
+    }
+
+    public static dispose(): void {
+        if (this._haloTexture) {
+            this._haloTexture.dispose();
+            this._haloTexture = null;
+        }
+        if (this._raysTexture) {
+            this._raysTexture.dispose();
+            this._raysTexture = null;
+        }
+        if (this._cloudTexture) {
+            this._cloudTexture.dispose();
+            this._cloudTexture = null;
+        }
+    }
+}
+
+// Pre-allocated static uniforms with explicit type signatures to minimize V8 object-recursion
+export interface StarUniforms {
+    uTime: { value: number };
+    uOpacity: { value: number };
+    [key: string]: THREE.IUniform;
+}
+
+export interface SunRaysUniforms {
+    uTime: { value: number };
+    uColor: { value: THREE.Color };
+    uOpacity: { value: number };
+    [key: string]: THREE.IUniform;
+}
+
+export const STAR_UNIFORMS: StarUniforms = {
+    uTime: { value: 0 },
+    uOpacity: { value: 0.0 }
+};
+
+// Module-level static color uniform avoiding instantiation in the material declaration itself
+const _sunRaysColor = new THREE.Color(0xffffff);
+
+export const SUN_RAYS_UNIFORMS: SunRaysUniforms = {
+    uTime: { value: 0 },
+    uColor: { value: _sunRaysColor },
+    uOpacity: { value: 0.5 }
+};
 
 export const MATERIALS_SKY = {
     // Primary Sky dome background
-    sky: new THREE.MeshBasicMaterial({
-        color: 0xffffeb,
-        fog: false,
-        side: THREE.BackSide,
-        userData: { isSharedAsset: true }
-    }),
+    get sky(): THREE.MeshBasicMaterial {
+        if (!_skyMaterial) {
+            _skyMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffeb,
+                fog: false,
+                side: THREE.BackSide
+            });
+            _skyMaterial.userData = { isSharedAsset: true };
+        }
+        return _skyMaterial;
+    },
 
     // High-performance branchless Star Shader with smooth fading support
-    star: new THREE.ShaderMaterial({
-        uniforms: {
-            uTime: { value: 0 },
-            uOpacity: { value: 0.0 }
-        },
-        vertexShader: `
-            attribute float size; 
-            attribute float phase; 
-            attribute float twinkleSpeed; 
-            varying float vAlpha; 
-            uniform float uTime;
-            uniform float uOpacity;
-            
-            void main() {
-                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); 
-                gl_Position = projectionMatrix * mvPosition;
-                
-                // Optimized branchless logic to prevent GPU execution divergence
-                float isTwinkle = step(0.001, twinkleSpeed);
-                float baseAlpha = mix(0.8, 0.9, isTwinkle);
-                float amplitude = mix(0.2, 0.1, isTwinkle);
-                
-                vAlpha = (baseAlpha + amplitude * sin(uTime * twinkleSpeed + phase)) * uOpacity;
-                
-                gl_Position.z -= 0.0001; // Depth optimization against dome clipping
-                gl_PointSize = size * (2500.0 / -mvPosition.z);
-            }
-        `,
-        fragmentShader: `
-            varying float vAlpha; 
-            void main() { 
-                vec2 coord = gl_PointCoord - vec2(0.5); 
-                if (length(coord) > 0.5) discard; 
-                gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha); 
-            }
-        `,
-        transparent: true,
-        depthWrite: false,
-        userData: { isSharedAsset: true }
-    }),
+    get star(): THREE.ShaderMaterial {
+        if (!_starMaterial) {
+            _starMaterial = new THREE.ShaderMaterial({
+                vertexShader: `
+                    attribute float size; 
+                    attribute float phase; 
+                    attribute float twinkleSpeed; 
+                    varying float vAlpha; 
+                    uniform float uTime;
+                    uniform float uOpacity;
+                    
+                    void main() {
+                        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); 
+                        gl_Position = projectionMatrix * mvPosition;
+                        
+                        // Optimized branchless logic to prevent GPU execution divergence
+                        float isTwinkle = step(0.001, twinkleSpeed);
+                        float baseAlpha = mix(0.8, 0.9, isTwinkle);
+                        float amplitude = mix(0.2, 0.1, isTwinkle);
+                        
+                        vAlpha = (baseAlpha + amplitude * sin(uTime * twinkleSpeed + phase)) * uOpacity;
+                        
+                        gl_Position.z -= 0.0001; // Depth optimization against dome clipping
+                        gl_PointSize = size * (2500.0 / -mvPosition.z);
+                    }
+                `,
+                fragmentShader: `
+                    varying float vAlpha; 
+                    void main() { 
+                        vec2 coord = gl_PointCoord - vec2(0.5); 
+                        if (length(coord) > 0.5) discard; 
+                        gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha); 
+                    }
+                `,
+                transparent: true,
+                depthWrite: false
+            });
+            // Assign pre-allocated flat uniform reference directly to avoid UniformsUtils.clone() allocation
+            _starMaterial.uniforms = STAR_UNIFORMS;
+            _starMaterial.userData = { isSharedAsset: true };
+        }
+        return _starMaterial;
+    },
 
     // Additive glow overlay for celestial bodies
-    moonHalo: new THREE.SpriteMaterial({
-        map: HALO_TEXTURE,
-        color: 0xffffee,
-        transparent: true,
-        opacity: 0.8,
-        blending: THREE.AdditiveBlending,
-        fog: false,
-        depthWrite: false,
-        userData: { isSharedAsset: true }
-    }),
+    get moonHalo(): THREE.SpriteMaterial {
+        if (!_moonHaloMaterial) {
+            _moonHaloMaterial = new THREE.SpriteMaterial({
+                map: SkyTextureManager.getHaloTexture(),
+                color: 0xffffee,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending,
+                fog: false,
+                depthWrite: false
+            });
+            _moonHaloMaterial.userData = { isSharedAsset: true };
+        }
+        return _moonHaloMaterial;
+    },
 
     // Moon disc — solid, cool-white, normal blending. fog:false punches through atmosphere.
-    moon: new THREE.MeshBasicMaterial({
-        color: 0xdde8ff,
-        fog: false,
-        userData: { isSharedAsset: true }
-    }),
+    get moon(): THREE.MeshBasicMaterial {
+        if (!_moonMaterial) {
+            _moonMaterial = new THREE.MeshBasicMaterial({
+                color: 0xdde8ff,
+                fog: false
+            });
+            _moonMaterial.userData = { isSharedAsset: true };
+        }
+        return _moonMaterial;
+    },
 
     // Sun disc — additive blending gives a glowing-orb appearance instead of a flat ball.
     // Color is set dynamically each frame by SkySystem.processProcedural.
-    sun: new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        fog: false,
-        blending: THREE.AdditiveBlending,
-        transparent: true,
-        depthWrite: false,
-        userData: { isSharedAsset: true }
-    }),
+    get sun(): THREE.MeshBasicMaterial {
+        if (!_sunMaterial) {
+            _sunMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                fog: false,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                depthWrite: false
+            });
+            _sunMaterial.userData = { isSharedAsset: true };
+        }
+        return _sunMaterial;
+    },
 
     // Dynamic, softly lit background cloud layer
-    cloud: new THREE.MeshBasicMaterial({
-        map: CLOUD_TEXTURE,
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.5,
-        blending: THREE.NormalBlending,
-        fog: false,
-        depthWrite: false,
-        userData: { isSharedAsset: true }
-    }),
+    get cloud(): THREE.MeshBasicMaterial {
+        if (!_cloudMaterial) {
+            _cloudMaterial = new THREE.MeshBasicMaterial({
+                map: SkyTextureManager.getCloudTexture(),
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.5,
+                blending: THREE.NormalBlending,
+                fog: false,
+                depthWrite: false
+            });
+            _cloudMaterial.userData = { isSharedAsset: true };
+        }
+        return _cloudMaterial;
+    },
 
     // Sun Rays
-    sunRays: new THREE.ShaderMaterial({
-        uniforms: {
-            uTime: { value: 0 },
-            uColor: { value: new THREE.Color(0xffffff) },
-            uOpacity: { value: 0.5 }
-        },
-        vertexShader: `
-            varying vec2 vUv;
-            void main() {
-                vUv = uv;
-                vec4 mvPosition = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-                vec2 scale;
-                scale.x = length(vec3(modelMatrix[0].x, modelMatrix[0].y, modelMatrix[0].z));
-                scale.y = length(vec3(modelMatrix[1].x, modelMatrix[1].y, modelMatrix[1].z));
-                
-                vec2 alignedPosition = position.xy * scale;
-                mvPosition.xy += alignedPosition;
-                gl_Position = projectionMatrix * mvPosition;
-            }
-        `,
-        fragmentShader: `
-            uniform float uTime;
-            uniform vec3 uColor;
-            uniform float uOpacity;
-            varying vec2 vUv;
+    get sunRays(): THREE.ShaderMaterial {
+        if (!_sunRaysMaterial) {
+            _sunRaysMaterial = new THREE.ShaderMaterial({
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        vec4 mvPosition = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+                        vec2 scale;
+                        scale.x = length(vec3(modelMatrix[0].x, modelMatrix[0].y, modelMatrix[0].z));
+                        scale.y = length(vec3(modelMatrix[1].x, modelMatrix[1].y, modelMatrix[1].z));
+                        
+                        vec2 alignedPosition = position.xy * scale;
+                        mvPosition.xy += alignedPosition;
+                        gl_Position = projectionMatrix * mvPosition;
+                    }
+                `,
+                fragmentShader: `
+                    uniform float uTime;
+                    uniform vec3 uColor;
+                    uniform float uOpacity;
+                    varying vec2 vUv;
 
-            void main() {
-                vec2 uv = vUv - vec2(0.5);
-                float dist = length(uv);
-                
-                // Early discard/cutoff to save fill rate
-                if (dist > 0.5) discard;
+                    float hash(float n) {
+                        return fract(sin(n) * 43758.5453123);
+                    }
 
-                float angle = atan(uv.y, uv.x) + 3.14159265;
+                    float hash2(float x, float y) {
+                        return fract(sin(dot(vec2(x, y), vec2(12.9898, 78.233))) * 43758.5453123);
+                    }
 
-                // 1. Tapered 10-Ray System of randomized lengths (static angles to prevent rotating arm effect)
-                float rayCount = 10.0;
-                float rayId = floor(angle * rayCount / 6.2831853);
-                float rand = fract(sin(rayId * 12.9898) * 43758.5453);
-                
-                float sectorCenter = (rayId + 0.5) * (6.2831853 / rayCount);
-                float diff = angle - sectorCenter;
-                diff = atan(sin(diff), cos(diff)); // Wrap difference to [-PI, PI] to handle boundaries
-                
-                // Randomized max length for each ray direction
-                float maxLength = mix(0.20, 0.48, rand);
-                
-                // Tapered width: wide base connecting to the sun body, narrowing down to a sharp tip
-                float normalizedDist = clamp(dist / maxLength, 0.0, 1.0);
-                float baseWidth = mix(0.18, 0.26, rand); // Randomized base width for organic variety
-                float rayWidth = mix(baseWidth, 0.015, normalizedDist);
-                
-                float rayVal = smoothstep(rayWidth, 0.0, abs(diff));
-                
-                // Soft fade-out towards the tip
-                float fade = smoothstep(maxLength, maxLength * 0.4, dist);
-                float combinedRays = rayVal * fade;
+                    void main() {
+                        vec2 uv = vUv - vec2(0.5);
+                        float dist = length(uv);
+                        
+                        // Early discard/cutoff to save fill rate
+                        if (dist > 0.5) discard;
 
-                // 2. Fast-moving outward shimmering waves (Purely radial/temporal, no twisting/rotation)
-                float shimmer = 0.82 + 0.18 * sin(uTime * 14.0 - dist * 35.0 + sin(angle * 10.0) * 3.0);
-                
-                // 3. Edges/Center vignettes
-                float centerFade = smoothstep(0.01, 0.08, dist);
-                float finalIntensity = combinedRays * shimmer * centerFade;
+                        float angle = atan(uv.y, uv.x) + 3.14159265;
 
-                // 4. Thermal color gradient (white/yellow core to mid color to warm orange/reddish tips)
-                vec3 coreColor = vec3(1.0, 1.0, 0.95);
-                vec3 midColor = uColor;
-                vec3 tipColor = vec3(1.0, 0.32, 0.03);
+                        // 1. Tapered 12-Ray System with continuous pulsing
+                        float combinedRays = 0.0;
+                        for (int i = 0; i < 12; i++) {
+                            float rayIdx = float(i);
+                            
+                            // Unique out-of-phase offsets and dynamic speeds so rays pulse independently
+                            float randVal = hash(rayIdx * 17.43 + 3.14);
+                            float period = mix(3.5, 5.5, randVal); // Each ray cycle lasts 3.5 to 5.5 seconds
+                            float timeVal = uTime + randVal * 100.0;
+                            
+                            // Continuous smooth pulsing instead of discrete dormant phases (0.0 to 1.0)
+                            float pulse = sin(timeVal * 6.28318530718 / period) * 0.5 + 0.5;
+                            
+                            // Evenly spaced target angles for this ray to ensure no empty spots, plus a slow global rotation
+                            float baseAngle = (rayIdx / 12.0) * 6.28318530718 + (uTime * 0.03);
+                            
+                            // Ray difference
+                            float diff = angle - baseAngle;
+                            diff = atan(sin(diff), cos(diff)); // Wrap difference to [-PI, PI] to handle boundaries
+                            
+                            // Dynamic length: shoots out from sun body (base 0.08) up to a randomized max length
+                            float bodySize = 0.08;
+                            float minLength = bodySize + 0.08; // Never shrinks to zero
+                            float maxLength = bodySize + mix(0.18, 0.42, randVal);
+                            float currentLength = mix(minLength, maxLength, pulse);
+                            
+                            // Make bases wider so they touch and leave no empty gaps
+                            float baseWidth = mix(0.22, 0.35, randVal);
+                            float normalizedDist = clamp(dist / currentLength, 0.0, 1.0);
+                            float rayWidth = mix(baseWidth, 0.015, normalizedDist);
+                            
+                            float rayVal = smoothstep(rayWidth, 0.0, abs(diff));
+                            
+                            // Soft fade-out towards the tip
+                            float fade = smoothstep(currentLength, currentLength * 0.4, dist);
+                            
+                            // Ray intensity based on pulse (always partially visible to avoid gaps)
+                            float rayOpacityMod = mix(0.5, 1.0, pulse);
+                            float rayCont = rayVal * fade * rayOpacityMod;
+                            
+                            combinedRays = max(combinedRays, rayCont);
+                        }
 
-                vec3 finalColor = mix(coreColor, midColor, smoothstep(0.06, 0.22, dist));
-                finalColor = mix(finalColor, tipColor, smoothstep(0.22, 0.48, dist));
+                        // 2. Fast-moving outward shimmering waves (Purely radial/temporal, no twisting/rotation)
+                        float shimmer = 0.82 + 0.18 * sin(uTime * 14.0 - dist * 35.0 + sin(angle * 10.0) * 3.0);
+                        
+                        // 3. Edges/Center vignettes
+                        float centerFade = smoothstep(0.01, 0.08, dist);
+                        float finalIntensity = combinedRays * shimmer * centerFade;
 
-                gl_FragColor = vec4(finalColor, finalIntensity * uOpacity);
-            }
-        `,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        fog: false,
-        userData: { isSharedAsset: true }
-    }),
+                        // 4. Thermal color gradient (white/yellow core to mid color to warm orange/reddish tips)
+                        vec3 coreColor = vec3(1.0, 1.0, 0.95);
+                        vec3 midColor = uColor;
+                        vec3 tipColor = vec3(1.0, 0.32, 0.03);
+
+                        vec3 finalColor = mix(coreColor, midColor, smoothstep(0.06, 0.22, dist));
+                        finalColor = mix(finalColor, tipColor, smoothstep(0.22, 0.48, dist));
+
+                        gl_FragColor = vec4(finalColor, finalIntensity * uOpacity);
+                    }
+                `,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                fog: false
+            });
+            // Assign pre-allocated flat uniform reference directly to avoid UniformsUtils.clone() allocation and THREE.Color instantiation
+            _sunRaysMaterial.uniforms = SUN_RAYS_UNIFORMS;
+            _sunRaysMaterial.userData = { isSharedAsset: true };
+        }
+        return _sunRaysMaterial;
+    }
 };
-
-// Guarantee recursive protection flag across all materials mapped
-for (const key in MATERIALS_SKY) {
-    (MATERIALS_SKY as any)[key].userData = { isSharedAsset: true };
-}
