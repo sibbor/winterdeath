@@ -10,6 +10,7 @@ const POOL_SIZE = 8;
 const NotificationText: React.FC = () => {
     const poolRefs = useRef<HTMLDivElement[]>([]);
     const nextIdx = useRef(0);
+    const activeNodes = useRef<Array<{ type: UIEventType; amount: number; idx: number; spawnTime: number }>>([]);
 
     const spawn = (text: string, color: string) => {
         const idx = nextIdx.current;
@@ -30,22 +31,62 @@ const NotificationText: React.FC = () => {
 
         el.style.setProperty('--jitter-x', `${jitterX}px`);
         el.style.display = 'block';
-        el.style.animation = 'notification-float 1.5s cubic-bezier(0.25, 1, 0.5, 1) forwards';
+        el.style.animation = 'notification-float 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards';
+    };
+
+    const spawnAccumulated = (type: UIEventType, amount: number, label: string, color: string) => {
+        const now = Date.now();
+        activeNodes.current = activeNodes.current.filter(n => now - n.spawnTime < 1800);
+
+        const existing = activeNodes.current.find(n => n.type === type);
+
+        if (existing) {
+            existing.amount += amount;
+            existing.spawnTime = now;
+            
+            const el = poolRefs.current[existing.idx];
+            if (el) {
+                el.innerText = `+${existing.amount} ${label}`;
+                el.style.animation = 'none';
+                void el.offsetHeight;
+                el.style.animation = 'notification-float 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards';
+            }
+            return;
+        }
+
+        const idx = nextIdx.current;
+        nextIdx.current = (idx + 1) % POOL_SIZE;
+
+        const el = poolRefs.current[idx];
+        if (!el) return;
+
+        activeNodes.current = activeNodes.current.filter(n => n.idx !== idx);
+        activeNodes.current.push({ type, amount, idx, spawnTime: now });
+
+        el.innerText = `+${amount} ${label}`;
+        el.style.color = color;
+
+        const jitterX = Math.random() * 80 - 40;
+        el.style.animation = 'none';
+        void el.offsetHeight;
+        el.style.setProperty('--jitter-x', `${jitterX}px`);
+        el.style.display = 'block';
+        el.style.animation = 'notification-float 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards';
     };
 
     useUIEventBridge((type, p1) => {
         switch (type) {
             case UIEventType.XP_GAIN:
-                spawn(`+${p1} XP`, COLORS.BLUE.str);
+                spawnAccumulated(type, p1, 'XP', COLORS.BLUE.str);
                 break;
             case UIEventType.SP_GAIN:
-                spawn(`+${p1} SP`, COLORS.PURPLE.str);
+                spawnAccumulated(type, p1, 'SP', COLORS.PURPLE.str);
                 break;
             case UIEventType.SCRAP_GAIN:
-                spawn(`+${p1} SCRAP`, COLORS.ORANGE.str);
+                spawnAccumulated(type, p1, 'SCRAP', COLORS.ORANGE.str);
                 break;
             case UIEventType.CP_GAIN:
-                spawn(`+${p1} CP`, COLORS.RED.str);
+                spawnAccumulated(type, p1, 'CP', COLORS.RED.str);
                 break;
             case UIEventType.BUFF_GAIN: {
                 const perk = PERKS[p1];
@@ -65,37 +106,41 @@ const NotificationText: React.FC = () => {
     });
 
     return (
-        <div className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[1000] select-none font-black text-1xl tracking-tighter uppercase text-center font-mono">
-            {Array.from({ length: POOL_SIZE }).map((_, i) => (
-                <div
-                    key={i}
-                    ref={(el) => { if (el) poolRefs.current[i] = el; }}
-                    className="absolute whitespace-nowrap drop-shadow-[0_4px_12px_rgba(0,0,0,1)] text-stroke"
-                    style={{
-                        display: 'none',
-                        willChange: 'transform, opacity',
-                        textShadow: '0 0 10px rgba(0,0,0,0.8), -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000'
-                    }}
-                />
-            ))}
+        <div className="fixed inset-0 pointer-events-none z-[1000] select-none font-black tracking-tighter uppercase text-center font-mono">
+            <div className="absolute left-1/2 top-[55%] -translate-x-1/2">
+                {Array.from({ length: POOL_SIZE }).map((_, i) => (
+                    <div
+                        key={i}
+                        ref={(el) => { if (el) poolRefs.current[i] = el; }}
+                        className="absolute left-1/2 top-0 whitespace-nowrap drop-shadow-[0_4px_12px_rgba(0,0,0,1)]"
+                        style={{
+                            display: 'none',
+                            willChange: 'transform, opacity',
+                            textShadow:
+                                '0 0 10px rgba(0,0,0,0.8), -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000'
+                        }}
+                    />
+                ))}
+            </div>
+
             <style>{`
-                @keyframes notification-float {
-                    0% {
-                        opacity: 0;
-                        transform: translate(calc(-50% + var(--jitter-x)), 20px) scale(0.6);
-                    }
-                    10% {
-                        opacity: 1;
-                        transform: translate(calc(-50% + var(--jitter-x)), 20px) scale(1.15);
-                    }
-                    25% {
-                        transform: translate(calc(-50% + var(--jitter-x)), 30px) scale(1.0);
-                    }
-                    100% {
-                        opacity: 0;
-                        transform: translate(calc(-50% + var(--jitter-x)), 120px) scale(0.85);
-                    }
+            @keyframes notification-float {
+                0% {
+                opacity: 0;
+                transform: translate(calc(-50% + var(--jitter-x)), 20px) scale(0.6);
                 }
+                10% {
+                opacity: 1;
+                transform: translate(calc(-50% + var(--jitter-x)), 20px) scale(1.15);
+                }
+                25% {
+                transform: translate(calc(-50% + var(--jitter-x)), 30px) scale(1.0);
+                }
+                100% {
+                opacity: 0;
+                transform: translate(calc(-50% + var(--jitter-x)), 120px) scale(0.85);
+                }
+            }
             `}</style>
         </div>
     );
