@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { t } from '../../../../utils/i18n';
-import { SectorStats } from '../../../../types/StateTypes';
+import { SectorStats, PlayerStats } from '../../../../types/StateTypes';
 import ScreenModalLayout, { TacticalCard, TacticalTab, TacticalRow } from '../../layout/ScreenModalLayout';
 import { StatWeaponIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../../entities/player/PlayerTypes';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
@@ -12,6 +12,7 @@ import { SectorID } from '../../../../game/session/SectorTypes';
 
 interface ScreenSectorReportProps {
     stats: SectorStats;
+    playerStats: PlayerStats;
     deathDetails: { killer: string } | null;
     onReturnCamp: () => void;
     onRestartSector: () => void;
@@ -25,7 +26,7 @@ interface ScreenSectorReportProps {
  * [VINTERDÖD] Redesigned Sector Report
  * Features a paged layout for better clarity and hierarchy.
  */
-const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRestartSector, onRespawn, onNextSector, currentSector, isMobileDevice }) => {
+const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerStats, deathDetails, onReturnCamp, onRestartSector, onRespawn, onNextSector, currentSector, isMobileDevice }) => {
     const [activeTab, setActiveTab] = useState<0 | 1>(0);
 
     const isFailed = !!deathDetails;
@@ -78,6 +79,35 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
         setActiveTab(index);
         UiSounds.playClick();
     }, []);
+
+    // Sector-specific discovery totals
+    const sectorCollectibles = useMemo(() => {
+        const all = Object.values(DataResolver.getCollectibles());
+        return all.filter((c: any) => c.sector === currentSector);
+    }, [currentSector]);
+    const sectorClues = useMemo(() => {
+        const all = Object.values(DataResolver.getClues());
+        return all.filter((c: any) => c.sector === currentSector);
+    }, [currentSector]);
+    const sectorPOIs = useMemo(() => {
+        const all = Object.values(DataResolver.getPois());
+        return all.filter((p: any) => p.sector === currentSector);
+    }, [currentSector]);
+
+    const discoveredSectorCollectibles = useMemo(() => {
+        const found = StatsBridge.getCollectiblesDiscovered(playerStats);
+        return sectorCollectibles.filter(c => found.includes(String(c.id))).length;
+    }, [playerStats, sectorCollectibles]);
+
+    const discoveredSectorClues = useMemo(() => {
+        const found = StatsBridge.getCluesFound(playerStats);
+        return sectorClues.filter(c => found.includes(String(c.id))).length;
+    }, [playerStats, sectorClues]);
+
+    const discoveredSectorPOIs = useMemo(() => {
+        const found = StatsBridge.getDiscoveredPOIs(playerStats);
+        return sectorPOIs.filter(p => found.includes(String(p.id))).length;
+    }, [playerStats, sectorPOIs]);
 
     return (
         <ScreenModalLayout
@@ -145,9 +175,9 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     <div className="space-y-6">
                         <h3 className="text-white font-light uppercase text-xl border-b border-gray-800 pb-2 tracking-tighter">{t('ui.exploration')}</h3>
                         <div className="space-y-3">
-                            <StatBox label={t('ui.collectibles_discovered')} value={`${StatsBridge.getCollectiblesDiscovered(stats as any)?.length || 0} / 2`} color={COLORS.ORANGE} />
-                            <StatBox label={t('ui.clues_discovered')} value={StatsBridge.getCluesFound(stats as any)?.length || 0} color={COLORS.ORANGE} />
-                            <StatBox label={t('ui.pois_discovered')} value={StatsBridge.getDiscoveredPOIs(stats as any)?.length || 0} color={COLORS.ORANGE} />
+                            <StatBox label={t('ui.collectibles_discovered')} value={`${discoveredSectorCollectibles} / ${sectorCollectibles.length}`} color={COLORS.ORANGE} />
+                            <StatBox label={t('ui.clues_discovered')} value={`${discoveredSectorClues} / ${sectorClues.length}`} color={COLORS.ORANGE} />
+                            <StatBox label={t('ui.pois_discovered')} value={`${discoveredSectorPOIs} / ${sectorPOIs.length}`} color={COLORS.ORANGE} />
                         </div>
                         <div className="space-y-3">
                             <StatBox label={t('ui.time_elapsed')} value={FormatUtils.formatTimeSmart(StatsBridge.getSectorTimeElapsed(stats))} color={COLORS.ORANGE} />

@@ -1115,6 +1115,7 @@ const App: React.FC = () => {
                     {gameState.screen === GameScreen.RECAP && sectorStats && (
                         <ScreenSectorReport
                             stats={sectorStats}
+                            playerStats={gameState.stats}
                             deathDetails={deathDetails}
                             currentSector={gameState.currentSector}
                             onReturnCamp={handleReturnToCamp}
