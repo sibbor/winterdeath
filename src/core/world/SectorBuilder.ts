@@ -1202,8 +1202,8 @@ export const SectorBuilder = {
         await VegetationGenerator.fillArea(ctx, type, region, density);
     },
 
-    createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string) => {
-        PathGenerator.createBoundry(ctx, polygon, name);
+    createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string, isClosed: boolean = false) => {
+        PathGenerator.createBoundry(ctx, polygon, name, isClosed);
     },
 
     createMountain: (ctx: SectorContext, points: THREE.Vector3[], depth: number = 20, height: number = 15, caveConfig?: { position: THREE.Vector3, rotation?: number }) => {

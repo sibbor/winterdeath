@@ -121,12 +121,14 @@ export const PathGenerator = {
         return result;
     },
 
-    createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string) => {
+    createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string, isClosed: boolean = false) => {
         if (!polygon || polygon.length < 2) return;
         const height = 50;
         const thickness = 4.0;
+        
+        const segmentCount = isClosed ? polygon.length : polygon.length - 1;
 
-        for (let i = 0; i < polygon.length; i++) {
+        for (let i = 0; i < segmentCount; i++) {
             const p1 = polygon[i];
             const p2 = polygon[(i + 1) % polygon.length];
 
@@ -526,10 +528,10 @@ export const PathGenerator = {
         let startTime = performance.now();
 
         // Use a consistent unit geometry for all segments (Zero-GC optimization)
-        // Radius 0.5 means diameter is 1.0. We scale it later by width/height.
-        const geo = new THREE.CylinderGeometry(0.1, 0.5, 1.0, 4, 1, false);
-        geo.rotateX(Math.PI / 2); // Lay the "mound" along the Z axis
-        geo.rotateZ(Math.PI / 4); // Align the 4-sided cylinder to have a flat bottom
+        // Radius 0.7071 (1/sqrt(2)) rotated by 45 degrees yields a perfect 1x1 base square.
+        // The top radius is 0.07071 to make the top 10% the width of the bottom.
+        const geo = new THREE.CylinderGeometry(0.07071, 0.7071, 1.0, 4, 1, false);
+        geo.rotateY(Math.PI / 4); // Align the 4-sided cylinder to have a flat base
 
         for (let i = 0; i < points.length - 1; i++) {
             if (performance.now() - startTime > 12) {

@@ -1036,7 +1036,7 @@ export const Sector0: SectorDef = {
             }
         }
 
-        if (sectorState.busEventState === 0) {
+        if (!sectorState.busEventState) {
             const busTrigIdx = triggerSystem.getTriggerById(SectorEventID.S0_TUNNEL_BLOCKED);
             if (triggerSystem.isTriggered(busTrigIdx)) {
                 sectorState.busEventState = 1;
