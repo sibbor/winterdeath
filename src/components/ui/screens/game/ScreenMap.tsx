@@ -180,29 +180,29 @@ const MapCanvas = React.memo(({ mapItems, mapItemsCount, bounds, groupedEntities
                 const topItem = group[0];
                 const pos = getMapPercent(topItem.x, topItem.z, bounds);
                 let content = (
-                    <div 
-                        className="w-2.5 h-2.5 rounded-full border border-white/40 shadow-[0_0_4px_currentColor]" 
-                        style={{ backgroundColor: topItem.color || 'white', color: topItem.color || 'white' }} 
+                    <div
+                        className="w-2.5 h-2.5 rounded-full border border-white/40 shadow-[0_0_4px_currentColor]"
+                        style={{ backgroundColor: topItem.color || 'white', color: topItem.color || 'white' }}
                     />
                 );
 
                 if (topItem.type === MapItemType.POI) {
                     content = (
-                        <svg className="w-6 h-6 drop-shadow-[0_0_6px_rgba(59,130,246,0.8)] stroke-blue-400 stroke-2 fill-none" viewBox="0 0 24 24">
+                        <svg className="w-8 h-8 drop-shadow-[0_0_6px_rgba(59,130,246,0.8)] stroke-blue-400 stroke-2 fill-none" viewBox="0 0 24 24">
                             <circle cx="12" cy="12" r="8" />
                             <path d="M12 8v8 M8 12h8" />
                         </svg>
                     );
                 } else if (topItem.type === MapItemType.CHEST) {
                     content = (
-                        <svg className="w-6 h-6 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)] stroke-yellow-500 stroke-2 fill-none" viewBox="0 0 24 24">
+                        <svg className="w-8 h-8 drop-shadow-[0_0_6px_rgba(245,158,11,0.8)] stroke-yellow-500 stroke-2 fill-none" viewBox="0 0 24 24">
                             <rect x="4" y="4" width="16" height="16" rx="2" />
                             <path d="M4 10h16 M10 20V10 M14 20V10" />
                         </svg>
                     );
                 } else if (topItem.type === MapItemType.TRIGGER || topItem.label?.includes('clue')) {
                     content = (
-                        <svg className="w-6 h-6 drop-shadow-[0_0_6px_rgba(236,72,153,0.8)] stroke-pink-500 stroke-2 fill-none animate-pulse" viewBox="0 0 24 24">
+                        <svg className="w-8 h-8 drop-shadow-[0_0_6px_rgba(236,72,153,0.8)] stroke-pink-500 stroke-2 fill-none animate-pulse" viewBox="0 0 24 24">
                             <circle cx="12" cy="12" r="5" />
                             <path d="M16 16l4 4" />
                         </svg>
@@ -264,6 +264,9 @@ const LiveEnemyDots = React.memo(({ bounds }: { bounds: any }) => {
                 }
             }
         };
+
+        // Call once immediately so positions are populated when opening map while paused
+        handleUpdate(null);
 
         return HudStore.subscribeFastUpdate(handleUpdate);
     }, [bounds]);
@@ -331,6 +334,9 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
             }
         };
 
+        // Call once immediately so positions are populated when opening map while paused
+        handleUpdate(null);
+
         return HudStore.subscribeFastUpdate(handleUpdate);
     }, [bounds]);
 
@@ -339,30 +345,30 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
             <LiveEnemyDots bounds={bounds} />
             <div
                 ref={playerRef}
-                className="absolute -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none will-change-[left,top] flex items-center justify-center w-8 h-8"
+                className="absolute -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none will-change-[left,top] flex items-center justify-center w-10 h-10"
                 style={{ left: '50%', top: '50%' }}
             >
-                <svg className="w-6 h-6 drop-shadow-[0_0_8px_rgba(59,130,246,0.85)] fill-blue-500 stroke-white animate-pulse" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 drop-shadow-[0_0_8px_rgba(59,130,246,0.85)] fill-blue-500 stroke-white animate-pulse" viewBox="0 0 24 24">
                     <polygon points="12,2 22,22 12,17 2,22" />
                 </svg>
             </div>
 
             <div
                 ref={bossRef}
-                className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none will-change-[left,top] flex items-center justify-center w-10 h-10"
+                className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none will-change-[left,top] flex items-center justify-center w-12 h-12"
                 style={{ display: 'none' }}
             >
-                <svg className="w-8 h-8 drop-shadow-[0_0_8px_rgba(239,68,68,0.9)] fill-red-600 stroke-red-400 animate-[pulse_1.5s_infinite]" viewBox="0 0 24 24">
+                <svg className="w-10 h-10 drop-shadow-[0_0_8px_rgba(239,68,68,0.9)] fill-red-600 stroke-red-400 animate-[pulse_1.5s_infinite]" viewBox="0 0 24 24">
                     <path d="M12 2C8.69 2 6 4.69 6 8C6 11.31 8.69 14 12 14C15.31 14 18 11.31 18 8C18 4.69 15.31 2 12 2M8.5 7.5C8.5 6.67 9.17 6 10 6C10.83 6 11.5 6.67 11.5 7.5C11.5 8.33 10.83 9 10 9C9.17 9 8.5 8.33 8.5 7.5M14 6C14.83 6 15.5 6.67 15.5 7.5C15.5 8.33 14.83 9 14 9C13.17 9 12.5 8.33 12.5 7.5C12.5 6.67 13.17 6 14 6M10 16V18H14V16H10Z" />
                 </svg>
             </div>
 
             <div
                 ref={familyRef}
-                className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none will-change-[left,top] flex items-center justify-center w-10 h-10"
+                className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none will-change-[left,top] flex items-center justify-center w-12 h-12"
                 style={{ display: 'none' }}
             >
-                <svg className="w-8 h-8 drop-shadow-[0_0_8px_rgba(34,197,94,0.9)] stroke-green-500 stroke-2 fill-none" viewBox="0 0 24 24">
+                <svg className="w-10 h-10 drop-shadow-[0_0_8px_rgba(34,197,94,0.9)] stroke-green-500 stroke-2 fill-none" viewBox="0 0 24 24">
                     <path d="M4 8V4h4 M16 4h4v4 M20 16v4h-4 M8 20H4v-4" />
                     <circle cx="12" cy="12" r="3" className="fill-green-500 animate-ping" />
                 </svg>
@@ -474,13 +480,47 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
 
     const footerNode = useMemo(() => (
         <div className="flex flex-col gap-4 w-full">
-            <div className="w-full flex flex-wrap justify-center gap-4 text-[10px] uppercase font-bold text-gray-400">
-                <div className="flex items-center gap-2"><span className="w-2 h-2 bg-blue-500"></span> {t('ui.player')}</div>
-                <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green-500 rounded-full"></span> {t('ui.family_member')}</div>
-                <div className="flex items-center gap-2">💀 {t('ui.boss')}</div>
-                <div className="flex items-center gap-2">📦 {t('ui.chest')}</div>
-                <div className="flex items-center gap-2">📍 {t('ui.poi')}</div>
-                <div className="flex items-center gap-2">🔍 {t('ui.clue')}</div>
+            <div className="w-full flex flex-wrap justify-center gap-6 text-sm uppercase font-bold text-gray-300">
+                <div className="flex items-center gap-2">
+                    <svg className="w-6 h-6 fill-blue-500 stroke-white" viewBox="0 0 24 24">
+                        <polygon points="12,2 22,22 12,17 2,22" />
+                    </svg>
+                    {t('ui.player')}
+                </div>
+                <div className="flex items-center gap-2">
+                    <svg className="w-6 h-6 stroke-green-500 stroke-2 fill-none" viewBox="0 0 24 24">
+                        <path d="M4 8V4h4 M16 4h4v4 M20 16v4h-4 M8 20H4v-4" />
+                        <circle cx="12" cy="12" r="3" className="fill-green-500" />
+                    </svg>
+                    {t('ui.family_member')}
+                </div>
+                <div className="flex items-center gap-2">
+                    <svg className="w-6 h-6 fill-red-600 stroke-red-400" viewBox="0 0 24 24">
+                        <path d="M12 2C8.69 2 6 4.69 6 8C6 11.31 8.69 14 12 14C15.31 14 18 11.31 18 8C18 4.69 15.31 2 12 2M8.5 7.5C8.5 6.67 9.17 6 10 6C10.83 6 11.5 6.67 11.5 7.5C11.5 8.33 10.83 9 10 9C9.17 9 8.5 8.33 8.5 7.5M14 6C14.83 6 15.5 6.67 15.5 7.5C15.5 8.33 14.83 9 14 9C13.17 9 12.5 8.33 12.5 7.5C12.5 6.67 13.17 6 14 6M10 16V18H14V16H10Z" />
+                    </svg>
+                    {t('ui.boss')}
+                </div>
+                <div className="flex items-center gap-2">
+                    <svg className="w-6 h-6 stroke-yellow-500 stroke-2 fill-none" viewBox="0 0 24 24">
+                        <rect x="4" y="4" width="16" height="16" rx="2" />
+                        <path d="M4 10h16 M10 20V10 M14 20V10" />
+                    </svg>
+                    {t('ui.chest')}
+                </div>
+                <div className="flex items-center gap-2">
+                    <svg className="w-6 h-6 stroke-blue-400 stroke-2 fill-none" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="8" />
+                        <path d="M12 8v8 M8 12h8" />
+                    </svg>
+                    {t('ui.poi')}
+                </div>
+                <div className="flex items-center gap-2">
+                    <svg className="w-6 h-6 stroke-pink-500 stroke-2 fill-none" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="5" />
+                        <path d="M16 16l4 4" />
+                    </svg>
+                    {t('ui.clue')}
+                </div>
             </div>
             <div className="flex gap-4 justify-center">
                 <TacticalCard color={0x3b82f6} className="px-3 py-1 flex items-center gap-2">
