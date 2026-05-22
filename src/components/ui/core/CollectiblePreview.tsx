@@ -76,7 +76,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
     const [isVisible, setIsVisible] = useState(autoReady || false);
     const [isReady, setIsReady] = useState(autoReady || false);
 
-    // [VINTERDÖD] Optimization: Use refs for THREE objects to ensure they are 
+    // Optimization: Use refs for THREE objects to ensure they are 
     // preserved during visibility changes but disposed of correctly on unmount.
     const [size, setSize] = useState({ width: 0, height: 0 });
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -118,25 +118,21 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
         return () => clearTimeout(timer);
     }, [isVisible, isLocked, autoReady]);
 
-    // --- THREE.js INITIALIZATION (SKAPAS BARA EN GÅNG) ---
+    // --- THREE.js INITIALIZATION ---
     useEffect(() => {
         if (!isReady || isLocked || !containerRef.current) return;
 
         const container = containerRef.current;
-
-        // Fallback om size inte hunnit sättas av ResizeObserver än
-        const width = size.width > 0 ? size.width : container.clientWidth || 100;
-        const height = size.height > 0 ? size.height : container.clientHeight || 100;
+        const width = size.width > 0 ? size.width : container.clientWidth || 256;
+        const height = size.height > 0 ? size.height : container.clientHeight || 256;
 
         const scene = new THREE.Scene();
-        // Sätt EnvMap på scenen så att allt reflekterande material plockar upp den
         scene.environment = envMapTexture;
 
         const aspect = width / Math.max(0.1, height);
         const camera = new THREE.PerspectiveCamera(45, aspect, 0.01, 100);
 
-        // --- VINTERDÖD FIX: Kamerans placering ---
-        // Sänkte kameran på Y-axeln för att titta mer "rakt på" objektet istället för mycket ovanifrån.
+        // --- Camera placement ---
         camera.position.set(0, 0.1, 1.4);
         camera.lookAt(0, 0, 0);
 
@@ -150,17 +146,16 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
         renderer.setSize(width, height);
         container.appendChild(renderer.domElement);
 
-        // --- VINTERDÖD FIX: Belysning ---
-        // Mer dramatisk ljussättning för att framhäva normal-maps och speglingar
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // Lite mörkare ambient
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
         scene.add(ambientLight);
 
-        // Huvudljus snett framifrån
+        // Main light, top front
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
         dirLight.position.set(2, 2, 2);
         scene.add(dirLight);
 
-        // Ett "rim light" snett bakifrån för att separera mörka objekt från bakgrunden
+        // Rim light, top back
         const backLight = new THREE.DirectionalLight(0xaaccff, 0.8);
         backLight.position.set(-2, 1, -2);
         scene.add(backLight);
@@ -176,7 +171,6 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
                     const newMats = new Array(mats.length);
                     for (let i = 0; i < mats.length; i++) {
                         newMats[i] = mats[i].clone();
-                        // Tvinga materialet att uppdateras om det behöver miljö-reflektioner
                         newMats[i].needsUpdate = true;
                     }
                     child.material = newMats;
@@ -190,25 +184,25 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
         const worldLight = mesh.getObjectByName('collectibleGlow');
         if (worldLight) mesh.remove(worldLight);
 
-        // --- VINTERDÖD FIX: Auto-Scale & Auto-Center ---
-        // Räkna ut hur stor originalmodellen är
+        // --- Auto-Scale & Auto-Center ---
+        // Calculate how large the model is
         const box = new THREE.Box3().setFromObject(mesh);
         const sizeObj = box.getSize(new THREE.Vector3());
 
-        // Hitta den största ledden (X, Y eller Z) och skala upp/ner till exakt 0.9 enheter
-        // (Sänkt från 1.2 till 0.9 så att objektet "vilar" lite bättre i rutan)
+        // Find the largest dimension (X, Y, or Z) and scale up/down to exactly 0.9 units
+        // (Reduced from 1.2 to 0.9 so the object "rests" a bit better in the box)
         const maxDim = Math.max(sizeObj.x, sizeObj.y, sizeObj.z);
         if (maxDim > 0.0001) {
             const scaleFactor = 0.9 / maxDim;
             mesh.scale.setScalar(scaleFactor);
         }
 
-        // Efter skalning: Hitta den nya mitten och flytta meshen så att dess mittpunkt är exakt i origo (0,0,0)
+        // After scaling: Find the new center and move the mesh so its center is exactly at the origin (0,0,0)
         const scaledBox = new THREE.Box3().setFromObject(mesh);
         const center = scaledBox.getCenter(new THREE.Vector3());
         mesh.position.sub(center);
 
-        // En "Fusk-skugga" under objektet för att grunda det.
+        // A "Cheat shadow" under the object to ground it.
         const shadowGeo = new THREE.PlaneGeometry(1, 1);
         const shadowMat = new THREE.MeshBasicMaterial({
             color: 0x000000,
@@ -217,7 +211,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
             depthWrite: false
         });
 
-        // Skapa en enkel radiell gradient för skuggan
+        // Create a simple radial gradient for the shadow
         const canvas = document.createElement('canvas');
         canvas.width = 128;
         canvas.height = 128;
@@ -235,7 +229,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
 
         const dropShadow = new THREE.Mesh(shadowGeo, shadowMat);
         dropShadow.rotation.x = -Math.PI / 2;
-        // Placera skuggan precis under objektets bounding box botten
+        // Place the shadow just below the object's bounding box bottom
         dropShadow.position.y = -0.5;
         scene.add(dropShadow);
         // -----------------------------------------------
@@ -266,7 +260,6 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
             cameraRef.current = null;
             groupRef.current = null;
         };
-        // 'size' borttagen från deps. Vi återskapar INTE hela scenen vid resize.
     }, [type, isLocked, isReady]);
 
     // --- ZERO-GC RESIZE HANDLER ---
@@ -290,8 +283,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
         let animeId: number;
         const animate = () => {
             animeId = requestAnimationFrame(animate);
-            // Tillbaka till autorotation som i originalkoden!
-            group.rotation.y += 0.015; // Lite långsammare snurr, ser mer "premium" ut
+            group.rotation.y += 0.015;
             renderer.render(scene, camera);
         };
 

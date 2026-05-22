@@ -27,11 +27,15 @@ export const useGlobalInput = (
     // without requiring the listener itself to be re-registered.
     const stateRef = useRef(state.screen);
     const overlayRef = useRef<OverlayType | null>(activeOverlay);
+    const previousOverlayRef = useRef<OverlayType | null>(OverlayType.NONE);
     const actionsRef = useRef(actions);
     const lastEscTimeRef = useRef<number>(0);
 
     // Sync state to refs quietly without triggering re-renders
     useEffect(() => {
+        if (overlayRef.current !== activeOverlay) {
+            previousOverlayRef.current = overlayRef.current;
+        }
         stateRef.current = state.screen;
         overlayRef.current = activeOverlay;
         actionsRef.current = actions;
@@ -61,7 +65,13 @@ export const useGlobalInput = (
                     if (screen === GameScreen.CAMP) {
                         acts.setActiveOverlay(OverlayType.NONE);
                     } else {
-                        acts.setActiveOverlay(OverlayType.PAUSE);
+                        // Return to PAUSE only if we actually came from PAUSE, otherwise return to GAME
+                        if (previousOverlayRef.current === OverlayType.PAUSE) {
+                            acts.setActiveOverlay(OverlayType.PAUSE);
+                        } else {
+                            acts.setActiveOverlay(OverlayType.NONE);
+                            acts.requestPointerLock?.();
+                        }
                     }
                     UiSounds.playClick();
                 } else if (

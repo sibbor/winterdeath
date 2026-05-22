@@ -98,7 +98,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const action = INPUT_KEY_MAP[e.key];
-            if (action === InputAction.ESCAPE || action === InputAction.ENTER) {
+            if (action === InputAction.ENTER) {
                 onClose();
             }
         };

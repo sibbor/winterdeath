@@ -20,17 +20,17 @@ const NotificationText: React.FC = () => {
 
         el.innerText = text;
         el.style.color = color;
-        
+
         // Random horizontal jitter to prevent overlays stacking exactly
         const jitterX = Math.random() * 80 - 40;
-        
+
         // Reset element animation by reflowing
         el.style.animation = 'none';
         void el.offsetHeight; // trigger reflow
-        
+
         el.style.setProperty('--jitter-x', `${jitterX}px`);
         el.style.display = 'block';
-        el.style.animation = 'notification-float-up 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards';
+        el.style.animation = 'notification-float 1.5s cubic-bezier(0.25, 1, 0.5, 1) forwards';
     };
 
     useUIEventBridge((type, p1) => {
@@ -65,7 +65,7 @@ const NotificationText: React.FC = () => {
     });
 
     return (
-        <div className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[1000] select-none font-black text-2xl tracking-tighter uppercase text-center font-mono">
+        <div className="absolute top-[40%] left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[1000] select-none font-black text-1xl tracking-tighter uppercase text-center font-mono">
             {Array.from({ length: POOL_SIZE }).map((_, i) => (
                 <div
                     key={i}
@@ -79,21 +79,21 @@ const NotificationText: React.FC = () => {
                 />
             ))}
             <style>{`
-                @keyframes notification-float-up {
+                @keyframes notification-float {
                     0% {
                         opacity: 0;
                         transform: translate(calc(-50% + var(--jitter-x)), 20px) scale(0.6);
                     }
                     10% {
                         opacity: 1;
-                        transform: translate(calc(-50% + var(--jitter-x)), -20px) scale(1.15);
+                        transform: translate(calc(-50% + var(--jitter-x)), 20px) scale(1.15);
                     }
                     25% {
-                        transform: translate(calc(-50% + var(--jitter-x)), -30px) scale(1.0);
+                        transform: translate(calc(-50% + var(--jitter-x)), 30px) scale(1.0);
                     }
                     100% {
                         opacity: 0;
-                        transform: translate(calc(-50% + var(--jitter-x)), -120px) scale(0.85);
+                        transform: translate(calc(-50% + var(--jitter-x)), 120px) scale(0.85);
                     }
                 }
             `}</style>
