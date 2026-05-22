@@ -162,11 +162,13 @@ export class LootSystem implements System {
 
                 // Magnetic Suck-up (Smoother acceleration)
                 const pullPercent = Math.max(0.01, Math.min(1.0, 1.0 - (dist / 10.0)));
-                const speed = (magnetSpeed + (pullPercent * 40.0)) * delta;
+
+                // Proper frame-rate independent LERP to prevent instant teleportation
+                const lerpRate = (magnetSpeed * 0.15) + (pullPercent * magnetSpeed * 0.4);
+                const factor = 1.0 - Math.exp(-lerpRate * delta);
 
                 // Smooth LERP towards player center (slightly above ground)
                 const targetY = py + 0.8;
-                const factor = Math.min(0.9, speed); // Prevent snapping
                 item.position.x = THREE.MathUtils.lerp(item.position.x, px, factor);
                 item.position.y = THREE.MathUtils.lerp(item.position.y, targetY, factor);
                 item.position.z = THREE.MathUtils.lerp(item.position.z, pz, factor);
@@ -176,7 +178,6 @@ export class LootSystem implements System {
                 const ns = Math.max(0.2, item.scale.x - 2.5 * delta);
                 item.scale.set(ns, ns, ns);
                 item.needsUpdate = true;
-
             } else if (!item.grounded) {
                 item.velocity.y -= LOOT.GRAVITY * delta;
 
