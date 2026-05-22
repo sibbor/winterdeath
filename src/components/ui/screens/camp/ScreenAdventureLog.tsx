@@ -544,7 +544,7 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
             {filteredSectors.map(sectorIndex => {
                 const boss = bossesList.find((b: any) => b.id === sectorIndex);
                 const theme = themesList[sectorIndex];
-                const isSectorUnlocked = isDebug || StatsBridge.getSectorsCompleted(stats) >= sectorIndex;
+                const isSectorUnlocked = isDebug || StatsBridge.getSectorsCompleted(stats) >= sectorIndex - 1;
                 const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorIndex)) : `${t('ui.sector')} ${sectorIndex}`) : '???';
 
                 const seenBosses = StatsBridge.getSeenBosses(stats);
@@ -659,7 +659,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
             {SECTORS.map(sectorId => {
                 const sectorItems = items.filter(c => c.sector === sectorId);
-                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId;
+                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
 
                 // Accurate found count regardless of data pollution (strings vs objects)
                 const discoveredItems = sectorItems.filter(c => {
@@ -723,7 +723,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effecti
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
                 const sectorItems = items.filter(c => c.sector === sectorId);
-                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId;
+                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
 
                 // Accurate found count regardless of data pollution (strings vs objects)
                 const discoveredItems = sectorItems.filter(c => {
@@ -801,7 +801,7 @@ const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effective
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
                 const sectorItems = items.filter(poi => poi.sector === sectorId);
-                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId;
+                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
 
                 // Normalize visitedList (POI IDs)
                 const discoveredItems = sectorItems.filter(poi => {
@@ -890,7 +890,7 @@ const PerkItem: React.FC<{ perk: any, stats: PlayerStats, isSeen: boolean }> = R
                             {t(categoryLabel)}
                         </span>
                     </div>
-                    {isSeen && (
+                    {isSeen && perk.category !== PerkCategory.PASSIVE && (
                         <div className="flex flex-col items-end">
                             <span className="text-lg font-mono text-white">{activations}</span>
                             <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{t('ui.activations')}</span>
