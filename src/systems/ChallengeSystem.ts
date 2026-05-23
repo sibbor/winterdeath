@@ -20,18 +20,20 @@ export class ChallengeSystem implements System {
         // Initialization if needed
     }
 
+    private lastEvalTime = 0;
+
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         if (!session || !session.state) return;
         const stats = session.state.stats;
         if (!stats) return;
 
         // Run evaluation logic
-        // Optimized: Only run evaluation every 30 frames (approx 2Hz) 
+        // Optimized: Only run evaluation every 500ms (2Hz)
         // to save CPU cycles, as challenges are long-term goals.
-        const frameCount = session.engine.frameCount;
-        const isFirstEval = frameCount < 5; // Initial burst to sync tiers silently
+        const isFirstEval = simTime < 100; // Initial burst to sync tiers silently
 
-        if (!isFirstEval && frameCount % 30 !== 0) return;
+        if (!isFirstEval && simTime - this.lastEvalTime < 500) return;
+        this.lastEvalTime = simTime;
 
         this.evaluateAll(session, isFirstEval);
     }

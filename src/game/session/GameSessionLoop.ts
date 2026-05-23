@@ -155,6 +155,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
     const { engine, session, state, refs, propsRef, callbacks } = ctx;
 
     let frame = 0;
+    let lastHudSyncTime = 0;
+    let lastThrottledTime = 0;
+    let lastBossIntroShakeTime = 0;
     ChunkManager.clear();
 
     const getActiveCallbacks = () => state.callbacks || callbacks || EMPTY_OBJECT;
@@ -435,7 +438,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             _vInteraction.set(bossPos.x, bossPos.y + 3, bossPos.z);
             engine.camera.lookAt(_vInteraction);
 
-            if (frame % 5 === 0 && introTime < 3000) {
+            if (now - lastBossIntroShakeTime >= 83 && introTime < 3000) { // ~12Hz (every 83ms)
+                lastBossIntroShakeTime = now;
                 bossMesh.rotation.y += (Math.random() - 0.5) * 0.2;
                 bossMesh.scale.setScalar(3.0 + Math.sin(now * 0.02) * 0.1);
             }
@@ -449,8 +453,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             return;
         }
 
-        // 4. Throttled logic (Health warnings, burning effects)
-        if (frame % 5 === 0) {
+        // 4. Throttled logic (Health warnings, burning effects) - runs at 10Hz (every 100ms)
+        if (now - lastThrottledTime >= 100) {
+            lastThrottledTime = now;
             const sb = state.statsBuffer;
             const hp = sb[PlayerStatID.HP];
             const maxHp = sb[PlayerStatID.MAX_HP];
@@ -948,7 +953,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         }
 
         // --- HUD TELEMETRY SYNC ---
-        if (frame % 4 === 0) {
+        if (now - lastHudSyncTime >= 66) { // ~15Hz or every 66ms
+            lastHudSyncTime = now;
             monitor.begin('hud_sync');
             const hudMesh = refs.playerMeshRef.current;
             const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, refs.distanceTraveledRef.current, engine.camera.threeCamera, playerGroup.rotation.y);

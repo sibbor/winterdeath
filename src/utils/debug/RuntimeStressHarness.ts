@@ -14,7 +14,7 @@ export class RuntimeStressHarness {
 
     // --- STATIC TELEMETRY BUFFERS (Zero-GC) ---
     private static lastHeapSize: number = 0;
-    private static frameCount: number = 0;
+    private static lastCheckTime: number = 0;
     private static totalHeapDrift: number = 0;
     private static maxFrameTime: number = 0;
 
@@ -79,31 +79,34 @@ export class RuntimeStressHarness {
 
     /**
      * V8 Memory Drift Telemetry (Zero-GC)
-     * Tracks heap usage over 600 frames (10 seconds) to detect persistent leaks.
+     * Tracks heap usage over 10 seconds to detect persistent leaks.
      */
     public static tickMemory(): void {
         if (!this.enabled) return;
 
-        this.frameCount++;
+        const now = performance.now();
         
         // performance.memory is non-standard but available in Chromium/V8
         const memory = (performance as any).memory;
         if (!memory) return;
 
-        if (this.frameCount === 1) {
+        if (this.lastCheckTime === 0) {
             this.lastHeapSize = memory.usedJSHeapSize;
+            this.lastCheckTime = now;
+            return;
         }
 
-        if (this.frameCount % 600 === 0) {
+        if (now - this.lastCheckTime >= 10000) { // Every 10 seconds
             const currentHeap = memory.usedJSHeapSize;
             const drift = currentHeap - this.lastHeapSize;
             this.totalHeapDrift += drift;
 
             if (drift > 1024 * 512) { // > 0.5MB drift in 10 seconds
-                console.warn("[MEMORY DRIFT] Heap growth detected:", (drift / 1024 / 1024).toFixed(2), "MB over 600 frames.");
+                console.warn("[MEMORY DRIFT] Heap growth detected:", (drift / 1024 / 1024).toFixed(2), "MB over 10 seconds.");
             }
             
             this.lastHeapSize = currentHeap;
+            this.lastCheckTime = now;
         }
     }
 }
