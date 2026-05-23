@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SystemID } from './System';
 import { PerformanceMonitor } from './PerformanceMonitor';
-import { InteractionType, MetaActionId } from './ui/UIEventBridge';
+import { InteractionType, InteractionPromptId, MetaActionId } from './ui/UIEventBridge';
 import { HudStore, HudStateSoA } from '../store/HudStore';
 import { MAX_STATUS_EFFECTS, MAX_PASSIVES, MAX_BUFFS, MAX_DEBUFFS, MAX_MAP_ITEMS } from '../components/ui/hud/HudTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
@@ -45,6 +45,7 @@ const _fastUpdateDetail = {
     bossHpP: -1,
     vehicleSpeed: 0,
     throttleState: 0,
+    isSkidding: false,
     kills: 0,
     scrap: 0,
     challengePoints: 0,
@@ -104,6 +105,7 @@ export const HudSystem = {
         _fastUpdateDetail.bossHpP = isFinite(bossHpP) ? bossHpP : -1;
         _fastUpdateDetail.vehicleSpeed = state.vehicle.active ? (state.vehicle.speed || 0) : 0;
         _fastUpdateDetail.throttleState = state.vehicle.active ? (state.vehicle.throttle || 0) : 0;
+        _fastUpdateDetail.isSkidding = state.vehicle.active ? !!state.vehicle.isSkidding : false;
         _fastUpdateDetail.kills = state.sessionStats.kills || 0;
         _fastUpdateDetail.scrap = state.statsBuffer[PlayerStatID.SCRAP] || 0;
         _fastUpdateDetail.challengePoints = state.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0;
@@ -113,7 +115,17 @@ export const HudSystem = {
         _fastUpdateDetail.spEarned = directSp + collSp + poiSp;
         _fastUpdateDetail.hasCriticalHp = _fastUpdateDetail.hp > 0 && _fastUpdateDetail.hp < _fastUpdateDetail.maxHp * 0.25;
 
-        if (state.hasInteractionTarget && state.interactionTargetPos) {
+        if (state.vehicle.active) {
+            _fastUpdateDetail.interactionActive = true;
+            _fastUpdateDetail.interactionId = InteractionPromptId.EXIT_VEHICLE;
+            _fastUpdateDetail.interactionType = InteractionType.VEHICLE;
+            _fastUpdateDetail.interactionLabel = 'ui.exit_vehicle';
+            _fastUpdateDetail.interactionX = window.innerWidth / 2;
+            _fastUpdateDetail.interactionY = window.innerHeight - 150;
+
+            // Zero-GC Interaction Bridge
+            UIEventBridge.setInteractionPrompt(InteractionPromptId.EXIT_VEHICLE);
+        } else if (state.hasInteractionTarget && state.interactionTargetPos) {
             _fastUpdateDetail.interactionActive = true;
             _fastUpdateDetail.interactionId = state.interaction.promptId;
             _fastUpdateDetail.interactionType = state.interaction.type;
@@ -403,7 +415,23 @@ export const HudSystem = {
         _current.hasCriticalHp = hp > 0 && hp < maxHp * 0.25;
 
         // Sync interaction (BOTH buffers)
-        if (state.hasInteractionTarget && state.interactionTargetPos) {
+        if (state.vehicle.active) {
+            _bufferA.interactionActive = true;
+            _bufferA.interactionType = InteractionType.VEHICLE;
+            _bufferA.interactionLabel = 'ui.exit_vehicle';
+            _bufferA.interactionTargetId = '';
+            _bufferA.interactionX = window.innerWidth / 2;
+            _bufferA.interactionY = window.innerHeight - 150;
+
+            _bufferB.interactionActive = true;
+            _bufferB.interactionType = InteractionType.VEHICLE;
+            _bufferB.interactionLabel = 'ui.exit_vehicle';
+            _bufferB.interactionTargetId = '';
+            _bufferB.interactionX = window.innerWidth / 2;
+            _bufferB.interactionY = window.innerHeight - 150;
+
+            UIEventBridge.setInteractionPrompt(InteractionPromptId.EXIT_VEHICLE);
+        } else if (state.hasInteractionTarget && state.interactionTargetPos) {
             _v1.copy(state.interactionTargetPos);
             _v1.project(camera);
             const screenX = (0.5 + _v1.x * 0.5) * window.innerWidth;

@@ -162,9 +162,7 @@ export const VehicleManager = {
 
         playerGroup.visible = false;
 
-        if (state.worldStreamer) {
-            vehicle.userData.isInteractable = false;
-        }
+        vehicle.userData.isInteractable = false;
 
         const headlight = playerGroup.getObjectByName(FLASHLIGHT.name) as THREE.SpotLight;
         if (headlight) {
@@ -262,10 +260,7 @@ export const VehicleManager = {
             vNodes.brakeGlow.visible = false;
         }
 
-        if (state.worldStreamer) {
-            vehicle.userData.isInteractable = true;
-            // Interaction state is now managed via bucket membership/flags in WorldStreamer
-        }
+        vehicle.userData.isInteractable = true;
     },
 
     handleEnemyCollisions: (

@@ -246,8 +246,12 @@ export class VehicleMovementSystem implements System {
         vehicle.updateMatrixWorld(true);
 
         const obs = vehicle.userData.obstacleRef;
-        if (obs && (speedSq > 0 || angVel.lengthSq() > 0.01)) {
-            session.worldStreamer?.updateObstacle(obs);
+        if (speedSq > 0 || angVel.lengthSq() > 0.01) {
+            if (obs) {
+                session.worldStreamer?.updateObstacle(obs);
+            }
+            // Update the vehicle's interactable logic cell in the spatial grid so it remains interactable at its new position!
+            session.worldStreamer?.updateInteractable(vehicle);
         }
 
         // --- LIGHTING SYSTEM ---
@@ -292,6 +296,7 @@ export class VehicleMovementSystem implements System {
             VehicleSounds.updateEngine(vState.engineVoiceIdx, normSpeed);
 
             const isSkidding = absLatSpeed > 4.5 || (speedSq > 25 && Math.abs(angVel.y) > 0.8);
+            state.vehicle.isSkidding = isSkidding;
             if (def.category !== VehicleCategory.BOAT) {
                 if (isSkidding) {
                     if (vState.skidVoiceIdx === -1) vState.skidVoiceIdx = VehicleSounds.startSkid();

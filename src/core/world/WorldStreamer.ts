@@ -592,6 +592,51 @@ export class WorldStreamer implements System {
         }
     }
 
+    public updateInteractable(interactable: any) {
+        const posX = interactable.position.x;
+        const posZ = interactable.position.z;
+        const newKey = this.getSmiKeyFromWorld(posX, posZ);
+        const newBucketIdx = this.getBucketIndex(posX, posZ);
+
+        if (newKey !== interactable._currentChunkKey || newBucketIdx !== interactable._bucketIndex) {
+            // Remove from old
+            if (interactable._currentChunkKey !== undefined && interactable._currentChunkKey !== -1) {
+                const oldGrid = this.chunks.get(interactable._currentChunkKey);
+                if (oldGrid) {
+                    const bIdx = interactable._bucketIndex!;
+                    const count = oldGrid.interactableCounts[bIdx];
+                    const localIdx = interactable._internalBucketIdx!;
+                    if (localIdx !== undefined && localIdx !== -1 && localIdx < count) {
+                        const last = oldGrid.interactableBuckets[bIdx][count - 1];
+                        oldGrid.interactableBuckets[bIdx][localIdx] = last;
+                        if (last) last._internalBucketIdx = localIdx;
+                        oldGrid.interactableBuckets[bIdx][count - 1] = null;
+                        oldGrid.interactableCounts[bIdx]--;
+                    }
+                }
+            }
+
+            // Add to new
+            const ix = ChunkManager.getCoordIndex(posX);
+            const iz = ChunkManager.getCoordIndex(posZ);
+            const newGrid = this.getOrCreateGrid(ix, iz);
+            if (newGrid) {
+                const count = newGrid.interactableCounts[newBucketIdx];
+                if (count < BUCKET_CAPACITY) {
+                    newGrid.interactableBuckets[newBucketIdx][count] = interactable;
+                    interactable._internalBucketIdx = count;
+                    newGrid.interactableCounts[newBucketIdx]++;
+                    interactable._currentChunkKey = newKey;
+                    interactable._bucketIndex = newBucketIdx;
+                } else {
+                    interactable._currentChunkKey = -1;
+                }
+            } else {
+                interactable._currentChunkKey = -1;
+            }
+        }
+    }
+
     /**
      * Registers an interactable object (Station, Chest, etc).
      */
@@ -623,6 +668,13 @@ export class WorldStreamer implements System {
             if (count < BUCKET_CAPACITY) {
                 grid.interactableBuckets[bIdx][count] = entity;
                 grid.interactableCounts[bIdx]++;
+
+                // Track logic indices for removal and dynamic updates (Zero-GC)
+                if (entity._currentChunkKey === undefined || entity._currentChunkKey === -1) {
+                    entity._currentChunkKey = this.getSmiKeyFromWorld(x, z);
+                    entity._bucketIndex = bIdx;
+                    entity._internalBucketIdx = count;
+                }
             }
         });
     }

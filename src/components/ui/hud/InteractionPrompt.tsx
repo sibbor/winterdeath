@@ -9,36 +9,65 @@ interface InteractionPromptProps {
     onInteract?: (active: boolean) => void;
 }
 
-// ============================================================================
-// PERFORMANCE: Static Configuration Array (O(1) SMI Lookup)
-// Replaced the Record/Map with a contiguous array for optimized memory access.
-// Ensures Zero-GC and prevents hidden-class deoptimization.
-// ============================================================================
-const TYPE_CONFIG = [
-    { key: 'ui.interact', color: 'border-gray-400 text-white' }, // NONE (0)
-    { key: 'ui.interact_pickup_collectible', color: 'border-green-400 text-green-100' }, // COLLECTIBLE (1)
-    { key: 'ui.interact_open_chest', color: 'border-yellow-500 text-yellow-100' }, // CHEST (2)
-    { key: 'ui.enter_vehicle', color: 'border-blue-400 text-blue-100' }, // VEHICLE (3)
-    { key: 'ui.interact', color: 'border-gray-400 text-white' }, // SECTOR_SPECIFIC (4)
-    { key: 'ui.interact', color: 'border-orange-400 text-white' }, // PLANT_EXPLOSIVE (5)
-    { key: 'ui.interact', color: 'border-gray-400 text-white' }  // KNOCK_ON_PORT (6)
-];
+interface PromptConfig {
+    key: string;
+    color: string;
+    keyColor: string;
+}
 
-/**
- * SMI-to-String key mapping for Zero-GC UI updates.
- */
-const PROMPT_ID_MAP: Record<number, string> = {
-    [InteractionPromptId.NONE]: 'ui.interact',
-    [InteractionPromptId.ENTER_VEHICLE]: 'ui.enter_vehicle',
-    [InteractionPromptId.EXIT_VEHICLE]: 'ui.exit_vehicle',
-    [InteractionPromptId.PICKUP_COLLECTIBLE]: 'ui.interact_pickup_collectible',
-    [InteractionPromptId.OPEN_CHEST]: 'ui.interact_open_chest',
-    [InteractionPromptId.INTERACT]: 'ui.interact',
-    [InteractionPromptId.PLANT_EXPLOSIVE]: 'ui.interact_blow_up_bus',
-    [InteractionPromptId.KNOCK_ON_PORT]: 'ui.interact_knock_on_port'
+// ============================================================================
+// PERFORMANCE: SMI-to-Object Fixed Lookup Map
+// Holds distinct style classes for both container and key indicators.
+// Guarantees Zero-GC execution and enforces strict hidden-class shapes for V8.
+// ============================================================================
+const PROMPT_CONFIG_MAP: Record<number, PromptConfig> = {
+    [InteractionPromptId.NONE]: {
+        key: 'ui.interact',
+        color: 'border-white/20 text-white shadow-[0_0_15px_rgba(255,255,255,0.8)]',
+        keyColor: 'bg-white/10 border-white/20 text-white shadow-[inset_0_0_4px_rgba(255,255,255,0.8)]'
+    },
+    [InteractionPromptId.INTERACT]: {
+        key: 'ui.interact',
+        color: 'border-white/20 text-white shadow-[0_0_15px_rgba(255,255,255,0.8)]',
+        keyColor: 'bg-white/10 border-white/20 text-white shadow-[inset_0_0_4px_rgba(255,255,255,0.8)]'
+    },
+    [InteractionPromptId.ENTER_VEHICLE]: {
+        key: 'ui.enter_vehicle',
+        color: 'border-blue-500/40 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.8)]',
+        keyColor: 'bg-blue-500/10 border-blue-500/30 text-blue-400 shadow-[inset_0_0_4px_rgba(59,130,246,0.8)]'
+    },
+    [InteractionPromptId.EXIT_VEHICLE]: {
+        key: 'ui.exit_vehicle',
+        color: 'border-blue-500/40 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.8)]',
+        keyColor: 'bg-blue-500/10 border-blue-500/30 text-blue-400 shadow-[inset_0_0_4px_rgba(59,130,246,0.8)]'
+    },
+    [InteractionPromptId.PICKUP_COLLECTIBLE]: {
+        key: 'ui.interact_pickup_collectible',
+        color: 'border-yellow-500/40 text-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.8)]',
+        keyColor: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 shadow-[inset_0_0_4px_rgba(234,179,8,0.8)]'
+    },
+    [InteractionPromptId.OPEN_CHEST]: {
+        key: 'ui.interact_open_chest',
+        color: 'border-orange-500/40 text-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.8)]',
+        keyColor: 'bg-orange-500/10 border-orange-500/30 text-orange-400 shadow-[inset_0_0_4px_rgba(249,115,22,0.8)]'
+    },
+    [InteractionPromptId.PLANT_EXPLOSIVE]: {
+        key: 'ui.plant_explosives',
+        color: 'border-red-500/40 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.8)]',
+        keyColor: 'bg-red-500/10 border-red-500/30 text-red-400 shadow-[inset_0_0_4px_rgba(239,68,68,0.8)]'
+    },
+    [InteractionPromptId.KNOCK_ON_PORT]: {
+        key: 'ui.interact_knock_on_port',
+        color: 'border-white/20 text-white shadow-[0_0_15px_rgba(255,255,255,0.8)]',
+        keyColor: 'bg-white/10 border-white/20 text-white shadow-[inset_0_0_4px_rgba(255,255,255,0.8)]'
+    }
 };
 
-const DEFAULT_CONFIG = TYPE_CONFIG[0];
+const DEFAULT_CONFIG = PROMPT_CONFIG_MAP[InteractionPromptId.NONE];
+
+// PERFORMANCE: Pre-allocated strings to avoid incremental heap allocations inside the render loop.
+const CONTAINER_BASE_CLASS = "hud-prompt-grit px-5 py-2.5 flex items-center gap-3 relative overflow-hidden";
+const KEY_BASE_CLASS = "w-6 h-6 flex items-center justify-center text-xs font-mono font-black rounded-sm border";
 
 const InteractionPrompt = React.forwardRef<any, InteractionPromptProps>(({
     isMobileDevice,
@@ -46,18 +75,19 @@ const InteractionPrompt = React.forwardRef<any, InteractionPromptProps>(({
 }, ref) => {
     const labelRef = React.useRef<HTMLSpanElement>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
+    const keyRef = React.useRef<HTMLSpanElement>(null);
 
     React.useImperativeHandle(ref, () => ({
         update: (type: InteractionType, label: string, promptId?: InteractionPromptId) => {
-            if (!labelRef.current || !containerRef.current) return;
+            if (!labelRef.current || !containerRef.current || !keyRef.current) return;
 
-            const config = TYPE_CONFIG[type] || DEFAULT_CONFIG;
+            // Resolve lookup configuration object from fixed SMI table
+            const id = promptId !== undefined ? promptId : InteractionPromptId.NONE;
+            const config = PROMPT_CONFIG_MAP[id] || DEFAULT_CONFIG;
 
-            // Priority: PromptId SMI -> Dynamic Label -> Config Default
+            // Resolve translation text asset localization
             let textKey = config.key;
-            if (promptId && PROMPT_ID_MAP[promptId]) {
-                textKey = PROMPT_ID_MAP[promptId];
-            } else if (label) {
+            if (label && id === InteractionPromptId.NONE) {
                 textKey = label;
             }
 
@@ -66,20 +96,19 @@ const InteractionPrompt = React.forwardRef<any, InteractionPromptProps>(({
                 translatedText = textKey;
             }
 
+            // Direct DOM Mutation: Avoids heavy React reconciliation cycles entirely
             if (labelRef.current.innerText !== translatedText) {
                 labelRef.current.innerText = translatedText;
             }
 
-            // Update color classes via direct className manipulation
-            // Note: We're replacing the specific border/text colors
-            const baseClass = "hud-bar-container bg-black/80 backdrop-blur-md px-4 py-2 border flex items-center gap-3 shadow-2xl";
-            containerRef.current.className = `${baseClass} ${config.color}`;
+            // Atomic Class Mutators: Snap color properties instantly to prevent rendering interpolation bugs
+            containerRef.current.className = CONTAINER_BASE_CLASS + " " + config.color;
+            keyRef.current.className = KEY_BASE_CLASS + " " + config.keyColor;
         }
     }));
 
     const inputKey = isMobileDevice ? t('ui.tap') : "E";
 
-    // Handle touch for engine-level edge detection
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
         e.stopPropagation();
         if (onInteract) onInteract(true);
@@ -90,34 +119,49 @@ const InteractionPrompt = React.forwardRef<any, InteractionPromptProps>(({
         if (onInteract) onInteract(false);
     }, [onInteract]);
 
-    // Handle mouse click for desktop debugging/PC
     const handleClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         if (onInteract) {
             onInteract(true);
-            // Pulse the interaction for single-click devices/browsers
             setTimeout(() => onInteract(false), 50);
         }
     }, [onInteract]);
 
     return (
         <div
-            className={`flex flex-col items-center gap-2 pointer-events-auto z-[100] transition-all duration-200 cursor-pointer select-none active:scale-90 ${isMobileDevice ? 'scale-50 origin-center' : 'scale-100'}`}
+            className={`flex flex-col items-center gap-2 pointer-events-auto z-[100] transition-transform duration-200 cursor-pointer select-none active:scale-90 ${isMobileDevice ? 'scale-70 origin-center' : 'scale-100'}`}
             onClick={handleClick}
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
         >
-            {/* Added a transparent padding layer to increase mobile tap target area */}
             <div className="absolute inset-[-20px] pointer-events-auto" />
 
-            <div ref={containerRef} className={`hud-bar-container bg-black/80 backdrop-blur-md px-4 py-2 border flex items-center gap-3 shadow-2xl relative z-10 ${DEFAULT_CONFIG.color}`}>
-                <span className="w-6 h-6 flex items-center justify-center bg-white/20 border border-white/40 text-[10px] font-black text-white">
+            <div ref={containerRef} className={`${CONTAINER_BASE_CLASS} z-10 ${DEFAULT_CONFIG.color}`}>
+                <span ref={keyRef} className={`${KEY_BASE_CLASS} ${DEFAULT_CONFIG.keyColor}`}>
                     {inputKey}
                 </span>
                 <span ref={labelRef} className="text-xs font-black tracking-widest uppercase hud-text-glow">
                     {t(DEFAULT_CONFIG.key)}
                 </span>
             </div>
+
+            <style>{`
+                .hud-prompt-grit {
+                    background: repeating-linear-gradient(
+                        0deg,
+                        transparent,
+                        transparent 2px,
+                        rgba(255, 255, 255, 0.08) 2px,
+                        rgba(255, 255, 255, 0.08) 4px
+                    ),
+                    linear-gradient(
+                        rgba(24, 24, 27, 0.95),
+                        rgba(24, 24, 27, 0.95)
+                    );
+                    border-style: solid;
+                    border-width: 1px;
+                }
+            `}</style>
         </div>
     );
 });

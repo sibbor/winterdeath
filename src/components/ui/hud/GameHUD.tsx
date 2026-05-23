@@ -283,7 +283,7 @@ const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
     );
 });
 
-const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, handleSelectWeaponInternal, ammoTextRef, reloadBarRef, speedTextRef, gasPedalRef, brakePedalRef, handleActionEnter, handleActionLeave }: any) => {
+const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, handleSelectWeaponInternal, ammoTextRef, reloadBarRef, speedTextRef, speedArcRef, gasPedalRef, skidPedalRef, brakePedalRef, handleActionEnter, handleActionLeave }: any) => {
     const isDriving = useHudStore(s => s.isDriving);
     const activeWeapon = useHudStore(s => s.activeWeapon);
     const throwableAmmo = useHudStore(s => s.throwableAmmo);
@@ -373,19 +373,73 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
             )}
 
             {isDriving ? (
-                <div className={`flex flex-col items-center ${isMobileDevice ? 'pt-2' : 'pt-8'}`}>
-                    <div className={`${BAR_WRAPPER} hud-gritty-base hud-gritty-texture ${isMobileDevice ? 'px-8 py-2' : 'px-12 py-4'} shadow-2xl`}>
-                        <span ref={speedTextRef} className={`${isMobileDevice ? 'text-4xl' : 'text-6xl'} font-semibold text-white tracking-tighter block hud-text-glow text-center`}>
+                <div className="relative w-48 h-48 flex items-center justify-center bg-black/50 rounded-full border border-white/5 shadow-2xl p-2 animate-fadeIn">
+                    {/* SVG Speedometer Dial */}
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 200 200">
+                        <defs>
+                            <linearGradient id="speedGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stopColor="#3b82f6" />    {/* Blue */}
+                                <stop offset="50%" stopColor="#22c55e" />   {/* Green */}
+                                <stop offset="100%" stopColor="#ef4444" />  {/* Reddish */}
+                            </linearGradient>
+                        </defs>
+
+                        {/* Outer Circular Track Background */}
+                        <path
+                            d="M 40,145 A 75,75 0 1,1 160,145"
+                            fill="none"
+                            stroke="rgba(255,255,255,0.06)"
+                            strokeWidth="8"
+                            strokeLinecap="round"
+                        />
+
+                        {/* Active Speed Arc */}
+                        <path
+                            ref={speedArcRef}
+                            d="M 40,145 A 75,75 0 1,1 160,145"
+                            fill="none"
+                            stroke="url(#speedGrad)"
+                            strokeWidth="8"
+                            strokeLinecap="round"
+                            strokeDasharray="340"
+                            strokeDashoffset="340"
+                        />
+
+                        {/* Inner thin dial border */}
+                        <circle cx="100" cy="100" r="58" fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="1.5" />
+                        <circle cx="100" cy="100" r="98" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1.5" />
+                    </svg>
+
+                    {/* Center Panel (Absolute overlay) */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pt-2">
+                        {/* Speed Number */}
+                        <span ref={speedTextRef} className="text-4xl font-black font-mono text-white tracking-tighter leading-none block drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
                             0
                         </span>
-                        <span className="text-[10px] font-medium text-white/40 uppercase tracking-[0.3em] block text-center mt-1">{t('ui.speed_unit')}</span>
-                    </div>
-                    <div className="flex gap-4 mt-4">
-                        <div ref={gasPedalRef} className="px-6 py-2 border transition-all bg-black/80 border-white/10 text-white/20">
-                            <span className="text-xs font-black uppercase tracking-widest">{t('ui.gas')}</span>
-                        </div>
-                        <div ref={brakePedalRef} className="px-6 py-2 border transition-all bg-black/80 border-white/10 text-white/20">
-                            <span className="text-xs font-black uppercase tracking-widest">{t('ui.brake')}</span>
+                        <span className="text-[10px] font-bold tracking-widest text-white/40 uppercase block mt-1">
+                            {t('ui.speed_unit')}
+                        </span>
+
+                        {/* Integrated Gas / Skid / Brake Dot Indicators */}
+                        <div className="flex items-center gap-1 mt-3 z-10">
+                            {/* GAS Dot (Blue) */}
+                            <div
+                                ref={gasPedalRef}
+                                className="w-2.5 h-2.5 rounded-full border border-white/10 bg-zinc-950/60 shadow-sm"
+                                title={t('ui.gas')}
+                            />
+                            {/* SKID Dot (Orange) */}
+                            <div
+                                ref={skidPedalRef}
+                                className="w-2.5 h-2.5 rounded-full border border-white/10 bg-zinc-950/60 shadow-sm"
+                                title={t('ui.skid')}
+                            />
+                            {/* BRAKE Dot (Red) */}
+                            <div
+                                ref={brakePedalRef}
+                                className="w-2.5 h-2.5 rounded-full border border-white/10 bg-zinc-950/60 shadow-sm"
+                                title={t('ui.brake')}
+                            />
                         </div>
                     </div>
                 </div>
@@ -426,7 +480,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const floatingReloadBarContainerRef = useRef<HTMLDivElement>(null);
     const hudContainerRef = useRef<HTMLDivElement>(null);
     const speedTextRef = useRef<HTMLSpanElement>(null);
+    const speedArcRef = useRef<SVGPathElement>(null);
     const gasPedalRef = useRef<HTMLDivElement>(null);
+    const skidPedalRef = useRef<HTMLDivElement>(null);
     const brakePedalRef = useRef<HTMLDivElement>(null);
     const bossHpBarRef = useRef<HTMLDivElement>(null);
     const killsTextRef = useRef<HTMLSpanElement>(null);
@@ -549,13 +605,32 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     speedTextRef.current.innerText = speed;
                 }
             }
+
+            // Speedometer Arc and Dot animations
+            const maxSpeed = 160;
+            const speedRatio = Math.max(0, Math.min(1, data.vehicleSpeed / maxSpeed));
+
+            if (speedArcRef.current) {
+                const offset = 340 - (speedRatio * 340);
+                speedArcRef.current.style.strokeDashoffset = offset.toString();
+            }
             if (gasPedalRef.current) {
                 const isGas = data.throttleState > 0;
-                gasPedalRef.current.style.backgroundColor = isGas ? 'rgba(6, 182, 212, 0.2)' : 'rgba(0, 0, 0, 0.8)';
+                gasPedalRef.current.style.borderColor = isGas ? '#3b82f6' : 'rgba(255,255,255,0.1)';
+                gasPedalRef.current.style.backgroundColor = isGas ? '#3b82f6' : 'rgba(0, 0, 0, 0.6)';
+                gasPedalRef.current.style.boxShadow = isGas ? '0 0 8px rgba(59, 130, 246, 0.8)' : 'none';
+            }
+            if (skidPedalRef.current) {
+                const isSkid = !!data.isSkidding;
+                skidPedalRef.current.style.borderColor = isSkid ? '#f97316' : 'rgba(255,255,255,0.1)';
+                skidPedalRef.current.style.backgroundColor = isSkid ? '#f97316' : 'rgba(0, 0, 0, 0.6)';
+                skidPedalRef.current.style.boxShadow = isSkid ? '0 0 8px rgba(249, 115, 22, 0.8)' : 'none';
             }
             if (brakePedalRef.current) {
                 const isBrake = data.throttleState < 0;
-                brakePedalRef.current.style.backgroundColor = isBrake ? 'rgba(255, 51, 51, 0.2)' : 'rgba(0, 0, 0, 0.8)';
+                brakePedalRef.current.style.borderColor = isBrake ? '#ef4444' : 'rgba(255,255,255,0.1)';
+                brakePedalRef.current.style.backgroundColor = isBrake ? '#ef4444' : 'rgba(0, 0, 0, 0.6)';
+                brakePedalRef.current.style.boxShadow = isBrake ? '0 0 8px rgba(239, 68, 68, 0.8)' : 'none';
             }
 
             // --- 8. TELEMETRY (Kills, Scrap, SP) ---
@@ -591,13 +666,18 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
             // --- 9. INTERACTION PROMPT ---
             if (interactionRef.current) {
+                const scaleStr = isMobileDevice ? 'scale(1.5)' : 'scale(1)';
                 if (data.interactionActive) {
-                    interactionRef.current.style.display = 'block';
+                    interactionRef.current.style.opacity = '1';
+                    interactionRef.current.style.transform = `translate(-50%, 0px) ${scaleStr}`;
+                    interactionRef.current.style.pointerEvents = 'auto';
                     if (interactionComponentRef.current) {
                         interactionComponentRef.current.update(data.interactionType, data.interactionLabel, data.interactionId);
                     }
                 } else {
-                    interactionRef.current.style.display = 'none';
+                    interactionRef.current.style.opacity = '0';
+                    interactionRef.current.style.transform = `translate(-50%, 10px) ${scaleStr}`;
+                    interactionRef.current.style.pointerEvents = 'none';
                 }
             }
 
@@ -800,7 +880,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     ammoTextRef={ammoTextRef}
                     reloadBarRef={reloadBarRef}
                     speedTextRef={speedTextRef}
+                    speedArcRef={speedArcRef}
                     gasPedalRef={gasPedalRef}
+                    skidPedalRef={skidPedalRef}
                     brakePedalRef={brakePedalRef}
                     handleActionEnter={handleActionEnter}
                     handleActionLeave={handleActionLeave}
@@ -905,8 +987,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             {/* Interaction Prompt (Highest Priority - Centered and scaled for mobile) */}
             <div
                 ref={interactionRef}
-                className={`absolute ${isMobileDevice ? 'bottom-[25%] scale-150' : 'bottom-40'} left-1/2 -translate-x-1/2 z-[200] pointer-events-auto transition-all duration-300 ease-out`}
-                style={{ display: 'none' }}
+                className={`absolute ${isMobileDevice ? 'bottom-[35%]' : 'bottom-64'} left-1/2 pointer-events-none z-[200] transition-all duration-[150ms] ease-out opacity-0`}
+                style={{ transform: `translate(-50%, 10px) ${isMobileDevice ? 'scale(1.5)' : 'scale(1)'}` }}
             >
                 <InteractionPrompt
                     ref={interactionComponentRef}

@@ -163,6 +163,7 @@ export const en = {
         interact_open_chest: "OPEN CHEST",
         interact_knock_on_port: "KNOCK ON DOOR",
         interact_blow_up_bus: "BLOW UP BUS",
+        plant_explosives: "PLANT EXPLOSIVES",
         planting_explosives: "Planting explosives...",
         map: "MAP",
         map_btn: "MAP",

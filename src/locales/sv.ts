@@ -122,6 +122,7 @@ export const sv = {
         interact_open_chest: "ÖPPNA KISTA",
         interact_knock_on_port: "KNACKA PÅ DÖRREN",
         interact_blow_up_bus: "SPRÄNG BUSSEN",
+        plant_explosives: "PLACERA SPRÄNGLADDNING",
         planting_explosives: "Placerar sprängämnen...",
         map: "KARTA",
         map_btn: "KARTA",
