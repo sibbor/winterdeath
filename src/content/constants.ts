@@ -193,14 +193,13 @@ export const FLASHLIGHT = {
     shadowMapSize: 512
 };
 
-export type ShadowQuality = 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH' | 'VERYHIGH';
+export type ShadowQuality = 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH';
 
-export const SHADOW_PRESETS: Record<ShadowQuality, { shadows: boolean; shadowMapType: THREE.ShadowMapType; shadowResolution: number; weatherCount: number }> = {
-    OFF: { shadows: false, shadowMapType: 0, shadowResolution: 256, weatherCount: 150 },
-    LOW: { shadows: true, shadowMapType: 0, shadowResolution: 512, weatherCount: 250 },      // BasicShadowMap
-    MEDIUM: { shadows: true, shadowMapType: 1, shadowResolution: 1024, weatherCount: 400 },   // PCFShadowMap
-    HIGH: { shadows: true, shadowMapType: 2, shadowResolution: 2048, weatherCount: 800 },     // PCFSoftShadowMap
-    VERYHIGH: { shadows: true, shadowMapType: 3, shadowResolution: 4096, weatherCount: 1600 }  // VSMShadowMap
+export const SHADOW_PRESETS: Record<ShadowQuality, { shadows: boolean; shadowMapType: THREE.ShadowMapType; shadowResolution: number; }> = {
+    OFF: { shadows: false, shadowMapType: 0, shadowResolution: 256 },
+    LOW: { shadows: true, shadowMapType: 0, shadowResolution: 512 },      // BasicShadowMap
+    MEDIUM: { shadows: true, shadowMapType: 1, shadowResolution: 1024 },   // PCFShadowMap
+    HIGH: { shadows: true, shadowMapType: 2, shadowResolution: 2048 },     // PCFSoftShadowMap
 };
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -209,7 +208,6 @@ export const DEFAULT_SETTINGS: GameSettings = {
     shadows: true,
     shadowMapType: 1,
     shadowResolution: 256,
-    weatherCount: WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES,
     textureQuality: 1.0,
     volumetricFog: true,
     showDiscoveryPopups: true

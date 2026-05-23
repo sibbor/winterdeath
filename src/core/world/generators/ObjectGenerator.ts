@@ -541,7 +541,7 @@ export const ObjectGenerator = {
         group.userData.logicalLights = [{
             offset: new THREE.Vector3(0, -0.5, 0),
             color: 0xffddaa,
-            baseIntensity: 20,
+            intensity: 50,
             distance: 20.0,
             flickerRate: 0.1
         }];
@@ -700,7 +700,7 @@ export const ObjectGenerator = {
                             group.userData.logicalLights.push({
                                 offset: _v1_og.clone(),
                                 color: 0xffffaa,
-                                baseIntensity: 4.0,
+                                intensity: 4.0,
                                 distance: 10.0,
                                 flickerRate: Math.random() > 0.8 ? 0.2 : 0.0
                             });
@@ -793,7 +793,7 @@ export const ObjectGenerator = {
         group.userData.logicalLights = [{
             offset: lightOffset,
             color: color,
-            baseIntensity: 15.0,
+            intensity: 15.0,
             distance: 25.0 * scale,
             flickerRate: 0.05
         }];

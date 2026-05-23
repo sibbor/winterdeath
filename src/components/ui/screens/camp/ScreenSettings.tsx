@@ -204,8 +204,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                     {[
                         { label: t('ui.quality_low'), preset: SHADOW_PRESETS.LOW },
                         { label: t('ui.quality_med'), preset: SHADOW_PRESETS.MEDIUM },
-                        { label: t('ui.quality_high'), preset: SHADOW_PRESETS.HIGH },
-                        { label: t('ui.quality_vhigh'), preset: SHADOW_PRESETS.VERYHIGH }
+                        { label: t('ui.quality_high'), preset: SHADOW_PRESETS.HIGH }
                     ].map(q => (
                         <TacticalButton
                             key={q.label}

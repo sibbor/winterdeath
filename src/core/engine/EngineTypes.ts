@@ -4,7 +4,6 @@ export interface GameSettings {
   shadowMapType: number;
   shadowResolution: number;
   pixelRatio: number;
-  weatherCount: number;
   textureQuality: number;
   volumetricFog: boolean;
   showDiscoveryPopups: boolean;

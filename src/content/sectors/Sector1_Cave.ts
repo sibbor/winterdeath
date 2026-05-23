@@ -359,7 +359,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
                     isLogicalLight: true,
                     position: worldPos,
                     color: 0xff0000,
-                    baseIntensity: 100.0,
+                    intensity: 100.0,
                     distance: 50.0,
                     flickerRate: 0.05
                 } as any);

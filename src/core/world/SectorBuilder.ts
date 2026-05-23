@@ -477,7 +477,7 @@ export const SectorBuilder = {
                 isLogicalLight: true,
                 position: new THREE.Vector3(_v1_sg.x, _v1_sg.y, _v1_sg.z),
                 color: colorPrimary,
-                baseIntensity: 3.0,
+                intensity: 10.0,
                 distance: 10.0,
                 flickerRate: 0.0
             } as any);
@@ -977,7 +977,7 @@ export const SectorBuilder = {
                     isLogicalLight: true,
                     position: new THREE.Vector3(_v1_sg.x, _v1_sg.y, _v1_sg.z),
                     color: lData.color,
-                    baseIntensity: lData.baseIntensity,
+                    intensity: lData.intensity,
                     distance: lData.distance,
                     flickerRate: lData.flickerRate
                 } as any);
@@ -1015,7 +1015,7 @@ export const SectorBuilder = {
                     isLogicalLight: true,
                     position: new THREE.Vector3(_v1_sg.x, _v1_sg.y, _v1_sg.z),
                     color: lData.color,
-                    baseIntensity: lData.baseIntensity,
+                    intensity: lData.intensity,
                     distance: lData.distance,
                     flickerRate: lData.flickerRate || 0.0
                 } as any);
@@ -1360,7 +1360,7 @@ export const SectorBuilder = {
                         isLogicalLight: true,
                         targetObject: child,
                         color: child.userData.lightColor,
-                        baseIntensity: child.userData.lightIntensity,
+                        intensity: child.userData.lightIntensity,
                         distance: child.userData.lightDistance,
                         flickerRate: child.userData.flickerRate || 0.0
                     } as any);
@@ -1454,7 +1454,7 @@ export const SectorBuilder = {
         if (eff.type === EffectType.NEON_SIGN || eff.type === EffectType.FLICKER_LIGHT || eff.type === EffectType.FIRE) {
             const isFire = eff.type === EffectType.FIRE;
             const baseColor = isFire ? 0xff6600 : (eff.color || 0xffaa00);
-            const baseIntensity = isFire ? 2.0 : (eff.intensity || 1.0);
+            const lightIntensity = isFire ? 2.0 : (eff.intensity || 1.0);
             const yOffset = isFire ? oY + 1.0 : oY;
 
             let flicker = 0;
@@ -1470,7 +1470,7 @@ export const SectorBuilder = {
                     targetObject: parent,
                     offset: new THREE.Vector3(oX, yOffset, oZ),
                     color: baseColor,
-                    baseIntensity: baseIntensity,
+                    intensity: lightIntensity,
                     distance: 25.0,
                     flickerRate: flicker
                 } as any);

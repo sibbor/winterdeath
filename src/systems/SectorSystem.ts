@@ -314,7 +314,7 @@ export class SectorSystem implements System {
         const streamer = state.worldStreamer;
 
         const settings = engine.settings;
-        const defaultWeatherCount = settings.weatherCount || 1000;
+        const defaultWeatherCount = defaultEnv.weather?.particles ?? 1000;
         const defaultWindMin = defaultEnv.wind?.strengthMin ?? 0.2;
         const defaultWindMax = defaultEnv.wind?.strengthMax ?? 1.0;
 
@@ -487,8 +487,6 @@ export class SectorSystem implements System {
                     // groundColor blends back to sector default outside zones (automatic via defaultWeight)
                     target.groundColor = defGroundColor; // zones don't override ground color for now
                 }
-                // If count > 0 but totalWeight == 0 (player just exited all zones),
-                // target is already reset to sector defaults above — no extra work needed.
             }
         } else if (override) {
             if (override.bgColor !== undefined) target.fogColor = override.bgColor;

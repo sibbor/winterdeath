@@ -708,11 +708,11 @@ export class GameSessionSetup {
                     const eff = effects[j];
                     if (eff.type === SubEffectType.LIGHT) {
                         const light = new THREE.PointLight(eff.color, eff.intensity, eff.distance);
-                        light.userData.baseIntensity = eff.intensity;
+                        light.userData.intensity = eff.intensity;
                         light.userData.isCulled = false;
                         if (eff.offset) light.position.copy(eff.offset);
                         child.add(light);
-                        if (eff.flicker) flickeringLights.push({ light, baseInt: eff.intensity, flickerRate: 0.1 });
+                        if (eff.flicker) flickeringLights.push({ light, intensity: eff.intensity, flickerRate: 0.1 });
                         light.castShadow = false;
                         light.shadow.autoUpdate = false;
                         light.shadow.mapSize.set(256, 256);

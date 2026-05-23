@@ -273,9 +273,9 @@ export class InputManager implements System {
                 if (playerGroup) {
                     const flashlight = playerGroup.getObjectByName('FLASHLIGHT') as THREE.SpotLight;
                     if (flashlight) {
-                        const baseIntensity = FLASHLIGHT.intensity;
+                        const defaultIntensity = FLASHLIGHT.intensity;
                         const multiplier = session.state.vehicle?.active ? 2.0 : 1.0;
-                        flashlight.intensity = session.state.flashlightOn ? (baseIntensity * multiplier) : 0;
+                        flashlight.intensity = session.state.flashlightOn ? (defaultIntensity * multiplier) : 0;
                     }
                 }
             }

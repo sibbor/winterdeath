@@ -126,7 +126,7 @@ export class DeathSystem implements System {
 
                 // Fetch HUD data once for death state to avoid GC hits
                 // HUD data now respects the statsBuffer and statusFlags automatically.
-                const hudData = HudSystem.getHudData(state, pgPos, fmMesh, input, renderTime, props, this.distanceTraveledRef.current, camera) as any;
+                const hudData = HudSystem.getHudData(state, pgPos, fmMesh, input, renderTime, props, this.distanceTraveledRef.current, camera, playerGroup ? playerGroup.rotation.y : 0) as any;
                 HudStore.update(hudData);
                 break;
 
