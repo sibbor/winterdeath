@@ -410,7 +410,7 @@ export const ObjectGenerator = {
     createTimberPile: (scale: number = 1.0) => {
         const group = new THREE.Group();
         const logHeight = 6, logRadius = 0.3;
-        const materials = [MATERIALS.treeTrunk, MATERIALS.logEnd, MATERIALS.logEnd];
+        const materials = [MATERIALS.treeTrunkStatic, MATERIALS.logEnd || MATERIALS.treeTrunkStatic, MATERIALS.logEnd || MATERIALS.treeTrunkStatic];
 
         for (let l = 0; l < 4; l++) {
             const logsInLayer = 4 - l;

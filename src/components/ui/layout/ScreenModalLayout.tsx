@@ -149,7 +149,9 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
             const action = INPUT_KEY_MAP[e.key];
 
             if (action === InputAction.ESCAPE) {
+                e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation();
                 UiSounds.playClick();
                 if (currCancel) currCancel();
                 else currClose();

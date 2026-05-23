@@ -289,6 +289,7 @@ const LiveEnemyDots = React.memo(({ bounds }: { bounds: any }) => {
 // ZERO-GC: Live Map Entities perfectly decoupled from the heavy SVG re-renders
 const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
     const playerRef = useRef<HTMLDivElement>(null);
+    const playerArrowRef = useRef<SVGSVGElement>(null);
     const familyRef = useRef<HTMLDivElement>(null);
     const bossRef = useRef<HTMLDivElement>(null);
 
@@ -305,6 +306,14 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
                 const py = ((state.playerPos.z - bounds.minZ) / height) * 100;
                 playerRef.current.style.left = `${px}%`;
                 playerRef.current.style.top = `${py}%`;
+            }
+            if (playerArrowRef.current) {
+                // Three.js Y-rotation is counter-clockwise, CSS is clockwise.
+                // Three.js 0 rotation faces positive Z (down on the map).
+                // The arrow SVG naturally points UP (negative Z on the map).
+                // So we add 180 degrees and don't negate playerRotY.
+                const rotDeg = (state.playerRotY * 180 / Math.PI);
+                playerArrowRef.current.style.transform = `rotate(${rotDeg}deg)`;
             }
 
             // Update Boss
@@ -348,7 +357,7 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
                 className="absolute -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none will-change-[left,top] flex items-center justify-center w-10 h-10"
                 style={{ left: '50%', top: '50%' }}
             >
-                <svg className="w-8 h-8 drop-shadow-[0_0_8px_rgba(59,130,246,0.85)] fill-blue-500 stroke-white animate-pulse" viewBox="0 0 24 24">
+                <svg ref={playerArrowRef} className="w-8 h-8 drop-shadow-[0_0_8px_rgba(59,130,246,0.85)] fill-blue-500 stroke-white animate-pulse" viewBox="0 0 24 24">
                     <polygon points="12,2 22,22 12,17 2,22" />
                 </svg>
             </div>

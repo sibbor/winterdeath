@@ -951,7 +951,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         if (frame % 4 === 0) {
             monitor.begin('hud_sync');
             const hudMesh = refs.playerMeshRef.current;
-            const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, refs.distanceTraveledRef.current, engine.camera.threeCamera);
+            const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, refs.distanceTraveledRef.current, engine.camera.threeCamera, playerGroup.rotation.y);
             monitor.end('hud_sync');
 
             hudData.debugInfo.drawCalls = refs.lastDrawCallsRef.current;

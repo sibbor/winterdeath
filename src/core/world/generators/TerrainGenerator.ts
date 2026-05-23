@@ -367,7 +367,7 @@ export const TerrainGenerator = {
         caveOpeningGroup.add(portal);
 
         const logRadius = 0.5, postHeight = wallH - 0.5;
-        const woodMat = MATERIALS.treeTrunk || MATERIALS.deadWood;
+        const woodMat = MATERIALS.treeTrunkStatic;
 
         for (let z = -tunnelDepth / 2 + 1.5; z <= tunnelDepth / 2 - 1.5; z += 3.5) {
             const fz = z;

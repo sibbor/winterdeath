@@ -432,7 +432,7 @@ export const PathGenerator = {
                 }
 
                 // Collision Obstacle
-                _pos.copy(_v1).setY(height / 2);
+                _pos.copy(_v1).setY(_v1.y + height / 2);
                 _v2.set(0.4, height, dist);
 
                 SectorBuilder.addObstacle(ctx, {
@@ -509,7 +509,7 @@ export const PathGenerator = {
                 ctx.scene.add(post);
             }
 
-            _pos.copy(_v1).setY(height / 2);
+            _pos.copy(_v1).setY(_v1.y + height / 2);
             _scale.set(thickness, height, dist);
 
             SectorBuilder.addObstacle(ctx, {
@@ -528,10 +528,20 @@ export const PathGenerator = {
         let startTime = performance.now();
 
         // Use a consistent unit geometry for all segments (Zero-GC optimization)
-        // Radius 0.7071 (1/sqrt(2)) rotated by 45 degrees yields a perfect 1x1 base square.
-        // The top radius is 0.07071 to make the top 10% the width of the bottom.
-        const geo = new THREE.CylinderGeometry(0.07071, 0.7071, 1.0, 4, 1, false);
-        geo.rotateY(Math.PI / 4); // Align the 4-sided cylinder to have a flat base
+        // A trapezoidal prism tapers in X (width) but remains straight in Z (length).
+        // This ensures segments connect perfectly end-to-end without massive gaps!
+        let geo = (PathGenerator as any)._embankmentGeo as THREE.BufferGeometry;
+        if (!geo) {
+            geo = new THREE.BoxGeometry(1, 1, 1);
+            const pos = geo.attributes.position;
+            for (let i = 0; i < pos.count; i++) {
+                if (pos.getY(i) > 0) { // Top vertices
+                    pos.setX(i, pos.getX(i) * 0.1); // Taper the top width to 10%
+                }
+            }
+            geo.computeVertexNormals();
+            (PathGenerator as any)._embankmentGeo = geo;
+        }
 
         for (let i = 0; i < points.length - 1; i++) {
             if (performance.now() - startTime > 12) {
@@ -550,16 +560,16 @@ export const PathGenerator = {
 
             const mesh = new THREE.Mesh(geo, material);
             mesh.position.copy(_v1);
-            mesh.position.y += height / 2 - 0.5;
+            mesh.position.y -= height / 2; // Position center below the path points
             mesh.quaternion.copy(_quat);
-            // SCALE: width (X), height (Y), dist (Z)
-            mesh.scale.set(width, height, dist);
+            // Scale Z slightly more than dist to seamlessly overlap outer curve gaps
+            mesh.scale.set(width, height, dist * 1.1);
             mesh.receiveShadow = true;
             GeneratorUtils.freezeStatic(mesh);
             ctx.scene.add(mesh);
 
             // Match Collision Obstacle to the visual mesh
-            _pos.copy(_v1).setY(height / 2);
+            _pos.copy(_v1).setY(_v1.y - height / 2);
             _scale.set(width * 0.6, height, dist); // Box collider matching the mound
 
             SectorBuilder.addObstacle(ctx, {

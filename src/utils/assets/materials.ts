@@ -221,12 +221,18 @@ export const MATERIALS = {
         bumpScale: 0.1,
         flatShading: true
     })),
-    deadWood: patchTreeWindMaterial(new THREE.MeshStandardMaterial({
+    deadWood: new THREE.MeshStandardMaterial({
         color: 0x5c5046,
         roughness: 1.0,
         map: DIFFUSE.bark,
         flatShading: true
-    })),
+    }),
+
+    treeTrunkStatic: new THREE.MeshStandardMaterial({
+        color: 0x4a3c31, // Flat dark brown
+        roughness: 1.0,
+        flatShading: true
+    }),
 
     mountain: (() => {
         // Clone so the repeat settings don't affect MATERIALS.stone

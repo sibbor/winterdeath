@@ -56,6 +56,7 @@ export class HudStateSoA implements IHudState {
     public reloadProgress = 0;
 
     public playerPos: HudVector2 = { x: 0, z: 0 };
+    public playerRotY = 0;
     public familyPos: HudVector2 | null = { x: 0, z: 0 };
     public bossPos: HudVector2 | null = { x: 0, z: 0 };
     public distanceTraveled = 0;
@@ -202,6 +203,7 @@ export class HudStateSoA implements IHudState {
 
         this.playerPos.x = src.playerPos.x;
         this.playerPos.z = src.playerPos.z;
+        this.playerRotY = src.playerRotY;
         if (src.familyPos && this.familyPos) {
             this.familyPos.x = src.familyPos.x;
             this.familyPos.z = src.familyPos.z;

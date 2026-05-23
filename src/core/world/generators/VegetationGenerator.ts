@@ -749,7 +749,7 @@ export const VegetationGenerator = {
             GeneratorUtils.freezeStatic(hedge);
             ctx.scene.add(hedge);
 
-            _pos.copy(_v1).setY(height / 2);
+            _pos.copy(_v1).setY(_v1.y + height / 2);
             _scale.set(dist, height, thickness);
 
             SectorBuilder.addObstacle(ctx, {
@@ -799,7 +799,7 @@ export const VegetationGenerator = {
             GeneratorUtils.freezeStatic(wall);
             ctx.scene.add(wall);
 
-            _pos.copy(_v1).setY(height / 2);
+            _pos.copy(_v1).setY(_v1.y + height / 2);
             _scale.set(dist, height, thickness);
 
             SectorBuilder.addObstacle(ctx, {
@@ -861,7 +861,9 @@ export const VegetationGenerator = {
             return;
         }
 
-        const baseType = typeKey.split('_')[0];
+        let baseType = typeKey.split('_')[0];
+        if (typeKey.startsWith('DEAD_TREE')) baseType = 'DEAD_TREE';
+        
         let trunkMat = materialOverride || MATERIALS.treeTrunk;
         let leavesMat = materialOverride || MATERIALS.treeFirNeedles;
 

@@ -76,7 +76,7 @@ export const ENVIRONMENTAL_ZONES: EnvironmentalZone[] = [
         polygon: CAVE_ENVIRONMENTAL_POLY,
         weather: WeatherType.NONE,
         weatherDensity: 0,
-        windStrength: 0,
+        //windStrength: 0,
         bgColor: 0x111118,
         fogDensity: 0.005,
         ambient: 0.2
@@ -106,7 +106,7 @@ const LOCATIONS = {
         CAVE_ENTRANCE: { x: 100, z: -70 },
         TUNNEL: { x: 165, z: -54 },
         CAMPFIRE: { x: 0, z: 12 },
-        TRAIN_TUNNEL: { x: 170, z: -50 },
+        TRAIN_TUNNEL: { x: 150, z: -50 },
         BOSS_ROOM: { x: 61, z: -193 }
     },
     COLLECTIBLES: {

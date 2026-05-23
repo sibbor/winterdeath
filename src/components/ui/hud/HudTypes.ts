@@ -151,6 +151,7 @@ export interface HudState {
 
   // Positioning
   playerPos: HudVector2;
+  playerRotY: number;
   familyPos: HudVector2 | null;
   bossPos: HudVector2 | null;
   distanceTraveled: number;

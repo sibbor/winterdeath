@@ -941,22 +941,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         refs.engineRef.current = engine;
         engine.input.enable();
         engine.input.onMetaAction = (actionId: MetaActionId) => {
-            const currentOverlay = latestStateRef.current.props.activeOverlay;
-
             switch (actionId) {
-                case MetaActionId.TOGGLE_PAUSE:
-                case MetaActionId.NAV_BACK:
-                    if (currentOverlay === OverlayType.PAUSE) props.onInteractionStateChange?.(OverlayType.NONE);
-                    else if (currentOverlay === OverlayType.NONE) props.onInteractionStateChange?.(OverlayType.PAUSE);
-                    break;
-                case MetaActionId.TOGGLE_MAP:
-                    if (currentOverlay === OverlayType.MAP) props.onInteractionStateChange?.(OverlayType.NONE);
-                    else if (currentOverlay === OverlayType.NONE) props.onInteractionStateChange?.(OverlayType.MAP);
-                    break;
-                case MetaActionId.TOGGLE_ADVENTURE_LOG:
-                    if (currentOverlay === OverlayType.ADVENTURE_LOG) props.onInteractionStateChange?.(OverlayType.NONE);
-                    else props.onInteractionStateChange?.(OverlayType.ADVENTURE_LOG);
-                    break;
                 case MetaActionId.RESTART_SECTOR:
                     (ref as any).current?.restartSector();
                     break;

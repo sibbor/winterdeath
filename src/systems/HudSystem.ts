@@ -142,7 +142,8 @@ export const HudSystem = {
         now: number,
         props: any,
         distanceTraveled: number,
-        camera: THREE.Camera
+        camera: THREE.Camera,
+        playerRotY: number
     ) => {
         // Swap active buffer
         _useBufferA = !_useBufferA;
@@ -247,6 +248,7 @@ export const HudSystem = {
 
         _current.playerPos.x = playerPos.x;
         _current.playerPos.z = playerPos.z;
+        _current.playerRotY = playerRotY;
 
         _current.isDisoriented = (state.statusFlags & PlayerStatusFlags.DISORIENTED) !== 0;
 
