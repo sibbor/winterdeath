@@ -129,7 +129,7 @@ const InteractionPrompt = React.forwardRef<any, InteractionPromptProps>(({
 
     return (
         <div
-            className={`flex flex-col items-center gap-2 pointer-events-auto z-[100] transition-transform duration-200 cursor-pointer select-none active:scale-90 ${isMobileDevice ? 'scale-70 origin-center' : 'scale-100'}`}
+            className={`flex flex-col items-center gap-2 pointer-events-auto z-[100] transition-transform duration-200 cursor-pointer select-none active:scale-90 ${isMobileDevice ? 'scale-50 origin-center' : 'scale-100'}`}
             onClick={handleClick}
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
