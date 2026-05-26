@@ -57,6 +57,7 @@ export interface FireZone {
     life: number;
     damage: number;
     sourceId: number;
+    nextTick: number; // simTime timestamp for the next damage tick (replaces fragile modulo gate)
 }
 
 /*
@@ -430,7 +431,7 @@ export function allocateRuntimeState(): RuntimeState {
         particles: [],
         activeEffects: [],
         projectiles: [],
-        fireZones: Array.from({ length: MAX_ENTITIES.FIRE_ZONES }, () => ({ x: 0, z: 0, radius: 0, life: 0, damage: 0, sourceId: 0 })),
+        fireZones: Array.from({ length: MAX_ENTITIES.FIRE_ZONES }, () => ({ x: 0, z: 0, radius: 0, life: 0, damage: 0, sourceId: 0, nextTick: 0 })),
         fireZoneCount: 0,
         scrapItems: [],
         chests: [],

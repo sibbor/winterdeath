@@ -123,14 +123,16 @@ export class VehicleMovementSystem implements System {
             if (input.joystickMove) throttle += input.joystickMove.y * -1;
             if (input.joystickAim) steer += input.joystickAim.x;
 
-            if (def.category === VehicleCategory.BOAT && session.engine.water) {
-                session.engine.water.checkBuoyancy(vehicle.position.x, vehicle.position.y, vehicle.position.z, renderTime);
+            if (def.category === VehicleCategory.BOAT && session.engine.ground) {
+                // Route through GroundSystem SSoT (cache + Y-height + proximity gate).
+                // _buoyancyResult is populated as a side-effect when near water.
+                session.engine.ground.getGroundHeight(vehicle.position.x, vehicle.position.z, session, vehicle.position.y);
                 if (!_buoyancyResult.inWater || vehicle.position.y < _buoyancyResult.waterLevel - 2.0) {
                     if (throttle > 0.1 || throttle < -0.1) throttle = 0;
                 }
             } else if (session.engine.ground) {
-                // Terrain Alignment for Land Vehicles
-                const groundY = session.engine.ground.getGroundHeight(vehicle.position.x, vehicle.position.z, session);
+                // Terrain Alignment for Land Vehicles — pass Y for airborne gate
+                const groundY = session.engine.ground.getGroundHeight(vehicle.position.x, vehicle.position.z, session, vehicle.position.y);
                 const targetY = groundY;
 
                 // Simple gravity/ground snap
@@ -311,7 +313,7 @@ export class VehicleMovementSystem implements System {
                         const groundX = vehicle.position.x + _v1.x;
                         const groundZ = vehicle.position.z + _v1.z;
                         
-                        const groundY = session.engine.ground?.getGroundHeight(groundX, groundZ, session) || 0.1;
+                        const groundY = session.engine.ground?.getGroundHeight(groundX, groundZ, session, vehicle.position.y) || 0.1;
                         const groundMat = session.worldStreamer?.getGroundMaterial(groundX, groundZ) || 0;
                         
                         let pType = FXParticleType.SMOKE;

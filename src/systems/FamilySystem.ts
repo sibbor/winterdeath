@@ -291,8 +291,12 @@ export class FamilySystem implements System {
                 _animState.isSpeaking = simTime < (familyMember.speakingUntil || 0);
                 _animState.isThinking = simTime < (familyMember.thinkingUntil || 0);
 
-                if (engine?.water) {
-                    engine.water.checkBuoyancy(fm.position.x, fm.position.y, fm.position.z, renderTime);
+                if (engine?.ground) {
+                    // Route through GroundSystem SSoT — cache + Y-gate + proximity gate.
+                    // _buoyancyResult is populated as a side-effect when near water.
+                    const groundY = engine.ground.getGroundHeight(
+                        fm.position.x, fm.position.z, { engine, state: _session.state }, fm.position.y
+                    );
                     _animState.isSwimming = _buoyancyResult.depth > 1.2;
                     _animState.isWading = _buoyancyResult.depth > 0.4 && !_animState.isSwimming;
 
@@ -308,7 +312,7 @@ export class FamilySystem implements System {
                             const dz = fm.position.z - rz;
 
                             if (dx * dx + dz * dz > 0.5) {
-                                engine.water.spawnRipple(fm.position.x, fm.position.z, state.simTime, _animState.isSwimming ? 0.8 : 0.5);
+                                engine.water?.spawnRipple(fm.position.x, fm.position.z, _session.state.simTime, _animState.isSwimming ? 0.8 : 0.5);
                                 familyMember.lastRippleX = fm.position.x;
                                 familyMember.lastRippleZ = fm.position.z;
                             }
@@ -316,9 +320,9 @@ export class FamilySystem implements System {
                     } else {
                         _animState.isSwimming = false;
                         _animState.isWading = false;
-                        if (fm.position.y !== 0) {
-                            fm.position.y = THREE.MathUtils.lerp(fm.position.y, 0, 15 * delta);
-                            if (Math.abs(fm.position.y) < 0.01) fm.position.y = 0;
+                        if (fm.position.y !== groundY) {
+                            fm.position.y = THREE.MathUtils.lerp(fm.position.y, groundY, 15 * delta);
+                            if (Math.abs(fm.position.y - groundY) < 0.01) fm.position.y = groundY;
                         }
                     }
                 } else {

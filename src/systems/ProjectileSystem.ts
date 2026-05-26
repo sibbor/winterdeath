@@ -299,16 +299,30 @@ export class ProjectileSystem implements System {
 
         let hitCount = 0;
 
-        // DoD AoE Damage
-        for (let i = 0; i < EnemyPoolState.activeCount; i++) {
-            if ((EnemyPoolState.statusFlags[i] & ENTITY_STATUS.DEAD) !== 0) continue;
-            const dx = EnemyPoolState.posX[i] - px;
-            const dz = EnemyPoolState.posZ[i] - pz;
-            const distSq = dx * dx + dz * dz;
-            if (distSq < radius * radius) {
-                EnemyPoolState.hp[i] -= damage;
-                this.session?.state.applyDamage(EnemyManager.getActiveEnemies()[i], damage, DamageType.EXPLOSION, pool.weaponId[idx], true);
-                hitCount++;
+        // AoE Damage — SpatialGrid query replaces O(N) full-pool scan.
+        // Queries a cell radius equal to the explosion radius, matching all other hit-detection patterns.
+        if (this.session?.worldStreamer) {
+            const streamer = this.session.worldStreamer;
+            const poolIdx = streamer.getEnemyPool().nextIndex();
+            streamer.getNearbyEnemies(px, pz, radius, poolIdx);
+
+            const nearby = streamer.getEnemyPool().getPool(poolIdx);
+            const nearCount = streamer.getEnemyPool().getCount(poolIdx);
+            const activeEnemies = EnemyManager.getActiveEnemies();
+            const radSq = radius * radius;
+
+            for (let i = 0; i < nearCount; i++) {
+                const enemy = nearby[i];
+                if (!enemy) continue;
+                const eIdx = enemy.poolId | 0;
+                if ((EnemyPoolState.statusFlags[eIdx] & ENTITY_STATUS.DEAD) !== 0) continue;
+                const dx = EnemyPoolState.posX[eIdx] - px;
+                const dz = EnemyPoolState.posZ[eIdx] - pz;
+                if (dx * dx + dz * dz < radSq) {
+                    EnemyPoolState.hp[eIdx] -= damage;
+                    this.session.state.applyDamage(activeEnemies[eIdx], damage, DamageType.EXPLOSION, pool.weaponId[idx], true);
+                    hitCount++;
+                }
             }
         }
 
@@ -352,6 +366,9 @@ export class ProjectileSystem implements System {
                         fz.life = 8.0;
                         fz.damage = damage * 0.2;
                         fz.sourceId = pool.weaponId[idx];
+                        // Use explicit simTime timestamp for the first tick (0.5s after impact).
+                        // This replaces the fragile simTime % tickRate < dt modulo gate.
+                        fz.nextTick = (this.session.state.simTime || 0) + 500;
                         this.session.state.fireZoneCount = (fCount + 1) | 0;
                     }
                 }
@@ -380,6 +397,7 @@ export class ProjectileSystem implements System {
                     const last = fireZones[lastIdx];
                     fz.x = last.x; fz.z = last.z; fz.radius = last.radius;
                     fz.life = last.life; fz.damage = last.damage; fz.sourceId = last.sourceId;
+                    fz.nextTick = last.nextTick;
                 }
                 state.fireZoneCount = lastIdx;
                 fCount = lastIdx;
@@ -393,10 +411,12 @@ export class ProjectileSystem implements System {
                 WeaponFX.updateFireZoneVisuals(_v1, fz.radius, dt, ctx);
             }
 
-            // Damage (Tick every 0.5s)
-            const tickRate = 0.5;
-            if (simTime % tickRate < dt) {
-                const dmg = fz.damage * tickRate;
+            // Damage tick — explicit timestamp gate replaces the fragile simTime % tickRate < dt modulo.
+            // The old modulo fires incorrectly at low framerates (dt > tickRate) and can skip or double-tick.
+            const TICK_INTERVAL_MS = 500;
+            if (simTime >= fz.nextTick) {
+                fz.nextTick = simTime + TICK_INTERVAL_MS;
+                const dmg = fz.damage * (TICK_INTERVAL_MS / 1000);
                 const radSq = fz.radius * fz.radius;
 
                 // --- PLAYER COLLISION ---
@@ -411,25 +431,36 @@ export class ProjectileSystem implements System {
                     }
                 }
 
-                for (let j = 0; j < EnemyPoolState.activeCount; j++) {
+                // Enemy DoT — SpatialGrid query keeps this O(cells) instead of O(N_enemies).
+                // Runs at 2Hz so even a full scan would be cheap, but matching the established pattern.
+                if (ctx?.worldStreamer) {
+                    const streamer = ctx.worldStreamer;
+                    const poolIdx = streamer.getEnemyPool().nextIndex();
+                    streamer.getNearbyEnemies(fz.x, fz.z, fz.radius, poolIdx);
 
-                    if ((EnemyPoolState.statusFlags[j] & EnemyFlags.DEAD) !== 0) continue;
+                    const nearby = streamer.getEnemyPool().getPool(poolIdx);
+                    const nearCount = streamer.getEnemyPool().getCount(poolIdx);
 
-                    const dx = EnemyPoolState.posX[j] - fz.x;
-                    const dz = EnemyPoolState.posZ[j] - fz.z;
-                    const dSq = dx * dx + dz * dz;
+                    for (let j = 0; j < nearCount; j++) {
+                        const enemy = nearby[j];
+                        if (!enemy) continue;
+                        const jIdx = enemy.poolId | 0;
+                        if ((EnemyPoolState.statusFlags[jIdx] & EnemyFlags.DEAD) !== 0) continue;
 
-                    if (dSq <= radSq) {
-                        EnemyPoolState.hp[j] -= dmg;
-                        EnemyPoolState.statusFlags[j] = (EnemyPoolState.statusFlags[j] | EnemyFlags.BURNING) | 0;
+                        const dx = EnemyPoolState.posX[jIdx] - fz.x;
+                        const dz = EnemyPoolState.posZ[jIdx] - fz.z;
+                        if (dx * dx + dz * dz <= radSq) {
+                            EnemyPoolState.hp[jIdx] -= dmg;
+                            EnemyPoolState.statusFlags[jIdx] = (EnemyPoolState.statusFlags[jIdx] | EnemyFlags.BURNING) | 0;
 
-                        const enemy = enemies[j];
-                        if (enemy) {
-                            enemy.statusFlags = (enemy.statusFlags | EnemyFlags.BURNING) | 0;
-                            enemy.burnSource = fz.sourceId || DamageID.BURN;
+                            const enemyObj = enemies[jIdx];
+                            if (enemyObj) {
+                                enemyObj.statusFlags = (enemyObj.statusFlags | EnemyFlags.BURNING) | 0;
+                                enemyObj.burnSource = fz.sourceId || DamageID.BURN;
+                            }
+
+                            state.applyDamage(enemyObj, dmg, DamageType.BURN, fz.sourceId, false);
                         }
-
-                        state.applyDamage(enemy, dmg, DamageType.BURN, fz.sourceId, false);
                     }
                 }
             }
