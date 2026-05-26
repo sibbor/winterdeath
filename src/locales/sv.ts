@@ -161,6 +161,7 @@ export const sv = {
         player_died: "{name} dog",
         killed_by: "dödad av",
         died_from: "dog av",
+        enemy: "Fiende",
         time_elapsed: "TID FÖRFLUTEN",
         distance_traveled: "DISTANS",
         damage_taken: "SKADA TAGEN",
@@ -563,6 +564,12 @@ export const sv = {
         adventure_log: "ÄVENTYRLOGG",
         stats: "STATISTIK"
     },
+    terminals: {
+        armory: "UTRUSTNING",
+        spawner: "ZOMBIES",
+        skills: "FÄRDIGHETER",
+        environment: "MILJÖ"
+    },
     skills: {
         vitality: "VITALITET",
         vitality_desc: "Ökar maximal hälsa",
@@ -657,7 +664,6 @@ export const sv = {
             description: "Tar snabb skada under vattenytan.",
             prerequisite: "Nedsänkt i djupt vatten"
         },
-        vehicle_desc: "Krossa de infekterade under tyngden av ditt fordon. Höghastighetskollisioner ger betydande fysisk skada och knockback."
     },
     weapons: {
         smg: "SMG",
@@ -672,6 +678,14 @@ export const sv = {
         flamethrower: "Eldkastare",
         arc_cannon: "Arc-Kanon",
         radio: "Radio",
+    },
+    abilities: {
+        rush: "Rusning",
+        rush_desc: "Att rusa in i fiender slår dem upp i luften och orsakar fallskada",
+        dodge: "Duckning",
+        dodge_desc: "Att snabbt ducka undan attacker och slå tillbaka fiender",
+        vehicle: "Fordon",
+        vehicle_desc: "Krossa de infekterade under tyngden av ditt fordon. Höghastighetskollisioner ger betydande fysisk skada och knockback."
     },
     tips: [
         "Skjut bara! Obegränsad ammunition till pistoler.",

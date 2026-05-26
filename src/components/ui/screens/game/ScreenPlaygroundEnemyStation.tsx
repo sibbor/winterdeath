@@ -77,7 +77,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
 
         const spawned: any[] = [];
 
-        // 1. Spawn Standard Horde
+        // Spawn Horde
         let totalCount = 0;
         ZOMBIE_TYPES.forEach(type => {
             const count = counts[type] || 0;
@@ -94,16 +94,8 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
             }
         });
 
-        // 2. Spawn Selected Boss (If any)
-        if (selectedBoss !== null) {
-            handleSpawnBoss(selectedBoss, spawned);
-        }
-
-        if (totalCount > 10 || selectedBoss !== null) {
-            audioEngine.playSound(SoundID.ZOMBIE_GROWL_TANK);
-        }
-
         if (onSpawnEnemies) onSpawnEnemies(spawned);
+
         onClose();
     }, [biome, counts, spread, selectedBoss, onSpawnEnemies, onClose]);
 
@@ -147,11 +139,6 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                         <span className="text-zinc-400 text-[11px] uppercase">{t('ui.mass_spawning')}</span>
                     </div>
                     <div className="flex gap-2">
-                        {BOSS_IDS.map(id => (
-                            <button key={id} onClick={() => handleSpawnBoss(Number(id))} className="p-3 bg-zinc-800 border border-zinc-700 text-white rounded hover:bg-zinc-700 transition-colors uppercase font-mono text-xs">
-                                {t(DataResolver.getBossName(Number(id)))}
-                            </button>
-                        ))}
                         <button
                             onClick={handleClear}
                             className="px-4 py-2 border border-zinc-700 hover:border-red-600 text-zinc-500 hover:text-red-500 text-[12px] font-bold uppercase transition-colors rounded"

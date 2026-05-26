@@ -146,6 +146,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (!session) return;
 
         const state = session.state;
+        if (state.isPlayground) return;
         const statsBuffer = state.statsBuffer;
 
         // Telemetry
@@ -175,6 +176,27 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         UIEventRingBuffer.push(UIEventType.XP_GAIN, amount);
     }, [refs]);
 
+    const gainSp = useCallback((amount: number) => {
+        const session = refs.gameSessionRef.current;
+        if (!session || session.state.isPlayground) return;
+
+        session.state.sessionStats.spGained += amount;
+        session.state.statsBuffer[PlayerStatID.SKILL_POINTS] += amount;
+        UIEventRingBuffer.push(UIEventType.SP_GAIN, amount);
+    }, [refs]);
+
+    const gainScrap = useCallback((amount: number) => {
+        const session = refs.gameSessionRef.current;
+        if (!session || session.state.isPlayground) return;
+
+        session.state.sessionStats.scrapLooted += amount;
+
+        const statsBuffer = session.state.statsBuffer;
+        statsBuffer[PlayerStatID.SCRAP] += amount;
+        statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += amount;
+        UIEventRingBuffer.push(UIEventType.SCRAP_GAIN, amount);
+    }, [refs]);
+
     // --- PAUSE SYNCHRONIZATION ---
     useEffect(() => {
         const engine = refs.engineRef.current;
@@ -187,27 +209,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
         }
     }, [props.isPaused, props.currentGameState?.screen, refs]);
-
-    const gainSp = useCallback((amount: number) => {
-        const session = refs.gameSessionRef.current;
-        if (!session) return;
-
-        session.state.sessionStats.spGained += amount;
-        session.state.statsBuffer[PlayerStatID.SKILL_POINTS] += amount;
-        UIEventRingBuffer.push(UIEventType.SP_GAIN, amount);
-    }, [refs]);
-
-    const gainScrap = useCallback((amount: number) => {
-        const session = refs.gameSessionRef.current;
-        if (!session) return;
-
-        session.state.sessionStats.scrapLooted += amount;
-
-        const statsBuffer = session.state.statsBuffer;
-        statsBuffer[PlayerStatID.SCRAP] += amount;
-        statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += amount;
-        UIEventRingBuffer.push(UIEventType.SCRAP_GAIN, amount);
-    }, [refs]);
 
     const closeModal = useCallback(() => {
         const { props: currentProps } = latestStateRef.current;
@@ -287,14 +288,26 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         // Standard Damage/Hazard Effect via Stats System (which then calls applyPerk for the debuff)
                         const statsSystem = refs.gameSessionRef.current?.getSystem<PlayerStatsSystem>(SystemID.PLAYER_STATS);
                         if (statsSystem) {
+                            let dmgId = DamageID.OTHER;
+                            let dmgType = DamageType.PHYSICAL;
+                            switch (effectId) {
+                                case StatusEffectID.BURNING: dmgId = DamageID.BURN; dmgType = DamageType.BURN; break;
+                                case StatusEffectID.BLEEDING: dmgId = DamageID.BLEED; dmgType = DamageType.BLEED; break;
+                                case StatusEffectID.ELECTRIFIED: dmgId = DamageID.ELECTRIC; dmgType = DamageType.ELECTRIC; break;
+                                case StatusEffectID.FREEZING: dmgId = DamageID.FROST; dmgType = DamageType.FROST; break;
+                                case StatusEffectID.DROWNING: dmgId = DamageID.DROWNING; dmgType = DamageType.DROWNING; break;
+                            }
+
                             statsSystem.handlePlayerHit(
                                 refs.gameSessionRef.current!,
                                 amount,
                                 null,
-                                payload.damageType || DamageID.NONE,
+                                dmgType,
+                                dmgId,
                                 true, // isDoT
                                 effectId, // StatusEffectID
-                                payload.duration || 1500
+                                payload.duration || 1500,
+                                payload.amount || 1.0 // intensity
                             );
                         }
                     }
@@ -331,6 +344,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             case TriggerActionType.FAMILY_MEMBER_FOLLOW: {
                 UIEventRingBuffer.push(UIEventType.FAMILY_FOLLOW, 1);
+
+                // TODO: Gain 2 SP if it's the first time a family member follows the player
+                // gainSp(2);
                 break;
             }
 
@@ -1074,6 +1090,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         const pProps = latestStateRef.current.props;
                         const sectorData = pProps.currentSectorData || SectorSystem.getSector(pProps.currentSector || 0);
                         if (sectorData?.ambientLoop) audioEngine.playMusic(sectorData.ambientLoop);
+                        gainSp(2);
+
+                        // Current family member set to rescued
+                        const currentFamilyMember = refs.familyMemberRef.current;
+                        if (currentFamilyMember && !currentFamilyMember.rescued) {
+                            currentFamilyMember.rescued = true;
+                        }
                     }
                 }
             };

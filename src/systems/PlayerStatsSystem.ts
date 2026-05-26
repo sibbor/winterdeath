@@ -41,39 +41,6 @@ export class PlayerStatsSystem implements System {
         const state = session.state;
         if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
         if ((state.statusFlags & PlayerStatusFlags.STUNNED) !== 0) return;
-
-        this.checkAdrenalinePatch(session, simTime);
-
-        // --- DELEGATION ---
-        // Duration-based effects and modifier aggregation are now handled by PerkSystem.
-        // PlayerStatsSystem remains responsible only for one-off triggers and health.
-    }
-
-    // bakeFinalStats has been moved to PerkSystem for architectural consistency.
-
-    private checkAdrenalinePatch(session: GameSessionLogic, simTime: number) {
-        const state = session.state;
-        const perkID = StatusEffectID.ADRENALINE_PATCH;
-        const perk = PERKS[perkID];
-        if (!perk) return;
-
-        const hp = state.statsBuffer[PlayerStatID.HP];
-        const maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
-
-        if (hp > 0 && hp < maxHp * COMBAT.CRISIS_HP_RATIO) {
-            const cooldown = perk.cooldown ?? 60000;
-            if (simTime - state.lastAdrenalinePatchTime > cooldown) {
-                state.lastAdrenalinePatchTime = simTime;
-
-                const perkSystem = session.getSystem<any>(SystemID.PERK_SYSTEM);
-                if (perkSystem) {
-                    perkSystem.applyPerk(session, perkID);
-                }
-
-                const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                if (tracker) tracker.recordCrisisSave(session);
-            }
-        }
     }
 
     public handlePlayerHit(
@@ -90,6 +57,10 @@ export class PlayerStatsSystem implements System {
     ) {
         if (!session || !session.state) return;
         const state = session.state;
+
+        // --- INVINCIBILITY TERMINAL SETTING ---
+        if (state.sectorState?.isInvincible) return;
+
         const now = session.engine.simTime;
 
         if (state.statusFlags & PlayerStatusFlags.DEAD) return;

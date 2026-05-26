@@ -3,10 +3,11 @@ import { SystemID } from './System';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { InteractionType, InteractionPromptId, MetaActionId } from './ui/UIEventBridge';
 import { HudStore, HudStateSoA } from '../store/HudStore';
+import { StatusStore } from '../store/StatusStore';
 import { MAX_STATUS_EFFECTS, MAX_PASSIVES, MAX_BUFFS, MAX_DEBUFFS, MAX_MAP_ITEMS } from '../components/ui/hud/HudTypes';
 import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
 import { DataResolver } from '../core/data/DataResolver';
-import { WeaponID, ToolID } from '../entities/player/CombatTypes';
+import { ToolID } from '../entities/player/CombatTypes';
 import { InputAction } from '../core/engine/InputManager';
 import { CLUES } from '../content/clues';
 import { POIS } from '../content/pois';
@@ -139,8 +140,11 @@ export const HudSystem = {
         } else {
             _fastUpdateDetail.interactionActive = false;
             _fastUpdateDetail.interactionId = 0;
-            UIEventBridge.setInteractionPrompt(0); // InteractionPromptId.NONE
+            UIEventBridge.setInteractionPrompt(InteractionPromptId.NONE);
         }
+
+        // Sync StatusStore flags with the main engine state (Zero-GC)
+        StatusStore.setStatusFlags(state.statusFlags || 0);
 
         // ZERO-GC: Replaced CustomEvent with direct callback registry
         HudStore.emitFastUpdate(_fastUpdateDetail);

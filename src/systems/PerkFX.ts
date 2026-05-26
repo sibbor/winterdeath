@@ -96,29 +96,102 @@ export const PerkFX = {
         const particlesList = state.particles;
 
         if (playerPos && scene && particlesList) {
-            // --- BURNING 3D FLAMES ---
-            if (hasBurning && Math.random() < 0.22) {
-                const px = playerPos.x + (Math.random() - 0.5) * 0.45;
-                const py = 0.4 + Math.random() * 0.8;
-                const pz = playerPos.z + (Math.random() - 0.5) * 0.45;
-                FXSystem.spawnParticle(scene, particlesList, px, py, pz, FXParticleType.ENEMY_EFFECT_FLAME, 1);
+            // --- ENHANCED BURNING 3D FLAMES (Head Height & Enlarged) ---
+            if (hasBurning && Math.random() < 0.25) {
+                const px = playerPos.x + (Math.random() - 0.5) * 0.5;
+                const py = 1.6 + Math.random() * 0.5; // Head/chest height
+                const pz = playerPos.z + (Math.random() - 0.5) * 0.5;
+                FXSystem.spawnParticle(scene, particlesList, px, py, pz, FXParticleType.ENEMY_EFFECT_FLAME, 1, null, undefined, undefined, 2.5); // Enlarged scale 2.5
             }
 
-            // --- BLEEDING BLOOD DROPS TRAIL ---
-            if (hasBleeding && Math.random() < 0.16) {
-                const px = playerPos.x + (Math.random() - 0.5) * 0.2;
-                const py = 0.5 + Math.random() * 0.3;
-                const pz = playerPos.z + (Math.random() - 0.5) * 0.2;
-                _velScratch.set((Math.random() - 0.5) * 0.8, -4.0, (Math.random() - 0.5) * 0.8);
-                FXSystem.spawnParticle(scene, particlesList, px, py, pz, FXParticleType.BLOOD_SPLATTER, 1, null, _velScratch);
+            // --- ENHANCED BLEEDING (Outward sprouting blood splatters) ---
+            if (hasBleeding && Math.random() < 0.20) {
+                const px = playerPos.x;
+                const py = 1.5 + Math.random() * 0.5; // Chest/head level sprout
+                const pz = playerPos.z;
+                
+                const speed = 2.5 + Math.random() * 3.0;
+                const angle = Math.random() * Math.PI * 2;
+                _velScratch.set(Math.cos(angle) * speed, 1.5 + Math.random() * 3.5, Math.sin(angle) * speed);
+                
+                // Sprout blood splatters outwards
+                FXSystem.spawnParticle(scene, particlesList, px, py, pz, FXParticleType.BLOOD_SPLATTER, 3, null, _velScratch, undefined, 2.2, 1.2);
             }
 
-            // --- ELECTRIFIED / STUNNED SPARKS ---
-            if ((hasElectrified || hasStunned) && Math.random() < 0.25) {
-                const px = playerPos.x + (Math.random() - 0.5) * 0.4;
-                const py = 0.5 + Math.random() * 0.7;
-                const pz = playerPos.z + (Math.random() - 0.5) * 0.4;
-                FXSystem.spawnParticle(scene, particlesList, px, py, pz, FXParticleType.ENEMY_EFFECT_SPARK, 1);
+            // --- ENHANCED WADING & DROWNING SPLASHES (Sprouting water splatters) ---
+            const wading = !!state.isWading || (flags & PlayerStatusFlags.DROWNING) !== 0;
+            if (wading && Math.random() < 0.22) {
+                const px = playerPos.x;
+                const py = 0.15; // Water surface
+                const pz = playerPos.z;
+                
+                const speed = 2.0 + Math.random() * 2.5;
+                const angle = Math.random() * Math.PI * 2;
+                _velScratch.set(Math.cos(angle) * speed, 1.5 + Math.random() * 3.0, Math.sin(angle) * speed);
+                
+                // Sprout water splash outwards
+                FXSystem.spawnParticle(scene, particlesList, px, py, pz, FXParticleType.SPLASH, 4, null, _velScratch, undefined, 2.6, 1.0);
+            }
+
+            // --- ENHANCED ELECTRIFIED / STUNNED SPARKS (Head Height & Enlarged) ---
+            if ((hasElectrified || hasStunned) && Math.random() < 0.28) {
+                const px = playerPos.x + (Math.random() - 0.5) * 0.5;
+                const py = 1.5 + Math.random() * 0.5; // Head/chest height
+                const pz = playerPos.z + (Math.random() - 0.5) * 0.5;
+                FXSystem.spawnParticle(scene, particlesList, px, py, pz, FXParticleType.ENEMY_EFFECT_SPARK, 1, null, undefined, undefined, 2.5); // Enlarged scale 2.5
+            }
+
+            // --- ENHANCED BUFFS: 100+ SWIRLING INSTANCED GREEN VORTEX & DUST TRAIL ---
+            const hasAnyBuff = hasShield || hasAdrenaline || hasGibMaster || ((flags & PlayerStatusFlags.QUICK_FINGER) !== 0);
+            if (hasAnyBuff) {
+                // Spiral 3 instanced green particles per frame. Over 1.2s particle life at 60fps, 
+                // this sustains a massive vortex of ~216 glowing green swirling particles around the player.
+                const spawnCount = 3;
+                for (let k = 0; k < spawnCount; k++) {
+                    const t = renderTime * 0.008 + (k * Math.PI * 2 / spawnCount);
+                    const radius = 0.75;
+                    const px = playerPos.x + Math.cos(t) * radius;
+                    // Spiral up and down from knees to head height
+                    const py = 0.3 + (Math.sin(renderTime * 0.004 + k) * 0.5 + 0.5) * 1.7;
+                    const pz = playerPos.z + Math.sin(t) * radius;
+
+                    // Tangential orbit vector + upward lift
+                    _velScratch.set(-Math.sin(t) * 3.2, 1.2, Math.cos(t) * 3.2);
+
+                    FXSystem.spawnParticle(
+                        scene,
+                        particlesList,
+                        px, py, pz,
+                        FXParticleType.ENEMY_EFFECT_STUN, // Fast instanced glowing spark
+                        1,
+                        null,
+                        _velScratch,
+                        COLORS.GREEN.num,
+                        1.8, // Glowing green scale 1.8
+                        1.2
+                    );
+                }
+
+                // Leave a beautiful grey dust cloud behind the player when moving
+                const playerState = ctx.state;
+                if (playerState && playerState.isMoving && Math.random() < 0.25) {
+                    const playerRotY = _shieldMesh.parent ? _shieldMesh.parent.rotation.y : 0;
+                    _velScratch.set((Math.random() - 0.5) * 0.4, 0.15, (Math.random() - 0.5) * 0.4);
+                    FXSystem.spawnParticle(
+                        scene,
+                        particlesList,
+                        playerPos.x - Math.cos(playerRotY) * 0.4,
+                        0.1,
+                        playerPos.z + Math.sin(playerRotY) * 0.4,
+                        FXParticleType.SMOKE,
+                        2,
+                        null,
+                        _velScratch,
+                        0xbbbbbb, // Dust color
+                        2.2, // Large dust puffs
+                        0.9
+                    );
+                }
             }
         }
 

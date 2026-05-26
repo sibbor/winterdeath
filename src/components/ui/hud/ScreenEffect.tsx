@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { HudStore } from '../../../store/HudStore';
 import { StatusStore } from '../../../store/StatusStore';
-import { COLORS, VIGNETTE_COLORS } from '../../../utils/ui/ColorUtils';
+import { VIGNETTE_COLORS } from '../../../utils/ui/ColorUtils';
 import { PlayerStatusFlags } from '../../../entities/player/PlayerTypes';
 
 /**

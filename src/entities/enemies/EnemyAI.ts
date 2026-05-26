@@ -152,16 +152,16 @@ export const EnemyAI = {
                         finalDeathState = EnemyDeathState.BURNED;
                     } else if (e.type === EnemyType.BOMBER || (e.statusFlags & EnemyFlags.BOSS) !== 0) {
                         finalDeathState = EnemyDeathState.EXPLODED;
+                    } else if ((playerStatusFlags & PlayerStatusFlags.GIB_MASTER) !== 0 && weapon) {
+                        // GIB_MASTER Perk allows ALL shots from ALL projectile weapons to GIB enemies on kill!
+                        finalDeathState = EnemyDeathState.GIBBED;
                     } else if (weaponImpact === EnemyDeathState.GIBBED) {
                         // Weapons that NATIVELY GIB (Shotgun, Revolver)
-                        if (isHighImpact || (playerStatusFlags & PlayerStatusFlags.GIB_MASTER) !== 0) {
+                        if (isHighImpact) {
                             finalDeathState = EnemyDeathState.GIBBED;
                         } else {
                             finalDeathState = EnemyDeathState.SHOT;
                         }
-                    } else if ((playerStatusFlags & PlayerStatusFlags.GIB_MASTER) !== 0 && isHighImpact) {
-                        // GIB_MASTER Perk allows ANY weapon to GIB on High Impact hits
-                        finalDeathState = EnemyDeathState.GIBBED;
                     } else if (weapon) {
                         finalDeathState = EnemyDeathState.SHOT;
                     }

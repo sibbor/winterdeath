@@ -25,7 +25,7 @@ import { GameSessionLogic } from '../../game/session/GameSessionLogic';
 import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
 import { WorldStreamer } from '../../core/world/WorldStreamer';
 import { ChunkManager } from '../../core/world/ChunkManager';
-import { SectorContext, SectorUpdateContext } from '../../game/session/SectorTypes';
+import { SectorContext, SectorUpdateContext, BossID } from '../../game/session/SectorTypes';
 import { SPATIAL_CONFIG } from '../../config/SpatialConfig';
 import { SectorSystem } from '../../systems/SectorSystem';
 import { LootSystem } from '../../systems/LootSystem';
@@ -346,7 +346,7 @@ export const EnemyManager = {
                     case EnemyDeathState.DROWNED:
                         e.mesh.visible = true;
                         e.mesh.matrixAutoUpdate = true;
-                        
+
                         // Ensure the standalone body mesh is temporarily visible for dying animations
                         const dBody = e.bodyMesh;
                         if (dBody) dBody.visible = true;
@@ -669,6 +669,7 @@ export const EnemyManager = {
         e.lastSeenTime = 0;
         e.awareness = 0;
         e.lastHeardNoiseType = NoiseType.NONE;
+        e.bossId = BossID.NONE;
 
         // --- ZERO-GC VECTOR ALLOCATION (Pool warmup phase) ---
         if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3();
@@ -742,7 +743,7 @@ export const EnemyManager = {
     },
 
     spawnBoss: (scene: THREE.Scene, pos: { x: number, z: number }, bossData: any, isForced: boolean = false) => {
-        // VINTERDÖD STABILIZATION: Generic Sector Gating
+        // Generic Sector Gating
         if (_currentSession && !isForced) {
             const sectorDef = SectorSystem.getSector(_currentSession.sectorId);
             if (sectorDef && sectorDef.spawnZombiesOnSector === false) {
@@ -756,11 +757,16 @@ export const EnemyManager = {
 
             const index = activeCount;
             activeEnemies[index] = boss;
+            boss.poolId = index;
 
             // Sync SoA
             EnemyPoolState.posX[index] = boss.mesh.position.x;
             EnemyPoolState.posY[index] = boss.mesh.position.y;
             EnemyPoolState.posZ[index] = boss.mesh.position.z;
+            EnemyPoolState.hp[index] = boss.hp;
+            EnemyPoolState.maxHp[index] = boss.maxHp;
+            EnemyPoolState.types[index] = boss.type;
+            EnemyPoolState.deathState[index] = boss.deathState;
             EnemyPoolState.statusFlags[index] = boss.statusFlags;
 
             activeCount++;
@@ -1074,10 +1080,21 @@ export const EnemyManager = {
         maxForce: number,
         maxDamage: number,
         damageType: DamageType,
-        damageSource: DamageID
+        damageSource: DamageID,
+        direction?: THREE.Vector3
     ) => {
         const streamer = ctx.worldStreamer;
         if (!streamer) return;
+
+        let hasDir = false;
+        if (direction && direction.lengthSq() > 0.001) {
+            _v2.copy(direction).normalize();
+            _v2.y = 0;
+            if (_v2.lengthSq() > 0.001) {
+                _v2.normalize();
+                hasDir = true;
+            }
+        }
 
         let hitAnyone = false;
         const enPool = streamer.getEnemyPool();
@@ -1097,6 +1114,10 @@ export const EnemyManager = {
             const distSq = _v1.lengthSq();
 
             if (distSq < radiusSq) {
+                const isGrappling = e.state === AIState.GRAPPLE;
+                if (!isGrappling && hasDir) {
+                    if (_v1.dot(_v2) < 0) continue;
+                }
                 hitAnyone = true;
                 const falloff = 1.0 - (distSq / radiusSq);
 

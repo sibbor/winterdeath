@@ -67,7 +67,9 @@ export enum SystemID {
     CAMP_CHATTER = 45,
     CAMP_FAMILY_ANIMATION = 46,
 
-    COUNT = 47
+    DISCOVERY_SYSTEM = 47,
+
+    COUNT = 48
 }
 
 export const getSystemName = (id: SystemID): string => {

@@ -202,6 +202,7 @@ export const en = {
         player_died: "{name} died",
         killed_by: "killed by",
         died_from: "died from",
+        enemy: "Enemy",
         time_elapsed: "TIME ELAPSED",
         distance_traveled: "DISTANCE",
         damage_taken: "DAMAGE TAKEN",
@@ -550,6 +551,12 @@ export const en = {
         adventure_log: "ADVENTURE LOG",
         stats: "STATISTICS"
     },
+    terminals: {
+        armory: "ARMORY",
+        spawner: "ZOMBIE SPAWNER",
+        skills: "SKILLS",
+        environmental: "ENVIRONMENTALS"
+    },
     enemies: {
         zombies: {
             WALKER: {
@@ -712,7 +719,6 @@ export const en = {
             description: "Taking rapid damage while submerged in deep water.",
             prerequisite: "Submerged in deep water"
         },
-        vehicle_desc: "Crush the infected under the weight of your vehicle. High-speed collisions deal significant physical damage and knockback."
     },
     weapons: {
         smg: "SMG",
@@ -727,6 +733,14 @@ export const en = {
         flamethrower: "Flamethrower",
         arc_cannon: "Arc-Cannon",
         radio: "Radio",
+    },
+    abilities: {
+        rush: "Rush",
+        rush_desc: "Rushing into enemies knocking them up in the air, causing fall damage",
+        dodge: "Dodge",
+        dodge_desc: "Performing quick dodges evades attacks and knocks back enemies",
+        vehicle: "Vehicle",
+        vehicle_desc: "Crush the infected under the weight of your vehicle. High-speed collisions deal significant physical damage and knockback."
     },
     tips: [
         "Just shoot! Unlimited gun ammo.",

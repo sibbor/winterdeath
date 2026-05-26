@@ -31,6 +31,7 @@ import { WeaponFX } from '../../systems/WeaponFX';
 import { PerkFX } from '../../systems/PerkFX';
 import { SectorUpdateContext } from './SectorTypes';
 import { ChunkManager } from '../../core/world/ChunkManager';
+import { DiscoverySystem } from '../../systems/DiscoverySystem';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -610,10 +611,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         _sectorUpdateContext.setInteraction = callbacks.setInteraction;
         _sectorUpdateContext.setOverlay = callbacks.setOverlay;
         _sectorUpdateContext.state = state;
-        _sectorUpdateContext.gameState = state; // Legacy compat
+        _sectorUpdateContext.gameState = state;
         _sectorUpdateContext.triggerSystem = session.triggerSystem;
-        _sectorUpdateContext.handleDiscovery = (type: any, id: any, smi?: number, title?: string, details?: string, payload?: any) =>
-            session.handleDiscovery(type, id, smi, title, details, payload);
+        _sectorUpdateContext.handleDiscovery = (type: any, id: any, smi?: number, title?: string, details?: string, payload?: any) => {
+            const discoverySystem = session.getSystem<DiscoverySystem>(SystemID.DISCOVERY_SYSTEM);
+            return discoverySystem ? discoverySystem.handleDiscovery(session, type, id, smi, title, details, payload) : false;
+        };
 
         _sectorUpdateContext.applyDamage = state.applyDamage;
         _sectorUpdateContext.playSound = (id: any) => audioEngine.playSound(id);

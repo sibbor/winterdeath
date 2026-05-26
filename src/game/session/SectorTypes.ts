@@ -40,7 +40,7 @@ export enum BossID {
 export enum TerminalType {
     ARMORY = 0,
     SPAWNER = 1,
-    ENV = 2,
+    ENVIRONMENT = 2,
     SKILLS = 3
 }
 
@@ -190,6 +190,7 @@ export interface SectorDef {
     generate?: (ctx: SectorContext) => Promise<void>;
     onSectorUpdate: (ctx: SectorUpdateContext) => void;
     onInteract?: (id: string, object: THREE.Object3D, state: any, events: any) => void;
+    onPlayerRespawn?: (ctx: SectorContext, state: any, engine: any) => void;
 }
 
 export interface SectorUpdateContext {

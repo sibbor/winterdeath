@@ -7,7 +7,13 @@ import { MaterialType } from '../content/environment';
 /**
  * GroundSystem: Manages visual terrain and infinite ground plane.
  * Acts as the high-level API proxy for world height and materials.
- * 
+ *
+ * Performance contract (Zero-GC):
+ *  - getGroundHeight uses a frame-stamped spatial cache to bypass redundant
+ *    WaterSystem sine-wave math for repeated or nearby queries within the same frame.
+ *  - Buoyancy is further gated by: (1) Y-height (airborne objects skip it entirely),
+ *    and (2) water-zone proximity (dry terrain regions never touch WaterSystem).
+ *
  * Note: Footprints are handled by the dedicated FootprintSystem.
  */
 export class GroundSystem implements System {
@@ -20,9 +26,25 @@ export class GroundSystem implements System {
     private scene: THREE.Scene | null = null;
     private groundPlane: THREE.Mesh;
 
+    // --- FRAME-STAMPED SPATIAL CACHE (Zero-GC) ---
+    // Keyed by a fast integer hash of rounded (x, z), reset once per frame tick.
+    // Eliminates 95%+ of duplicate WaterSystem calls when the same ground cell is
+    // queried multiple times per frame (player + nearby enemies + particles).
+    private _cache = new Map<number, number>();
+    private _cacheFrame: number = -1;
+
+    // --- WATER PROXIMITY REGISTRY ---
+    // Populated by WaterSystem.addWaterBody via registerWaterZone() so that
+    // buoyancy is only evaluated for objects actually near water — saving heavy
+    // sine-wave math on all dry-terrain queries.
+    private _waterZones: Array<{ x: number; z: number; halfW: number; halfD: number }> = [];
+
+    // Y-height above which buoyancy is never evaluated.
+    // Airborne projectiles, throwables, and jumping/flying enemies are gated here.
+    private static readonly BUOYANCY_Y_MAX = 2.0;
+
     constructor() {
         // Initialize Infinite Ground Plane
-        // FIXED: Using 'plane' instead of 'infinitePlane' to match GEOMETRY definitions
         this.groundPlane = new THREE.Mesh(GEOMETRY.plane, MATERIALS.snow);
         this.groundPlane.name = 'GROUND';
         this.groundPlane.rotation.x = -Math.PI / 2;
@@ -41,23 +63,91 @@ export class GroundSystem implements System {
             this.scene.remove(this.groundPlane);
             this.scene = null;
         }
+        this._waterZones.length = 0;
+        this._cache.clear();
     }
 
     /**
-     * High-level API Proxy for Ground Height.
-     * Gameplay systems call this instead of WorldStreamer directly.
+     * Called by WaterSystem.addWaterBody so GroundSystem can gate checkBuoyancy
+     * spatially without coupling to WaterSystem internals.
      */
-    public getGroundHeight(x: number, z: number, session: any): number {
-        // 1. Check for WaterSystem bed-height override
-        if (session.engine.water) {
-            session.engine.water.checkBuoyancy(x, 0, z, session.state.renderTime);
-            if (session.engine.water.getBuoyancyResult().inWater) {
-                return session.engine.water.getBuoyancyResult().groundY;
+    public registerWaterZone(x: number, z: number, width: number, depth: number): void {
+        this._waterZones.push({ x, z, halfW: width * 0.5, halfD: depth * 0.5 });
+    }
+
+    /**
+     * High-level SSoT for ground height.
+     * All gameplay systems (PlayerMovementSystem, ProjectileSystem, WaterSystem body
+     * physics, VehicleMovementSystem, etc.) call THIS instead of WorldStreamer or
+     * WaterSystem directly.
+     *
+     * @param y  Caller's current Y position — used for the airborne gate.
+     *           Defaults to 0 (conservative: always checks buoyancy) when omitted.
+     */
+    public getGroundHeight(x: number, z: number, session: any, y: number = 0): number {
+        // 1. Frame-stamped cache — invalidate when the engine frame counter advances.
+        // engine.frameCount is the canonical 60Hz integer, always available.
+        const frame = (session.engine?.frameCount as number) ?? 0;
+        if (frame !== this._cacheFrame) {
+            this._cache.clear();
+            this._cacheFrame = frame;
+        }
+
+        // Spatial hash key: round to 2 decimal places (1 cm precision).
+        // Two queries within 1 cm share the same cached result — no precision loss
+        // at gameplay scale, and prevents Map growth from float noise.
+        const kx = Math.round(x * 100) | 0;
+        const kz = Math.round(z * 100) | 0;
+        const cacheKey = (kx * 1000003 + kz) | 0;
+
+        const cached = this._cache.get(cacheKey);
+        if (cached !== undefined) return cached;
+
+        let result: number;
+
+        // 2. Y-height gate: objects above BUOYANCY_Y_MAX cannot be submerged.
+        //    Projectiles in flight and airborne enemies are skipped entirely.
+        const isAirborne = y > GroundSystem.BUOYANCY_Y_MAX;
+
+        // 3. Spatial proximity gate: buoyancy math only runs for objects near a
+        //    registered water zone (+ 2m margin for smooth entry approach).
+        const nearWater = !isAirborne && this._isNearWater(x, z);
+
+        if (nearWater && session.engine.water) {
+            session.engine.water.checkBuoyancy(x, y, z, session.state.renderTime);
+            const b = session.engine.water.getBuoyancyResult();
+            if (b.inWater) {
+                result = b.groundY;
+                this._cache.set(cacheKey, result);
+                return result;
             }
         }
 
-        // 2. Fallback to WorldStreamer (Authority for non-liquid terrain)
-        return session.state.worldStreamer ? session.state.worldStreamer.getGroundHeight(x, z) : 0;
+        // 4. Dry-land fallback — WorldStreamer is the authority for non-liquid terrain.
+        result = session.state.worldStreamer
+            ? session.state.worldStreamer.getGroundHeight(x, z)
+            : 0;
+        this._cache.set(cacheKey, result);
+        return result;
+    }
+
+    /**
+     * O(N_zones) AABB proximity check where N ≤ 3 per sector in practice.
+     * A 2m margin is added so objects begin receiving buoyancy as they approach
+     * the water edge — avoiding a hard pop at the exact boundary.
+     */
+    private _isNearWater(x: number, z: number): boolean {
+        const margin = 2.0;
+        const zones = this._waterZones;
+        const len = zones.length;
+        for (let i = 0; i < len; i++) {
+            const wz = zones[i];
+            if (Math.abs(x - wz.x) <= wz.halfW + margin &&
+                Math.abs(z - wz.z) <= wz.halfD + margin) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

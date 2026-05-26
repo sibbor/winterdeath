@@ -7,6 +7,7 @@ import { INITIAL_ENEMY_POOL } from '../content/constants';
 import { DamageID, DamageType, EnemyAttackType } from '../entities/player/CombatTypes';
 import { StatusEffectID } from '../types/StatusEffects';
 import { EnemyPoolState } from '../core/state/EnemyPool';
+import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
 
 // --- TYPE DEFINITIONS ---
 interface Callbacks {
@@ -61,7 +62,7 @@ export class EnemySystem implements System {
     private syncDeferredRecycle() {
         const pool = EnemyPoolState;
         for (let i = pool.activeCount - 1; i >= 0; i--) {
-            if ((pool.statusFlags[i] & ENTITY_STATUS.DEAD) !== 0) {
+            if (pool.deathState[i] === EnemyDeathState.DEAD) {
                 EnemyManager.recycleEnemy(i);
             }
         }

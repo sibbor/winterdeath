@@ -5,7 +5,7 @@ import { t } from '../../../../utils/i18n';
 import { UiSounds } from '../../../../utils/audio/AudioLib';
 import { LEVEL_CAP, PLAYER_BASE_SPEED } from '../../../../content/constants';
 import { useOrientation } from '../../../../hooks/useOrientation';
-import { ColorPair, COLORS, colorToHex } from '../../../../utils/ui/ColorUtils';
+import { COLORS } from '../../../../utils/ui/ColorUtils';
 import ScreenModalLayout, { TacticalCard, TacticalButton, HORIZONTAL_HATCHING_STYLE } from '../../layout/ScreenModalLayout';
 
 const SKILLS_CONFIG = [

@@ -121,23 +121,6 @@ export class PlayerMovementSystem implements System {
         this.updateInvincibleGlow(state, session.state.renderTime);
     }
 
-    private checkReflexShield(session: GameSessionLogic, simTime: number) {
-        const state = session.state;
-        const perkID = StatusEffectID.REFLEX_SHIELD;
-
-        const perk = PERKS[perkID];
-        const cooldown = perk?.cooldown ?? 10000;
-
-        if (simTime - state.lastReflexShieldTime > cooldown) {
-            state.lastReflexShieldTime = simTime;
-
-            // Centralized Trigger (Clears debuffs!)
-            const perkSystem = session.getSystem<any>(SystemID.PERK_SYSTEM);
-            if (perkSystem) {
-                perkSystem.applyPerk(session, perkID);
-            }
-        }
-    }
 
     private updateInvincibleGlow(state: any, renderTime: number) {
         if (state.sectorState.isInvincible && this._invincibilityMesh) {
@@ -186,8 +169,6 @@ export class PlayerMovementSystem implements System {
                         // --- TRACK NEW METRIC (UNIFIED) ---
                         const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                         if (tracker) tracker.recordDodge(session);
-
-                        this.checkReflexShield(session, simTime);
                     }
                 }
             }
@@ -224,7 +205,6 @@ export class PlayerMovementSystem implements System {
                         }
 
                         state.lastStaminaUseTime = simTime;
-                        this.checkReflexShield(session, simTime);
                     } else {
                         state.isRushing = false;
                         state.statusFlags &= ~PlayerStatusFlags.RUSHING;
@@ -240,11 +220,14 @@ export class PlayerMovementSystem implements System {
         let isSwimming = state.isSwimming || false;
         let isWading = false;
 
-        if (session.engine.water) {
-            session.engine.water.checkBuoyancy(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z, session.state.renderTime);
+        if (session.engine.ground) {
+            // getGroundHeight is the SSoT: it applies the frame-stamped cache, Y-height gate,
+            // and water-proximity gate before calling checkBuoyancy — populating _buoyancyResult
+            // as a side-effect. No direct checkBuoyancy call is needed here.
+            const groundY = session.engine.ground.getGroundHeight(
+                playerGroup.position.x, playerGroup.position.z, session, playerGroup.position.y
+            );
             inWater = _buoyancyResult.inWater && !state.vehicle.active;
-
-            const groundY = session.engine.ground ? session.engine.ground.getGroundHeight(playerGroup.position.x, playerGroup.position.z, session) : 0;
 
             if (inWater) {
                 const flatDepth = _buoyancyResult.baseWaterLevel - _buoyancyResult.groundY;
@@ -277,6 +260,7 @@ export class PlayerMovementSystem implements System {
             }
         }
 
+
         state.isSwimming = isSwimming;
         state.isWading = isWading;
 
@@ -306,8 +290,6 @@ export class PlayerMovementSystem implements System {
         const rushRampSpeed = delta * PLAYER.RUSH_RAMP_SPEED; // 2 seconds for full ramp
 
         if (state.isRushing) {
-            this.checkReflexShield(session, simTime);
-
             // --- PROGRESSIVE RAMP-UP (2.0s) ---
             state.rushFactor = Math.min(1.0, state.rushFactor + rushRampSpeed);
 
@@ -371,7 +353,6 @@ export class PlayerMovementSystem implements System {
 
             if (!state.dodgeSmokeSpawned && !inWater) {
                 state.dodgeSmokeSpawned = true;
-                this.checkReflexShield(session, simTime);
                 audioEngine.playSound(SoundID.DASH);
                 session.makeNoise(playerGroup.position, NoiseType.PLAYER_DODGING, NOISE_RADIUS[NoiseType.PLAYER_DODGING]);
 
@@ -555,7 +536,8 @@ export class PlayerMovementSystem implements System {
                 state.isDodging ? 15 : 50, // Max Force
                 0,                         // Max Damage (Damage only applied on landing!)
                 DamageType.PHYSICAL,
-                state.isDodging ? DamageID.DODGE : DamageID.RUSH
+                state.isDodging ? DamageID.DODGE : DamageID.RUSH,
+                state.isDodging ? state.dodgeDir : baseMoveVec
             );
         }
 

@@ -13,6 +13,7 @@ import { VehicleID } from '../entities/vehicles/VehicleTypes';
 import { InputAction } from '../core/engine/InputManager';
 import { TriggerSystem } from './TriggerSystem';
 import { VehicleManager } from './VehicleManager';
+import { DataResolver } from '../core/data/DataResolver';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -549,7 +550,8 @@ export class InteractionSystem implements System {
         if (!collectible || collectible.userData.pickedUp) return;
 
         const collectibleId = collectible.userData.collectibleId;
-        if (!getCollectibleById(collectibleId)) return;
+        const colSmi = DataResolver.resolveCollectibleID(collectibleId);
+        if (colSmi === undefined || !getCollectibleById(colSmi)) return;
 
         collectible.userData.pickedUp = true;
         UiSounds.playPickUp();

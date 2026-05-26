@@ -8,6 +8,7 @@ import { InteractionPromptId } from './ui/UIEventBridge';
 import { WorldStreamer } from '../core/world/WorldStreamer';
 import { TriggerShape, MAX_ENTITIES } from '../content/constants';
 import { ClueType } from '../game/session/SectorTypes';
+import { DiscoverySystem } from './DiscoverySystem';
 
 export class TriggerSystem implements System {
     readonly systemId = SystemID.TRIGGER_SYSTEM;
@@ -495,14 +496,16 @@ export class TriggerSystem implements System {
         const type = this.triggerTypes[idx] | 0;
         const state = session.state;
 
-        console.log("Triggered:", type, m.id);
+        const discoverySystem = session.getSystem(SystemID.DISCOVERY_SYSTEM) as DiscoverySystem;
 
         switch (type) {
             case TriggerType.CLUE: {
                 const clue = DataResolver.getClues()[m.id as any];
                 if (clue) {
                     const clueSmi = clue.id | 0;
-                    session.handleDiscovery(DiscoveryType.CLUE, m.id, clueSmi);
+                    if (discoverySystem) {
+                        discoverySystem.handleDiscovery(session, DiscoveryType.CLUE, m.id, clueSmi);
+                    }
 
                     const subType = clue.type === ClueType.SPEAK ? ChatBubbleSubtype.SPEAK : ChatBubbleSubtype.THOUGHT;
                     const duration = CHAT_BUBBLE_DURATIONS[subType];
@@ -521,7 +524,9 @@ export class TriggerSystem implements System {
             case TriggerType.POI: {
                 const poi = DataResolver.getPois()[m.id as any];
                 const poiSmi = poi ? poi.id : 0;
-                session.handleDiscovery(DiscoveryType.POI, m.id, poiSmi);
+                if (discoverySystem) {
+                    discoverySystem.handleDiscovery(session, DiscoveryType.POI, m.id, poiSmi);
+                }
 
                 const duration = CHAT_BUBBLE_DURATIONS[ChatBubbleSubtype.SPEAK];
                 const encodedP2 = duration | (ChatBubbleSubtype.SPEAK << 16);
@@ -537,7 +542,9 @@ export class TriggerSystem implements System {
             case TriggerType.COLLECTIBLE: {
                 const col = DataResolver.getCollectibles()[m.id as any];
                 const colSmi = col ? col.id : 0;
-                session.handleDiscovery(DiscoveryType.COLLECTIBLE, m.id, colSmi);
+                if (discoverySystem) {
+                    discoverySystem.handleDiscovery(session, DiscoveryType.COLLECTIBLE, m.id, colSmi);
+                }
                 break;
             }
         }

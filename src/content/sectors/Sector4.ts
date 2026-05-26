@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, EnvironmentalZone } from '../../game/session/SectorTypes';
+import { SectorDef, SectorContext, EnvironmentalZone, TerminalType } from '../../game/session/SectorTypes';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { MATERIALS } from '../../utils/assets';
 import { t } from '../../utils/i18n';
@@ -9,7 +9,7 @@ import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
 import { VehicleGenerator } from '../../core/world/generators/VehicleGenerator';
 import { GeneratorUtils } from '../../core/world/generators/GeneratorUtils';
-import { InteractionType, InteractionShape } from '../../systems/ui/UIEventBridge';
+import { InteractionType, InteractionShape, InteractionSubType } from '../../systems/ui/UIEventBridge';
 import { ToneType, SoundID } from '../../utils/audio/AudioTypes';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { NoiseType } from '../../entities/enemies/EnemyBase';
@@ -17,7 +17,7 @@ import { VEGETATION_TYPE } from '../../content/environment';
 import { WeatherType, GroundType } from '../../core/engine/EngineTypes';
 import { CAMERA_HEIGHT } from '../constants';
 import { StatusEffectID } from '../../content/perks';
-import { DamageID } from '../../entities/player/CombatTypes';
+import { DamageID, DamageType } from '../../entities/player/CombatTypes';
 import { FXParticleType } from '../../types/FXTypes';
 import { EnemyFlags } from '../../entities/enemies/EnemyTypes';
 import { OverlayType } from '../../components/ui/hud/HudTypes';
@@ -150,7 +150,7 @@ export const Sector4: SectorDef = {
         fov: 50,
         sky: {
             time: 0.8,
-            timeScale: 0.8, // Really fast day cycle for testing
+            timeScale: 0.05,
             atmosphereColor: 0x0a0a0c,
             celestial: {
                 radius: 150, // Scaled up due to distance
@@ -190,6 +190,17 @@ export const Sector4: SectorDef = {
     setupProps: async (ctx: SectorContext) => {
         const { scene } = ctx;
 
+        // Reset Sector 4's bus state on initial load to ensure a clean slate,
+        // completely decoupled from other sector states (e.g. Sector 0's exploded tunnel bus).
+        if (ctx.sectorState) {
+            ctx.sectorState.busExploded = false;
+            ctx.sectorState.busPlanting = false;
+            ctx.sectorState.busPlantingTime = 0;
+            ctx.sectorState.busExplosionHandled = false;
+            ctx.sectorState.busExplosionTime = 0;
+            ctx.sectorState.lastBusBeep = 0;
+        }
+
         let startTime = performance.now();
         const yieldIfBudgetExceeded = async () => {
             if (performance.now() - startTime > 12) {
@@ -216,43 +227,43 @@ export const Sector4: SectorDef = {
         scene.add(plaza);
 
         // Add some lights to the plaza - SHADOWS DISABLED TO PREVENT TEXTURE LIMIT CRASH
-        const pl = new THREE.PointLight(0xffaa00, 50, 30);
-        pl.position.set(0, 8, 0);
+        const pl = new THREE.PointLight(0xffaa00, 200, 30);
+        pl.position.set(0, 15, 0);
         pl.castShadow = false;
         scene.add(pl);
 
-        // --- INTERACTION STATIONS (Circular Layout) ---
-        const stationDist = 13; // Distance from center
-        const s_scale = 1.5;   // Magnificent Scale
+        // --- INTERACTION TERMINALS ---
+        const terminalDist = 13;
+        const terminalScale = 2.5;
 
         // 1. Armory (West)
-        await SectorBuilder.spawnTerminal(ctx, -stationDist, 0, 'TERMINAL_ARMORY', s_scale);
-        const armoryLabel = ObjectGenerator.createTextSprite(t('stations.armory'));
-        armoryLabel.position.set(-stationDist, 4.5, 0);
+        await SectorBuilder.spawnTerminal(ctx, -terminalDist, 0, TerminalType.ARMORY, terminalScale);
+        const armoryLabel = ObjectGenerator.createTextSprite(t('terminals.armory'));
+        armoryLabel.position.set(-terminalDist, 4.5, 0);
         armoryLabel.scale.set(10, 1.5, 1);
         scene.add(armoryLabel);
         await yieldIfBudgetExceeded();
 
         // 2. Enemy Spawner (North)
-        await SectorBuilder.spawnTerminal(ctx, 0, -stationDist, 'TERMINAL_SPAWNER', s_scale);
-        const spawnerLabel = ObjectGenerator.createTextSprite(t('ui.enemy_spawner'));
-        spawnerLabel.position.set(0, 4.5, -stationDist);
+        await SectorBuilder.spawnTerminal(ctx, 0, -terminalDist, TerminalType.SPAWNER, terminalScale);
+        const spawnerLabel = ObjectGenerator.createTextSprite(t('terminals.spawner'));
+        spawnerLabel.position.set(0, 4.5, -terminalDist);
         spawnerLabel.scale.set(10, 1.5, 1);
         scene.add(spawnerLabel);
         await yieldIfBudgetExceeded();
 
         // 3. Environment Control (East)
-        await SectorBuilder.spawnTerminal(ctx, stationDist, 0, 'TERMINAL_ENV', s_scale);
-        const envLabel = ObjectGenerator.createTextSprite(t('ui.environment_control'));
-        envLabel.position.set(stationDist, 4.5, 0);
+        await SectorBuilder.spawnTerminal(ctx, terminalDist, 0, TerminalType.ENVIRONMENT, terminalScale);
+        const envLabel = ObjectGenerator.createTextSprite(t('terminals.environment'));
+        envLabel.position.set(terminalDist, 4.5, 0);
         envLabel.scale.set(10, 1.5, 1);
         scene.add(envLabel);
         await yieldIfBudgetExceeded();
 
         // 4. Skill Station (South)
-        await SectorBuilder.spawnTerminal(ctx, 0, stationDist, 'TERMINAL_SKILLS', s_scale);
-        const skillLabel = ObjectGenerator.createTextSprite(t('stations.skills'));
-        skillLabel.position.set(0, 4.5, stationDist);
+        await SectorBuilder.spawnTerminal(ctx, 0, terminalDist, TerminalType.SKILLS, terminalScale);
+        const skillLabel = ObjectGenerator.createTextSprite(t('terminals.skills'));
+        skillLabel.position.set(0, 4.5, terminalDist);
         skillLabel.scale.set(10, 1.5, 1);
         scene.add(skillLabel);
         await yieldIfBudgetExceeded();
@@ -498,8 +509,9 @@ export const Sector4: SectorDef = {
 
         await SectorBuilder.addInteractable(ctx, bus, {
             id: EXPLODING_BUS_ID,
-            label: 'ui.interact_blow_up_bus',
+            label: 'ui.plant_explosives',
             type: InteractionType.SECTOR_SPECIFIC,
+            subType: InteractionSubType.PLANT_EXPLOSIVE,
             collider: { type: InteractionShape.SPHERE, radius: 15.0 }
         });
         await yieldIfBudgetExceeded();
@@ -508,6 +520,9 @@ export const Sector4: SectorDef = {
         // Store references
         (ctx as any).busObject = bus;
         (ctx as any).busColMesh = colMesh;
+        (ctx as any).busCenter = busCenter.clone();
+        (ctx as any).busSize = busSize.clone();
+        (ctx as any).busObstacle = obstacle_bus;
 
         // Rubble
         const rubble = await SectorBuilder.spawnRubble(ctx, EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.z, 20, MATERIALS.busBlue, Math.PI);
@@ -555,21 +570,21 @@ export const Sector4: SectorDef = {
         }
 
         // STATIONS
-        if (id === 'TERMINAL_ARMORY') {
+        if (id === 'terminal_' + TerminalType.ARMORY) {
             events.setOverlay(OverlayType.STATION_ARMORY);
         }
-        else if (id === 'TERMINAL_SPAWNER') {
+        else if (id === 'terminal_' + TerminalType.SPAWNER) {
             events.setOverlay(OverlayType.STATION_SPAWNER);
         }
-        else if (id === 'TERMINAL_ENV') {
+        else if (id === 'terminal_' + TerminalType.ENVIRONMENT) {
             events.setOverlay(OverlayType.STATION_ENVIRONMENT);
         }
-        else if (id === 'TERMINAL_SKILLS') {
+        else if (id === 'terminal_' + TerminalType.SKILLS) {
             events.setOverlay(OverlayType.STATION_SKILLS);
         }
 
-        // BUS EXPLOSION
-        if (id === EXPLODING_BUS_ID) {
+        // BUS EXPLOSION EVENT
+        else if (id === EXPLODING_BUS_ID) {
             if (!state.sectorState || state.sectorState.busExploded || state.sectorState.busPlanting) return;
 
             state.sectorState.busPlanting = true;
@@ -581,34 +596,76 @@ export const Sector4: SectorDef = {
         }
     },
 
-    setupContent: async (ctx: SectorContext) => {
-        // Register Perk Zones as centralized triggers
-        const triggers: any[] = [];
-        for (let i = 0; i < PERK_ZONES.length; i++) {
-            const zone = PERK_ZONES[i];
-            triggers.push({
-                id: zone.effect,
-                position: { x: zone.x, z: zone.z },
-                radius: zone.radius,
-                type: TriggerType.ZONE,
-                statusFlags: TriggerStatus.ACTIVE | TriggerStatus.REPEATABLE,
-                repeatInterval: 1.0, // Tick once per second to prevent PerkSystem spam
-                actions: [{
-                    type: TriggerActionType.APPLY_EFFECT,
-                    id: zone.effect,
-                    amount: zone.type === 'buff' ? 0 : 0.5, // Reduced damage for testing
-                    duration: 3000,
-                    damageType: getDamageTypeForEffect(zone.effect)
-                }]
-            });
+    onPlayerRespawn: (ctx: SectorContext, state: any, engine: any) => {
+        if (!state.sectorState) return;
+
+        // Reset state variables
+        state.sectorState.busExploded = false;
+        state.sectorState.busPlanting = false;
+        state.sectorState.busPlantingTime = 0;
+        state.sectorState.busExplosionHandled = false;
+        state.sectorState.busExplosionTime = 0;
+        state.sectorState.lastBusBeep = 0;
+
+        // Restore bus visual model
+        const bus = (ctx as any).busObject;
+        if (bus) {
+            bus.position.set(EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.y, EXPLODING_BUS_POS.z);
+            bus.userData.isInteractable = true;
         }
-        SectorBuilder.addTriggers(ctx, triggers);
+
+        // Hide rubble and tires
+        const rubble = (ctx as any).busRubble;
+        if (rubble) {
+            rubble.visible = false;
+            rubble.userData.active = false;
+        }
+        const tires = (ctx as any).busTires;
+        if (tires) {
+            tires.visible = false;
+            tires.userData.active = false;
+        }
+
+        // Restore collision obstacle
+        const obstacle_bus = (ctx as any).busObstacle;
+        const busSize = (ctx as any).busSize;
+        const busCenter = (ctx as any).busCenter;
+        if (obstacle_bus && busSize && busCenter) {
+            obstacle_bus.collider.size.copy(busSize);
+            if (obstacle_bus.mesh) {
+                obstacle_bus.mesh.position.copy(busCenter);
+            }
+            obstacle_bus.position.copy(busCenter);
+            obstacle_bus.radius = Math.sqrt(busSize.x * busSize.x + busSize.z * busSize.z) * 0.5;
+
+            // Re-add to obstacles array if not already present
+            let exists = false;
+            for (let i = 0; i < ctx.obstacles.length; i++) {
+                if (ctx.obstacles[i].id === EXPLODING_BUS_ID) {
+                    exists = true;
+                    ctx.obstacles[i] = obstacle_bus;
+                    break;
+                }
+            }
+            if (!exists) {
+                ctx.obstacles.push(obstacle_bus);
+            }
+
+            // Re-register with streamer so it's placed in correct logic buckets
+            if (ctx.worldStreamer && typeof ctx.worldStreamer.registerObstacle === 'function') {
+                ctx.worldStreamer.registerObstacle(obstacle_bus);
+            }
+        }
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
+    setupContent: async (ctx: SectorContext) => {
+        // No-op: Perk Zones are handled live in onSectorUpdate for optimal performance and instant feel.
+    },
+
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, onPlayerHit, ...events }) => {
         // --- PERK ZONE LOGIC (Zero-GC) ---
-        // Optimization: Player effects are now handled by TriggerSystem.
-        // We only handle visual feedback and Enemy debuffs here.
+        // Ambient visuals and frame-level player + enemy status effect processing
+
         for (let i = 0; i < PERK_ZONES.length; i++) {
             const zone = PERK_ZONES[i];
 
@@ -616,17 +673,26 @@ export const Sector4: SectorDef = {
             const distSq = playerPos.distanceToSquared(_v1_pz);
             const isInside = distSq < zone.radius * zone.radius;
 
-            if (isInside) {
-                // Visual feedback (Throttle particle spawning to ~4Hz)
-                if ((simTime % 250) < delta * 1000) {
-                    events.spawnParticle(
-                        zone.x + (Math.random() - 0.5) * zone.radius * 1.5,
-                        1.0,
-                        zone.z + (Math.random() - 0.5) * zone.radius * 1.5,
-                        zone.particle,
-                        1
-                    );
-                }
+            // 1. Ambient Visual Feedback: Sparking, boiling, freezing, and burning effects inside the pools constantly
+            const particleInterval = zone.effect === StatusEffectID.BURNING ? 100 : 250;
+            if (((simTime + i * 150) % particleInterval) < delta * 1000) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * zone.radius;
+                events.spawnParticle(
+                    zone.x + Math.cos(angle) * dist,
+                    0.2 + Math.random() * 0.8,
+                    zone.z + Math.sin(angle) * dist,
+                    zone.particle,
+                    1
+                );
+            }
+
+            // 2. Direct Player Perk Application
+            if (isInside && onPlayerHit) {
+                const duration = 2000; // Refresh to 2s
+                const intensity = zone.type === 'buff' ? 0.0 : 1.0;
+                // Directly invoke onPlayerHit: 0 damage, null attacker, isDoT = true, effectType = zone.effect
+                onPlayerHit(0, null, DamageType.PHYSICAL, DamageID.OTHER, true, zone.effect, duration, intensity);
             }
 
             // Apply effects to enemies (Still manual until TriggerSystem supports multi-entity)
@@ -834,8 +900,8 @@ export const Sector4: SectorDef = {
         for (let mIdx = 0; mIdx < _activeMeshCount; mIdx++) {
             const rubble = _activeMeshesScratch[mIdx];
             const isTire = rubble === busTires;
-            const rubbleWeight = isTire ? 35.0 : 18.0;
-            const bouncy = isTire ? 0.7 : 0.4;
+            const rubbleWeight = isTire ? 35.0 : 75.0;
+            const bouncy = isTire ? 0.5 : 0.2;
             const data = rubble.userData;
             let stillMoving = false;
             const elapsed = renderTime - (sectorState.busExplosionTime || 0);

@@ -113,6 +113,15 @@ export class WaterSystem implements System {
 
     surfaces: WaterSurface[] = [];
     waterBodies: WaterBody[] = [];
+
+    // Optional reference to GroundSystem so water bodies self-register their zones.
+    // Set by GameSessionSetup via setGroundRef() after both systems are initialized.
+    private _groundRef: { registerWaterZone(x: number, z: number, w: number, d: number): void } | null = null;
+
+    public setGroundRef(g: { registerWaterZone(x: number, z: number, w: number, d: number): void }): void {
+        this._groundRef = g;
+    }
+
     private rippleData: THREE.Vector4[] = [];
     private objectPositions: THREE.Vector4[] = [];
     private rippleIndex: number = 0;
@@ -291,6 +300,10 @@ export class WaterSystem implements System {
             maxDepth: options?.maxDepth ?? preset.maxDepth
         });
         this.waterBodies.push(body);
+
+        // Notify GroundSystem so it can gate buoyancy queries spatially.
+        // Uses the raw width/depth — GroundSystem handles the half-extents itself.
+        if (this._groundRef) this._groundRef.registerWaterZone(x, z, width, depth);
         this.updateGroundUniforms();
         return body;
     }
@@ -422,7 +435,7 @@ export class WaterSystem implements System {
         // --- 2. Update Surfaces ---
         for (let i = 0; i < this.surfaces.length; i++) {
             this.surfaces[i].update(renderTime);
-            
+
             // Zero-GC: uObjectPositions is a pre-allocated array whose elements are mutated in-place.
             // Assigning it every frame is redundant and triggers uniform lookup thrashing.
             if (this.surfaces[i].material.uniforms.uClarity) {

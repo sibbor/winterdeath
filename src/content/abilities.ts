@@ -19,7 +19,7 @@ export const ABILITIES: AbilityStats[] = [];
 
 ABILITIES[AbilityID.RUSH] = {
     name: AbilityID.RUSH,
-    displayName: 'ui.combat.rush',
+    displayName: 'abilities.rush',
     icon: PNG_PATH + 'icon_dodge.png',
     iconIsPng: true,
     damage: 0,
@@ -32,7 +32,7 @@ ABILITIES[AbilityID.RUSH] = {
 
 ABILITIES[AbilityID.DODGE] = {
     name: AbilityID.DODGE,
-    displayName: 'ui.combat.dodge',
+    displayName: 'abilities.dodge',
     icon: PNG_PATH + 'icon_dodge.png',
     iconIsPng: true,
     damage: 0,
@@ -45,7 +45,7 @@ ABILITIES[AbilityID.DODGE] = {
 
 ABILITIES[AbilityID.VEHICLE] = {
     name: AbilityID.VEHICLE,
-    displayName: 'ui.vehicle',
+    displayName: 'abilites.vehicle',
     icon: PNG_PATH + 'icon_vehicle.png',
     iconIsPng: true,
     damage: 0,

@@ -1,5 +1,3 @@
-import { WinterEngine } from '../../core/engine/WinterEngine';
-
 /**
  * RuntimeStressHarness
  * 
@@ -10,7 +8,28 @@ import { WinterEngine } from '../../core/engine/WinterEngine';
  * flag to ensure it is completely pruned from production builds.
  */
 export class RuntimeStressHarness {
-    public static enabled: boolean = true;
+    public static get enabled(): boolean {
+        if (typeof window === 'undefined') return false;
+
+        // 1. Check current HudStore state (primary source of truth in session)
+        const hudState = (window as any).HudStore?.getState();
+        if (hudState && hudState.debugMode !== undefined) {
+            return !!hudState.debugMode;
+        }
+
+        // 2. Check gameEngine sectorContext override
+        const gameEngine = (window as any).gameEngine;
+        if (gameEngine?.sectorContext && gameEngine.sectorContext.debugMode !== undefined) {
+            return !!gameEngine.sectorContext.debugMode;
+        }
+
+        // 3. Check developer console/global override
+        if ((window as any).WD_DEBUG === true) {
+            return true;
+        }
+
+        return false;
+    }
 
     // --- STATIC TELEMETRY BUFFERS (Zero-GC) ---
     private static lastHeapSize: number = 0;
@@ -85,7 +104,7 @@ export class RuntimeStressHarness {
         if (!this.enabled) return;
 
         const now = performance.now();
-        
+
         // performance.memory is non-standard but available in Chromium/V8
         const memory = (performance as any).memory;
         if (!memory) return;
@@ -104,7 +123,7 @@ export class RuntimeStressHarness {
             if (drift > 1024 * 512) { // > 0.5MB drift in 10 seconds
                 console.warn("[MEMORY DRIFT] Heap growth detected:", (drift / 1024 / 1024).toFixed(2), "MB over 10 seconds.");
             }
-            
+
             this.lastHeapSize = currentHeap;
             this.lastCheckTime = now;
         }

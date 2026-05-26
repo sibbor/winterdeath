@@ -12,7 +12,8 @@ import { FamilyMemberID } from '../content/constants';
 import { audioEngine } from '../utils/audio/AudioEngine';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
-import { KMH_TO_MS, MAX_ENTITIES } from '../content/constants';
+import { KMH_TO_MS, MAX_ENTITIES, COMBAT } from '../content/constants';
+import { DiscoverySystem } from './DiscoverySystem';
 
 /**
  * PerkSystem
@@ -60,7 +61,10 @@ export class PerkSystem implements System {
 
         // 2. Telemetry & Discovery Signal
         if (state.perkTimesGained[id] === 0) {
-            session.handleDiscovery(DiscoveryType.PERK, id, id, perk.displayName, perk.description);
+            const discoverySystem = session.getSystem<DiscoverySystem>(SystemID.DISCOVERY_SYSTEM);
+            if (discoverySystem) {
+                discoverySystem.handleDiscovery(session, DiscoveryType.PERK, id, id, perk.displayName, perk.description);
+            }
         }
 
         if (!isAlreadyActive) {
@@ -150,6 +154,50 @@ export class PerkSystem implements System {
 
         // 2. Apply DoT Ticks
         this.applyStatusTicks(session, simTime);
+
+        // 3. Adrenaline Patch check (refactored from PlayerStatsSystem)
+        this.checkAdrenalinePatch(session, simTime);
+
+        // 4. Reflex Shield check on active dodge/rush (refactored from PlayerMovementSystem)
+        if (session.state.isDodging || session.state.isRushing) {
+            this.checkReflexShield(session, simTime);
+        }
+    }
+
+    private checkAdrenalinePatch(session: GameSessionLogic, simTime: number) {
+        const state = session.state;
+        const perkID = StatusEffectID.ADRENALINE_PATCH;
+        const perk = PERKS[perkID];
+        if (!perk) return;
+
+        const hp = state.statsBuffer[PlayerStatID.HP];
+        const maxHp = state.statsBuffer[PlayerStatID.MAX_HP];
+
+        if (hp > 0 && hp < maxHp * COMBAT.CRISIS_HP_RATIO) {
+            const cooldown = perk.cooldown ?? 60000;
+            if (simTime - state.lastAdrenalinePatchTime > cooldown) {
+                state.lastAdrenalinePatchTime = simTime;
+
+                this.applyPerk(session, perkID);
+
+                const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+                if (tracker) tracker.recordCrisisSave(session);
+            }
+        }
+    }
+
+    private checkReflexShield(session: GameSessionLogic, simTime: number) {
+        const state = session.state;
+        const perkID = StatusEffectID.REFLEX_SHIELD;
+
+        const perk = PERKS[perkID];
+        const cooldown = perk?.cooldown ?? 10000;
+
+        if (simTime - state.lastReflexShieldTime > cooldown) {
+            state.lastReflexShieldTime = simTime;
+
+            this.applyPerk(session, perkID);
+        }
     }
 
     /**

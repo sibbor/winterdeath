@@ -165,7 +165,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
       className="fixed top-12 left-1/2 -translate-x-1/2 z-[10000] pointer-events-auto"
       style={{
         display: visible ? 'block' : 'none',
-        animation: visible ? `discovery-pop 4500ms cubic-bezier(0.25, 1, 0.5, 1) forwards` : 'none'
+        animation: visible ? `discovery-pop 10000ms cubic-bezier(0.25, 1, 0.5, 1) forwards` : 'none'
       }}
       onClick={handleInteraction}
       onTouchStart={handleInteraction}

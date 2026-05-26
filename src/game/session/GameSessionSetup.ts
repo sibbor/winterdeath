@@ -55,6 +55,7 @@ import { COLLECTIBLES } from '../../content/collectibles';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { PerkFX } from '../../systems/PerkFX';
 import { PerkSystem } from '../../systems/PerkSystem';
+import { DiscoverySystem } from '../../systems/DiscoverySystem';
 import { InteractionType, InteractionSubType } from '../../systems/ui/UIEventBridge';
 
 const seededRandom = (seed: number) => {
@@ -671,17 +672,6 @@ export class GameSessionSetup {
                     state.bossesDefeated.push(id);
                     state.bossDefeatedTime = engine.simTime;
 
-                    const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                    if (tracker) {
-                        tracker.recordSp(session, 2); // Boss Kill = +2 SP
-                    }
-
-                    const currentFM = refs.familyMemberRef.current;
-                    if (currentFM && !currentFM.rescued) {
-                        currentFM.rescued = true;
-                        // SP for family rescue (+2 SP)
-                        if (tracker) tracker.recordSp(session, 2);
-                    }
                     callbacks.onBossKilled(id);
                 }
             },
@@ -834,6 +824,7 @@ export class GameSessionSetup {
         session.addSystem(new DamageNumberSystem(engine.scene));
         session.addSystem(new DamageTrackerSystem());
         session.addSystem(new ChallengeSystem());
+        session.addSystem(new DiscoverySystem());
         session.addSystem(new ProjectileSystem());
         session.addSystem(new ParticleSystem());
 
@@ -1203,6 +1194,11 @@ export class GameSessionSetup {
         const sCtx = refs.sectorContextRef.current;
         if (sCtx && currentSectorData.setupZombies) {
             currentSectorData.setupZombies(sCtx);
+        }
+
+        // 6.2.1 SECTOR-SPECIFIC PLAYER RESPAWN HOOK (VINTERDÖD HARDENING)
+        if (sCtx && currentSectorData.onPlayerRespawn) {
+            currentSectorData.onPlayerRespawn(sCtx, state, engine);
         }
 
         // 6.2 PLAYER & FAMILY MEMBER POSITIONING

@@ -158,6 +158,10 @@ export class WinterEngine {
         this.sky = new SkySystem();
         this.ground = new GroundSystem();
 
+        // Wire GroundSystem into WaterSystem so each addWaterBody auto-registers its spatial
+        // zone in GroundSystem — enabling the buoyancy proximity gate without extra plumbing.
+        this.water.setGroundRef(this.ground);
+
         // 3. Environment Orchestrator (The Master Sync System)
         this.environment = new EnvironmentManager(
             this.sky, this.fog, this.weather, this.water, this.light, this.wind, this.ground

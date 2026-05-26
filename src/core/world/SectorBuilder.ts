@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { MATERIALS, ModelFactory } from '../../utils/assets';
 import { EffectType, SubEffectType } from '../../systems/EffectManager';
 import { FXParticleType } from '../../types/FXTypes';
-import { SectorContext, ChestType, NatureFillType, EnvironmentalZone } from '../../game/session/SectorTypes';
+import { SectorContext, ChestType, NatureFillType, EnvironmentalZone, TerminalType } from '../../game/session/SectorTypes';
 import { ObjectGenerator } from './generators/ObjectGenerator';
 import { VehicleGenerator } from './generators/VehicleGenerator';
 import { TerrainGenerator } from './generators/TerrainGenerator';
@@ -1497,15 +1497,15 @@ export const SectorBuilder = {
         return mesh;
     },
 
-    spawnTerminal: (ctx: SectorContext, x: number, z: number, type: 'TERMINAL_ARMORY' | 'TERMINAL_SPAWNER' | 'TERMINAL_ENV' | 'TERMINAL_SKILLS', scale: number = 1.0) => {
-        const terminal = ObjectGenerator.createTerminal(type.replace('TERMINAL_', '') as any, scale);
+    spawnTerminal: (ctx: SectorContext, x: number, z: number, type: TerminalType, scale: number = 1.0) => {
+        const terminal = ObjectGenerator.createTerminal(type, scale);
         terminal.position.set(x, 0, z);
         ctx.scene.add(terminal);
 
         _v1_sg.set(1.2 * scale, 2.0 * scale, 1.2 * scale);
 
         SectorBuilder.addInteractable(ctx, terminal, {
-            id: type,
+            id: 'terminal_' + type,
             type: InteractionType.SECTOR_SPECIFIC,
             subType: InteractionSubType.TERMINAL,
             label: 'ui.interact',

@@ -579,7 +579,7 @@ export const WeaponHandler = {
     handleContinuousFire: (weapon: WeaponStats, origin: THREE.Vector3, direction: THREE.Vector3, ctx: any, delta: number) => {
         switch (weapon.name) {
             case WeaponID.FLAMETHROWER:
-                WeaponFX.drawFlames(origin, direction, weapon.range);
+                WeaponFX.drawFlames(ctx.engine.scene, origin, direction, weapon.range);
                 break;
             case WeaponID.ARC_CANNON:
                 // We let ProjectileSystem handle the authoritative hit-beam and chaining.

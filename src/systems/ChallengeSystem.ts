@@ -23,7 +23,7 @@ export class ChallengeSystem implements System {
     private lastEvalTime = 0;
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
-        if (!session || !session.state) return;
+        if (!session || !session.state || session.state.isPlayground) return;
         const stats = session.state.stats;
         if (!stats) return;
 

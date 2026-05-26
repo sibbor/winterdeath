@@ -2,17 +2,14 @@ import * as THREE from 'three';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { SectorStats } from '../../types/StateTypes';
-import { Enemy, NoiseType, EnemyDeathState, EnemyFlags } from '../../entities/enemies/EnemyTypes';
+import { Enemy, NoiseType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { WorldStreamer } from '../../core/world/WorldStreamer';
 import { RuntimeState } from '../../core/RuntimeState';
 import { System, SystemID } from '../../systems/System';
-import { DamageID, WeaponID, ToolID } from '../../entities/player/CombatTypes';
 import { WEAPONS } from '../../content/weapons';
 import { PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
 import { VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
-import { DiscoveryType } from '../../components/ui/hud/HudTypes';
-import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 import { allocateRuntimeState, resetRuntimeState } from '../../core/RuntimeState';
 import { FXSystem } from '../../systems/FXSystem';
 import { SectorID } from './SectorTypes';
@@ -23,10 +20,13 @@ import { MAX_ENTITIES } from '../../content/constants';
 import { DataResolver } from '../../core/data/DataResolver';
 
 export class GameSessionLogic {
+    public callbacks?: any;
     public inputDisabled: boolean = false;
     public isMobileDevice: boolean = false;
     public debugMode: boolean = false;
     public onAction(action: any): void {
+        if (!action) return;
+
         if (this.callbacks?.onAction) {
             this.callbacks.onAction(action);
         }
@@ -300,123 +300,6 @@ export class GameSessionLogic {
         if (pg) {
             this.playerPos = pg.position;
         }
-    }
-
-    /**
-     * Registers a sound event in the world for AI to react to.
-     * Delegates to the centralized EnemyDetectionSystem.
-     */
-    public callbacks?: any;
-
-    public handleDiscovery(type: DiscoveryType, id: any, uiSmi: number = 0, titleKey: string = '', detailsKey: string = '', payload?: any): boolean {
-        if (!this.state) return false;
-        
-        const state = this.state;
-        const sets = state.discoverySets;
-        const stats = state.sessionStats;
-        let isNew = false;
-        
-        switch (type) {
-            case DiscoveryType.ZOMBIE:
-                if (!sets.seenEnemies.has(id)) {
-                    isNew = true;
-                }
-                break;
-            case DiscoveryType.BOSS:
-                if (!sets.seenBosses.has(id)) {
-                    isNew = true;
-                }
-                break;
-            case DiscoveryType.CLUE: {
-                const clueSmi = DataResolver.resolveClueID(id);
-                if (clueSmi !== undefined && !sets.clues.has(clueSmi)) {
-                    isNew = true;
-                }
-                break;
-            }
-            case DiscoveryType.POI: {
-                const poiSmi = DataResolver.resolvePoiID(id);
-                if (poiSmi !== undefined && !sets.pois.has(poiSmi)) {
-                    isNew = true;
-                }
-                break;
-            }
-            case DiscoveryType.COLLECTIBLE: {
-                const colSmi = DataResolver.resolveCollectibleID(id);
-                if (colSmi !== undefined && !sets.collectibles.has(colSmi)) {
-                    isNew = true;
-                }
-                break;
-            }
-            case DiscoveryType.PERK: {
-                const perkSmi = Number(uiSmi !== undefined ? uiSmi : id);
-                const globalDiscovered = state.stats?.discoveredPerksMap ? state.stats.discoveredPerksMap[perkSmi] === 1 : false;
-                
-                if (stats.discoveredPerksMap && perkSmi < stats.discoveredPerksMap.length && !stats.discoveredPerksMap[perkSmi] && !globalDiscovered) {
-                    isNew = true;
-                    uiSmi = perkSmi;
-                }
-                break;
-            }
-        }
-        
-        if (isNew) {
-            // [VINTERDÖD] Always notify the ring buffer for the React UI DiscoveryPopup
-            const smi = uiSmi || (typeof id === 'number' ? id : 0);
-            UIEventRingBuffer.push(UIEventType.DISCOVERY, smi, type, state.simTime);
-            
-            // Invoke the higher-level callback if registered (e.g. for persistence/stats)
-            if (state.callbacks?.onDiscovery) {
-                state.callbacks.onDiscovery(type, id, titleKey, detailsKey, payload);
-            } else {
-                // FALLBACK: Headless / test context fallback mutation
-                switch (type) {
-                    case DiscoveryType.ZOMBIE:
-                        sets.seenEnemies.add(id);
-                        stats.seenEnemies.push(Number(id));
-                        break;
-                    case DiscoveryType.BOSS:
-                        sets.seenBosses.add(id);
-                        stats.seenBosses.push(Number(id));
-                        break;
-                    case DiscoveryType.CLUE: {
-                        const clueSmi = DataResolver.resolveClueID(id);
-                        if (clueSmi !== undefined) {
-                            sets.clues.add(clueSmi);
-                            const strId = DataResolver.resolveClueId(clueSmi);
-                            stats.cluesFound.push(strId);
-                        }
-                        break;
-                    }
-                    case DiscoveryType.POI: {
-                        const poiSmi = DataResolver.resolvePoiID(id);
-                        if (poiSmi !== undefined) {
-                            sets.pois.add(poiSmi);
-                            const strId = DataResolver.resolvePoiId(poiSmi);
-                            stats.discoveredPOIs.push(strId);
-                        }
-                        break;
-                    }
-                    case DiscoveryType.COLLECTIBLE: {
-                        const colSmi = DataResolver.resolveCollectibleID(id);
-                        if (colSmi !== undefined) {
-                            sets.collectibles.add(colSmi);
-                            const strId = DataResolver.resolveCollectibleId(colSmi);
-                            stats.collectiblesDiscovered.push(strId);
-                        }
-                        break;
-                    }
-                    case DiscoveryType.PERK: {
-                        const perkSmi = Number(uiSmi !== undefined ? uiSmi : id);
-                        stats.discoveredPerksMap[perkSmi] = 1;
-                        if (state.stats?.discoveredPerksMap) state.stats.discoveredPerksMap[perkSmi] = 1;
-                        break;
-                    }
-                }
-            }
-        }
-        
-        return isNew;
     }
 
     makeNoise(pos: THREE.Vector3, type: NoiseType = NoiseType.OTHER, radius?: number) {

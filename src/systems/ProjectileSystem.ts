@@ -166,7 +166,7 @@ export class ProjectileSystem implements System {
 
             // 3. Enemy Hit Detection (Phase 7 Spatial Grid)
             if (!despawn) {
-                const groundY = session.engine.ground ? session.engine.ground.getGroundHeight(pool.posX[i], pool.posZ[i], session) : 0;
+                const groundY = session.engine.ground ? session.engine.ground.getGroundHeight(pool.posX[i], pool.posZ[i], session, pool.posY[i]) : 0;
 
                 // --- WATER IMPACT DETECTION ---
                 if (session.engine.water) {
@@ -195,10 +195,15 @@ export class ProjectileSystem implements System {
                 } else if (!despawn) {
                     const streamer = state.worldStreamer;
                     const poolIdx = streamer.getEnemyPool().nextIndex();
-                    streamer.getNearbyEnemies(pool.posX[i], pool.posZ[i], 0.8, poolIdx);
+                    // Query a wider radius (2.5m) to catch candidates along the swept path
+                    streamer.getNearbyEnemies(pool.posX[i], pool.posZ[i], 2.5, poolIdx);
 
                     const nearby = streamer.getEnemyPool().getPool(poolIdx);
                     const nearCount = streamer.getEnemyPool().getCount(poolIdx);
+
+                    // Reconstruct swept path line segment: Start point (_v1) and Delta Offset (_v2)
+                    _v1.set(pool.posX[i] - pool.velX[i] * delta, pool.posY[i] - pool.velY[i] * delta, pool.posZ[i] - pool.velZ[i] * delta);
+                    _v2.set(pool.velX[i] * delta, pool.velY[i] * delta, pool.velZ[i] * delta);
 
                     for (let n = 0; n < nearCount; n++) {
                         const enemy = nearby[n];
@@ -206,54 +211,66 @@ export class ProjectileSystem implements System {
 
                         const enemyIdx = enemy.poolId | 0;
                         if (state.applyDamage) {
-                            const halfHeight = enemy.originalScale || 1.0;
-                            const enemyY = enemy.mesh.position.y;
-                            if (pool.posY[i] >= enemyY - halfHeight && pool.posY[i] <= enemyY + halfHeight) {
-                                // 1. Apply SoA Damage (Phase 9 Deferred Resolution)
-                                EnemyPoolState.hp[enemyIdx] -= pool.damage[i];
-                                if (EnemyPoolState.hp[enemyIdx] <= 0) {
-                                    EnemyPoolState.statusFlags[enemyIdx] = (EnemyPoolState.statusFlags[enemyIdx] | ENTITY_STATUS.DEAD) | 0;
+                            // Find closest point on projectile segment in 3D to enemy center
+                            _v3.set(enemy.mesh.position.x, enemy.mesh.position.y, enemy.mesh.position.z);
+                            _v4.subVectors(_v3, _v1);
+
+                            const lenSq = _v2.lengthSq();
+                            const tProj = lenSq > 0.0001 ? Math.max(0, Math.min(1, _v4.dot(_v2) / lenSq)) : 0;
+                            _v5.copy(_v1).addScaledVector(_v2, tProj);
+
+                            // Calculate horizontal distance between closest swept point and enemy
+                            const dx = _v5.x - enemy.mesh.position.x;
+                            const dz = _v5.z - enemy.mesh.position.z;
+                            const distSq = dx * dx + dz * dz;
+
+                            const hitRad = enemy.hitRadius || 0.8;
+                            if (distSq <= hitRad * hitRad) {
+                                const halfHeight = enemy.originalScale || 1.0;
+                                const enemyY = enemy.mesh.position.y;
+                                if (_v5.y >= enemyY - halfHeight && _v5.y <= enemyY + halfHeight) {
+                                    EnemyPoolState.hp[enemyIdx] -= pool.damage[i];
+
+                                    // 1. Calculate impact intensity (Tactile Feedback)
+                                    const wepStats = WEAPONS[pool.weaponId[i]];
+                                    const isKill = EnemyPoolState.hp[enemyIdx] <= 0;
+                                    const isHighImpact = pool.damage[i] > 50 || isKill || (wepStats?.impactType === EnemyDeathState.GIBBED);
+
+                                    // 2. Trigger Legacy Callback (For FX and Telemetry)
+                                    state.applyDamage(enemy, pool.damage[i], wepStats?.defaultDamageType || 1, pool.weaponId[i], isHighImpact);
+
+                                    if (this.session) {
+                                        this.session.spawnParticle(pool.posX[i], pool.posY[i], pool.posZ[i], FXParticleType.BLOOD_SPLATTER, 3);
+                                    }
+                                    GamePlaySounds.playImpact(MaterialType.FLESH);
+
+                                    // --- PIERCING & HIT-STOP ---
+                                    const canPierce = wepStats?.piercing && pool.pierceCount[i] < 3;
+
+                                    // 3. Kinetic Feedback (Knockback)
+                                    const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
+                                    const force = (pool.damage[i] / 3) / Math.max(0.3, mass);
+                                    _v1.set(pool.velX[i], 0, pool.velZ[i]).normalize().multiplyScalar(force);
+                                    enemy.knockbackVel.add(_v1);
+
+                                    if (isKill && isHighImpact) {
+                                        enemy.deathVel.set(pool.velX[i], pool.velY[i], pool.velZ[i]).normalize().multiplyScalar(force * 2.0).setY(4.0);
+                                    }
+
+                                    if (isHighImpact && session.state) {
+                                        const ms = isKill ? 45 : 35;
+                                        session.state.hitStopTime = Math.max(session.state.hitStopTime || 0, ms);
+                                    }
+
+                                    if (canPierce) {
+                                        pool.pierceCount[i]++;
+                                        pool.damage[i] *= (wepStats?.pierceDecay || 0.7);
+                                        despawn = false;
+                                    } else {
+                                        despawn = true;
+                                    }
+                                    break; // Hit handled, move to next projectile
                                 }
-
-                                // 1. Calculate impact intensity (Tactile Feedback)
-                                const wepStats = WEAPONS[pool.weaponId[i]];
-                                const isKill = EnemyPoolState.hp[enemyIdx] <= 0;
-                                const isHighImpact = pool.damage[i] > 50 || isKill || (wepStats?.impactType === EnemyDeathState.GIBBED);
-
-                                // 2. Trigger Legacy Callback (For FX and Telemetry)
-                                state.applyDamage(enemy, pool.damage[i], wepStats?.defaultDamageType || 1, pool.weaponId[i], isHighImpact);
-
-                                if (this.session) {
-                                    this.session.spawnParticle(pool.posX[i], pool.posY[i], pool.posZ[i], FXParticleType.BLOOD_SPLATTER, 3);
-                                }
-                                GamePlaySounds.playImpact(MaterialType.FLESH);
-
-                                // --- PIERCING & HIT-STOP ---
-                                const canPierce = wepStats?.piercing && pool.pierceCount[i] < 3;
-
-                                // 3. Kinetic Feedback (Knockback)
-                                const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
-                                const force = (pool.damage[i] / 3) / Math.max(0.3, mass);
-                                _v1.set(pool.velX[i], 0, pool.velZ[i]).normalize().multiplyScalar(force);
-                                enemy.knockbackVel.add(_v1);
-
-                                if (isKill && isHighImpact) {
-                                    enemy.deathVel.set(pool.velX[i], pool.velY[i], pool.velZ[i]).normalize().multiplyScalar(force * 2.0).setY(4.0);
-                                }
-
-                                if (isHighImpact && session.state) {
-                                    const ms = isKill ? 45 : 35;
-                                    session.state.hitStopTime = Math.max(session.state.hitStopTime || 0, ms);
-                                }
-
-                                if (canPierce) {
-                                    pool.pierceCount[i]++;
-                                    pool.damage[i] *= (wepStats?.pierceDecay || 0.7);
-                                    despawn = false;
-                                } else {
-                                    despawn = true;
-                                }
-                                break; // Hit handled, move to next projectile
                             }
                         }
                     }
@@ -595,7 +612,6 @@ export class ProjectileSystem implements System {
                 state.applyDamage(enemies[i], damage, isFlame ? DamageType.BURN : DamageType.ELECTRIC, wepId as unknown as DamageID, false);
 
                 if (EnemyPoolState.hp[i] <= 0) {
-                    EnemyPoolState.statusFlags[i] = (EnemyPoolState.statusFlags[i] | ENTITY_STATUS.DEAD) | 0;
                     if (state) {
                         state.hitStopTime = Math.max(state.hitStopTime || 0, 35) | 0;
                     }
@@ -616,13 +632,6 @@ export class ProjectileSystem implements System {
                     this.session.spawnParticle(EnemyPoolState.posX[i], 1.2, EnemyPoolState.posZ[i], FXParticleType.BLOOD_SPLATTER, 3);
                 }
             }
-        }
-
-        // --- ARC CANNON IDLE BEAM (Audit Fix) ---
-        if (!isFlame && !anyHit) {
-            _v1.set(aimX, 0, aimZ).multiplyScalar(range);
-            _v2.copy(this.session.playerPos).add(_v1);
-            WeaponFX.drawArcLightning(this.session.engine.scene, this.session.playerPos, _v2, true);
         }
     }
 

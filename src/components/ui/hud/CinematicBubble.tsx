@@ -19,7 +19,7 @@ interface TextToken {
 }
 
 const CONTAINER_HIDDEN = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out bottom-[-20%] opacity-0";
-const CONTAINER_VISIBLE = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out bottom-[calc(12%+25px)] opacity-100";
+const CONTAINER_VISIBLE = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-5000 ease-out bottom-[calc(12%+25px)] opacity-100";
 
 const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(({ isMobileDevice, onComplete }, ref) => {
     // ZERO-GC: No more reactive useHudStore selectors for fast data.

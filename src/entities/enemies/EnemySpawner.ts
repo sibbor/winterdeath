@@ -238,8 +238,6 @@ export const EnemySpawner = {
         boss.position.set(pos.x, 0, pos.z);
         scene.add(boss);
 
-        EnemySounds.playGrowl(EnemyGrowlType.TANK, _v1);
-
         const currentPoolId = _nextPoolId++;
 
         const body = boss.children.find((c: any) => c.userData?.isBody) || null;
@@ -262,7 +260,7 @@ export const EnemySpawner = {
             color: bossData.color.num,
             originalScale: scale,
             widthScale: widthMod,
-            hitRadius: 0.5 * scale * Math.max(0.8, widthMod), // Bosses have slightly wider hitboxes
+            hitRadius: 0.5 * scale * Math.max(0.8, widthMod),
             combatRadius: 1.2 * baseScale,
             state: AIState.IDLE,
             idleTimer: 2.0,

@@ -176,17 +176,17 @@ export const WeaponFX = {
     },
 
     // Flamethrower flames
-    drawFlames: (start: THREE.Vector3, direction: THREE.Vector3, range: number) => {
+    drawFlames: (scene: THREE.Scene, start: THREE.Vector3, direction: THREE.Vector3, range: number) => {
         // Ported to Zero-GC ParticlePool
-        const spread = 0.30;
-        const speed = 35 + Math.random() * 15;
-        const life = (range / speed) * (1.1 + Math.random() * 0.2);
+        const spread = 0.035; // Narrow spread to prevent massive cone!
+        const speed = 26 + Math.random() * 4;
+        const life = range / speed; // Reaches exactly as long as the weapon does damage!
 
         const vx = direction.x * speed + (Math.random() - 0.5) * spread * speed;
         const vy = direction.y * speed + (Math.random() - 0.5) * spread * speed;
         const vz = direction.z * speed + (Math.random() - 0.5) * spread * speed;
 
-        const scale = 0.15 + Math.random() * 0.25;
+        const scale = 0.28 + Math.random() * 0.35; // Larger, more visible flames
 
         // Dynamic fire colors
         let r = 1.0, g = 0.4, b = 0.0;
@@ -196,6 +196,13 @@ export const WeaponFX = {
         else { r = 0.66; g = 0.06; b = 0.0; } // Dark Red
 
         ParticlePool.spawnParticle(start.x, start.y, start.z, vx, vy, vz, scale, life, r, g, b);
+
+        // A logical light throws fire color from the flames (at ~20% frequency)
+        if (Math.random() < 0.20) {
+            _v1.copy(start).addScaledVector(direction, range * 0.5);
+            _v1.y += 0.5;
+            WeaponFX.spawnDynamicLight(scene, _v1, COLORS.FIRE_ORANGE.num, 6.0 + Math.random() * 4.0, range * 1.5, 0.15, WeaponLightType.FIRE);
+        }
     },
 
     // Arc-Cannon lightning beam (continuous)
@@ -263,6 +270,13 @@ export const WeaponFX = {
 
             attrMain.needsUpdate = true;
             attrCore.needsUpdate = true;
+        }
+
+        // Flashing cyan logical light thrown around the electricity center
+        if (Math.random() < 0.25) {
+            _v2.copy(start).add(end).multiplyScalar(0.5);
+            _v2.y += 0.5;
+            WeaponFX.spawnDynamicLight(scene, _v2, COLORS.ELECTRIC_FLASH.num, 8.0 + Math.random() * 5.0, dist * 1.6, 0.1, WeaponLightType.ELECTRIC);
         }
     },
 
