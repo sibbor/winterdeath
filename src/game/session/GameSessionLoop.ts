@@ -3,7 +3,7 @@ import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { CameraShakeType } from '../../systems/CameraSystem';
-import { GameSessionState } from '../../core/GameSessionState';
+import { GameSessionState } from './GameSessionState';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { HudSystem } from '../../systems/HudSystem';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';

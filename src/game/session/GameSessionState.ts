@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { SectorState, SectorStats } from '../types/StateTypes';
-import { PlayerStats, PlayerStatID, StatWeaponIndex, StatPerkIndex, StatEnemyIndex, TELEMETRY_BUFFER_SIZE } from '../entities/player/PlayerTypes';
-import { PlayerDeathState, DamageID, DamageType, WeaponID, ToolID, HoldableID } from '../entities/player/CombatTypes';
-import { StatusEffectID } from '../types/StatusEffects';
-import { MAX_ENTITIES } from '../content/constants';
-import { Obstacle } from './world/CollisionResolution';
-import { Enemy } from '../entities/enemies/EnemyManager';
-import { ScrapItem } from '../systems/LootSystem';
-import { WorldStreamer } from './world/WorldStreamer';
-import { ParticleState } from '../types/FXTypes';
-import { InteractionType, InteractionSubType, InteractionPromptId } from '../systems/ui/UIEventBridge';
-import { DiscoveryType } from '../components/ui/hud/HudTypes';
+import { SectorState, SectorStats } from '../../types/StateTypes';
+import { PlayerStats, PlayerStatID, StatWeaponIndex, StatPerkIndex, StatEnemyIndex, TELEMETRY_BUFFER_SIZE } from '../../entities/player/PlayerTypes';
+import { PlayerDeathState, DamageID, DamageType, WeaponID, ToolID, HoldableID } from '../../entities/player/CombatTypes';
+import { StatusEffectID } from '../../types/StatusEffects';
+import { MAX_ENTITIES } from '../../content/constants';
+import { Obstacle } from '../../core/world/CollisionResolution';
+import { Enemy } from '../../entities/enemies/EnemyManager';
+import { ScrapItem } from '../../systems/LootSystem';
+import { WorldStreamer } from '../../core/world/WorldStreamer';
+import { ParticleState } from '../../types/FXTypes';
+import { InteractionType, InteractionSubType, InteractionPromptId } from '../../systems/ui/UIEventBridge';
+import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 
 export interface PreallocatedInitialAim {
     active: boolean;
@@ -42,7 +42,7 @@ export interface PreallocatedInteractionRequest {
     targetId: string;
 }
 
-import { VehicleState, VehicleNodes, VehicleID, VehicleEngineState } from '../entities/vehicles/VehicleTypes';
+import { VehicleState, VehicleNodes, VehicleID, VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
 
 export interface PreallocatedVehicleState extends VehicleState {
     active: boolean;

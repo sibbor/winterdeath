@@ -48,7 +48,7 @@ import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { ChallengeSystem } from '../../systems/ChallengeSystem';
 import { HudSystem } from '../../systems/HudSystem';
-import { GameSessionState } from '../../core/GameSessionState';
+import { GameSessionState } from './GameSessionState';
 import { CLUES } from '../../content/clues';
 import { POIS } from '../../content/pois';
 import { COLLECTIBLES } from '../../content/collectibles';

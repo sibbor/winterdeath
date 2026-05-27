@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GameSessionState } from '../../core/GameSessionState';
+import { GameSessionState } from './GameSessionState';
 import { useRef, useState, useEffect } from 'react';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { DeathPhase } from '../../types/SessionTypes';

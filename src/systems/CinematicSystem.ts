@@ -4,7 +4,7 @@ import { CameraSystem } from './CameraSystem';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { VoiceSounds } from '../utils/audio/AudioLib';
 import { STORY_SCRIPTS } from '../content/dialogues';
-import { GameSessionState } from '../core/GameSessionState';
+import { GameSessionState } from '../game/session/GameSessionState';
 import { FamilyMemberID } from '../content/constants';
 import { System, SystemID } from './System';
 import { DialogueLineType } from '../game/session/SectorTypes';

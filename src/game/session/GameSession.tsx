@@ -35,7 +35,7 @@ import { StatusEffectID } from '../../types/StatusEffects';
 import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 import { useUIEventBridge } from '../../hooks/useUIEventBridge';
 import { InteractionType, InteractionSubType, InteractionPromptId, MetaActionId } from '../../systems/ui/UIEventBridge';
-import { safeCopyBuffer } from '../../core/GameSessionState';
+import { safeCopyBuffer } from './GameSessionState';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
