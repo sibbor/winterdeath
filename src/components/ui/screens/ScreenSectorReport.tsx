@@ -45,7 +45,10 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
     const isAborted = StatsBridge.isSectorAborted(stats) && !deathDetails;
     const statusKey = isFailed ? 'ui.failed' : (isAborted ? 'ui.aborted' : 'ui.completed');
     const statusColor = isFailed ? COLORS.RED : (isAborted ? COLORS.YELLOW : COLORS.GREEN);
-    const accuracy = FormatUtils.formatAccuracy(StatsBridge.getShotsFired(stats), StatsBridge.getShotsHit(stats)).replace('%', '');
+    const shotsFired = StatsBridge.getShotsFired(stats);
+    const shotsHit = StatsBridge.getShotsHit(stats);
+    const accuracyNum = shotsFired > 0 ? Math.floor((shotsHit / shotsFired) * 100) : 0;
+    const accuracy = String(accuracyNum);
     const totalKills = StatsBridge.getSectorKills(stats);
     const bossKilled = StatsBridge.isSectorBossDefeated(stats);
     const familyStatusKey = (StatsBridge.isSectorFamilyFound(stats) || bossKilled) ? 'ui.family_member_rescued' : 'ui.family_member_missing';
@@ -80,33 +83,62 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
         UiSounds.playClick();
     }, []);
 
-    // Sector-specific discovery totals
+    // Sector-specific discovery totals — Zero-GC: for-loops, no Object.values allocations
     const sectorCollectibles = useMemo(() => {
-        const all = Object.values(DataResolver.getCollectibles());
-        return all.filter((c: any) => c.sector === currentSector);
+        const all = DataResolver.getCollectibles();
+        const result: any[] = [];
+        for (const key in all) {
+            if (all[key].sector === currentSector) result.push(all[key]);
+        }
+        return result;
     }, [currentSector]);
+
     const sectorClues = useMemo(() => {
-        const all = Object.values(DataResolver.getClues());
-        return all.filter((c: any) => c.sector === currentSector);
+        const all = DataResolver.getClues();
+        const result: any[] = [];
+        for (const key in all) {
+            if (all[key].sector === currentSector) result.push(all[key]);
+        }
+        return result;
     }, [currentSector]);
+
     const sectorPOIs = useMemo(() => {
-        const all = Object.values(DataResolver.getPois());
-        return all.filter((p: any) => p.sector === currentSector);
+        const all = DataResolver.getPois();
+        const result: any[] = [];
+        for (const key in all) {
+            if (all[key].sector === currentSector) result.push(all[key]);
+        }
+        return result;
     }, [currentSector]);
 
     const discoveredSectorCollectibles = useMemo(() => {
         const found = StatsBridge.getCollectiblesDiscovered(playerStats);
-        return sectorCollectibles.filter(c => found.includes(String(c.id))).length;
+        const foundSet = new Set<string>(found);
+        let count = 0;
+        for (let i = 0; i < sectorCollectibles.length; i++) {
+            if (foundSet.has(String(sectorCollectibles[i].id))) count++;
+        }
+        return count;
     }, [playerStats, sectorCollectibles]);
 
     const discoveredSectorClues = useMemo(() => {
         const found = StatsBridge.getCluesFound(playerStats);
-        return sectorClues.filter(c => found.includes(String(c.id))).length;
+        const foundSet = new Set<string>(found.map((c: any) => String(typeof c === 'string' ? c : c.id)));
+        let count = 0;
+        for (let i = 0; i < sectorClues.length; i++) {
+            if (foundSet.has(String(sectorClues[i].id))) count++;
+        }
+        return count;
     }, [playerStats, sectorClues]);
 
     const discoveredSectorPOIs = useMemo(() => {
         const found = StatsBridge.getDiscoveredPOIs(playerStats);
-        return sectorPOIs.filter(p => found.includes(String(p.id))).length;
+        const foundSet = new Set<string>(found.map(String));
+        let count = 0;
+        for (let i = 0; i < sectorPOIs.length; i++) {
+            if (foundSet.has(String(sectorPOIs[i].id))) count++;
+        }
+        return count;
     }, [playerStats, sectorPOIs]);
 
     return (

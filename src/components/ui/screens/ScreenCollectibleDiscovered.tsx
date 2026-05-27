@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import ModalLayout, { TacticalCard } from './ModalLayout';
-import { getCollectibleById } from '../../../content/collectibles';
+import { DataResolver } from '../../../core/data/DataResolver';
 import CollectiblePreview from '../core/CollectiblePreview';
 
 interface ScreenCollectibleDiscoveredProps {
@@ -12,7 +12,7 @@ interface ScreenCollectibleDiscoveredProps {
 }
 
 const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = ({ collectibleId, onClose, isMobileDevice }) => {
-    const def = getCollectibleById(collectibleId);
+    const def = DataResolver.getCollectibles()[collectibleId as any];
 
     useEffect(() => {
         UiSounds.playLevelUp();

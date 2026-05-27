@@ -36,6 +36,7 @@ const TABS: { id: DiscoveryType, label: string }[] = [
     { id: DiscoveryType.ZOMBIE, label: 'ui.log_zombies' },
     { id: DiscoveryType.BOSS, label: 'ui.log_bosses' },
 ];
+const TAB_IDS = TABS.map(t => t.id);
 const SECTORS = [SectorID.VILLAGE, SectorID.MOUNTAIN_VAULT, SectorID.MAST, SectorID.SCRAPYARD];
 const THEME_COLOR = '#16a34a'; // green-600
 
@@ -138,7 +139,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                     </span>
                 </div>
             ) : undefined}
-            tabs={TABS.map(t => t.id)}
+            tabs={TAB_IDS}
             activeTab={activeTab}
             onTabChange={handleTabChange as any}
             tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
@@ -213,23 +214,50 @@ const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, is
     }, []);
 
     const trackedIds = StatsBridge.getTrackedChallengeIds(stats);
+    const trackedSet = useMemo(() => new Set(trackedIds), [trackedIds]);
+
     const trackedChallenges = useMemo(() => {
-        return GAME_CHALLENGES.filter(c => trackedIds.includes(c.id));
-    }, [trackedIds]);
+        const list: ChallengeDef[] = [];
+        for (let i = 0; i < GAME_CHALLENGES.length; i++) {
+            const c = GAME_CHALLENGES[i];
+            if (trackedSet.has(c.id)) {
+                list.push(c as any);
+            }
+        }
+        return list;
+    }, [trackedSet]);
+
+    const challengesByCategory = useMemo(() => {
+        const mapping: Record<number, ChallengeDef[]> = {};
+        for (let i = 0; i < CHALLENGE_CATEGORIES.length; i++) {
+            const cat = CHALLENGE_CATEGORIES[i];
+            const list: ChallengeDef[] = [];
+            for (let j = 0; j < GAME_CHALLENGES.length; j++) {
+                const c = GAME_CHALLENGES[j];
+                if (c.categoryId === cat.id) {
+                    list.push(c as any);
+                }
+            }
+            mapping[cat.id] = list;
+        }
+        return mapping;
+    }, []);
 
     const categoryProgress = useMemo(() => {
         const progress: Record<string, number> = {};
-        CHALLENGE_CATEGORIES.forEach(cat => {
-            const catChallenges = GAME_CHALLENGES.filter(c => c.categoryId === cat.id);
+        for (let i = 0; i < CHALLENGE_CATEGORIES.length; i++) {
+            const cat = CHALLENGE_CATEGORIES[i];
+            const catChallenges = challengesByCategory[cat.id] || [];
             if (catChallenges.length === 0) {
                 progress[cat.id] = 0;
-                return;
+                continue;
             }
 
             const totalPossiblePoints = catChallenges.length * 3.0;
             let currentPoints = 0;
 
-            catChallenges.forEach(c => {
+            for (let k = 0; k < catChallenges.length; k++) {
+                const c = catChallenges[k];
                 const tier = StatsBridge.getChallengeTier(stats, c.id);
                 const value = StatsBridge.getChallengeValue(stats, c.id);
 
@@ -244,13 +272,13 @@ const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, is
                         currentPoints += Math.max(0, Math.min(1, isNaN(tierProgress) ? 0 : tierProgress));
                     }
                 }
-            });
+            }
 
             const rawProgress = (currentPoints / totalPossiblePoints) * 100;
             progress[cat.id] = isNaN(rawProgress) || !isFinite(rawProgress) ? 0 : Math.round(rawProgress);
-        });
+        }
         return progress;
-    }, [stats]);
+    }, [stats, challengesByCategory]);
 
     return (
         <div className="space-y-12 pb-24">
@@ -283,7 +311,7 @@ const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, is
             )}
 
             {CHALLENGE_CATEGORIES.map(cat => {
-                const catChallenges = GAME_CHALLENGES.filter(c => c.categoryId === cat.id);
+                const catChallenges = challengesByCategory[cat.id] || [];
                 if (catChallenges.length === 0) return null;
 
                 const isCollapsed = collapsed[cat.id] || false;
@@ -319,7 +347,7 @@ const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, is
                                         stats={stats}
                                         isMobileDevice={isMobileDevice}
                                         onToggleTracking={onToggleTracking}
-                                        isTracked={trackedIds.includes(challenge.id)}
+                                        isTracked={trackedSet.has(challenge.id)}
                                     />
                                 ))}
                             </div>
@@ -416,14 +444,20 @@ const ChallengeCard: React.FC<{
 const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, isDebug }) => {
     const zombies = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.ZOMBIE), []);
 
+    const seenEnemySet = useMemo(() => new Set(StatsBridge.getSeenEnemies(stats)), [stats]);
+
     const filteredZombies = useMemo(() => {
-        const seenEnemies = StatsBridge.getSeenEnemies(stats);
-        return zombies.filter(item => {
+        const list: typeof zombies = [];
+        for (let i = 0; i < zombies.length; i++) {
+            const item = zombies[i];
             const typeSmi = Number(item.id);
             const kills = StatsBridge.getEnemyKillCount(stats, typeSmi);
-            return isDebug || seenEnemies.includes(typeSmi) || kills > 0;
-        });
-    }, [zombies, stats, isDebug]);
+            if (isDebug || seenEnemySet.has(typeSmi) || kills > 0) {
+                list.push(item);
+            }
+        }
+        return list;
+    }, [zombies, stats, isDebug, seenEnemySet]);
 
     if (filteredZombies.length === 0) {
         return <NoDataMessage />;
@@ -439,7 +473,7 @@ const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDeb
                 const itemColor = item.color.str;
 
                 // Determine discovery status. If isDebug is active (via 'Show All'), we treat as discovered.
-                const isSeen = isDebug || StatsBridge.getSeenEnemies(stats).includes(typeSmi) || kills > 0;
+                const isSeen = isDebug || seenEnemySet.has(typeSmi) || kills > 0;
 
                 return (
                     <TacticalCard key={key} id={`log-item-${key}`} isLocked={!isSeen} color={item.color} showHatching={isSeen} showHover={true}>
@@ -525,15 +559,31 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
     const themesList = useMemo(() => DataResolver.getSectorThemes(), []);
     const bossesList = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.BOSS), []);
 
+    const { seenBossesSet, defeatedBossesSet } = useMemo(() => {
+        return {
+            seenBossesSet: new Set(StatsBridge.getSeenBosses(stats)),
+            defeatedBossesSet: new Set(StatsBridge.getDeadBossIndices(stats))
+        };
+    }, [stats]);
+
     const filteredSectors = useMemo(() => {
-        const seenBosses = StatsBridge.getSeenBosses(stats);
-        const defeatedBosses = StatsBridge.getDeadBossIndices(stats);
-        return sectorsList.filter(sectorIndex => {
-            const boss = bossesList.find((b: any) => b.id === sectorIndex);
-            const isSeen = boss && (seenBosses.includes(sectorIndex) || defeatedBosses.includes(sectorIndex));
-            return isDebug || isSeen;
-        });
-    }, [sectorsList, bossesList, stats, isDebug]);
+        const list: typeof sectorsList = [];
+        for (let i = 0; i < sectorsList.length; i++) {
+            const sectorIndex = sectorsList[i];
+            let boss: any = null;
+            for (let j = 0; j < bossesList.length; j++) {
+                if (bossesList[j].id === sectorIndex) {
+                    boss = bossesList[j];
+                    break;
+                }
+            }
+            const isSeen = boss && (seenBossesSet.has(sectorIndex) || defeatedBossesSet.has(sectorIndex));
+            if (isDebug || isSeen) {
+                list.push(sectorIndex);
+            }
+        }
+        return list;
+    }, [sectorsList, bossesList, isDebug, seenBossesSet, defeatedBossesSet]);
 
     if (filteredSectors.length === 0) {
         return <NoDataMessage />;
@@ -542,15 +592,19 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
     return (
         <div className="space-y-16 pb-12">
             {filteredSectors.map(sectorIndex => {
-                const boss = bossesList.find((b: any) => b.id === sectorIndex);
+                let boss: any = null;
+                for (let j = 0; j < bossesList.length; j++) {
+                    if (bossesList[j].id === sectorIndex) {
+                        boss = bossesList[j];
+                        break;
+                    }
+                }
                 const theme = themesList[sectorIndex];
                 const isSectorUnlocked = isDebug || StatsBridge.getSectorsCompleted(stats) >= sectorIndex - 1;
                 const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorIndex)) : `${t('ui.sector')} ${sectorIndex}`) : '???';
 
-                const seenBosses = StatsBridge.getSeenBosses(stats);
-                const defeatedBosses = StatsBridge.getDeadBossIndices(stats);
-                const isBossUnlocked = isDebug || (boss && (seenBosses.includes(sectorIndex) || defeatedBosses.includes(sectorIndex)));
-                const isDefeated = defeatedBosses.includes(sectorIndex);
+                const isBossUnlocked = isDebug || (boss && (seenBossesSet.has(sectorIndex) || defeatedBossesSet.has(sectorIndex)));
+                const isDefeated = defeatedBossesSet.has(sectorIndex);
 
                 return (
                     <div key={sectorIndex} className="space-y-6">
@@ -652,27 +706,70 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
     const foundIds = StatsBridge.getCollectiblesDiscovered(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.COLLECTIBLE), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
-
     const sectorsCompleted = StatsBridge.getSectorsCompleted(stats);
+
+    const itemsBySector = useMemo(() => {
+        const mapping: Record<number, typeof items> = {};
+        for (let s = 0; s < SECTORS.length; s++) {
+            const sectorId = SECTORS[s];
+            const list: typeof items = [];
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].sector === sectorId) {
+                    list.push(items[i]);
+                }
+            }
+            mapping[sectorId] = list;
+        }
+        return mapping;
+    }, [items]);
+
+    const resolvedFoundSet = useMemo(() => {
+        const set = new Set<number>();
+        for (let i = 0; i < foundIds.length; i++) {
+            const resolved = DataResolver.resolveCollectibleID(foundIds[i]);
+            if (resolved !== undefined) {
+                set.add(resolved);
+            }
+        }
+        return set;
+    }, [foundIds]);
+
+    const sectorData = useMemo(() => {
+        const data: Record<number, { sectorItems: typeof items, discoveredItems: typeof items, itemsToShow: typeof items, foundCount: number }> = {};
+        for (let s = 0; s < SECTORS.length; s++) {
+            const sectorId = SECTORS[s];
+            const sectorItems = itemsBySector[sectorId] || [];
+            
+            const discoveredItems: typeof items = [];
+            for (let i = 0; i < sectorItems.length; i++) {
+                const item = sectorItems[i];
+                if (resolvedFoundSet.has(item.id)) {
+                    discoveredItems.push(item);
+                }
+            }
+
+            const itemsToShow = isDebug ? sectorItems : discoveredItems;
+            const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
+            const foundCount = isSectorUnlocked ? discoveredItems.length : 0;
+
+            data[sectorId] = {
+                sectorItems,
+                discoveredItems,
+                itemsToShow,
+                foundCount
+            };
+        }
+        return data;
+    }, [itemsBySector, resolvedFoundSet, isDebug, sectorsCompleted]);
+
     // Always show the sector list
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
             {SECTORS.map(sectorId => {
-                const sectorItems = items.filter(c => c.sector === sectorId);
+                const sData = sectorData[sectorId];
+                if (!sData || sData.sectorItems.length === 0) return null;
+
                 const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
-
-                // Accurate found count regardless of data pollution (strings vs objects)
-                const discoveredItems = sectorItems.filter(c => {
-                    return foundIds.some(fid => DataResolver.resolveCollectibleID(fid) === c.id);
-                });
-
-                const itemsToShow = isDebug ? sectorItems : discoveredItems;
-
-                // Always show the sector if it has items defined in the data
-                if (sectorItems.length === 0) return null;
-
-                // Enforce 0 count for locked sectors to avoid revealing progress early
-                const foundCount = isSectorUnlocked ? discoveredItems.length : 0;
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -681,15 +778,15 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
                                 {isSectorUnlocked ? (themes[sectorId] ? t(DataResolver.getSectorName(sectorId)) : `${t('ui.sector')} ${sectorId}`) : '???'}
                             </h3>
                             <span className="text-sm font-mono text-zinc-600 font-light uppercase mt-1">
-                                {foundCount} / {sectorItems.length} {t('ui.collected')}
+                                {sData.foundCount} / {sData.sectorItems.length} {t('ui.collected')}
                             </span>
                         </div>
 
                         {(isSectorUnlocked || isDebug) ? (
-                            itemsToShow.length > 0 ? (
+                            sData.itemsToShow.length > 0 ? (
                                 <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                                    {itemsToShow.map(item => {
-                                        const isFound = isDebug || foundIds.some(fid => DataResolver.resolveCollectibleID(fid) === item.id);
+                                    {sData.itemsToShow.map(item => {
+                                        const isFound = isDebug || resolvedFoundSet.has(item.id);
                                         return (
                                             <TacticalCard key={item.id} id={`log-item-${item.id}`} isLocked={!isFound} color={COLORS.YELLOW} className="p-0" showHover={isFound}>
                                                 <DescriptionExpansion item={item} isFound={isFound} isMobileDevice={isMobileDevice} />
@@ -716,27 +813,70 @@ const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effecti
     const foundIds = StatsBridge.getCluesFound(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.CLUE), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
-
     const sectorsCompleted = StatsBridge.getSectorsCompleted(stats);
+
+    const itemsBySector = useMemo(() => {
+        const mapping: Record<number, typeof items> = {};
+        for (let s = 0; s < SECTORS.length; s++) {
+            const sectorId = SECTORS[s];
+            const list: typeof items = [];
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].sector === sectorId) {
+                    list.push(items[i]);
+                }
+            }
+            mapping[sectorId] = list;
+        }
+        return mapping;
+    }, [items]);
+
+    const resolvedFoundSet = useMemo(() => {
+        const set = new Set<number>();
+        for (let i = 0; i < foundIds.length; i++) {
+            const resolved = DataResolver.resolveClueID(foundIds[i]);
+            if (resolved !== undefined) {
+                set.add(resolved);
+            }
+        }
+        return set;
+    }, [foundIds]);
+
+    const sectorData = useMemo(() => {
+        const data: Record<number, { sectorItems: typeof items, discoveredItems: typeof items, itemsToShow: typeof items, foundCount: number }> = {};
+        for (let s = 0; s < SECTORS.length; s++) {
+            const sectorId = SECTORS[s];
+            const sectorItems = itemsBySector[sectorId] || [];
+            
+            const discoveredItems: typeof items = [];
+            for (let i = 0; i < sectorItems.length; i++) {
+                const item = sectorItems[i];
+                if (resolvedFoundSet.has(item.id)) {
+                    discoveredItems.push(item);
+                }
+            }
+
+            const itemsToShow = isDebug ? sectorItems : discoveredItems;
+            const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
+            const foundCount = isSectorUnlocked ? discoveredItems.length : 0;
+
+            data[sectorId] = {
+                sectorItems,
+                discoveredItems,
+                itemsToShow,
+                foundCount
+            };
+        }
+        return data;
+    }, [itemsBySector, resolvedFoundSet, isDebug, sectorsCompleted]);
+
     // Always show the sector list
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
-                const sectorItems = items.filter(c => c.sector === sectorId);
+                const sData = sectorData[sectorId];
+                if (!sData || sData.sectorItems.length === 0) return null;
+
                 const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
-
-                // Accurate found count regardless of data pollution (strings vs objects)
-                const discoveredItems = sectorItems.filter(c => {
-                    return foundIds.some(fid => DataResolver.resolveClueID(fid) === c.id);
-                });
-
-                const itemsToShow = isDebug ? sectorItems : discoveredItems;
-
-                // Always show the sector if it has items defined in the data
-                if (sectorItems.length === 0) return null;
-
-                // Enforce 0 count for locked sectors to avoid revealing progress early
-                const foundCount = isSectorUnlocked ? discoveredItems.length : 0;
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -746,16 +886,16 @@ const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effecti
                             </h3>
                             {isSectorUnlocked && (
                                 <span className="text-sm font-mono text-zinc-600 font-light uppercase mt-1">
-                                    {foundCount} / {sectorItems.length} {t('ui.discovered')}
+                                    {sData.foundCount} / {sData.sectorItems.length} {t('ui.discovered')}
                                 </span>
                             )}
                         </div>
 
                         {(isSectorUnlocked || isDebug) ? (
-                            itemsToShow.length > 0 ? (
+                            sData.itemsToShow.length > 0 ? (
                                 <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                                    {itemsToShow.map((clue) => {
-                                        const isFound = isDebug || foundIds.some(fid => DataResolver.resolveClueID(fid) === clue.id);
+                                    {sData.itemsToShow.map((clue) => {
+                                        const isFound = isDebug || resolvedFoundSet.has(clue.id);
                                         const isThought = clue.type === 'THOUGHT';
                                         const typeColor = isThought ? COLORS.BLUE : COLORS.YELLOW;
                                         return (
@@ -793,28 +933,69 @@ const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effective
     const visitedList = StatsBridge.getDiscoveredPOIs(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.POI), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
-
     const sectorsCompleted = StatsBridge.getSectorsCompleted(stats);
-    // Removed hasAny check to always show the list of sectors
+
+    const itemsBySector = useMemo(() => {
+        const mapping: Record<number, typeof items> = {};
+        for (let s = 0; s < SECTORS.length; s++) {
+            const sectorId = SECTORS[s];
+            const list: typeof items = [];
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].sector === sectorId) {
+                    list.push(items[i]);
+                }
+            }
+            mapping[sectorId] = list;
+        }
+        return mapping;
+    }, [items]);
+
+    const resolvedFoundSet = useMemo(() => {
+        const set = new Set<number>();
+        for (let i = 0; i < visitedList.length; i++) {
+            const resolved = DataResolver.resolvePoiID(visitedList[i]);
+            if (resolved !== undefined) {
+                set.add(resolved);
+            }
+        }
+        return set;
+    }, [visitedList]);
+
+    const sectorData = useMemo(() => {
+        const data: Record<number, { sectorItems: typeof items, discoveredItems: typeof items, itemsToShow: typeof items, foundCount: number }> = {};
+        for (let s = 0; s < SECTORS.length; s++) {
+            const sectorId = SECTORS[s];
+            const sectorItems = itemsBySector[sectorId] || [];
+            
+            const discoveredItems: typeof items = [];
+            for (let i = 0; i < sectorItems.length; i++) {
+                const item = sectorItems[i];
+                if (resolvedFoundSet.has(item.id)) {
+                    discoveredItems.push(item);
+                }
+            }
+
+            const itemsToShow = isDebug ? sectorItems : discoveredItems;
+            const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
+            const foundCount = isSectorUnlocked ? discoveredItems.length : 0;
+
+            data[sectorId] = {
+                sectorItems,
+                discoveredItems,
+                itemsToShow,
+                foundCount
+            };
+        }
+        return data;
+    }, [itemsBySector, resolvedFoundSet, isDebug, sectorsCompleted]);
 
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
-                const sectorItems = items.filter(poi => poi.sector === sectorId);
+                const sData = sectorData[sectorId];
+                if (!sData || sData.sectorItems.length === 0) return null;
+
                 const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
-
-                // Normalize visitedList (POI IDs)
-                const discoveredItems = sectorItems.filter(poi => {
-                    return visitedList.some(fid => DataResolver.resolvePoiID(fid) === poi.id);
-                });
-
-                const itemsToShow = isDebug ? sectorItems : discoveredItems;
-
-                // Always show the sector if it has items defined in the data
-                if (sectorItems.length === 0) return null;
-
-                // Enforce 0 count for locked sectors
-                const foundCount = isSectorUnlocked ? discoveredItems.length : 0;
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -824,17 +1005,17 @@ const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effective
                             </h3>
                             {isSectorUnlocked && (
                                 <span className="text-sm font-mono text-zinc-600 font-light uppercase mt-1">
-                                    {foundCount} / {sectorItems.length} {t('ui.discovered')}
+                                    {sData.foundCount} / {sData.sectorItems.length} {t('ui.discovered')}
                                 </span>
                             )}
                         </div>
 
                         {(isSectorUnlocked || isDebug) ? (
-                            itemsToShow.length > 0 ? (
+                            sData.itemsToShow.length > 0 ? (
                                 <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                                    {itemsToShow.map((poi) => {
+                                    {sData.itemsToShow.map((poi) => {
                                         const poiId = poi.id;
-                                        const isFound = isDebug || visitedList.some(fid => DataResolver.resolvePoiID(fid) === poiId);
+                                        const isFound = isDebug || resolvedFoundSet.has(poiId);
                                         return (
                                             <TacticalCard key={poiId} id={`log-item-${poiId}`} isLocked={!isFound} color={COLORS.YELLOW} showHover={isFound} className={isMobileDevice ? 'p-4' : 'p-6'}>
                                                 <div className="flex flex-col gap-4 relative z-10 w-full">

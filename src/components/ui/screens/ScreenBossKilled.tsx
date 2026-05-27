@@ -22,6 +22,39 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
         UiSounds.playVictory();
     }, []);
 
+    const weaponDamageList = React.useMemo(() => {
+        if (!stats) return [];
+        const list: { idx: number; amount: number; nameKey: string }[] = [];
+        for (let idx = 0; idx < StatWeaponIndex.COUNT; idx++) {
+            const amount = StatsBridge.getWeaponDamageDealt(stats, idx);
+            if (amount > 0) {
+                list.push({
+                    idx,
+                    amount,
+                    nameKey: DataResolver.getDamageName(idx),
+                });
+            }
+        }
+        return list;
+    }, [stats]);
+
+    const incomingDamageList = React.useMemo(() => {
+        if (!stats) return [];
+        const list: { attackId: number; amount: number; nameKey: string }[] = [];
+        const sourceId = TelemetrySourceOffset.BOSS + sectorIndex;
+        for (let attackId = 0; attackId < TELEMETRY_ATTACKS_PER_SOURCE; attackId++) {
+            const amount = StatsBridge.getIncomingDamage(stats, sourceId, attackId);
+            if (amount > 0) {
+                list.push({
+                    attackId,
+                    amount,
+                    nameKey: DataResolver.getAttackName(attackId),
+                });
+            }
+        }
+        return list;
+    }, [stats, sectorIndex]);
+
     return (
         <ModalLayout
             title={bossName}
@@ -45,18 +78,12 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                         <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-4 border-b border-blue-900/30 pb-1">{t('ui.damage_dealt')}</span>
                             <div className="space-y-1">
-                                {Array.from({ length: StatWeaponIndex.COUNT }).map((_, idx) => {
-                                    const amount = StatsBridge.getWeaponDamageDealt(stats, idx);
-                                    if (amount <= 0) return null;
-
-                                    const weaponId = idx;
-                                    return (
-                                        <div key={idx} className="flex justify-between items-center text-[10px]">
-                                            <span className="text-gray-400 uppercase font-bold">{t(DataResolver.getDamageName(weaponId))}</span>
-                                            <span className="text-white font-mono">{Math.floor(amount).toLocaleString()}</span>
-                                        </div>
-                                    );
-                                })}
+                                {weaponDamageList.map((item) => (
+                                    <div key={item.idx} className="flex justify-between items-center text-[10px]">
+                                        <span className="text-gray-400 uppercase font-bold">{t(item.nameKey)}</span>
+                                        <span className="text-white font-mono">{Math.floor(item.amount).toLocaleString()}</span>
+                                    </div>
+                                ))}
                                 <div className="flex justify-between items-center pt-2 border-t border-gray-800 mt-2">
                                     <span className="text-xs font-black text-white uppercase">{t('ui.total')}</span>
                                     <span className="text-xl font-black text-blue-400">{Math.floor(StatsBridge.getSectorDamageDealt(stats)).toLocaleString()}</span>
@@ -74,19 +101,12 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                         <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest mb-4 border-b border-red-900/30 pb-1">{t('ui.damage_taken')}</span>
                             <div className="space-y-1">
-                                {Array.from({ length: TELEMETRY_ATTACKS_PER_SOURCE }).map((_, attackId) => {
-                                    // Use new mapped source offset (TelemetrySourceOffset.BOSS + BossID)
-                                    const sourceId = TelemetrySourceOffset.BOSS + sectorIndex;
-                                    const amount = StatsBridge.getIncomingDamage(stats, sourceId, attackId);
-                                    if (amount <= 0) return null;
-
-                                    return (
-                                        <div key={attackId} className="flex justify-between items-center text-[10px]">
-                                            <span className="text-gray-400 uppercase font-bold">{t(DataResolver.getAttackName(attackId))}</span>
-                                            <span className="text-white font-mono">{Math.floor(amount).toLocaleString()}</span>
-                                        </div>
-                                    );
-                                })}
+                                {incomingDamageList.map((item) => (
+                                    <div key={item.attackId} className="flex justify-between items-center text-[10px]">
+                                        <span className="text-gray-400 uppercase font-bold">{t(item.nameKey)}</span>
+                                        <span className="text-white font-mono">{Math.floor(item.amount).toLocaleString()}</span>
+                                    </div>
+                                ))}
                                 <div className="flex justify-between items-center pt-2 border-t border-gray-800 mt-2">
                                     <span className="text-xs font-black text-white uppercase">{t('ui.total')}</span>
                                     <span className="text-xl font-black text-red-400">{Math.floor(StatsBridge.getSectorDamageTaken(stats)).toLocaleString()}</span>

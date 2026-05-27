@@ -8,7 +8,6 @@ import { MAX_ENTITIES } from '../../../content/constants';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { COLORS } from '../../../utils/ui/ColorUtils';
 import { PerkCategory } from '../../../content/perks';
-import { WEAPONS } from '../../../content/weapons';
 import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputManager';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 import { FormatUtils } from '../../../utils/ui/FormatUtils';
@@ -35,6 +34,8 @@ const TABS: { id: Tab, label: string }[] = [
     { id: 'weapons', label: 'ui.weapons' },
     { id: 'perks', label: 'ui.perks' },
 ];
+
+const TAB_IDS = TABS.map(t => t.id);
 
 const THEME_COLOR = '#3b82f6'; // blue-500
 
@@ -119,7 +120,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
             onCancel={onClose}
             cancelLabel={t('ui.close')}
             titleColorClass="text-blue-500"
-            tabs={TABS.map(t => t.id)}
+            tabs={TAB_IDS}
             activeTab={activeTab}
             onTabChange={handleTabChange}
             tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
@@ -239,6 +240,23 @@ const OverviewTab: React.FC<{
         return set;
     }, [stats]);
 
+    const { rescuedNames, missingNames } = useMemo(() => {
+        const rescuedList: string[] = [];
+        const missingList: string[] = [];
+        for (let i = 0; i < FAMILY_MEMBERS.length; i++) {
+            const m = FAMILY_MEMBERS[i];
+            if (rescuedMemberIds.has(m.id)) {
+                rescuedList.push(t(m.name));
+            } else {
+                missingList.push(t(m.name));
+            }
+        }
+        return {
+            rescuedNames: rescuedList.join(', ') || t('ui.none'),
+            missingNames: missingList.join(', ') || t('ui.none')
+        };
+    }, [rescuedMemberIds, FAMILY_MEMBERS]);
+
     return (
         <div className="flex flex-col h-full gap-6 pb-12 overflow-y-auto pr-2 custom-scrollbar bg-zinc-950/20 backdrop-blur-sm rounded-lg p-1">
             <div className={`grid ${isMobileDevice ? 'grid-cols-1' : 'grid-cols-2'} gap-6`}>
@@ -267,13 +285,13 @@ const OverviewTab: React.FC<{
                         <div className="flex flex-wrap items-baseline gap-2">
                             <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest shrink-0">{t('ui.rescued')}:</span>
                             <span className="text-sm font-bold tracking-tight text-white/90">
-                                {FAMILY_MEMBERS.filter(m => rescuedMemberIds.has(m.id)).map(m => t(m.name)).join(', ') || t('ui.none')}
+                                {rescuedNames}
                             </span>
                         </div>
                         <div className="flex flex-wrap items-baseline gap-2 pt-2 border-t border-zinc-800/50">
                             <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest shrink-0">{t('ui.missing')}:</span>
                             <span className="text-sm font-medium text-zinc-500 italic">
-                                {FAMILY_MEMBERS.filter(m => !rescuedMemberIds.has(m.id)).map(m => t(m.name)).join(', ') || t('ui.none')}
+                                {missingNames}
                             </span>
                         </div>
                     </div>
@@ -587,8 +605,8 @@ const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?:
         const comRes = StatsBridge.getComfortWeapon(stats);
         const comId = comRes[0];
 
-        const sigData = sigId !== -1 ? WEAPONS[sigId] : null;
-        const comData = comId !== -1 ? WEAPONS[comId] : null;
+        const sigData = sigId !== -1 ? DataResolver.getWeapons()[sigId] : null;
+        const comData = comId !== -1 ? DataResolver.getWeapons()[comId] : null;
 
         return {
             signature: sigData ? { name: t(sigData.displayName), icon: sigData.icon, isPng: sigData.iconIsPng, count: sigCount } : null,
@@ -793,13 +811,19 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
         const gained = StatsBridge.getPerkTimesGainedMap(stats);
         if (!discovered) return [];
 
-        return (DataResolver.getPerksByCategory(PerkCategory.BUFF)).filter(p => {
-            if (!p) return false;
-            return (discovered[p.id] > 0) ||
+        const allBuffs = DataResolver.getPerksByCategory(PerkCategory.BUFF);
+        const filtered: typeof allBuffs = [];
+        for (let i = 0; i < allBuffs.length; i++) {
+            const p = allBuffs[i];
+            if (!p) continue;
+            if ((discovered[p.id] > 0) ||
                 (gained && gained[p.id] > 0) ||
                 (StatsBridge.getPerkDamageDealt(stats, p.id) > 0) ||
-                (StatsBridge.getPerkDamageAbsorbed(stats, p.id) > 0);
-        });
+                (StatsBridge.getPerkDamageAbsorbed(stats, p.id) > 0)) {
+                filtered.push(p);
+            }
+        }
+        return filtered;
     }, [stats]);
 
     const debuffs = useMemo(() => {
@@ -807,12 +831,18 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
         const gained = StatsBridge.getPerkTimesGainedMap(stats);
         if (!discovered) return [];
 
-        return (DataResolver.getPerksByCategory(PerkCategory.DEBUFF)).filter(p => {
-            if (!p) return false;
-            return (discovered[p.id] > 0) ||
+        const allDebuffs = DataResolver.getPerksByCategory(PerkCategory.DEBUFF);
+        const filtered: typeof allDebuffs = [];
+        for (let i = 0; i < allDebuffs.length; i++) {
+            const p = allDebuffs[i];
+            if (!p) continue;
+            if ((discovered[p.id] > 0) ||
                 (gained && gained[p.id] > 0) ||
-                (StatsBridge.getPerkDamageDealt(stats, p.id) > 0);
-        });
+                (StatsBridge.getPerkDamageDealt(stats, p.id) > 0)) {
+                filtered.push(p);
+            }
+        }
+        return filtered;
     }, [stats]);
 
     const passives = useMemo(() => {
@@ -820,10 +850,16 @@ const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effec
         const gained = StatsBridge.getPerkTimesGainedMap(stats);
         if (!discovered) return [];
 
-        return (DataResolver.getPerksByCategory(PerkCategory.PASSIVE)).filter(p => {
-            if (!p) return false;
-            return (discovered[p.id] > 0) || (gained && gained[p.id] > 0);
-        });
+        const allPassives = DataResolver.getPerksByCategory(PerkCategory.PASSIVE);
+        const filtered: typeof allPassives = [];
+        for (let i = 0; i < allPassives.length; i++) {
+            const p = allPassives[i];
+            if (!p) continue;
+            if ((discovered[p.id] > 0) || (gained && gained[p.id] > 0)) {
+                filtered.push(p);
+            }
+        }
+        return filtered;
     }, [stats]);
 
     const hasData = buffs.length > 0 || debuffs.length > 0 || passives.length > 0;

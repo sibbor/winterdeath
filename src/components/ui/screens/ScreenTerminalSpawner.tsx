@@ -77,7 +77,8 @@ export const ScreenTerminalSpawner: React.FC<SpawnerTerminalProps> = ({ onClose,
 
         // Spawn Horde
         let totalCount = 0;
-        ZOMBIE_TYPES.forEach(type => {
+        for (let idx = 0; idx < ZOMBIE_TYPES.length; idx++) {
+            const type = ZOMBIE_TYPES[idx];
             const count = counts[type] || 0;
             totalCount += count;
 
@@ -90,7 +91,7 @@ export const ScreenTerminalSpawner: React.FC<SpawnerTerminalProps> = ({ onClose,
                 const newEnemy = EnemyManager.spawn(scene, _playerPosRef, type, _spawnPos, false, 0, true);
                 if (newEnemy) spawned.push(newEnemy);
             }
-        });
+        }
 
         if (onSpawnEnemies) onSpawnEnemies(spawned);
 
@@ -104,16 +105,18 @@ export const ScreenTerminalSpawner: React.FC<SpawnerTerminalProps> = ({ onClose,
     const handleRandomize = () => {
         UiSounds.playClick();
         const newCounts: Record<number, number> = {};
-        ZOMBIE_TYPES.forEach(type => {
-            newCounts[type] = Math.floor(Math.random() * 60); // Random up to 60 for stress test
-        });
+        for (let idx = 0; idx < ZOMBIE_TYPES.length; idx++) {
+            newCounts[ZOMBIE_TYPES[idx]] = Math.floor(Math.random() * 60); // Random up to 60 for stress test
+        }
         setCounts(newCounts);
     };
 
     const handleClear = () => {
         UiSounds.playClick();
         const newCounts: Record<number, number> = {};
-        ZOMBIE_TYPES.forEach(type => { newCounts[type] = 0; });
+        for (let idx = 0; idx < ZOMBIE_TYPES.length; idx++) {
+            newCounts[ZOMBIE_TYPES[idx]] = 0;
+        }
         setCounts(newCounts);
         setSelectedBoss(null);
     };

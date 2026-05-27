@@ -85,9 +85,10 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
         if (tempLoadout.throwable !== currentLoadout.throwable) return true;
         if (tempLoadout.special !== currentLoadout.special) return true;
 
-        const weaponIds = DataResolver.getWeapons().map(w => w.name);
-        for (const k of weaponIds) {
-            if ((tempWeaponLevels[k] || 1) !== (weaponLevels[k] || 1)) return true;
+        const weapons = DataResolver.getWeapons();
+        for (let i = 0; i < weapons.length; i++) {
+            const name = weapons[i].name;
+            if ((tempWeaponLevels[name] || 1) !== (weaponLevels[name] || 1)) return true;
         }
         return false;
     }, [tempStats, tempLoadout, tempWeaponLevels, stats, currentLoadout, weaponLevels]);

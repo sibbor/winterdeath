@@ -3,7 +3,7 @@ import { t } from '../../../utils/i18n';
 import ModalLayout, { TacticalButton, HORIZONTAL_HATCHING_STYLE } from './ModalLayout';
 import { PlayerStats } from '../../../entities/player/PlayerTypes';
 import { PERKS, PerkColors } from '../../../content/perks';
-import { GAME_CHALLENGES } from '../../../content/ChallengeTypes';
+import { GAME_CHALLENGES, ChallengeDef } from '../../../content/ChallengeTypes';
 import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 
@@ -68,7 +68,15 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
 
     const trackedChallenges = useMemo(() => {
         const trackedIds = StatsBridge.getTrackedChallengeIds(stats);
-        return GAME_CHALLENGES.filter(c => trackedIds.includes(c.id));
+        const set = new Set(trackedIds);
+        const list: ChallengeDef[] = [];
+        for (let i = 0; i < GAME_CHALLENGES.length; i++) {
+            const c = GAME_CHALLENGES[i];
+            if (set.has(c.id)) {
+                list.push(c as any);
+            }
+        }
+        return list;
     }, [stats]);
 
     return (

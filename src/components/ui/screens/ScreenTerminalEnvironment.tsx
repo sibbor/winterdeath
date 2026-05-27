@@ -5,6 +5,15 @@ import { EnvironmentOverride, WeatherType } from '../../../core/engine/EngineTyp
 import { Sector4 } from '../../../content/sectors/Sector4';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 
+// Zero-GC: static config hoisted outside component to prevent re-allocation on every render
+const WEATHER_OPTIONS: { id: WeatherType; key: string }[] = [
+    { id: WeatherType.NONE, key: 'none' },
+    { id: WeatherType.RAIN, key: 'rain' },
+    { id: WeatherType.SNOW, key: 'snow' },
+    { id: WeatherType.ASH, key: 'ash' },
+    { id: WeatherType.EMBER, key: 'ember' },
+];
+
 interface EnvironmentTerminalProps {
     onClose: () => void;
     currentWeather: WeatherType;
@@ -169,13 +178,7 @@ export const ScreenTerminalEnvironment: React.FC<EnvironmentTerminalProps> = ({ 
                 <div className="bg-zinc-900/40 p-6 border border-zinc-800 rounded-lg">
                     <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest mb-4 block">{t('ui.weather')}</label>
                     <div className="flex flex-nowrap gap-2 overflow-x-auto mb-6 pb-2 scrollbar-hide">
-                        {[
-                            { id: WeatherType.NONE, key: 'none' },
-                            { id: WeatherType.RAIN, key: 'rain' },
-                            { id: WeatherType.SNOW, key: 'snow' },
-                            { id: WeatherType.ASH, key: 'ash' },
-                            { id: WeatherType.EMBER, key: 'ember' }
-                        ].map((w) => (
+                        {WEATHER_OPTIONS.map((w) => (
                             <TacticalTab
                                 key={w.id}
                                 label={t(`weather.${w.key}`)}

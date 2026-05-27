@@ -10,6 +10,9 @@ import { SectorID } from '../../../game/session/SectorTypes';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 import { PoiID } from '../../../content/pois';
 
+// Zero-GC: Sector index array built once at module level, not per render
+const SECTOR_INDICES: number[] = DataResolver.getSectorThemes().map((_, i) => i);
+
 interface ScreenSectorOverviewProps {
     currentSector: number;
     rescuedFamilyIndices: number[];
@@ -58,34 +61,50 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
         return () => clearInterval(interval);
     }, [briefingData]);
 
-    // -- Stats Calculation --
+    // -- Stats Calculation -- Zero-GC: for-loops replacing Object.values+filter chains
     const { collectibles, clues, pois } = useMemo(() => {
-        // Accurate Collectible Count
-        const allCollectibles = Object.values(DataResolver.getCollectibles());
-        const sectorCollectibles = allCollectibles.filter(c => c.sector === selectedSectorIndex);
-        const foundCollectiblesCount = StatsBridge.getCollectiblesDiscovered(stats).filter(id =>
-            sectorCollectibles.some(c => c.id === Number(id))
-        ).length;
+        const foundCollectiblesSet = new Set<number>(StatsBridge.getCollectiblesDiscovered(stats).map(Number));
+        const foundCluesRaw = StatsBridge.getCluesFound(stats);
+        const foundCluesSet = new Set<string>(foundCluesRaw.map((c: any) => String(typeof c === 'string' ? c : c.id)));
+        const foundPoisSet = new Set<number>(StatsBridge.getDiscoveredPOIs(stats).map(Number));
 
-        // Accurate Clue Count
-        const sectorClueIds = Object.values(DataResolver.getClues())
-            .filter(c => c.sector === selectedSectorIndex)
-            .map(c => c.id);
-        const foundCluesCount = StatsBridge.getCluesFound(stats).filter(clueObj => {
-            const id = typeof clueObj === 'string' ? clueObj : (clueObj as any).id;
-            return sectorClueIds.includes(id);
-        }).length;
+        const allCollectibles = DataResolver.getCollectibles();
+        let collTotal = 0;
+        let collFound = 0;
+        for (const key in allCollectibles) {
+            const c = allCollectibles[key];
+            if (c.sector === selectedSectorIndex) {
+                collTotal++;
+                if (foundCollectiblesSet.has(c.id)) collFound++;
+            }
+        }
 
-        // Accurate POI Count
-        const sectorPoiIds = Object.values(DataResolver.getPois())
-            .filter(p => p.sector === selectedSectorIndex)
-            .map(p => p.id);
-        const foundPoisCount = StatsBridge.getDiscoveredPOIs(stats).filter(id => sectorPoiIds.includes(Number(id) as PoiID)).length;
+        const allClues = DataResolver.getClues();
+        let clueTotal = 0;
+        let clueFound = 0;
+        for (const key in allClues) {
+            const c = allClues[key];
+            if (c.sector === selectedSectorIndex) {
+                clueTotal++;
+                if (foundCluesSet.has(String(c.id))) clueFound++;
+            }
+        }
+
+        const allPois = DataResolver.getPois();
+        let poiTotal = 0;
+        let poiFound = 0;
+        for (const key in allPois) {
+            const p = allPois[key];
+            if (p.sector === selectedSectorIndex) {
+                poiTotal++;
+                if (foundPoisSet.has(p.id as number)) poiFound++;
+            }
+        }
 
         return {
-            collectibles: { found: foundCollectiblesCount, total: sectorCollectibles.length },
-            clues: { found: foundCluesCount, total: sectorClueIds.length },
-            pois: { found: foundPoisCount, total: sectorPoiIds.length }
+            collectibles: { found: collFound, total: collTotal },
+            clues: { found: clueFound, total: clueTotal },
+            pois: { found: poiFound, total: poiTotal }
         };
     }, [selectedSectorIndex, stats]);
 
@@ -119,7 +138,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
             canConfirm={!(!debugMode && (selectedSectorIndex > SectorID.VILLAGE && selectedSectorIndex !== SectorID.PLAYGROUND && !deadBossIndices.includes(selectedSectorIndex - 1)))}
             showCancel={true}
             titleColorClass="text-red-600"
-            tabs={DataResolver.getSectorThemes().map((_, i) => i)}
+            tabs={SECTOR_INDICES}
             activeTab={selectedSectorIndex}
             onTabChange={handleSelect}
             tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
@@ -128,7 +147,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                 {/* LEFT: Sector List */}
                 <div className={`${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : 'w-full shrink-0 relative'}`}>
                     <div className={`${!effectiveLandscape ? 'flex flex-nowrap gap-2 overflow-x-auto pb-4 px-10 snap-x snap-mandatory pt-2 scrollbar-hide touch-auto cursor-pointer' : 'flex flex-col gap-4 pt-4 pr-10'}`}>
-                        {DataResolver.getSectorThemes().map((map, i) => {
+                        {SECTOR_INDICES.map((i) => {
                             const locked = !debugMode && (i > SectorID.VILLAGE && i !== SectorID.PLAYGROUND && !deadBossIndices.includes(i - 1));
                             return (
                                 <TacticalTab

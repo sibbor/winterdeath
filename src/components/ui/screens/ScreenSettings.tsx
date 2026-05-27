@@ -7,6 +7,25 @@ import { useOrientation } from '../../../hooks/useOrientation';
 import ModalLayout, { TacticalCard, TacticalButton, TacticalTab } from './ModalLayout';
 import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputManager';
 
+// Zero-GC: static config arrays hoisted at module level
+const SHADOW_QUALITY_PRESETS = [
+    { key: 'ui.quality_low', preset: SHADOW_PRESETS.LOW },
+    { key: 'ui.quality_med', preset: SHADOW_PRESETS.MEDIUM },
+    { key: 'ui.quality_high', preset: SHADOW_PRESETS.HIGH },
+];
+const TEXTURE_QUALITY_PRESETS = [
+    { val: 0.5, key: 'ui.quality_low' },
+    { val: 0.75, key: 'ui.quality_med' },
+    { val: 1.0, key: 'ui.quality_high' },
+];
+// Pre-truncated label keys — avoids .substring() in render
+const RES_LABELS = [
+    { key: 'ui.res_performance', chars: 4 },
+    { key: 'ui.res_standard', chars: 3 },
+    { key: 'ui.res_optimized', chars: 3 },
+    { key: 'ui.res_native', chars: 6 },
+];
+
 interface ScreenSettingsProps {
     onClose: () => void;
     settings: GameSettings;
@@ -178,10 +197,10 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                         className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-white"
                     />
                     <div className="flex justify-between w-full text-[10px] font-mono text-gray-500 mt-1 uppercase">
-                        <span className={tempGraphics.pixelRatio <= 0.5 ? 'text-white font-bold' : ''}>{t('ui.res_performance').substring(0, 4)}</span>
-                        <span className={tempGraphics.pixelRatio > 0.5 && tempGraphics.pixelRatio <= 0.75 ? 'text-white font-bold' : ''}>{t('ui.res_standard').substring(0, 3)}</span>
-                        <span className={tempGraphics.pixelRatio > 0.75 && tempGraphics.pixelRatio <= 0.85 ? 'text-white font-bold' : ''}>{t('ui.res_optimized').substring(0, 3)}</span>
-                        <span className={tempGraphics.pixelRatio > 0.85 ? 'text-white font-bold' : ''}>{t('ui.res_native').substring(0, 6)}</span>
+                        <span className={tempGraphics.pixelRatio <= 0.5 ? 'text-white font-bold' : ''}>{t(RES_LABELS[0].key).slice(0, RES_LABELS[0].chars)}</span>
+                        <span className={tempGraphics.pixelRatio > 0.5 && tempGraphics.pixelRatio <= 0.75 ? 'text-white font-bold' : ''}>{t(RES_LABELS[1].key).slice(0, RES_LABELS[1].chars)}</span>
+                        <span className={tempGraphics.pixelRatio > 0.75 && tempGraphics.pixelRatio <= 0.85 ? 'text-white font-bold' : ''}>{t(RES_LABELS[2].key).slice(0, RES_LABELS[2].chars)}</span>
+                        <span className={tempGraphics.pixelRatio > 0.85 ? 'text-white font-bold' : ''}>{t(RES_LABELS[3].key).slice(0, RES_LABELS[3].chars)}</span>
                     </div>
                 </div>
             </TacticalCard>
@@ -200,18 +219,14 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                     >
                         {t('ui.off')}
                     </TacticalButton>
-                    {[
-                        { label: t('ui.quality_low'), preset: SHADOW_PRESETS.LOW },
-                        { label: t('ui.quality_med'), preset: SHADOW_PRESETS.MEDIUM },
-                        { label: t('ui.quality_high'), preset: SHADOW_PRESETS.HIGH }
-                    ].map(q => (
+                    {SHADOW_QUALITY_PRESETS.map(q => (
                         <TacticalButton
-                            key={q.label}
+                            key={q.key}
                             onClick={() => { setTempGraphics(prev => ({ ...prev, ...q.preset })); }}
                             variant={tempGraphics.shadows && tempGraphics.shadowMapType === q.preset.shadowMapType ? 'primary' : 'secondary'}
                             className="px-4 py-2 text-xs"
                         >
-                            {q.label}
+                            {t(q.key)}
                         </TacticalButton>
                     ))}
                 </div>
@@ -224,18 +239,14 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                     <p className="text-gray-400 text-xs font-mono">{t('ui.texture_sub')}</p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                    {[
-                        { val: 0.5, label: t('ui.quality_low') },
-                        { val: 0.75, label: t('ui.quality_med') },
-                        { val: 1.0, label: t('ui.quality_high') }
-                    ].map(q => (
+                    {TEXTURE_QUALITY_PRESETS.map(q => (
                         <TacticalButton
                             key={q.val}
                             onClick={() => { setTempGraphics(prev => ({ ...prev, textureQuality: q.val })); }}
                             variant={tempGraphics.textureQuality === q.val ? 'primary' : 'secondary'}
                             className="px-4 py-1"
                         >
-                            {q.label}
+                            {t(q.key)}
                         </TacticalButton>
                     ))}
                 </div>
