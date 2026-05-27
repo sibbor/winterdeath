@@ -59,6 +59,10 @@ export class PerkSystem implements System {
         state.effectMaxDurations[id] = finalDuration;
         state.effectIntensities[id] = intensity !== undefined ? intensity : 1;
 
+        if (perk.damageResistModifier) {
+            state.activeResistPerkIdx = id;
+        }
+
         // 2. Telemetry & Discovery Signal
         if (state.perkTimesGained[id] === 0) {
             const discoverySystem = session.getSystem<DiscoverySystem>(SystemID.DISCOVERY_SYSTEM);
@@ -289,6 +293,9 @@ export class PerkSystem implements System {
             durations[i] = Math.max(0, durations[i] - delta * 1000);
 
             if (durations[i] <= 0) {
+                if (state.activeResistPerkIdx === i) {
+                    state.activeResistPerkIdx = -1;
+                }
                 // Expiry Logic: Reset timescale if Quick Finger expires
                 if (i === StatusEffectID.QUICK_FINGER && state.globalTimeScale < 1.0) {
                     state.globalTimeScale = 1.0;

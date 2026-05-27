@@ -27,9 +27,11 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
     const leftTouchId = useRef<number | null>(null);
     const rightTouchId = useRef<number | null>(null);
 
-    // Pre-allocated objects for touch tracking
-    const leftCenter = useRef({ x: 0, y: 0 });
-    const rightCenter = useRef({ x: 0, y: 0 });
+    // Pre-allocated objects for touch tracking (Zero-GC lazy initialized)
+    const leftCenter = useRef<{ x: number; y: number }>();
+    if (!leftCenter.current) leftCenter.current = { x: 0, y: 0 };
+    const rightCenter = useRef<{ x: number; y: number }>();
+    if (!rightCenter.current) rightCenter.current = { x: 0, y: 0 };
 
     const isInteractiveElement = (target: EventTarget) => {
         return (target as HTMLElement).tagName === 'BUTTON';

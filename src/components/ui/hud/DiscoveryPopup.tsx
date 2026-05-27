@@ -6,12 +6,41 @@ import { DiscoveryType } from './HudTypes';
 import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
 import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
 import { DataResolver } from '../../../core/data/DataResolver';
-import { PERKS } from '../../../content/perks';
-import { CLUES } from '../../../content/clues';
-import { POIS } from '../../../content/pois';
-import { COLLECTIBLES } from '../../../content/collectibles';
 import { MetaActionId } from '../../../systems/ui/UIEventBridge';
 import { EnemyType } from '../../../entities/enemies/EnemyTypes';
+
+// Pre-compiled O(1) totals per sector using centralized DataResolver to prevent database leakage
+const CLUES_BY_SECTOR: Record<number, number> = {};
+const POIS_BY_SECTOR: Record<number, number> = {};
+const COLLECTIBLES_BY_SECTOR: Record<number, number> = {};
+
+let sectorTotalsCompiled = false;
+const ensureSectorTotalsCompiled = () => {
+  if (sectorTotalsCompiled) return;
+  sectorTotalsCompiled = true;
+  const clues = DataResolver.getClues();
+  const pois = DataResolver.getPois();
+  const collectibles = DataResolver.getCollectibles();
+
+  for (const key in clues) {
+    const c = clues[key];
+    if (c && typeof c.sector === 'number') {
+      CLUES_BY_SECTOR[c.sector] = (CLUES_BY_SECTOR[c.sector] || 0) + 1;
+    }
+  }
+  for (const key in pois) {
+    const p = pois[key];
+    if (p && typeof p.sector === 'number') {
+      POIS_BY_SECTOR[p.sector] = (POIS_BY_SECTOR[p.sector] || 0) + 1;
+    }
+  }
+  for (const key in collectibles) {
+    const col = collectibles[key];
+    if (col && typeof col.sector === 'number') {
+      COLLECTIBLES_BY_SECTOR[col.sector] = (COLLECTIBLES_BY_SECTOR[col.sector] || 0) + 1;
+    }
+  }
+};
 
 interface DiscoveryPopupProps {
   onOpenAdventureLog: (tab?: DiscoveryType, itemId?: string) => void;
@@ -104,24 +133,26 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
     let subtitle = activeDiscovery.details ? t(activeDiscovery.details) : '';
     let icon = '';
 
+    ensureSectorTotalsCompiled();
+
     switch (type) {
       case DiscoveryType.CLUE:
         title = activeDiscovery.title ? t(activeDiscovery.title) : t('ui.discovered_clue');
-        const totalClues = Object.values(CLUES).filter(c => c.sector === sector).length;
+        const totalClues = CLUES_BY_SECTOR[sector] || 0;
         subtitle = `${activeDiscovery.details || t('ui.clue')} (${cluesFound}/${totalClues})`;
         icon = '🔍';
         break;
 
       case DiscoveryType.POI:
         title = activeDiscovery.title ? t(activeDiscovery.title) : t('ui.discovered_poi');
-        const totalPois = Object.values(POIS).filter(p => p.sector === sector).length;
+        const totalPois = POIS_BY_SECTOR[sector] || 0;
         subtitle = `${activeDiscovery.details || t('ui.poi_short')} (${poisFound}/${totalPois})`;
         icon = '📍';
         break;
 
       case DiscoveryType.COLLECTIBLE:
         title = activeDiscovery.title ? t(activeDiscovery.title) : t('ui.discovered_collectible');
-        const totalCollectibles = Object.values(COLLECTIBLES).filter(c => c.sector === sector).length;
+        const totalCollectibles = COLLECTIBLES_BY_SECTOR[sector] || 0;
         subtitle = `${activeDiscovery.details || t(DataResolver.getCollectibleName(id))} (${collectiblesFound}/${totalCollectibles})`;
         icon = '📦';
         break;
@@ -136,7 +167,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
       case DiscoveryType.PERK:
         title = t('ui.discovered_perk');
         const perkId = Number(id);
-        const perk = PERKS[perkId];
+        const perk = DataResolver.getPerks()[perkId];
         if (perk) {
           icon = perk.icon || '✨';
           const catKey = DataResolver.getPerkCategoryKey(perk.category);

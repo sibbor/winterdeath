@@ -496,7 +496,25 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     // ZERO-GC Pooled Status Refs
     const passiveRefs = useRef<any[]>([]);
     const effectRefs = useRef<{ buffs: any[], debuffs: any[] }>({ buffs: [], debuffs: [] });
-    const prevTelemetry = useRef({ kills: 0, scrap: 0, sp: 0 });
+    const prevTelemetry = useRef({
+        hp: -999,
+        maxHp: -999,
+        stamina: -999,
+        maxStamina: -999,
+        xp: -999,
+        maxXp: -999,
+        ammo: '',
+        kills: -999,
+        scrap: -999,
+        sp: -999,
+        hasCriticalHp: false,
+        reloadProgress: -999,
+        bossHpP: -999,
+        isDriving: false,
+        vehicleSpeed: -999,
+        throttleState: -999,
+        isSkidding: false
+    });
 
     // --- ASYNCHRONOUS UI EVENT BRIDGE (VINTERDÖD HARDENING) ---
     useUIEventBridge(useCallback((type, p1, p2) => {
@@ -529,40 +547,57 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     // --- FAST HUD UPDATE LISTENER ---
     useEffect(() => {
         const handleFastUpdate = (data: any) => {
-            // 1. HP Updates
-            if (hpBarRef.current) {
-                const hpRatio = data.maxHp > 0 ? (data.hp / data.maxHp) : 0;
-                hpBarRef.current.style.transform = `scaleX(${hpRatio})`;
+            const cache = prevTelemetry.current as any;
 
-                if (data.hasCriticalHp) {
-                    hpBarRef.current.classList.add('hud-critical-pulse');
-                } else {
-                    hpBarRef.current.classList.remove('hud-critical-pulse');
+            // 1. HP Updates
+            if (data.hp !== cache.hp || data.maxHp !== cache.maxHp) {
+                if (hpBarRef.current) {
+                    const hpRatio = data.maxHp > 0 ? (data.hp / data.maxHp) : 0;
+                    hpBarRef.current.style.transform = `scaleX(${hpRatio})`;
                 }
-            }
-            if (hpTextRef.current) {
-                const text = `${Math.ceil(data.hp)} / ${data.maxHp}`;
-                if (hpTextRef.current.innerText !== text) {
+                if (hpTextRef.current) {
+                    const text = `${Math.ceil(data.hp)} / ${data.maxHp}`;
                     hpTextRef.current.innerText = text;
                 }
+                cache.hp = data.hp;
+                cache.maxHp = data.maxHp;
+            }
+
+            if (data.hasCriticalHp !== cache.hasCriticalHp) {
+                if (hpBarRef.current) {
+                    if (data.hasCriticalHp) {
+                        hpBarRef.current.classList.add('hud-critical-pulse');
+                    } else {
+                        hpBarRef.current.classList.remove('hud-critical-pulse');
+                    }
+                }
+                cache.hasCriticalHp = data.hasCriticalHp;
             }
 
             // 2. Stamina Updates
-            if (staminaBarRef.current) {
-                const stRatio = data.maxStamina > 0 ? (data.stamina / data.maxStamina) : 0;
-                staminaBarRef.current.style.transform = `scaleX(${stRatio})`;
-            }
-            if (staminaTextRef.current) {
-                const text = data.stamina < 30 ? t('ui.low') : t('ui.stamina');
-                if (staminaTextRef.current.innerText !== text) {
-                    staminaTextRef.current.innerText = text;
+            if (data.stamina !== cache.stamina || data.maxStamina !== cache.maxStamina) {
+                if (staminaBarRef.current) {
+                    const stRatio = data.maxStamina > 0 ? (data.stamina / data.maxStamina) : 0;
+                    staminaBarRef.current.style.transform = `scaleX(${stRatio})`;
                 }
+                if (staminaTextRef.current) {
+                    const text = data.stamina < 30 ? t('ui.low') : t('ui.stamina');
+                    if (staminaTextRef.current.innerText !== text) {
+                        staminaTextRef.current.innerText = text;
+                    }
+                }
+                cache.stamina = data.stamina;
+                cache.maxStamina = data.maxStamina;
             }
 
             // 3. XP Updates
-            if (xpBarRef.current) {
-                const xpRatio = data.nextLevelXp > 0 ? (data.currentXp / data.nextLevelXp) : 0;
-                xpBarRef.current.style.transform = `scaleX(${xpRatio})`;
+            if (data.currentXp !== cache.xp || data.nextLevelXp !== cache.maxXp) {
+                if (xpBarRef.current) {
+                    const xpRatio = data.nextLevelXp > 0 ? (data.currentXp / data.nextLevelXp) : 0;
+                    xpBarRef.current.style.transform = `scaleX(${xpRatio})`;
+                }
+                cache.xp = data.currentXp;
+                cache.maxXp = data.nextLevelXp;
             }
 
             // 4. Ammo Updates
@@ -574,73 +609,94 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     ? Math.floor(data.ammo) + '%'
                     : data.ammo.toString();
 
-                if (ammoTextRef.current.innerText !== val) {
+                if (cache.ammo !== val) {
                     ammoTextRef.current.innerText = val;
+                    cache.ammo = val;
                 }
             }
 
             // 5. Reload Updates
-            if (floatingReloadBarContainerRef.current) {
-                const isReloading = data.reloadProgress > 0 && data.reloadProgress < 1;
-                floatingReloadBarContainerRef.current.style.opacity = isReloading ? '1' : '0';
-            }
-            if (reloadBarRef.current) {
-                reloadBarRef.current.style.transform = `scaleY(${data.reloadProgress})`;
-            }
-            if (floatingReloadBarRef.current) {
-                floatingReloadBarRef.current.style.transform = `scaleX(${data.reloadProgress})`;
+            if (data.reloadProgress !== cache.reloadProgress) {
+                if (floatingReloadBarContainerRef.current) {
+                    const isReloading = data.reloadProgress > 0 && data.reloadProgress < 1;
+                    floatingReloadBarContainerRef.current.style.opacity = isReloading ? '1' : '0';
+                }
+                if (reloadBarRef.current) {
+                    reloadBarRef.current.style.transform = `scaleY(${data.reloadProgress})`;
+                }
+                if (floatingReloadBarRef.current) {
+                    floatingReloadBarRef.current.style.transform = `scaleX(${data.reloadProgress})`;
+                }
+                cache.reloadProgress = data.reloadProgress;
             }
 
             // 6. Boss HP Update
-            if (bossHpBarRef.current && data.bossHpP !== undefined) {
-                if (data.bossHpP >= 0) {
+            if (data.bossHpP !== undefined && data.bossHpP !== cache.bossHpP) {
+                if (bossHpBarRef.current && data.bossHpP >= 0) {
                     bossHpBarRef.current.style.transform = `scaleX(${Math.max(0, Math.min(1, data.bossHpP))})`;
                 }
+                cache.bossHpP = data.bossHpP;
             }
 
-            // 7. Vehicle Speed & Throttle
-            if (speedTextRef.current) {
-                const speed = Math.round(data.vehicleSpeed).toString();
-                if (speedTextRef.current.innerText !== speed) {
-                    speedTextRef.current.innerText = speed;
+            // 7. Vehicle Speed & Throttle (Bypassed if not driving!)
+            if (data.isDriving) {
+                if (data.vehicleSpeed !== cache.vehicleSpeed) {
+                    if (speedTextRef.current) {
+                        const speed = Math.round(data.vehicleSpeed).toString();
+                        speedTextRef.current.innerText = speed;
+                    }
+
+                    // Speedometer Arc and Dot animations
+                    const maxSpeed = 160;
+                    const speedRatio = Math.max(0, Math.min(1, data.vehicleSpeed / maxSpeed));
+
+                    if (speedArcRef.current) {
+                        const offset = 340 - (speedRatio * 340);
+                        speedArcRef.current.style.strokeDashoffset = offset.toString();
+                    }
+                    cache.vehicleSpeed = data.vehicleSpeed;
                 }
-            }
 
-            // Speedometer Arc and Dot animations
-            const maxSpeed = 160;
-            const speedRatio = Math.max(0, Math.min(1, data.vehicleSpeed / maxSpeed));
+                if (data.throttleState !== cache.throttleState) {
+                    if (gasPedalRef.current) {
+                        const isGas = data.throttleState > 0;
+                        gasPedalRef.current.style.borderColor = isGas ? '#3b82f6' : 'rgba(255,255,255,0.1)';
+                        gasPedalRef.current.style.backgroundColor = isGas ? '#3b82f6' : 'rgba(0, 0, 0, 0.6)';
+                        gasPedalRef.current.style.boxShadow = isGas ? '0 0 8px rgba(59, 130, 246, 0.8)' : 'none';
+                    }
+                    if (brakePedalRef.current) {
+                        const isBrake = data.throttleState < 0;
+                        brakePedalRef.current.style.borderColor = isBrake ? '#ef4444' : 'rgba(255,255,255,0.1)';
+                        brakePedalRef.current.style.backgroundColor = isBrake ? '#ef4444' : 'rgba(0, 0, 0, 0.6)';
+                        brakePedalRef.current.style.boxShadow = isBrake ? '0 0 8px rgba(239, 68, 68, 0.8)' : 'none';
+                    }
+                    cache.throttleState = data.throttleState;
+                }
 
-            if (speedArcRef.current) {
-                const offset = 340 - (speedRatio * 340);
-                speedArcRef.current.style.strokeDashoffset = offset.toString();
-            }
-            if (gasPedalRef.current) {
-                const isGas = data.throttleState > 0;
-                gasPedalRef.current.style.borderColor = isGas ? '#3b82f6' : 'rgba(255,255,255,0.1)';
-                gasPedalRef.current.style.backgroundColor = isGas ? '#3b82f6' : 'rgba(0, 0, 0, 0.6)';
-                gasPedalRef.current.style.boxShadow = isGas ? '0 0 8px rgba(59, 130, 246, 0.8)' : 'none';
-            }
-            if (skidPedalRef.current) {
-                const isSkid = !!data.isSkidding;
-                skidPedalRef.current.style.borderColor = isSkid ? '#f97316' : 'rgba(255,255,255,0.1)';
-                skidPedalRef.current.style.backgroundColor = isSkid ? '#f97316' : 'rgba(0, 0, 0, 0.6)';
-                skidPedalRef.current.style.boxShadow = isSkid ? '0 0 8px rgba(249, 115, 22, 0.8)' : 'none';
-            }
-            if (brakePedalRef.current) {
-                const isBrake = data.throttleState < 0;
-                brakePedalRef.current.style.borderColor = isBrake ? '#ef4444' : 'rgba(255,255,255,0.1)';
-                brakePedalRef.current.style.backgroundColor = isBrake ? '#ef4444' : 'rgba(0, 0, 0, 0.6)';
-                brakePedalRef.current.style.boxShadow = isBrake ? '0 0 8px rgba(239, 68, 68, 0.8)' : 'none';
+                if (data.isSkidding !== cache.isSkidding) {
+                    if (skidPedalRef.current) {
+                        const isSkid = !!data.isSkidding;
+                        skidPedalRef.current.style.borderColor = isSkid ? '#f97316' : 'rgba(255,255,255,0.1)';
+                        skidPedalRef.current.style.backgroundColor = isSkid ? '#f97316' : 'rgba(0, 0, 0, 0.6)';
+                        skidPedalRef.current.style.boxShadow = isSkid ? '0 0 8px rgba(249, 115, 22, 0.8)' : 'none';
+                    }
+                    cache.isSkidding = data.isSkidding;
+                }
             }
 
             // --- 8. TELEMETRY (Kills, Scrap, SP) ---
-            if (killsTextRef.current && data.kills !== undefined) {
-                killsTextRef.current.innerText = data.kills.toString();
+            if (data.kills !== undefined && data.kills !== cache.kills) {
+                if (killsTextRef.current) {
+                    killsTextRef.current.innerText = data.kills.toString();
+                }
+                cache.kills = data.kills;
             }
 
-            if (scrapTextRef.current && data.scrap !== undefined) {
-                scrapTextRef.current.innerText = data.scrap.toString();
-                if (data.scrap > prevTelemetry.current.scrap) {
+            if (data.scrap !== undefined && data.scrap !== cache.scrap) {
+                if (scrapTextRef.current) {
+                    scrapTextRef.current.innerText = data.scrap.toString();
+                }
+                if (data.scrap > cache.scrap && cache.scrap !== -999) {
                     if (scrapBoxRef.current) {
                         scrapBoxRef.current.classList.remove('hud-bling-pulse');
                         void scrapBoxRef.current.offsetWidth;
@@ -648,12 +704,14 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         UiSounds.playPickUp();
                     }
                 }
-                prevTelemetry.current.scrap = data.scrap;
+                cache.scrap = data.scrap;
             }
 
-            if (spTextRef.current && data.spEarned !== undefined) {
-                spTextRef.current.innerText = data.spEarned.toString();
-                if (data.spEarned > prevTelemetry.current.sp) {
+            if (data.spEarned !== undefined && data.spEarned !== cache.sp) {
+                if (spTextRef.current) {
+                    spTextRef.current.innerText = data.spEarned.toString();
+                }
+                if (data.spEarned > cache.sp && cache.sp !== -999) {
                     if (spBoxRef.current) {
                         spBoxRef.current.classList.remove('hud-bling-pulse-purple');
                         void spBoxRef.current.offsetWidth;
@@ -661,7 +719,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         UiSounds.playPickUp();
                     }
                 }
-                prevTelemetry.current.sp = data.spEarned;
+                cache.sp = data.spEarned;
             }
 
             // --- 9. INTERACTION PROMPT ---

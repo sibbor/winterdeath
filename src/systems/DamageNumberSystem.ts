@@ -157,12 +157,17 @@ export class DamageNumberSystem implements System {
                 t.mesh.material.color.set(color);
                 t.mesh.material.opacity = 1.0;
 
-                return; // ZERO-GC EXIT!
+                return;
             }
         }
 
-        // --- 2. NORMAL SPAWN (if no merge occurred) ---
-        let pooled = this.pool.find(t => !t.active);
+        let pooled = undefined;
+        for (let i = 0; i < this.pool.length; i++) {
+            if (!this.pool[i].active) {
+                pooled = this.pool[i];
+                break;
+            }
+        }
 
         // Fallback if pool is empty (creates a new one dynamically, though rare)
         if (!pooled) {

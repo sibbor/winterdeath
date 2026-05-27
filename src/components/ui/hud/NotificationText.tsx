@@ -10,7 +10,10 @@ const POOL_SIZE = 8;
 const NotificationText: React.FC = () => {
     const poolRefs = useRef<HTMLDivElement[]>([]);
     const nextIdx = useRef(0);
-    const activeNodes = useRef<Array<{ type: UIEventType; amount: number; idx: number; spawnTime: number }>>([]);
+    const activeNodes = useRef<Array<{ type: UIEventType; amount: number; idx: number; spawnTime: number; active: boolean }>>();
+    if (!activeNodes.current) {
+        activeNodes.current = Array.from({ length: POOL_SIZE }, () => ({ type: UIEventType.NONE, amount: 0, idx: -1, spawnTime: 0, active: false }));
+    }
 
     const spawn = (text: string, color: string) => {
         const idx = nextIdx.current;
@@ -36,9 +39,17 @@ const NotificationText: React.FC = () => {
 
     const spawnAccumulated = (type: UIEventType, amount: number, label: string, color: string) => {
         const now = Date.now();
-        activeNodes.current = activeNodes.current.filter(n => now - n.spawnTime < 1800);
-
-        const existing = activeNodes.current.find(n => n.type === type);
+        
+        let existing = null;
+        for (let i = 0; i < POOL_SIZE; i++) {
+            const node = activeNodes.current[i];
+            if (node.active && now - node.spawnTime >= 1800) {
+                node.active = false;
+            }
+            if (node.active && node.type === type) {
+                existing = node;
+            }
+        }
 
         if (existing) {
             existing.amount += amount;
@@ -60,8 +71,31 @@ const NotificationText: React.FC = () => {
         const el = poolRefs.current[idx];
         if (!el) return;
 
-        activeNodes.current = activeNodes.current.filter(n => n.idx !== idx);
-        activeNodes.current.push({ type, amount, idx, spawnTime: now });
+        // Deactivate any old node using this slot index
+        for (let i = 0; i < POOL_SIZE; i++) {
+            const node = activeNodes.current[i];
+            if (node.idx === idx) {
+                node.active = false;
+            }
+        }
+
+        // Reuse an inactive slot in the structural array
+        let slot = null;
+        for (let i = 0; i < POOL_SIZE; i++) {
+            if (!activeNodes.current[i].active) {
+                slot = activeNodes.current[i];
+                break;
+            }
+        }
+        if (!slot) {
+            slot = activeNodes.current[0]; // Fallback
+        }
+
+        slot.active = true;
+        slot.type = type;
+        slot.amount = amount;
+        slot.idx = idx;
+        slot.spawnTime = now;
 
         el.innerText = `+${amount} ${label}`;
         el.style.color = color;

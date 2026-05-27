@@ -111,9 +111,11 @@ export class EnemyDetectionSystem implements System {
             return false;
         }
 
-        // FOV Check using fast dot product
-        this._vDir.set(dx, dy, dz).normalize();
-        this._vForward.set(0, 0, 1).applyQuaternion(enemy.mesh.quaternion);
+        // FOV Check using fast 2D yaw trigonometry dot product (Zero-GC, extremely low overhead)
+        const invDist = 1.0 / Math.sqrt(distSq);
+        this._vDir.set(dx * invDist, dy * invDist, dz * invDist);
+        const yaw = enemy.mesh.rotation.y;
+        this._vForward.set(Math.sin(yaw), 0, Math.cos(yaw));
 
         if (this._vForward.dot(this._vDir) < ENEMY_DETECTION.FOV_COS) {
             return false; // Player is outside FOV cone
@@ -162,7 +164,7 @@ export class EnemyDetectionSystem implements System {
         }
 
         // Calculate a repeating staggered index 0, 1, or 2 based on current time
-        const frameIndex = Math.floor(simTime / 16.666) % 3;
+        const frameIndex = (simTime * 0.06 | 0) % 3;
 
         for (let i = 0; i < activeCount; i++) {
             const e = enemies[i];
@@ -180,11 +182,12 @@ export class EnemyDetectionSystem implements System {
                     if (!isAggressive) e.state = AIState.CHASE;
 
                     // --- Discovery Logic ---
+                    const discoverySystem = context.getSystem(SystemID.DISCOVERY_SYSTEM);
                     if ((e.statusFlags & EnemyFlags.BOSS) !== 0) {
                         const sectorIndex = state.sessionStats?.currentSector || 0;
-                        context.handleDiscovery(DiscoveryType.BOSS, sectorIndex);
+                        if (discoverySystem) discoverySystem.handleDiscovery(context, DiscoveryType.BOSS, sectorIndex);
                     } else {
-                        context.handleDiscovery(DiscoveryType.ZOMBIE, e.type);
+                        if (discoverySystem) discoverySystem.handleDiscovery(context, DiscoveryType.ZOMBIE, e.type);
                     }
                 }
             }
@@ -192,7 +195,11 @@ export class EnemyDetectionSystem implements System {
             // 3. AUDIO CHECK - Skip if already in an aggressive state
             const isAggressive = e.state === AIState.CHASE || e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING || e.state === AIState.GRAPPLE;
 
-            if (!isAggressive) {
+            if (!isAggressive && this.activeNoiseCount > 0) {
+                const hearingThreshold = e.hearingThreshold || 1.0;
+                // Max potential hearing range is limited to VISUAL_RANGE_SQ
+                const maxRangeSq = ENEMY_DETECTION.VISUAL_RANGE_SQ * hearingThreshold * hearingThreshold;
+
                 for (let j = 0; j < this.activeNoiseCount; j++) {
                     const evt = this.noiseEvents[j];
 
@@ -200,7 +207,9 @@ export class EnemyDetectionSystem implements System {
                     const dz = evt.pos.z - e.mesh.position.z;
                     const distSq = dx * dx + dz * dz;
 
-                    const hearingThreshold = e.hearingThreshold || 1.0;
+                    // Coarse distance early out
+                    if (distSq > maxRangeSq) continue;
+
                     const effectiveRadius = evt.radius * hearingThreshold;
 
                     if (distSq <= effectiveRadius * effectiveRadius) {

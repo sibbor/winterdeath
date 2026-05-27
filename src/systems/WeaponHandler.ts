@@ -238,7 +238,7 @@ export const WeaponHandler = {
             state.isReloading = true;
             const actualReloadTime = (wep.reloadTime || 0) * (state.statsBuffer[PlayerStatID.MULTIPLIER_RELOAD] || 1.0);
             state.reloadEndTime = simTime + actualReloadTime;
-            UIEventRingBuffer.push(UIEventType.RELOAD_START, actualReloadTime);
+            UIEventRingBuffer.push(UIEventType.RELOAD_START, actualReloadTime, 0, simTime);
             WeaponSounds.playMagOut();
             haptic.reload();
         }
@@ -324,7 +324,7 @@ export const WeaponHandler = {
                                 state.lastShotTime = simTime;
 
                                 if (state.weaponAmmo[state.activeWeapon] === 5) {
-                                    UIEventRingBuffer.push(UIEventType.AMMO_LOW, 5);
+                                    UIEventRingBuffer.push(UIEventType.AMMO_LOW, 5, 0, simTime);
                                 }
 
                                 const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
@@ -459,7 +459,7 @@ export const WeaponHandler = {
                             state.isReloading = true;
                             const actualReloadTime = (wep.reloadTime || 0);
                             state.reloadEndTime = simTime + actualReloadTime;
-                            UIEventRingBuffer.push(UIEventType.RELOAD_START, actualReloadTime);
+                            UIEventRingBuffer.push(UIEventType.RELOAD_START, actualReloadTime, 0, simTime);
                             WeaponSounds.playMagOut();
                         }
                     }

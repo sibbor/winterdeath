@@ -161,6 +161,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
     let lastBossIntroShakeTime = 0;
     ChunkManager.clear();
 
+    const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
+    const movementSystem = session.getSystem<any>(SystemID.PLAYER_MOVEMENT);
+    const combatSystem = session.getSystem<any>(SystemID.PLAYER_COMBAT);
+    const lootSystem = session.getSystem<any>(SystemID.LOOT);
+    const familySystem = session.getSystem<any>(SystemID.FAMILY);
+
     const getActiveCallbacks = () => state.callbacks || callbacks || EMPTY_OBJECT;
 
     // Initial binding for FX (will be updated in loop if needed)
@@ -389,14 +395,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         state.renderTime = renderTime;
         state.simTime = simTime;
 
-        const now = performance.now();
+        const now = renderTime;
 
-        // Retrieve systems for the current tick
-        const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
-        const movementSystem = session.getSystem<any>(SystemID.PLAYER_MOVEMENT);
-        const combatSystem = session.getSystem<any>(SystemID.PLAYER_COMBAT);
-        const lootSystem = session.getSystem<any>(SystemID.LOOT);
-        const familySystem = session.getSystem<any>(SystemID.FAMILY);
         const water = engine.water;
 
         const sf = state.statusFlags;
@@ -603,13 +603,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         }
         monitor.end('chunk_mounting');
 
-        _sectorUpdateContext.spawnHorde = (count: number, type: any, pos?: THREE.Vector3) => {
-            const enemySys = session.getSystem<any>(SystemID.ENEMY_SYSTEM);
-            if (enemySys) enemySys.spawnHorde(session, count, type, pos);
-        };
-        _sectorUpdateContext.setBubble = callbacks.setBubble;
-        _sectorUpdateContext.setInteraction = callbacks.setInteraction;
-        _sectorUpdateContext.setOverlay = callbacks.setOverlay;
         _sectorUpdateContext.state = state;
         _sectorUpdateContext.gameState = state;
         _sectorUpdateContext.triggerSystem = session.triggerSystem;
@@ -642,7 +635,13 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         // 8. Standard Gameplay State Updates (Physics/Stats)
         if (!isCinematic && !isBossIntro) {
             if (refs.hasSetPrevPosRef.current && playerGroup) {
-                refs.distanceTraveledRef.current += playerGroup.position.distanceTo(refs.prevPosRef.current);
+                const dx = playerGroup.position.x - refs.prevPosRef.current.x;
+                const dy = playerGroup.position.y - refs.prevPosRef.current.y;
+                const dz = playerGroup.position.z - refs.prevPosRef.current.z;
+                const distSq = dx * dx + dy * dy + dz * dz;
+                if (distSq > 0.0001) {
+                    refs.distanceTraveledRef.current += Math.sqrt(distSq);
+                }
             }
 
             if (playerGroup) {

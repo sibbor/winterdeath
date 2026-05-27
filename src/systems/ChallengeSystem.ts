@@ -72,7 +72,9 @@ export class ChallengeSystem implements System {
                 // Data format: (ChallengeID << 8) | NewTier
                 UIEventRingBuffer.push(
                     UIEventType.CHALLENGE_COMPLETE,
-                    (def.id << 8) | nextTier
+                    (def.id << 8) | nextTier,
+                    0,
+                    session.state.simTime
                 );
 
                 // Console log for debugging the clean state

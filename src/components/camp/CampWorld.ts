@@ -52,8 +52,7 @@ export const CAMP_SCENE = {
     cameraHeight: 25,
 
     // Cameras
-    cameraBaseLookAt: new THREE.Vector3(0, 8, -5),
-    //cameraBaseLookAt: new THREE.Vector3(0, 2, -5),
+    cameraBaseLookAt: new THREE.Vector3(0, 2, -5),
     cameraCinematicLookAt: new THREE.Vector3(0, 8, -5),
 
     // Lighting

@@ -133,11 +133,8 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
     // --- ZERO-GC EVENT LISTENER PATTERN ---
     // Using refs to hold the latest closures allows the event listener to remain 
     // strictly bound once, without memory reallocation or missed updates.
-    const callbacksRef = useRef({ onClose, onConfirm, canConfirm, onCancel, tabs, activeTab, onTabChange, tabOrientation });
-
-    useEffect(() => {
-        callbacksRef.current = { onClose, onConfirm, canConfirm, onCancel, tabs, activeTab, onTabChange, tabOrientation };
-    }); // Runs safely on every render without teardown overhead
+    const callbacksRef = useRef<any>(null);
+    callbacksRef.current = { onClose, onConfirm, canConfirm, onCancel, tabs, activeTab, onTabChange, tabOrientation };
 
     useEffect(() => {
         // Break pointer lock when modal opens

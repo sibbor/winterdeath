@@ -25,6 +25,9 @@ export class PlayerStatsSystem implements System {
 
     private cachedPassives: StatusEffectID[] = [];
 
+    private damageTracker: any = null;
+    private perkSystem: any = null;
+
     constructor(
         private playerGroup: THREE.Group,
         private t: (key: string) => string,
@@ -32,8 +35,8 @@ export class PlayerStatsSystem implements System {
     ) { }
 
     init(session: GameSessionLogic) {
-        // Stats system no longer handles initial baking or passives.
-        // These are now delegated to the PerkSystem.
+        this.damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+        this.perkSystem = session.getSystem<any>(SystemID.PERK_SYSTEM);
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
@@ -75,15 +78,9 @@ export class PlayerStatsSystem implements System {
 
         // Telemetry: Record Absorbed Damage
         if (absorbed > 0.01) {
-            // Find which perk is providing the resistance (heuristic for telemetry)
-            for (let i = 0; i < MAX_ENTITIES.PERKS; i++) {
-                // Check if effect is active via duration (covers passives, buffs, and debuffs)
-                if (state.effectDurations[i] > 0) {
-                    if (PERKS[i]?.damageResistModifier) {
-                        state.perkDamageAbsorbed[i] += absorbed;
-                        break;
-                    }
-                }
+            const activeResistIdx = state.activeResistPerkIdx;
+            if (activeResistIdx !== -1) {
+                state.perkDamageAbsorbed[activeResistIdx] += absorbed;
             }
         }
 
@@ -97,7 +94,7 @@ export class PlayerStatsSystem implements System {
         }
 
         // Damage Telemetry
-        const damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+        const damageTracker = this.damageTracker;
         if (damageTracker) {
             let telemetrySourceKey = 0;
             let telemetryAttackIndex = attackIndex;
@@ -118,7 +115,7 @@ export class PlayerStatsSystem implements System {
         }
 
         if (effectType !== undefined) {
-            const perkSystem = session.getSystem<any>(SystemID.PERK_SYSTEM);
+            const perkSystem = this.perkSystem;
             if (perkSystem) {
                 perkSystem.applyPerk(session, effectType, effectDuration, effectIntensity);
             }
@@ -168,7 +165,7 @@ export class PlayerStatsSystem implements System {
 
     public executePlayerDeath(session: GameSessionLogic, attacker: any, damageType: DamageType, damageSource: DamageID, attackType: EnemyAttackType, sourceKey: number, attackIndex: number, now: number, lethalEffect?: StatusEffectID) {
         const state = session.state;
-        const damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+        const damageTracker = this.damageTracker;
         if (damageTracker) {
             damageTracker.recordPlayerDeath(session, sourceKey, attackIndex);
         }
@@ -256,7 +253,7 @@ export class PlayerStatsSystem implements System {
             const cooldown = PERKS[StatusEffectID.ADRENALINE_PATCH]?.cooldown || 15000;
             if (now - (state.lastAdrenalineTime || 0) > cooldown) {
                 state.lastAdrenalineTime = now;
-                const perkSystem = session.getSystem<any>(SystemID.PERK_SYSTEM);
+                const perkSystem = this.perkSystem;
                 if (perkSystem) perkSystem.applyPerk(session, StatusEffectID.ADRENALINE_PATCH);
             }
         }
@@ -266,7 +263,7 @@ export class PlayerStatsSystem implements System {
             const cooldown = PERKS[StatusEffectID.GIB_MASTER]?.cooldown || 30000;
             if (now - (state.lastGibMasterTime || 0) > cooldown) {
                 state.lastGibMasterTime = now;
-                const perkSystem = session.getSystem<any>(SystemID.PERK_SYSTEM);
+                const perkSystem = this.perkSystem;
                 if (perkSystem) perkSystem.applyPerk(session, StatusEffectID.GIB_MASTER);
             }
         }
@@ -276,12 +273,12 @@ export class PlayerStatsSystem implements System {
             const cooldown = qfPerk.cooldown || 10000;
             if (now - (state.lastQuickFingerTime || 0) > cooldown) {
                 state.lastQuickFingerTime = now;
-                const perkSystem = session.getSystem<any>(SystemID.PERK_SYSTEM);
+                const perkSystem = this.perkSystem;
                 if (perkSystem) perkSystem.applyPerk(session, StatusEffectID.QUICK_FINGER);
             }
         }
 
-        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+        const tracker = this.damageTracker;
         if (tracker) {
             tracker.recordKill(session, enemy.type, (enemy.statusFlags & EnemyFlags.BOSS) !== 0, enemy.bossId, weaponId, distSq);
         }

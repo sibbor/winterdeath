@@ -418,7 +418,7 @@ export const Sector3: SectorDef = {
                     sectorState.epilogueState = EP.AWAIT_INSIDE;
                     sectorState.epilogueTimer = simTime;
                     if (events.setCameraOverride) events.setCameraOverride(null);
-                    UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 1); // 1 = SHOW
+                    UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 1, 0, simTime); // 1 = SHOW
                 }
             }
         }
@@ -444,7 +444,7 @@ export const Sector3: SectorDef = {
                     lookAtPos: _camLookBuilding,
                     endTime: renderTime + 60000
                 });
-                UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 0); // 0 = HIDE
+                UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 0, 0, simTime); // 0 = HIDE
             }
 
             updateFamilyMembers();
@@ -681,10 +681,11 @@ export const Sector3: SectorDef = {
             if (elapsed > 1500) {
                 sectorState.epilogueState = EP.DRIVE;
                 sectorState.epilogueTimer = simTime;
+
                 // Return camera control to player and show HUD
                 if (events.setCameraOverride) events.setCameraOverride(null);
-                UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 1); // 1 = SHOW
-                // Player can now interact with the car
+
+                UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 1, 0, simTime); // 1 = SHOW
             }
         }
 

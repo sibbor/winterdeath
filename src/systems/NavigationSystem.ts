@@ -18,6 +18,8 @@ const TOTAL_CELLS = GRID_SIZE * GRID_SIZE;
 // Dedicated Flat Memory (Zero-GC / Data-Oriented Design)
 const costMap = new Uint8Array(TOTAL_CELLS);
 const integrationMap = new Uint16Array(TOTAL_CELLS);
+const integrationGen = new Uint16Array(TOTAL_CELLS);
+const flowGen = new Uint16Array(TOTAL_CELLS);
 const flowX = new Float32Array(TOTAL_CELLS);
 const flowZ = new Float32Array(TOTAL_CELLS);
 
@@ -25,6 +27,8 @@ const flowZ = new Float32Array(TOTAL_CELLS);
 const bfsQueue = new Uint16Array(TOTAL_CELLS);
 let queueHead = 0;
 let queueTail = 0;
+
+let currentGen = 0;
 
 // Update frequency management
 let lastUpdateSimTime = 0;
@@ -110,7 +114,11 @@ export const NavigationSystem = {
         if (simTime < lastUpdateSimTime + UPDATE_INTERVAL) return;
         lastUpdateSimTime = simTime;
 
-        integrationMap.fill(65535);
+        currentGen = (currentGen + 1) | 0;
+        if (currentGen === 0) {
+            integrationGen.fill(0);
+            currentGen = 1;
+        }
 
         const playerIndex = getIndex(playerPos.x, playerPos.z);
         if (playerIndex === -1) return;
@@ -119,6 +127,7 @@ export const NavigationSystem = {
         queueTail = 0;
 
         integrationMap[playerIndex] = 0;
+        integrationGen[playerIndex] = currentGen;
         bfsQueue[queueTail++] = playerIndex;
 
         // BFS Wavefront: Inlined logic to eliminate 160k+ function call overheads
@@ -132,79 +141,38 @@ export const NavigationSystem = {
             // Right Neighbor
             if (curX + 1 < GRID_SIZE) {
                 const nIdx = currentIdx + 1;
-                if (costMap[nIdx] !== 255 && integrationMap[nIdx] === 65535) {
+                if (costMap[nIdx] !== 255 && integrationGen[nIdx] !== currentGen) {
                     integrationMap[nIdx] = nextDist;
+                    integrationGen[nIdx] = currentGen;
                     bfsQueue[queueTail++] = nIdx;
                 }
             }
             // Left Neighbor
             if (curX - 1 >= 0) {
                 const nIdx = currentIdx - 1;
-                if (costMap[nIdx] !== 255 && integrationMap[nIdx] === 65535) {
+                if (costMap[nIdx] !== 255 && integrationGen[nIdx] !== currentGen) {
                     integrationMap[nIdx] = nextDist;
+                    integrationGen[nIdx] = currentGen;
                     bfsQueue[queueTail++] = nIdx;
                 }
             }
             // Bottom Neighbor
             if (curZ + 1 < GRID_SIZE) {
                 const nIdx = currentIdx + GRID_SIZE;
-                if (costMap[nIdx] !== 255 && integrationMap[nIdx] === 65535) {
+                if (costMap[nIdx] !== 255 && integrationGen[nIdx] !== currentGen) {
                     integrationMap[nIdx] = nextDist;
+                    integrationGen[nIdx] = currentGen;
                     bfsQueue[queueTail++] = nIdx;
                 }
             }
             // Top Neighbor
             if (curZ - 1 >= 0) {
                 const nIdx = currentIdx - GRID_SIZE;
-                if (costMap[nIdx] !== 255 && integrationMap[nIdx] === 65535) {
+                if (costMap[nIdx] !== 255 && integrationGen[nIdx] !== currentGen) {
                     integrationMap[nIdx] = nextDist;
+                    integrationGen[nIdx] = currentGen;
                     bfsQueue[queueTail++] = nIdx;
                 }
-            }
-        }
-
-        // Flow Calculation: 8-way local gradient search (Optimized: Bounded to visited cells)
-        for (let k = 0; k < queueTail; k++) {
-            const i = bfsQueue[k];
-
-            const x = i % GRID_SIZE;
-            const z = (i / GRID_SIZE) | 0;
-
-            let minVal = integrationMap[i];
-            let targetX = 0;
-            let targetZ = 0;
-
-            for (let dz = -1; dz <= 1; dz++) {
-                for (let dx = -1; dx <= 1; dx++) {
-                    if (dx === 0 && dz === 0) continue;
-
-                    const nx = x + dx;
-                    const nz = z + dz;
-                    if (nx < 0 || nx >= GRID_SIZE || nz < 0 || nz >= GRID_SIZE) continue;
-
-                    const nVal = integrationMap[nz * GRID_SIZE + nx];
-                    if (nVal < minVal) {
-                        minVal = nVal;
-                        targetX = dx;
-                        targetZ = dz;
-                    }
-                }
-            }
-
-            // Normalize steering vector (Zero-GC: Conditional Jump-table avoids Math.sqrt)
-            if (targetX !== 0 || targetZ !== 0) {
-                if (targetX !== 0 && targetZ !== 0) {
-                    // Diagonal movement
-                    flowX[i] = targetX * 0.7071;
-                    flowZ[i] = targetZ * 0.7071;
-                } else {
-                    // Cardinal movement
-                    flowX[i] = targetX;
-                    flowZ[i] = targetZ;
-                }
-            } else {
-                flowX[i] = 0;
-                flowZ[i] = 0;
             }
         }
     },
@@ -218,6 +186,50 @@ export const NavigationSystem = {
             out.set(0, 0, 0);
             return;
         }
+
+        // Lazy computation of flow vector if it hasn't been computed for the current generation yet
+        if (flowGen[idx] !== currentGen) {
+            flowGen[idx] = currentGen;
+
+            const x = idx % GRID_SIZE;
+            const z = (idx / GRID_SIZE) | 0;
+
+            let minVal = integrationGen[idx] === currentGen ? integrationMap[idx] : 65535;
+            let targetX = 0;
+            let targetZ = 0;
+
+            for (let dz = -1; dz <= 1; dz++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    if (dx === 0 && dz === 0) continue;
+
+                    const nx = x + dx;
+                    const nz = z + dz;
+                    if (nx < 0 || nx >= GRID_SIZE || nz < 0 || nz >= GRID_SIZE) continue;
+
+                    const nIdx = nz * GRID_SIZE + nx;
+                    const nVal = integrationGen[nIdx] === currentGen ? integrationMap[nIdx] : 65535;
+                    if (nVal < minVal) {
+                        minVal = nVal;
+                        targetX = dx;
+                        targetZ = dz;
+                    }
+                }
+            }
+
+            if (targetX !== 0 || targetZ !== 0) {
+                if (targetX !== 0 && targetZ !== 0) {
+                    flowX[idx] = targetX * 0.7071;
+                    flowZ[idx] = targetZ * 0.7071;
+                } else {
+                    flowX[idx] = targetX;
+                    flowZ[idx] = targetZ;
+                }
+            } else {
+                flowX[idx] = 0;
+                flowZ[idx] = 0;
+            }
+        }
+
         out.set(flowX[idx], 0, flowZ[idx]);
     }
 };

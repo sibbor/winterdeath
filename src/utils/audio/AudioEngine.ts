@@ -12,10 +12,14 @@ class Voice {
     public isLooping = false;
     public startTime = 0;
     public id: SoundID = SoundID.NONE;
+    private onEndedBound: () => void;
 
     constructor(ctx: AudioContext, destination: AudioNode) {
         this.gain = ctx.createGain();
         this.gain.connect(destination);
+        this.onEndedBound = () => {
+            this.isActive = false;
+        };
     }
 
     /** Prepares the voice for playback with a new buffer */
@@ -35,9 +39,7 @@ class Voice {
         this.isLooping = loop;
         this.source.start(0);
 
-        this.source.onended = () => {
-            this.isActive = false;
-        };
+        this.source.onended = this.onEndedBound;
     }
 
     stop() {
@@ -82,10 +84,17 @@ class BackgroundBus<T extends number> {
             oldGain.gain.setValueAtTime(oldGain.gain.value, now);
             oldGain.gain.linearRampToValueAtTime(0, now + fadeTime);
             
-            setTimeout(() => {
-                try { oldSource.stop(); oldSource.disconnect(); } catch(e) {}
+            try {
+                oldSource.stop(now + fadeTime);
+                oldSource.onended = () => {
+                    oldSource.disconnect();
+                    oldGain.disconnect();
+                };
+            } catch (e) {
+                // If source cannot be stopped gracefully, disconnect immediately
+                oldSource.disconnect();
                 oldGain.disconnect();
-            }, fadeTime * 1000 + 100);
+            }
             
             // Re-create bus gain for new track
             this.gain = this.ctx.createGain();
@@ -113,9 +122,17 @@ class BackgroundBus<T extends number> {
         this.gain.gain.linearRampToValueAtTime(0, now + fadeTime);
         
         const s = this.source;
-        setTimeout(() => {
-            try { s.stop(); s.disconnect(); } catch(e) {}
-        }, fadeTime * 1000 + 100);
+        const g = this.gain;
+        try {
+            s.stop(now + fadeTime);
+            s.onended = () => {
+                s.disconnect();
+                g.disconnect();
+            };
+        } catch (e) {
+            s.disconnect();
+            g.disconnect();
+        }
 
         this.source = null;
         this.currentId = null;

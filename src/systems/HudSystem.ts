@@ -19,6 +19,16 @@ import { MAX_ENTITIES } from '../content/constants';
 // Performance Scratchpads (Zero-GC)
 const _v1 = new THREE.Vector3();
 
+// Cached screen dimensions to avoid DOM layout thrashing / window lookup overhead
+let _cachedWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+let _cachedHeight = typeof window !== 'undefined' ? window.innerHeight : 1080;
+if (typeof window !== 'undefined') {
+    window.addEventListener('resize', () => {
+        _cachedWidth = window.innerWidth;
+        _cachedHeight = window.innerHeight;
+    });
+}
+
 // ============================================================================
 // ZERO-GC DOUBLE BUFFERING
 // We allocate two identical state trees (A and B) on load.
@@ -78,14 +88,7 @@ export const HudSystem = {
 
         // Boss/Wave logic
         let bossHpP = -1;
-        const enemies = state.enemies;
-        let activeBossObj = null;
-        for (let i = 0; i < enemies.length; i++) {
-            if (enemies[i].isBoss) {
-                activeBossObj = enemies[i];
-                break;
-            }
-        }
+        const activeBossObj = state.activeBoss;
 
         if (activeBossObj) {
             bossHpP = activeBossObj.hp / activeBossObj.maxHp;
@@ -121,8 +124,8 @@ export const HudSystem = {
             _fastUpdateDetail.interactionId = InteractionPromptId.EXIT_VEHICLE;
             _fastUpdateDetail.interactionType = InteractionType.VEHICLE;
             _fastUpdateDetail.interactionLabel = 'ui.exit_vehicle';
-            _fastUpdateDetail.interactionX = window.innerWidth / 2;
-            _fastUpdateDetail.interactionY = window.innerHeight - 150;
+            _fastUpdateDetail.interactionX = _cachedWidth * 0.5;
+            _fastUpdateDetail.interactionY = _cachedHeight - 150;
 
             // Zero-GC Interaction Bridge
             UIEventBridge.setInteractionPrompt(InteractionPromptId.EXIT_VEHICLE);
@@ -171,14 +174,13 @@ export const HudSystem = {
         for (let i = 0; i < 256; i++) vecBuf[i] = -99999; // Sentinel value for "Inactive"
 
         const enemies = state.enemies;
-        let activeBossObj = null;
+        let activeBossObj = state.activeBoss;
         let entitiesWritten = 0;
 
         // Write enemies (Max 100 to leave space for loot/points)
         const enemyLimit = Math.min(enemies.length, 100);
         for (let i = 0; i < enemyLimit; i++) {
             const ent = enemies[i];
-            if (ent.isBoss) activeBossObj = ent;
 
             const idx = entitiesWritten * 2;
             vecBuf[idx] = ent.mesh.position.x;
@@ -319,9 +321,10 @@ export const HudSystem = {
         _current.distanceTraveled = Math.floor(distanceTraveled) || 0;
         _current.kills = state.sessionStats.kills || 0;
         _current.spEarned = state.sessionStats.spGained || 0;
-        _current.cluesFoundCount = state.sessionStats.cluesFound?.length || 0;
-        _current.poisFoundCount = state.sessionStats.discoveredPOIs?.length || 0;
-        _current.collectiblesFoundCount = state.sessionStats.collectiblesDiscovered?.length || 0;
+        const sStats = state.sessionStats;
+        _current.cluesFoundCount = sStats ? (sStats.cluesFound ? sStats.cluesFound.length : 0) : 0;
+        _current.poisFoundCount = sStats ? (sStats.discoveredPOIs ? sStats.discoveredPOIs.length : 0) : 0;
+        _current.collectiblesFoundCount = sStats ? (sStats.collectiblesDiscovered ? sStats.collectiblesDiscovered.length : 0) : 0;
 
         // Sync persistent telemetry
         if (state.stats) {
@@ -424,22 +427,22 @@ export const HudSystem = {
             _bufferA.interactionType = InteractionType.VEHICLE;
             _bufferA.interactionLabel = 'ui.exit_vehicle';
             _bufferA.interactionTargetId = '';
-            _bufferA.interactionX = window.innerWidth / 2;
-            _bufferA.interactionY = window.innerHeight - 150;
+            _bufferA.interactionX = _cachedWidth * 0.5;
+            _bufferA.interactionY = _cachedHeight - 150;
 
             _bufferB.interactionActive = true;
             _bufferB.interactionType = InteractionType.VEHICLE;
             _bufferB.interactionLabel = 'ui.exit_vehicle';
             _bufferB.interactionTargetId = '';
-            _bufferB.interactionX = window.innerWidth / 2;
-            _bufferB.interactionY = window.innerHeight - 150;
+            _bufferB.interactionX = _cachedWidth * 0.5;
+            _bufferB.interactionY = _cachedHeight - 150;
 
             UIEventBridge.setInteractionPrompt(InteractionPromptId.EXIT_VEHICLE);
         } else if (state.hasInteractionTarget && state.interactionTargetPos) {
             _v1.copy(state.interactionTargetPos);
             _v1.project(camera);
-            const screenX = (0.5 + _v1.x * 0.5) * window.innerWidth;
-            const screenY = (0.5 - _v1.y * 0.5) * window.innerHeight;
+            const screenX = (0.5 + _v1.x * 0.5) * _cachedWidth;
+            const screenY = (0.5 - _v1.y * 0.5) * _cachedHeight;
 
             _bufferA.interactionActive = true;
             _bufferA.interactionType = state.interaction.type;

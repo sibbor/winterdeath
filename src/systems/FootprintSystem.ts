@@ -126,12 +126,8 @@ class FootprintSystemClass implements System {
             return;
         }
 
-        // 2. Fast Ground Detection via WorldStreamer (Zero-Raycast)
+        // 2. Leverage frame-stamped snapped coordinate from player position (O(1) time snap)
         const streamer = session.state.worldStreamer;
-        if (!streamer) return;
-
-        const ground = session.engine.ground;
-        const groundHeight = ground ? ground.getGroundHeight(position.x, position.z, session) : (streamer ? streamer.getGroundHeight(position.x, position.z) : 0);
 
         // Extremely fast mathematical X/Z offset avoiding trig overhead where possible
         const offsetDist = isRight ? 0.15 : -0.15;
@@ -140,7 +136,7 @@ class FootprintSystemClass implements System {
 
         const spawnX = position.x + (offsetDist * cosY);
         const spawnZ = position.z + (-offsetDist * sinY);
-        const spawnY = groundHeight + 0.02;
+        const spawnY = position.y + 0.02;
 
         const data = this.footprintData[this.index];
         data.active = true;

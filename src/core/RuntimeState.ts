@@ -203,6 +203,9 @@ export interface RuntimeState {
     applyDamage: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
 
 
+    activeBoss: Enemy | null;
+    activeResistPerkIdx: number;
+
     bossesDefeated: number[];
     familyFound: boolean;
     familyAlreadyRescued: boolean;
@@ -447,6 +450,9 @@ export function allocateRuntimeState(): RuntimeState {
         },
 
         applyDamage: () => false,
+
+        activeBoss: null,
+        activeResistPerkIdx: -1,
 
         bossesDefeated: [],
         familyFound: false,
@@ -703,6 +709,8 @@ export function resetRuntimeState(state: RuntimeState, props: any): void {
     state.hasInteractionTarget = false;
     state.hasNearestCollectible = false;
     state.bossSpawned = false;
+    state.activeBoss = null;
+    state.activeResistPerkIdx = -1;
 
     // 7. World & Collision
     state.sectorState = props.sectorState || { envOverride: undefined } as any;

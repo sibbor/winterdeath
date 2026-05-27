@@ -138,7 +138,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     }, [getSectorStats, refs]);
 
     const setBubble = useCallback((text: string, duration?: number) => {
-        UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration);
+        UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration, refs.gameSessionRef.current?.state.simTime || 0);
     }, []);
 
     const gainXp = useCallback((amount: number) => {
@@ -169,11 +169,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
 
         if (levelUps > 0) {
-            UIEventRingBuffer.push(UIEventType.LEVEL_UP, statsBuffer[PlayerStatID.LEVEL], levelUps);
+            UIEventRingBuffer.push(UIEventType.LEVEL_UP, statsBuffer[PlayerStatID.LEVEL], levelUps, state.simTime);
             UiSounds.playLevelUp();
         }
 
-        UIEventRingBuffer.push(UIEventType.XP_GAIN, amount);
+        UIEventRingBuffer.push(UIEventType.XP_GAIN, amount, 0, state.simTime);
     }, [refs]);
 
     const gainSp = useCallback((amount: number) => {
@@ -182,7 +182,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         session.state.sessionStats.spGained += amount;
         session.state.statsBuffer[PlayerStatID.SKILL_POINTS] += amount;
-        UIEventRingBuffer.push(UIEventType.SP_GAIN, amount);
+        UIEventRingBuffer.push(UIEventType.SP_GAIN, amount, 0, session.state.simTime);
     }, [refs]);
 
     const gainScrap = useCallback((amount: number) => {
@@ -194,7 +194,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const statsBuffer = session.state.statsBuffer;
         statsBuffer[PlayerStatID.SCRAP] += amount;
         statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += amount;
-        UIEventRingBuffer.push(UIEventType.SCRAP_GAIN, amount);
+        UIEventRingBuffer.push(UIEventType.SCRAP_GAIN, amount, 0, session.state.simTime);
     }, [refs]);
 
     // --- PAUSE SYNCHRONIZATION ---
@@ -338,12 +338,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             case TriggerActionType.SPAWN_BOSS: {
-                UIEventRingBuffer.push(UIEventType.BOSS_SPAWN, payload.type === 'BOSS' ? 1 : 0);
+                UIEventRingBuffer.push(UIEventType.BOSS_SPAWN, payload.type === 'BOSS' ? 1 : 0, 0, state.simTime);
                 break;
             }
 
             case TriggerActionType.FAMILY_MEMBER_FOLLOW: {
-                UIEventRingBuffer.push(UIEventType.FAMILY_FOLLOW, 1);
+                UIEventRingBuffer.push(UIEventType.FAMILY_FOLLOW, 1, 0, state.simTime);
 
                 // TODO: Gain 2 SP if it's the first time a family member follows the player
                 // gainSp(2);
@@ -366,7 +366,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 state.sectorState.familyFound = true;
 
                 if (!props.familyAlreadyRescued) {
-                    UIEventRingBuffer.push(UIEventType.FAMILY_FOUND, targetId || 0);
+                    UIEventRingBuffer.push(UIEventType.FAMILY_FOUND, targetId || 0, 0, state.simTime);
 
                     // Permanent Base Upgrade: Refresh passives immediately upon rescue
                     const perkSystem = refs.gameSessionRef.current?.getSystem<any>(SystemID.PERK_SYSTEM);
@@ -647,7 +647,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (currentProps.settings?.showDiscoveryPopups !== false) {
                 audioEngine.playSound(SoundID.PASSIVE_GAINED);
                 if (!fromBridge && typeof id === 'number') {
-                    UIEventRingBuffer.push(UIEventType.DISCOVERY, id, type);
+                    UIEventRingBuffer.push(UIEventType.DISCOVERY, id, type, state.simTime);
                 }
             }
         }
@@ -875,7 +875,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 setTimeout(() => {
                     if (refs.isMounted.current) {
                         const introText = t(currentSector.intro!.text);
-                        UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, `🧠 ${introText}`, currentSector.intro!.duration || 4000);
+                        UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, `🧠 ${introText}`, currentSector.intro!.duration || 4000, refs.stateRef.current?.simTime || 0);
                         if (currentSector.intro!.sound) audioEngine.playSound(currentSector.intro!.sound as any);
                     }
                 }, currentSector.intro.delay || 1500);
@@ -1028,7 +1028,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     showDamageText,
                     onDiscovery: handleDiscovery,
                     setBubble: (text: string, duration?: number) => {
-                        UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000);
+                        UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000, refs.stateRef.current?.simTime || 0);
                     },
                     spawnParticle: (x, y, z, type: FXParticleType, count, customMesh, customVel, color, scale) => {
                         FXSystem.spawnParticle(engine.scene, refs.stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
@@ -1141,7 +1141,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 spawnZombie: (type: any, pos: any) => refs.sectorContextRef.current?.spawnZombie(type, pos),
                 spawnHorde: (count: number, type: any, pos: any) => refs.sectorContextRef.current?.spawnHorde(count, type, pos),
                 setBubble: (text: string, duration?: number) => {
-                    UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000);
+                    UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000, refs.stateRef.current?.simTime || 0);
                 },
                 setInteraction: (interaction: any) => {
                     const s = refs.stateRef.current;

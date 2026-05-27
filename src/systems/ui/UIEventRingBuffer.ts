@@ -60,7 +60,7 @@ export const UIEventRingBuffer = {
      * Pushes a new event packet into the buffer.
      * Zero-GC: No allocations.
      */
-    push: (type: UIEventType, p1: number = 0, p2: number = 0, timestamp: number = 0) => {
+    push: (type: UIEventType, p1: number = 0, p2: number = 0, timestamp: number) => {
         // [VINTERDÖD] We use bitwise mask for wrap-around instead of modulo (%) 
         // to maximize performance in the hot loop.
         const writeIdx = head;
@@ -78,7 +78,7 @@ export const UIEventRingBuffer = {
         buffer[writeIdx] = type;
         buffer[writeIdx + 1] = p1;
         buffer[writeIdx + 2] = p2;
-        buffer[writeIdx + 3] = timestamp || performance.now();
+        buffer[writeIdx + 3] = timestamp;
 
         head = nextHead;
     },
@@ -87,7 +87,7 @@ export const UIEventRingBuffer = {
      * Helper to push an event that requires a string parameter.
      * Stores the string in a circular pool and passes the index as p1.
      */
-    pushString: (type: UIEventType, str: string, p2: number = 0, timestamp: number = 0) => {
+    pushString: (type: UIEventType, str: string, p2: number = 0, timestamp: number) => {
         const idx = stringPoolIdx;
         stringPool[idx] = str;
         stringPoolIdx = (stringPoolIdx + 1) & 63; // Wrap at 64

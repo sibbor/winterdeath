@@ -70,8 +70,9 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
     const heapLimitRef = useRef<HTMLSpanElement>(null);
     const gcAlertRef = useRef<HTMLSpanElement>(null);
 
-    // Recording State Tracking
-    const lastRecordState = useRef({ active: false, pending: false });
+    // Recording State Tracking (Zero-GC lazy initialized)
+    const lastRecordState = useRef<{ active: boolean; pending: boolean }>();
+    if (!lastRecordState.current) lastRecordState.current = { active: false, pending: false };
     const isMinimizedRef = useRef(isMinimized);
     isMinimizedRef.current = isMinimized;
 

@@ -569,6 +569,10 @@ export const EnemyManager = {
         enemy.mesh.visible = false;
         enemy.mesh.removeFromParent();
 
+        if (_currentSession && _currentSession.state && _currentSession.state.activeBoss === enemy) {
+            _currentSession.state.activeBoss = null;
+        }
+
         // Remove from spatial grid
         if (enemy.currentChunkKey !== -1) {
             if (_currentSession && _currentSession.worldStreamer) {
@@ -681,12 +685,14 @@ export const EnemyManager = {
         e.swingVelX = 0;
         e.swingVelZ = 0;
 
-        e.prevP.set(0, -1000, 0);
+        e.prevP.set(Infinity, Infinity, Infinity);
 
         if (!e.lastObsQueryPos) e.lastObsQueryPos = new THREE.Vector3(0, -1000, 0);
         else e.lastObsQueryPos.set(0, -1000, 0);
+
         if (!e.cachedObstacles) e.cachedObstacles = new Array(16);
         else e.cachedObstacles.fill(null);
+
         e.cachedObstacleCount = 0;
 
         e.lastTrailPos.set(0, 0, 0);
@@ -771,6 +777,10 @@ export const EnemyManager = {
 
             activeCount++;
             EnemyPoolState.activeCount = activeCount;
+
+            if (_currentSession && _currentSession.state) {
+                _currentSession.state.activeBoss = boss;
+            }
         }
         return boss;
     },

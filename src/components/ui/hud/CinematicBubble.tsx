@@ -34,6 +34,7 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
     const textContainerRef = useRef<HTMLSpanElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const rawTextRef = useRef('');
+    const lastDialogueKeyRef = useRef<string | null>(null);
 
     // Pre-calculate tokens locally when text changes via subscription
     const currentTokens = useRef<TextToken[]>([]);
@@ -73,6 +74,9 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
             const active = state.cinematicActive && state.dialogueActive && !!state.dialogueText;
 
             if (active) {
+                if (state.dialogueText === lastDialogueKeyRef.current) return;
+                lastDialogueKeyRef.current = state.dialogueText;
+
                 const newText = t(state.dialogueText);
                 if (newText !== rawTextRef.current) {
                     rawTextRef.current = newText;
@@ -94,6 +98,7 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
                     startTyping();
                 }
             } else {
+                lastDialogueKeyRef.current = null;
                 if (isVisible) {
                     setIsVisible(false);
                     rawTextRef.current = '';

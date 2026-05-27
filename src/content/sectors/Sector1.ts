@@ -446,7 +446,7 @@ export const Sector1: SectorDef = {
                 sectorState.jordanEventTimer = simTime;
                 audioEngine.playSound(SoundID.DOOR_OPEN, 0.6);
 
-                UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 0);
+                UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 0, 0, simTime);
 
                 if (events.setCameraOverride) {
                     events.setCameraOverride({
@@ -547,7 +547,7 @@ export const Sector1: SectorDef = {
                     sectorState.jordanEventState = 7;
                     sectorState.jordanEventTimer = simTime;
                     if (events.setCameraOverride) events.setCameraOverride(null);
-                    UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 1);
+                    UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 1, 0, simTime);
 
                     // --- OPTIMIZATION: SEQUENTIAL CALLS AVOIDING ARRAY ALLOCATIONS ---
                     if (events.onAction) {
