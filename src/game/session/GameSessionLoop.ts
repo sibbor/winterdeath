@@ -3,7 +3,7 @@ import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { CameraShakeType } from '../../systems/CameraSystem';
-import { RuntimeState } from '../../core/RuntimeState';
+import { GameSessionState } from '../../core/GameSessionState';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { HudSystem } from '../../systems/HudSystem';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
@@ -36,7 +36,7 @@ import { DiscoverySystem } from '../../systems/DiscoverySystem';
 interface LoopContext {
     engine: WinterEngine;
     session: GameSessionLogic;
-    state: RuntimeState;
+    state: GameSessionState;
     refs: any;
     propsRef: any;
     callbacks: {
@@ -263,20 +263,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
             // Set the visual hit timestamp so EnemyAnimator knows to shake the mesh
             enemy.hitRenderTime = state.renderTime;
-
-            // --- O(1) ZERO-GC ENEMY DISCOVERY ---
-            const sets = state.discoverySets;
-
-            if (sets && !sets.seenEnemies.has(enemy.type)) {
-                if (!isBoss && callbacks.onDiscovery) {
-                    callbacks.onDiscovery(
-                        DiscoveryType.ZOMBIE,
-                        enemy.type as any, // SMI ID
-                        'ui.enemy_encountered',
-                        DataResolver.getZombieName(enemy.type)
-                    );
-                }
-            }
 
             const actualDmg = Math.max(0, Math.min(enemy.hp, amount));
             enemy.hp -= actualDmg;

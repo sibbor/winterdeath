@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { RuntimeState } from '../../core/RuntimeState';
+import { GameSessionState } from '../../core/GameSessionState';
 import { useRef, useState, useEffect } from 'react';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { DeathPhase } from '../../types/SessionTypes';
@@ -9,7 +9,7 @@ import { GameSessionLogic } from './GameSessionLogic';
 import { CinematicBubbleHandle } from '../../components/ui/hud/CinematicBubble';
 import { InteractionType } from '../../systems/ui/UIEventBridge';
 
-export interface UIState {
+export interface GameSessionUiState {
     isSectorLoading: boolean;
     deathPhase: DeathPhase;
     cinematicActive: boolean;
@@ -26,7 +26,7 @@ export interface UIState {
     stationOverlay: string | null;
 }
 
-export const useGameSessionState = (props: GameCanvasProps) => {
+export const useGameSessionUiState = (props: GameCanvasProps) => {
     // Top level engine refs
     const propsRef = useRef(props);
     useEffect(() => { propsRef.current = props; }, [props]);
@@ -38,7 +38,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
     const sectorContextRef = useRef<SectorContext | null>(null);
 
     // Core State Ref
-    const stateRef = useRef<RuntimeState>(null!);
+    const stateRef = useRef<GameSessionState>(null!);
     if (!stateRef.current) {
         stateRef.current = GameSessionLogic.allocateState();
         GameSessionLogic.resetState(stateRef.current, props);
@@ -54,7 +54,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
     // Gameplay Logic Refs
     const activeBubbles = useRef<any[]>([]);
     const hasEndedSector = useRef(false);
-    const collectedCluesRef = useRef<string[]>(props.stats.cluesFound || []);
+    const collectedCluesRef = useRef<string[]>(props.stats.discoveredClues || []);
     const distanceTraveledRef = useRef(0);
     const lastTeleportRef = useRef<number>(0);
     const lastDrawCallsRef = useRef(0);
@@ -108,7 +108,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
     });
 
     // --- REACT STATE TANK ---
-    const [uiState, setUiState] = useState<UIState>({
+    const [uiState, setUiState] = useState<GameSessionUiState>({
         isSectorLoading: true,
         deathPhase: DeathPhase.NONE,
         cinematicActive: false,
@@ -126,7 +126,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
     });
 
     // Zero-GC partial state update (prevents re-renders if nothing actually changed)
-    const updateUiState = (partial: Partial<UIState>) => {
+    const updateUiState = (partial: Partial<GameSessionUiState>) => {
         setUiState(prev => {
             let hasChanged = false;
             for (const key in partial) {

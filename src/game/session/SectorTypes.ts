@@ -121,13 +121,11 @@ export interface SectorContext {
     spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
     spawnBoss: (id: BossID, pos?: THREE.Vector3) => void;
     smokeEmitters: any[];
-    cluesFound: string[];
-    collectiblesDiscovered: string[];
     collectibles: THREE.Group[]; // Optimized Cache
     dynamicLights: THREE.Light[];  // Optimized Cache
     sectorId: number;
     sectorState: SectorState;
-    state: any; // RuntimeState (for systems like waterSystem, windSystem)
+    state: any; // GameSessionState (for systems like waterSystem, windSystem)
     activeFamilyMembers: any[]; // List for the FamilySystem to track
     environmentalZones: EnvironmentalZone[]; // Dynamic environmental regions
     uniqueMeshes?: any[]; // For instanced meshes or unique geometry

@@ -59,7 +59,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
         const SESS = Math.max(1, StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SESSIONS_STARTED));
         const totalDist = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_DISTANCE_TRAVELED);
         const totalTime = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME);
-        const discPoints = (StatsBridge.getDiscoveredPOIs(stats).length) + (StatsBridge.getCollectiblesDiscovered(stats).length) + (StatsBridge.getCluesFound(stats).length);
+        const discPoints = (StatsBridge.getDiscoveredPois(stats).length) + (StatsBridge.getDiscoveredCollectibles(stats).length) + (StatsBridge.getDiscoveredClues(stats).length);
 
         return {
             scrapTotal: ST,

@@ -112,7 +112,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
     }, [currentSector]);
 
     const discoveredSectorCollectibles = useMemo(() => {
-        const found = StatsBridge.getCollectiblesDiscovered(playerStats);
+        const found = StatsBridge.getDiscoveredCollectibles(playerStats);
         const foundSet = new Set<string>(found);
         let count = 0;
         for (let i = 0; i < sectorCollectibles.length; i++) {
@@ -122,7 +122,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
     }, [playerStats, sectorCollectibles]);
 
     const discoveredSectorClues = useMemo(() => {
-        const found = StatsBridge.getCluesFound(playerStats);
+        const found = StatsBridge.getDiscoveredClues(playerStats);
         const foundSet = new Set<string>(found.map((c: any) => String(typeof c === 'string' ? c : c.id)));
         let count = 0;
         for (let i = 0; i < sectorClues.length; i++) {
@@ -132,7 +132,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
     }, [playerStats, sectorClues]);
 
     const discoveredSectorPOIs = useMemo(() => {
-        const found = StatsBridge.getDiscoveredPOIs(playerStats);
+        const found = StatsBridge.getDiscoveredPois(playerStats);
         const foundSet = new Set<string>(found.map(String));
         let count = 0;
         for (let i = 0; i < sectorPOIs.length; i++) {

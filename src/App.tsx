@@ -275,7 +275,7 @@ const App: React.FC = () => {
         setActiveCollectible(id);
         setActiveOverlay(OverlayType.COLLECTIBLE);
         setGameState(prev => {
-            if (StatsBridge.getCollectiblesDiscovered(prev.stats).includes(id)) return prev;
+            if (StatsBridge.getDiscoveredCollectibles(prev.stats).includes(id)) return prev;
 
             const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
             newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
@@ -285,7 +285,7 @@ const App: React.FC = () => {
                 stats: {
                     ...prev.stats,
                     statsBuffer: newStatsBuffer,
-                    collectiblesDiscovered: [...StatsBridge.getCollectiblesDiscovered(prev.stats), id],
+                    discoveredCollectibles: [...StatsBridge.getDiscoveredCollectibles(prev.stats), id],
                     totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1
                 }
             };
@@ -296,7 +296,7 @@ const App: React.FC = () => {
         const clueId = String(typeof clue === 'string' ? clue : (clue?.id || ''));
         if (!clueId) return;
         setGameState(prev => {
-            if (StatsBridge.getCluesFound(prev.stats).includes(clueId)) return prev;
+            if (StatsBridge.getDiscoveredClues(prev.stats).includes(clueId)) return prev;
 
             const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
             newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
@@ -306,7 +306,7 @@ const App: React.FC = () => {
                 stats: {
                     ...prev.stats,
                     statsBuffer: newStatsBuffer,
-                    cluesFound: [...StatsBridge.getCluesFound(prev.stats), clueId],
+                    discoveredClues: [...StatsBridge.getDiscoveredClues(prev.stats), clueId],
                     totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1
                 }
             };
@@ -317,7 +317,7 @@ const App: React.FC = () => {
         const poiId = String(typeof poi === 'string' ? poi : (poi?.id || ''));
         if (!poiId) return;
         setGameState(prev => {
-            if (StatsBridge.getDiscoveredPOIs(prev.stats).includes(poiId)) return prev;
+            if (StatsBridge.getDiscoveredPois(prev.stats).includes(poiId)) return prev;
 
             const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
             newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
@@ -327,7 +327,7 @@ const App: React.FC = () => {
                 stats: {
                     ...prev.stats,
                     statsBuffer: newStatsBuffer,
-                    discoveredPOIs: [...StatsBridge.getDiscoveredPOIs(prev.stats), poiId],
+                    discoveredPois: [...StatsBridge.getDiscoveredPois(prev.stats), poiId],
                     totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1
                 }
             };
@@ -337,16 +337,16 @@ const App: React.FC = () => {
     const handleEnemyDiscoveredAction = useCallback((type: number) => {
         if (!type && type !== 0) return;
         setGameState(prev => {
-            if (StatsBridge.getSeenEnemies(prev.stats).includes(type)) return prev;
-            return { ...prev, stats: { ...prev.stats, seenEnemies: [...StatsBridge.getSeenEnemies(prev.stats), type] } };
+            if (StatsBridge.getDiscoveredZombies(prev.stats).includes(type)) return prev;
+            return { ...prev, stats: { ...prev.stats, discoveredZombies: [...StatsBridge.getDiscoveredZombies(prev.stats), type] } };
         });
     }, []);
 
     const handleBossDiscoveredAction = useCallback((id: number) => {
         if (!id && id !== 0) return;
         setGameState(prev => {
-            if (StatsBridge.getSeenBosses(prev.stats).includes(id)) return prev;
-            return { ...prev, stats: { ...prev.stats, seenBosses: [...StatsBridge.getSeenBosses(prev.stats), id] } };
+            if (StatsBridge.getDiscoveredBosses(prev.stats).includes(id)) return prev;
+            return { ...prev, stats: { ...prev.stats, discoveredBosses: [...StatsBridge.getDiscoveredBosses(prev.stats), id] } };
         });
     }, []);
 

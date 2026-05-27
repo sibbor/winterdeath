@@ -290,12 +290,12 @@ export const INITIAL_STATS: PlayerStats = {
     sectorsCompleted: 0,
     totalSkillPointsEarned: 0,
 
-    collectiblesDiscovered: [],
+    discoveredCollectibles: [],
     viewedCollectibles: [],
-    cluesFound: [],
-    discoveredPOIs: [],
-    seenEnemies: [],
-    seenBosses: [],
+    discoveredClues: [],
+    discoveredPois: [],
+    discoveredZombies: [],
+    discoveredBosses: [],
     deadBossIndices: [],
     discoveredPerksMap: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
 

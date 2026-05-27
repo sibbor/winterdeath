@@ -39,7 +39,7 @@ export const VehicleManager = {
 
         const speed = vState.speed || 0;
         const throttle = vState.throttle || 0;
-        
+
         // Simple RPM simulation: Idle + (Throttle * 0.5) + (Speed * 0.05)
         const rpm = 0.2 + (Math.abs(throttle) * 0.5) + (speed * 0.05);
         VehicleSounds.updateEngine(vState.engineVoiceIdx, Math.min(1.0, rpm));
@@ -140,11 +140,11 @@ export const VehicleManager = {
         const vState = vehicle.userData.state as VehicleState;
         const vNodes = vehicle.userData.nodes as VehicleNodes;
 
-        // 2. Point Global RuntimeState to this vehicle's buffers
+        // 2. Point Global G to this vehicle's buffers
         state.vehicle.mesh = vehicle;
         state.vehicle.nodes = vNodes;
 
-        // Zero-GC Transfer: Copy properties from instance to runtime active buffer
+        // Zero-GC Transfer: Copy properties from instance to GameSessionState active buffer
         state.vehicle.type = def.type;
         state.vehicle.active = true;
         state.vehicle.engineState = VehicleEngineState.RUNNING;

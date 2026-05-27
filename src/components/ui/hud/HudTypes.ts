@@ -181,8 +181,8 @@ export interface HudState {
 
   // Real-time telemetry (Synced from persistent stats + session)
   enemyKills: Float64Array;
-  seenEnemies: number[];
-  seenBosses: number[];
+  discoveredZombies: number[];
+  discoveredBosses: number[];
 
   // Status & Buffs (SoA Pattern)
   StatusEffectIDs: Int32Array;

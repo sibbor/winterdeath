@@ -49,11 +49,11 @@ export const aggregateStats = (
     const sb = s.statsBuffer;
 
     // Shallow clone arrays/objects we will mutate to avoid mutating prevStats directly
-    s.collectiblesDiscovered = s.collectiblesDiscovered ? s.collectiblesDiscovered.slice() : [];
-    s.cluesFound = s.cluesFound ? s.cluesFound.slice() : [];
-    s.discoveredPOIs = s.discoveredPOIs ? s.discoveredPOIs.slice() : [];
-    s.seenBosses = s.seenBosses ? s.seenBosses.slice() : [];
-    s.seenEnemies = s.seenEnemies ? s.seenEnemies.slice() : [];
+    s.discoveredCollectibles = s.discoveredCollectibles ? s.discoveredCollectibles.slice() : [];
+    s.discoveredClues = s.discoveredClues ? s.discoveredClues.slice() : [];
+    s.discoveredPois = s.discoveredPois ? s.discoveredPois.slice() : [];
+    s.discoveredBosses = s.discoveredBosses ? s.discoveredBosses.slice() : [];
+    s.discoveredZombies = s.discoveredZombies ? s.discoveredZombies.slice() : [];
     s.deadBossIndices = s.deadBossIndices ? s.deadBossIndices.slice() : [];
     s.rescuedFamilyIndices = s.rescuedFamilyIndices ? s.rescuedFamilyIndices.slice() : [];
     s.trackedChallengeIds = s.trackedChallengeIds ? s.trackedChallengeIds.slice() : [];
@@ -138,48 +138,48 @@ export const aggregateStats = (
     sb[PlayerStatID.TOTAL_LONG_RANGE_KILLS] += (sectorStats.engagementDistSqKills > 1000 ? 1 : 0); // Example threshold
 
     // 5. Discovery & Unique Items
-    if (sectorStats.cluesFound) {
-        for (let i = 0; i < sectorStats.cluesFound.length; i++) {
-            const c = sectorStats.cluesFound[i];
+    if (sectorStats.discoveredClues) {
+        for (let i = 0; i < sectorStats.discoveredClues.length; i++) {
+            const c = sectorStats.discoveredClues[i];
             const id = typeof c === 'string' ? c : c.id;
             if (typeof id === 'string') {
-                if (!s.cluesFound.includes(id)) {
-                    s.cluesFound.push(id);
+                if (!s.discoveredClues.includes(id)) {
+                    s.discoveredClues.push(id);
                     sb[PlayerStatID.SKILL_POINTS]++;
                 }
             }
         }
     }
 
-    if (sectorStats.discoveredPOIs) {
-        for (let i = 0; i < sectorStats.discoveredPOIs.length; i++) {
-            const poi = sectorStats.discoveredPOIs[i];
-            if (!s.discoveredPOIs.includes(poi)) {
-                s.discoveredPOIs.push(poi);
+    if (sectorStats.discoveredPois) {
+        for (let i = 0; i < sectorStats.discoveredPois.length; i++) {
+            const poi = sectorStats.discoveredPois[i];
+            if (!s.discoveredPois.includes(poi)) {
+                s.discoveredPois.push(poi);
                 sb[PlayerStatID.SKILL_POINTS]++;
             }
         }
     }
 
-    if (sectorStats.seenEnemies) {
-        for (let i = 0; i < sectorStats.seenEnemies.length; i++) {
-            const enemyId = sectorStats.seenEnemies[i];
-            if (!s.seenEnemies.includes(enemyId)) s.seenEnemies.push(enemyId);
+    if (sectorStats.discoveredZombies) {
+        for (let i = 0; i < sectorStats.discoveredZombies.length; i++) {
+            const enemyId = sectorStats.discoveredZombies[i];
+            if (!s.discoveredZombies.includes(enemyId)) s.discoveredZombies.push(enemyId);
         }
     }
 
-    if (sectorStats.seenBosses) {
-        for (let i = 0; i < sectorStats.seenBosses.length; i++) {
-            const bossId = sectorStats.seenBosses[i];
-            if (!s.seenBosses.includes(bossId)) s.seenBosses.push(bossId);
+    if (sectorStats.discoveredBosses) {
+        for (let i = 0; i < sectorStats.discoveredBosses.length; i++) {
+            const bossId = sectorStats.discoveredBosses[i];
+            if (!s.discoveredBosses.includes(bossId)) s.discoveredBosses.push(bossId);
         }
     }
 
-    if (sectorStats.collectiblesDiscovered) {
-        for (let i = 0; i < sectorStats.collectiblesDiscovered.length; i++) {
-            const collectible = sectorStats.collectiblesDiscovered[i];
-            if (!s.collectiblesDiscovered.includes(collectible)) {
-                s.collectiblesDiscovered.push(collectible);
+    if (sectorStats.discoveredCollectibles) {
+        for (let i = 0; i < sectorStats.discoveredCollectibles.length; i++) {
+            const collectible = sectorStats.discoveredCollectibles[i];
+            if (!s.discoveredCollectibles.includes(collectible)) {
+                s.discoveredCollectibles.push(collectible);
                 sb[PlayerStatID.SKILL_POINTS]++;
             }
         }

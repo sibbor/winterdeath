@@ -57,7 +57,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
 
     // Mark all found collectibles as viewed when the log is opened
     useEffect(() => {
-        const foundIds = StatsBridge.getCollectiblesDiscovered(stats);
+        const foundIds = StatsBridge.getDiscoveredCollectibles(stats);
         const viewedIds = StatsBridge.getViewedCollectibles(stats);
 
         let hasNew = false;
@@ -444,7 +444,7 @@ const ChallengeCard: React.FC<{
 const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, isDebug }) => {
     const zombies = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.ZOMBIE), []);
 
-    const seenEnemySet = useMemo(() => new Set(StatsBridge.getSeenEnemies(stats)), [stats]);
+    const seenEnemySet = useMemo(() => new Set(StatsBridge.getDiscoveredZombies(stats)), [stats]);
 
     const filteredZombies = useMemo(() => {
         const list: typeof zombies = [];
@@ -561,7 +561,7 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
 
     const { seenBossesSet, defeatedBossesSet } = useMemo(() => {
         return {
-            seenBossesSet: new Set(StatsBridge.getSeenBosses(stats)),
+            seenBossesSet: new Set(StatsBridge.getDiscoveredBosses(stats)),
             defeatedBossesSet: new Set(StatsBridge.getDeadBossIndices(stats))
         };
     }, [stats]);
@@ -703,7 +703,7 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
 });
 
 const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
-    const foundIds = StatsBridge.getCollectiblesDiscovered(stats);
+    const foundIds = StatsBridge.getDiscoveredCollectibles(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.COLLECTIBLE), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
     const sectorsCompleted = StatsBridge.getSectorsCompleted(stats);
@@ -810,7 +810,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
 });
 
 const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
-    const foundIds = StatsBridge.getCluesFound(stats);
+    const foundIds = StatsBridge.getDiscoveredClues(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.CLUE), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
     const sectorsCompleted = StatsBridge.getSectorsCompleted(stats);
@@ -930,7 +930,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effecti
 });
 
 const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
-    const visitedList = StatsBridge.getDiscoveredPOIs(stats);
+    const visitedList = StatsBridge.getDiscoveredPois(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.POI), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
     const sectorsCompleted = StatsBridge.getSectorsCompleted(stats);

@@ -48,7 +48,7 @@ import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { ChallengeSystem } from '../../systems/ChallengeSystem';
 import { HudSystem } from '../../systems/HudSystem';
-import { RuntimeState } from '../../core/RuntimeState';
+import { GameSessionState } from '../../core/GameSessionState';
 import { CLUES } from '../../content/clues';
 import { POIS } from '../../content/pois';
 import { COLLECTIBLES } from '../../content/collectibles';
@@ -67,7 +67,7 @@ const seededRandom = (seed: number) => {
 export interface SetupContext {
     engine: WinterEngine;
     session: GameSessionLogic;
-    state: RuntimeState;
+    state: GameSessionState;
     props: GameCanvasProps;
     refs: any;
     ui: {
@@ -329,7 +329,7 @@ export class GameSessionSetup {
         engine.mountScene(engine.scene, env, undefined, !!isWarmup);
     }
 
-    private static setupPlayerAndCamera(engine: WinterEngine, currentSector: any, refs: any, state: RuntimeState) {
+    private static setupPlayerAndCamera(engine: WinterEngine, currentSector: any, refs: any, state: GameSessionState) {
         const playerGroup = ModelFactory.createPlayer();
         refs.playerGroupRef.current = playerGroup;
 
@@ -437,8 +437,8 @@ export class GameSessionSetup {
 
                 const idStr = String(bossId);
                 let seen = false;
-                for (let j = 0; j < props.stats.seenBosses.length; j++) {
-                    if (props.stats.seenBosses[j] === bossId) {
+                for (let j = 0; j < props.stats.discoveredBosses.length; j++) {
+                    if (props.stats.discoveredBosses[j] === bossId) {
                         seen = true;
                         break;
                     }
@@ -456,8 +456,8 @@ export class GameSessionSetup {
             worldStreamer: state.worldStreamer,
             flickeringLights, burningObjects, rng, mapItems, debugMode: props.debugMode,
             textures: textures, spawnZombie: realSpawnZombie, spawnHorde, spawnBoss,
-            cluesFound: (props.stats.cluesFound || []) as string[], collectiblesDiscovered: (props.stats.collectiblesDiscovered || []) as string[],
-            collectibles: [], dynamicLights: [], interactables: [], triggers: [], sectorId: props.currentSector, smokeEmitters: [],
+            collectibles: [],
+            dynamicLights: [], interactables: [], triggers: [], sectorId: props.currentSector, smokeEmitters: [],
             sectorState: state.sectorState, state: state, activeFamilyMembers: ctx.refs.activeFamilyMembers.current, yield: yielder,
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => ctx.session.makeNoise(pos, type, radius),
             isWarmup: props.isWarmup,
@@ -526,17 +526,17 @@ export class GameSessionSetup {
                     case DiscoveryType.CLUE: {
                         const clueSmi = DataResolver.resolveClueID(id);
                         if (clueSmi !== undefined) {
-                            alreadyFound = sets.clues.has(clueSmi);
+                            alreadyFound = sets.discoveredClues.has(clueSmi);
                             if (!alreadyFound) {
-                                if (!isRespawnable) sets.clues.add(clueSmi);
+                                if (!isRespawnable) sets.discoveredClues.add(clueSmi);
 
                                 let foundClue = false;
-                                for (let i = 0; i < stats.cluesFound.length; i++) {
-                                    const c = stats.cluesFound[i];
+                                for (let i = 0; i < stats.discoveredClues.length; i++) {
+                                    const c = stats.discoveredClues[i];
                                     if ((typeof c === 'string' ? c : c.id) === id) { foundClue = true; break; }
                                 }
                                 if (!isRespawnable && !foundClue) {
-                                    stats.cluesFound.push(id as string);
+                                    stats.discoveredClues.push(id as string);
                                 }
                             }
                         }
@@ -546,16 +546,16 @@ export class GameSessionSetup {
                     case DiscoveryType.POI: {
                         const poiSmi = DataResolver.resolvePoiID(id);
                         if (poiSmi !== undefined) {
-                            alreadyFound = sets.pois.has(poiSmi);
+                            alreadyFound = sets.discoveredPois.has(poiSmi);
                             if (!alreadyFound) {
-                                if (!isRespawnable) sets.pois.add(poiSmi);
+                                if (!isRespawnable) sets.discoveredPois.add(poiSmi);
 
                                 let foundPOI = false;
-                                for (let i = 0; i < stats.discoveredPOIs.length; i++) {
-                                    if (stats.discoveredPOIs[i] === id) { foundPOI = true; break; }
+                                for (let i = 0; i < stats.discoveredPois.length; i++) {
+                                    if (stats.discoveredPois[i] === id) { foundPOI = true; break; }
                                 }
                                 if (!isRespawnable && !foundPOI) {
-                                    stats.discoveredPOIs.push(id);
+                                    stats.discoveredPois.push(id);
                                 }
                             }
                         }
@@ -565,16 +565,16 @@ export class GameSessionSetup {
                     case DiscoveryType.COLLECTIBLE: {
                         const colSmi = DataResolver.resolveCollectibleID(id);
                         if (colSmi !== undefined) {
-                            alreadyFound = sets.collectibles.has(colSmi);
+                            alreadyFound = sets.discoveredCollectibles.has(colSmi);
                             if (!alreadyFound) {
-                                if (!isRespawnable) sets.collectibles.add(colSmi);
+                                if (!isRespawnable) sets.discoveredCollectibles.add(colSmi);
 
                                 let foundCol = false;
-                                for (let i = 0; i < stats.collectiblesDiscovered.length; i++) {
-                                    if (stats.collectiblesDiscovered[i] === id) { foundCol = true; break; }
+                                for (let i = 0; i < stats.discoveredCollectibles.length; i++) {
+                                    if (stats.discoveredCollectibles[i] === id) { foundCol = true; break; }
                                 }
                                 if (!isRespawnable && !foundCol) {
-                                    stats.collectiblesDiscovered.push(id);
+                                    stats.discoveredCollectibles.push(id);
                                 }
                             }
                         }
@@ -599,42 +599,42 @@ export class GameSessionSetup {
 
                         if (type === DiscoveryType.CLUE) {
                             let cCount = 0;
-                            if (state.discoverySets?.clues) {
-                                for (const cid of state.discoverySets.clues) {
+                            if (state.discoverySets?.discoveredClues) {
+                                for (const cid of state.discoverySets.discoveredClues) {
                                     const resolved = DataResolver.resolveClueID(cid);
                                     if (resolved !== undefined && CLUES[resolved]?.sector === currentSector) cCount++;
                                 }
                             }
                             const thisClueSmi = DataResolver.resolveClueID(id);
-                            if (thisClueSmi !== undefined && (!state.discoverySets?.clues || !state.discoverySets.clues.has(thisClueSmi))) {
+                            if (thisClueSmi !== undefined && (!state.discoverySets?.discoveredClues || !state.discoverySets.discoveredClues.has(thisClueSmi))) {
                                 if (CLUES[thisClueSmi]?.sector === currentSector) cCount++;
                             }
                             HudStore.patch({ cluesFoundCount: cCount });
 
                         } else if (type === DiscoveryType.POI) {
                             let poiCount = 0;
-                            if (state.discoverySets?.pois) {
-                                for (const pid of state.discoverySets.pois) {
+                            if (state.discoverySets?.discoveredPois) {
+                                for (const pid of state.discoverySets.discoveredPois) {
                                     const resolved = DataResolver.resolvePoiID(pid);
                                     if (resolved !== undefined && POIS[resolved]?.sector === currentSector) poiCount++;
                                 }
                             }
                             const thisPoiSmi = DataResolver.resolvePoiID(id);
-                            if (thisPoiSmi !== undefined && (!state.discoverySets?.pois || !state.discoverySets.pois.has(thisPoiSmi))) {
+                            if (thisPoiSmi !== undefined && (!state.discoverySets?.discoveredPois || !state.discoverySets.discoveredPois.has(thisPoiSmi))) {
                                 if (POIS[thisPoiSmi]?.sector === currentSector) poiCount++;
                             }
                             HudStore.patch({ poisFoundCount: poiCount });
 
                         } else if (type === DiscoveryType.COLLECTIBLE) {
                             let colCount = 0;
-                            if (state.discoverySets?.collectibles) {
-                                for (const colid of state.discoverySets.collectibles) {
+                            if (state.discoverySets?.discoveredCollectibles) {
+                                for (const colid of state.discoverySets.discoveredCollectibles) {
                                     const resolved = DataResolver.resolveCollectibleID(colid);
                                     if (resolved !== undefined && COLLECTIBLES[resolved]?.sector === currentSector) colCount++;
                                 }
                             }
                             const thisColSmi = DataResolver.resolveCollectibleID(id);
-                            if (thisColSmi !== undefined && (!state.discoverySets?.collectibles || !state.discoverySets.collectibles.has(thisColSmi))) {
+                            if (thisColSmi !== undefined && (!state.discoverySets?.discoveredCollectibles || !state.discoverySets.discoveredCollectibles.has(thisColSmi))) {
                                 if (COLLECTIBLES[thisColSmi]?.sector === currentSector) colCount++;
                             }
                             HudStore.patch({ collectiblesFoundCount: colCount });
@@ -680,7 +680,7 @@ export class GameSessionSetup {
         });
     }
 
-    private static finalizeStateLimits(state: RuntimeState, mapItems: MapItem[], flickeringLights: any[], scene: THREE.Scene, sectorCtx: SectorContext) {
+    private static finalizeStateLimits(state: GameSessionState, mapItems: MapItem[], flickeringLights: any[], scene: THREE.Scene, sectorCtx: SectorContext) {
         state.mapItems = mapItems;
 
         const sb = state.statsBuffer;
@@ -1037,7 +1037,7 @@ export class GameSessionSetup {
      * Respawns the player with full HP, stamina, ammo etc.
      * Enemies are respawned. Chests already opened remain open.
      * */
-    static respawnPlayer(session: GameSessionLogic, engine: WinterEngine, state: RuntimeState, refs: any, props: any, setDeathPhase: (phase: DeathPhase) => void) {
+    static respawnPlayer(session: GameSessionLogic, engine: WinterEngine, state: GameSessionState, refs: any, props: any, setDeathPhase: (phase: DeathPhase) => void) {
         const scene = engine.scene;
 
         // --- 1. RESET PLAYER STATE (DOD / Zero-GC) ---
@@ -1296,7 +1296,7 @@ export class GameSessionSetup {
         ui.setDeathPhase(DeathPhase.NONE);
     }
 
-    static disposeSector(session: GameSessionLogic, state: RuntimeState) {
+    static disposeSector(session: GameSessionLogic, state: GameSessionState) {
         EnemyManager.clear();
         ChunkManager.clear();
         AssetLoader.getInstance().clearCache();
@@ -1318,7 +1318,6 @@ export class GameSessionSetup {
             session.dispose();
         }
 
-        state.sessionCollectiblesDiscovered.length = 0;
         state.bossSpawned = false;
     }
 }

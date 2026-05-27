@@ -100,7 +100,7 @@ export class ChallengeSystem implements System {
             case ChallengeID.SCRAPPER:
                 return buffer[PlayerStatID.TOTAL_SCRAP_COLLECTED];
             case ChallengeID.EXPLORER:
-                return stats.discoveredPOIs.length;
+                return stats.discoveredPois.length;
             case ChallengeID.TREASURE_HUNTER:
                 return buffer[PlayerStatID.TOTAL_CHESTS_OPENED];
             case ChallengeID.SCAVENGER:

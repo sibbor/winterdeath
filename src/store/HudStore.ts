@@ -83,8 +83,8 @@ export class HudStateSoA implements IHudState {
     public totalWaves = 1;
 
     public enemyKills = new Float64Array(16);
-    public seenEnemies: number[] = [];
-    public seenBosses: number[] = [];
+    public discoveredZombies: number[] = [];
+    public discoveredBosses: number[] = [];
 
     // SoA Status Effects
     public StatusEffectIDs = new Int32Array(MAX_STATUS_EFFECTS);
@@ -237,8 +237,8 @@ export class HudStateSoA implements IHudState {
 
         this.enemyKills.set(src.enemyKills);
         // Note: Reference copy for seen lists as they change infrequently
-        this.seenEnemies = src.seenEnemies;
-        this.seenBosses = src.seenBosses;
+        this.discoveredZombies = (src as any).discoveredZombies;
+        this.discoveredBosses = (src as any).discoveredBosses;
 
         this.StatusEffectIDs.set(src.StatusEffectIDs);
         this.statusEffectDurations.set(src.statusEffectDurations);

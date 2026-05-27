@@ -13,7 +13,6 @@ import { AssetPreloader } from '../../systems/AssetPreloader';
 import { SkySystem } from '../../systems/SkySystem';
 import { EnvironmentManager } from '../../systems/EnvironmentManager';
 import { GroundSystem } from '../../systems/GroundSystem';
-import { FootprintSystem } from '../../systems/FootprintSystem';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { System, SystemID } from '../../systems/System';
 import { GroundType, SectorEnvironment, EnvironmentOverride } from '../../core/engine/EngineTypes';
@@ -183,7 +182,6 @@ export class WinterEngine {
         this.registerSystem(SystemID.FOG, this.fog, false);
         this.registerSystem(SystemID.LIGHT, this.light, false);
         this.registerSystem(SystemID.ENVIRONMENT_MANAGER, this.environment);
-        this.registerSystem(SystemID.FOOTPRINT, FootprintSystem, true);
 
         // Perform init logic once system is assigned a property
         this.sky.init();

@@ -63,10 +63,10 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
     // -- Stats Calculation -- Zero-GC: for-loops replacing Object.values+filter chains
     const { collectibles, clues, pois } = useMemo(() => {
-        const foundCollectiblesSet = new Set<number>(StatsBridge.getCollectiblesDiscovered(stats).map(Number));
-        const foundCluesRaw = StatsBridge.getCluesFound(stats);
+        const foundCollectiblesSet = new Set<number>(StatsBridge.getDiscoveredCollectibles(stats).map(Number));
+        const foundCluesRaw = StatsBridge.getDiscoveredClues(stats);
         const foundCluesSet = new Set<string>(foundCluesRaw.map((c: any) => String(typeof c === 'string' ? c : c.id)));
-        const foundPoisSet = new Set<number>(StatsBridge.getDiscoveredPOIs(stats).map(Number));
+        const foundPoisSet = new Set<number>(StatsBridge.getDiscoveredPois(stats).map(Number));
 
         const allCollectibles = DataResolver.getCollectibles();
         let collTotal = 0;

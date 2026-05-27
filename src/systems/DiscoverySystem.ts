@@ -32,24 +32,24 @@ export class DiscoverySystem implements System {
 
         switch (type) {
             case DiscoveryType.ZOMBIE:
-                if (!sets.seenEnemies.has(id)) isNew = true;
+                if (!sets.discoveredZombies.has(id)) isNew = true;
                 break;
             case DiscoveryType.BOSS:
-                if (!sets.seenBosses.has(id)) isNew = true;
+                if (!sets.discoveredBosses.has(id)) isNew = true;
                 break;
             case DiscoveryType.CLUE: {
                 const clueSmi = DataResolver.resolveClueID(id);
-                if (clueSmi !== undefined && !sets.clues.has(clueSmi)) isNew = true;
+                if (clueSmi !== undefined && !sets.discoveredClues.has(clueSmi)) isNew = true;
                 break;
             }
             case DiscoveryType.POI: {
                 const poiSmi = DataResolver.resolvePoiID(id);
-                if (poiSmi !== undefined && !sets.pois.has(poiSmi)) isNew = true;
+                if (poiSmi !== undefined && !sets.discoveredPois.has(poiSmi)) isNew = true;
                 break;
             }
             case DiscoveryType.COLLECTIBLE: {
                 const colSmi = DataResolver.resolveCollectibleID(id);
-                if (colSmi !== undefined && !sets.collectibles.has(colSmi)) isNew = true;
+                if (colSmi !== undefined && !sets.discoveredCollectibles.has(colSmi)) isNew = true;
                 break;
             }
             case DiscoveryType.PERK: {
@@ -72,21 +72,21 @@ export class DiscoverySystem implements System {
 
             // Persist the discovery
             switch (type) {
-                case DiscoveryType.ZOMBIE: sets.seenEnemies.add(id); break;
-                case DiscoveryType.BOSS: sets.seenBosses.add(id); break;
+                case DiscoveryType.ZOMBIE: sets.discoveredZombies.add(id); break;
+                case DiscoveryType.BOSS: sets.discoveredBosses.add(id); break;
                 case DiscoveryType.CLUE: {
                     const clueSmi = DataResolver.resolveClueID(id);
-                    if (clueSmi !== undefined) sets.clues.add(clueSmi);
+                    if (clueSmi !== undefined) sets.discoveredClues.add(clueSmi);
                     break;
                 }
                 case DiscoveryType.POI: {
                     const poiSmi = DataResolver.resolvePoiID(id);
-                    if (poiSmi !== undefined) sets.pois.add(poiSmi);
+                    if (poiSmi !== undefined) sets.discoveredPois.add(poiSmi);
                     break;
                 }
                 case DiscoveryType.COLLECTIBLE: {
                     const colSmi = DataResolver.resolveCollectibleID(id);
-                    if (colSmi !== undefined) sets.collectibles.add(colSmi);
+                    if (colSmi !== undefined) sets.discoveredCollectibles.add(colSmi);
                     break;
                 }
                 case DiscoveryType.PERK: {

@@ -1,6 +1,6 @@
 import React, { useCallback, memo } from 'react';
 import { GameCanvasProps } from '../../types/CanvasTypes';
-import { UIState } from './useGameSessionState';
+import { GameSessionUiState } from './useGameSessionState';
 import TouchController from '../../components/ui/hud/TouchController';
 import CinematicBubble from '../../components/ui/hud/CinematicBubble';
 import GameUI from '../../components/ui/hud/GameUI';
@@ -32,7 +32,7 @@ const STATIC_STYLES = `
 
 interface GameSessionUIProps {
     refs: any;
-    uiState: UIState;
+    uiState: GameSessionUiState;
     gameProps: GameCanvasProps;
     callbacks: {
         onContinue: () => void;

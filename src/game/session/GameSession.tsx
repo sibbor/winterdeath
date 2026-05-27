@@ -10,7 +10,7 @@ import { UiSounds, WeaponSounds } from '../../utils/audio/AudioLib';
 import { SoundID, MusicID } from '../../utils/audio/AudioTypes';
 import { t } from '../../utils/i18n';
 import { LEVEL_CAP, WEATHER_SYSTEM, WIND_SYSTEM, FamilyMemberID } from '../../content/constants';
-import { useGameSessionState } from './useGameSessionState';
+import { useGameSessionUiState } from './useGameSessionState';
 import { useGameInput } from './useGameInput';
 import { GameSessionSetup, SetupContext } from './GameSessionSetup';
 import { createGameLoop } from './GameSessionLoop';
@@ -35,7 +35,7 @@ import { StatusEffectID } from '../../types/StatusEffects';
 import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 import { useUIEventBridge } from '../../hooks/useUIEventBridge';
 import { InteractionType, InteractionSubType, InteractionPromptId, MetaActionId } from '../../systems/ui/UIEventBridge';
-import { safeCopyBuffer } from '../../core/RuntimeState';
+import { safeCopyBuffer } from '../../core/GameSessionState';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -57,7 +57,7 @@ const _spawnPosScratch = new THREE.Vector3();
 
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
 
-    const { refs, uiState, updateUiState, setUiState } = useGameSessionState(props);
+    const { refs, uiState, updateUiState, setUiState } = useGameSessionUiState(props);
     const setupContextRef = useRef<SetupContext | null>(null);
 
     // Zero-GC latest state proxy
@@ -517,14 +517,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         switch (type) {
             case DiscoveryType.ZOMBIE: {
                 const enemyId = Number(id);
-                if (fromBridge || !sets.seenEnemies.has(enemyId)) {
-                    sets.seenEnemies.add(enemyId);
+                if (fromBridge || !sets.discoveredZombies.has(enemyId)) {
+                    sets.discoveredZombies.add(enemyId);
 
                     let foundEnemy = false;
-                    for (let i = 0; i < stats.seenEnemies.length; i++) {
-                        if (stats.seenEnemies[i] === enemyId) { foundEnemy = true; break; }
+                    for (let i = 0; i < stats.discoveredZombies.length; i++) {
+                        if (stats.discoveredZombies[i] === enemyId) { foundEnemy = true; break; }
                     }
-                    if (!foundEnemy) stats.seenEnemies.push(enemyId);
+                    if (!foundEnemy) stats.discoveredZombies.push(enemyId);
 
                     isNew = true;
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.ZOMBIE);
@@ -536,14 +536,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             case DiscoveryType.BOSS: {
                 const bossId = Number(id);
-                if (fromBridge || !sets.seenBosses.has(bossId)) {
-                    sets.seenBosses.add(bossId);
+                if (fromBridge || !sets.discoveredBosses.has(bossId)) {
+                    sets.discoveredBosses.add(bossId);
 
                     let foundBoss = false;
-                    for (let i = 0; i < stats.seenBosses.length; i++) {
-                        if (stats.seenBosses[i] === bossId) { foundBoss = true; break; }
+                    for (let i = 0; i < stats.discoveredBosses.length; i++) {
+                        if (stats.discoveredBosses[i] === bossId) { foundBoss = true; break; }
                     }
-                    if (!foundBoss) stats.seenBosses.push(bossId);
+                    if (!foundBoss) stats.discoveredBosses.push(bossId);
 
                     isNew = true;
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.BOSS);
@@ -560,10 +560,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.COLLECTIBLE);
                     detailsKey = detailsKey || payload?.detailsKey || DataResolver.getCollectibleName(strId);
 
-                    if (fromBridge || !sets.collectibles.has(colSmi)) {
-                        sets.collectibles.add(colSmi);
-                        if (!stats.collectiblesDiscovered.includes(strId)) {
-                            stats.collectiblesDiscovered.push(strId);
+                    if (fromBridge || !sets.discoveredCollectibles.has(colSmi)) {
+                        sets.discoveredCollectibles.add(colSmi);
+                        if (!stats.discoveredCollectibles.includes(strId)) {
+                            stats.discoveredCollectibles.push(strId);
                             isNew = true;
                         }
                         state.sessionCollectiblesDiscovered.push(strId);
@@ -580,11 +580,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     const strId = DataResolver.resolvePoiId(poiSmi);
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.POI);
                     detailsKey = payload?.detailsKey || DataResolver.getPoiName(strId);
-                    if (fromBridge || !sets.pois.has(poiSmi)) {
-                        sets.pois.add(poiSmi);
+                    if (fromBridge || !sets.discoveredPois.has(poiSmi)) {
+                        sets.discoveredPois.add(poiSmi);
 
-                        if (!stats.discoveredPOIs.includes(strId)) {
-                            stats.discoveredPOIs.push(strId);
+                        if (!stats.discoveredPois.includes(strId)) {
+                            stats.discoveredPois.push(strId);
                             isNew = true;
                         }
 
@@ -617,12 +617,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     const strId = DataResolver.resolveClueId(clueSmi);
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.CLUE);
                     detailsKey = detailsKey || 'ui.clue_found';
-                    if (fromBridge || !sets.clues.has(clueSmi)) {
-                        sets.clues.add(clueSmi);
+                    if (fromBridge || !sets.discoveredClues.has(clueSmi)) {
+                        sets.discoveredClues.add(clueSmi);
                         const cluePayload = payload || { id: strId, content: detailsKey };
 
-                        if (!stats.cluesFound.includes(strId)) {
-                            stats.cluesFound.push(strId);
+                        if (!stats.discoveredClues.includes(strId)) {
+                            stats.discoveredClues.push(strId);
                             isNew = true;
                         }
 

@@ -265,15 +265,15 @@ export interface PlayerStats {
     totalSkillPointsEarned: number;
 
     // --- COLLECTION DATA ---
-    collectiblesDiscovered: string[];
+    discoveredCollectibles: string[];
     viewedCollectibles?: string[];
-    cluesFound: string[];
+    discoveredClues: string[];
     mostUsedWeapon: DamageID;
     totalEnemiesKilled: number;
-    seenEnemies: number[];
-    seenBosses: number[];
+    discoveredZombies: number[];
+    discoveredBosses: number[];
     discoveredPerksMap: Uint8Array;
-    discoveredPOIs: string[];
+    discoveredPois: string[];
 
     // --- STORY & PROGRESSION ---
     prologueSeen?: boolean;
@@ -388,12 +388,12 @@ export const PlayerStatsUtils = {
             trackedChallengeIds: [] as number[],
 
             // Collection data
-            collectiblesDiscovered: [] as string[],
+            discoveredCollectibles: [] as string[],
             viewedCollectibles: [] as string[],
-            cluesFound: [] as string[],
-            discoveredPOIs: [] as string[],
-            seenEnemies: [] as number[],
-            seenBosses: [] as number[],
+            discoveredClues: [] as string[],
+            discoveredPois: [] as string[],
+            discoveredZombies: [] as number[],
+            discoveredBosses: [] as number[],
 
             // Progression
             sectorsCompleted: 0,

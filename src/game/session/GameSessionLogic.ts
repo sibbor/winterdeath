@@ -5,12 +5,12 @@ import { SectorStats } from '../../types/StateTypes';
 import { Enemy, NoiseType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { WorldStreamer } from '../../core/world/WorldStreamer';
-import { RuntimeState } from '../../core/RuntimeState';
+import { GameSessionState } from '../../core/GameSessionState';
 import { System, SystemID } from '../../systems/System';
 import { WEAPONS } from '../../content/weapons';
 import { PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
 import { VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
-import { allocateRuntimeState, resetRuntimeState } from '../../core/RuntimeState';
+import { allocateGameSessionState, resetGameSessionState } from '../../core/GameSessionState';
 import { FXSystem } from '../../systems/FXSystem';
 import { SectorID } from './SectorTypes';
 import { FXParticleType } from '../../types/FXTypes';
@@ -18,6 +18,7 @@ import { clearEffects } from '../../systems/EffectManager';
 import { TriggerSystem } from '../../systems/TriggerSystem';
 import { MAX_ENTITIES } from '../../content/constants';
 import { DataResolver } from '../../core/data/DataResolver';
+import { FootprintSystem } from '../../systems/FootprintSystem';
 
 export class GameSessionLogic {
     public callbacks?: any;
@@ -35,7 +36,7 @@ export class GameSessionLogic {
     public sectorId: number = 0;
     public cinematicActive: boolean = false;
     public engine: WinterEngine;
-    public state!: RuntimeState;
+    public state!: GameSessionState;
     public playerPos: THREE.Vector3 | null = null;
     public detectionSystem!: EnemyDetectionSystem;
     public worldStreamer!: WorldStreamer;
@@ -44,38 +45,38 @@ export class GameSessionLogic {
 
     /**
      * Zero-GC Reset Logic
-     * * Reuses an existing RuntimeState object to avoid massive re-allocations.
+     * * Reuses an existing GameSessionState object to avoid massive re-allocations.
      */
-    static resetState(state: RuntimeState, props: GameCanvasProps): void {
-        resetRuntimeState(state, props);
+    static resetState(state: GameSessionState, props: GameCanvasProps): void {
+        resetGameSessionState(state, props);
 
         // --- VINTERDÖD FIX: PURGE VFX POOLS ---
         clearEffects();
 
         // Update Discovery Sets (Zero-GC: reuse Sets)
-        state.discoverySets.clues.clear();
-        (props.stats.cluesFound || []).forEach((c: any) => {
+        state.discoverySets.discoveredClues.clear();
+        (props.stats.discoveredClues || []).forEach((c: any) => {
             const resolved = DataResolver.resolveClueID(c);
-            if (resolved !== undefined) state.discoverySets.clues.add(resolved);
+            if (resolved !== undefined) state.discoverySets.discoveredClues.add(resolved);
         });
 
-        state.discoverySets.pois.clear();
-        (props.stats.discoveredPOIs || []).forEach((p: any) => {
+        state.discoverySets.discoveredPois.clear();
+        (props.stats.discoveredPois || []).forEach((p: any) => {
             const resolved = DataResolver.resolvePoiID(p);
-            if (resolved !== undefined) state.discoverySets.pois.add(resolved);
+            if (resolved !== undefined) state.discoverySets.discoveredPois.add(resolved);
         });
 
-        state.discoverySets.collectibles.clear();
-        (props.stats.collectiblesDiscovered || []).forEach((c: any) => {
+        state.discoverySets.discoveredCollectibles.clear();
+        (props.stats.discoveredCollectibles || []).forEach((c: any) => {
             const resolved = DataResolver.resolveCollectibleID(c);
-            if (resolved !== undefined) state.discoverySets.collectibles.add(resolved);
+            if (resolved !== undefined) state.discoverySets.discoveredCollectibles.add(resolved);
         });
 
-        state.discoverySets.seenEnemies.clear();
-        (props.stats.seenEnemies || []).forEach(e => state.discoverySets.seenEnemies.add(e));
+        state.discoverySets.discoveredZombies.clear();
+        (props.stats.discoveredZombies || []).forEach(e => state.discoverySets.discoveredZombies.add(e));
 
-        state.discoverySets.seenBosses.clear();
-        (props.stats.seenBosses || []).forEach(b => state.discoverySets.seenBosses.add(b));
+        state.discoverySets.discoveredBosses.clear();
+        (props.stats.discoveredBosses || []).forEach(b => state.discoverySets.discoveredBosses.add(b));
 
         // [VINTERDÖD FIX] Seed perk discovery from global stats to prevent repeat popups
         if (props.stats.discoveredPerksMap) {
@@ -122,7 +123,7 @@ export class GameSessionLogic {
         stats.score = 0;
         stats.chestsOpened = 0;
         stats.bigChestsOpened = 0;
-        stats.cluesFound.length = 0;
+        stats.discoveredClues.length = 0;
         stats.maxKillstreak = 0;
         stats.engagementDistSqKills = 0;
         stats.spGained = 0;
@@ -151,10 +152,10 @@ export class GameSessionLogic {
         stats.enemyDeaths.fill(0);
         stats.incomingDamageBuffer.fill(0);
 
-        stats.discoveredPOIs.length = 0;
-        stats.seenEnemies.length = 0;
-        stats.seenBosses.length = 0;
-        stats.collectiblesDiscovered.length = 0;
+        stats.discoveredPois.length = 0;
+        stats.discoveredZombies.length = 0;
+        stats.discoveredBosses.length = 0;
+        stats.discoveredCollectibles.length = 0;
         stats.aborted = false;
         stats.familyFound = !!props.familyAlreadyRescued;
         stats.familyExtracted = false;
@@ -171,8 +172,8 @@ export class GameSessionLogic {
         stats.activeDebuffsCount = 0;
     }
 
-    static allocateState(): RuntimeState {
-        const state = allocateRuntimeState();
+    static allocateState(): GameSessionState {
+        const state = allocateGameSessionState();
         state.sessionStats = this.allocateSessionStats();
         return state;
     }
@@ -194,7 +195,7 @@ export class GameSessionLogic {
             score: 0,
             chestsOpened: 0,
             bigChestsOpened: 0,
-            cluesFound: [],
+            discoveredClues: [],
             maxKillstreak: 0,
             engagementDistSqKills: 0,
             spGained: 0,
@@ -219,10 +220,10 @@ export class GameSessionLogic {
             enemyKills: new Float64Array(StatEnemyIndex.COUNT),
             enemyDeaths: new Float64Array(StatEnemyIndex.COUNT),
             incomingDamageBuffer: new Float64Array(64 * 32),
-            discoveredPOIs: [],
-            seenEnemies: [],
-            seenBosses: [],
-            collectiblesDiscovered: [],
+            discoveredPois: [],
+            discoveredZombies: [],
+            discoveredBosses: [],
+            discoveredCollectibles: [],
             aborted: false,
             familyFound: false,
             familyExtracted: false,
@@ -241,7 +242,7 @@ export class GameSessionLogic {
         };
     }
 
-    static createInitialState(props: GameCanvasProps): RuntimeState {
+    static createInitialState(props: GameCanvasProps): GameSessionState {
         const state = this.allocateState();
         this.resetState(state, props);
         return state;
@@ -252,7 +253,7 @@ export class GameSessionLogic {
         this.engine.onUpdateContext = this;
     }
 
-    init(state: RuntimeState) {
+    init(state: GameSessionState) {
         this.state = state;
 
         const originalApplyDamage = this.state.applyDamage || (() => false);
@@ -387,19 +388,17 @@ export class GameSessionLogic {
             this.state.bossesDefeated.length = 0;
             this.triggerSystem.reset();
             this.state.obstacles.length = 0;
-            this.state.sessionCollectiblesDiscovered.length = 0;
-            this.state.collectiblesDiscovered.length = 0;
             this.state.mapItems.length = 0;
             this.state.mapItems.length = 0;
 
             // Clean up sessionStats breakdowns (Zero-GC: keep object shape but reset values)
             GameSessionLogic.resetSessionStats(this.state.sessionStats, this.state.stats as any);
 
-            this.state.discoverySets.clues.clear();
-            this.state.discoverySets.pois.clear();
-            this.state.discoverySets.collectibles.clear();
-            this.state.discoverySets.seenEnemies.clear();
-            this.state.discoverySets.seenBosses.clear();
+            this.state.discoverySets.discoveredClues.clear();
+            this.state.discoverySets.discoveredPois.clear();
+            this.state.discoverySets.discoveredCollectibles.clear();
+            this.state.discoverySets.discoveredZombies.clear();
+            this.state.discoverySets.discoveredBosses.clear();
 
             this.state.vehicle.active = false;
             this.state.vehicle.mesh = null;
@@ -417,6 +416,8 @@ export class GameSessionLogic {
             if (this.state.worldStreamer) {
                 this.state.worldStreamer.clear();
             }
+
+            FootprintSystem.clear();
 
             // --- CINEMATIC CLEANUP ---
             this.state.cinematicActive = false;

@@ -114,8 +114,8 @@ export const HudSystem = {
         _fastUpdateDetail.scrap = state.statsBuffer[PlayerStatID.SCRAP] || 0;
         _fastUpdateDetail.challengePoints = state.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0;
         const directSp = state.sessionStats.spGained || 0;
-        const collSp = state.sessionStats.collectiblesDiscovered?.length || 0;
-        const poiSp = state.sessionStats.discoveredPOIs?.length || 0;
+        const collSp = state.sessionStats.discoveredCollectibles?.length || 0;
+        const poiSp = state.sessionStats.discoveredPois?.length || 0;
         _fastUpdateDetail.spEarned = directSp + collSp + poiSp;
         _fastUpdateDetail.hasCriticalHp = _fastUpdateDetail.hp > 0 && _fastUpdateDetail.hp < _fastUpdateDetail.maxHp * 0.25;
 
@@ -322,16 +322,16 @@ export const HudSystem = {
         _current.kills = state.sessionStats.kills || 0;
         _current.spEarned = state.sessionStats.spGained || 0;
         const sStats = state.sessionStats;
-        _current.cluesFoundCount = sStats ? (sStats.cluesFound ? sStats.cluesFound.length : 0) : 0;
-        _current.poisFoundCount = sStats ? (sStats.discoveredPOIs ? sStats.discoveredPOIs.length : 0) : 0;
-        _current.collectiblesFoundCount = sStats ? (sStats.collectiblesDiscovered ? sStats.collectiblesDiscovered.length : 0) : 0;
+        _current.cluesFoundCount = sStats ? (sStats.discoveredClues ? sStats.discoveredClues.length : 0) : 0;
+        _current.poisFoundCount = sStats ? (sStats.discoveredPois ? sStats.discoveredPois.length : 0) : 0;
+        _current.collectiblesFoundCount = sStats ? (sStats.discoveredCollectibles ? sStats.discoveredCollectibles.length : 0) : 0;
 
         // Sync persistent telemetry
         if (state.stats) {
             _current.enemyKills.set(state.enemyKills);
 
-            _current.seenEnemies = state.stats.seenEnemies;
-            _current.seenBosses = state.stats.seenBosses;
+            _current.discoveredZombies = state.stats.discoveredZombies;
+            _current.discoveredBosses = state.stats.discoveredBosses;
 
             // Sync challenge tiers
             if (state.stats.challengeTiers) {
@@ -389,8 +389,8 @@ export const HudSystem = {
 
         // --- ZERO-GC SECTOR-SPECIFIC DISCOVERY TALLYING ---
         let cCount = 0;
-        if (state.discoverySets?.clues) {
-            for (const id of state.discoverySets.clues) {
+        if (state.discoverySets?.discoveredClues) {
+            for (const id of state.discoverySets.discoveredClues) {
                 const resolved = DataResolver.resolveClueID(id);
                 if (resolved !== undefined && CLUES[resolved]?.sector === _current.currentSector) cCount++;
             }
@@ -398,8 +398,8 @@ export const HudSystem = {
         _current.cluesFoundCount = cCount;
 
         let poiCount = 0;
-        if (state.discoverySets?.pois) {
-            for (const id of state.discoverySets.pois) {
+        if (state.discoverySets?.discoveredPois) {
+            for (const id of state.discoverySets.discoveredPois) {
                 const resolved = DataResolver.resolvePoiID(id);
                 if (resolved !== undefined && POIS[resolved]?.sector === _current.currentSector) poiCount++;
             }
@@ -407,8 +407,8 @@ export const HudSystem = {
         _current.poisFoundCount = poiCount;
 
         let colCount = 0;
-        if (state.discoverySets?.collectibles) {
-            for (const id of state.discoverySets.collectibles) {
+        if (state.discoverySets?.discoveredCollectibles) {
+            for (const id of state.discoverySets.discoveredCollectibles) {
                 const resolved = DataResolver.resolveCollectibleID(id);
                 if (resolved !== undefined && COLLECTIBLES[resolved]?.sector === _current.currentSector) colCount++;
             }

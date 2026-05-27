@@ -472,10 +472,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                                     toolTipSubText = `${t(weaponName(currentLoadout.primary))} • ${t(weaponName(currentLoadout.secondary))} • ${t(weaponName(currentLoadout.throwable))}${currentLoadout.special !== 'none' ? ` • ${t(weaponName(currentLoadout.special))}` : ''}`;
                                 } else if (newHover === 'adventure_log') {
                                     const totalCollectibles = StatsBridge.getCollectiblesDiscoveredLength(stats);
-                                    const totalClues = StatsBridge.getCluesFound(stats).length;
-                                    const totalPois = StatsBridge.getDiscoveredPOIs(stats).length;
-                                    const totalEnemies = StatsBridge.getSeenEnemies(stats).length;
-                                    const totalBosses = StatsBridge.getSeenBosses(stats).length;
+                                    const totalClues = StatsBridge.getDiscoveredClues(stats).length;
+                                    const totalPois = StatsBridge.getDiscoveredPois(stats).length;
+                                    const totalEnemies = StatsBridge.getDiscoveredZombies(stats).length;
+                                    const totalBosses = StatsBridge.getDiscoveredBosses(stats).length;
                                     toolTipSubText = `${t('camp_tooltips.collectibles')}: ${totalCollectibles} • ${t('camp_tooltips.clues')}: ${totalClues} • ${t('camp_tooltips.poi')}: ${totalPois} • ${t('camp_tooltips.enemies')}: ${totalEnemies} • ${t('camp_tooltips.bosses')}: ${totalBosses}`;
                                 } else if (newHover === 'sectors') {
                                     const finishedSectors = StatsBridge.getSectorsCompleted(stats);

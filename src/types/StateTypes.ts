@@ -64,16 +64,16 @@ export interface SectorStats {
   activeDebuffs: Int32Array;
   activeDebuffsCount: number;
 
-  cluesFound: any[];
-  discoveredPOIs: string[];
-  seenEnemies: number[];
-  seenBosses: number[];
+  discoveredClues: any[];
+  discoveredPois: string[];
+  discoveredZombies: number[];
+  discoveredBosses: number[];
   xpGained: number;
   spGained: number;
   killerType?: number;
   killingBlowWeapon?: number;
   killingBlowSource?: number;
-  collectiblesDiscovered: string[];
+  discoveredCollectibles: string[];
   aborted: boolean;
   familyFound: boolean;
   familyExtracted: boolean;

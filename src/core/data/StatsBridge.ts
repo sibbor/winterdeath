@@ -57,7 +57,7 @@ export class StatsBridge {
     public static getSectorDamageTaken(stats: any): number { return stats.damageTaken || 0.0; }
     public static getSectorXPGained(stats: any): number { return stats.xpGained | 0; }
     public static getSectorSPGained(stats: any): number {
-        return (stats.spGained | 0) + (stats.collectiblesDiscovered?.length || 0) + (stats.discoveredPOIs?.length || 0);
+        return (stats.spGained | 0) + (stats.discoveredCollectibles?.length || 0) + (stats.discoveredPois?.length || 0);
     }
     public static getSectorScrapLooted(stats: any): number { return stats.scrapLooted | 0; }
     public static getSectorTimeElapsed(stats: any): number { return stats.timeElapsed || 0.0; }
@@ -217,7 +217,7 @@ export class StatsBridge {
         switch (id) {
             case ChallengeID.MARATHON: return StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_DISTANCE_TRAVELED);
             case ChallengeID.SCRAPPER: return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SCRAP_COLLECTED);
-            case ChallengeID.EXPLORER: return stats.discoveredPOIs.length;
+            case ChallengeID.EXPLORER: return stats.discoveredPois.length;
             case ChallengeID.TREASURE_HUNTER: return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_CHESTS_OPENED);
             case ChallengeID.SCAVENGER: return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_ITEMS_COLLECTED);
             case ChallengeID.ZOMBIE_HUNTER: return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_KILLS);
@@ -292,7 +292,7 @@ export class StatsBridge {
     }
 
     public static getCollectiblesDiscoveredLength(stats: PlayerStats): number {
-        return stats.collectiblesDiscovered ? (stats.collectiblesDiscovered.length | 0) : 0;
+        return stats.discoveredCollectibles ? (stats.discoveredCollectibles.length | 0) : 0;
     }
 
     public static getIncomingDamage(stats: AnyStatsEntity, sourceId: number, attackId: number): number {
@@ -388,12 +388,12 @@ export class StatsBridge {
     // DISCOVERY & PROGRESSION ARRAYS
     // ========================================================================
 
-    public static getCollectiblesDiscovered(stats: PlayerStats): string[] { return stats.collectiblesDiscovered || []; }
+    public static getDiscoveredCollectibles(stats: PlayerStats): string[] { return stats.discoveredCollectibles || []; }
     public static getViewedCollectibles(stats: PlayerStats): string[] { return stats.viewedCollectibles || []; }
-    public static getCluesFound(stats: PlayerStats): string[] { return stats.cluesFound || []; }
-    public static getDiscoveredPOIs(stats: PlayerStats): string[] { return stats.discoveredPOIs || []; }
-    public static getSeenEnemies(stats: PlayerStats): number[] { return stats.seenEnemies || []; }
-    public static getSeenBosses(stats: PlayerStats): number[] { return stats.seenBosses || []; }
+    public static getDiscoveredClues(stats: PlayerStats): string[] { return stats.discoveredClues || []; }
+    public static getDiscoveredPois(stats: PlayerStats): string[] { return stats.discoveredPois || []; }
+    public static getDiscoveredZombies(stats: PlayerStats): number[] { return stats.discoveredZombies || []; }
+    public static getDiscoveredBosses(stats: PlayerStats): number[] { return stats.discoveredBosses || []; }
     public static getDeadBossIndices(stats: PlayerStats): number[] { return stats.deadBossIndices || []; }
     public static getRescuedFamilyIndices(stats: PlayerStats): number[] { return stats.rescuedFamilyIndices || []; }
     public static getTrackedChallengeIds(stats: PlayerStats): number[] { return stats.trackedChallengeIds || []; }
@@ -482,12 +482,12 @@ export class StatsBridge {
         if (stats.activePassives) clone.activePassives = stats.activePassives.slice();
         if (stats.activeBuffs) clone.activeBuffs = stats.activeBuffs.slice();
         if (stats.activeDebuffs) clone.activeDebuffs = stats.activeDebuffs.slice();
-        if (stats.collectiblesDiscovered) clone.collectiblesDiscovered = stats.collectiblesDiscovered.slice();
+        if (stats.discoveredCollectibles) clone.discoveredCollectibles = stats.discoveredCollectibles.slice();
         clone.viewedCollectibles = stats.viewedCollectibles ? stats.viewedCollectibles.slice() : [];
-        if (stats.cluesFound) clone.cluesFound = stats.cluesFound.slice();
-        if (stats.seenEnemies) clone.seenEnemies = stats.seenEnemies.slice();
-        if (stats.seenBosses) clone.seenBosses = stats.seenBosses.slice();
-        if (stats.discoveredPOIs) clone.discoveredPOIs = stats.discoveredPOIs.slice();
+        if (stats.discoveredClues) clone.discoveredClues = stats.discoveredClues.slice();
+        if (stats.discoveredZombies) clone.discoveredZombies = stats.discoveredZombies.slice();
+        if (stats.discoveredBosses) clone.discoveredBosses = stats.discoveredBosses.slice();
+        if (stats.discoveredPois) clone.discoveredPois = stats.discoveredPois.slice();
         if (stats.rescuedFamilyIndices) clone.rescuedFamilyIndices = stats.rescuedFamilyIndices.slice();
         if (stats.trackedChallengeIds) clone.trackedChallengeIds = stats.trackedChallengeIds.slice();
 

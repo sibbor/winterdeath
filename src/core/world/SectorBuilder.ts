@@ -219,7 +219,7 @@ export const SectorBuilder = {
             obstacles: [], chests: [], triggers: [], mapItems: [],
             interactables: [], collectibles: [], dynamicLights: [], flickeringLights: [], burningObjects: [], smokeEmitters: [],
             environmentalZones: [],
-            cluesFound: [], collectiblesDiscovered: [], rng: Math.random, debugMode: false,
+            rng: Math.random, debugMode: false,
             textures: {} as any, sectorState: {} as any, state: { sectorState: {} } as any, activeFamilyMembers: [],
             yield: yieldFn ?? (() => new Promise<void>(resolve => setTimeout(resolve, 0))),
             spawnZombie: NOOP as any, spawnHorde: NOOP as any, spawnBoss: NOOP as any, makeNoise: NOOP as any, onAction: NOOP as any,
@@ -433,7 +433,7 @@ export const SectorBuilder = {
 
         // Persistence Check
         if (!respawnable) {
-            const foundList = (ctx as any).collectiblesDiscovered || [];
+            const foundList = (ctx as any).discoveredCollectibles || [];
             const len = foundList.length;
             for (let i = 0; i < len; i++) {
                 if (foundList[i] === id) return;

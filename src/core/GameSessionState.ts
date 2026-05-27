@@ -63,25 +63,27 @@ export interface FireZone {
 /*
 Upcoming change
 
-export interface RuntimeState {
+export interface GameSessionState {
     // --- CORE SYSTEMS ---
     simTime: number;
     renderTime: number;
+    delta: number;
     
     // --- SUB-STATES (Preallocated & Zero-GC) ---
-    player: PreallocatedPlayerState;     // hp, stamina, dodgeDir, isDead, isSwimming
-    combat: PreallocatedCombatState;     // activeWeapon, ammo, reloadEndTime, multipliers
-    movement: PreallocatedMovementState; // distanceSinceLastStep, isRushing, isWading
-    enemies: PreallocatedEnemyManager;   // enemies array, bossSpawned, killerType
-    world: PreallocatedWorldState;       // sectorState, obstacles, worldStreamer, triggers
-    isPlayground: boolean;
+    player: PreallocatedPlayerState;     // hp, stamina, isDead... etc. etc.
+    combat: PreallocatedCombatState;     // activeWeapon, ammo, reloadEndTime, multipliers... etc. etc.
+    movement: PreallocatedMovementState; // distanceSinceLastStep, isRushing, isDodging, dodgeDir, isSwimming, isWading... etc. etc.
+    enemies: PreallocatedEnemyManager;   // enemies array, bossSpawned, killerType... etc. etc.
+    world: PreallocatedWorldState;       // sectorState, obstacles, worldStreamer, isPlayground... etc. etc.
     discovery: PreallocatedDiscoveryState; // pois, clues, collectibles
-    vehicle: PreallocatedVehicleState;
-    metrics: PreallocatedTelemetryState; // fps, drawCalls, triangles
+    triggers: PreallocatedTriggers;      // triggers...
+    vehicle: PreallocatedVehicleState;   // 
+    metrics: PreallocatedTelemetryState; // fps, drawCalls, triangles... etc. etc.
+    ui: PreallocatedUIState; // hudVisible, ... etc. etc.
 }
 */
 
-export interface RuntimeState {
+export interface GameSessionState {
     // --- PLAYER STATS (Flattened from PlayerStats for Zero-GC) ---
     velocity: THREE.Vector3;
     nodes: {
@@ -123,15 +125,7 @@ export interface RuntimeState {
     sectorsCompleted: number;
     totalSkillPointsEarned: number;
 
-    collectiblesDiscovered: string[];
-    viewedCollectibles: string[];
-    cluesFound: string[];
-    mostUsedWeapon: DamageID;
-    totalEnemiesKilled: number;
-    seenEnemies: number[];
-    seenBosses: number[];
     discoveredPerksMap: Uint8Array;
-    discoveredPOIs: string[];
 
     prologueSeen: boolean;
     rescuedFamilyIndices: number[];
@@ -193,15 +187,14 @@ export interface RuntimeState {
     // --- TELEMETRY & PROGRESSION ---
     sessionStats: SectorStats;
     discoverySets: {
-        clues: Set<number>;
-        pois: Set<number>;
-        collectibles: Set<number>;
-        seenEnemies: Set<number>;
-        seenBosses: Set<number>;
+        discoveredClues: Set<number>;
+        discoveredPois: Set<number>;
+        discoveredCollectibles: Set<number>;
+        discoveredZombies: Set<number>;
+        discoveredBosses: Set<number>;
     };
 
     applyDamage: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
-
 
     activeBoss: Enemy | null;
     activeResistPerkIdx: number;
@@ -294,7 +287,6 @@ export interface RuntimeState {
     nearestCollectibleId: string;
 
     bossIntroActive: boolean;
-    sessionCollectiblesDiscovered: string[];
     mapItems: any[];
 
     // --- VEHICLES ---
@@ -339,9 +331,9 @@ export interface RuntimeState {
 
 /**
  * Zero-GC Allocation Logic
- * * Allocates the massive RuntimeState object and all its sub-objects EXACTLY ONCE.
+ * * Allocates the massive GameSessionState object and all its sub-objects EXACTLY ONCE.
  */
-export function allocateRuntimeState(): RuntimeState {
+export function allocateGameSessionState(): GameSessionState {
     return {
         velocity: new THREE.Vector3(),
         nodes: { gun: null, laserSight: null, barrelTip: null },
@@ -379,15 +371,7 @@ export function allocateRuntimeState(): RuntimeState {
         sectorsCompleted: 0,
         totalSkillPointsEarned: 0,
 
-        collectiblesDiscovered: [],
-        viewedCollectibles: [],
-        cluesFound: [],
-        mostUsedWeapon: DamageID.NONE,
-        totalEnemiesKilled: 0,
-        seenEnemies: [],
-        seenBosses: [],
         discoveredPerksMap: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
-        discoveredPOIs: [],
 
         prologueSeen: false,
         rescuedFamilyIndices: [],
@@ -442,11 +426,11 @@ export function allocateRuntimeState(): RuntimeState {
 
         sessionStats: null as any,
         discoverySets: {
-            clues: new Set(),
-            pois: new Set(),
-            collectibles: new Set(),
-            seenEnemies: new Set(),
-            seenBosses: new Set()
+            discoveredClues: new Set(),
+            discoveredPois: new Set(),
+            discoveredCollectibles: new Set(),
+            discoveredZombies: new Set(),
+            discoveredBosses: new Set()
         },
 
         applyDamage: () => false,
@@ -517,7 +501,6 @@ export function allocateRuntimeState(): RuntimeState {
         nearestCollectibleId: '',
 
         bossIntroActive: false,
-        sessionCollectiblesDiscovered: [],
         mapItems: [],
 
         vehicle: {
@@ -575,10 +558,10 @@ export function allocateRuntimeState(): RuntimeState {
 
 /**
  * Zero-GC Reset Pattern
- * Mutates an existing RuntimeState to its initial session values.
+ * Mutates an existing GameSessionState to its initial session values.
  * NO `new` keywords. NO object literals `{}`.
  */
-export function resetRuntimeState(state: RuntimeState, props: any): void {
+export function resetGameSessionState(state: GameSessionState, props: any): void {
     // 1. Core Simulation Time
     state.simTime = 0;
     state.renderTime = 0;
@@ -631,22 +614,6 @@ export function resetRuntimeState(state: RuntimeState, props: any): void {
 
     state.sectorsCompleted = pStats.sectorsCompleted;
     state.totalSkillPointsEarned = pStats.totalSkillPointsEarned;
-
-    state.collectiblesDiscovered.length = 0;
-    state.collectiblesDiscovered.push(...pStats.collectiblesDiscovered);
-    state.viewedCollectibles.length = 0;
-    if (pStats.viewedCollectibles) state.viewedCollectibles.push(...pStats.viewedCollectibles);
-
-    state.cluesFound.length = 0;
-    state.cluesFound.push(...pStats.cluesFound);
-
-    state.discoveredPOIs.length = 0;
-    state.discoveredPOIs.push(...pStats.discoveredPOIs);
-
-    state.seenEnemies.length = 0;
-    state.seenEnemies.push(...pStats.seenEnemies);
-    state.seenBosses.length = 0;
-    state.seenBosses.push(...pStats.seenBosses);
 
     state.rescuedFamilyIndices.length = 0;
     state.rescuedFamilyIndices.push(...pStats.rescuedFamilyIndices);

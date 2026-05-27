@@ -4,7 +4,7 @@ import { CameraSystem } from './CameraSystem';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { VoiceSounds } from '../utils/audio/AudioLib';
 import { STORY_SCRIPTS } from '../content/dialogues';
-import { RuntimeState } from '../core/RuntimeState';
+import { GameSessionState } from '../core/GameSessionState';
 import { FamilyMemberID } from '../content/constants';
 import { System, SystemID } from './System';
 import { DialogueLineType } from '../game/session/SectorTypes';
@@ -46,7 +46,7 @@ export class CinematicSystem implements System {
         playCinematicLine: (index: number) => void;
         onAction: (action: any) => void;
     };
-    private state: RuntimeState;
+    private state: GameSessionState;
 
     constructor(opts: {
         cinematicRef: React.MutableRefObject<any>;
@@ -61,7 +61,7 @@ export class CinematicSystem implements System {
             playCinematicLine: (index: number) => void;
             onAction: (action: any) => void;
         };
-        state: RuntimeState;
+        state: GameSessionState;
     }) {
         this.cinematicRef = opts.cinematicRef;
         this.camera = opts.camera;
@@ -104,7 +104,7 @@ export class CinematicSystem implements System {
         }
 
         console.log(`[CinematicSystem] Starting cinematic: Sector ${sectorId}, Dialogue ${safeDialogueId}, Script Length: ${script.length}`);
-        
+
         cinematic.active = true;
         cinematic.isClosing = false;
         cinematic.target = target || null;
@@ -165,7 +165,7 @@ export class CinematicSystem implements System {
             console.log(`[CinematicSystem] playLine debounced for index=${index}`);
             return;
         }
-        
+
         if (index >= cinematic.script.length) {
             console.log(`[CinematicSystem] End of script reached at index=${index}`);
             this.stop(); // End cinematic if we reach the end
@@ -217,7 +217,7 @@ export class CinematicSystem implements System {
         // 5. Update Telemetry and UI Bridge (SMI-Safe)
         const resolvedId = DataResolver.resolveSpeaker(line.speaker);
         cinematic.currentSpeakerId = resolvedId;
-        
+
         // Sync to the high-performance telemetry bridge for React/HUD
         this.state.cinematicLine.currentSpeakerId = resolvedId;
         this.state.cinematicLine.active = true;

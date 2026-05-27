@@ -163,7 +163,7 @@ export class SectorSystem implements System {
                     // FIX: Substring(12) safely slices off "collectible_". 
                     // V8 handles this internally as a "Sliced String" (a pointer), averting large allocations.
                     const realId = item.id.substring(12);
-                    if (state.collectiblesDiscovered.includes(realId)) continue;
+                    if (state.stats && state.stats.discoveredCollectibles && state.stats.discoveredCollectibles.includes(realId)) continue;
 
                     const dx = item.x - pPos.x;
                     const dz = item.z - pPos.z;
