@@ -1,15 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { PlayerStats, SectorState } from '../../../../types/StateTypes';
-import { WeaponCategory, WeaponCategoryColors } from '../../../../content/weapons';
-import { WeaponID } from '../../../../entities/player/CombatTypes';
-import { t } from '../../../../utils/i18n';
-import { SCRAP_COST_BASE } from '../../../../content/constants';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { DataResolver } from '../../../../core/data/DataResolver';
-import ScreenModalLayout, { TacticalTab } from '../../layout/ScreenModalLayout';
-import { StatsBridge } from '../../../../core/data/StatsBridge';
+import { PlayerStats, SectorState } from '../../../types/StateTypes';
+import { WeaponCategory, WeaponCategoryColors } from '../../../content/weapons';
+import { WeaponID } from '../../../entities/player/CombatTypes';
+import { t } from '../../../utils/i18n';
+import { SCRAP_COST_BASE } from '../../../content/constants';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import { DataResolver } from '../../../core/data/DataResolver';
+import ModalLayout, { TacticalTab } from './ModalLayout';
+import { StatsBridge } from '../../../core/data/StatsBridge';
 
-interface ScreenPlaygroundArmoryStationProps {
+interface ArmoryTerminalProps {
     stats: PlayerStats;
     sectorState: SectorState;
     currentLoadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; };
@@ -24,7 +24,7 @@ interface ScreenPlaygroundArmoryStationProps {
     isMobileDevice?: boolean;
 }
 
-const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps> = ({ stats, sectorState, currentLoadout, weaponLevels, onSave, onClose, isMobileDevice }) => {
+const ScreenTerminalArmory: React.FC<ArmoryTerminalProps> = ({ stats, sectorState, currentLoadout, weaponLevels, onSave, onClose, isMobileDevice }) => {
     const [activeTab, setActiveTab] = useState<WeaponCategory>(WeaponCategory.PRIMARY);
     const [tempStats, setTempStats] = useState(() => StatsBridge.deepCloneStats(stats));
     const [tempLoadout, setTempLoadout] = useState({ ...currentLoadout });
@@ -88,7 +88,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
     );
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('stations.armory')}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
@@ -221,9 +221,9 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                     })}
                 </div>
             </div>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };
 
-export default ScreenPlaygroundArmoryStation;
+export default ScreenTerminalArmory;
 

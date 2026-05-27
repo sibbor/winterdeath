@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { t } from '../../../../utils/i18n';
-import ScreenModalLayout from '../../layout/ScreenModalLayout';
+import { t } from '../../../utils/i18n';
+import ModalLayout from './ModalLayout';
 
 interface ScreenTeleportProps {
     onJump: (x: number, z: number) => void;
@@ -24,7 +24,7 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
     };
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('ui.teleport_title')}
             isMobileDevice={isMobileDevice}
             onClose={onCancel}
@@ -61,7 +61,7 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
                     </div>
                 </div>
             </div>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };
 

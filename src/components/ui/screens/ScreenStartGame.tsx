@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { t } from '../../../../utils/i18n';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { audioEngine } from '../../../../utils/audio/AudioEngine';
+import { t } from '../../../utils/i18n';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import { audioEngine } from '../../../utils/audio/AudioEngine';
 
 interface ScreenStartUpProps {
     onStart: () => void;

@@ -1,15 +1,15 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
-import { StatsBridge } from '../../../../core/data/StatsBridge';
-import { WeaponCategory, WeaponCategoryColors, WeaponStats } from '../../../../content/weapons';
-import { WeaponID } from '../../../../entities/player/CombatTypes';
-import { t } from '../../../../utils/i18n';
-import { SCRAP_COST_BASE } from '../../../../content/constants';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { DataResolver } from '../../../../core/data/DataResolver';
-import { ColorPair, COLORS } from '../../../../utils/ui/ColorUtils';
-import { useOrientation } from '../../../../hooks/useOrientation';
-import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalButton, TacticalTab } from '../../layout/ScreenModalLayout';
+import { PlayerStats, PlayerStatID } from '../../../entities/player/PlayerTypes';
+import { StatsBridge } from '../../../core/data/StatsBridge';
+import { WeaponCategory, WeaponCategoryColors, WeaponStats } from '../../../content/weapons';
+import { WeaponID } from '../../../entities/player/CombatTypes';
+import { t } from '../../../utils/i18n';
+import { SCRAP_COST_BASE } from '../../../content/constants';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import { DataResolver } from '../../../core/data/DataResolver';
+import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
+import { useOrientation } from '../../../hooks/useOrientation';
+import ModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalButton, TacticalTab } from './ModalLayout';
 
 interface ScreenArmoryProps {
     stats: PlayerStats;
@@ -113,7 +113,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
     const TABS = [WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL];
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('stations.armory')}
             subtitle={scrapSubtitle}
             isMobileDevice={isMobileDevice}
@@ -162,7 +162,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
                     />
                 </div>
             </div>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 });
 

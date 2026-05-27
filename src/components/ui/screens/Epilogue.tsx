@@ -11,20 +11,11 @@ interface EpilogueProps {
 
 const Epilogue: React.FC<EpilogueProps> = ({ onComplete, isMobileDevice }) => {
     const [currentPage, setCurrentIndex] = useState(0);
-    // Denna state används för att tvinga React att rita om när språket ändras
-    const [locale, setLocale] = useState(getLocale());
 
     useEffect(() => {
-        const handleLocaleChange = () => {
-            setLocale(getLocale());
-        };
-
-        window.addEventListener('locale-changed', handleLocaleChange);
-        UiSounds.playConfirm();
-        //audioEngine.playMusic(MusicID.EPILOGUE_HAPPY);
+        audioEngine.playMusic(MusicID.EPILOGUE);
 
         return () => {
-            window.removeEventListener('locale-changed', handleLocaleChange);
             audioEngine.stopMusic();
         };
     }, []);
@@ -141,24 +132,6 @@ const Epilogue: React.FC<EpilogueProps> = ({ onComplete, isMobileDevice }) => {
                             {currentPage === epilogueData.length - 1 ? t('ui.begin') : t('ui.continue')}
                         </span>
                     </button>
-
-                    {/* Container that centers the row on the screen */}
-                    <div className="flex justify-center items-center w-full gap-x-10 text-gray-500 uppercase text-[10px] sm:text-xs font-bold font-mono mt-4">
-                        {/* LANGUAGE BUTTON */}
-                        <button
-                            onClick={toggleLanguage}
-                            className="flex-1 text-right hover:text-white duration-200 tracking-[0.2em] whitespace-nowrap"
-                        >
-                            {t('ui.language')}: {locale.toUpperCase()}
-                        </button>
-                        {/* SKIP BUTTON */}
-                        <button
-                            onClick={handleFinish}
-                            className="flex-1 text-left hover:text-white duration-200 tracking-[0.2em] whitespace-nowrap"
-                        >
-                            {t('ui.skip')}
-                        </button>
-                    </div>
                 </div>
 
                 {/* Progress Indicator */}

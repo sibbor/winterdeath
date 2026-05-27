@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { t } from '../../../../utils/i18n';
-import ScreenModalLayout, { TacticalButton, TacticalTab } from '../../layout/ScreenModalLayout';
-import { EnvironmentOverride, WeatherType } from '../../../../core/engine/EngineTypes';;
-import { Sector4 } from '../../../../content/sectors/Sector4';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
+import { t } from '../../../utils/i18n';
+import ModalLayout, { TacticalButton, TacticalTab } from './ModalLayout';
+import { EnvironmentOverride, WeatherType } from '../../../core/engine/EngineTypes';;
+import { Sector4 } from '../../../content/sectors/Sector4';
+import { UiSounds } from '../../../utils/audio/AudioLib';
 
-interface ScreenPlaygroundEnvironmentStationProps {
+interface EnvironmentTerminalProps {
     onClose: () => void;
     currentWeather: WeatherType;
     onWeatherChange: (w: WeatherType) => void;
@@ -14,7 +14,7 @@ interface ScreenPlaygroundEnvironmentStationProps {
     isMobileDevice?: boolean;
 }
 
-export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnvironmentStationProps> = ({ onClose, currentWeather, onWeatherChange, currentOverride, onOverrideChange, isMobileDevice }) => {
+export const ScreenTerminalEnvironment: React.FC<EnvironmentTerminalProps> = ({ onClose, currentWeather, onWeatherChange, currentOverride, onOverrideChange, isMobileDevice }) => {
     // Local state for UI inputs
     const [bgColor, setBgColor] = useState(currentOverride?.bgColor ? '#' + currentOverride.bgColor.toString(16).padStart(6, '0') : '#000000');
     const [fogColor, setFogColor] = useState(currentOverride?.fogColor ? '#' + currentOverride.fogColor.toString(16).padStart(6, '0') : '#050510');
@@ -27,7 +27,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
     const [skyLightVisible, setSkyLightVisible] = useState(currentOverride?.sky?.light?.visible ?? true);
     const [skyLightColor, setSkyLightColor] = useState(currentOverride?.sky?.light?.color ? '#' + currentOverride.sky.light.color.toString(16).padStart(6, '0') : '#4444ff');
     const [skyLightIntensity, setSkyLightIntensity] = useState(currentOverride?.sky?.light?.intensity ?? 0.5);
-    
+
     const [hemiIntensity, setHemiIntensity] = useState(currentOverride?.sky?.hemi?.intensity ?? 0.6);
     const [hemiSkyColor, setHemiSkyColor] = useState(currentOverride?.sky?.hemi?.skyColor ? '#' + currentOverride.sky.hemi.skyColor.toString(16).padStart(6, '0') : '#87ceeb');
 
@@ -84,7 +84,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
         setFogDensity(def.fog?.density ?? 0.01);
         setGroundColor('#' + def.groundColor.toString(16).padStart(6, '0'));
         setFov(def.fov);
-        
+
         if (def.sky) {
             setSkyTime(def.sky.time ?? 0.5);
             setSkyLightVisible(def.sky.light?.visible ?? true);
@@ -96,7 +96,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
             setCelestialRadius(def.sky.celestial?.radius ?? 20);
             setCelestialColor('#' + (def.sky.celestial?.color ?? 0xffffff).toString(16).padStart(6, '0'));
         }
-        
+
         onWeatherChange(def.weather as any);
         setWeatherDensity(500);
         setWindStrength(1.0);
@@ -113,7 +113,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
     );
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('ui.environment_control')}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
@@ -127,7 +127,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                     <div className="flex flex-col gap-2 bg-zinc-900/40 p-4 border border-zinc-800 rounded-lg">
                         <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest leading-none mb-2">{t('ui.time_of_day')}: <span className="text-white font-mono">{skyTime.toFixed(2)}</span></label>
                         <input type="range" min="0" max="1" step="0.01" value={skyTime} onChange={(e) => setSkyTime(parseFloat(e.target.value))} className="w-full accent-cyan-500" />
-                        
+
                         <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest leading-none mt-4 mb-2">{t('ui.ground')}</label>
                         <input type="color" value={groundColor} onChange={(e) => setGroundColor(e.target.value)} className="w-full h-8 cursor-pointer bg-black border border-zinc-700" title={t('ui.ground_color')} />
                     </div>
@@ -251,6 +251,6 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                     </div>
                 </div>
             </div>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };

@@ -718,6 +718,7 @@ export const Generators = {
 
     // --- MUSIC ---
     music_prologue: (ctx: AudioContext) => _genMusicPrologue(ctx),
+    music_epilogue: (ctx: AudioContext) => _genMusicEpilogue(ctx),
     music_boss: (ctx: AudioContext) => _genMusicBoss(ctx),
     voice_death_scream: (ctx: AudioContext) => createMoan(ctx, 'sawtooth', 400, 150, 0.8),
     voice_hurt: (ctx: AudioContext) => createMoan(ctx, 'triangle', 200, 100, 0.2),
@@ -1062,7 +1063,8 @@ export function registerSoundGenerators() {
     map(SoundID.VEHICLE_SKID, Generators.ambient_wind); // Use wind noise for skid for now
 
     // Music
-    mapMusic(MusicID.PROLOGUE_SAD, Generators.music_prologue);
+    mapMusic(MusicID.PROLOGUE, Generators.music_prologue);
+    mapMusic(MusicID.EPILOGUE, Generators.music_epilogue);
     mapMusic(MusicID.BOSS_FIGHT, Generators.music_boss);
     mapMusic(MusicID.CAMP_CALM, Generators.ambient_forest);
     mapMusic(MusicID.GAMEPLAY_TENSE, Generators.ambient_wind);
@@ -1191,6 +1193,22 @@ function _genMusicBoss(ctx: AudioContext): AudioBuffer {
 }
 
 function _genMusicPrologue(ctx: AudioContext): AudioBuffer {
+    const sr = ctx.sampleRate;
+    const dur = 8.0;
+    const buf = ctx.createBuffer(1, sr * dur, sr);
+    const d = buf.getChannelData(0);
+    const freqs = [110, 130.81, 164.81, 196];
+    for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        const f = freqs[Math.floor(t % 4)];
+        const pluck = Math.sin(2 * Math.PI * f * t) * 0.3 * Math.exp(-2 * (t % 1));
+        const fade = Math.min(1, Math.min(t / 0.2, (dur - t) / 0.2));
+        d[i] = pluck * fade * 0.4;
+    }
+    return buf;
+}
+
+function _genMusicEpilogue(ctx: AudioContext): AudioBuffer {
     const sr = ctx.sampleRate;
     const dur = 8.0;
     const buf = ctx.createBuffer(1, sr * dur, sr);

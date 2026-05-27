@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { PlayerStats, PlayerStatID, StatEnemyIndex, StatWeaponIndex } from '../../../../entities/player/PlayerTypes';
-import { t } from '../../../../utils/i18n';
-import { useOrientation } from '../../../../hooks/useOrientation';
-import ScreenModalLayout, { TacticalCard, TacticalTab, } from '../../layout/ScreenModalLayout';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { MAX_ENTITIES } from '../../../../content/constants';
-import { DataResolver } from '../../../../core/data/DataResolver';
-import { COLORS } from '../../../../utils/ui/ColorUtils';
-import { PerkCategory } from '../../../../content/perks';
-import { WEAPONS } from '../../../../content/weapons';
-import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputManager';
-import { StatsBridge } from '../../../../core/data/StatsBridge';
-import { FormatUtils } from '../../../../utils/ui/FormatUtils';
-import CollectiblePreview from '../../core/CollectiblePreview';
+import { PlayerStats, PlayerStatID, StatEnemyIndex, StatWeaponIndex } from '../../../entities/player/PlayerTypes';
+import { t } from '../../../utils/i18n';
+import { useOrientation } from '../../../hooks/useOrientation';
+import ModalLayout, { TacticalCard, TacticalTab, } from './ModalLayout';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import { MAX_ENTITIES } from '../../../content/constants';
+import { DataResolver } from '../../../core/data/DataResolver';
+import { COLORS } from '../../../utils/ui/ColorUtils';
+import { PerkCategory } from '../../../content/perks';
+import { WEAPONS } from '../../../content/weapons';
+import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputManager';
+import { StatsBridge } from '../../../core/data/StatsBridge';
+import { FormatUtils } from '../../../utils/ui/FormatUtils';
+import CollectiblePreview from '../core/CollectiblePreview';
 
 interface ScreenStatisticsProps {
     stats: PlayerStats;
@@ -112,7 +112,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
     }, []);
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('ui.statistics')}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
@@ -215,7 +215,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
                     opacity: 0.3;
                 }
             `}</style>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };
 

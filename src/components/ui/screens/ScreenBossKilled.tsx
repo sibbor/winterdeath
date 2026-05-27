@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react';
-import { t } from '../../../../utils/i18n';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import ScreenModalLayout, { TacticalCard } from '../../layout/ScreenModalLayout';
-import { SectorStats } from '../../../../types/StateTypes';
-import { StatWeaponIndex, TelemetrySourceOffset, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../../entities/player/PlayerTypes';
-import { StatsBridge } from '../../../../core/data/StatsBridge';
-import { DataResolver } from '../../../../core/data/DataResolver';
-import { COLORS } from '../../../../utils/ui/ColorUtils';
+import { t } from '../../../utils/i18n';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import ModalLayout, { TacticalCard } from './ModalLayout';
+import { SectorStats } from '../../../types/StateTypes';
+import { StatWeaponIndex, TelemetrySourceOffset, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../entities/player/PlayerTypes';
+import { StatsBridge } from '../../../core/data/StatsBridge';
+import { DataResolver } from '../../../core/data/DataResolver';
+import { COLORS } from '../../../utils/ui/ColorUtils';
 
 interface ScreenBossKilledProps {
     sectorIndex: number;
@@ -23,7 +23,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
     }, []);
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={bossName}
             isMobileDevice={isMobileDevice}
             onConfirm={onProceed}
@@ -96,7 +96,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                     </div>
                 )}
             </TacticalCard>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };
 

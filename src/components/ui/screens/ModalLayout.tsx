@@ -31,7 +31,7 @@ export const HORIZONTAL_HATCHING_STYLE_DARK: React.CSSProperties = {
     backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px)'
 };
 
-interface ScreenModalLayoutProps {
+interface ModalLayoutProps {
     title: string | React.ReactNode;
     subtitle?: string | React.ReactNode;
     subtitleClass?: string;
@@ -99,7 +99,7 @@ const SCANLINE_EFFECT = "absolute inset-0 pointer-events-none z-10 opacity-[0.03
 const BUTTON_HATCHING_STYLE = HORIZONTAL_HATCHING_STYLE;
 const BUTTON_HATCHING_STYLE_DARK = HORIZONTAL_HATCHING_STYLE_DARK;
 
-const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
+const ModalLayout: React.FC<ModalLayoutProps> = React.memo(({
     title,
     subtitle,
     subtitleClass = "text-zinc-500",
@@ -509,4 +509,4 @@ export const TacticalRow: React.FC<{
     );
 });
 
-export default ScreenModalLayout;
+export default ModalLayout;

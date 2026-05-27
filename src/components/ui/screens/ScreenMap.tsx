@@ -1,12 +1,12 @@
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import { MapItem, MapItemType } from '../../hud/HudTypes';
-import { t } from '../../../../utils/i18n';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import ScreenModalLayout, { TacticalCard } from '../../layout/ScreenModalLayout';
-import { useHudStore } from '../../../../hooks/useHudStore';
-import { HudStore } from '../../../../store/HudStore';
-import { DamageID, ToolID } from '../../../../entities/player/CombatTypes';
-import { colorToHex } from '../../../../utils/ui/ColorUtils';
+import { MapItem, MapItemType } from '../hud/HudTypes';
+import { t } from '../../../utils/i18n';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import ModalLayout, { TacticalCard } from './ModalLayout';
+import { useHudStore } from '../../../hooks/useHudStore';
+import { HudStore } from '../../../store/HudStore';
+import { ToolID } from '../../../entities/player/CombatTypes';
+import { colorToHex } from '../../../utils/ui/ColorUtils';
 
 interface ScreenMapProps {
     onClose: () => void;
@@ -551,7 +551,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
     ), [isMobileDevice]);
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('ui.map')}
             subtitle={sectorName.toUpperCase()}
             isMobileDevice={isMobileDevice}
@@ -634,7 +634,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
                 </div>
             </div>
             <TooltipOverlay data={tooltipData} />
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };
 

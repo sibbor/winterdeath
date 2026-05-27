@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { PlayerStats, StatEnemyIndex } from '../../../../entities/player/PlayerTypes';
-import { t } from '../../../../utils/i18n';
-import { useOrientation } from '../../../../hooks/useOrientation';
-import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalTab } from '../../layout/ScreenModalLayout';
-import CollectiblePreview from '../../core/CollectiblePreview';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { DiscoveryType } from '../../hud/HudTypes';
-import { DataResolver } from '../../../../core/data/DataResolver';
-import { SectorID } from '../../../../game/session/SectorTypes';
-import { GAME_CHALLENGES, ChallengeCategory, ChallengeDef } from '../../../../content/ChallengeTypes';
-import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputManager';
-import { ColorPair, COLORS } from '../../../../utils/ui/ColorUtils';
-import { StatsBridge } from '../../../../core/data/StatsBridge';
-import { FormatUtils } from '../../../../utils/ui/FormatUtils';
-import { PerkCategory } from '../../../../content/perks';
+import { PlayerStats, StatEnemyIndex } from '../../../entities/player/PlayerTypes';
+import { t } from '../../../utils/i18n';
+import { useOrientation } from '../../../hooks/useOrientation';
+import ModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalTab } from './ModalLayout';
+import CollectiblePreview from '../core/CollectiblePreview';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import { DiscoveryType } from '../hud/HudTypes';
+import { DataResolver } from '../../../core/data/DataResolver';
+import { SectorID } from '../../../game/session/SectorTypes';
+import { GAME_CHALLENGES, ChallengeCategory, ChallengeDef } from '../../../content/ChallengeTypes';
+import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputManager';
+import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
+import { StatsBridge } from '../../../core/data/StatsBridge';
+import { FormatUtils } from '../../../utils/ui/FormatUtils';
+import { PerkCategory } from '../../../content/perks';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
@@ -109,7 +109,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
 
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('stations.adventure_log')}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
@@ -184,7 +184,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                     transition: border-color 1.0s;
                 }
             `}</style>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };
 

@@ -1,12 +1,12 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { PlayerStats, PlayerStatID } from '../../../../entities/player/PlayerTypes';
-import { StatsBridge } from '../../../../core/data/StatsBridge';
-import { t } from '../../../../utils/i18n';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { LEVEL_CAP, PLAYER_BASE_SPEED } from '../../../../content/constants';
-import { useOrientation } from '../../../../hooks/useOrientation';
-import { COLORS } from '../../../../utils/ui/ColorUtils';
-import ScreenModalLayout, { TacticalCard, TacticalButton, HORIZONTAL_HATCHING_STYLE } from '../../layout/ScreenModalLayout';
+import { PlayerStats, PlayerStatID } from '../../../entities/player/PlayerTypes';
+import { StatsBridge } from '../../../core/data/StatsBridge';
+import { t } from '../../../utils/i18n';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import { LEVEL_CAP, PLAYER_BASE_SPEED } from '../../../content/constants';
+import { useOrientation } from '../../../hooks/useOrientation';
+import { COLORS } from '../../../utils/ui/ColorUtils';
+import ModalLayout, { TacticalCard, TacticalButton, HORIZONTAL_HATCHING_STYLE } from './ModalLayout';
 
 const SKILLS_CONFIG = [
     { statId: PlayerStatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', cost: 1, value: 20, base: 100 },
@@ -72,7 +72,7 @@ const ScreenSkills: React.FC<ScreenSkillsProps> = React.memo(({ stats, onSave, o
     ), [StatsBridge.getStatInt(tempStats, PlayerStatID.SKILL_POINTS), isMaxRank, xpNeeded]);
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('stations.skills')}
             subtitle={spSubtitle}
             isMobileDevice={isMobileDevice}
@@ -104,7 +104,7 @@ const ScreenSkills: React.FC<ScreenSkillsProps> = React.memo(({ stats, onSave, o
                     />
                 ))}
             </div>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 });
 

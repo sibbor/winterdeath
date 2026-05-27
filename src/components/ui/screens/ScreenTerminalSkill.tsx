@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { PlayerStatID } from '../../../../entities/player/PlayerTypes';
-import { PlayerStats, SectorState } from '../../../../types/StateTypes';
-import { t } from '../../../../utils/i18n';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import ScreenModalLayout, { TacticalButton, TacticalCard } from '../../layout/ScreenModalLayout';
-import { StatsBridge } from '../../../../core/data/StatsBridge';
+import { PlayerStatID } from '../../../entities/player/PlayerTypes';
+import { PlayerStats, SectorState } from '../../../types/StateTypes';
+import { t } from '../../../utils/i18n';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import ModalLayout, { TacticalButton, TacticalCard } from './ModalLayout';
+import { StatsBridge } from '../../../core/data/StatsBridge';
 
 const SKILLS_CONFIG = [
     { id: PlayerStatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', value: 20 },
@@ -12,7 +12,7 @@ const SKILLS_CONFIG = [
     { id: PlayerStatID.SPEED, labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', value: 0.1 }
 ];
 
-interface ScreenPlaygroundSkillStationProps {
+interface SkillTerminalProps {
     stats: PlayerStats;
     sectorState: SectorState;
     onSave: (newStats: PlayerStats, newSectorState: SectorState) => void;
@@ -20,20 +20,20 @@ interface ScreenPlaygroundSkillStationProps {
     isMobileDevice?: boolean;
 }
 
-const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> = ({ stats, sectorState, onSave, onClose, isMobileDevice }) => {
+const ScreenTerminalSkill: React.FC<SkillTerminalProps> = ({ stats, sectorState, onSave, onClose, isMobileDevice }) => {
     const [tempStats, setTempStats] = useState(() => StatsBridge.deepCloneStats(stats));
     const [tempSectorState, setTempSectorState] = useState({ ...sectorState });
 
     const handleUpgradeSkill = (skillId: PlayerStatID, value: number) => {
         UiSounds.playClick();
-        
+
         const nextStats = StatsBridge.deepCloneStats(tempStats);
         if (skillId === PlayerStatID.SPEED) {
             StatsBridge.addStatFloat(nextStats, skillId, value);
         } else {
             StatsBridge.addStatInt(nextStats, skillId, value);
         }
-        
+
         setTempStats(nextStats);
     };
 
@@ -43,7 +43,7 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
     };
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('stations.skills')}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
@@ -125,9 +125,9 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                     </p>
                 </div>
             </div>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };
 
-export default ScreenPlaygroundSkillStation;
+export default ScreenTerminalSkill;
 

@@ -8,29 +8,29 @@ import { BossID, SectorID } from './game/session/SectorTypes';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';
 import { aggregateStats } from './game/progression/ProgressionManager';
 import GameSession, { GameSessionHandle } from './game/session/GameSession';
-import ScreenStartGame from './components/ui/screens/shared/ScreenStartGame';
-import ScreenLoading from './components/ui/screens/shared/ScreenLoading';
+import ScreenStartGame from './components/ui/screens/ScreenStartGame';
+import ScreenLoading from './components/ui/screens/ScreenLoading';
 import Prologue from './components/ui/screens/Prologue';
 import Camp from './components/camp/Camp';
 import GameHUD from './components/ui/hud/GameHUD';
-import ScreenPause from './components/ui/screens/game/ScreenPause';
-import ScreenMap from './components/ui/screens/game/ScreenMap';
-import ScreenTeleport from './components/ui/screens/game/ScreenTeleport';
-import ScreenSectorReport from './components/ui/screens/game/ScreenSectorReport';
-import ScreenBossKilled from './components/ui/screens/game/ScreenBossKilled';
-import ScreenCollectibleDiscovered from './components/ui/screens/game/ScreenCollectibleDiscovered';
-import ScreenAdventureLog from './components/ui/screens/camp/ScreenAdventureLog';
-import ScreenStatistics from './components/ui/screens/camp/ScreenStatistics';
-import ScreenSettings from './components/ui/screens/camp/ScreenSettings';
-import ScreenPlaygroundArmoryStation from './components/ui/screens/game/ScreenPlaygroundArmoryStation';
-import { ScreenPlaygroundEnemyStation } from './components/ui/screens/game/ScreenPlaygroundEnemyStation';
-import ScreenPlaygroundSkillStation from './components/ui/screens/game/ScreenPlaygroundSkillStation';
-import { ScreenPlaygroundEnvironmentStation } from './components/ui/screens/game/ScreenPlaygroundEnvironmentStation';
-import ScreenPlayerDied from './components/ui/screens/game/ScreenPlayerDied';
-import ScreenArmory from './components/ui/screens/camp/ScreenArmory';
-import ScreenSkills from './components/ui/screens/camp/ScreenSkills';
-import ScreenSectorOverview from './components/ui/screens/camp/ScreenSectorOverview';
-import ScreenResetConfirm from './components/ui/screens/camp/ScreenResetConfirm';
+import ScreenPause from './components/ui/screens/ScreenPause';
+import ScreenMap from './components/ui/screens/ScreenMap';
+import ScreenTeleport from './components/ui/screens/ScreenTeleport';
+import ScreenSectorReport from './components/ui/screens/ScreenSectorReport';
+import ScreenBossKilled from './components/ui/screens/ScreenBossKilled';
+import ScreenCollectibleDiscovered from './components/ui/screens/ScreenCollectibleDiscovered';
+import ScreenAdventureLog from './components/ui/screens/ScreenAdventureLog';
+import ScreenStatistics from './components/ui/screens/ScreenStatistics';
+import ScreenSettings from './components/ui/screens/ScreenSettings';
+import ScreenTerminalArmory from './components/ui/screens/ScreenTerminalArmory';
+import { ScreenTerminalSpawner } from './components/ui/screens/ScreenTerminalSpawner';
+import ScreenTerminalSkill from './components/ui/screens/ScreenTerminalSkill';
+import { ScreenTerminalEnvironment } from './components/ui/screens/ScreenTerminalEnvironment';
+import ScreenPlayerDied from './components/ui/screens/ScreenPlayerDied';
+import ScreenArmory from './components/ui/screens/ScreenArmory';
+import ScreenSkills from './components/ui/screens/ScreenSkills';
+import ScreenSectorOverview from './components/ui/screens/ScreenSectorOverview';
+import ScreenResetConfirm from './components/ui/screens/ScreenResetConfirm';
 import DebugDisplay from './components/ui/core/DebugDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
@@ -1026,7 +1026,7 @@ const App: React.FC = () => {
                                 isMobileDevice={isMobileDevice}
                             />
                         ) : (
-                            <ScreenPlaygroundArmoryStation
+                            <ScreenTerminalArmory
                                 currentLoadout={gameState.loadout}
                                 weaponLevels={gameState.weaponLevels}
                                 isMobileDevice={isMobileDevice}
@@ -1047,7 +1047,7 @@ const App: React.FC = () => {
                                 isMobileDevice={isMobileDevice}
                             />
                         ) : (
-                            <ScreenPlaygroundSkillStation
+                            <ScreenTerminalSkill
                                 stats={gameState.stats}
                                 isMobileDevice={isMobileDevice}
                                 sectorState={gameState.sectorState || EMPTY_SECTOR_STATE}
@@ -1058,7 +1058,7 @@ const App: React.FC = () => {
                     )}
 
                     {activeOverlay === OverlayType.STATION_ENVIRONMENT && (
-                        <ScreenPlaygroundEnvironmentStation
+                        <ScreenTerminalEnvironment
                             onClose={handleCloseAction}
                             isMobileDevice={isMobileDevice}
                             currentWeather={gameState.weather}
@@ -1070,7 +1070,7 @@ const App: React.FC = () => {
                     )}
 
                     {activeOverlay === OverlayType.STATION_SPAWNER && (
-                        <ScreenPlaygroundEnemyStation
+                        <ScreenTerminalSpawner
                             onClose={handleCloseAction}
                             isMobileDevice={isMobileDevice}
                             onSpawnEnemies={handleSpawnEnemiesAction}

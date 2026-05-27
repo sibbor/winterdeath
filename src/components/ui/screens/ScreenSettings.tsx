@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { t, setLocale, getLocale } from '../../../../utils/i18n';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { GameSettings } from '../../../../core/engine/EngineTypes';
-import { SHADOW_PRESETS } from '../../../../content/constants';
-import { useOrientation } from '../../../../hooks/useOrientation';
-import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalButton, TacticalTab } from '../../layout/ScreenModalLayout';
-import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputManager';
+import React, { useState, useEffect, useCallback } from 'react';
+import { t, setLocale, getLocale } from '../../../utils/i18n';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import { GameSettings } from '../../../core/engine/EngineTypes';
+import { SHADOW_PRESETS } from '../../../content/constants';
+import { useOrientation } from '../../../hooks/useOrientation';
+import ModalLayout, { TacticalCard, TacticalButton, TacticalTab } from './ModalLayout';
+import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputManager';
 
 interface ScreenSettingsProps {
     onClose: () => void;
@@ -15,7 +15,6 @@ interface ScreenSettingsProps {
     onToggleShowFps?: () => void;
     isMobileDevice?: boolean;
 }
-
 
 const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, settings, onUpdateGraphics, showFps, onToggleShowFps, isMobileDevice }) => {
     const { isLandscapeMode } = useOrientation();
@@ -71,7 +70,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, set
     }, [showReloadConfirm, confirmReload]);
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('ui.settings')}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
@@ -129,7 +128,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, set
                     </div>
                 </div>
             )}
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 });
 
@@ -253,16 +252,16 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                     <p className="text-gray-400 text-xs font-mono">{t('ui.volumetric_fog_sub')}</p>
                 </div>
                 <div className="flex gap-2">
-                    <TacticalButton 
+                    <TacticalButton
                         onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, volumetricFog: true })); UiSounds.playClick(); }}
-                        variant={tempGraphics.volumetricFog ? 'primary' : 'secondary'} 
+                        variant={tempGraphics.volumetricFog ? 'primary' : 'secondary'}
                         className="px-6 py-1"
                     >
                         {t('ui.on')}
                     </TacticalButton>
-                    <TacticalButton 
+                    <TacticalButton
                         onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, volumetricFog: false })); UiSounds.playClick(); }}
-                        variant={!tempGraphics.volumetricFog ? 'primary' : 'secondary'} 
+                        variant={!tempGraphics.volumetricFog ? 'primary' : 'secondary'}
                         className="px-6 py-1"
                     >
                         {t('ui.off')}
@@ -281,16 +280,16 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                     <p className="text-gray-400 text-xs font-mono">{t('ui.antialias_sub')}</p>
                 </div>
                 <div className="flex gap-2">
-                    <TacticalButton 
+                    <TacticalButton
                         onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, antialias: true })); UiSounds.playClick(); }}
-                        variant={tempGraphics.antialias ? 'primary' : 'secondary'} 
+                        variant={tempGraphics.antialias ? 'primary' : 'secondary'}
                         className="px-6 py-1"
                     >
                         {t('ui.on')}
                     </TacticalButton>
-                    <TacticalButton 
+                    <TacticalButton
                         onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, antialias: false })); UiSounds.playClick(); }}
-                        variant={!tempGraphics.antialias ? 'primary' : 'secondary'} 
+                        variant={!tempGraphics.antialias ? 'primary' : 'secondary'}
                         className="px-6 py-1"
                     >
                         {t('ui.off')}

@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { t } from '../../../../utils/i18n';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { HudStore } from '../../../../store/HudStore';
-import { useHudStore } from '../../../../hooks/useHudStore';
-import { DataResolver } from '../../../../core/data/DataResolver';
-import { HORIZONTAL_HATCHING_STYLE_DARK } from '../../layout/ScreenModalLayout';
-import { StatusEffectID } from '../../../../types/StatusEffects';
-import { MetaActionId } from '../../../../systems/ui/UIEventBridge';
+import { t } from '../../../utils/i18n';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import { HudStore } from '../../../store/HudStore';
+import { useHudStore } from '../../../hooks/useHudStore';
+import { DataResolver } from '../../../core/data/DataResolver';
+import { HORIZONTAL_HATCHING_STYLE_DARK } from './ModalLayout';
+import { StatusEffectID } from '../../../types/StatusEffects';
+import { MetaActionId } from '../../../systems/ui/UIEventBridge';
 
 interface ScreenPlayerDiedProps {
     onContinue: () => void;

@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { t } from '../../../../utils/i18n';
-import { useOrientation } from '../../../../hooks/useOrientation';
-import ScreenModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalTab } from '../../layout/ScreenModalLayout';
-import { PlayerStats } from '../../../../entities/player/PlayerTypes';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { DataResolver } from '../../../../core/data/DataResolver';
-import { ColorPair, COLORS, colorToHex } from '../../../../utils/ui/ColorUtils';
-import { SectorID } from '../../../../game/session/SectorTypes';
-import { StatsBridge } from '../../../../core/data/StatsBridge';
-import { PoiID } from '../../../../content/pois';
+import { t } from '../../../utils/i18n';
+import { useOrientation } from '../../../hooks/useOrientation';
+import ModalLayout, { TacticalCard, TacticalTab } from './ModalLayout';
+import { PlayerStats } from '../../../entities/player/PlayerTypes';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import { DataResolver } from '../../../core/data/DataResolver';
+import { COLORS } from '../../../utils/ui/ColorUtils';
+import { SectorID } from '../../../game/session/SectorTypes';
+import { StatsBridge } from '../../../core/data/StatsBridge';
+import { PoiID } from '../../../content/pois';
 
 interface ScreenSectorOverviewProps {
     currentSector: number;
@@ -110,7 +110,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('stations.sectors')}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
@@ -207,7 +207,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                     </div>
                 </TacticalCard>
             </div>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };
 

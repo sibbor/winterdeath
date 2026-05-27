@@ -1,6 +1,6 @@
 import React from 'react';
-import { t } from '../../../../utils/i18n';
-import ScreenModalLayout, { TacticalCard } from '../../layout/ScreenModalLayout';
+import { t } from '../../../utils/i18n';
+import ModalLayout, { TacticalCard } from './ModalLayout';
 
 interface ScreenResetConfirmProps {
     onConfirm: () => void;
@@ -10,7 +10,7 @@ interface ScreenResetConfirmProps {
 
 const ScreenResetConfirm: React.FC<ScreenResetConfirmProps> = ({ onConfirm, onCancel, isMobileDevice }) => {
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('ui.reset_confirm_title')}
             isMobileDevice={isMobileDevice}
             onClose={onCancel}
@@ -28,7 +28,7 @@ const ScreenResetConfirm: React.FC<ScreenResetConfirmProps> = ({ onConfirm, onCa
                     </p>
                 </TacticalCard>
             </div>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };
 

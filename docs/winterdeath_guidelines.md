@@ -20,7 +20,7 @@ The engine relies on modular systems (`src/core/systems/`) inheriting from a bas
 - **Directory Structure**:
   - `src/components/ui/core/`: Global components.
   - `src/components/ui/hud/`: Active gameplay UI.
-  - `src/components/ui/layout/`: Wrappers like `ScreenModalLayout`.
+  - `src/components/ui/layout/`: Wrappers like `ModalLayout`.
   - `src/components/ui/screens/`: Routed views (`camp`, `game`, `shared`).
 - **HudSystem & HudStore**: `HudSystem.ts` extracts data from the game loop and updates `HudStore`. 
   - **Double Buffering**: Uses a **Swap-and-Flip** pattern by keeping two pre-allocated state trees (Buffer A/B). Swapping the reference each frame triggers React's shallow equality (`===`) for a re-render while maintaining Zero-GC.

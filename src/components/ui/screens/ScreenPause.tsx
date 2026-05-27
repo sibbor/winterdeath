@@ -1,11 +1,11 @@
 import React, { useMemo } from 'react';
-import { t } from '../../../../utils/i18n';
-import ScreenModalLayout, { TacticalButton, HORIZONTAL_HATCHING_STYLE } from '../../layout/ScreenModalLayout';
-import { PlayerStats } from '../../../../entities/player/PlayerTypes';
-import { PERKS, PerkColors } from '../../../../content/perks';
-import { GAME_CHALLENGES } from '../../../../content/ChallengeTypes';
-import { ColorPair, COLORS } from '../../../../utils/ui/ColorUtils';
-import { StatsBridge } from '../../../../core/data/StatsBridge';
+import { t } from '../../../utils/i18n';
+import ModalLayout, { TacticalButton, HORIZONTAL_HATCHING_STYLE } from './ModalLayout';
+import { PlayerStats } from '../../../entities/player/PlayerTypes';
+import { PERKS, PerkColors } from '../../../content/perks';
+import { GAME_CHALLENGES } from '../../../content/ChallengeTypes';
+import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
+import { StatsBridge } from '../../../core/data/StatsBridge';
 
 interface ScreenPauseProps {
     onResume: () => void;
@@ -72,7 +72,7 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
     }, [stats]);
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('ui.paused')}
             isMobileDevice={isMobileDevice}
             onClose={onResume}
@@ -200,7 +200,7 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
                     </span>
                 </div>
             )}
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };
 

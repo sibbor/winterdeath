@@ -135,9 +135,10 @@ export enum FXID {
 // --- MUSIC SMI ENUMS ---
 export enum MusicID {
     NONE = 0,
-    PROLOGUE_SAD = 1,
-    GAMEPLAY_TENSE = 2,
-    BOSS_FIGHT = 3,
-    CAMP_CALM = 4,
-    DEATH_SCREEN = 5
+    PROLOGUE = 1,
+    EPILOGUE = 2,
+    GAMEPLAY_TENSE = 3,
+    BOSS_FIGHT = 4,
+    CAMP_CALM = 5,
+    DEATH_SCREEN = 6
 }

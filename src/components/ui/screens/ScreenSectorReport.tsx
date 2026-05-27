@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { t } from '../../../../utils/i18n';
-import { SectorStats, PlayerStats } from '../../../../types/StateTypes';
-import ScreenModalLayout, { TacticalCard, TacticalTab, TacticalRow } from '../../layout/ScreenModalLayout';
-import { StatWeaponIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../../entities/player/PlayerTypes';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { DataResolver } from '../../../../core/data/DataResolver';
-import { ColorPair, COLORS } from '../../../../utils/ui/ColorUtils';
-import { FormatUtils } from '../../../../utils/ui/FormatUtils';
-import { StatsBridge } from '../../../../core/data/StatsBridge';
-import { SectorID } from '../../../../game/session/SectorTypes';
+import { t } from '../../../utils/i18n';
+import { SectorStats, PlayerStats } from '../../../types/StateTypes';
+import ModalLayout, { TacticalCard, TacticalTab, TacticalRow } from './ModalLayout';
+import { StatWeaponIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../entities/player/PlayerTypes';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import { DataResolver } from '../../../core/data/DataResolver';
+import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
+import { FormatUtils } from '../../../utils/ui/FormatUtils';
+import { StatsBridge } from '../../../core/data/StatsBridge';
+import { SectorID } from '../../../game/session/SectorTypes';
 
 interface ScreenSectorReportProps {
     stats: SectorStats;
@@ -110,7 +110,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
     }, [playerStats, sectorPOIs]);
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={sectorName.toUpperCase()}
             subtitle={`${t('ui.sector_report')}  |  ${t(statusKey)}`.toUpperCase()}
             subtitleClass={statusColor.str}
@@ -307,7 +307,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
                     </TacticalCard>
                 </div>
             )}
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };
 

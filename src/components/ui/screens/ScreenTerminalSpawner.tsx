@@ -1,18 +1,16 @@
 import * as THREE from 'three';
 import React, { useState, useCallback, useRef } from 'react';
-import { t } from '../../../../utils/i18n';
-import ScreenModalLayout, { TacticalButton } from '../../layout/ScreenModalLayout';
-import { EnemyManager } from '../../../../entities/enemies/EnemyManager';
-import { WinterEngine } from '../../../../core/engine/WinterEngine';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import { HudStore } from '../../../../store/HudStore';
-import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
-import { DataResolver } from '../../../../core/data/DataResolver';
-import { SoundID } from '../../../../utils/audio/AudioTypes';
-import { audioEngine } from '../../../../utils/audio/AudioEngine';
-import { BossID } from '../../../../game/session/SectorTypes';
+import { t } from '../../../utils/i18n';
+import ModalLayout, { TacticalButton } from './ModalLayout';
+import { EnemyManager } from '../../../entities/enemies/EnemyManager';
+import { WinterEngine } from '../../../core/engine/WinterEngine';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import { HudStore } from '../../../store/HudStore';
+import { EnemyType } from '../../../entities/enemies/EnemyTypes';
+import { DataResolver } from '../../../core/data/DataResolver';
+import { BossID } from '../../../game/session/SectorTypes';
 
-interface ScreenPlaygroundEnemyStationProps {
+interface SpawnerTerminalProps {
     onClose: () => void;
     onSpawnEnemies?: (enemies: any[]) => void;
     isMobileDevice?: boolean;
@@ -27,12 +25,12 @@ const _centerPos = new THREE.Vector3();
 const _spawnPos = new THREE.Vector3();
 const _playerPosRef = new THREE.Vector3();
 
-export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStationProps> = ({ onClose, onSpawnEnemies, isMobileDevice }) => {
+export const ScreenTerminalSpawner: React.FC<SpawnerTerminalProps> = ({ onClose, onSpawnEnemies, isMobileDevice }) => {
     const [counts, setCounts] = useState<Record<number, number>>({
         [EnemyType.WALKER]: 1,
-        [EnemyType.RUNNER]: 0,
-        [EnemyType.TANK]: 0,
-        [EnemyType.BOMBER]: 0,
+        [EnemyType.RUNNER]: 1,
+        [EnemyType.TANK]: 1,
+        [EnemyType.BOMBER]: 1,
     });
     const [selectedBoss, setSelectedBoss] = useState<number | null>(null);
     const [spread, setSpread] = useState(10);
@@ -121,7 +119,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
     };
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('ui.enemy_spawner')}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
@@ -223,6 +221,6 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                 </div>
 
             </div>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };

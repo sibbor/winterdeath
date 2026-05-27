@@ -21,7 +21,8 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
 
         window.addEventListener('locale-changed', handleLocaleChange);
         UiSounds.playConfirm();
-        audioEngine.playMusic(MusicID.PROLOGUE_SAD);
+
+        audioEngine.playMusic(MusicID.PROLOGUE);
 
         return () => {
             window.removeEventListener('locale-changed', handleLocaleChange);
@@ -29,7 +30,6 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
         };
     }, []);
 
-    // Funktionen som faktiskt byter språk
     const toggleLanguage = () => {
         const current = getLocale();
         const next = current === 'en' ? 'sv' : 'en';

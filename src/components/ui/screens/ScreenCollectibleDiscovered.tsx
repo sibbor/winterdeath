@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
-import { t } from '../../../../utils/i18n';
-import { UiSounds } from '../../../../utils/audio/AudioLib';
-import ScreenModalLayout, { TacticalCard } from '../../layout/ScreenModalLayout';
-import { getCollectibleById } from '../../../../content/collectibles';
-import CollectiblePreview from '../../core/CollectiblePreview';
+import { t } from '../../../utils/i18n';
+import { UiSounds } from '../../../utils/audio/AudioLib';
+import ModalLayout, { TacticalCard } from './ModalLayout';
+import { getCollectibleById } from '../../../content/collectibles';
+import CollectiblePreview from '../core/CollectiblePreview';
 
 interface ScreenCollectibleDiscoveredProps {
     collectibleId: string;
@@ -24,7 +24,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
     const collectibleDescription = t(`collectibles.${def.sector}.${def.index}.description`);
 
     return (
-        <ScreenModalLayout
+        <ModalLayout
             title={t('ui.discovered_collectible')}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
@@ -58,7 +58,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
                     </p>
                 </div>
             </div>
-        </ScreenModalLayout>
+        </ModalLayout>
     );
 };
 
