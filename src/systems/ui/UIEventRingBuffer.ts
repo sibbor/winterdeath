@@ -66,9 +66,9 @@ export const UIEventRingBuffer = {
         const writeIdx = head;
         const nextHead = (head + PACKET_SIZE) & (BUFFER_SIZE - 1);
 
-        //if (process.env.NODE_ENV === 'development') {
-        console.log(`[UIEvent] ${UIEventType[type]} | P1: ${p1} | P2: ${p2} | TS: ${timestamp.toFixed(2)}`);
-        //}
+        if (typeof window !== 'undefined' && (window as any).WD_DEBUG === true) {
+            console.log(`[UIEvent] ${UIEventType[type]} | P1: ${p1} | P2: ${p2} | TS: ${timestamp.toFixed(2)}`);
+        }
 
         // Overflow check: If head catches tail, we drop the oldest event to maintain real-time stability
         if (nextHead === tail) {

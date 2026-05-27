@@ -90,6 +90,12 @@ export class RuntimeStressHarness {
     public static monitorFrame(startTime: number): void {
         if (!this.enabled) return;
 
+        // Vinterdöd optimization: Skip warning during preloader ghost-render/warmup
+        const gameEngine = (window as any).gameEngine;
+        if (gameEngine?.environment?.isWarmup === true || gameEngine?.sceneContext?.isWarmup === true) {
+            return;
+        }
+
         const duration = performance.now() - startTime;
         if (duration > 1.0) {
             console.warn("[PERF WARNING] Spatial hot-path exceeded budget:", duration.toFixed(2), "ms");
