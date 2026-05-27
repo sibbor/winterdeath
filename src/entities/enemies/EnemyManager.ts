@@ -663,6 +663,7 @@ export const EnemyManager = {
         e.deathState = EnemyDeathState.ALIVE;
         e.velocity.set(0, 0, 0);
         e.knockbackVel.set(0, 0, 0);
+        e.lastKnockback = 0;
         e.deathVel.set(0, 0, 0);
         e.deathTimer = 0;
         e.bloodSpawned = false;

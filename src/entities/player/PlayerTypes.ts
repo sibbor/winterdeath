@@ -111,14 +111,14 @@ export enum StatWeaponIndex {
     RADIO = 12,
 
     // --- ABILITIES (20-29) ---
-    RUSH = 22,
-    DODGE = 21,
+    RUSH = 21,
+    DODGE = 22,
 
     // --- VEHICLES (33-36) ---
-    VEHICLE = 30,
-    VEHICLE_SPLATTER = 31,
-    VEHICLE_RAM = 32,
-    VEHICLE_PUSH = 33,
+    VEHICLE = 23,
+    VEHICLE_SPLATTER = 24,
+    VEHICLE_RAM = 25,
+    VEHICLE_PUSH = 26,
 
     // --- ENVIRONMENT & MASTER (41+) ---
     PHYSICAL = 41,

@@ -823,8 +823,12 @@ export class SkySystem implements System {
         // if (this.moonHaloMaterial) this.moonHaloMaterial.dispose();
         // if (this.cloudMaterial) this.cloudMaterial.dispose();
         if (this.cloudMesh) {
+            this.root.remove(this.cloudMesh);
             this.cloudMesh.dispose();
             this.cloudMesh = null;
         }
+        // Force evaluation on spatial/temporal checks post-transition
+        this.lastTrackedPos.set(Infinity, Infinity, Infinity);
+        this.lastLerpTime = -1;
     }
 }
