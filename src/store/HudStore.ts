@@ -76,11 +76,6 @@ export class HudStateSoA implements IHudState {
     public unlimitedAmmo = false;
     public unlimitedThrowables = false;
     public isInvincible = false;
-    public waveActive = false;
-    public waveKills = 0;
-    public waveTarget = 0;
-    public currentWave = 1;
-    public totalWaves = 1;
 
     public enemyKills = new Float64Array(16);
     public discoveredZombies: number[] = [];
@@ -171,7 +166,6 @@ export class HudStateSoA implements IHudState {
         this.statsBuffer.set(src.statsBuffer);
         this.vectorBuffer.set(src.vectorBuffer);
         this.statusFlags = src.statusFlags;
-
         this.hp = src.hp;
         this.maxHp = src.maxHp;
         this.stamina = src.stamina;
@@ -184,23 +178,19 @@ export class HudStateSoA implements IHudState {
         this.multiplier = src.multiplier;
         this.activeWeapon = src.activeWeapon;
         this.isReloading = src.isReloading;
-
         this.bossActive = src.bossActive;
         this.bossName = src.bossName;
         this.bossHp = src.bossHp;
         this.bossMaxHp = src.bossMaxHp;
-
         this.bossSpawned = src.bossSpawned;
         this.bossDefeated = src.bossDefeated;
         this.familyFound = src.familyFound;
         this.familySignal = src.familySignal;
-
         this.level = src.level;
         this.currentXp = src.currentXp;
         this.nextLevelXp = src.nextLevelXp;
         this.throwableAmmo = src.throwableAmmo;
         this.reloadProgress = src.reloadProgress;
-
         this.playerPos.x = src.playerPos.x;
         this.playerPos.z = src.playerPos.z;
         this.playerRotY = src.playerRotY;
@@ -213,7 +203,6 @@ export class HudStateSoA implements IHudState {
             this.bossPos.z = src.bossPos.z;
         }
         this.distanceTraveled = src.distanceTraveled;
-
         this.kills = src.kills;
         this.spEarned = src.spEarned;
         this.isDead = src.isDead;
@@ -225,28 +214,18 @@ export class HudStateSoA implements IHudState {
         this.poisFoundCount = src.poisFoundCount;
         this.collectiblesFoundCount = src.collectiblesFoundCount;
         this.fps = src.fps;
-
         this.unlimitedAmmo = src.unlimitedAmmo;
         this.unlimitedThrowables = src.unlimitedThrowables;
         this.isInvincible = src.isInvincible;
-        this.waveActive = src.waveActive;
-        this.waveKills = src.waveKills;
-        this.waveTarget = src.waveTarget;
-        this.currentWave = src.currentWave;
-        this.totalWaves = src.totalWaves;
-
         this.enemyKills.set(src.enemyKills);
-        // Note: Reference copy for seen lists as they change infrequently
         this.discoveredZombies = (src as any).discoveredZombies;
         this.discoveredBosses = (src as any).discoveredBosses;
-
         this.StatusEffectIDs.set(src.StatusEffectIDs);
         this.statusEffectDurations.set(src.statusEffectDurations);
         this.statusEffectMaxDurations.set(src.statusEffectMaxDurations);
         this.statusEffectIntensities.set(src.statusEffectIntensities);
         this.statusEffectProgress.set(src.statusEffectProgress);
         this.statusEffectsCount = src.statusEffectsCount;
-
         this.isDisoriented = src.isDisoriented;
         this.activePassives.set(src.activePassives);
         this.activePassivesCount = src.activePassivesCount;
@@ -254,13 +233,11 @@ export class HudStateSoA implements IHudState {
         this.activeBuffsCount = src.activeBuffsCount;
         this.activeDebuffs.set(src.activeDebuffs);
         this.activeDebuffsCount = src.activeDebuffsCount;
-
         this.killerName = src.killerName;
         this.killerAttackName = src.killerAttackName;
         this.killedByEnemy = src.killedByEnemy;
         this.lethalSourceId = src.lethalSourceId;
         this.lethalStatusEffect = src.lethalStatusEffect;
-
         this.mapItemsCount = src.mapItemsCount;
         for (let i = 0; i < this.mapItemsCount; i++) {
             const s = src.mapItems[i];

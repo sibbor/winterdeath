@@ -3,7 +3,7 @@ import { PlayerStats, PlayerStatID } from '../../../entities/player/PlayerTypes'
 import { StatsBridge } from '../../../core/data/StatsBridge';
 import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
-import { LEVEL_CAP, PLAYER_BASE_SPEED } from '../../../content/constants';
+import { LEVEL_CAP, PLAYER } from '../../../content/constants';
 import { useOrientation } from '../../../hooks/useOrientation';
 import { COLORS } from '../../../utils/ui/ColorUtils';
 import ModalLayout, { TacticalCard, TacticalButton, HORIZONTAL_HATCHING_STYLE } from './ModalLayout';
@@ -11,7 +11,7 @@ import ModalLayout, { TacticalCard, TacticalButton, HORIZONTAL_HATCHING_STYLE } 
 const SKILLS_CONFIG = [
     { statId: PlayerStatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', cost: 1, value: 20, base: 100 },
     { statId: PlayerStatID.MAX_STAMINA, labelKey: 'skills.adrenaline', descKey: 'skills.adrenaline_desc', cost: 1, value: 20, base: 100 },
-    { statId: PlayerStatID.SPEED, labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', cost: 2, value: 0.5, base: PLAYER_BASE_SPEED }
+    { statId: PlayerStatID.SPEED, labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', cost: 2, value: 0.5, base: PLAYER.BASE_SPEED }
 ];
 
 interface ScreenSkillsProps {

@@ -79,13 +79,6 @@ export interface SectorStats {
   familyExtracted: boolean;
   isExtraction: boolean;
   discoveredPerksMap: Uint8Array;
-
-  // Standardized wave naming
-  waveActive?: boolean;
-  waveKills?: number;
-  waveTarget?: number;
-  currentWave?: number;
-  totalWaves?: number;
 }
 
 export interface SectorState {
@@ -96,13 +89,6 @@ export interface SectorState {
   envOverride?: EnvironmentOverride;
   ctx?: any;
 
-  // Standardized wave naming
-  waveActive?: boolean;
-  waveKills?: number;
-  waveTarget?: number;
-  currentWave?: number;
-  totalWaves?: number;
-
   // The Generic Bridge API
   pendingTrigger?: string | null;
   keepCamera?: boolean;
@@ -111,6 +97,7 @@ export interface SectorState {
 }
 
 export interface GameState {
+  settings: GameSettings;
   screen: GameScreen;
   currentSector: number;
   stats: PlayerStats;
@@ -122,12 +109,11 @@ export interface GameState {
   };
   weaponLevels: Partial<Record<WeaponID, number>>;
 
-  settings: GameSettings;
+
   deadBossIndices: number[];
   rescuedFamilyIndices: number[];
   sectorState?: SectorState;
   showFps?: boolean;
-  sectorBriefing?: string;
   debugMode?: boolean;
   weather: WeatherType;
   environmentOverrides?: Record<number, EnvironmentOverride>;

@@ -1,7 +1,7 @@
 import { GameState } from '../types/StateTypes';
 import { GameScreen } from '../types/SessionTypes';
 import { WeaponID } from '../entities/player/CombatTypes';
-import { INITIAL_STATS, DEFAULT_SETTINGS, OVERRIDE_DEFAULT_SECTOR, MAX_ENTITIES } from '../content/constants';
+import { INITIAL_STATS, SETTINGS_DEFAULT, OVERRIDE_DEFAULT_SECTOR, MAX_ENTITIES } from '../content/constants';
 import { PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex, TELEMETRY_BUFFER_SIZE } from '../entities/player/PlayerTypes';
 import { WeatherType } from '../core/engine/EngineTypes';
 
@@ -23,12 +23,11 @@ export const DEFAULT_STATE: GameState = {
         [WeaponID.FLAMETHROWER]: 1,
         [WeaponID.ARC_CANNON]: 1,
     },
-    sectorBriefing: '',
     debugMode: true,
     showFps: false,
     rescuedFamilyIndices: [],
     deadBossIndices: [],
-    settings: DEFAULT_SETTINGS,
+    settings: SETTINGS_DEFAULT,
     weather: WeatherType.SNOW,
     environmentOverrides: {},
     sectorState: {

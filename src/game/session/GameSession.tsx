@@ -480,13 +480,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 break;
             }
 
+            // TODO: Implement support for zombies waves
             case TriggerActionType.START_WAVE: {
+                /*
                 if (payload.count) {
                     state.sectorState.zombiesKilled = 0;
                     state.sectorState.targetKills = payload.count;
                     state.sectorState.waveActive = true;
                     setBubble(t('ui.wave_start'), 3000);
                 }
+                */
                 break;
             }
 

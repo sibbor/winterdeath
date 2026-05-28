@@ -20,7 +20,7 @@ import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
-import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, PLAYER_BASE_SPEED, FamilyMemberID, INITIAL_ENEMY_POOL, MAX_ENTITIES } from '../../content/constants';
+import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, BOSSES, PLAYER, FamilyMemberID, INITIAL_ENEMY_POOL, MAX_ENTITIES } from '../../content/constants';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { SubEffectType } from '../../systems/EffectManager';
 import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
@@ -29,7 +29,6 @@ import { StatusEffectID } from '../../types/StatusEffects';
 import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { audioEngine } from '../../utils/audio/AudioEngine';
-import { UiSounds } from '../../utils/audio/AudioLib';
 import { WEAPONS } from '../../content/weapons';
 import { PlayerMovementSystem } from '../../systems/PlayerMovementSystem';
 import { VehicleMovementSystem } from '../../systems/VehicleMovementSystem';
@@ -688,7 +687,7 @@ export class GameSessionSetup {
         sb[PlayerStatID.HP] = sb[PlayerStatID.MAX_HP];
         sb[PlayerStatID.MAX_STAMINA] = (sb[PlayerStatID.MAX_STAMINA] <= 0) ? 100 : Math.max(100, sb[PlayerStatID.MAX_STAMINA]);
         sb[PlayerStatID.STAMINA] = sb[PlayerStatID.MAX_STAMINA];
-        sb[PlayerStatID.SPEED] = (sb[PlayerStatID.SPEED] <= 0) ? PLAYER_BASE_SPEED : Math.max(10.0, sb[PlayerStatID.SPEED]);
+        sb[PlayerStatID.SPEED] = (sb[PlayerStatID.SPEED] <= 0) ? PLAYER.BASE_SPEED : Math.max(10.0, sb[PlayerStatID.SPEED]);
 
         const activeEffects: any[] = [];
         scene.traverse((child) => {

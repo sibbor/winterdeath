@@ -7,7 +7,7 @@ import { createWaterMaterial, WaterGeometryPool } from '../utils/assets/material
 import { MATERIALS_FOG } from '../utils/assets/materials_fog';
 import { MATERIALS_WEATHER } from '../utils/assets/materials_weather';
 import { WeatherType } from '../core/engine/EngineTypes';
-import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, LIGHT_SETTINGS, FLASHLIGHT } from '../content/constants';
+import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, LIGHT_SYSTEM, LIGHT_SETTINGS } from '../content/constants';
 import { VEGETATION_TYPE } from '../content/environment';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
 import { VEHICLES, VehicleType } from '../content/vehicles';
@@ -211,7 +211,7 @@ export const AssetPreloader = {
             const SHADOW_BUDGET = engine.maxSafeShadows || 1;
 
             for (let i = 0; i < ENGINE_MAX_VISIBLE; i++) {
-                const proxy = new THREE.PointLight(LIGHT_SETTINGS.DEFAULT_COLOR, 0, LIGHT_SETTINGS.DEFAULT_DISTANCE);
+                const proxy = new THREE.PointLight(LIGHT_SYSTEM.DEFAULT_COLOR, 0, LIGHT_SYSTEM.DEFAULT_DISTANCE);
                 proxy.name = `PreloadProxy_${i}`;
                 proxy.userData.isProxy = true;
                 proxy.position.set(0, -1000, 0);

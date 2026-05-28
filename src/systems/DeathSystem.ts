@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System, SystemID } from './System';
 import { PlayerDeathState, DamageID } from '../entities/player/CombatTypes';
-import { PLAYER_DEATH_TIMER } from '../content/constants';
+import { PLAYER } from '../content/constants';
 import { MATERIALS } from '../utils/assets';
 import { VoiceSounds } from '../utils/audio/AudioLib';
 import { HudSystem } from './HudSystem';
@@ -131,7 +131,7 @@ export class DeathSystem implements System {
                 break;
 
             case DeathPhase.ANIMATION:
-                if (simTime - state.deathStartTime > PLAYER_DEATH_TIMER) {
+                if (simTime - state.deathStartTime > PLAYER.DEATH_TIMER) {
                     this.deathPhaseRef.current = DeathPhase.MESSAGE;
                     this.setDeathPhase(DeathPhase.MESSAGE);
                 }

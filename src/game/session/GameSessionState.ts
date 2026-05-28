@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SectorState, SectorStats } from '../../types/StateTypes';
-import { PlayerStats, PlayerStatID, StatWeaponIndex, StatPerkIndex, StatEnemyIndex, TELEMETRY_BUFFER_SIZE } from '../../entities/player/PlayerTypes';
+import { PlayerNodes, PlayerStats, PlayerStatID, StatWeaponIndex, StatPerkIndex, StatEnemyIndex, TELEMETRY_BUFFER_SIZE } from '../../entities/player/PlayerTypes';
 import { PlayerDeathState, DamageID, DamageType, WeaponID, ToolID, HoldableID } from '../../entities/player/CombatTypes';
 import { StatusEffectID } from '../../types/StatusEffects';
 import { MAX_ENTITIES } from '../../content/constants';
@@ -60,37 +60,10 @@ export interface FireZone {
     nextTick: number; // simTime timestamp for the next damage tick (replaces fragile modulo gate)
 }
 
-/*
-Upcoming change
-
-export interface GameSessionState {
-    // --- CORE SYSTEMS ---
-    simTime: number;
-    renderTime: number;
-    delta: number;
-    
-    // --- SUB-STATES (Preallocated & Zero-GC) ---
-    player: PreallocatedPlayerState;     // hp, stamina, isDead... etc. etc.
-    combat: PreallocatedCombatState;     // activeWeapon, ammo, reloadEndTime, multipliers... etc. etc.
-    movement: PreallocatedMovementState; // distanceSinceLastStep, isRushing, isDodging, dodgeDir, isSwimming, isWading... etc. etc.
-    enemies: PreallocatedEnemyManager;   // enemies array, bossSpawned, killerType... etc. etc.
-    world: PreallocatedWorldState;       // sectorState, obstacles, worldStreamer, isPlayground... etc. etc.
-    discovery: PreallocatedDiscoveryState; // pois, clues, collectibles
-    triggers: PreallocatedTriggers;      // triggers...
-    vehicle: PreallocatedVehicleState;   // 
-    metrics: PreallocatedTelemetryState; // fps, drawCalls, triangles... etc. etc.
-    ui: PreallocatedUIState; // hudVisible, ... etc. etc.
-}
-*/
-
 export interface GameSessionState {
     // --- PLAYER STATS (Flattened from PlayerStats for Zero-GC) ---
     velocity: THREE.Vector3;
-    nodes: {
-        gun: THREE.Object3D | null;
-        laserSight: THREE.Mesh | null;
-        barrelTip: THREE.Object3D | null;
-    };
+    nodes: PlayerNodes,
     baseScale: number;
     baseY: number;
     statsBuffer: Float32Array;
@@ -158,7 +131,6 @@ export interface GameSessionState {
     eDepressed: boolean;
     isRushing: boolean;
     rushCostPaid: boolean;
-    wasFiring: boolean;
     throwChargeStart: number;
     throwChargeRotation: THREE.Quaternion;
     lastShotTime: number;
@@ -401,7 +373,6 @@ export function allocateGameSessionState(): GameSessionState {
         eDepressed: false,
         isRushing: false,
         rushCostPaid: false,
-        wasFiring: false,
         throwChargeStart: 0,
         throwChargeRotation: new THREE.Quaternion(),
         lastShotTime: 0,

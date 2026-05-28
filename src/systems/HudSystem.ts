@@ -86,16 +86,11 @@ export const HudSystem = {
             ? Math.max(0, Math.min(1, 1 - (reloadRemaining / reloadDuration)))
             : 0;
 
-        // Boss/Wave logic
-        let bossHpP = -1;
-        const activeBossObj = state.activeBoss;
-
-        if (activeBossObj) {
-            bossHpP = activeBossObj.hp / activeBossObj.maxHp;
-        } else if (state.sectorState && state.sectorState.waveActive) {
-            const kills = state.sectorState.waveKills || 0;
-            const target = state.sectorState.waveTarget || 0;
-            bossHpP = (target > 0) ? kills / target : 0;
+        // Boss logic
+        let bossHp = -1;
+        const activeBoss = state.activeBoss;
+        if (activeBoss) {
+            bossHp = activeBoss.hp / activeBoss.maxHp;
         }
 
         _fastUpdateDetail.hp = stats[PlayerStatID.HP] || 0;
@@ -106,7 +101,7 @@ export const HudSystem = {
         _fastUpdateDetail.currentXp = stats[PlayerStatID.CURRENT_XP] || 0;
         _fastUpdateDetail.nextLevelXp = stats[PlayerStatID.NEXT_LEVEL_XP] || 1000;
         _fastUpdateDetail.reloadProgress = isFinite(reloadProgress) ? reloadProgress : 0;
-        _fastUpdateDetail.bossHpP = isFinite(bossHpP) ? bossHpP : -1;
+        _fastUpdateDetail.bossHpP = isFinite(bossHp) ? bossHp : -1;
         _fastUpdateDetail.vehicleSpeed = state.vehicle.active ? (state.vehicle.speed || 0) : 0;
         _fastUpdateDetail.throttleState = state.vehicle.active ? (state.vehicle.throttle || 0) : 0;
         _fastUpdateDetail.isSkidding = state.vehicle.active ? !!state.vehicle.isSkidding : false;
@@ -174,7 +169,7 @@ export const HudSystem = {
         for (let i = 0; i < 256; i++) vecBuf[i] = -99999; // Sentinel value for "Inactive"
 
         const enemies = state.enemies;
-        let activeBossObj = state.activeBoss;
+        let activeBoss = state.activeBoss;
         let entitiesWritten = 0;
 
         // Write enemies (Max 100 to leave space for loot/points)
@@ -189,18 +184,13 @@ export const HudSystem = {
         }
 
         // --- 2. REST OF DATA SYNC ---
-        if (activeBossObj) {
+        if (activeBoss) {
             _current.bossActive = true;
-            _current.bossName = activeBossObj.bossId !== undefined ? DataResolver.getBossName(activeBossObj.bossId) : 'ui.boss';
-            _current.bossHp = activeBossObj.hp;
-            _current.bossMaxHp = activeBossObj.maxHp;
-            _current.bossPos!.x = activeBossObj.mesh.position.x;
-            _current.bossPos!.z = activeBossObj.mesh.position.z;
-        } else if (state.sectorState && state.sectorState.waveActive && (state.sectorState.waveKills || 0) < (state.sectorState.waveTarget || 0)) {
-            _current.bossActive = true;
-            _current.bossName = 'ui.zombie_wave';
-            _current.bossHp = Math.max(0, (state.sectorState.waveTarget || 0) - (state.sectorState.waveKills || 0));
-            _current.bossMaxHp = state.sectorState.waveTarget || 0;
+            _current.bossName = activeBoss.bossId !== undefined ? DataResolver.getBossName(activeBoss.bossId) : 'ui.boss';
+            _current.bossHp = activeBoss.hp;
+            _current.bossMaxHp = activeBoss.maxHp;
+            _current.bossPos!.x = activeBoss.mesh.position.x;
+            _current.bossPos!.z = activeBoss.mesh.position.z;
         } else {
             _current.bossActive = false;
         }
@@ -311,7 +301,7 @@ export const HudSystem = {
         _current.activeWeapon = state.activeWeapon;
         _current.isReloading = state.isReloading;
         _current.bossSpawned = state.bossSpawned;
-        _current.bossDefeated = activeBossObj ? activeBossObj.dead : false;
+        _current.bossDefeated = activeBoss ? activeBoss.dead : false;
         _current.familyFound = state.familyFound;
         _current.familySignal = isFinite(famSignal) ? famSignal : 0;
         _current.level = state.statsBuffer[PlayerStatID.LEVEL] || 1;
@@ -343,11 +333,6 @@ export const HudSystem = {
             _current.unlimitedAmmo = !!state.sectorState.unlimitedAmmo;
             _current.unlimitedThrowables = !!state.sectorState.unlimitedThrowables;
             _current.isInvincible = !!state.sectorState.isInvincible;
-            _current.waveActive = !!state.sectorState.waveActive;
-            _current.waveKills = state.sectorState.waveKills || 0;
-            _current.waveTarget = state.sectorState.waveTarget || 0;
-            _current.currentWave = state.sectorState.currentWave || 0;
-            _current.totalWaves = state.sectorState.totalWaves || 0;
         }
 
         _current.isDriving = !!state.vehicle.active;

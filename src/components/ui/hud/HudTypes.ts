@@ -173,11 +173,6 @@ export interface HudState {
   unlimitedAmmo: boolean;
   unlimitedThrowables: boolean;
   isInvincible: boolean;
-  waveActive: boolean;
-  waveKills: number;
-  waveTarget: number;
-  currentWave: number;
-  totalWaves: number;
 
   // Real-time telemetry (Synced from persistent stats + session)
   enemyKills: Float64Array;

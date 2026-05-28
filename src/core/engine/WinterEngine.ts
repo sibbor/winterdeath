@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DEFAULT_SETTINGS, SKY_SYSTEM } from '../../content/constants';
+import { SETTINGS_DEFAULT, SKY_SYSTEM } from '../../content/constants';
 import { GameSettings } from '../../core/engine/EngineTypes';
 import { InputManager } from './InputManager';
 import { CameraSystem } from '../../systems/CameraSystem';
@@ -140,7 +140,7 @@ export class WinterEngine {
     private _cachedGround: THREE.Mesh | null = null;
 
     constructor(initialSettings?: Partial<GameSettings>) {
-        this.settings = { ...DEFAULT_SETTINGS, ...initialSettings };
+        this.settings = { ...SETTINGS_DEFAULT, ...initialSettings };
         this.scene = new THREE.Scene();
 
         this.initRenderer();

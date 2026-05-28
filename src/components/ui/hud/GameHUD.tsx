@@ -258,18 +258,13 @@ const CurrencyPanel = React.memo(({ isMobileDevice, isLandscapeMode, isBossIntro
 const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
     const bossActive = useHudStore(s => s.bossActive && !s.bossDefeated);
     const bossName = useHudStore(s => s.bossActive ? s.bossName : '');
-    const waveActive = useHudStore(s => s.waveActive);
 
-    const isWave = !bossActive && waveActive;
-
-    if (!bossActive && !waveActive) return null;
-
-    const displayName = bossActive ? bossName : 'zombie_wave';
+    if (!bossActive) return null;
 
     return (
         <div className="w-full flex flex-col items-center animate-fadeIn pointer-events-none">
-            <h2 className={`${isMobileDevice ? 'text-sm mb-2 opacity-60' : 'text-5xl font-light mb-4 opacity-80'} text-white tracking-widest uppercase hud-text-glow ${isWave ? 'italic font-semibold' : ''}`} style={{ color: isWave ? COLORS.RED.str : undefined }}>
-                {t(displayName)}
+            <h2 className={`${isMobileDevice ? 'text-sm mb-2 opacity-60' : 'text-5xl font-light mb-4 opacity-80'} text-white tracking-widest uppercase hud-text-glow`}>
+                {t(bossName)}
             </h2>
             <div className={`w-full bg-black/90 border border-red-900 shadow-2xl skew-x-[-10deg] ${isMobileDevice ? 'max-w-[250px] h-2' : 'max-w-[600px] h-4'}`}>
                 {/* HARDWARE ACCELERATED BOSS BAR */}

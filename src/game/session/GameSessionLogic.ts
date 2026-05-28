@@ -285,15 +285,15 @@ export class GameSessionLogic {
         }
     }
 
-    update(dt: number, sectorId: number = 0) {
+    update(delta: number, sectorId: number = 0) {
         this.sectorId = sectorId;
         if (!this.state) return;
 
         // --- TRACK PERSISTENT GAME TIME (Zero-GC) ---
         if (!this.state.isPlayground) {
-            this.state.statsBuffer[PlayerStatID.TOTAL_GAME_TIME] += dt;
+            this.state.statsBuffer[PlayerStatID.TOTAL_GAME_TIME] += delta;
         }
-        this.state.sessionStats.timePlayed += dt;
+        this.state.sessionStats.timePlayed += delta;
         this.state.sessionStats.timeElapsed = this.state.sessionStats.timePlayed;
 
         // Sync player position from the playerGroup reference (live fallback)

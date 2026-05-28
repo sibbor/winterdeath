@@ -212,7 +212,7 @@ export interface PlayerNodes {
 }
 
 /**
- * REFACTORED: PlayerStats (Phase 9 DOD SoA)
+ * REFACTORED: PlayerStats
  * Removes individual high-frequency fields in favor of contiguous Float32Arrays.
  * No Getters/Setters: Use raw buffer access for Zero-GC performance.
  */
@@ -277,9 +277,8 @@ export interface PlayerStats {
 
     // --- STORY & PROGRESSION ---
     prologueSeen?: boolean;
-    rescuedFamilyIndices: number[];
     deadBossIndices: number[];
-
+    rescuedFamilyIndices: number[];
     familyFoundCount: number;
 
     // --- CHALLENGE PROGRESSION ---

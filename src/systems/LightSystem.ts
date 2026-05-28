@@ -58,9 +58,9 @@ export class LightSystem implements System {
     private initPool() {
         for (let i = 0; i < this.maxProxies; i++) {
             const proxy = new THREE.PointLight(
-                LIGHT_SETTINGS.DEFAULT_COLOR,
+                LIGHT_SYSTEM.DEFAULT_COLOR,
                 0,
-                LIGHT_SETTINGS.DEFAULT_DISTANCE);
+                LIGHT_SYSTEM.DEFAULT_DISTANCE);
             proxy.name = `ProxyLight_${i}`;
             proxy.userData.isPersistent = true;
             proxy.userData.isProxy = true;

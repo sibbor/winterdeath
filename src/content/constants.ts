@@ -1,9 +1,7 @@
 import * as THREE from 'three';
 import { PlayerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex, TELEMETRY_BUFFER_SIZE } from '../entities/player/PlayerTypes';
 import { DamageID } from '../entities/player/CombatTypes';
-import { ChallengeID } from './ChallengeTypes';
 import { GameSettings } from '../core/engine/EngineTypes';
-import { ColorPair } from '../utils/ui/ColorUtils';
 
 // Re-export Data
 export { ZOMBIE_TYPES } from './enemies/zombies';
@@ -13,17 +11,23 @@ export { WEAPONS } from './weapons';
 // Sector constants
 export const OVERRIDE_DEFAULT_SECTOR = -1;       // Set to -1 to disable override
 
-// PHASE 7: SPATIAL CONFIG (DOD Optimized)
+// SPATIAL CONFIG (DOD Optimized)
 export const WORLD_CHUNK_SIZE = 256;             // 256m x 256m active simulation area
 export const POOL_PARTICLE_MAX = 5000;          // Max hardware-accelerated particles
 export const POOL_ENEMY_MAX = 120;              // Current contiguous enemy pool limit
 
-// PHASE 17: RENDERER POOL SIZES (Magic Number Eradication)
+// RENDERER POOL SIZES (Magic Number Eradication)
 export const POOL_CORPSE_MAX = 2000;
 export const POOL_ASH_MAX = 2000;
 export const POOL_ASH_ANIM_MAX = 500;
 export const POOL_PROJECTILE_MAX = 2000;
 export const POOL_ZOMBIE_PER_TYPE_MAX = 500;
+
+export const KMH_TO_MS = 1.0 / 3.6; // km/h to m/s
+export const CAMERA_HEIGHT = 50;
+export const SCRAP_COST_BASE = 50;
+export const LEVEL_CAP = 20;
+export const INITIAL_ENEMY_POOL = 100;
 
 // PHASE 9: ENTITY STATE MASKING
 export const ENTITY_STATUS = {
@@ -112,6 +116,7 @@ export const LOOT = {
 
 export const PLAYER = {
     BASE_SPEED: 20.0,
+    DEATH_TIMER: 3000, // ms
     DEATH_VELOCITY_NORMAL: 12,
     DEATH_VELOCITY_RUSH: 15,
     DEATH_UPWARD_VELOCITY: 4,
@@ -123,13 +128,7 @@ export const PLAYER = {
     RUSH_RAMP_SPEED: 0.5 // 2 seconds (1.0 / 0.5)
 };
 
-export const PLAYER_DEATH_TIMER = 3000; // ms
 export const HEALTH_CRITICAL_THRESHOLD = 0.2; // 20% HP
-export const PLAYER_BASE_SPEED = PLAYER.BASE_SPEED; // km/h, km/tim, kph
-export const COLLECTIBLES_PER_SECTOR = 2;
-export const KMH_TO_MS = 1.0 / 3.6; // km/h to m/s
-
-export const CAMERA_HEIGHT = 50;
 
 // WindSystem
 export const WIND_SYSTEM = {
@@ -154,7 +153,6 @@ export const WATER_SYSTEM = {
 // SkySystem
 export const SKY_SYSTEM = {
     STAR_COUNT_MAX: 2000,
-    DRIFT_SPEED: -0.003,
     SKY_LIGHT: 'SKY_LIGHT',
     HEMI_LIGHT: 'HEMI_LIGHT'
 };
@@ -162,17 +160,17 @@ export const SKY_SYSTEM = {
 // LightSystem
 export const LIGHT_SYSTEM = {
     MAX_VISIBLE_LIGHTS: 16,
-    MAX_SHADOW_CASTING_LIGHTS: 2
+    MAX_SHADOW_CASTING_LIGHTS: 2,
+    DEFAULT_DISTANCE: 10,
+    DEFAULT_COLOR: 0x000000
 };
 
 export const LIGHT_SETTINGS = {
     MAX_PROXIES: 6,
     SHADOW_BUDGET: 3,
-    DEFAULT_DISTANCE: 10,
     SHADOW_MAP_SIZE: 256,
     SHADOW_BIAS: -0.005,
     SHADOW_RADIUS: 2,
-    DEFAULT_COLOR: 0x000000,
 };
 
 // Flashlight
@@ -202,7 +200,7 @@ export const SHADOW_PRESETS: Record<ShadowQuality, { shadows: boolean; shadowMap
     HIGH: { shadows: true, shadowMapType: 2, shadowResolution: 2048 },     // PCFSoftShadowMap
 };
 
-export const DEFAULT_SETTINGS: GameSettings = {
+export const SETTINGS_DEFAULT: GameSettings = {
     pixelRatio: 0.75,
     antialias: false,
     shadows: true,
@@ -212,11 +210,6 @@ export const DEFAULT_SETTINGS: GameSettings = {
     volumetricFog: true,
     showDiscoveryPopups: true
 };
-
-export const SCRAP_COST_BASE = 50;
-export const LEVEL_CAP = 20;
-export const MASSIVE_DAMAGE_THRESHOLD = 60;
-export const INITIAL_ENEMY_POOL = 100;
 
 export const INITIAL_STATS: PlayerStats = {
     statsBuffer: (function () {
@@ -231,7 +224,7 @@ export const INITIAL_STATS: PlayerStats = {
         b[PlayerStatID.NEXT_LEVEL_XP] = 1500;
         b[PlayerStatID.SKILL_POINTS] = 0;
         b[PlayerStatID.SCRAP] = 0;
-        b[PlayerStatID.SPEED] = PLAYER_BASE_SPEED;
+        b[PlayerStatID.SPEED] = PLAYER.BASE_SPEED;
 
         // --- TOTALS (11-15: SCRAP, DAMAGE_DEALT, DAMAGE_TAKEN, DISTANCE, KILLS) ---
         b[PlayerStatID.TOTAL_SCRAP_COLLECTED] = 0;
