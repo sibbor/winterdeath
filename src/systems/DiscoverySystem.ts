@@ -10,9 +10,9 @@ export class DiscoverySystem implements System {
     enabled = true;
     persistent = true;
 
-    init(session: GameSessionLogic) {}
+    init(session: GameSessionLogic) { }
 
-    update(session: GameSessionLogic, delta: number) {}
+    update(session: GameSessionLogic, delta: number) { }
 
     public handleDiscovery(
         session: GameSessionLogic,
@@ -68,9 +68,7 @@ export class DiscoverySystem implements System {
             const smi = uiSmi || (typeof id === 'number' ? id : 0);
             UIEventRingBuffer.push(UIEventType.DISCOVERY, smi, type, state.simTime);
 
-            if (state.world.isPlayground) return true; // Block career persistence
-
-            // Persist the discovery
+            // Persist the discovery to session sets (deduplication)
             switch (type) {
                 case DiscoveryType.ZOMBIE: sets.discoveredZombies.add(id); break;
                 case DiscoveryType.BOSS: sets.discoveredBosses.add(id); break;

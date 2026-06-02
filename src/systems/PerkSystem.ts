@@ -29,6 +29,7 @@ export class PerkSystem implements System {
     isFixedStep = true;
 
     private _v1 = new THREE.Vector3();
+    private _effectNextTicks = new Float32Array(MAX_ENTITIES.PERKS);
 
     // System references
     private discoverySystem!: DiscoverySystem;
@@ -357,31 +358,41 @@ export class PerkSystem implements System {
     private applyStatusTicks(session: GameSessionLogic, simTime: number) {
         const state = session.state;
         const durations = state.combat.effectDurations;
-        const tickRate = 1.0; // Fixed 1Hz tick rate
+        const TICK_INTERVAL_MS = 1000;
 
         for (let i = 0; i < MAX_ENTITIES.PERKS; i++) {
-            if (durations[i] <= 0) continue;
+            if (durations[i] <= 0) {
+                this._effectNextTicks[i] = 0;
+                continue;
+            }
 
             const perk = PERKS[i];
             if (!perk || !perk.dotDamage) continue;
 
-            const isTick = (simTime % tickRate) < (state.lastSimDelta || 0.016);
-            if (isTick) {
-                const intensity = state.combat.effectIntensities[i] || 1.0;
-                const totalDamage = perk.dotDamage * intensity;
+            if (this._effectNextTicks[i] === 0) {
+                this._effectNextTicks[i] = simTime + TICK_INTERVAL_MS;
+                this.dealTickDamage(session, i, perk);
+                continue;
+            }
 
-                // Apply damage through PlayerStatsSystem
-                const dmgID = this.getDebuffDamageID(i);
-                const dmgType = this.getDebuffDamageType(i);
-                this.playerStats.handlePlayerHit(session, totalDamage, null, dmgType, dmgID, true, i);
-
-                // Telemetry: Perk Damage Dealt (DoT)
-                state.combat.perkDamageDealt[i] += totalDamage;
-
-                // Visual Feedback
-                this.spawnTickFX(session, perk.id);
+            if (simTime >= this._effectNextTicks[i]) {
+                this._effectNextTicks[i] = simTime + TICK_INTERVAL_MS;
+                this.dealTickDamage(session, i, perk);
             }
         }
+    }
+
+    private dealTickDamage(session: GameSessionLogic, i: number, perk: any) {
+        const state = session.state;
+        const intensity = state.combat.effectIntensities[i] || 1.0;
+        const totalDamage = perk.dotDamage * intensity;
+
+        const dmgID = this.getDebuffDamageID(i);
+        const dmgType = this.getDebuffDamageType(i);
+        this.playerStats.handlePlayerHit(session, totalDamage, null, dmgType, dmgID, true, i);
+
+        state.combat.perkDamageDealt[i] += totalDamage;
+        this.spawnTickFX(session, perk.id);
     }
 
     private spawnTickFX(session: GameSessionLogic, effectId: StatusEffectID) {

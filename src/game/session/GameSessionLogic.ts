@@ -379,7 +379,11 @@ export class GameSessionLogic {
             this.state.enemies.pool.length = 0;
             this.state.combat.particles.length = 0;
             this.state.combat.projectiles.length = 0;
-            this.state.combat.fireZones.length = 0;
+            const fzLen = this.state.combat.fireZones.length | 0;
+            for (let i = 0; i < fzLen; i++) {
+                if (this.state.combat.fireZones[i]) this.state.combat.fireZones[i].life = 0;
+            }
+            this.state.combat.fireZoneCount = 0;
             this.state.world.scrapItems.length = 0;
             this.state.world.chests.length = 0;
             this.state.world.bloodDecals.length = 0;

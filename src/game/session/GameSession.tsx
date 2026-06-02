@@ -71,12 +71,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     // --- CORE CALLBACKS ---
     const spawnParticle = useCallback((x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number) => {
         const engine = refs.engineRef.current;
-        if (engine) FXSystem.spawnParticle(engine.scene, refs.stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
+        if (engine) FXSystem.spawnParticle(engine.scene, refs.stateRef.current.combat.particles, x, y, z, type, count, customMesh, customVel, color, scale);
     }, [refs]);
 
     const spawnDecal = useCallback((x: number, z: number, scale: number, material?: any, type: FXDecalType = FXDecalType.DECAL) => {
         const engine = refs.engineRef.current;
-        if (engine) FXSystem.spawnDecal(engine.scene, refs.stateRef.current.bloodDecals, x, z, scale, material, type);
+        if (engine) FXSystem.spawnDecal(engine.scene, refs.stateRef.current.world.bloodDecals, x, z, scale, material, type);
     }, [refs]);
 
     const showDamageText = useCallback((x: number, y: number, z: number, text: string, color?: number) => {
@@ -129,7 +129,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (!refs.hasEndedSector.current) {
             refs.hasEndedSector.current = true;
             if (isExtraction) {
-                refs.stateRef.current.familyExtracted = true;
+                refs.stateRef.current.world.familyExtracted = true;
                 audioEngine.stopAmbience();
                 audioEngine.setReverb(0);
             }
@@ -695,19 +695,19 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         saveArmory: (newLoadout: any, newLevels: any, newSectorState: any) => {
             const currentProps = latestStateRef.current.props;
             if (currentProps.onUpdateLoadout) currentProps.onUpdateLoadout(newLoadout, newLevels);
-            refs.stateRef.current.loadout = newLoadout;
-            refs.stateRef.current.weaponLevels = newLevels;
+            refs.stateRef.current.gameState.loadout = newLoadout;
+            refs.stateRef.current.gameState.weaponLevels = newLevels;
             refs.stateRef.current.sectorState = { ...refs.stateRef.current.sectorState, ...newSectorState };
 
-            for (const key in refs.stateRef.current.weaponAmmo) {
+            for (const key in refs.stateRef.current.combat.weaponAmmo) {
                 const wepType = key as any;
-                refs.stateRef.current.weaponAmmo[wepType] = DataResolver.getWeapons()[wepType]?.magSize || 0;
+                refs.stateRef.current.combat.weaponAmmo[wepType] = DataResolver.getWeapons()[wepType]?.magSize || 0;
             }
             closeModal();
             UiSounds.playConfirm();
         },
         spawnEnemies: (newEnemies: any[]) => {
-            const enemies = refs.stateRef.current.enemies;
+            const enemies = refs.stateRef.current.enemies.pool;
             const len = newEnemies.length;
             for (let i = 0; i < len; i++) {
                 enemies.push(newEnemies[i]);
@@ -726,7 +726,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         },
         changeEnvironment: (weather: any, overrides: any) => {
             const currentProps = latestStateRef.current.props;
-            refs.stateRef.current.weather = weather;
             refs.stateRef.current.sectorState.envOverride = overrides;
             if (refs.engineRef.current) refs.engineRef.current.weather.sync(weather, 1000);
             if (currentProps.onEnvironmentOverrideChange) currentProps.onEnvironmentOverrideChange(overrides, weather);
@@ -918,7 +917,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         setSystemEnabled: (id: SystemID, enabled: boolean) => refs.gameSessionRef.current?.setSystemEnabled(id, enabled),
         spawnBoss: (type: string, pos?: THREE.Vector3) => refs.SectorBuildContextRef.current?.spawnBoss(type, pos),
         spawnEnemies: (newEnemies: any[]) => {
-            const enemies = refs.stateRef.current.enemies;
+            const enemies = refs.stateRef.current.enemies.pool;
             const len = newEnemies.length;
             for (let i = 0; i < len; i++) {
                 enemies.push(newEnemies[i]);
@@ -1012,11 +1011,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     setBubbleTailPosition: (val: any) => updateUiState({ bubbleTailPosition: val }),
                     setCurrentLine: (val: any) => {
                         updateUiState({ currentLine: val });
-                        refs.stateRef.current.currentLine = val;
                     },
                     setCinematicActive: (val: boolean) => {
                         updateUiState({ cinematicActive: val });
-                        refs.stateRef.current.cinematicActive = val;
+                        refs.stateRef.current.ui.cinematicActive = val;
                         if (latestStateRef.current.props.onDialogueStateChange) latestStateRef.current.props.onDialogueStateChange(val);
                     },
                     setInteractionType: (val: any) => updateUiState({ interactionType: val }),
@@ -1036,10 +1034,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000, refs.stateRef.current?.simTime || 0);
                     },
                     spawnParticle: (x, y, z, type: FXParticleType, count, customMesh, customVel, color, scale) => {
-                        FXSystem.spawnParticle(engine.scene, refs.stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
+                        FXSystem.spawnParticle(engine.scene, refs.stateRef.current.combat.particles, x, y, z, type, count, customMesh, customVel, color, scale);
                     },
                     spawnDecal: (x, z, scale, material, type: FXDecalType = FXDecalType.DECAL) => {
-                        FXSystem.spawnDecal(engine.scene, refs.stateRef.current.bloodDecals, x, z, scale, material, type);
+                        FXSystem.spawnDecal(engine.scene, refs.stateRef.current.world.bloodDecals, x, z, scale, material, type);
                     },
                     onTrigger: (type: TriggerType, duration: number) => {
                         const state = refs.stateRef.current;
@@ -1149,7 +1147,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000, refs.stateRef.current?.simTime || 0);
                 },
                 setInteraction: (interaction: any) => {
-                    const s = refs.stateRef.current;
+                    const s = refs.stateRef.current.triggers;
                     if (interaction) {
                         s.interaction.active = true;
                         s.interaction.targetId = interaction.id;

@@ -185,7 +185,6 @@ export class GameSessionSetup {
             refs.activeFamilyMembers.current.length = 0;
             const sectorBuildContext = this.createSectorBuildContext(ctx, currentSector, textures, dynamicLights, burningObjects, mapItems, rng, playerGroup, yielder);
             refs.SectorBuildContextRef.current = sectorBuildContext;
-            state.sectorState.ctx = sectorBuildContext;
             session.sectorCtx = sectorBuildContext;
 
             // 4. Bind State Callbacks
@@ -863,9 +862,9 @@ export class GameSessionSetup {
         engine.registerSystem(SystemID.ENEMY_MANAGER, EnemyManager);
         engine.registerSystem(SystemID.HUD, HudSystem);
 
+        session.addSystem(new PerkSystem(playerGroup, refs.activeFamilyMembers));
         const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
         session.addSystem(playerStatsSystem);
-        session.addSystem(new PerkSystem(playerGroup, refs.activeFamilyMembers));
         PerkFX.init(playerGroup);
 
         session.addSystem(new PlayerMovementSystem(playerGroup));

@@ -387,6 +387,15 @@ export class PlayerMovementSystem implements System {
                 this.performMove(playerGroup, _v1, state, session, simTime, delta);
                 isMovingVal = true;
 
+                // SPAWN DODGE SMOKE CONTINUOUSLY
+                if (Math.random() < 0.4 && !inWater) {
+                    FXSystem.spawnParticle(
+                        session.engine.scene, state.combat.particles,
+                        playerGroup.position.x, 0.2, playerGroup.position.z,
+                        FXParticleType.SMOKE, 1, undefined, undefined, 0xcccccc, 1.0
+                    );
+                }
+
                 // UNIFIED STATE SYNC
                 state.combat.statusFlags |= PlayerStatusFlags.DODGING;
             } else {
@@ -492,6 +501,11 @@ export class PlayerMovementSystem implements System {
                         } else if (state.player.isRushing) {
                             noiseType = NoiseType.PLAYER_RUSH;
                             noiseRadius = NOISE_RADIUS[NoiseType.PLAYER_RUSH];
+                            FXSystem.spawnParticle(
+                                session.engine.scene, state.combat.particles,
+                                playerGroup.position.x, 0.2, playerGroup.position.z,
+                                FXParticleType.SMOKE, 1, undefined, undefined, 0xcccccc, 0.8
+                            );
                         }
 
                         session.makeNoise(playerGroup.position, noiseType, noiseRadius);

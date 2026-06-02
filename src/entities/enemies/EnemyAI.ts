@@ -997,11 +997,17 @@ function handleStatusEffects(e: Enemy, delta: number, simTime: number, callbacks
 
     // 1. BURNING: Damage + Flame Particles
     if ((flags & EnemyFlags.BURNING) !== 0) {
+        if (Math.random() < 0.3) {
+            if (callbacks.spawnParticle) {
+                const s = e.originalScale * 1.5;
+                callbacks.spawnParticle(e.mesh.position.x + (Math.random()-0.5)*s, e.mesh.position.y + s, e.mesh.position.z + (Math.random()-0.5)*s, FXParticleType.ENEMY_EFFECT_FLAME, 1);
+            }
+        }
         if (simTime > (e.lastBurnTick || 0) + 500) {
             const dmg = 5;
             e.hp -= dmg;
-            callbacks.onEffectTick(e, EnemyEffectType.FLAME);
-            callbacks.applyDamage(e, dmg, DamageType.BURN, e.burnSource || DamageID.BURN, false);
+            if (callbacks.onEffectTick) callbacks.onEffectTick(e, EnemyEffectType.FLAME);
+            if (callbacks.applyDamage) callbacks.applyDamage(e, dmg, DamageType.BURN, e.burnSource || DamageID.BURN, false);
             e.lastBurnTick = simTime;
         }
     }
@@ -1009,14 +1015,21 @@ function handleStatusEffects(e: Enemy, delta: number, simTime: number, callbacks
     // 2. STUNNED: Constant visual check (not damage)
     if ((flags & EnemyFlags.STUNNED) !== 0) {
         if (Math.random() < 0.1) {
-            callbacks.onEffectTick(e, EnemyEffectType.STUN);
+            if (callbacks.onEffectTick) callbacks.onEffectTick(e, EnemyEffectType.STUN);
+            if (callbacks.spawnParticle) {
+                callbacks.spawnParticle(e.mesh.position.x, e.mesh.position.y + e.originalScale * 1.8, e.mesh.position.z, FXParticleType.ENEMY_EFFECT_STUN, 1);
+            }
         }
     }
 
     // 3. ELECTROCUTED: Spark particles
     if ((flags & EnemyFlags.ELECTROCUTED) !== 0) {
         if (Math.random() < 0.2) {
-            callbacks.onEffectTick(e, EnemyEffectType.SPARK);
+            if (callbacks.onEffectTick) callbacks.onEffectTick(e, EnemyEffectType.SPARK);
+            if (callbacks.spawnParticle) {
+                const s = e.originalScale * 1.5;
+                callbacks.spawnParticle(e.mesh.position.x + (Math.random()-0.5)*s, e.mesh.position.y + s, e.mesh.position.z + (Math.random()-0.5)*s, FXParticleType.ENEMY_EFFECT_SPARK, 1);
+            }
         }
     }
 }
