@@ -7,7 +7,7 @@ import { SystemID } from './System';
 export class PerformanceMonitor {
     readonly systemId = SystemID.PERFORMANCE_MONITOR;
     id = 'performance_monitor';
-    enabled = false; // [VINTERDÖD] Disabled by default to protect menu performance
+    enabled = false; // Disabled by default to protect menu performance
     persistent = true;
 
     private static instance: PerformanceMonitor | null = null;
@@ -130,10 +130,10 @@ export class PerformanceMonitor {
         if (savedHijack === 'true') this.logsHijackEnabled = true;
     }
 
-    public silenceWarnings: boolean = false; // [VINTERDÖD] Prevent console spam during heavy loads
+    public silenceWarnings: boolean = false; // Prevent console spam during heavy loads
 
     public startFrame() {
-        // [VINTERDÖD] Relaxed Guard: Enable if in session OR if debug mode is active.
+        // Relaxed Guard: Enable if in session OR if debug mode is active.
         // This allows capturing preloader and menu metrics when the developer opts-in.
         const hudState = (window as any).HudStore?.getState();
         const hudVisible = hudState ? !!hudState.hudVisible : false;

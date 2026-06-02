@@ -22,10 +22,11 @@ import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { FXSystem } from '../../systems/FXSystem';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { GameSessionLogic } from '../../game/session/GameSessionLogic';
-import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
+import { GameSessionState } from '../../game/session/GameSessionState';
+import { PlayerStatusFlags } from '../../types/CareerStats';
 import { WorldStreamer } from '../../core/world/WorldStreamer';
 import { ChunkManager } from '../../core/world/ChunkManager';
-import { SectorContext, SectorUpdateContext, BossID } from '../../game/session/SectorTypes';
+import { SectorBuildContext, SectorUpdateContext, BossID } from '../../game/session/SectorTypes';
 import { SPATIAL_CONFIG } from '../../config/SpatialConfig';
 import { SectorSystem } from '../../systems/SectorSystem';
 import { LootSystem } from '../../systems/LootSystem';
@@ -243,14 +244,12 @@ export const EnemyManager = {
 
         const state = session.state;
 
-        const playerPos = session.playerPos || session.engine.camera?.lookAtTarget;
-        if (!playerPos) return;
-
+        const playerPos = state.player.position;
         const pX = playerPos.x;
         const pZ = playerPos.z;
 
-        const isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
-        const playerStatusFlags = state.statusFlags;
+        const isDead = (state.combat.statusFlags & PlayerStatusFlags.DEAD) !== 0;
+        const playerStatusFlags = state.combat.statusFlags;
         const water = session.engine.water;
         const ground = session.engine.ground;
         const callbacks = state.callbacks;
@@ -268,7 +267,7 @@ export const EnemyManager = {
         _aiContext.applyDamage = applyDamage;
         _currentStreamer = streamer;
 
-        const globalTimeScale = state?.globalTimeScale ?? 1.0;
+        const globalTimeScale = state?.metrics?.globalTimeScale ?? 1.0;
         const scaledDelta = delta * globalTimeScale;
 
         const camera = session.engine.camera;
@@ -569,8 +568,8 @@ export const EnemyManager = {
         enemy.mesh.visible = false;
         enemy.mesh.removeFromParent();
 
-        if (_currentSession && _currentSession.state && _currentSession.state.activeBoss === enemy) {
-            _currentSession.state.activeBoss = null;
+        if (_currentSession && _currentSession.state && _currentSession.state.enemies.activeBoss === enemy) {
+            _currentSession.state.enemies.activeBoss = null;
         }
 
         // Remove from spatial grid
@@ -780,7 +779,7 @@ export const EnemyManager = {
             EnemyPoolState.activeCount = activeCount;
 
             if (_currentSession && _currentSession.state) {
-                _currentSession.state.activeBoss = boss;
+                _currentSession.state.enemies.activeBoss = boss;
             }
         }
         return boss;
@@ -1085,7 +1084,7 @@ export const EnemyManager = {
      * player's Rush or Dodge.
      */
     knockbackEnemies: (
-        ctx: SectorContext | SectorUpdateContext,
+        ctx: SectorBuildContext | SectorUpdateContext,
         center: THREE.Vector3,
         radius: number,
         maxForce: number,
@@ -1166,9 +1165,7 @@ export const EnemyManager = {
                 );
 
                 // --- VISUALS ---
-                if (ctx.spawnParticle) {
-                    ctx.spawnParticle(e.mesh.position.x, 1.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 6);
-                }
+                ctx.spawnParticle(e.mesh.position.x, 1.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 6);
             }
         }
 
@@ -1183,8 +1180,8 @@ export const EnemyManager = {
         knockDir: THREE.Vector3,
         speedMS: number,
         vehicleDef: any,
-        state: any,
-        session: any,
+        state: GameSessionState,
+        session: GameSessionLogic,
         delta: number,
         simTime: number,
         renderTime: number
@@ -1201,10 +1198,7 @@ export const EnemyManager = {
         const scene = session.engine.scene;
 
         // Redirect damage through the centralized system to ensure proper telemetry and XP attribution
-        const tracker = (session as GameSessionLogic).getSystem<any>(SystemID.DAMAGE_TRACKER);
-        if (tracker) {
-            tracker.recordOutgoingDamage(session, baseDamage, DamageID.VEHICLE_SPLATTER, (e.statusFlags & EnemyFlags.BOSS) !== 0);
-        }
+        session.damageTracker.recordOutgoingDamage(session, baseDamage, DamageID.VEHICLE_SPLATTER, (e.statusFlags & EnemyFlags.BOSS) !== 0);
 
         // Call applyDamage instead of direct HP mutation to trigger centralized onEnemyKilled
         const applyDamage = session.state.applyDamage;
@@ -1238,8 +1232,8 @@ export const EnemyManager = {
                 e.deathVel.copy(knockDir).multiplyScalar(pushForce);
                 e.deathVel.y = Math.max(4.0, upForce);
 
-                FXSystem.spawnParticle(scene, state.particles, e.mesh.position.x, 1.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 6);
-                FXSystem.spawnDecal(scene, state.bloodDecals, e.mesh.position.x, e.mesh.position.z,
+                FXSystem.spawnParticle(scene, state.combat.particles, e.mesh.position.x, 1.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 6);
+                FXSystem.spawnDecal(scene, state.world.bloodDecals, e.mesh.position.x, e.mesh.position.z,
                     1.0 + Math.random() * 1.5, MATERIALS.bloodDecal);
 
                 session.engine.camera.shake(0.2);
@@ -1288,7 +1282,7 @@ export const EnemyManager = {
 
             if (e.deathState === EnemyDeathState.ALIVE) {
                 // Out-of-bounds check (Zero-GC ambient hibernation recycling)
-                const playerPos = session.playerPos || session.engine.camera?.lookAtTarget;
+                const playerPos = state.player.position;
                 if (playerPos && (e.statusFlags & EnemyFlags.BOSS) === 0) {
                     const dx = e.mesh.position.x - playerPos.x;
                     const dz = e.mesh.position.z - playerPos.z;

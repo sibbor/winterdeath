@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { UiSounds } from '../../utils/audio/AudioLib';
 import { FLASHLIGHT } from '../../content/constants';
-import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
+import { PlayerStatusFlags } from '../../types/CareerStats';
 import { InputAction, INPUT_KEY_MAP } from '../../core/engine/InputManager';
 
 export const useGameInput = (
@@ -24,7 +24,7 @@ export const useGameInput = (
 
             // Only trap directional keys in debug mode for camera control
             if (isArrowKey) {
-                if (!props.debugMode) return;
+                if (!props.gameState.debugMode) return;
                 e.preventDefault();
             }
 
@@ -40,7 +40,7 @@ export const useGameInput = (
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [props.isMobileDevice, props.isPaused, props.debugMode, refs.engineRef]);
+    }, [props.isMobileDevice, props.isPaused, props.gameState.debugMode, refs.engineRef]);
 
     // 2. Gameplay actions (Flashlight, Rolling)
     useEffect(() => {
@@ -49,7 +49,7 @@ export const useGameInput = (
             !refs.cinematicRef.current.active &&
             !p.isClueOpen &&
             !p.disableInput &&
-            !(refs.stateRef.current?.statusFlags & PlayerStatusFlags.DEAD) &&
+            !(refs.stateRef.current?.combat?.statusFlags & PlayerStatusFlags.DEAD) &&
             !refs.bossIntroTimerRef.current;
 
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -67,8 +67,8 @@ export const useGameInput = (
 
             if (!isInputEnabled) return;
 
-            if (state.statusFlags & PlayerStatusFlags.DEAD) return;
-            state.lastActionTime = state.simTime;
+            if (state.combat.statusFlags & PlayerStatusFlags.DEAD) return;
+            state.player.lastActionTime = state.simTime;
         };
 
         const handleKeyUp = (e: KeyboardEvent) => {
@@ -79,7 +79,7 @@ export const useGameInput = (
             const engine = refs.engineRef.current;
             if (!state || !engine) return;
 
-            if (state.statusFlags & PlayerStatusFlags.DEAD) return;
+            if (state.combat.statusFlags & PlayerStatusFlags.DEAD) return;
 
             // Dodging / Rushing cleanup (Movement handling is moved to PlayerMovementSystem)
             if (action === InputAction.DODGE) {
@@ -132,7 +132,7 @@ export const useGameInput = (
                 // Only trigger pause if we are in a state that expects input focus
                 const isExpected = refs.cinematicRef.current.active ||
                     refs.bossIntroTimerRef.current ||
-                    (refs.stateRef.current?.statusFlags & PlayerStatusFlags.DEAD);
+                    (refs.stateRef.current?.combat?.statusFlags & PlayerStatusFlags.DEAD);
 
                 if (!isExpected && props.isGameRunning && !props.isPaused) {
                     props.onPauseToggle(true);

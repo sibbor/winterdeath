@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
-import { PlayerStats, PlayerStatID } from '../../entities/player/PlayerTypes';;
+import { CareerStats, PlayerStatID } from '../../types/CareerStats';
 import { WeaponID } from '../../entities/player/CombatTypes';
 import { PLAYER_CHARACTER } from '../../content/constants';
 import { UiSounds, AmbientSounds, VoiceSounds } from '../../utils/audio/AudioLib';
@@ -11,7 +11,7 @@ import { createProceduralTextures } from '../../utils/assets';
 import { WinterEngine, GameSettings } from '../../core/engine/WinterEngine';
 import { CampWorld } from './CampWorld';
 import { CampEffectsState, CAMP_SCENE } from './CampWorld';
-import { WeatherType } from '../../core/engine/EngineTypes';
+import { WeatherType } from '../../core/engine/EnvironmentalTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { CampEffectsSystem, CampFamilyAnimationSystem, CampChatterSystem } from './CampSystems';
 import { SystemID } from '../../systems/System';
@@ -22,8 +22,8 @@ const _campCtx: any = { dynamicLights: [] };
 
 // Pre-allocated timer context objects — set callbacks wired once per mount.
 // Avoids creating { val, set } + arrow-function allocations on every frame.
-const _nextChatterTimeCtx: { val: number; set: (v: number) => void } = { val: 0, set: () => {} };
-const _nextWildlifeTimeCtx: { val: number; set: (v: number) => void } = { val: 0, set: () => {} };
+const _nextChatterTimeCtx: { val: number; set: (v: number) => void } = { val: 0, set: () => { } };
+const _nextWildlifeTimeCtx: { val: number; set: (v: number) => void } = { val: 0, set: () => { } };
 
 /** Safe O(1) WEAPONS lookup via DataResolver */
 const weaponName = (id: number): string => DataResolver.getDamageName(id);
@@ -34,25 +34,23 @@ import { OverlayType } from '../ui/hud/HudTypes';
 import { StatsBridge } from '../../core/data/StatsBridge';
 
 interface CampProps {
-    stats: PlayerStats;
+    stats: CareerStats;
     currentLoadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; };
     weaponLevels: Record<WeaponID, number>;
-    onSaveStats: (newStats: PlayerStats) => void;
+    onSaveStats: (newStats: CareerStats) => void;
     onSaveLoadout: (loadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; }, levels: Record<WeaponID, number>) => void;
     onSelectSector: (sectorIndex: number) => void;
     onStartSector: () => void;
     currentSector: number;
     debugMode: boolean;
     onToggleDebug: (val: boolean) => void;
-    rescuedFamilyIndices: number[];
     isSectorLoaded: boolean;
-    deadBossIndices: number[];
     onResetGame: () => void;
     onSaveGraphics: (graphics: GameSettings) => void;
     settings?: GameSettings;
     onCampLoaded?: () => void;
     isMobileDevice?: boolean;
-    weather: WeatherType;
+    weather?: WeatherType;
     hasCheckpoint?: boolean;
     isGameRunning?: boolean;
     activeOverlay: string | null;
@@ -67,10 +65,11 @@ const areEqual = (prevProps: CampProps, nextProps: CampProps) => {
         prevProps.activeOverlay === nextProps.activeOverlay &&
         prevProps.weather === nextProps.weather &&
         prevProps.isGameRunning === nextProps.isGameRunning;
-    // Ignore debugMode, rescuedFamilyIndices (handled via effects/Store)
 };
 
-const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, settings, onCampLoaded, isMobileDevice, weather, hasCheckpoint, isGameRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
+const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, settings, onCampLoaded, isMobileDevice, weather = WeatherType.SNOW, hasCheckpoint, isGameRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
+    const rescuedFamilyIndices = StatsBridge.getRescuedFamilyIndices(stats);
+    const deadBossIndices = StatsBridge.getDeadBossIndices(stats);
     const monitor = PerformanceMonitor.getInstance();
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -173,13 +172,14 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             // ARCHITECTURAL UNIFICATION: Provide a minimal RuntimeState for the Camp
             const campState: any = {
                 simTime: 0, renderTime: 0, lastSimDelta: 0.016, lastRenderDelta: 0.016,
-                playerPos: camera.threeCamera.position, isDodging: false,
+                cameraPosition: camera.threeCamera.position, isDodging: false,
                 isDead: false, staminaRatio: 1.0, hp: 100, maxHp: 100
             };
             campStateRef.current = campState;
             _campCtx.state = campState;
             _campCtx.camera = camera;
-            _campCtx.playerPos = camera.threeCamera.position;
+            _campCtx.cameraPosition = camera.threeCamera.position;
+            _campCtx.engine = engine;
             _campCtx.dynamicLights.length = 0; // reset on each setup
             engine.onUpdateContext = _campCtx;
 
@@ -195,7 +195,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             if (envState && envState.fireLight) {
                 _campCtx.dynamicLights.push(envState.fireLight);
             }
-            campState.dynamicLights = _campCtx.dynamicLights;
+            campState.world = { lights: _campCtx.dynamicLights };
 
             envStateRef.current = envState;
 
@@ -393,7 +393,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         window.addEventListener('touchstart', onTS, { passive: false });
         window.addEventListener('resize', onResize);
 
-        engine.onUpdate = (dt: number, simTime: number, renderTime: number) => {
+        engine.onUpdate = (delta: number, simTime: number, renderTime: number) => {
             const frameStart = performance.now();
             if (nextWildlifeTime.current === 0) {
                 nextWildlifeTime.current = renderTime + 5000 + Math.random() * 10000;
@@ -408,9 +408,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             if (campState) {
                 campState.simTime = simTime;
                 campState.renderTime = renderTime;
-                campState.lastSimDelta = dt;
-                campState.lastRenderDelta = dt;
-                campState.playerPos = camera.threeCamera.position;
+                campState.lastSimDelta = delta;
+                campState.lastRenderDelta = delta;
+                campState.cameraPosition = camera.threeCamera.position;
             }
 
             _campCtx.scene = scene;
@@ -419,11 +419,11 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             _campCtx.container = container;
             _campCtx.envState = envStateRef.current;
 
-            // ARCHITECTURAL FIX: LightSystem prioritizes 'state.dynamicLights'.
+            // ARCHITECTURAL FIX: LightSystem prioritizes 'state.world.lights'.
             // By updating the campState directly, we ensure the lights are picked up even before React re-renders.
-            // campState.dynamicLights is assigned to _campCtx.dynamicLights once during setup to be 100% Zero-GC.
+            // campState.world.lights is assigned to _campCtx.dynamicLights once during setup to be 100% Zero-GC.
 
-            _campCtx.playerPos = camera.threeCamera.position;
+            _campCtx.cameraPosition = camera.threeCamera.position;
             _campCtx.familyMembers = familyMembers;
             _campCtx.activeMembers = sceneActiveMembersRef.current;
             _campCtx.activeChats = activeChats.current;

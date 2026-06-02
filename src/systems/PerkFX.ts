@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { PlayerStatusFlags } from '../entities/player/PlayerTypes';
+import { PlayerStatusFlags } from '../types/CareerStats';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { COLORS } from '../utils/ui/ColorUtils';
 import { FXSystem } from './FXSystem';
@@ -51,12 +51,12 @@ export const PerkFX = {
      * Radial activation burst centered on the player when a perk triggers.
      * Spawns expanding novae/shockwaves accompanied by a ring of colorful sparks.
      */
-    triggerActivationBurst: (ctx: GameSessionLogic, colorNum: number, particleType: FXParticleType) => {
-        const playerPos = ctx.playerPos;
+    triggerActivationBurst: (session: GameSessionLogic, colorNum: number, particleType: FXParticleType) => {
+        const playerPos = session.state.player.position;
         if (!playerPos) return;
 
-        const scene = ctx.engine.scene;
-        const particlesList = ctx.state.particles;
+        const scene = session.engine.scene;
+        const particlesList = session.state.combat.particles;
         if (!scene || !particlesList) return;
 
         // 1. Expanding center shockwave/nova
@@ -75,13 +75,13 @@ export const PerkFX = {
         }
     },
 
-    updateFX: (ctx: GameSessionLogic, delta: number, simTime: number, renderTime: number) => {
+    updateFX: (session: GameSessionLogic, delta: number, simTime: number, renderTime: number) => {
         if (!_shieldMesh || !_shieldMaterial) return;
 
-        const state = ctx.state;
+        const state = session.state;
         if (!state) return;
 
-        const flags = state.statusFlags;
+        const flags = state.combat.statusFlags;
         const hasShield = (flags & PlayerStatusFlags.REFLEX_SHIELD) !== 0;
         const hasAdrenaline = (flags & PlayerStatusFlags.ADRENALINE_PATCH) !== 0;
         const hasGibMaster = (flags & PlayerStatusFlags.GIB_MASTER) !== 0;
@@ -91,9 +91,9 @@ export const PerkFX = {
         const hasElectrified = (flags & PlayerStatusFlags.ELECTRIFIED) !== 0;
         const hasStunned = (flags & PlayerStatusFlags.STUNNED) !== 0;
 
-        const playerPos = ctx.playerPos;
-        const scene = ctx.engine.scene;
-        const particlesList = state.particles;
+        const playerPos = state.player.position;
+        const scene = session.engine.scene;
+        const particlesList = state.combat.particles;
 
         if (playerPos && scene && particlesList) {
             // --- ENHANCED BURNING 3D FLAMES (Head Height & Enlarged) ---
@@ -119,7 +119,7 @@ export const PerkFX = {
             }
 
             // --- ENHANCED WADING & DROWNING SPLASHES (Sprouting water splatters) ---
-            const wading = !!state.isWading || (flags & PlayerStatusFlags.DROWNING) !== 0;
+            const wading = !!state.player.isWading || (flags & PlayerStatusFlags.DROWNING) !== 0;
             if (wading && Math.random() < 0.22) {
                 const px = playerPos.x;
                 const py = 0.15; // Water surface
@@ -173,8 +173,8 @@ export const PerkFX = {
                 }
 
                 // Leave a beautiful grey dust cloud behind the player when moving
-                const playerState = ctx.state;
-                if (playerState && playerState.isMoving && Math.random() < 0.25) {
+                const playerState = session.state;
+                if (playerState && playerState.player.isMoving && Math.random() < 0.25) {
                     const playerRotY = _shieldMesh.parent ? _shieldMesh.parent.rotation.y : 0;
                     _velScratch.set((Math.random() - 0.5) * 0.4, 0.15, (Math.random() - 0.5) * 0.4);
                     FXSystem.spawnParticle(
@@ -197,13 +197,13 @@ export const PerkFX = {
 
         // --- TRANSITION BURSTS DETECT ---
         if (hasShield && !_prevShield) {
-            PerkFX.triggerActivationBurst(ctx, COLORS.YELLOW.num, FXParticleType.SHOCKWAVE);
+            PerkFX.triggerActivationBurst(session, COLORS.YELLOW.num, FXParticleType.SHOCKWAVE);
         }
         if (hasAdrenaline && !_prevAdrenaline) {
-            PerkFX.triggerActivationBurst(ctx, COLORS.GREEN.num, FXParticleType.FROST_NOVA);
+            PerkFX.triggerActivationBurst(session, COLORS.GREEN.num, FXParticleType.FROST_NOVA);
         }
         if (hasGibMaster && !_prevGibMaster) {
-            PerkFX.triggerActivationBurst(ctx, COLORS.PURPLE.num, FXParticleType.MAGNETIC_SPARKS);
+            PerkFX.triggerActivationBurst(session, COLORS.PURPLE.num, FXParticleType.MAGNETIC_SPARKS);
         }
 
         _prevShield = hasShield;

@@ -3,7 +3,7 @@ import { TriggerSystem } from '../../systems/TriggerSystem';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { MapItem, DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { DeathPhase } from '../../types/SessionTypes';
-import { SectorContext, BossID, SectorID } from '../../game/session/SectorTypes';
+import { SectorBuildContext, BossID, SectorID } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
@@ -23,10 +23,10 @@ import { AssetLoader } from '../../utils/assets/AssetLoader';
 import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, BOSSES, PLAYER, FamilyMemberID, INITIAL_ENEMY_POOL, MAX_ENTITIES } from '../../content/constants';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { SubEffectType } from '../../systems/EffectManager';
-import { PlayerStatID, PlayerStatusFlags } from '../../entities/player/PlayerTypes';
+import { PlayerStatID, PlayerStatusFlags } from '../../types/CareerStats';
 import { PlayerDeathState, DamageID, DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { StatusEffectID } from '../../types/StatusEffects';
-import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
+import { SoundID, ToneType, MusicID } from '../../utils/audio/AudioTypes';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { WEAPONS } from '../../content/weapons';
@@ -55,7 +55,7 @@ import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { PerkFX } from '../../systems/PerkFX';
 import { PerkSystem } from '../../systems/PerkSystem';
 import { DiscoverySystem } from '../../systems/DiscoverySystem';
-import { InteractionType, InteractionSubType } from '../../systems/ui/UIEventBridge';
+import { WorldStreamer } from '../../core/world/WorldStreamer';
 
 const seededRandom = (seed: number) => {
     let s = seed % 2147483647;
@@ -135,22 +135,19 @@ export class GameSessionSetup {
 
         try {
             // Ensure sector definition is in cache — may be cold on fresh save / first Prologue load
-            let currentSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
+            let currentSector = (props as any).currentSectorData || SectorSystem.getSector(props.gameState.currentSector || 0);
             if (!currentSector) {
-                console.warn(`[GameSessionSetup] Sector ${props.currentSector} not in cache — loading now.`);
-                currentSector = await SectorSystem.loadSector(props.currentSector || 0);
+                console.warn(`[GameSessionSetup] Sector ${props.gameState.currentSector} not in cache — loading now.`);
+                currentSector = await SectorSystem.loadSector(props.gameState.currentSector || 0);
             }
-            state.sectorName = currentSector.name || DataResolver.getSectorName(currentSector.id);
+            state.world.sectorName = currentSector.name || DataResolver.getSectorName(currentSector.id);
 
-            if (currentSector.initialAim) {
-                state.initialAim.active = true;
-                state.initialAim.x = currentSector.initialAim.x;
-                state.initialAim.y = currentSector.initialAim.y;
-            } else {
-                state.initialAim.active = false;
+            if (currentSector.aimDirection) {
+                state.player.aimDirection.x = currentSector.aimDirection.x;
+                state.player.aimDirection.y = currentSector.aimDirection.y;
             }
 
-            const rng = seededRandom(props.currentSector + 4242);
+            const rng = seededRandom(props.gameState.currentSector + 4242);
 
             // 1. Prepare Scene
             this.prepareScene(engine, props.isWarmup, refs, currentSector.environment);
@@ -167,43 +164,49 @@ export class GameSessionSetup {
 
             const mapItems: MapItem[] = [];
             const burningObjects: any[] = [];
-            const flickeringLights: any[] = [];
+            const dynamicLights: any[] = [];
             const textures = createProceduralTextures();
 
             const triggerSystem = new TriggerSystem(MAX_ENTITIES.TRIGGERS);
+            session.triggerSystem = triggerSystem;
+            
+            const worldStreamer = new WorldStreamer();
+            session.worldStreamer = worldStreamer;
+
+            // Attach the streamer to the TriggerSystem so generation can add triggers to it
+            triggerSystem.setStreamer(worldStreamer);
 
             // 2. Setup Player & Camera
             const playerGroup = this.setupPlayerAndCamera(engine, currentSector, refs, state);
             refs.playerGroupRef.current = playerGroup;
             (session as any).playerGroup = playerGroup;
-            session.playerPos = playerGroup.position;
 
             // 3. Create Sector Context
             refs.activeFamilyMembers.current.length = 0;
-            const sectorCtx = this.createSectorContext(ctx, currentSector, textures, flickeringLights, burningObjects, mapItems, rng, playerGroup, yielder);
-            refs.sectorContextRef.current = sectorCtx;
-            state.sectorState.ctx = sectorCtx;
-            session.sectorCtx = sectorCtx;
+            const sectorBuildContext = this.createSectorBuildContext(ctx, currentSector, textures, dynamicLights, burningObjects, mapItems, rng, playerGroup, yielder);
+            refs.SectorBuildContextRef.current = sectorBuildContext;
+            state.sectorState.ctx = sectorBuildContext;
+            session.sectorCtx = sectorBuildContext;
 
             // 4. Bind State Callbacks
-            this.bindStateCallbacks(ctx, sectorCtx);
+            this.bindStateCallbacks(ctx, sectorBuildContext);
 
             PathGenerator.resetPathLayer();
             const setupStart = performance.now();
-            console.info(`[SectorBuilder] ▶ START building sector ${props.currentSector} [LIVE]`);
+            console.info(`[SectorBuilder] ▶ START building sector ${props.gameState.currentSector} [LIVE]`);
 
             performance.mark('build-start');
-            await SectorBuilder.build(sectorCtx, currentSector);
+            await SectorBuilder.build(sectorBuildContext, currentSector);
             performance.mark('build-end');
             performance.measure('Sector Build', 'build-start', 'build-end');
 
-            console.info(`[SectorBuilder] ✅ DONE building sector ${props.currentSector} [LIVE] in ${(performance.now() - setupStart).toFixed(1)}ms`);
+            console.info(`[SectorBuilder] ✅ DONE building sector ${props.gameState.currentSector} [LIVE] in ${(performance.now() - setupStart).toFixed(1)}ms`);
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
             await yielder();
 
             // 5. Finalize limits and parse effects
-            this.finalizeStateLimits(state, mapItems, flickeringLights, scene, sectorCtx);
+            this.finalizeStateLimits(state, mapItems, dynamicLights, scene, sectorBuildContext);
             await yielder();
 
             // 6. Setup Family Members
@@ -211,14 +214,14 @@ export class GameSessionSetup {
             await yielder();
 
             // 7. Initialize Systems
-            this.setupSystems(ctx, playerGroup, sectorCtx, triggerSystem);
+            this.setupSystems(ctx, playerGroup, sectorBuildContext, triggerSystem);
 
 
             await yielder();
 
             // --- VINTERDÖD FIX: BYPASS INTRO TRIGGERS ---
             // If the sector is already cleared, mark the intro triggers as completed
-            if (state.familyAlreadyRescued || state.bossPermanentlyDefeated) {
+            if (state.world.familyAlreadyRescued || state.enemies.bossPermanentlyDefeated) {
                 const triggers = ctx.session.triggerSystem;
                 const activeFlags = triggers.getActiveFlags();
                 const types = triggers.getTriggerTypes();
@@ -250,11 +253,12 @@ export class GameSessionSetup {
             await yielder();
 
             // VINTERDÖD FIX: Ensure static light buckets are optimized post-build
-            engine.light.rebuildBuckets(sectorCtx.dynamicLights as any);
+            engine.light.rebuildBuckets(sectorBuildContext.dynamicLights);
+            state.world.lights.push(...sectorBuildContext.dynamicLights);
 
             // If we are building LIVE (not warmup), activate systems immediately.
             if (!props.isWarmup) {
-                await this.activateSector(sectorCtx, currentSector);
+                await this.activateSector(sectorBuildContext, currentSector);
             }
 
             // Handshake: Tell App.tsx to release the loading screen
@@ -290,7 +294,7 @@ export class GameSessionSetup {
      * This is called either at the end of runSectorSetup (if not warmup) 
      * or manually when isWarmup toggles to false.
      */
-    static async activateSector(ctx: SectorContext, def: any) {
+    static async activateSector(ctx: SectorBuildContext, def: any) {
         if (!ctx || !def) return;
 
         const setupStart = performance.now();
@@ -324,13 +328,16 @@ export class GameSessionSetup {
         engine.camera.reset();
         engine.camera.set('fov', env.fov);
 
-        // [VINTERDÖD] Orchestrate the transition via the authoritative engine pipeline.
+        // Orchestrate the transition via the authoritative engine pipeline.
         engine.mountScene(engine.scene, env, undefined, !!isWarmup);
     }
 
     private static setupPlayerAndCamera(engine: WinterEngine, currentSector: any, refs: any, state: GameSessionState) {
         const playerGroup = ModelFactory.createPlayer();
         refs.playerGroupRef.current = playerGroup;
+
+        // Single source of truth link: make the state's position vector refer directly to the 3D group's position vector
+        state.player.position = playerGroup.position;
 
         let bodyMesh = playerGroup.children[0];
         const pLen = playerGroup.children.length;
@@ -344,29 +351,28 @@ export class GameSessionSetup {
 
         // --- PERFORMANCE CACHE ---
         // Purging getObjectByName from hot-paths by caching nodes during setup
-        state.baseScale = bodyMesh.userData.baseScale !== undefined ? bodyMesh.userData.baseScale : 1.0;
-        state.baseY = bodyMesh.userData.baseY !== undefined ? bodyMesh.userData.baseY : 0;
+        state.player.baseScale = bodyMesh.userData.baseScale !== undefined ? bodyMesh.userData.baseScale : 1.0;
+        state.player.baseY = bodyMesh.userData.baseY !== undefined ? bodyMesh.userData.baseY : 0;
 
         // Cache Equipment Nodes for O(1) access
-        state.nodes.gun = bodyMesh.getObjectByName('gun') || null;
-        state.nodes.laserSight = bodyMesh.getObjectByName('laserSight') as THREE.Mesh || null;
+        state.player.nodes.gun = bodyMesh.getObjectByName('gun') || null;
+        state.player.nodes.laserSight = bodyMesh.getObjectByName('laserSight') as THREE.Mesh || null;
 
         // Find or create barrel tip (Combat optimization)
-        if (state.nodes.gun) {
-            state.nodes.barrelTip = state.nodes.gun.getObjectByName('barrelTip') || null;
-            if (!state.nodes.barrelTip) {
+        if (state.player.nodes.gun) {
+            state.player.nodes.barrelTip = state.player.nodes.gun.getObjectByName('barrelTip') || null;
+            if (!state.player.nodes.barrelTip) {
                 // If not defined in geometry, we place it at the muzzle end
                 const tip = new THREE.Object3D();
                 tip.name = 'barrelTip';
                 tip.position.set(0, 0, 0.5); // Standard forward offset for our Gun box
-                state.nodes.gun.add(tip);
-                state.nodes.barrelTip = tip;
+                state.player.nodes.gun.add(tip);
+                state.player.nodes.barrelTip = tip;
             }
         }
 
-        if (state.initialAim.active && engine.input?.state) {
-            engine.input.state.aimVector.x = state.initialAim.x;
-            engine.input.state.aimVector.y = state.initialAim.y;
+        if (engine.input?.state) {
+            engine.input.state.aimVector.copy(state.player.aimDirection);
         }
 
         // Prevent NaN poisoning if sector data is missing spawn coordinates
@@ -378,7 +384,7 @@ export class GameSessionSetup {
         playerGroup.add(flashlight);
         playerGroup.add(flashlight.target);
         refs.flashlightRef.current = flashlight;
-        state.flashlightOn = true;
+        state.ui.flashlightOn = true;
 
         engine.scene.add(playerGroup);
 
@@ -407,20 +413,20 @@ export class GameSessionSetup {
         return playerGroup;
     }
 
-    private static createSectorContext(ctx: SetupContext, currentSector: any, textures: any, flickeringLights: any[], burningObjects: any[], mapItems: MapItem[], rng: () => number, playerGroup: THREE.Group, yielder: () => Promise<void>): SectorContext {
+    private static createSectorBuildContext(ctx: SetupContext, currentSector: any, textures: any, dynamicLights: any[], burningObjects: any[], mapItems: MapItem[], rng: () => number, playerGroup: THREE.Group, yielder: () => Promise<void>): SectorBuildContext {
         const { engine, state, props, callbacks } = ctx;
 
         const spawnHorde = (count: number, type?: EnemyType, pos?: THREE.Vector3) => {
             const startPos = pos || playerGroup.position;
-            EnemyManager.spawnHorde(engine.scene, startPos, count, state.bossSpawned, state.enemies.length, type, false, (e) => {
-                state.enemies.push(e);
+            EnemyManager.spawnHorde(engine.scene, startPos, count, state.enemies.bossSpawned, state.enemies.pool.length, type, false, (e) => {
+                state.enemies.pool.push(e);
             });
         };
 
         const realSpawnZombie = (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => {
             const playerPos = playerGroup.position;
-            const enemy = EnemyManager.spawn(engine.scene, playerPos, forcedType, forcedPos, state.bossSpawned, state.enemies.length);
-            if (enemy) state.enemies.push(enemy);
+            const enemy = EnemyManager.spawn(engine.scene, playerPos, forcedType, forcedPos, state.enemies.bossSpawned, state.enemies.pool.length);
+            if (enemy) state.enemies.pool.push(enemy);
             return enemy;
         };
 
@@ -431,13 +437,13 @@ export class GameSessionSetup {
 
             const boss = EnemyManager.spawnBoss(engine.scene, bossPos, bossData);
             if (boss) {
-                state.enemies.push(boss);
-                state.bossSpawned = true;
+                state.enemies.pool.push(boss);
+                state.enemies.bossSpawned = true;
 
                 const idStr = String(bossId);
                 let seen = false;
-                for (let j = 0; j < props.stats.discoveredBosses.length; j++) {
-                    if (props.stats.discoveredBosses[j] === bossId) {
+                for (let j = 0; j < props.gameState.stats.discoveredBosses.length; j++) {
+                    if (props.gameState.stats.discoveredBosses[j] === bossId) {
                         seen = true;
                         break;
                     }
@@ -449,15 +455,13 @@ export class GameSessionSetup {
             }
             return boss;
         };
-
         return {
-            scene: engine.scene, engine, obstacles: state.obstacles, chests: state.chests,
-            worldStreamer: state.worldStreamer,
-            flickeringLights, burningObjects, rng, mapItems, debugMode: props.debugMode,
-            textures: textures, spawnZombie: realSpawnZombie, spawnHorde, spawnBoss,
-            collectibles: [],
-            dynamicLights: [], interactables: [], triggers: [], sectorId: props.currentSector, smokeEmitters: [],
+            scene: engine.scene, engine, obstacles: state.world.obstacles, chests: state.world.chests,
+            worldStreamer: ctx.session.worldStreamer,
+            dynamicLights, burningObjects, rng, mapItems, debugMode: props.gameState.debugMode,
+            interactables: [], triggers: [], sectorId: props.gameState.currentSector, smokeEmitters: [],
             sectorState: state.sectorState, state: state, activeFamilyMembers: ctx.refs.activeFamilyMembers.current, yield: yielder,
+            textures, spawnZombie: realSpawnZombie, spawnHorde, spawnBoss, collectibles: [],
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => ctx.session.makeNoise(pos, type, radius),
             isWarmup: props.isWarmup,
 
@@ -470,7 +474,7 @@ export class GameSessionSetup {
         };
     }
 
-    private static bindStateCallbacks(ctx: SetupContext, sectorCtx: SectorContext) {
+    private static bindStateCallbacks(ctx: SetupContext, sectorCtx: SectorBuildContext) {
         const { engine, session, state, callbacks, refs, props } = ctx;
 
         Object.assign(state.callbacks || (state.callbacks = {} as any), {
@@ -513,7 +517,7 @@ export class GameSessionSetup {
             },
             onDiscovery: (type: DiscoveryType, id: string, titleKey: string, detailsKey: string, payload?: any) => {
                 // O(1) Optimization: Avoid React overhead if already found in this session or prior
-                const sets = state.discoverySets;
+                const sets = state.discovery.discoverySets;
                 if (!sets) return;
 
                 const isRespawnable = payload?.respawnable || false;
@@ -598,42 +602,42 @@ export class GameSessionSetup {
 
                         if (type === DiscoveryType.CLUE) {
                             let cCount = 0;
-                            if (state.discoverySets?.discoveredClues) {
-                                for (const cid of state.discoverySets.discoveredClues) {
+                            if (state.discovery.discoverySets?.discoveredClues) {
+                                for (const cid of state.discovery.discoverySets.discoveredClues) {
                                     const resolved = DataResolver.resolveClueID(cid);
                                     if (resolved !== undefined && CLUES[resolved]?.sector === currentSector) cCount++;
                                 }
                             }
                             const thisClueSmi = DataResolver.resolveClueID(id);
-                            if (thisClueSmi !== undefined && (!state.discoverySets?.discoveredClues || !state.discoverySets.discoveredClues.has(thisClueSmi))) {
+                            if (thisClueSmi !== undefined && (!state.discovery.discoverySets?.discoveredClues || !state.discovery.discoverySets.discoveredClues.has(thisClueSmi))) {
                                 if (CLUES[thisClueSmi]?.sector === currentSector) cCount++;
                             }
                             HudStore.patch({ cluesFoundCount: cCount });
 
                         } else if (type === DiscoveryType.POI) {
                             let poiCount = 0;
-                            if (state.discoverySets?.discoveredPois) {
-                                for (const pid of state.discoverySets.discoveredPois) {
+                            if (state.discovery.discoverySets?.discoveredPois) {
+                                for (const pid of state.discovery.discoverySets.discoveredPois) {
                                     const resolved = DataResolver.resolvePoiID(pid);
                                     if (resolved !== undefined && POIS[resolved]?.sector === currentSector) poiCount++;
                                 }
                             }
                             const thisPoiSmi = DataResolver.resolvePoiID(id);
-                            if (thisPoiSmi !== undefined && (!state.discoverySets?.discoveredPois || !state.discoverySets.discoveredPois.has(thisPoiSmi))) {
+                            if (thisPoiSmi !== undefined && (!state.discovery.discoverySets?.discoveredPois || !state.discovery.discoverySets.discoveredPois.has(thisPoiSmi))) {
                                 if (POIS[thisPoiSmi]?.sector === currentSector) poiCount++;
                             }
                             HudStore.patch({ poisFoundCount: poiCount });
 
                         } else if (type === DiscoveryType.COLLECTIBLE) {
                             let colCount = 0;
-                            if (state.discoverySets?.discoveredCollectibles) {
-                                for (const colid of state.discoverySets.discoveredCollectibles) {
+                            if (state.discovery.discoverySets?.discoveredCollectibles) {
+                                for (const colid of state.discovery.discoverySets.discoveredCollectibles) {
                                     const resolved = DataResolver.resolveCollectibleID(colid);
                                     if (resolved !== undefined && COLLECTIBLES[resolved]?.sector === currentSector) colCount++;
                                 }
                             }
                             const thisColSmi = DataResolver.resolveCollectibleID(id);
-                            if (thisColSmi !== undefined && (!state.discoverySets?.discoveredCollectibles || !state.discoverySets.discoveredCollectibles.has(thisColSmi))) {
+                            if (thisColSmi !== undefined && (!state.discovery.discoverySets?.discoveredCollectibles || !state.discovery.discoverySets.discoveredCollectibles.has(thisColSmi))) {
                                 if (COLLECTIBLES[thisColSmi]?.sector === currentSector) colCount++;
                             }
                             HudStore.patch({ collectiblesFoundCount: colCount });
@@ -659,17 +663,17 @@ export class GameSessionSetup {
                 const stats = state.sessionStats;
 
                 let alreadyDefeated = false;
-                const bdLen = state.bossesDefeated.length;
+                const bdLen = state.enemies.bossesDefeated.length;
                 for (let j = 0; j < bdLen; j++) {
-                    if (state.bossesDefeated[j] === id) {
+                    if (state.enemies.bossesDefeated[j] === id) {
                         alreadyDefeated = true;
                         break;
                     }
                 }
 
                 if (!alreadyDefeated) {
-                    state.bossesDefeated.push(id);
-                    state.bossDefeatedTime = engine.simTime;
+                    state.enemies.bossesDefeated.push(id);
+                    state.enemies.bossDefeatedTime = engine.simTime;
 
                     callbacks.onBossKilled(id);
                 }
@@ -679,10 +683,10 @@ export class GameSessionSetup {
         });
     }
 
-    private static finalizeStateLimits(state: GameSessionState, mapItems: MapItem[], flickeringLights: any[], scene: THREE.Scene, sectorCtx: SectorContext) {
-        state.mapItems = mapItems;
+    private static finalizeStateLimits(state: GameSessionState, mapItems: MapItem[], dynamicLights: any[], scene: THREE.Scene, sectorCtx: SectorBuildContext) {
+        state.world.mapItems = mapItems;
 
-        const sb = state.statsBuffer;
+        const sb = state.player.statsBuffer;
         sb[PlayerStatID.MAX_HP] = (sb[PlayerStatID.MAX_HP] <= 0) ? 100 : Math.max(100, sb[PlayerStatID.MAX_HP]);
         sb[PlayerStatID.HP] = sb[PlayerStatID.MAX_HP];
         sb[PlayerStatID.MAX_STAMINA] = (sb[PlayerStatID.MAX_STAMINA] <= 0) ? 100 : Math.max(100, sb[PlayerStatID.MAX_STAMINA]);
@@ -701,7 +705,7 @@ export class GameSessionSetup {
                         light.userData.isCulled = false;
                         if (eff.offset) light.position.copy(eff.offset);
                         child.add(light);
-                        if (eff.flicker) flickeringLights.push({ light, intensity: eff.intensity, flickerRate: 0.1 });
+                        if (eff.flicker) dynamicLights.push({ light, intensity: eff.intensity, flickerRate: 0.1 });
                         light.castShadow = false;
                         light.shadow.autoUpdate = false;
                         light.shadow.mapSize.set(256, 256);
@@ -711,7 +715,7 @@ export class GameSessionSetup {
                 activeEffects.push(child);
             }
         });
-        state.activeEffects = activeEffects;
+        state.world.activeEffects = activeEffects;
     }
 
     private static setupFamily(currentSector: any, props: GameCanvasProps, refs: any, scene: THREE.Scene) {
@@ -721,17 +725,21 @@ export class GameSessionSetup {
         const fSpawn = currentSector.familySpawn;
 
         // Zero-GC arrays (replaced .filter)
-        const rescuedIndices: number[] = [];
-        const propIndices = props.rescuedFamilyIndices || [];
+        const propIndices = props.gameState.stats.rescuedFamilyIndices || [];
+        const rescuedIndices = [...propIndices];
         for (let i = 0; i < propIndices.length; i++) {
-            if (propIndices[i] < props.currentSector) {
-                rescuedIndices.push(propIndices[i]);
+            if (propIndices[i] < props.gameState.currentSector) {
+                const fmId = DataResolver.getSectorFamilyMemberId(propIndices[i]);
+                if (fmId !== undefined) {
+                    const idx = rescuedIndices.indexOf(propIndices[i]);
+                    if (idx !== -1) rescuedIndices.splice(idx, 1);
+                }
             }
         }
 
         // Developer override
-        if (props.debugMode && props.currentSector >= SectorID.MOUNTAIN_VAULT && rescuedIndices.length === 0) {
-            for (let i = 0; i < props.currentSector; i++) {
+        if (props.gameState.debugMode && props.gameState.currentSector >= SectorID.MOUNTAIN_VAULT && rescuedIndices.length === 0) {
+            for (let i = 0; i < props.gameState.currentSector; i++) {
                 let found = false;
                 for (let j = 0; j < rescuedIndices.length; j++) {
                     if (rescuedIndices[j] === i) { found = true; break; }
@@ -766,11 +774,11 @@ export class GameSessionSetup {
 
         let hasRescuedCurrent = false;
         for (let i = 0; i < rescuedIndices.length; i++) {
-            if (rescuedIndices[i] === props.currentSector) { hasRescuedCurrent = true; break; }
+            if (rescuedIndices[i] === props.gameState.currentSector) { hasRescuedCurrent = true; break; }
         }
 
         if (!props.familyAlreadyRescued) {
-            const fmId = DataResolver.getSectorFamilyMemberId(props.currentSector);
+            const fmId = DataResolver.getSectorFamilyMemberId(props.gameState.currentSector);
             if (!hasRescuedCurrent && fmId !== undefined) {
                 const fmData = FAMILY_MEMBERS[fmId];
                 if (fmData) {
@@ -809,7 +817,7 @@ export class GameSessionSetup {
         }
     }
 
-    private static setupSystems(ctx: SetupContext, playerGroup: THREE.Group, sectorCtx: SectorContext, triggerSystem: TriggerSystem) {
+    private static setupSystems(ctx: SetupContext, playerGroup: THREE.Group, sectorCtx: SectorBuildContext, triggerSystem: TriggerSystem) {
         const { engine, session, state, callbacks, refs, props, ui } = ctx;
 
         if (engine.water) {
@@ -827,7 +835,7 @@ export class GameSessionSetup {
         session.addSystem(new ProjectileSystem());
         session.addSystem(new ParticleSystem());
 
-        // --- PHASE 10: ZERO-GC PARTICLE RENDERER ---
+        // --- ZERO-GC PARTICLE RENDERER ---
         const particleRenderer = new ParticleRenderer(engine.scene);
         engine.onPreRender = () => {
             particleRenderer.render();
@@ -837,14 +845,16 @@ export class GameSessionSetup {
         session.addSystem(detectionSys);
         session.detectionSystem = detectionSys;
 
-        // Register the SoA TriggerSystem
-        session.triggerSystem = triggerSystem;
-        if (state.worldStreamer) {
-            session.triggerSystem.setStreamer(state.worldStreamer);
+        // TriggerSystem and WorldStreamer are already instantiated in runSectorSetup
+        // so that SectorBuilder can populate them during generation.
+        if (session.worldStreamer) {
+            session.addSystem(session.worldStreamer);
         }
-        session.addSystem(session.triggerSystem);
+        if (session.triggerSystem) {
+            session.addSystem(session.triggerSystem);
+        }
 
-        // [VINTERDÖD] Batch register buffered triggers from construction phase
+        // Batch register buffered triggers from construction phase
         if (sectorCtx.triggers && sectorCtx.triggers.length > 0) {
             session.triggerSystem.addTriggers(sectorCtx.triggers);
         }
@@ -879,12 +889,12 @@ export class GameSessionSetup {
             t: callbacks.t,
             onBossKilled: (id: number) => {
                 let seen = false;
-                for (let j = 0; j < state.bossesDefeated.length; j++) {
-                    if (state.bossesDefeated[j] === id) { seen = true; break; }
+                for (let j = 0; j < state.enemies.bossesDefeated.length; j++) {
+                    if (state.enemies.bossesDefeated[j] === id) { seen = true; break; }
                 }
-                if (!seen) state.bossesDefeated.push(id);
-                state.bossDefeatedTime = engine.simTime;
-                state.familyFound = true;
+                if (!seen) state.enemies.bossesDefeated.push(id);
+                state.enemies.bossDefeatedTime = engine.simTime;
+                state.world.familyFound = true;
 
                 // Immediate SP/State updates via App.tsx props
                 if (props.onBossKilled) props.onBossKilled(id);
@@ -897,14 +907,15 @@ export class GameSessionSetup {
                 }
 
                 audioEngine.stopMusic();
-                const curSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
-                if (curSector?.ambientLoop) audioEngine.playMusic(curSector.ambientLoop);
+                const curSector = (props as any).currentSectorData || SectorSystem.getSector(props.gameState.currentSector || 0);
+                const loopId = curSector.ambientLoop || MusicID.GAMEPLAY_TENSE;
+                audioEngine.playMusic(loopId);
             },
             onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) =>
                 playerStatsSystem.handlePlayerHit(session, damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType),
         } as any, INITIAL_ENEMY_POOL));
 
-        session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
+        session.addSystem(new SectorSystem(playerGroup, props.gameState.currentSector, {
             setBubble: (text: string, duration?: number) => {
                 callbacks.setBubble(text, duration || 3000);
             },
@@ -1041,14 +1052,14 @@ export class GameSessionSetup {
 
         // --- 1. RESET PLAYER STATE (DOD / Zero-GC) ---
         // --- STATUS & EFFECT RESET (Zero-GC Clean Slate) ---
-        state.statusFlags = PlayerStatusFlags.NONE; // Reset all flags (Dead, Airborne, etc.)
-        state.hudVisible = true;
+        state.combat.statusFlags = PlayerStatusFlags.NONE; // Reset all flags (Dead, Airborne, etc.)
+        state.ui.hudVisible = true;
         refs.deathPhaseRef.current = DeathPhase.NONE;
-        state.playerDeathState = PlayerDeathState.ALIVE;
-        state.statsBuffer[PlayerStatID.HP] = state.statsBuffer[PlayerStatID.MAX_HP];
-        state.statsBuffer[PlayerStatID.STAMINA] = state.statsBuffer[PlayerStatID.MAX_STAMINA];
-        state.isReloading = false;
-        state.isInteractionOpen = false;
+        state.player.deathState = PlayerDeathState.ALIVE;
+        state.player.statsBuffer[PlayerStatID.HP] = state.player.statsBuffer[PlayerStatID.MAX_HP];
+        state.player.statsBuffer[PlayerStatID.STAMINA] = state.player.statsBuffer[PlayerStatID.MAX_STAMINA];
+        state.combat.isReloading = false;
+        state.triggers.isInteractionOpen = false;
         state.vehicle.active = false;
         state.vehicle.mesh = null;
         state.vehicle.speed = 0;
@@ -1062,8 +1073,6 @@ export class GameSessionSetup {
             playerMesh.scale.setScalar(baseScale);
             playerMesh.rotation.set(0, 0, 0);
 
-            // Reset material colors (Reversing the "Burned" look)
-            this.resetPlayerVisuals(playerMesh, PLAYER_CHARACTER.color.num);
         }
 
         if (playerGroup) {
@@ -1071,59 +1080,59 @@ export class GameSessionSetup {
         }
 
         // Reset Persistent Visual Flags
-        state.playerBloodSpawned = false;
-        state.playerAshSpawned = false;
-        state.hasLastTrailPos = false;
-        state.lastBiteTime = 0;
+        state.player.playerBloodSpawned = false;
+        state.player.playerAshSpawned = false;
+        state.player.hasLastTrailPos = false;
+        state.combat.lastBiteTime = 0;
         state.vehicle.engineState = VehicleEngineState.OFF;
 
         // Reset Numeric Effect Buffers (Zero-GC: Filling contiguous arrays with 0)
-        state.effectDurations.fill(0);
-        state.effectIntensities.fill(0);
+        state.combat.effectDurations.fill(0);
+        state.combat.effectIntensities.fill(0);
 
         // Clear Dynamic Status Effect Collections
-        state.activePassivesCount = 0;
-        state.activeBuffsCount = 0;
-        state.activeDebuffsCount = 0;
-        state.fireZoneCount = 0;
+        state.combat.activePassivesCount = 0;
+        state.combat.activeBuffsCount = 0;
+        state.combat.activeDebuffsCount = 0;
+        state.combat.fireZoneCount = 0;
 
         // Reset Killer Metadata
-        state.killedByEnemy = false;
-        state.killerType = DamageType.NONE;
-        state.killerName = '';
-        state.killerAttackName = '';
-        state.incomingDamageBuffer.fill(0);
+        state.player.killedByEnemy = false;
+        state.player.killerType = DamageType.NONE;
+        state.player.killerName = '';
+        state.player.killerAttackName = '';
+        state.enemies.incomingDamageBuffer.fill(0);
 
         // Zero-out contiguous status arrays
-        state.activePassives.fill(0);
-        state.activeBuffs.fill(0);
-        state.activeDebuffs.fill(0);
+        state.combat.activePassives.fill(0);
+        state.combat.activeBuffs.fill(0);
+        state.combat.activeDebuffs.fill(0);
 
         // Reset simulation timers to prevent lockout
         state.simTime = 0;
-        state.lastShotTime = 0;
-        state.reloadEndTime = 0;
-        state.throwChargeStart = 0;
-        state.lastDamageTime = 0;
-        state.lastStaminaUseTime = 0;
-        state.lastBiteTime = 0;
-        state.lastActionTime = 0;
-        state.bossDefeatedTime = 0;
-        state.lastDrownTick = 0;
-        state.isInteractionOpen = false;
-        state.eDepressed = false;
-        state.interaction.active = false;
+        state.combat.lastShotTime = 0;
+        state.combat.reloadEndTime = 0;
+        state.combat.throwChargeStart = 0;
+        state.player.lastDamageTime = 0;
+        state.player.lastStaminaUseTime = 0;
+        state.combat.lastBiteTime = 0;
+        state.player.lastActionTime = 0;
+        state.enemies.bossDefeatedTime = 0;
+        state.player.lastDrownTick = 0;
+        state.triggers.isInteractionOpen = false;
+        state.inputState.eDepressed = false;
+        state.triggers.interaction.active = false;
         state.discovery.active = false;
 
         // Empty pools:
-        state.enemies.length = 0;
-        state.bloodDecals.length = 0;
+        state.enemies.pool.length = 0;
+        state.world.bloodDecals.length = 0;
 
         // Purge ghost cells to prevent immediate collision conflicts with new spawns
 
         // Weapons:
-        for (const key in state.weaponAmmo) {
-            state.weaponAmmo[key as any] = WEAPONS[key as any]?.magSize || 0;
+        for (const key in state.combat.weaponAmmo) {
+            state.combat.weaponAmmo[key as any] = WEAPONS[key as any]?.magSize || 0;
         }
 
         // --- 2. SECTOR SPECIFC RESET ---
@@ -1148,7 +1157,7 @@ export class GameSessionSetup {
         }
 
         // --- 4. SYSTEM CLEARING ---
-        ProjectileSystem.clear(scene, state.projectiles, state.fireZones);
+        ProjectileSystem.clear(scene, state.combat.projectiles, state.combat.fireZones);
         FXSystem.reset();
         session.triggerSystem.resetTriggerStates();
         EnemyManager.clear();
@@ -1157,8 +1166,8 @@ export class GameSessionSetup {
         this.clearDynamicNodes(scene);
 
         // --- 6. SECTOR DATA ---
-        const currentSectorData = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
-        const currentSectorId = props.currentSector || 0;
+        const currentSectorData = (props as any).currentSectorData || SectorSystem.getSector(props.gameState.currentSector || 0);
+        const currentSectorId = props.gameState.currentSector || 0;
         const currentFMId = DataResolver.getSectorFamilyMemberId(currentSectorId);
 
         // --- 6.1 RESET FAMILY MEMBERS (VINTERDÖD FIX) ---
@@ -1190,7 +1199,7 @@ export class GameSessionSetup {
         }
 
         // 6.2 RESPAWN ZOMBIES
-        const sCtx = refs.sectorContextRef.current;
+        const sCtx = refs.SectorBuildContextRef.current;
         if (sCtx && currentSectorData.setupZombies) {
             currentSectorData.setupZombies(sCtx);
         }
@@ -1237,7 +1246,7 @@ export class GameSessionSetup {
         }
 
         // --- 7. FIX THE UI ---
-        HudStore.patch({ isDead: false, hp: state.statsBuffer[PlayerStatID.MAX_HP] });
+        HudStore.patch({ isDead: false, hp: state.player.statsBuffer[PlayerStatID.MAX_HP] });
 
         setDeathPhase(DeathPhase.NONE);
     }
@@ -1251,7 +1260,7 @@ export class GameSessionSetup {
         ui.setIsSectorLoading(true);
 
         EnemyManager.clear();
-        ProjectileSystem.clear(engine.scene, state.projectiles, state.fireZones);
+        ProjectileSystem.clear(engine.scene, state.combat.projectiles, state.combat.fireZones);
         FXSystem.reset();
 
         const toRemove: THREE.Object3D[] = [];
@@ -1268,27 +1277,27 @@ export class GameSessionSetup {
         }
 
         // Zero-GC Arrays reset
-        state.enemies.length = 0;
-        state.obstacles.length = 0;
-        state.chests.length = 0;
+        state.enemies.pool.length = 0;
+        state.world.obstacles.length = 0;
+        state.world.chests.length = 0;
         ctx.session.triggerSystem.clear();
-        state.bloodDecals.length = 0;
+        state.world.bloodDecals.length = 0;
 
-        state.statusFlags &= ~PlayerStatusFlags.DEAD;
-        state.statsBuffer[PlayerStatID.HP] = state.statsBuffer[PlayerStatID.MAX_HP];
-        state.statsBuffer[PlayerStatID.STAMINA] = state.statsBuffer[PlayerStatID.MAX_STAMINA];
+        state.combat.statusFlags &= ~PlayerStatusFlags.DEAD;
+        state.player.statsBuffer[PlayerStatID.HP] = state.player.statsBuffer[PlayerStatID.MAX_HP];
+        state.player.statsBuffer[PlayerStatID.STAMINA] = state.player.statsBuffer[PlayerStatID.MAX_STAMINA];
 
         // Reset simulation timers to prevent lockout
         state.simTime = 0;
-        state.lastShotTime = 0;
-        state.reloadEndTime = 0;
-        state.throwChargeStart = 0;
-        state.lastDamageTime = 0;
-        state.lastStaminaUseTime = 0;
-        state.lastBiteTime = 0;
-        state.lastActionTime = 0;
-        state.bossDefeatedTime = 0;
-        state.lastDrownTick = 0;
+        state.combat.lastShotTime = 0;
+        state.combat.reloadEndTime = 0;
+        state.combat.throwChargeStart = 0;
+        state.player.lastDamageTime = 0;
+        state.player.lastStaminaUseTime = 0;
+        state.combat.lastBiteTime = 0;
+        state.player.lastActionTime = 0;
+        state.enemies.bossDefeatedTime = 0;
+        state.player.lastDrownTick = 0;
 
         await this.runSectorSetup(ctx, currentSetupId);
 
@@ -1310,13 +1319,13 @@ export class GameSessionSetup {
         audioEngine.setReverb(0);
         audioEngine.stopAll();
 
-        ProjectileSystem.clear(engine.scene, state.projectiles, state.fireZones);
+        ProjectileSystem.clear(engine.scene, state.combat.projectiles, state.combat.fireZones);
         FXSystem.reset();
 
         if (session) {
             session.dispose();
         }
 
-        state.bossSpawned = false;
+        state.enemies.bossSpawned = false;
     }
 }

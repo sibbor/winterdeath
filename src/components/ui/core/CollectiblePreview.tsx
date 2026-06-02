@@ -10,7 +10,7 @@ interface CollectiblePreviewProps {
 }
 
 /**
- * [VINTERDÖD] Optimization: Static disposal function to avoid 
+ * Optimization: Static disposal function to avoid 
  * allocation of anonymous functions during cleanup.
  */
 const disposeNode = (node: THREE.Object3D) => {
@@ -35,7 +35,7 @@ const disposeNode = (node: THREE.Object3D) => {
 };
 
 /**
- * [VINTERDÖD] Helper to ensure all GPU textures are freed.
+ * Helper to ensure all GPU textures are freed.
  */
 const disposeMaterialTextures = (material: THREE.Material) => {
     // Explicitly check common texture slots to avoid GC from Object.values/keys

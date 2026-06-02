@@ -12,7 +12,7 @@ import { COLLECTIBLES, CollectibleID } from '../../content/collectibles';
 import { PERKS, PERK_CATALOG, PerkCategory } from '../../content/perks';
 import { FAMILY_MEMBERS, FamilyMemberID, PLAYER_CHARACTER, SPEAKER_ID_TO_KEY, VoiceParams, VOICE_PARAMS_MAP } from '../../content/constants';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
-import { TelemetrySourceOffset, TELEMETRY_SOURCES_COUNT } from '../../entities/player/PlayerTypes';
+import { TelemetrySourceOffset, TELEMETRY_SOURCES_COUNT } from '../../types/CareerStats';
 import { BossID, SectorID, SECTOR_THEMES } from '../../game/session/SectorTypes';
 import { t } from '../../utils/i18n';
 import { en } from '../../locales/en';

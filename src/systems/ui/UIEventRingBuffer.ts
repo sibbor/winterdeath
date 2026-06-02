@@ -61,7 +61,7 @@ export const UIEventRingBuffer = {
      * Zero-GC: No allocations.
      */
     push: (type: UIEventType, p1: number = 0, p2: number = 0, timestamp: number) => {
-        // [VINTERDÖD] We use bitwise mask for wrap-around instead of modulo (%) 
+        // We use bitwise mask for wrap-around instead of modulo (%) 
         // to maximize performance in the hot loop.
         const writeIdx = head;
         const nextHead = (head + PACKET_SIZE) & (BUFFER_SIZE - 1);

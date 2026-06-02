@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CAMERA_HEIGHT } from '../content/constants';
 import { System, SystemID } from './System';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 export enum CameraShakeType {
     GENERAL = 0,
@@ -179,7 +180,7 @@ export class CameraSystem implements System {
         }
     }
 
-    public update(ctx: any, delta: number, simTime: number, renderTime: number) {
+    public update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         if (!this._initialized && this.threeCamera) {
             this._idealPos.copy(this.threeCamera.position);
             this._initialized = true;

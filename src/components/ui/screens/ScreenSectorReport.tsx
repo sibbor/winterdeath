@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { t } from '../../../utils/i18n';
-import { SectorStats, PlayerStats } from '../../../types/StateTypes';
+import { SectorStats } from '../../../types/StateTypes';
+import { CareerStats } from '../../../types/CareerStats';
 import ModalLayout, { TacticalCard, TacticalTab, TacticalRow } from './ModalLayout';
-import { StatWeaponIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../entities/player/PlayerTypes';
+import { StatWeaponIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../types/CareerStats';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
@@ -12,7 +13,7 @@ import { SectorID } from '../../../game/session/SectorTypes';
 
 interface ScreenSectorReportProps {
     stats: SectorStats;
-    playerStats: PlayerStats;
+    playerStats: CareerStats;
     deathDetails: { killer: string } | null;
     onReturnCamp: () => void;
     onRestartSector: () => void;
@@ -23,7 +24,7 @@ interface ScreenSectorReportProps {
 }
 
 /**
- * [VINTERDÖD] Redesigned Sector Report
+ * Redesigned Sector Report
  * Features a paged layout for better clarity and hierarchy.
  */
 const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerStats, deathDetails, onReturnCamp, onRestartSector, onRespawn, onNextSector, currentSector, isMobileDevice }) => {

@@ -1,8 +1,7 @@
 import { System, SystemID } from './System';
-import { ENTITY_STATUS } from '../content/constants';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
-import { PlayerStatusFlags } from '../entities/player/PlayerTypes';
+import { PlayerStatusFlags } from '../types/CareerStats';
 import { INITIAL_ENEMY_POOL } from '../content/constants';
 import { DamageID, DamageType, EnemyAttackType } from '../entities/player/CombatTypes';
 import { StatusEffectID } from '../types/StatusEffects';
@@ -30,7 +29,7 @@ export class EnemySystem implements System {
     constructor(
         private callbacks: Callbacks,
         private initialPoolSize: number = INITIAL_ENEMY_POOL
-    ) {}
+    ) { }
 
     init(session: GameSessionLogic) {
         this.currentSession = session;
@@ -41,7 +40,7 @@ export class EnemySystem implements System {
         this.currentSession = session;
         const state = session.state;
 
-        if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
+        if ((state.combat.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
 
         // --- PHASE 9: DEFERRED CLEANUP (Zero-GC sweep) ---
         // We clean up at the START of the frame before logic updates

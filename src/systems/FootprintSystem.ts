@@ -113,7 +113,7 @@ class FootprintSystemClass implements System {
                 GamePlaySounds.playSwimming();
                 FXSystem.spawnParticle(
                     this.scene,
-                    session.state.particles,
+                    session.state.combat.particles,
                     position.x, position.y + 1.0, position.z,
                     FXParticleType.SPLASH,
                     10
@@ -127,7 +127,7 @@ class FootprintSystemClass implements System {
         }
 
         // 2. Leverage frame-stamped snapped coordinate from player position (O(1) time snap)
-        const streamer = session.state.worldStreamer;
+        const streamer = session.worldStreamer;
 
         // Extremely fast mathematical X/Z offset avoiding trig overhead where possible
         const offsetDist = isRight ? 0.15 : -0.15;
@@ -178,7 +178,7 @@ class FootprintSystemClass implements System {
         if (isRushing) {
             FXSystem.spawnParticle(
                 this.scene,
-                session.state.particles,
+                session.state.combat.particles,
                 spawnX, spawnY, spawnZ,
                 FXParticleType.LARGE_SMOKE,
                 1
@@ -190,7 +190,7 @@ class FootprintSystemClass implements System {
      * Main update loop for fading footprints.
      * Highly optimized: Bypasses getMatrixAt() and decompose() entirely via cached transformations.
      */
-    update(ctx: any, delta: number, simTime: number, renderTime: number) {
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         if (!this.enabled || !this.instancedMesh) return;
 
         let needsUpdate = false;

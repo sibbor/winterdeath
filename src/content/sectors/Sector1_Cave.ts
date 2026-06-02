@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SectorContext, ChestType } from '../../game/session/SectorTypes';
+import { SectorBuildContext, ChestType } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { ColliderType } from '@/src/core/world/CollisionResolution';
 
-export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Group) => {
+export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THREE.Group) => {
     const { scene } = ctx;
 
     interface Box { x: number; z: number; w: number; d: number; rotation?: number; }

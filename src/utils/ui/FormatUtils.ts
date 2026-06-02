@@ -29,7 +29,7 @@ export class FormatUtils {
     }
 
     /**
-     * [VINTERDÖD] Smart Time Formatting
+     * Smart Time Formatting
      * Returns minutes (MM:SS) if under 1 hour, otherwise returns hours (X.X hrs).
      */
     public static formatTimeSmart(seconds: number): string {
@@ -43,7 +43,7 @@ export class FormatUtils {
     }
 
     /**
-     * [VINTERDÖD] Deterministic Distance Formatting
+     * Deterministic Distance Formatting
      * Enforces strict numeric thresholds (< 1000m vs >= 1.00km) with exactly 2 decimal places.
      */
     public static formatDistance(meters: number): string {

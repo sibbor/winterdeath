@@ -31,7 +31,7 @@ export class CorpseRenderer {
         this.mesh = new THREE.InstancedMesh(GEOMETRY.zombie, material, this.maxInstances);
         this.mesh.frustumCulled = false;
         this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.maxInstances * 3), 3);
-        
+
         // --- BUOYANCY ATTRIBUTE (Phase 15) ---
         // 1.0 = Floating on water, 0.0 = Static on ground
         this.mesh.geometry.setAttribute('aIsFloating', new THREE.InstancedBufferAttribute(new Float32Array(this.maxInstances), 1));
@@ -44,7 +44,7 @@ export class CorpseRenderer {
         // --- SHADER INJECTION ---
         material.onBeforeCompile = (shader) => {
             shader.uniforms.uTime = { value: 0 };
-            
+
             shader.vertexShader = `
                 attribute float aIsFloating;
                 varying float vIsFloating;
@@ -108,7 +108,7 @@ export class CorpseRenderer {
         const wScale = widthScale * scale;
         this.dummy.scale.set(wScale, scale, wScale);
 
-        // [VINTERDÖD] Snabb type-check istället för instanceof (vilket är långsammare) och direkt matriskomposition.
+        // Snabb type-check istället för instanceof (vilket är långsammare) och direkt matriskomposition.
         if ((rotation as THREE.Euler).isEuler) {
             _tempQuat.setFromEuler(rotation as THREE.Euler);
             this.dummy.matrix.compose(this.dummy.position, _tempQuat, this.dummy.scale);
@@ -125,7 +125,7 @@ export class CorpseRenderer {
             _tempColor.setHex(colorHex).multiplyScalar(0.5);
             this.mesh.setColorAt(idx, _tempColor);
         } else {
-            // [VINTERDÖD] Återställ materialets grundfärg så vi inte blöder färg från ett överskrivet lik
+            // Återställ materialets grundfärg så vi inte blöder färg från ett överskrivet lik
             this.mesh.setColorAt(idx, _defaultDeadColor);
         }
 

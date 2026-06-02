@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { WeaponHandler } from './WeaponHandler';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
-import { PlayerStatusFlags } from '../entities/player/PlayerTypes';
+import { PlayerStatusFlags } from '../types/CareerStats';
 import { System, SystemID } from './System';
 import { InputAction } from '../core/engine/InputManager';
 import { WinterEngine } from '../core/engine/WinterEngine';
@@ -70,7 +70,7 @@ export class PlayerCombatSystem implements System {
         const input = session.engine.input.state;
 
         // Combine session input lock with cinematic and death states
-        const isLocked = session.inputDisabled || state.cinematicActive || (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
+        const isLocked = session.inputDisabled || state.ui.cinematicActive || (state.combat.statusFlags & PlayerStatusFlags.DEAD) !== 0;
 
         // --- CINEMATIC & DEATH LOCK ---
         if (isLocked) {
@@ -103,11 +103,11 @@ export class PlayerCombatSystem implements System {
 
         // --- Weapon Slot Switching ---
         const acts = input.actions;
-        if (acts[InputAction.SLOT_1] && !this._p1) WeaponHandler.handleSlotSwitch(state, state.loadout, InputAction.SLOT_1);
-        if (acts[InputAction.SLOT_2] && !this._p2) WeaponHandler.handleSlotSwitch(state, state.loadout, InputAction.SLOT_2);
-        if (acts[InputAction.SLOT_3] && !this._p3) WeaponHandler.handleSlotSwitch(state, state.loadout, InputAction.SLOT_3);
-        if (acts[InputAction.SLOT_4] && !this._p4) WeaponHandler.handleSlotSwitch(state, state.loadout, InputAction.SLOT_4);
-        if (acts[InputAction.SLOT_5] && !this._p5) WeaponHandler.handleSlotSwitch(state, state.loadout, InputAction.SLOT_5);
+        if (acts[InputAction.SLOT_1] && !this._p1) WeaponHandler.handleSlotSwitch(state, state.gameState.loadout, InputAction.SLOT_1);
+        if (acts[InputAction.SLOT_2] && !this._p2) WeaponHandler.handleSlotSwitch(state, state.gameState.loadout, InputAction.SLOT_2);
+        if (acts[InputAction.SLOT_3] && !this._p3) WeaponHandler.handleSlotSwitch(state, state.gameState.loadout, InputAction.SLOT_3);
+        if (acts[InputAction.SLOT_4] && !this._p4) WeaponHandler.handleSlotSwitch(state, state.gameState.loadout, InputAction.SLOT_4);
+        if (acts[InputAction.SLOT_5] && !this._p5) WeaponHandler.handleSlotSwitch(state, state.gameState.loadout, InputAction.SLOT_5);
 
         this._p1 = !!acts[InputAction.SLOT_1];
         this._p2 = !!acts[InputAction.SLOT_2];
@@ -115,7 +115,7 @@ export class PlayerCombatSystem implements System {
         this._p4 = !!acts[InputAction.SLOT_4];
         this._p5 = !!acts[InputAction.SLOT_5];
 
-        WeaponHandler.handleInput(input, state, state.loadout, simTime, false);
+        WeaponHandler.handleInput(input, state, state.gameState.loadout, simTime, false);
 
         WeaponHandler.handleFiring(
             session,
@@ -123,7 +123,7 @@ export class PlayerCombatSystem implements System {
             this.playerGroup,
             input,
             state,
-            state.loadout,
+            state.gameState.loadout,
             this.aimCross,
             this.trajectoryLine,
             delta,
@@ -161,3 +161,4 @@ export class PlayerCombatSystem implements System {
         this.initialized = false;
     }
 }
+

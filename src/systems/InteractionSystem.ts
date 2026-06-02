@@ -14,6 +14,7 @@ import { InputAction } from '../core/engine/InputManager';
 import { TriggerSystem } from './TriggerSystem';
 import { VehicleManager } from './VehicleManager';
 import { DataResolver } from '../core/data/DataResolver';
+import { PlayerStatID } from '../types/CareerStats';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -94,8 +95,8 @@ export class InteractionSystem implements System {
         if (state.vehicle.active) {
             UIEventBridge.setInteractionPrompt(InteractionPromptId.EXIT_VEHICLE);
             if (input.actions[InputAction.INTERACT]) {
-                if (!state.eDepressed) {
-                    state.eDepressed = true;
+                if (!state.inputState.eDepressed) {
+                    state.inputState.eDepressed = true;
                     // --- EXIT VEHICLE LOGIC ---
                     const vehicle = state.vehicle.mesh;
                     if (vehicle) {
@@ -104,7 +105,7 @@ export class InteractionSystem implements System {
                     }
                 }
             } else {
-                state.eDepressed = false;
+                state.inputState.eDepressed = false;
             }
             return;
         }
@@ -152,50 +153,50 @@ export class InteractionSystem implements System {
             );
 
             if (_detectionResult.type !== InteractionType.NONE) {
-                state.interaction.active = true;
-                state.interaction.type = _detectionResult.type;
-                state.interaction.promptId = _detectionResult.promptId;
-                state.interaction.label = _detectionResult.label || '';
-                state.interaction.targetId = _detectionResult.id || '';
-                state.interactionTargetPos.copy(_detectionResult.position);
-                state.hasInteractionTarget = true;
+                state.triggers.interaction.active = true;
+                state.triggers.interaction.type = _detectionResult.type;
+                state.triggers.interaction.promptId = _detectionResult.promptId;
+                state.triggers.interaction.label = _detectionResult.label || '';
+                state.triggers.interaction.targetId = _detectionResult.id || '';
+                state.triggers.interactionTargetPos.copy(_detectionResult.position);
+                state.triggers.hasInteractionTarget = true;
             } else {
-                state.interaction.active = false;
-                state.interaction.type = InteractionType.NONE;
-                state.interaction.promptId = InteractionPromptId.NONE;
-                state.interaction.label = '';
-                state.interaction.targetId = '';
-                state.hasInteractionTarget = false;
+                state.triggers.interaction.active = false;
+                state.triggers.interaction.type = InteractionType.NONE;
+                state.triggers.interaction.promptId = InteractionPromptId.NONE;
+                state.triggers.interaction.label = '';
+                state.triggers.interaction.targetId = '';
+                state.triggers.hasInteractionTarget = false;
             }
         }
 
         // 2. Handle Interaction Press (Edge Triggered)
         if (input.actions[InputAction.INTERACT]) {
-            if (!state.eDepressed) {
-                state.eDepressed = true;
+            if (!state.inputState.eDepressed) {
+                state.inputState.eDepressed = true;
 
-                if (state.interaction.active) {
-                    const isExit = (state.interaction.type === InteractionType.VEHICLE && state.vehicle.active && _detectionResult.object === state.vehicle.mesh);
+                if (state.triggers.interaction.active) {
+                    const isExit = (state.triggers.interaction.type === InteractionType.VEHICLE && state.vehicle.active && _detectionResult.object === state.vehicle.mesh);
 
                     if (!isExit) {
                         this.handleInteraction(
-                            state.interaction.type,
-                            state.chests,
+                            state.triggers.interaction.type,
+                            state.world.chests,
                             state,
                             session
                         );
 
                         // Clear prompt immediately for responsive feedback
-                        state.hasInteractionTarget = false;
-                        state.interaction.active = false;
-                        state.interaction.type = InteractionType.NONE;
-                        state.interaction.promptId = InteractionPromptId.NONE;
-                        state.interaction.label = '';
+                        state.triggers.hasInteractionTarget = false;
+                        state.triggers.interaction.active = false;
+                        state.triggers.interaction.type = InteractionType.NONE;
+                        state.triggers.interaction.promptId = InteractionPromptId.NONE;
+                        state.triggers.interaction.label = '';
                     }
                 }
             }
         } else {
-            state.eDepressed = false;
+            state.inputState.eDepressed = false;
         }
 
         // 3. Update Active Animations (Synced with Game Loop)
@@ -532,15 +533,15 @@ export class InteractionSystem implements System {
                 break;
 
             case InteractionType.SECTOR_SPECIFIC:
-                state.interaction.active = true;
-                state.interaction.targetId = _detectionResult.id || '';
-                state.interaction.type = InteractionType.SECTOR_SPECIFIC;
-                state.interaction.label = _detectionResult.label || '';
+                state.triggers.interaction.active = true;
+                state.triggers.interaction.targetId = _detectionResult.id || '';
+                state.triggers.interaction.type = InteractionType.SECTOR_SPECIFIC;
+                state.triggers.interaction.label = _detectionResult.label || '';
 
-                state.interactionRequest.active = true;
-                state.interactionRequest.type = InteractionType.SECTOR_SPECIFIC;
-                state.interactionRequest.id = _detectionResult.id || '';
-                state.interactionRequest.object = _detectionResult.object || null;
+                state.triggers.interactionRequest.active = true;
+                state.triggers.interactionRequest.type = InteractionType.SECTOR_SPECIFIC;
+                state.triggers.interactionRequest.id = _detectionResult.id || '';
+                state.triggers.interactionRequest.object = _detectionResult.object || null;
                 break;
         }
     }
@@ -576,7 +577,7 @@ export class InteractionSystem implements System {
 
         for (let i = 0; i < 15; i++) {
             _v1.set((Math.random() - 0.5) * 2, 10 + Math.random() * 10, (Math.random() - 0.5) * 2);
-            FXSystem.spawnParticle(session.engine.scene, session.state.particles, collectible.position.x, 0.1, collectible.position.z, FXParticleType.SPARK, 1, undefined, _v1);
+            FXSystem.spawnParticle(session.engine.scene, session.state.combat.particles, collectible.position.x, 0.1, collectible.position.z, FXParticleType.SPARK, 1, undefined, _v1);
         }
     }
 
@@ -615,7 +616,7 @@ export class InteractionSystem implements System {
                 glowRing.visible = false;
             }
 
-            FXSystem.spawnParticle(session.engine.scene, state.particles, chest.mesh.position.x, 1.0, chest.mesh.position.z, FXParticleType.SPARK, 15);
+            FXSystem.spawnParticle(session.engine.scene, state.combat.particles, chest.mesh.position.x, 1.0, chest.mesh.position.z, FXParticleType.SPARK, 15);
 
             const lid = chest.mesh.children[1];
             if (lid) {
@@ -634,11 +635,11 @@ export class InteractionSystem implements System {
             }
 
             if (chest.subType === InteractionSubType.BIG_CHEST) {
-                state.bigChestsOpened++;
                 if (state.sessionStats) state.sessionStats.bigChestsOpened++;
+                state.player.statsBuffer[PlayerStatID.TOTAL_BIG_CHESTS_OPENED]++;
             } else {
-                state.chestsOpened++;
                 if (state.sessionStats) state.sessionStats.chestsOpened++;
+                state.player.statsBuffer[PlayerStatID.TOTAL_CHESTS_OPENED]++;
             }
         }
     }

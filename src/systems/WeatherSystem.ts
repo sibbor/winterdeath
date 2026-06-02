@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { WindSystem } from './WindSystem';
 import { GEOMETRY, MATERIALS_WEATHER, WeatherUniforms } from '../utils/assets';
-import { WeatherType } from '../core/engine/EngineTypes';
+import { WeatherType } from '../core/engine/EnvironmentalTypes';
 import { WEATHER_SYSTEM } from '../content/constants';
 import { System, SystemID } from './System';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 export class WeatherSystem implements System {
     readonly systemId = SystemID.WEATHER;
@@ -57,7 +58,7 @@ export class WeatherSystem implements System {
             default: this.swayMult = 40.0; break;
         }
 
-        if (type === WeatherType.NONE || actualCount <= 0) {
+        if (type === undefined || type === null || type === WeatherType.NONE || actualCount <= 0) {
             this._activeUniforms = null;
             if (this.weatherMesh) this.weatherMesh.visible = false;
             return;
@@ -122,10 +123,10 @@ export class WeatherSystem implements System {
 
         geo.getAttribute('initialPos').needsUpdate = true;
         geo.getAttribute('velocity').needsUpdate = true;
-        this._activeUniforms.uAreaSize.value = areaSize;
+        if (this._activeUniforms && this._activeUniforms.uAreaSize) this._activeUniforms.uAreaSize.value = areaSize;
     }
 
-    public update(ctx: any, delta: number, _simTime: number, _renderTime: number): void {
+    public update(ctx: GameSessionLogic, delta: number, _simTime: number, _renderTime: number): void {
         if (!this.weatherMesh || !this.weatherMesh.visible || this.count === 0 || !this._activeUniforms) return;
 
         this.timeAccumulator += delta;
@@ -138,8 +139,11 @@ export class WeatherSystem implements System {
         this._activeUniforms.uWindOffset.value.copy(this._windOffset);
         this._activeUniforms.uSmoothWind.value.copy(this._smoothWind);
 
-        const pPos = ctx.playerPos || (ctx.camera && ctx.camera.position);
-        if (pPos) this._activeUniforms.uPlayerPos.value.copy(pPos);
+        if (ctx.state && ctx.state.player) {
+            this._activeUniforms.uPlayerPos.value.copy(ctx.state.player.position);
+        } else if (this.camera) {
+            this._activeUniforms.uPlayerPos.value.copy(this.camera.position);
+        }
     }
 
     public clear(): void {

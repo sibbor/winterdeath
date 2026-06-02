@@ -3,7 +3,7 @@ import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import ModalLayout, { TacticalCard } from './ModalLayout';
 import { SectorStats } from '../../../types/StateTypes';
-import { StatWeaponIndex, TelemetrySourceOffset, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../entities/player/PlayerTypes';
+import { StatWeaponIndex, TelemetrySourceOffset, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../types/CareerStats';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { COLORS } from '../../../utils/ui/ColorUtils';

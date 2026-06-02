@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { EnemyType, NoiseType } from '../../entities/enemies/EnemyTypes';
-import { SectorDef, SectorContext, ChestType, SectorID } from '../../game/session/SectorTypes';
+import { SectorDef, SectorBuildContext, ChestType, SectorID } from '../../game/session/SectorTypes';
 import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
@@ -14,7 +14,7 @@ import { CAMERA_HEIGHT } from '../constants';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { FamilyMemberID } from '../constants';
 import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
-import { WeatherType, GroundType } from '../../core/engine/EngineTypes';
+import { WeatherType, GroundType } from '../../core/engine/EnvironmentalTypes';
 import { FXParticleType } from '../../types/FXTypes';
 import { PoiType, PoiID } from '../../content/pois';
 import { ClueID } from '../../content/clues';
@@ -145,7 +145,8 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
                     if (o.mesh) {
                         o.mesh.position.set(99999, -1000, 99999);
                     }
-                    _obsArray.splice(i, 1);
+                    _obsArray[i] = _obsArray[_obsArray.length - 1];
+                    _obsArray.pop();
                     break;
                 }
             }
@@ -364,7 +365,7 @@ export const Sector0: SectorDef = {
         lookAtOffset: LOCATIONS.CINEMATIC.LOOK_AT,
     },
 
-    setupProps: async (ctx: SectorContext) => {
+    setupProps: async (ctx: SectorBuildContext) => {
         console.time('[Sector0] setupProps');
         performance.mark('sector0-props-start');
         const { scene, obstacles } = ctx;
@@ -915,7 +916,7 @@ export const Sector0: SectorDef = {
         console.timeEnd('[Sector0] setupProps');
     },
 
-    setupContent: async (ctx: SectorContext) => {
+    setupContent: async (ctx: SectorBuildContext) => {
         if (ctx.isWarmup) return;
         console.time('[Sector0] setupContent');
 

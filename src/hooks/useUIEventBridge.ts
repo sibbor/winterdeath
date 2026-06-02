@@ -38,11 +38,11 @@ const pump = () => {
         const p2 = _packetScratch[2];
         const time = _packetScratch[3];
 
-        // [VINTERDÖD] Special handling for string-based events
+        // Special handling for string-based events
         let p1Value: any = p1;
 
         if (type === UIEventType.CHAT_BUBBLE) {
-            // [VINTERDÖD] Unify String-based and SMI-based chat bubbles
+            // Unify String-based and SMI-based chat bubbles
             const poolString = UIEventRingBuffer.getString(p1);
             if (poolString) {
                 p1Value = poolString;
@@ -61,7 +61,7 @@ const pump = () => {
             let title = '';
             let details = '';
 
-            // [VINTERDÖD] Resolve localized content based on discovery category
+            // Resolve localized content based on discovery category
             switch (discoveryType) {
                 case DiscoveryType.PERK:
                     const perk = DataResolver.getPerks()[resolvedId as any];
@@ -95,7 +95,7 @@ const pump = () => {
         }
 
         // Notify all bridge listeners (Zero-GC Loop)
-        // [VINTERDÖD] We use for...of on the Set. While it creates an iterator, 
+        // We use for...of on the Set. While it creates an iterator, 
         // V8's escape analysis often elides this allocation. 
         // We avoid Array.from() which is a guaranteed allocation.
         for (const cb of listeners) {

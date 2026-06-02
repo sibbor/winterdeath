@@ -11,7 +11,7 @@ import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { HudStore } from '../store/HudStore';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { FXParticleType, FXDecalType } from '../types/FXTypes';
-import { PlayerStatusFlags, PlayerStatID } from '../entities/player/PlayerTypes';
+import { PlayerStatusFlags, PlayerStatID } from '../types/CareerStats';
 import { DeathPhase } from '../types/SessionTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -105,7 +105,7 @@ export class DeathSystem implements System {
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         const state = session.state;
-        if (!(state.statusFlags & PlayerStatusFlags.DEAD)) return;
+        if (!(state.combat.statusFlags & PlayerStatusFlags.DEAD)) return;
 
         const playerGroup = this.playerGroupRef.current;
         const playerMesh = this.playerMeshRef.current;
@@ -131,14 +131,14 @@ export class DeathSystem implements System {
                 break;
 
             case DeathPhase.ANIMATION:
-                if (simTime - state.deathStartTime > PLAYER.DEATH_TIMER) {
+                if (simTime - state.player.deathStartTime > PLAYER.DEATH_TIMER) {
                     this.deathPhaseRef.current = DeathPhase.MESSAGE;
                     this.setDeathPhase(DeathPhase.MESSAGE);
                 }
                 break;
 
             case DeathPhase.MESSAGE:
-                if (simTime - state.deathStartTime > 3000) {
+                if (simTime - state.player.deathStartTime > 3000) {
                     this.deathPhaseRef.current = DeathPhase.CONTINUE;
                     this.setDeathPhase(DeathPhase.CONTINUE);
                 }
@@ -147,40 +147,40 @@ export class DeathSystem implements System {
 
         // --- 2. Physics & Falling ---
         if (playerGroup) {
-            state.deathVel.y -= 30 * delta;
-            pgPos.addScaledVector(state.deathVel, delta);
+            state.player.deathVel.y -= 30 * delta;
+            pgPos.addScaledVector(state.player.deathVel, delta);
 
-            const isExploded = state.playerDeathState === PlayerDeathState.GIBBED;
-            const isBurning = state.playerDeathState === PlayerDeathState.BURNED;
-            const isDrowning = state.playerDeathState === PlayerDeathState.DROWNED;
-            const isElectrocuted = state.playerDeathState === PlayerDeathState.ELECTROCUTED;
-            const isBiting = state.killerSource === DamageID.BITE;
+            const isExploded = state.player.deathState === PlayerDeathState.GIBBED;
+            const isBurning = state.player.deathState === PlayerDeathState.BURNED;
+            const isDrowning = state.player.deathState === PlayerDeathState.DROWNED;
+            const isElectrocuted = state.player.deathState === PlayerDeathState.ELECTROCUTED;
+            const isBiting = state.player.killerSource === DamageID.BITE;
 
             if (pgPos.y <= 0.0) {
                 pgPos.y = 0.0;
-                state.deathVel.y = 0;
-                state.deathVel.x *= 0.9;
-                state.deathVel.z *= 0.9;
+                state.player.deathVel.y = 0;
+                state.player.deathVel.x *= 0.9;
+                state.player.deathVel.z *= 0.9;
 
-                if (!state.hasLastTrailPos) {
-                    state.lastTrailPos.copy(pgPos);
-                    state.hasLastTrailPos = true;
+                if (!state.player.hasLastTrailPos) {
+                    state.player.lastTrailPos.copy(pgPos);
+                    state.player.hasLastTrailPos = true;
                 }
 
-                if (!isExploded && pgPos.distanceToSquared(state.lastTrailPos) > 2.25) {
+                if (!isExploded && pgPos.distanceToSquared(state.player.lastTrailPos) > 2.25) {
                     const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
                     this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, (0.8 + Math.random() * 0.4) * baseScale, MATERIALS.bloodDecal);
-                    state.lastTrailPos.copy(pgPos);
+                    state.player.lastTrailPos.copy(pgPos);
                 }
             }
 
-            const speedSq = state.deathVel.x * state.deathVel.x + state.deathVel.z * state.deathVel.z;
+            const speedSq = state.player.deathVel.x * state.player.deathVel.x + state.player.deathVel.z * state.player.deathVel.z;
             if (speedSq > 0.1) {
-                _v2.set(state.deathVel.x, 0, state.deathVel.z);
+                _v2.set(state.player.deathVel.x, 0, state.player.deathVel.z);
                 _v1.copy(pgPos).sub(_v2);
                 playerGroup.lookAt(_v1);
-            } else if (!isExploded && !isBurning && !isDrowning && !isElectrocuted && !state.playerBloodSpawned && renderTime - state.deathStartTime > 350) {
-                state.playerBloodSpawned = true;
+            } else if (!isExploded && !isBurning && !isDrowning && !isElectrocuted && !state.player.playerBloodSpawned && renderTime - state.player.deathStartTime > 350) {
+                state.player.playerBloodSpawned = true;
                 const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 2.5 * baseScale, MATERIALS.bloodDecal);
                 this.fxCallbacks.spawnParticle(pgPos.x, 1.5, pgPos.z, FXParticleType.BLOOD_SPLATTER, 6);
@@ -202,12 +202,12 @@ export class DeathSystem implements System {
             }
 
             // --- 2.5 Specialized Death Visuals (Zero-GC Refactor) ---
-            switch (state.playerDeathState) {
+            switch (state.player.deathState) {
                 case PlayerDeathState.DROWNED:
                     // Sinking logic
-                    state.deathVel.y = -0.5; // Slow sink
-                    state.deathVel.x *= 0.95;
-                    state.deathVel.z *= 0.95;
+                    state.player.deathVel.y = -0.5; // Slow sink
+                    state.player.deathVel.x *= 0.95;
+                    state.player.deathVel.z *= 0.95;
 
                     if (this.deathPhaseRef.current === DeathPhase.ANIMATION) {
                         if (renderTime % 500 < 50) {
@@ -217,13 +217,13 @@ export class DeathSystem implements System {
                     break;
 
                 case PlayerDeathState.BURNED:
-                    const age = renderTime - state.deathStartTime;
+                    const age = renderTime - state.player.deathStartTime;
                     const duration = 1500;
                     const progress = Math.min(1.0, age / duration);
 
                     // Ash Pile Logic
-                    if (!state.playerAshSpawned) {
-                        state.playerAshSpawned = true;
+                    if (!state.player.playerAshSpawned) {
+                        state.player.playerAshSpawned = true;
                         const ashRenderer = EnemyManager.getAshRenderer();
                         if (ashRenderer) {
                             // [VINTERDÖD FIX] Use world position (pgPos) and group rotation for the ash pile
@@ -265,11 +265,11 @@ export class DeathSystem implements System {
         }
 
         // --- 3. Player Animation & Gibbing ---
-        if (state.playerDeathState === PlayerDeathState.GIBBED) {
+        if (state.player.deathState === PlayerDeathState.GIBBED) {
             if (playerMesh) playerMesh.visible = false;
 
-            if (!state.playerBloodSpawned) {
-                state.playerBloodSpawned = true;
+            if (!state.player.playerBloodSpawned) {
+                state.player.playerBloodSpawned = true;
                 const baseScale = (playerMesh as any).userData.baseScale;
 
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 4.5 * baseScale, MATERIALS.bloodDecal);
@@ -277,7 +277,7 @@ export class DeathSystem implements System {
                 this.fxCallbacks.spawnParticle(pgPos.x, 1.5, pgPos.z, FXParticleType.MEAT, 12);
             }
         } else if (playerMesh) {
-            _deathAnimState.deathStartTime = state.deathStartTime;
+            _deathAnimState.deathStartTime = state.player.deathStartTime;
             _deathAnimState.renderTime = state.renderTime;
             _deathAnimState.simTime = state.simTime;
             PlayerAnimator.update(playerMesh as any, _deathAnimState, renderTime, delta);
@@ -335,9 +335,10 @@ export class DeathSystem implements System {
                 _griefAnimState.isMoving = isWalking;
                 _griefAnimState.renderTime = state.renderTime;
                 _griefAnimState.simTime = state.simTime;
-                _griefAnimState.staminaRatio = state.statsBuffer[PlayerStatID.STAMINA] / Math.max(1, state.statsBuffer[PlayerStatID.MAX_STAMINA]);
+                _griefAnimState.staminaRatio = state.player.statsBuffer[PlayerStatID.STAMINA] / Math.max(1, state.player.statsBuffer[PlayerStatID.MAX_STAMINA]);
                 PlayerAnimator.update(body, _griefAnimState, renderTime, delta);
             }
         }
     }
 }
+

@@ -1,4 +1,4 @@
-import { PlayerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
+import { CareerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../types/CareerStats';
 import { SectorStats } from '../../types/StateTypes';
 import { LEVEL_CAP } from '../../content/constants';
 import { SectorID } from '../session/SectorTypes';
@@ -10,13 +10,13 @@ import { SectorID } from '../session/SectorTypes';
  * 100% Zero-GC standard with classic for-loops and Typed Arrays.
  */
 export const aggregateStats = (
-    prevStats: PlayerStats,
+    prevStats: CareerStats,
     sectorStats: SectorStats,
     died: boolean,
     aborted: boolean,
     currentSector: number = 0,
     newUniqueAchievements: number = 0
-): PlayerStats => {
+): CareerStats => {
     if (currentSector === SectorID.PLAYGROUND) return prevStats;
 
     // Clone BOTH the object and the statsBuffer to ensure React immutability

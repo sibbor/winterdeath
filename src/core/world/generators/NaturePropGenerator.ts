@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../../../utils/assets/materials';
-import { SectorContext, NatureFillType } from '../../../game/session/SectorTypes';
+import { SectorBuildContext, NatureFillType } from '../../../game/session/SectorTypes';
 import { SectorBuilder } from '../SectorBuilder';
 import { VegetationGenerator } from './VegetationGenerator';
 import { MaterialType } from '../../../content/environment';
@@ -73,7 +73,7 @@ export const NaturePropGenerator = {
     /**
      * Spawns physics-based rubble using InstancedMesh.
      */
-    spawnRubble: (ctx: SectorContext, x: number, z: number, count: number, material?: THREE.Material, directionBias: number = Math.PI) => {
+    spawnRubble: (ctx: SectorBuildContext, x: number, z: number, count: number, material?: THREE.Material, directionBias: number = Math.PI) => {
         const mat = material == null ? MATERIALS.steel : material;
 
         const mesh = new THREE.InstancedMesh(SHARED_GEO.box, mat, count);
@@ -131,7 +131,7 @@ export const NaturePropGenerator = {
     /**
      * Fills an area with rocks or debris.
      */
-    fillArea: (ctx: SectorContext, centerOrArea: { x: number, z: number, w: number, d: number } | { x: number, z: number }, sizeOrDensity: { width: number, height: number } | number, count?: number, type: NatureFillType = NatureFillType.TREE, avoidCenterRadius: number = 0) => {
+    fillArea: (ctx: SectorBuildContext, centerOrArea: { x: number, z: number, w: number, d: number } | { x: number, z: number }, sizeOrDensity: { width: number, height: number } | number, count?: number, type: NatureFillType = NatureFillType.TREE, avoidCenterRadius: number = 0) => {
         // Legacy delegation: if type is tree, hand over to VegetationGenerator
         if (type === NatureFillType.TREE) {
             const area = (centerOrArea as any).w !== undefined ? centerOrArea as { x: number, z: number, w: number, d: number } : { x: (centerOrArea as any).x, z: (centerOrArea as any).z, w: (sizeOrDensity as any).width || (sizeOrDensity as number), d: (sizeOrDensity as any).height || (sizeOrDensity as number) };

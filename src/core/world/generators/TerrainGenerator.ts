@@ -3,8 +3,8 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 import { createProceduralDiffuse } from '../../../utils/assets/procedural';
 import { MATERIALS } from '../../../utils/assets/materials';
 import { MaterialType } from '../../../content/environment';
-import { SectorContext } from '../../../game/session/SectorTypes';
-import { GroundType } from '../../engine/EngineTypes';
+import { SectorBuildContext } from '../../../game/session/SectorTypes';
+import { GroundType } from '../../engine/EnvironmentalTypes';
 import { GeneratorUtils } from './GeneratorUtils';
 import { WinterEngine } from '../../engine/WinterEngine';
 import { PhysicsGroup } from '../CollisionResolution';
@@ -140,7 +140,7 @@ export const TerrainGenerator = {
         return mesh;
     },
 
-    createMountain: (ctx: SectorContext, points: THREE.Vector3[], depth: number = 20, height: number = 15, caveConfig?: { position: THREE.Vector3, rotation?: number }) => {
+    createMountain: (ctx: SectorBuildContext, points: THREE.Vector3[], depth: number = 20, height: number = 15, caveConfig?: { position: THREE.Vector3, rotation?: number }) => {
         if (!points || points.length < 2) return;
 
         const geometries: THREE.BufferGeometry[] = [];

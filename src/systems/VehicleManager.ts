@@ -68,7 +68,7 @@ export const VehicleManager = {
                 state.vehicle.engineState = VehicleEngineState.RUNNING;
             }
 
-            if (input.actions[InputAction.INTERACT] && !state.eDepressed && engineState !== VehicleEngineState.OFF) {
+            if (input.actions[InputAction.INTERACT] && !state.inputState.eDepressed && engineState !== VehicleEngineState.OFF) {
                 VehicleManager.exitVehicle(playerGroup, vehicle, state, def);
             }
 
@@ -204,7 +204,7 @@ export const VehicleManager = {
         state: any,
         def: VehicleDef
     ) => {
-        state.eDepressed = true;
+        state.inputState.eDepressed = true;
         state.vehicle.active = false;
         state.vehicle.mesh = null;
         state.vehicle.nodes = null;
@@ -335,7 +335,7 @@ export const VehicleManager = {
             _vehicleKnockbackCtx.applyDamage = state.callbacks?.applyDamage;
             _vehicleKnockbackCtx.scene = session.engine.scene;
             _vehicleKnockbackCtx.engine = session.engine;
-            _vehicleKnockbackCtx.particles = state.particles;
+            _vehicleKnockbackCtx.particles = state.combat.particles;
 
             // Execute the single-target impact handler
             EnemyManager.ramEnemies(

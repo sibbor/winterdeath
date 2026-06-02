@@ -13,12 +13,13 @@ import { _buoyancyResult } from './WaterSystem';
 import { NOISE_RADIUS, NoiseType } from '../entities/enemies/EnemyTypes';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { FootprintSystem } from './FootprintSystem';
-import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
+import { PlayerStatID, PlayerStatusFlags } from '../types/CareerStats';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { PlayerStatsSystem } from './PlayerStatsSystem';
 import { InputAction } from '../core/engine/InputManager';
-import { StatsBridge } from '../core/data/StatsBridge';
-import { KMH_TO_MS, PLAYER, PHYSICS, COMBAT } from '../content/constants';
+import { PLAYER, PHYSICS, COMBAT } from '../content/constants';
+import type { DamageTrackerSystem } from './DamageTrackerSystem';
+import type { PerkSystem } from './PerkSystem';
 
 // --- SPEED AUDIT TELEMETRY (DEPRECATED) ---
 // Audit variables removed for Zero-GC compliance. Logging moved to TelemetrySystem.
@@ -51,7 +52,11 @@ export class PlayerMovementSystem implements System {
 
     private _invincibilityMesh: THREE.Mesh | null = null;
     private _buffShieldMesh: THREE.Mesh | null = null;
-    private _statsSystem: PlayerStatsSystem | null = null;
+
+    // System references
+    private statsSystem!: PlayerStatsSystem;
+    private damageTracker!: DamageTrackerSystem;
+    private perkSystem!: PerkSystem;
 
     constructor(private playerGroup: THREE.Group) {
         // 100% Zero-GC Mesh Pre-allocation
@@ -62,23 +67,25 @@ export class PlayerMovementSystem implements System {
     }
 
     init(session: GameSessionLogic) {
-        this._statsSystem = session.getSystem<PlayerStatsSystem>(SystemID.PLAYER_STATS);
+        this.statsSystem = session.getSystem<PlayerStatsSystem>(SystemID.PLAYER_STATS)!;
+        this.damageTracker = session.getSystem<DamageTrackerSystem>(SystemID.DAMAGE_TRACKER)!;
+        this.perkSystem = session.getSystem<PerkSystem>(SystemID.PERK_SYSTEM)!;
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         if (!session || !session.engine || !session.state) return;
 
         const state = session.state;
-        const stats = state.statsBuffer;
+        const stats = state.player.statsBuffer;
         if (!stats) return;
 
-        if ((state.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
-        if ((state.statusFlags & PlayerStatusFlags.STUNNED) !== 0) return;
+        if ((state.combat.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
+        if ((state.combat.statusFlags & PlayerStatusFlags.STUNNED) !== 0) return;
 
         // --- CINEMATIC LOCK (Zero-Velocity) ---
-        if (state.cinematicActive) {
-            state.isMoving = false;
-            state.velocity.set(0, 0, 0);
+        if (state.ui.cinematicActive) {
+            state.player.isMoving = false;
+            state.player.velocity.set(0, 0, 0);
             return;
         }
 
@@ -90,7 +97,7 @@ export class PlayerMovementSystem implements System {
         const currentSpeed = stats[PlayerStatID.FINAL_SPEED];
 
         if (state.vehicle.active) {
-            state.isMoving = false;
+            state.player.isMoving = false;
             return;
         }
 
@@ -106,7 +113,7 @@ export class PlayerMovementSystem implements System {
             currentSpeed
         );
 
-        state.isMoving = isMoving;
+        state.player.isMoving = isMoving;
 
         this.handleRotation(
             this.playerGroup,
@@ -147,67 +154,66 @@ export class PlayerMovementSystem implements System {
         session: GameSessionLogic,
         currentSpeed: number
     ): boolean {
-        const stats = state.statsBuffer;
+        const stats = state.player.statsBuffer;
 
         // --- 1. Ability Triggering (Rush & Dodge) ---
         const acts = input.actions;
         if (!acts[InputAction.DODGE]) {
             // Check for Dodge trigger on release (Short Press)
-            if (state.spaceDepressed) {
-                const pressDuration = simTime - state.spacePressTime;
+            if (state.inputState.spaceDepressed) {
+                const pressDuration = simTime - state.player.spacePressTime;
 
                 // Increased window (150->200ms) and added '!state.isDodging' check
                 const dodgeCost = ABILITIES[AbilityID.DODGE].staminaCost || 20;
-                if (!state.isRushing && !state.isDodging && pressDuration < PLAYER.DODGE_PRESS_THRESHOLD) {
+                if (!state.player.isRushing && !state.player.isDodging && pressDuration < PLAYER.DODGE_PRESS_THRESHOLD) {
                     if (stats[PlayerStatID.STAMINA] >= dodgeCost) {
                         stats[PlayerStatID.STAMINA] -= dodgeCost;
-                        state.lastStaminaUseTime = simTime;
-                        state.isDodging = true;
-                        state.dodgeStartTime = simTime; // Logic MUST use simTime for parity
-                        state.dodgeDir.set(0, 0, 0); // Reset to recalc next frame
+                        state.player.lastStaminaUseTime = simTime;
+                        state.player.isDodging = true;
+                        state.player.dodgeStartTime = simTime; // Logic MUST use simTime for parity
+                        state.player.dodgeDir.set(0, 0, 0); // Reset to recalc next frame
 
                         // --- TRACK NEW METRIC (UNIFIED) ---
-                        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
+                        const tracker = this.damageTracker;
                         if (tracker) tracker.recordDodge(session);
                     }
                 }
             }
 
-            if (state.isRushing) {
-                state.isRushing = false;
-                state.lastRushEndTime = simTime;
+            if (state.player.isRushing) {
+                state.player.isRushing = false;
+                state.player.lastRushEndTime = simTime;
                 // Clear flag immediately for responsive animation
-                state.statusFlags &= ~PlayerStatusFlags.RUSHING;
+                state.combat.statusFlags &= ~PlayerStatusFlags.RUSHING;
             }
 
-            state.spaceDepressed = false;
-            state.rushCostPaid = false;
+            state.inputState.spaceDepressed = false;
+            state.player.rushCostPaid = false;
         } else {
             // Initiation
-            if (!state.spaceDepressed && !disableInput) {
-                state.spaceDepressed = true;
-                state.spacePressTime = simTime;
-                state.rushCostPaid = false;
+            if (!state.inputState.spaceDepressed && !disableInput) {
+                state.inputState.spaceDepressed = true;
+                state.player.spacePressTime = simTime;
+                state.player.rushCostPaid = false;
             }
 
             // Handle Rush Elevation (Hold Space)
-            if (state.spaceDepressed && !state.isDodging) {
-                if (simTime - state.spacePressTime >= PLAYER.RUSH_HOLD_THRESHOLD) { // Increased threshold to avoid accidental dodge blocking
+            if (state.inputState.spaceDepressed && !state.player.isDodging) {
+                if (simTime - state.player.spacePressTime >= PLAYER.RUSH_HOLD_THRESHOLD) { // Increased threshold to avoid accidental dodge blocking
                     if (stats[PlayerStatID.STAMINA] >= 1.0) { // Check for minimal stamina to CONTINUE rushing
-                        if (!state.isRushing) {
-                            state.isRushing = true;
-                            state.rushCostPaid = true;
-                            state.statusFlags |= PlayerStatusFlags.RUSHING;
+                        if (!state.player.isRushing) {
+                            state.player.isRushing = true;
+                            state.player.rushCostPaid = true;
+                            state.combat.statusFlags |= PlayerStatusFlags.RUSHING;
 
                             // --- TRACK NEW METRIC (UNIFIED) ---
-                            const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                            if (tracker) tracker.recordRush(session);
+                            this.damageTracker.recordRush(session);
                         }
 
-                        state.lastStaminaUseTime = simTime;
+                        state.player.lastStaminaUseTime = simTime;
                     } else {
-                        state.isRushing = false;
-                        state.statusFlags &= ~PlayerStatusFlags.RUSHING;
+                        state.player.isRushing = false;
+                        state.combat.statusFlags &= ~PlayerStatusFlags.RUSHING;
                     }
                 }
             }
@@ -217,7 +223,7 @@ export class PlayerMovementSystem implements System {
 
         // --- 2. WATER PHYSICS & DRAG ---
         let inWater = false;
-        let isSwimming = state.isSwimming || false;
+        let isSwimming = state.player.isSwimming || false;
         let isWading = false;
 
         if (session.engine.ground) {
@@ -261,19 +267,19 @@ export class PlayerMovementSystem implements System {
         }
 
 
-        state.isSwimming = isSwimming;
-        state.isWading = isWading;
+        state.player.isSwimming = isSwimming;
+        state.player.isWading = isWading;
 
         // --- 3. EXTINGUISH BURNING IN WATER ---
-        if (inWater && state.effectDurations[StatusEffectID.BURNING] > 0) {
-            state.effectDurations[StatusEffectID.BURNING] = 0;
+        if (inWater && state.combat.effectDurations[StatusEffectID.BURNING] > 0) {
+            state.combat.effectDurations[StatusEffectID.BURNING] = 0;
             audioEngine.playSound(SoundID.STEAM_HISS);
         }
 
         // --- 4. STAMINA & REGENERATION ---
         const waterStaminaDrain = isSwimming ? COMBAT.STAMINA_DRAIN_SWIM : (isWading ? COMBAT.STAMINA_DRAIN_WADE : 0);
         if (waterStaminaDrain > 0 && !state.vehicle.active) {
-            state.lastStaminaUseTime = simTime;
+            state.player.lastStaminaUseTime = simTime;
             stats[PlayerStatID.STAMINA] = Math.max(0, stats[PlayerStatID.STAMINA] - waterStaminaDrain * delta);
 
             if (isSwimming && stats[PlayerStatID.STAMINA] < 0.1) {
@@ -289,54 +295,54 @@ export class PlayerMovementSystem implements System {
 
         const rushRampSpeed = delta * PLAYER.RUSH_RAMP_SPEED; // 2 seconds for full ramp
 
-        if (state.isRushing) {
+        if (state.player.isRushing) {
             // --- PROGRESSIVE RAMP-UP (2.0s) ---
-            state.rushFactor = Math.min(1.0, state.rushFactor + rushRampSpeed);
+            state.player.rushFactor = Math.min(1.0, state.player.rushFactor + rushRampSpeed);
 
             // --- DYNAMIC STAMINA DRAIN (Ramping based on Ability DB) ---
             const ability = ABILITIES[AbilityID.RUSH];
-            const drainRate = (ability.staminaCost || 5) + (state.rushFactor * 17);
+            const drainRate = (ability.staminaCost || 5) + (state.player.rushFactor * 17);
             stats[PlayerStatID.STAMINA] = Math.max(0, stats[PlayerStatID.STAMINA] - delta * drainRate);
-            state.lastStaminaUseTime = simTime;
-            state.statusFlags |= PlayerStatusFlags.RUSHING;
+            state.player.lastStaminaUseTime = simTime;
+            state.combat.statusFlags |= PlayerStatusFlags.RUSHING;
 
             if (stats[PlayerStatID.STAMINA] <= 0) {
-                state.isRushing = false;
-                state.lastRushEndTime = simTime;
-                state.statusFlags &= ~PlayerStatusFlags.RUSHING;
+                state.player.isRushing = false;
+                state.player.lastRushEndTime = simTime;
+                state.combat.statusFlags &= ~PlayerStatusFlags.RUSHING;
             }
         } else {
             // --- VINTERDÖD FIX: Properly ramp down when not rushing ---
-            state.rushFactor = Math.max(0, state.rushFactor - rushRampSpeed);
-            state.statusFlags &= ~PlayerStatusFlags.RUSHING;
+            state.player.rushFactor = Math.max(0, state.player.rushFactor - rushRampSpeed);
+            state.combat.statusFlags &= ~PlayerStatusFlags.RUSHING;
         }
 
         // --- 4. FINAL VELOCITY RESOLUTION ---
         // Apply Rush Multiplier (1.0x to 2.0x) universally to the pre-calculated speed.
         // This ensures perk modifiers are correctly inherited during the rush ramp.
-        speed *= (1.0 + state.rushFactor);
+        speed *= (1.0 + state.player.rushFactor);
 
         // Update Speed Ratio for Animation Sync (Base = 1.0)
-        state.currentSpeedRatio = speed / Math.max(0.001, currentSpeed);
+        state.player.currentSpeedRatio = speed / Math.max(0.001, currentSpeed);
 
-        if (!state.isDodging && !state.isRushing && waterStaminaDrain === 0) {
+        if (!state.player.isDodging && !state.player.isRushing && waterStaminaDrain === 0) {
             // Natural regeneration only if idle/walking and not soon after stamina use
-            if (simTime - state.lastStaminaUseTime > COMBAT.STAMINA_REGEN_DELAY) {
+            if (simTime - state.player.lastStaminaUseTime > COMBAT.STAMINA_REGEN_DELAY) {
                 stats[PlayerStatID.STAMINA] = Math.min(stats[PlayerStatID.MAX_STAMINA], stats[PlayerStatID.STAMINA] + COMBAT.STAMINA_REGEN_IDLE * delta);
             }
         }
 
         if (stats[PlayerStatID.HP] < stats[PlayerStatID.MAX_HP] &&
-            !(state.statusFlags & PlayerStatusFlags.DEAD) &&
-            simTime - state.lastDamageTime > COMBAT.HP_REGEN_DELAY) {
+            !(state.combat.statusFlags & PlayerStatusFlags.DEAD) &&
+            simTime - state.player.lastDamageTime > COMBAT.HP_REGEN_DELAY) {
             stats[PlayerStatID.HP] = Math.min(stats[PlayerStatID.MAX_HP], stats[PlayerStatID.HP] + COMBAT.HP_REGEN_IDLE * delta);
         }
 
         let isMovingVal = false;
 
         // --- 3. MOVE PROCESSING ---
-        if (state.isDodging) {
-            if (state.dodgeDir.lengthSq() === 0) {
+        if (state.player.isDodging) {
+            if (state.player.dodgeDir.lengthSq() === 0) {
                 // Set direction once at start of dodge
                 _v6.set(0, 0, 0);
                 if (acts[InputAction.UP]) _v6.z -= 1; if (acts[InputAction.DOWN]) _v6.z += 1;
@@ -344,15 +350,15 @@ export class PlayerMovementSystem implements System {
 
                 if (_v6.lengthSq() > 0) {
                     const camAngle = session.cameraAngle || 0;
-                    state.dodgeDir.copy(_v6).normalize();
-                    if (camAngle !== 0) state.dodgeDir.applyAxisAngle(_UP, camAngle);
+                    state.player.dodgeDir.copy(_v6).normalize();
+                    if (camAngle !== 0) state.player.dodgeDir.applyAxisAngle(_UP, camAngle);
                 } else {
-                    state.dodgeDir.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+                    state.player.dodgeDir.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
                 }
             }
 
-            if (!state.dodgeSmokeSpawned && !inWater) {
-                state.dodgeSmokeSpawned = true;
+            if (!state.player.dodgeSmokeSpawned && !inWater) {
+                state.player.dodgeSmokeSpawned = true;
                 audioEngine.playSound(SoundID.DASH);
                 session.makeNoise(playerGroup.position, NoiseType.PLAYER_DODGING, NOISE_RADIUS[NoiseType.PLAYER_DODGING]);
 
@@ -364,34 +370,31 @@ export class PlayerMovementSystem implements System {
                     session.worldStreamer.getNearbyEnemies(playerGroup.position.x, playerGroup.position.z, 5, poolIdx);
 
                     if (pool.getCount(poolIdx) > 0) {
-                        const perkSystem = session.getSystem<any>(SystemID.PERK_SYSTEM);
-                        if (perkSystem) {
-                            perkSystem.applyPerk(session, StatusEffectID.QUICK_FINGER);
-                        }
+                        this.perkSystem.applyPerk(session, StatusEffectID.QUICK_FINGER);
                     }
                 }
 
                 FXSystem.spawnParticle(
-                    session.engine.scene, state.particles,
+                    session.engine.scene, state.combat.particles,
                     playerGroup.position.x, 0.5, playerGroup.position.z,
                     FXParticleType.LARGE_SMOKE, 2, undefined, undefined, 0xcccccc, 1.2
                 );
             }
 
-            if (simTime < state.dodgeStartTime + COMBAT.DODGE_DURATION) {
+            if (simTime < state.player.dodgeStartTime + COMBAT.DODGE_DURATION) {
                 const dodgeSpeed = speed * 2.5;
-                _v1.copy(state.dodgeDir).multiplyScalar(dodgeSpeed * delta);
+                _v1.copy(state.player.dodgeDir).multiplyScalar(dodgeSpeed * delta);
                 this.performMove(playerGroup, _v1, state, session, simTime, delta);
                 isMovingVal = true;
 
                 // UNIFIED STATE SYNC
-                state.statusFlags |= PlayerStatusFlags.DODGING;
+                state.combat.statusFlags |= PlayerStatusFlags.DODGING;
             } else {
-                state.isDodging = false;
-                state.statusFlags &= ~PlayerStatusFlags.DODGING;
-                state.dodgeSmokeSpawned = false;
-                state.dodgeDir.set(0, 0, 0);
-                state.lastDodgeEndTime = simTime;
+                state.player.isDodging = false;
+                state.combat.statusFlags &= ~PlayerStatusFlags.DODGING;
+                state.player.dodgeSmokeSpawned = false;
+                state.player.dodgeDir.set(0, 0, 0);
+                state.player.lastDodgeEndTime = simTime;
             }
         } else if (!disableInput) {
             _v6.set(0, 0, 0);
@@ -403,7 +406,7 @@ export class PlayerMovementSystem implements System {
                 _v6.z += input.joystickMove.y;
             }
 
-            const disorientedDuration = state.effectDurations[StatusEffectID.DISORIENTED];
+            const disorientedDuration = state.combat.effectDurations[StatusEffectID.DISORIENTED];
             const isDisoriented = disorientedDuration > 0;
 
             if (isDisoriented) {
@@ -432,16 +435,16 @@ export class PlayerMovementSystem implements System {
                 _forward.set(0, 0, 1).applyQuaternion(playerGroup.quaternion);
                 const dot = _forward.dot(_v1);
 
-                state.isBacking = dot < -0.4;
-                state.isStrafing = Math.abs(dot) < 0.4;
+                state.player.isBacking = dot < -0.4;
+                state.player.isStrafing = Math.abs(dot) < 0.4;
 
-                if (state.isStrafing) {
+                if (state.player.isStrafing) {
                     // Bypass heavy crossVectors and Math.sqrt. 
                     // An orthogonal vector to (x, 0, z) on the Y-plane is simply (-z, 0, x).
                     _right.set(-_forward.z, 0, _forward.x);
-                    state.strafeDirection = Math.sign(_right.dot(_v1));
+                    state.player.strafeDirection = Math.sign(_right.dot(_v1));
                 } else {
-                    state.strafeDirection = 0;
+                    state.player.strafeDirection = 0;
                 }
 
                 const oldX = playerGroup.position.x;
@@ -460,21 +463,21 @@ export class PlayerMovementSystem implements System {
 
                 // Velocity Gate: Accumulate ONLY if moving decisively
                 if (mobilityRatio > 0.2 && movedDist > 0.001) {
-                    state.distanceSinceLastStep += movedDist;
+                    state.player.distanceSinceLastStep += movedDist;
 
-                    const distMult = state.isRushing ? 0.8 : 1.0;
-                    const reqDist = state.minStepDistance * distMult;
+                    const distMult = state.player.isRushing ? 0.8 : 1.0;
+                    const reqDist = state.player.minStepDistance * distMult;
 
-                    if (state.distanceSinceLastStep >= reqDist) {
-                        state.distanceSinceLastStep = 0;
-                        state.lastStepRight = !state.lastStepRight;
+                    if (state.player.distanceSinceLastStep >= reqDist) {
+                        state.player.distanceSinceLastStep = 0;
+                        state.player.lastStepRight = !state.player.lastStepRight;
 
                         FootprintSystem.addFootprint(
                             session,
                             playerGroup.position,
                             playerGroup.rotation.y,
-                            state.lastStepRight,
-                            state.isRushing,
+                            state.player.lastStepRight,
+                            state.player.isRushing,
                             inWater,
                             isSwimming,
                             session.worldStreamer.getGroundMaterial(playerGroup.position.x, playerGroup.position.z)
@@ -486,7 +489,7 @@ export class PlayerMovementSystem implements System {
                         if (isSwimming) {
                             noiseType = NoiseType.PLAYER_SWIM;
                             noiseRadius = NOISE_RADIUS[NoiseType.PLAYER_SWIM];
-                        } else if (state.isRushing) {
+                        } else if (state.player.isRushing) {
                             noiseType = NoiseType.PLAYER_RUSH;
                             noiseRadius = NOISE_RADIUS[NoiseType.PLAYER_RUSH];
                         }
@@ -495,17 +498,17 @@ export class PlayerMovementSystem implements System {
                     }
                 } else {
                     // We are pushing against a wall or stuck
-                    state.distanceSinceLastStep = 0;
+                    state.player.distanceSinceLastStep = 0;
                 }
             } else {
-                state.isBacking = false;
-                state.isStrafing = false;
-                state.strafeDirection = 0;
-                state.distanceSinceLastStep = 0;
+                state.player.isBacking = false;
+                state.player.isStrafing = false;
+                state.player.strafeDirection = 0;
+                state.player.distanceSinceLastStep = 0;
             }
         }
 
-        if (isMovingVal || acts[InputAction.FIRE] || acts[InputAction.DODGE]) state.lastActionTime = simTime;
+        if (isMovingVal || acts[InputAction.FIRE] || acts[InputAction.DODGE]) state.player.lastActionTime = simTime;
         return isMovingVal;
     }
 
@@ -517,7 +520,7 @@ export class PlayerMovementSystem implements System {
         const steps = Math.ceil(dist / MAX_STEP);
         _v2.copy(baseMoveVec).divideScalar(steps);
 
-        const canKnockback = state.isRushing || state.isDodging;
+        const canKnockback = state.player.isRushing || state.player.isDodging;
         const searchRadius = canKnockback ? 2.5 : 1.0;
 
         if (canKnockback) {
@@ -533,11 +536,11 @@ export class PlayerMovementSystem implements System {
                 this._knockbackCtx,
                 playerGroup.position,
                 searchRadius,
-                state.isDodging ? 15 : 50, // Max Force
+                state.player.isDodging ? 15 : 50, // Max Force
                 0,                         // Max Damage (Damage only applied on landing!)
                 DamageType.PHYSICAL,
-                state.isDodging ? DamageID.DODGE : DamageID.RUSH,
-                state.isDodging ? state.dodgeDir : baseMoveVec
+                state.player.isDodging ? DamageID.DODGE : DamageID.RUSH,
+                state.player.isDodging ? state.player.dodgeDir : baseMoveVec
             );
         }
 
@@ -549,12 +552,9 @@ export class PlayerMovementSystem implements System {
         //   Query once at the player's current position with a small radius (1.2m).
         const streamer = session.worldStreamer;
 
-        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-        if (tracker) {
-            tracker.recordDistance(session, distMoved);
-            if (state.isRushing) {
-                tracker.recordRushDistance(session, distMoved);
-            }
+        this.damageTracker.recordDistance(session, distMoved);
+        if (state.player.isRushing) {
+            this.damageTracker.recordRushDistance(session, distMoved);
         }
 
         const enPool = streamer.getEnemyPool();
@@ -630,7 +630,7 @@ export class PlayerMovementSystem implements System {
             // If we are charging a throwable, we only rotate to the stick IF it's an aim stick.
             // If the aim stick is released while charging, we remain facing the locked throw rotation
             // and IGNORE the movement stick for rotation.
-            if (state.throwChargeStart > 0) {
+            if (state.combat.throwChargeStart > 0) {
                 if (isAiming) {
                     _v1.set(stick.x, 0, stick.y);
                     if (angle !== 0) _v1.applyAxisAngle(_UP, angle);
@@ -638,7 +638,7 @@ export class PlayerMovementSystem implements System {
                     playerGroup.lookAt(_v5);
                 } else {
                     // Lock to the cached throw rotation
-                    playerGroup.quaternion.copy(state.throwChargeRotation);
+                    playerGroup.quaternion.copy(state.combat.throwChargeRotation);
                 }
                 return;
             }
@@ -656,7 +656,7 @@ export class PlayerMovementSystem implements System {
             }
         } else {
             // --- DESKTOP / MOUSE ---
-            const isCharging = state.throwChargeStart > 0;
+            const isCharging = state.combat.throwChargeStart > 0;
             const hasAimInput = input.aimVector && input.aimVector.lengthSq() > 1;
 
             if (hasAimInput) {
@@ -671,7 +671,7 @@ export class PlayerMovementSystem implements System {
                 playerGroup.lookAt(_v5);
             } else if (isCharging) {
                 // Keep facing the throw direction even if mouse isn't moving
-                playerGroup.quaternion.copy(state.throwChargeRotation);
+                playerGroup.quaternion.copy(state.combat.throwChargeRotation);
             } else if (isMoving) {
                 if (_v6.lengthSq() > 0) {
                     _v1.copy(_v6).normalize();

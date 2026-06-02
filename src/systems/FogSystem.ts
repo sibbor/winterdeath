@@ -3,6 +3,7 @@ import { WinterEngine } from '../core/engine/WinterEngine';
 import { WindSystem } from './WindSystem';
 import { MATERIALS_FOG, FogUniforms } from '../utils/assets';
 import { System, SystemID } from './System';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 const MAX_FOG_PLANES = 25; // Optimized for performance
 const FOG_AREA_SIZE = 80.0; // Radius around player

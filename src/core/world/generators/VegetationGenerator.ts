@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MATERIALS, getTreeDepthMaterial } from '../../../utils/assets/materials';
-import { SectorContext } from '../../../game/session/SectorTypes';
+import { SectorBuildContext } from '../../../game/session/SectorTypes';
 import { SectorBuilder } from '../SectorBuilder';
 import { VEGETATION_TYPE } from '../../../content/environment';
 import { MaterialType } from '../../../content/environment';
@@ -408,7 +408,7 @@ const _getBounds = (region: Region) => {
     return region;
 };
 
-const _placeTrees = async (ctx: SectorContext, region: Region, spacing: number, types: VEGETATION_TYPE[]) => {
+const _placeTrees = async (ctx: SectorBuildContext, region: Region, spacing: number, types: VEGETATION_TYPE[]) => {
     const bounds = _getBounds(region);
     const count = Math.floor((bounds.w * bounds.d) / (spacing * spacing));
     const matrixBuckets: Record<string, THREE.Matrix4[]> = {};
@@ -465,7 +465,7 @@ const _placeTrees = async (ctx: SectorContext, region: Region, spacing: number, 
 };
 
 const _placeGroundCover = async (
-    ctx: SectorContext,
+    ctx: SectorBuildContext,
     region: Region,
     density: number,
     geo: THREE.BufferGeometry,
@@ -535,7 +535,7 @@ const _placeGroundCover = async (
     }
 };
 
-const _placeSunflowers = async (ctx: SectorContext, region: Region, density: number) => {
+const _placeSunflowers = async (ctx: SectorBuildContext, region: Region, density: number) => {
     const bounds = _getBounds(region);
     const count = Math.floor(bounds.w * bounds.d * density);
     if (count <= 0) return;
@@ -656,7 +656,7 @@ export const VegetationGenerator = {
 
     initNaturePrototypes: async (yieldToMain?: () => Promise<void>) => {
         const VARIANTS = 3;
-        // [VINTERDÖD] SSoT Mapping: Ensure prototypes are keyed via the authoritative VTYPE_NAME array
+        // SSoT Mapping: Ensure prototypes are keyed via the authoritative VTYPE_NAME array
         // to prevent mismatches between generation and placement (e.g. SPRUCE_1).
         const types = [
             VEGETATION_TYPE.PINE,
@@ -721,7 +721,7 @@ export const VegetationGenerator = {
         return mesh;
     },
 
-    createHedgePath: async (ctx: SectorContext, points: THREE.Vector3[], height: number = 4, thickness: number = 1.5) => {
+    createHedgePath: async (ctx: SectorBuildContext, points: THREE.Vector3[], height: number = 4, thickness: number = 1.5) => {
         if (points.length < 2) return;
 
         let startTime = performance.now();
@@ -771,7 +771,7 @@ export const VegetationGenerator = {
         return wall;
     },
 
-    createStoneWallPath: async (ctx: SectorContext, points: THREE.Vector3[], height: number = 1.5, thickness: number = 0.8) => {
+    createStoneWallPath: async (ctx: SectorBuildContext, points: THREE.Vector3[], height: number = 1.5, thickness: number = 0.8) => {
         if (points.length < 2) return;
 
         let startTime = performance.now();
@@ -852,7 +852,7 @@ export const VegetationGenerator = {
         return group;
     },
 
-    addInstancedTrees: (ctx: SectorContext | { scene: THREE.Scene, uniqueMeshes?: any[] }, typeKey: string, matrices: THREE.Matrix4[], materialOverride?: THREE.Material) => {
+    addInstancedTrees: (ctx: SectorBuildContext | { scene: THREE.Scene, uniqueMeshes?: any[] }, typeKey: string, matrices: THREE.Matrix4[], materialOverride?: THREE.Material) => {
         if (matrices.length === 0) return;
 
         const proto = prototypes[typeKey];
@@ -863,7 +863,7 @@ export const VegetationGenerator = {
 
         let baseType = typeKey.split('_')[0];
         if (typeKey.startsWith('DEAD_TREE')) baseType = 'DEAD_TREE';
-        
+
         let trunkMat = materialOverride || MATERIALS.treeTrunk;
         let leavesMat = materialOverride || MATERIALS.treeFirNeedles;
 
@@ -944,7 +944,7 @@ export const VegetationGenerator = {
     },
 
     fillArea: async (
-        ctx: SectorContext,
+        ctx: SectorBuildContext,
         type: VEGETATION_TYPE | VEGETATION_TYPE[],
         region: THREE.Vector3[] | { x: number, z: number, w: number, d: number },
         density: number = 1.0
@@ -972,7 +972,7 @@ export const VegetationGenerator = {
         }
     },
 
-    createForest: async (ctx: SectorContext,
+    createForest: async (ctx: SectorBuildContext,
         region: { x: number, z: number, w: number, d: number } | THREE.Vector3[],
         countOrSpacing: number,
         type: string | string[] = 'PINE') => {
@@ -1040,7 +1040,7 @@ export const VegetationGenerator = {
         }
     },
 
-    createForestFromPolygon: async (ctx: SectorContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'PINE') => {
+    createForestFromPolygon: async (ctx: SectorBuildContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'PINE') => {
         if (!polygon || polygon.length < 3) return;
 
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -1121,7 +1121,7 @@ export const VegetationGenerator = {
         return tree;
     },
 
-    createDeforestation: async (ctx: SectorContext, x: number, z: number, w: number, d: number, count: number) => {
+    createDeforestation: async (ctx: SectorBuildContext, x: number, z: number, w: number, d: number, count: number) => {
         const matrixBuckets: Record<string, THREE.Matrix4[]> = {};
         const rand = () => Math.random();
 

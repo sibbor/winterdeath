@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { PlayerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex, TELEMETRY_BUFFER_SIZE } from '../entities/player/PlayerTypes';
+import { CareerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex, TELEMETRY_BUFFER_SIZE } from '../types/CareerStats';
 import { DamageID } from '../entities/player/CombatTypes';
-import { GameSettings } from '../core/engine/EngineTypes';
+import { GameSettings } from '../types/StateTypes';
 
 // Re-export Data
 export { ZOMBIE_TYPES } from './enemies/zombies';
@@ -209,103 +209,6 @@ export const SETTINGS_DEFAULT: GameSettings = {
     textureQuality: 1.0,
     volumetricFog: true,
     showDiscoveryPopups: true
-};
-
-export const INITIAL_STATS: PlayerStats = {
-    statsBuffer: (function () {
-        const b = new Float32Array(PlayerStatID.COUNT);
-        b[PlayerStatID.HP] = 100;
-        b[PlayerStatID.MAX_HP] = 100;
-        b[PlayerStatID.STAMINA] = 100;
-        b[PlayerStatID.MAX_STAMINA] = 100;
-        b[PlayerStatID.XP] = 0;
-        b[PlayerStatID.LEVEL] = 1;
-        b[PlayerStatID.CURRENT_XP] = 0;
-        b[PlayerStatID.NEXT_LEVEL_XP] = 1500;
-        b[PlayerStatID.SKILL_POINTS] = 0;
-        b[PlayerStatID.SCRAP] = 0;
-        b[PlayerStatID.SPEED] = PLAYER.BASE_SPEED;
-
-        // --- TOTALS (11-15: SCRAP, DAMAGE_DEALT, DAMAGE_TAKEN, DISTANCE, KILLS) ---
-        b[PlayerStatID.TOTAL_SCRAP_COLLECTED] = 0;
-        b[PlayerStatID.TOTAL_DAMAGE_DEALT] = 0;
-        b[PlayerStatID.TOTAL_DAMAGE_TAKEN] = 0;
-        b[PlayerStatID.TOTAL_DISTANCE_TRAVELED] = 0;
-        b[PlayerStatID.TOTAL_KILLS] = 0;
-
-        b[PlayerStatID.SCORE] = 0;
-
-        // --- MULTIPLIERS (17+) ---
-        b[PlayerStatID.MULTIPLIER_SPEED] = 1.0;
-        b[PlayerStatID.MULTIPLIER_RELOAD] = 1.0;
-        b[PlayerStatID.MULTIPLIER_FIRERATE] = 1.0;
-        b[PlayerStatID.MULTIPLIER_DMG_RESIST] = 1.0;
-        b[PlayerStatID.MULTIPLIER_RANGE] = 1.0;
-
-        // --- BASE MULTIPLIERS (Phase 11) ---
-        b[PlayerStatID.BASE_MULTIPLIER_SPEED] = 1.0;
-        b[PlayerStatID.BASE_MULTIPLIER_RELOAD] = 1.0;
-        b[PlayerStatID.BASE_MULTIPLIER_FIRERATE] = 1.0;
-        b[PlayerStatID.BASE_MULTIPLIER_DMG_RESIST] = 1.0;
-        b[PlayerStatID.BASE_MULTIPLIER_RANGE] = 1.0;
-
-        // --- BAKE FINAL PRE-CALCULATED STATS (Zero-GC) ---
-        b[PlayerStatID.FINAL_SPEED] = b[PlayerStatID.SPEED] * b[PlayerStatID.BASE_MULTIPLIER_SPEED] * b[PlayerStatID.MULTIPLIER_SPEED] * KMH_TO_MS;
-
-        return b;
-
-    })(),
-    effectDurations: new Float32Array(MAX_ENTITIES.PERKS),
-    effectMaxDurations: new Float32Array(MAX_ENTITIES.PERKS),
-    effectIntensities: new Float32Array(MAX_ENTITIES.PERKS),
-
-    weaponKills: new Float64Array(StatWeaponIndex.COUNT),
-    weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
-    weaponShotsFired: new Float64Array(StatWeaponIndex.COUNT),
-    weaponShotsHit: new Float64Array(StatWeaponIndex.COUNT),
-    weaponTimeActive: new Float64Array(StatWeaponIndex.COUNT),
-    weaponEngagementDistSq: new Float64Array(StatWeaponIndex.COUNT),
-
-    perkTimesGained: new Float64Array(StatPerkIndex.COUNT),
-    perkDamageAbsorbed: new Float64Array(StatPerkIndex.COUNT),
-    perkDamageDealt: new Float64Array(StatPerkIndex.COUNT),
-    perkDebuffsCleansed: new Float64Array(StatPerkIndex.COUNT),
-
-    enemyKills: new Float64Array(StatEnemyIndex.COUNT),
-    deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
-    incomingDamageBuffer: new Float64Array(TELEMETRY_BUFFER_SIZE),
-
-    statusFlags: 0,
-    activePassives: [],
-    activeBuffs: [],
-    activeDebuffs: [],
-
-    sectorsCompleted: 0,
-    totalSkillPointsEarned: 0,
-
-    discoveredCollectibles: [],
-    viewedCollectibles: [],
-    discoveredClues: [],
-    discoveredPois: [],
-    discoveredZombies: [],
-    discoveredBosses: [],
-    deadBossIndices: [],
-    discoveredPerksMap: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
-
-    prologueSeen: false,
-    rescuedFamilyIndices: [],
-    familyFoundCount: 0,
-    mostUsedWeapon: DamageID.NONE,
-    challengeTiers: new Int32Array(MAX_ENTITIES.CHALLENGES),
-    totalEnemiesKilled: 0,
-    totalChallengePoints: 0,
-    trackedChallengeIds: [],
-
-    // --- CACHED ENTITY STATE (Phase 13) ---
-    velocity: new THREE.Vector3(),
-    nodes: { gun: null, barrelTip: null, laserSight: null },
-    baseScale: 1.0,
-    baseY: 0,
 };
 
 export enum FamilyMemberID {

@@ -18,7 +18,7 @@ export class AssetLoader {
 
     /**
      * Loads a texture and sets standard properties for environment maps.
-     * [VINTERDÖD] Uses flat arguments instead of objects to prevent GC allocations.
+     * Uses flat arguments instead of objects to prevent GC allocations.
      *
      * @param persistent if true, the texture will never be removed from VRAM.
      *                   Perfect for global bump-maps.

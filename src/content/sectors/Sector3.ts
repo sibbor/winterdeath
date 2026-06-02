@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, ChestType } from '../../game/session/SectorTypes';
-import { GroundType } from '../../core/engine/EngineTypes';
+import { SectorDef, SectorBuildContext, ChestType } from '../../game/session/SectorTypes';
+import { GroundType } from '../../core/engine/EnvironmentalTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { VEGETATION_TYPE } from '../../content/environment';
@@ -17,7 +17,7 @@ import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { InteractionType, InteractionShape } from '../../systems/ui/UIEventBridge';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { FamilyMemberID } from '../constants';
-import { WeatherType } from '../../core/engine/EngineTypes';
+import { WeatherType } from '../../core/engine/EnvironmentalTypes';
 import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 
 // ─── Zero-GC Scratchpads ──────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ export const Sector3: SectorDef = {
         rotationSpeed: 0.05
     },
 
-    setupProps: async (ctx: SectorContext) => {
+    setupProps: async (ctx: SectorBuildContext) => {
         const { scene } = ctx;
 
         let startTime = performance.now();
@@ -226,7 +226,7 @@ export const Sector3: SectorDef = {
         await SectorBuilder.spawnFamily(ctx, FamilyMemberID.NATHALIE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, found: false });
     },
 
-    setupContent: async (ctx: SectorContext) => {
+    setupContent: async (ctx: SectorBuildContext) => {
         if (ctx.isWarmup) return;
         SectorBuilder.addTriggers(ctx, [
             // Part 1 — on the gravel path
@@ -269,7 +269,7 @@ export const Sector3: SectorDef = {
         ]);
     },
 
-    setupZombies: async (ctx: SectorContext) => {
+    setupZombies: async (ctx: SectorBuildContext) => {
         if (ctx.isWarmup) return;
         for (let i = 0; i < 5; i++) {
             ctx.spawnZombie(EnemyType.WALKER);
@@ -704,7 +704,7 @@ export const Sector3: SectorDef = {
     }
 };
 
-function spawnSectorHordes(ctx: SectorContext) {
+function spawnSectorHordes(ctx: SectorBuildContext) {
     if (!ctx.spawnHorde) return;
 
     const hordeSpots = [

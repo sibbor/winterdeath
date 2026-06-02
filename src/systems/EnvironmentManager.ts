@@ -7,7 +7,8 @@ import { WaterSystem } from './WaterSystem';
 import { LightSystem } from './LightSystem';
 import { WindSystem } from './WindSystem';
 import { GroundSystem } from './GroundSystem';
-import { SectorEnvironment } from '../core/engine/EngineTypes';
+import { EnvironmentConfig } from '../core/engine/EnvironmentalTypes';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 // --- ZERO-GC SCRATCHPADS ---
 const _c1 = new THREE.Color();
@@ -56,7 +57,7 @@ export class EnvironmentManager implements System {
      * Unifies the synchronization of all environmental systems.
      * Called during scene mounting (Camp or Sector).
      */
-    public sync(env: SectorEnvironment | any, groundType: number = 0, targetScene?: THREE.Scene, isWarmup: boolean = false) {
+    public sync(env: EnvironmentConfig | any, groundType: number = 0, targetScene?: THREE.Scene, isWarmup: boolean = false) {
         const scene = targetScene || this.lastScene;
         if (!scene) return;
         this.lastScene = scene;
@@ -88,7 +89,7 @@ export class EnvironmentManager implements System {
         this.ground.sync(groundType, _c1);
 
         // 6. Water System (Lakes/Buoyancy/Vegetation)
-        // [VINTERDÖD] Water bodies are registered during sector building; 
+        // Water bodies are registered during sector building; 
         // they are persistent and re-attached via the environment.reAttach() call.
 
         // 7. Wind System (Global force)
@@ -140,12 +141,12 @@ export class EnvironmentManager implements System {
         this.ground.clear();
     }
 
-    public update(context: any, delta: number, simTime: number, renderTime: number): void {
+    public update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number): void {
         if (!this.enabled) return;
 
         // Environmental systems are passive (query-only) in the fixed-step loop.
         // We only tick them here during the variable render loop.
-        this.sky.update(context, delta, simTime, renderTime);
+        this.sky.update(session, delta, simTime, renderTime);
 
         // Dynamically drive fog color from live sky atmosphere every frame.
         // NOTE: SkySystem already owns scene.background via pointer assignment in processProcedural;
@@ -163,11 +164,11 @@ export class EnvironmentManager implements System {
             this.fog.setVolumetricColor(_c1);
         }
 
-        this.fog.update(context, delta, simTime, renderTime);
-        this.weather.update(context, delta, simTime, renderTime);
-        this.water.update(context, delta, simTime, renderTime);
-        this.light.update(context, delta, simTime, renderTime);
-        this.wind.update(context, delta, simTime, renderTime);
-        this.ground.update(context, delta, simTime, renderTime);
+        this.fog.update(session, delta, simTime, renderTime);
+        this.weather.update(session, delta, simTime, renderTime);
+        this.water.update(session, delta, simTime, renderTime);
+        this.light.update(session, delta, simTime, renderTime);
+        this.wind.update(session, delta, simTime, renderTime);
+        this.ground.update(session, delta, simTime, renderTime);
     }
 }

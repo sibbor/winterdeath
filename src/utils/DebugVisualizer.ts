@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorContext } from '../game/session/SectorTypes';
+import { SectorBuildContext } from '../game/session/SectorTypes';
 import { ObjectGenerator } from '../core/world/generators/ObjectGenerator';
 import { GEOMETRY, MATERIALS } from './assets';
 import { MapItemType } from '../components/ui/hud/HudTypes';
@@ -29,7 +29,7 @@ export const DebugVisualizer = {
      * Master function to automatically draw all debug info for a loaded sector.
      * Extracts data from the context arrays (triggers, mapItems) without needing manual calls.
      */
-    visualizeSector: (ctx: SectorContext, sectorDef?: any) => {
+    visualizeSector: (ctx: SectorBuildContext, sectorDef?: any) => {
         if (!ctx.debugMode) return;
 
         // Clear old debug objects to prevent geometry leaks and FPS drops
@@ -110,7 +110,7 @@ export const DebugVisualizer = {
         }
     },
 
-    drawPolygon: (ctx: SectorContext, points: THREE.Vector3[], color: number = 0x00ff00, yOffset: number = 1, parent?: THREE.Object3D) => {
+    drawPolygon: (ctx: SectorBuildContext, points: THREE.Vector3[], color: number = 0x00ff00, yOffset: number = 1, parent?: THREE.Object3D) => {
         if (!ctx.debugMode || !points || points.length === 0) return;
 
         // Optimization: Use a temporary array for the closed loop to avoid spreading
@@ -132,7 +132,7 @@ export const DebugVisualizer = {
         else ctx.scene.add(line);
     },
 
-    drawPath: (ctx: SectorContext, points: THREE.Vector3[], color: number = 0x0000ff, yOffset: number = 0, parent?: THREE.Object3D) => {
+    drawPath: (ctx: SectorBuildContext, points: THREE.Vector3[], color: number = 0x0000ff, yOffset: number = 0, parent?: THREE.Object3D) => {
         if (!ctx.debugMode || !points || points.length === 0) return;
 
         const geo = new THREE.BufferGeometry().setFromPoints(points);
@@ -150,7 +150,7 @@ export const DebugVisualizer = {
         else ctx.scene.add(line);
     },
 
-    spawnMarker: (ctx: SectorContext, x: number, z: number, height: number, label: string, parent?: THREE.Object3D) => {
+    spawnMarker: (ctx: SectorBuildContext, x: number, z: number, height: number, label: string, parent?: THREE.Object3D) => {
         if (!ctx.debugMode) return;
 
         const beam = new THREE.Mesh(GEOMETRY.debugMarker, MATERIALS.debugBeam);
@@ -168,7 +168,7 @@ export const DebugVisualizer = {
         else ctx.scene.add(sprite);
     },
 
-    visualizeTriggers: (ctx: SectorContext, parent?: THREE.Object3D) => {
+    visualizeTriggers: (ctx: SectorBuildContext, parent?: THREE.Object3D) => {
         if (!ctx.debugMode || !ctx.triggers) return;
 
         const triggers = ctx.triggers;
@@ -200,7 +200,7 @@ export const DebugVisualizer = {
         }
     },
 
-    visualizeenvironmentalZones: (ctx: SectorContext, parent?: THREE.Object3D) => {
+    visualizeenvironmentalZones: (ctx: SectorBuildContext, parent?: THREE.Object3D) => {
         if (!ctx.debugMode) return;
 
         const processZone = (z: any) => {

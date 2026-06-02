@@ -5,6 +5,8 @@ import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { System, SystemID } from './System';
 import { RuntimeStressHarness } from '../utils/debug/RuntimeStressHarness';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
+import { DiscoverySystem } from './DiscoverySystem';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 export interface NoiseEvent {
     pos: THREE.Vector3;
@@ -25,7 +27,8 @@ export class EnemyDetectionSystem implements System {
     private readonly noiseEvents: NoiseEvent[];
     private activeNoiseCount: number = 0;
 
-    private context: any = null;
+    private session!: GameSessionLogic;
+    private discoverySystem!: DiscoverySystem;
 
     // Pre-allocated vectors for Zero-GC
     private _vStart = new THREE.Vector3();
@@ -48,9 +51,10 @@ export class EnemyDetectionSystem implements System {
     public attach() { }
     public detach() { }
 
-    public init(context: any) {
-        this.context = context;
-        context.detectionSystem = this;
+    public init(session: GameSessionLogic) {
+        this.session = session;
+        session.detectionSystem = this;
+        this.discoverySystem = session.getSystem<DiscoverySystem>(SystemID.DISCOVERY_SYSTEM)!;
     }
 
     /**
@@ -63,7 +67,7 @@ export class EnemyDetectionSystem implements System {
             radius = NOISE_RADIUS[type] || 30;
         }
 
-        const simTime = this.context.state.simTime;
+        const simTime = this.session.state.simTime;
 
         // --- CENTRALIZED THROTTLING (SPATIAL MERGING) ---
         for (let i = 0; i < this.activeNoiseCount; i++) {
@@ -136,16 +140,16 @@ export class EnemyDetectionSystem implements System {
         return pool.getCount(poolIdx) === 0;
     }
 
-    update(context: any, delta: number, simTime: number, renderTime: number) {
-        const state = context.state;
-        if (!state || !context.playerPos) return;
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
+        if (!session || !session.state) return;
+        const state = session.state;
+        const playerPos: THREE.Vector3 = state.player.position;
 
         const enemies = EnemyManager.getActiveEnemies();
         const activeCount = EnemyManager.getActiveCount();
-        const playerPos: THREE.Vector3 = context.playerPos;
-        const streamer: WorldStreamer = context.worldStreamer;
+        const streamer: WorldStreamer = session.worldStreamer;
 
-        if (!playerPos || !streamer || activeCount === 0) return;
+        if (!streamer || activeCount === 0) return;
 
         // 1. Cleanup stale noise events FIRST using Swap-and-Go to save inner loop cycles
         for (let i = this.activeNoiseCount - 1; i >= 0; i--) {
@@ -182,12 +186,11 @@ export class EnemyDetectionSystem implements System {
                     if (!isAggressive) e.state = AIState.CHASE;
 
                     // --- Discovery Logic ---
-                    const discoverySystem = context.getSystem(SystemID.DISCOVERY_SYSTEM);
                     if ((e.statusFlags & EnemyFlags.BOSS) !== 0) {
-                        const sectorIndex = state.sessionStats?.currentSector || 0;
-                        if (discoverySystem) discoverySystem.handleDiscovery(context, DiscoveryType.BOSS, sectorIndex);
+                        const sectorIndex = session.sectorId;
+                        this.discoverySystem.handleDiscovery(session, DiscoveryType.BOSS, sectorIndex);
                     } else {
-                        if (discoverySystem) discoverySystem.handleDiscovery(context, DiscoveryType.ZOMBIE, e.type);
+                        this.discoverySystem.handleDiscovery(session, DiscoveryType.ZOMBIE, e.type);
                     }
                 }
             }

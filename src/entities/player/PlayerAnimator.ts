@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PlayerNodes } from './PlayerTypes';
+import { PlayerNodes } from '../../types/CareerStats';
 
 export interface AnimState {
     isMoving: boolean;

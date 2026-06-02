@@ -216,7 +216,7 @@ export class WorldStreamer implements System {
         // --- AUTOMATIC HIBERNATION ---
         // Recycle chunks that are out of simulation range to keep the pool healthy.
         // We look up the player position from the session state.
-        const playerPos = session.state?.playerPos || (session.playerGroup?.position);
+        const playerPos = session.state?.player?.position || (session.playerGroup?.position);
 
         if (playerPos && this.chunks.size > 0) {
             const pX = playerPos.x;

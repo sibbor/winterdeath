@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, ChestType } from '../../game/session/SectorTypes';
-import { GroundType } from '../../core/engine/EngineTypes';
+import { SectorDef, SectorBuildContext, ChestType } from '../../game/session/SectorTypes';
+import { GroundType } from '../../core/engine/EnvironmentalTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { SoundID } from '../../utils/audio/AudioTypes';
@@ -15,7 +15,7 @@ import { ClueID } from '../../content/clues';
 import { SectorEventID } from '../../content/events';
 import { CollectibleID } from '../../content/collectibles';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
-import { WeatherType } from '../../core/engine/EngineTypes';
+import { WeatherType } from '../../core/engine/EnvironmentalTypes';
 import { ColliderType } from '../../core/world/CollisionResolution';
 
 const LOCATIONS = {
@@ -139,7 +139,7 @@ export const Sector2: SectorDef = {
         rotationSpeed: 0.02
     },
 
-    setupProps: async (ctx: SectorContext) => {
+    setupProps: async (ctx: SectorBuildContext) => {
         const { scene } = ctx;
 
         let startTime = performance.now();
@@ -409,7 +409,7 @@ export const Sector2: SectorDef = {
         await SectorBuilder.spawnFamily(ctx, FamilyMemberID.ESMERALDA, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, visible: false });
     },
 
-    setupContent: async (ctx: SectorContext) => {
+    setupContent: async (ctx: SectorBuildContext) => {
         if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
         // Triggers:
         SectorBuilder.addTriggers(ctx, [
@@ -455,7 +455,7 @@ export const Sector2: SectorDef = {
         ]);
     },
 
-    setupZombies: async (ctx: SectorContext) => {
+    setupZombies: async (ctx: SectorBuildContext) => {
         if (ctx.isWarmup || !ctx.spawnHorde) return; // No enemy spawning during preloader ghost-render
 
         const hordeSpots = [

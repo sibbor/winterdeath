@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WeatherType } from '../../core/engine/EngineTypes';
+import { WeatherType } from '../../core/engine/EnvironmentalTypes';
 
 // ============================================================================
 // CONFIGURATION & UNIFORM TYPES FOR WEATHER SYSTEM

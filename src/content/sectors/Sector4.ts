@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, EnvironmentalZone, TerminalType } from '../../game/session/SectorTypes';
+import { SectorDef, SectorBuildContext, EnvironmentalZone, TerminalType } from '../../game/session/SectorTypes';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { MATERIALS } from '../../utils/assets';
 import { t } from '../../utils/i18n';
@@ -14,7 +14,7 @@ import { ToneType, SoundID } from '../../utils/audio/AudioTypes';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { NoiseType } from '../../entities/enemies/EnemyBase';
 import { VEGETATION_TYPE } from '../../content/environment';
-import { WeatherType, GroundType } from '../../core/engine/EngineTypes';
+import { WeatherType, GroundType } from '../../core/engine/EnvironmentalTypes';
 import { CAMERA_HEIGHT } from '../constants';
 import { StatusEffectID } from '../../content/perks';
 import { DamageID, DamageType } from '../../entities/player/CombatTypes';
@@ -63,7 +63,7 @@ const PERK_ZONES = [
     { x: -120, z: -80, radius: 10, effect: StatusEffectID.DISORIENTED, type: 'debuff', color: 0xff00ff, particle: FXParticleType.MAGNETIC_SPARKS }
 ];
 
-function createPerkZone(ctx: SectorContext) {
+function createPerkZone(ctx: SectorBuildContext) {
     const { scene } = ctx;
 
     for (let i = 0; i < PERK_ZONES.length; i++) {
@@ -187,7 +187,7 @@ export const Sector4: SectorDef = {
 
     collectibles: [],
 
-    setupProps: async (ctx: SectorContext) => {
+    setupProps: async (ctx: SectorBuildContext) => {
         const { scene } = ctx;
 
         // Reset Sector 4's bus state on initial load to ensure a clean slate,
@@ -596,7 +596,7 @@ export const Sector4: SectorDef = {
         }
     },
 
-    onPlayerRespawn: (ctx: SectorContext, state: any, engine: any) => {
+    onPlayerRespawn: (ctx: SectorBuildContext, state: any, engine: any) => {
         if (!state.sectorState) return;
 
         // Reset state variables
@@ -658,7 +658,7 @@ export const Sector4: SectorDef = {
         }
     },
 
-    setupContent: async (ctx: SectorContext) => {
+    setupContent: async (ctx: SectorBuildContext) => {
         // No-op: Perk Zones are handled live in onSectorUpdate for optimal performance and instant feel.
     },
 
@@ -818,8 +818,9 @@ export const Sector4: SectorDef = {
                         if (o.mesh) {
                             o.mesh.position.set(99999, -1000, 99999);
                         }
-                        _obsArray.splice(i, 1);
-                        break;
+                    _obsArray[i] = _obsArray[_obsArray.length - 1];
+                    _obsArray.pop();
+                    break;
                     }
                 }
             }

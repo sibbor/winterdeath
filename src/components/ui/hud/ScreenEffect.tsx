@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { HudStore } from '../../../store/HudStore';
 import { StatusStore } from '../../../store/StatusStore';
 import { VIGNETTE_COLORS } from '../../../utils/ui/ColorUtils';
-import { PlayerStatusFlags } from '../../../entities/player/PlayerTypes';
+import { PlayerStatusFlags } from '../../../types/CareerStats';
 
 /**
  * ZERO-GC OPACITY POOL

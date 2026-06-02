@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { PlayerStats, PlayerStatID } from '../../../entities/player/PlayerTypes';
+import { CareerStats, PlayerStatID } from '../../../types/CareerStats';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 import { WeaponCategory, WeaponCategoryColors, WeaponStats } from '../../../content/weapons';
 import { WeaponID } from '../../../entities/player/CombatTypes';
@@ -12,11 +12,11 @@ import { useOrientation } from '../../../hooks/useOrientation';
 import ModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalButton, TacticalTab } from './ModalLayout';
 
 interface ScreenArmoryProps {
-    stats: PlayerStats;
+    stats: CareerStats;
     currentLoadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; };
     weaponLevels: Record<WeaponID, number>;
     onSave: (
-        newStats: PlayerStats,
+        newStats: CareerStats,
         newLoadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; },
         newLevels: Record<WeaponID, number>
     ) => void;
@@ -87,6 +87,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
 
         const weapons = DataResolver.getWeapons();
         for (let i = 0; i < weapons.length; i++) {
+            if (!weapons || !weapons[i] || weapons[i].name === undefined) continue;
             const name = weapons[i].name;
             if ((tempWeaponLevels[name] || 1) !== (weaponLevels[name] || 1)) return true;
         }

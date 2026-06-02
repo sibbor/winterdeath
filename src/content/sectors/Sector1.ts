@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, EnvironmentalZone, ChestType } from '../../game/session/SectorTypes';
-import { GroundType } from '../../core/engine/EngineTypes';
+import { SectorDef, SectorBuildContext, EnvironmentalZone, ChestType } from '../../game/session/SectorTypes';
+import { GroundType } from '../../core/engine/EnvironmentalTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { InteractionType, InteractionSubType, InteractionShape } from '../../systems/ui/UIEventBridge';
@@ -19,7 +19,7 @@ import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { FamilyMemberID } from '../constants';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
-import { WeatherType } from '../../core/engine/EngineTypes';
+import { WeatherType } from '../../core/engine/EnvironmentalTypes';
 import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 import { isPointInPolygon } from '../../utils/math/GeometryUtils';
 
@@ -123,7 +123,7 @@ const LOCATIONS = {
     }
 } as const;
 
-async function addProps(ctx: SectorContext) {
+async function addProps(ctx: SectorBuildContext) {
     await SectorBuilder.spawnPoi(ctx, PoiType.CAMPFIRE, LOCATIONS.POIS.CAMPFIRE.x, LOCATIONS.POIS.CAMPFIRE.z, 0, { scale: 1.0, y: 0 });
 
     await SectorBuilder.spawnBarrel(ctx, 106, -65);
@@ -137,7 +137,7 @@ async function addProps(ctx: SectorContext) {
     await VegetationGenerator.createDeforestation(ctx, 135, -75, 50, 30, 25);
 }
 
-async function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vector3>) {
+async function createBoundries(ctx: SectorBuildContext, curve: THREE.Curve<THREE.Vector3>) {
     const boundryPoints = curve.getSpacedPoints(150);
     const wallOffset = 35;
 
@@ -244,7 +244,7 @@ export const Sector1: SectorDef = {
         zoom: 0.1
     },
 
-    setupProps: async (ctx: SectorContext) => {
+    setupProps: async (ctx: SectorBuildContext) => {
         let startTime = performance.now();
         // ASYNC YIELDING: Prevents frame drops during asset generation
         const yieldIfBudgetExceeded = async () => {
@@ -354,7 +354,7 @@ export const Sector1: SectorDef = {
         await SectorBuilder.spawnFamily(ctx, FamilyMemberID.JORDAN, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, visible: false });
     },
 
-    setupContent: async (ctx: SectorContext) => {
+    setupContent: async (ctx: SectorBuildContext) => {
         const { scene } = ctx;
 
         if (!ctx.isWarmup) {

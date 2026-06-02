@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { PlayerStats, SectorState } from '../../../types/StateTypes';
+import { SectorState } from '../../../types/StateTypes';
+import { CareerStats } from '../../../types/CareerStats';
 import { WeaponCategory, WeaponCategoryColors } from '../../../content/weapons';
 import { WeaponStats } from '../../../content/weapons';
 import { WeaponID } from '../../../entities/player/CombatTypes';
@@ -11,12 +12,12 @@ import ModalLayout, { TacticalTab } from './ModalLayout';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 
 interface ArmoryTerminalProps {
-    stats: PlayerStats;
+    stats: CareerStats;
     sectorState: SectorState;
     currentLoadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; };
     weaponLevels: Record<WeaponID, number>;
     onSave: (
-        newStats: PlayerStats,
+        newStats: CareerStats,
         newLoadout: { primary: WeaponID; secondary: WeaponID; throwable: WeaponID; special: WeaponID; },
         newLevels: Record<WeaponID, number>,
         newSectorState: SectorState
@@ -71,6 +72,7 @@ const ScreenTerminalArmory: React.FC<ArmoryTerminalProps> = ({ stats, sectorStat
         // Zero-GC: iterate via for-loop, no Object.values allocation
         const allWeapons = DataResolver.getWeapons();
         for (let i = 0; i < allWeapons.length; i++) {
+            if (!allWeapons[i]) continue;
             const k = allWeapons[i].name;
             if ((tempWeaponLevels[k] || 1) !== (weaponLevels[k] || 1)) return true;
         }
@@ -175,7 +177,7 @@ const TerminalWeaponList: React.FC<TerminalWeaponListProps> = React.memo(({ acti
         const all = DataResolver.getWeapons();
         const result: WeaponStats[] = [];
         for (let i = 0; i < all.length; i++) {
-            if (all[i].category === activeTab) result.push(all[i]);
+            if (all[i] && all[i].category === activeTab) result.push(all[i]);
         }
         return result;
     }, [activeTab]);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { t, setLocale, getLocale } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
-import { GameSettings } from '../../../core/engine/EngineTypes';
+import { GameSettings } from '../../../types/StateTypes';
 import { SHADOW_PRESETS } from '../../../content/constants';
 import { useOrientation } from '../../../hooks/useOrientation';
 import ModalLayout, { TacticalCard, TacticalButton, TacticalTab } from './ModalLayout';

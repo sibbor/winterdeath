@@ -64,7 +64,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
 
         // DODGE -> RUSH logic
         if (action === InputAction.DODGE) {
-            // [VINTERDÖD] The PlayerMovementSystem handles the hold-to-rush logic 
+            // The PlayerMovementSystem handles the hold-to-rush logic 
             // based on the DODGE action's duration. We just set the state.
             if (inputManager) inputManager.handleVirtualAction(InputAction.DODGE, pressed);
             else inputState.actions[InputAction.DODGE] = pressed ? 1 : 0;

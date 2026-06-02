@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { PlayerStatID } from '../../../entities/player/PlayerTypes';
-import { PlayerStats, SectorState } from '../../../types/StateTypes';
+import { PlayerStatID } from '../../../types/CareerStats';
+import { SectorState } from '../../../types/StateTypes';
+import { CareerStats } from '../../../types/CareerStats';
 import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import ModalLayout, { TacticalButton, TacticalCard } from './ModalLayout';
@@ -13,9 +14,9 @@ const SKILLS_CONFIG = [
 ];
 
 interface SkillTerminalProps {
-    stats: PlayerStats;
+    stats: CareerStats;
     sectorState: SectorState;
-    onSave: (newStats: PlayerStats, newSectorState: SectorState) => void;
+    onSave: (newStats: CareerStats, newSectorState: SectorState) => void;
     onClose: () => void;
     isMobileDevice?: boolean;
 }

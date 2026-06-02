@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SystemID } from './SystemID';
-import { SectorContext } from '../game/session/SectorTypes';
+import { SectorBuildContext } from '../game/session/SectorTypes';
 import { Obstacle, ColliderType } from '../core/world/CollisionResolution';
 import { InteractionShape } from './ui/UIEventBridge';
 
@@ -51,7 +51,7 @@ export const NavigationSystem = {
     /**
      * Initializes the walkability grid. Scans obstacles and marks cells as impassable.
      */
-    init: (ctx: SectorContext) => {
+    init: (ctx: SectorBuildContext) => {
         costMap.fill(0);
         const streamer = ctx.worldStreamer;
         if (!streamer) return;

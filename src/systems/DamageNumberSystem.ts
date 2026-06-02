@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { WeaponCategoryColors, WEAPONS } from '../content/weapons';
 import { DamageID } from '../entities/player/CombatTypes';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 interface DamageText {
     mesh: THREE.Sprite;
@@ -199,7 +200,7 @@ export class DamageNumberSystem implements System {
     }
 
     // --- 3. LIFECYCLE ANIMATION ---
-    update(ctx: any, delta: number, simTime: number, renderTime: number) {
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         const safeDelta = Math.min(delta, 0.1);
 
         for (let i = 0; i < this.pool.length; i++) {

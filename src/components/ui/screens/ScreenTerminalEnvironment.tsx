@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { t } from '../../../utils/i18n';
 import ModalLayout, { TacticalButton, TacticalTab } from './ModalLayout';
-import { EnvironmentOverride, WeatherType } from '../../../core/engine/EngineTypes';;
+import { EnvironmentOverride, WeatherType } from '../../../core/engine/EnvironmentalTypes';;
 import { Sector4 } from '../../../content/sectors/Sector4';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 

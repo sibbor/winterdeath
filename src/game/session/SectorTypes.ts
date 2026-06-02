@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { TriggerSystem } from '../../systems/TriggerSystem';
 import { MapItem } from '../../components/ui/hud/HudTypes';
 import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
-import { WeatherType, GroundType, SectorEnvironment, EnvironmentalZone } from '../../core/engine/EngineTypes';
+import { WeatherType, GroundType, EnvironmentConfig, EnvironmentalZone } from '../../core/engine/EnvironmentalTypes';
 import { SectorState } from '../../types/StateTypes';
 import { EnemyType, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { TriggerAction, SectorTrigger } from '../../types/TriggerTypes';
@@ -12,6 +12,7 @@ import { InteractionPromptId } from '../../systems/ui/UIEventBridge';
 import { WorldStreamer } from '../../core/world/WorldStreamer';
 import { StatusEffectID } from '../../types/StatusEffects';
 import { CollectibleID } from '@/src/content/collectibles';
+import { LogicalLight } from '../../systems/LightSystem';
 
 export enum SectorID {
     VILLAGE = 0,
@@ -103,15 +104,14 @@ export interface CinematicConfig {
     zoom?: number; // Zoom factor over time (e.g. 0.5 means zoom in by 50%)
 }
 
-export interface SectorContext {
+export interface SectorBuildContext {
     scene: THREE.Scene;
     engine: any;
     obstacles: any[];
     worldStreamer: WorldStreamer;
     chests: any[];
-    flickeringLights: any[];
     burningObjects: any[];
-    triggers: SectorTrigger[]; // [VINTERDÖD] Buffered triggers for batch registration
+    triggers: SectorTrigger[]; // Buffered triggers for batch registration
     mapItems: MapItem[]; // For the Map Screen
     interactables: THREE.Object3D[]; // Explicit list of interactive objects (Boats, Stations, etc)
     rng: () => number;
@@ -122,7 +122,7 @@ export interface SectorContext {
     spawnBoss: (id: BossID, pos?: THREE.Vector3) => void;
     smokeEmitters: any[];
     collectibles: THREE.Group[]; // Optimized Cache
-    dynamicLights: THREE.Light[];  // Optimized Cache
+    dynamicLights: (THREE.PointLight | LogicalLight)[];  // Optimized Cache
     sectorId: number;
     sectorState: SectorState;
     state: any; // GameSessionState (for systems like waterSystem, windSystem)
@@ -131,7 +131,7 @@ export interface SectorContext {
     uniqueMeshes?: any[]; // For instanced meshes or unique geometry
     yield: () => Promise<void>;
     isWarmup?: boolean; // When true: skip triggers, enemies, and story logic (preloader ghost-render mode)
-    texturesReady?: boolean; // [VINTERDÖD] Semaphore for procedural asset availability
+    texturesReady?: boolean; // Semaphore for procedural asset availability
 
     // --- CAMERA CALLBACKS ---
     setCameraAngle?: (angle: number) => void;
@@ -152,7 +152,7 @@ export interface SectorDef {
     spawnZombiesOnSector?: boolean;
     ground: GroundType;
     bossId?: BossID;
-    environment: SectorEnvironment;
+    environment: EnvironmentConfig;
 
     // Automatic Ground Generation
     groundSize?: { width: number, depth: number };
@@ -168,7 +168,7 @@ export interface SectorDef {
     playerSpawn: SpawnPoint;
     familySpawn?: SpawnPoint;
     bossSpawn: SpawnPoint;
-    initialAim?: { x: number, y: number }; // Optional initial aim direction for player
+    aimDirection?: { x: number, y: number }; // Optional initial aim direction for player
 
     // Collectibles (Automatic Spawning)
     collectibles?: { id: CollectibleID, x: number, z: number }[];
@@ -180,15 +180,15 @@ export interface SectorDef {
     environmentalZones?: EnvironmentalZone[];
 
     // Logic
-    setupEnvironment?: (ctx: SectorContext) => Promise<void> | void;
-    setupProps?: (ctx: SectorContext) => Promise<void> | void;
-    setupContent?: (ctx: SectorContext) => Promise<void> | void;
-    setupZombies?: (ctx: SectorContext) => Promise<void> | void;
+    setupEnvironment?: (ctx: SectorBuildContext) => Promise<void> | void;
+    setupProps?: (ctx: SectorBuildContext) => Promise<void> | void;
+    setupContent?: (ctx: SectorBuildContext) => Promise<void> | void;
+    setupZombies?: (ctx: SectorBuildContext) => Promise<void> | void;
 
-    generate?: (ctx: SectorContext) => Promise<void>;
+    generate?: (ctx: SectorBuildContext) => Promise<void>;
     onSectorUpdate: (ctx: SectorUpdateContext) => void;
     onInteract?: (id: string, object: THREE.Object3D, state: any, events: any) => void;
-    onPlayerRespawn?: (ctx: SectorContext, state: any, engine: any) => void;
+    onPlayerRespawn?: (ctx: SectorBuildContext, state: any, engine: any) => void;
 }
 
 export interface SectorUpdateContext {
@@ -196,11 +196,11 @@ export interface SectorUpdateContext {
     simTime: number;
     renderTime: number;
     playerPos: THREE.Vector3;
-    triggerSystem: TriggerSystem; // [VINTERDÖD] Live system for simulation checks
-    state: any; // [VINTERDÖD] RuntimeState reference for systems
+    triggerSystem: TriggerSystem; // Live system for simulation checks
+    state: any; // RuntimeState reference for systems
     gameState: any; // RuntimeState (Legacy compat)
     sectorState: SectorState;
-    ctx: SectorContext;
+    ctx: SectorBuildContext;
     engine: any;
     worldStreamer: WorldStreamer;
     scene: THREE.Scene;

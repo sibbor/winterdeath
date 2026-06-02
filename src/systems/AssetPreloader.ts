@@ -6,7 +6,7 @@ import { TEXTURES } from '../utils/assets/AssetLoader';
 import { createWaterMaterial, WaterGeometryPool } from '../utils/assets/materials_water';
 import { MATERIALS_FOG } from '../utils/assets/materials_fog';
 import { MATERIALS_WEATHER } from '../utils/assets/materials_weather';
-import { WeatherType } from '../core/engine/EngineTypes';
+import { WeatherType } from '../core/engine/EnvironmentalTypes';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, LIGHT_SYSTEM, LIGHT_SETTINGS } from '../content/constants';
 import { VEGETATION_TYPE } from '../content/environment';
 import { EnemyType } from '../entities/enemies/EnemyTypes';

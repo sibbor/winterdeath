@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState, SectorStats } from './types/StateTypes';
 import { GameScreen } from './types/SessionTypes';
-import { PlayerStats, PlayerStatID } from './entities/player/PlayerTypes';
-import { WeatherType } from './core/engine/EngineTypes';
+import { CareerStats, PlayerStatID } from './types/CareerStats';
+import { WeatherType } from './core/engine/EnvironmentalTypes';
 import { SectorTrigger } from './types/TriggerTypes';
 import { BossID, SectorID } from './game/session/SectorTypes';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';
@@ -356,14 +356,13 @@ const App: React.FC = () => {
 
     const handleBossDefeatedAction = useCallback((bossId: BossID) => {
         setGameState(prev => {
-            if (prev.deadBossIndices.includes(prev.currentSector)) return prev;
+            if (StatsBridge.getDeadBossIndices(prev.stats).includes(prev.currentSector)) return prev;
 
             const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
             newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
 
             return {
                 ...prev,
-                deadBossIndices: [...prev.deadBossIndices, prev.currentSector],
                 stats: {
                     ...prev.stats,
                     statsBuffer: newStatsBuffer,
@@ -376,18 +375,18 @@ const App: React.FC = () => {
 
     const handleFamilyRescuedAction = useCallback((familyId: number) => {
         setGameState(prev => {
-            if (prev.rescuedFamilyIndices.includes(prev.currentSector)) return prev;
+            if (StatsBridge.getRescuedFamilyIndices(prev.stats).includes(prev.currentSector)) return prev;
 
             const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
             newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
 
             return {
                 ...prev,
-                rescuedFamilyIndices: [...prev.rescuedFamilyIndices, prev.currentSector],
                 stats: {
                     ...prev.stats,
                     statsBuffer: newStatsBuffer,
-                    totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1
+                    totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1,
+                    rescuedFamilyIndices: [...StatsBridge.getRescuedFamilyIndices(prev.stats), prev.currentSector]
                 }
             };
         });
@@ -577,7 +576,7 @@ const App: React.FC = () => {
         });
     }, []);
 
-    const handleSaveStats = useCallback((newStats: PlayerStats) => {
+    const handleSaveStats = useCallback((newStats: CareerStats) => {
         setGameState(prev => ({ ...prev, stats: newStats }));
     }, []);
 
@@ -638,7 +637,7 @@ const App: React.FC = () => {
             await AssetPreloader.warmupAsync('CAMP', yieldToMain);
 
             setGameState(prev => {
-                const isCleared = prev.deadBossIndices.includes(prev.currentSector);
+                const isCleared = StatsBridge.getDeadBossIndices(prev.stats).includes(prev.currentSector);
                 const nextSector = (isCleared && prev.currentSector < SectorID.SCRAPYARD) ? prev.currentSector + 1 : prev.currentSector;
                 const isFinished = isCleared && prev.currentSector === SectorID.SCRAPYARD;
 
@@ -860,8 +859,8 @@ const App: React.FC = () => {
                             currentLoadout={gameState.loadout}
                             weaponLevels={gameState.weaponLevels}
                             currentSector={gameState.currentSector}
-                            rescuedFamilyIndices={gameState.rescuedFamilyIndices}
-                            deadBossIndices={gameState.deadBossIndices}
+                            rescuedFamilyIndices={StatsBridge.getRescuedFamilyIndices(gameState.stats)}
+                            deadBossIndices={StatsBridge.getDeadBossIndices(gameState.stats)}
                             debugMode={gameState.debugMode}
                             onSaveStats={handleSaveStats}
                             onSaveLoadout={handleSaveLoadout}
@@ -895,12 +894,8 @@ const App: React.FC = () => {
                                 <GameSession
                                     ref={gameCanvasRef}
                                     isWarmup={false}
-                                    stats={gameState.stats}
-                                    loadout={gameState.loadout}
-                                    weaponLevels={gameState.weaponLevels}
-                                    currentSector={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector}
+                                    gameState={gameState.screen === GameScreen.PROLOGUE ? { ...gameState, currentSector: 0 } : gameState}
                                     currentSectorData={SectorSystem.getSector(gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector)}
-                                    debugMode={gameState.debugMode}
                                     isGameRunning={gameState.screen === GameScreen.SECTOR && !activeOverlay && !isLoadingSector}
                                     isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE || gameState.screen === GameScreen.RECAP || gameState.screen === GameScreen.DEATH}
                                     disableInput={activeOverlay === OverlayType.COLLECTIBLE || isLoadingSector || activeOverlay === OverlayType.ADVENTURE_LOG}
@@ -909,9 +904,8 @@ const App: React.FC = () => {
                                     onPauseToggle={handleTogglePauseAction}
                                     onOpenMap={handleOpenMap}
                                     triggerEndSector={false}
-                                    familyAlreadyRescued={gameState.rescuedFamilyIndices.includes(gameState.currentSector)}
-                                    rescuedFamilyIndices={gameState.rescuedFamilyIndices}
-                                    bossPermanentlyDefeated={gameState.deadBossIndices.includes(gameState.currentSector)}
+                                    familyAlreadyRescued={StatsBridge.getRescuedFamilyIndices(gameState.stats).includes(gameState.currentSector)}
+                                    bossPermanentlyDefeated={StatsBridge.getDeadBossIndices(gameState.stats).includes(gameState.currentSector)}
                                     onSectorLoaded={handleSceneReady}
                                     startAtCheckpoint={false}
                                     onCheckpointReached={handleCheckpointReached}
@@ -929,11 +923,7 @@ const App: React.FC = () => {
                                     onInteractionStateChange={onStationInteraction}
                                     onUpdateLoadout={handleUpdateLoadoutAction}
                                     onEnvironmentOverrideChange={handleEnvironmentOverrideChangeAction}
-                                    environmentOverrides={gameState.environmentOverrides}
-                                    settings={gameState.settings}
                                     isMobileDevice={isMobileDevice}
-                                    weather={gameState.weather}
-                                    sectorState={gameState.sectorState}
                                     onBossKilled={handleBossDefeatedAction}
                                     onFamilyRescued={handleFamilyRescuedAction}
                                     onPerkDiscovered={handlePerkDiscoveredAction}
@@ -1133,8 +1123,8 @@ const App: React.FC = () => {
                     {activeOverlay === OverlayType.STATION_SECTORS && (
                         <ScreenSectorOverview
                             currentSector={gameState.currentSector}
-                            rescuedFamilyIndices={gameState.rescuedFamilyIndices}
-                            deadBossIndices={gameState.deadBossIndices}
+                            rescuedFamilyIndices={StatsBridge.getRescuedFamilyIndices(gameState.stats)}
+                            deadBossIndices={StatsBridge.getDeadBossIndices(gameState.stats)}
                             debugMode={gameState.debugMode}
                             stats={gameState.stats}
                             onClose={handleOverlayClose}

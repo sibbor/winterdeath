@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SETTINGS_DEFAULT, SKY_SYSTEM } from '../../content/constants';
-import { GameSettings } from '../../core/engine/EngineTypes';
+import { GameSettings } from '../../types/StateTypes';
 import { InputManager } from './InputManager';
 import { CameraSystem } from '../../systems/CameraSystem';
 import { LightSystem } from '../../systems/LightSystem';
@@ -15,7 +15,7 @@ import { EnvironmentManager } from '../../systems/EnvironmentManager';
 import { GroundSystem } from '../../systems/GroundSystem';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { System, SystemID } from '../../systems/System';
-import { GroundType, SectorEnvironment, EnvironmentOverride } from '../../core/engine/EngineTypes';
+import { GroundType, EnvironmentConfig, EnvironmentOverride } from '../../core/engine/EnvironmentalTypes';
 import { ChunkManager } from '../world/ChunkManager';
 import { clearEffects } from '../../systems/EffectManager';
 
@@ -885,12 +885,12 @@ export class WinterEngine {
      * Synchronizes the entire environmental suite.
      * Delegates to EnvironmentManager for authoritative state control.
      */
-    public syncEnvironment(env: SectorEnvironment | EnvironmentOverride, groundType?: GroundType, targetScene?: THREE.Scene) {
+    public syncEnvironment(env: EnvironmentConfig | EnvironmentOverride, groundType?: GroundType, targetScene?: THREE.Scene) {
         const scene = targetScene || this.scene;
         const isWarmup = !!targetScene && targetScene !== this.scene;
 
         // VINTERDÖD FIX: Delegation of Authority
-        this.environment.sync(env as SectorEnvironment, groundType, scene, isWarmup);
+        this.environment.sync(env as EnvironmentConfig, groundType, scene, isWarmup);
 
         // Update camera FOV if provided (managed by CameraSystem but synced here)
         if (env.fov !== undefined) {

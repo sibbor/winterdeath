@@ -9,6 +9,7 @@ import { WorldStreamer } from '../core/world/WorldStreamer';
 import { TriggerShape, MAX_ENTITIES } from '../content/constants';
 import { ClueType } from '../game/session/SectorTypes';
 import { DiscoverySystem } from './DiscoverySystem';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 export class TriggerSystem implements System {
     readonly systemId = SystemID.TRIGGER_SYSTEM;
@@ -20,6 +21,7 @@ export class TriggerSystem implements System {
     private readonly maxTriggers: number;
     private activeCount: number = 0;
     private streamer: WorldStreamer | null = null;
+    private discoverySystem!: DiscoverySystem;
 
     // --- SPATIAL QUERY THROTTLING (Zero-GC) ---
     private _lastQueryX: number = -999999;
@@ -89,6 +91,10 @@ export class TriggerSystem implements System {
         }
 
         this._cachedNearbyTriggers = new Int32Array(128);
+    }
+
+    init(session: GameSessionLogic): void {
+        this.discoverySystem = (session.getSystem(SystemID.DISCOVERY_SYSTEM) as DiscoverySystem)!;
     }
 
     public setStreamer(streamer: WorldStreamer): void {
@@ -281,7 +287,7 @@ export class TriggerSystem implements System {
                     this.streamer.registerTrigger(i, minX, minZ, maxX, maxZ);
                 }
 
-                // [VINTERDÖD] Dynamic SMI Mapping: Register custom reaction keys at runtime
+                // Dynamic SMI Mapping: Register custom reaction keys at runtime
                 if (config.content && config.id && (config.type === TriggerType.CLUE
                     || config.type === TriggerType.THOUGHT
                     || config.type === TriggerType.SPEAK)) {
@@ -341,7 +347,7 @@ export class TriggerSystem implements System {
                     this.streamer.registerTrigger(i, x - radius, z - radius, x + radius, z + radius);
                 }
 
-                // [VINTERDÖD] Dynamic SMI Mapping: Register custom reaction keys at runtime
+                // Dynamic SMI Mapping: Register custom reaction keys at runtime
                 if (content && id && (type === TriggerType.CLUE
                     || type === TriggerType.THOUGHT || type === TriggerType.SPEAK)) {
                     DataResolver.registerReaction(id, content);
@@ -417,13 +423,12 @@ export class TriggerSystem implements System {
         }
     }
 
-    public update(session: any, delta: number): void {
-        if (!this.enabled) return;
+    public update(session: GameSessionLogic, delta: number): void {
+        if (!this.enabled || !session.state) return;
 
         const engine = WinterEngine.getInstance();
         const simTime = engine.simTime;
-        const playerPos = session.playerPos;
-        if (!playerPos) return;
+        const playerPos = session.state.player.position;
 
         if (this.streamer) {
             const dqx = playerPos.x - this._lastQueryX;
@@ -494,29 +499,19 @@ export class TriggerSystem implements System {
 
         const m = this.metadata[idx];
         const type = this.triggerTypes[idx] | 0;
-        const state = session.state;
-
-        const discoverySystem = session.getSystem(SystemID.DISCOVERY_SYSTEM) as DiscoverySystem;
 
         switch (type) {
             case TriggerType.CLUE: {
                 const clue = DataResolver.getClues()[m.id as any];
                 if (clue) {
                     const clueSmi = clue.id | 0;
-                    if (discoverySystem) {
-                        discoverySystem.handleDiscovery(session, DiscoveryType.CLUE, m.id, clueSmi);
-                    }
+                    this.discoverySystem.handleDiscovery(session, DiscoveryType.CLUE, m.id, clueSmi);
 
                     const subType = clue.type === ClueType.SPEAK ? ChatBubbleSubtype.SPEAK : ChatBubbleSubtype.THOUGHT;
                     const duration = CHAT_BUBBLE_DURATIONS[subType];
                     const encodedP2 = duration | (subType << 16);
 
-                    UIEventRingBuffer.push(
-                        UIEventType.CHAT_BUBBLE,
-                        clue.id,
-                        encodedP2,
-                        simTime
-                    );
+                    UIEventRingBuffer.push(UIEventType.CHAT_BUBBLE, clue.id, encodedP2, simTime);
                 }
                 break;
             }
@@ -524,27 +519,18 @@ export class TriggerSystem implements System {
             case TriggerType.POI: {
                 const poi = DataResolver.getPois()[m.id as any];
                 const poiSmi = poi ? poi.id : 0;
-                if (discoverySystem) {
-                    discoverySystem.handleDiscovery(session, DiscoveryType.POI, m.id, poiSmi);
-                }
+                this.discoverySystem.handleDiscovery(session, DiscoveryType.POI, m.id, poiSmi);
 
                 const duration = CHAT_BUBBLE_DURATIONS[ChatBubbleSubtype.SPEAK];
                 const encodedP2 = duration | (ChatBubbleSubtype.SPEAK << 16);
-                UIEventRingBuffer.push(
-                    UIEventType.CHAT_BUBBLE,
-                    poiSmi,
-                    encodedP2,
-                    simTime
-                );
+                UIEventRingBuffer.push(UIEventType.CHAT_BUBBLE, poiSmi, encodedP2, simTime);
                 break;
             }
 
             case TriggerType.COLLECTIBLE: {
                 const col = DataResolver.getCollectibles()[m.id as any];
                 const colSmi = col ? col.id : 0;
-                if (discoverySystem) {
-                    discoverySystem.handleDiscovery(session, DiscoveryType.COLLECTIBLE, m.id, colSmi);
-                }
+                this.discoverySystem.handleDiscovery(session, DiscoveryType.COLLECTIBLE, m.id, colSmi);
                 break;
             }
         }

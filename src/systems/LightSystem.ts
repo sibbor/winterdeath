@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { LIGHT_SYSTEM, LIGHT_SETTINGS } from '../content/constants';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { ChunkManager } from '../core/world/ChunkManager';
 import { EffectPool, SubEffectType } from './EffectManager';
 
@@ -30,7 +31,7 @@ const _shadowLights: LogicalLight[] = [];
 const _normalLights: LogicalLight[] = [];
 const _c1 = new THREE.Color();
 const _v1 = new THREE.Vector3();
-let _lastLightSource: LogicalLight[] | null = null;
+let _lastLightSource: (THREE.PointLight | LogicalLight)[] | null = null;
 
 export class LightSystem implements System {
     readonly systemId = SystemID.LIGHT;
@@ -84,13 +85,11 @@ export class LightSystem implements System {
 
     public update(context: any, delta: number, simTime: number, renderTime: number): void {
         if (!context) return;
-        const state = context.state || context;
-        if (!state) return;
+        const state = context.state;
+        const cullingCenter = context.engine?.camera?.threeCamera?.position;
+        const logicalLights = state?.world?.lights as any[];
 
-        const playerPos = context.playerPos || state.playerPos;
-        const logicalLights = state.dynamicLights || context.dynamicLights;
-
-        if (!logicalLights || logicalLights.length === 0 || !playerPos) {
+        if (!logicalLights || logicalLights.length === 0 || !cullingCenter) {
             this.hideAllProxies();
             return;
         }
@@ -109,7 +108,7 @@ export class LightSystem implements System {
                     if (!l._worldPos) l._worldPos = new THREE.Vector3();
                     if (l.position) l._worldPos.copy(l.position);
 
-                    const sqDist = l._worldPos.distanceToSquared(playerPos);
+                    const sqDist = l._worldPos.distanceToSquared(cullingCenter);
                     // Standard Light Culling (60 units)
                     if (sqDist < 3600) {
                         l._sqDist = sqDist;
@@ -139,7 +138,7 @@ export class LightSystem implements System {
                     l._worldPos.copy(l.position);
                 }
 
-                const sqDist = l._worldPos.distanceToSquared(playerPos);
+                const sqDist = l._worldPos.distanceToSquared(cullingCenter);
                 if (sqDist < 3600) {
                     l._sqDist = sqDist;
                     if (l.castShadow) _shadowLights.push(l);
@@ -186,8 +185,8 @@ export class LightSystem implements System {
             const ty = target.position.y + offY;
             const tz = target.position.z + offZ;
 
-            const dx = tx - playerPos.x;
-            const dz = tz - playerPos.z;
+            const dx = tx - cullingCenter.x;
+            const dz = tz - cullingCenter.z;
             const distSq = dx * dx + dz * dz;
 
             if (distSq > 3600) continue;
@@ -216,7 +215,7 @@ export class LightSystem implements System {
         }
     }
 
-    public rebuildBuckets(lights: LogicalLight[]) {
+    public rebuildBuckets(lights: (THREE.PointLight | LogicalLight)[]) {
         // Optimization: Only rebuild if the reference to the global list changed
         if (_lastLightSource === lights) return;
         _lastLightSource = lights;
@@ -227,7 +226,7 @@ export class LightSystem implements System {
         this.dynamicLightsList.length = 0;
 
         for (let i = 0; i < lights.length; i++) {
-            const l = lights[i];
+            const l = lights[i] as any;
 
             // Enforce vector initialization to prevent lazy allocations in hot-path
             if (!l._worldPos) l._worldPos = new THREE.Vector3();

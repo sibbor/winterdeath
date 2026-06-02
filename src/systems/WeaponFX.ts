@@ -103,8 +103,9 @@ export const WeaponFX = {
         if (!_lightsInjected && ctx) {
             const state = ctx.state || ctx.session?.state || ctx;
             if (state) {
-                if (!state.dynamicLights) state.dynamicLights = [];
-                state.dynamicLights.push(..._lightPool);
+                const world = state.world || state;
+                if (!world.lights) world.lights = [];
+                world.lights.push(..._lightPool);
                 _lightsInjected = true;
             }
         }

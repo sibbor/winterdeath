@@ -1,7 +1,7 @@
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System, SystemID } from './System';
 import { DamageID } from '../entities/player/CombatTypes';
-import { StatWeaponIndex, PlayerStatID, StatEnemyIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE, TELEMETRY_BUFFER_SIZE, TelemetrySourceOffset } from '../entities/player/PlayerTypes';
+import { StatWeaponIndex, PlayerStatID, StatEnemyIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE, TELEMETRY_BUFFER_SIZE, TelemetrySourceOffset } from '../types/CareerStats';
 import { COMBAT, MAX_ENTITIES } from '../content/constants';
 
 // Zero-GC: Pre-allocate boss keys to prevent template literal string allocations during runtime
@@ -21,13 +21,14 @@ export class DamageTrackerSystem implements System {
 
     init(session: GameSessionLogic) {
         this.currentKillstreak = 0;
+        session.damageTracker = this;
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
-        if (!session || !session.engine || !session.state || session.state.isPlayground) return;
+        if (!session || !session.engine || !session.state || session.state.world.isPlayground) return;
         // --- TRACK WEAPON USAGE (TIME ACTIVE) ---
         const state = session.state;
-        const activeWeapon = state.activeWeapon;
+        const activeWeapon = state.combat.activeWeapon;
         if ((activeWeapon as number) !== 0) {
             const idx = activeWeapon as number;
             //  HARDENING: Strict bounds check (64 slots)
@@ -54,12 +55,12 @@ export class DamageTrackerSystem implements System {
         attackId: number,
         isBoss: boolean = false
     ) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         if (this.isTechnical(sourceId)) return;
 
         const state = session.state;
         const stats = state.sessionStats;
-        const playerStats = state.statsBuffer;
+        const playerStats = state.player.statsBuffer;
 
         stats.damageTaken += amount;
         playerStats[PlayerStatID.TOTAL_DAMAGE_TAKEN] += amount;
@@ -80,7 +81,7 @@ export class DamageTrackerSystem implements System {
         // Final sanity check before write
         if (bufferIdx >= 0 && bufferIdx < TELEMETRY_BUFFER_SIZE) {
             stats.incomingDamageBuffer[bufferIdx] += amount;
-            state.incomingDamageBuffer[bufferIdx] += amount;
+            state.enemies.incomingDamageBuffer[bufferIdx] += amount;
         }
     }
 
@@ -93,11 +94,11 @@ export class DamageTrackerSystem implements System {
         weaponId: DamageID,
         isBoss: boolean = false
     ) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         if (this.isTechnical(weaponId)) return;
 
         const stats = session.state.sessionStats;
-        const playerStats = session.state.statsBuffer;
+        const playerStats = session.state.player.statsBuffer;
 
         stats.damageDealt += amount;
         playerStats[PlayerStatID.TOTAL_DAMAGE_DEALT] += amount;
@@ -114,11 +115,11 @@ export class DamageTrackerSystem implements System {
      * Records a shot fired by the player.
      */
     recordShot(session: GameSessionLogic, weaponId: DamageID) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         if (this.isTechnical(weaponId)) return;
 
         const stats = session.state.sessionStats;
-        const playerStats = session.state.statsBuffer;
+        const playerStats = session.state.player.statsBuffer;
 
         stats.shotsFired++;
         playerStats[PlayerStatID.TOTAL_SHOTS_FIRED]++;
@@ -133,11 +134,11 @@ export class DamageTrackerSystem implements System {
      * Records a shot hit by the player.
      */
     recordHit(session: GameSessionLogic, weaponId: DamageID) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         if (this.isTechnical(weaponId)) return;
 
         const stats = session.state.sessionStats;
-        const playerStats = session.state.statsBuffer;
+        const playerStats = session.state.player.statsBuffer;
 
         stats.shotsHit++;
         playerStats[PlayerStatID.TOTAL_SHOTS_HIT]++;
@@ -159,11 +160,11 @@ export class DamageTrackerSystem implements System {
         weaponId?: DamageID,
         distSq?: number
     ) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         if (weaponId !== undefined && this.isTechnical(weaponId)) {
             // Still record the general kill, but skip the weapon-specific kill count
             const stats = session.state.sessionStats;
-            const playerStats = session.state.statsBuffer;
+            const playerStats = session.state.player.statsBuffer;
 
             stats.kills++;
             playerStats[PlayerStatID.TOTAL_KILLS]++;
@@ -177,13 +178,13 @@ export class DamageTrackerSystem implements System {
 
             if (enemyType >= 0 && enemyType < StatEnemyIndex.COUNT) {
                 stats.enemyKills[enemyType]++;
-                session.state.enemyKills[enemyType]++;
+                session.state.enemies.enemyKills[enemyType]++;
             }
             return;
         }
 
         const stats = session.state.sessionStats;
-        const playerStats = session.state.statsBuffer;
+        const playerStats = session.state.player.statsBuffer;
 
         stats.kills++;
         playerStats[PlayerStatID.TOTAL_KILLS]++;
@@ -219,14 +220,14 @@ export class DamageTrackerSystem implements System {
 
         if (enemyType >= 0 && enemyType < StatEnemyIndex.COUNT) {
             stats.enemyKills[enemyType]++;
-            session.state.enemyKills[enemyType]++;
+            session.state.enemies.enemyKills[enemyType]++;
         }
 
         if (isBoss && bossId !== undefined) {
             // Bosses also count in the enemyKills buffer under BOSS index
             if (StatEnemyIndex.BOSS >= 0 && StatEnemyIndex.BOSS < StatEnemyIndex.COUNT) {
                 stats.enemyKills[StatEnemyIndex.BOSS]++;
-                session.state.enemyKills[StatEnemyIndex.BOSS]++;
+                session.state.enemies.enemyKills[StatEnemyIndex.BOSS]++;
             }
             // Record killing blow details for the victory screen
             stats.killingBlowWeapon = weaponId;
@@ -238,9 +239,9 @@ export class DamageTrackerSystem implements System {
      * Records a player death.
      */
     recordPlayerDeath(session: GameSessionLogic, sourceId: number, attackId: number) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         const stats = session.state.sessionStats;
-        const playerStats = session.state.statsBuffer;
+        const playerStats = session.state.player.statsBuffer;
         const globalStats = session.state;
 
         playerStats[PlayerStatID.TOTAL_DEATHS]++;
@@ -255,7 +256,7 @@ export class DamageTrackerSystem implements System {
 
         if (enemyTypeIdx >= 0 && enemyTypeIdx < StatEnemyIndex.COUNT) {
             stats.enemyDeaths[enemyTypeIdx]++;
-            globalStats.deathsByEnemyType[enemyTypeIdx]++;
+            globalStats.enemies.deathsByEnemyType[enemyTypeIdx]++;
         }
     }
 
@@ -271,11 +272,11 @@ export class DamageTrackerSystem implements System {
      * Records a throwable thrown by the player.
      */
     recordThrowable(session: GameSessionLogic, weaponId: DamageID) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         if (this.isTechnical(weaponId)) return;
 
         const stats = session.state.sessionStats;
-        const playerStats = session.state.statsBuffer;
+        const playerStats = session.state.player.statsBuffer;
 
         stats.throwablesThrown++;
         playerStats[PlayerStatID.TOTAL_THROWABLES_THROWN]++;
@@ -290,81 +291,81 @@ export class DamageTrackerSystem implements System {
      * Records how many unique enemies were hit by a single explosive.
      */
     recordUniqueEnemiesHitByExplosive(session: GameSessionLogic, count: number) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.uniqueEnemiesHitByExplosives += count;
-        session.state.statsBuffer[PlayerStatID.TOTAL_UNIQUE_ENEMIES_HIT_BY_EXPLOSIVES] += count;
+        session.state.player.statsBuffer[PlayerStatID.TOTAL_UNIQUE_ENEMIES_HIT_BY_EXPLOSIVES] += count;
     }
 
     /**
      * Records an enemy being gibbed.
      */
     recordGib(session: GameSessionLogic) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.gibbedEnemies++;
-        session.state.statsBuffer[PlayerStatID.TOTAL_GIBBED]++;
+        session.state.player.statsBuffer[PlayerStatID.TOTAL_GIBBED]++;
     }
 
     /**
      * Records a dodge performed by the player.
      */
     recordDodge(session: GameSessionLogic) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.dodges++;
-        session.state.statsBuffer[PlayerStatID.TOTAL_DODGES]++;
+        session.state.player.statsBuffer[PlayerStatID.TOTAL_DODGES]++;
     }
 
     /**
      * Records a rush initiation by the player.
      */
     recordRush(session: GameSessionLogic) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.rushes++;
-        session.state.statsBuffer[PlayerStatID.TOTAL_RUSHES]++;
+        session.state.player.statsBuffer[PlayerStatID.TOTAL_RUSHES]++;
     }
 
     /**
      * Records rush distance traveled.
      */
     recordRushDistance(session: GameSessionLogic, distance: number) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.rushDistance += distance;
-        session.state.statsBuffer[PlayerStatID.TOTAL_RUSH_DISTANCE] += distance;
+        session.state.player.statsBuffer[PlayerStatID.TOTAL_RUSH_DISTANCE] += distance;
     }
 
     /**
      * Records total distance traveled.
      */
     recordDistance(session: GameSessionLogic, distance: number) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.distanceTraveled += distance;
-        session.state.statsBuffer[PlayerStatID.TOTAL_DISTANCE_TRAVELED] += distance;
+        session.state.player.statsBuffer[PlayerStatID.TOTAL_DISTANCE_TRAVELED] += distance;
     }
 
     /**
      * Records a crisis save (adrenaline patch trigger).
      */
     recordCrisisSave(session: GameSessionLogic) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.crisisSaves++;
-        session.state.statsBuffer[PlayerStatID.TOTAL_CRISIS_SAVES]++;
+        session.state.player.statsBuffer[PlayerStatID.TOTAL_CRISIS_SAVES]++;
     }
 
     /**
      * Records buff time.
      */
     recordBuffTime(session: GameSessionLogic, delta: number) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.buffTime += delta;
-        session.state.statsBuffer[PlayerStatID.TOTAL_BUFF_TIME] += delta;
+        session.state.player.statsBuffer[PlayerStatID.TOTAL_BUFF_TIME] += delta;
     }
 
     /**
      * Records debuffs resisted/cleansed.
      */
     recordDebuffsResisted(session: GameSessionLogic, count: number) {
-        if (!session || !session.state || session.state.isPlayground) return;
+        if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.debuffsResisted += count;
-        session.state.statsBuffer[PlayerStatID.TOTAL_DEBUFFS_RESISTED] += count;
+        session.state.player.statsBuffer[PlayerStatID.TOTAL_DEBUFFS_RESISTED] += count;
     }
 
     clear() {

@@ -266,7 +266,7 @@ export class InputManager implements System {
 
             // Sync to game state immediately if available
             if (session.state) {
-                session.state.flashlightOn = this.state.flashlightOn;
+                session.state.ui.flashlightOn = this.state.flashlightOn;
 
                 // Update 3D scene representation
                 const playerGroup = (session as any).playerGroup || (session as any)._playerGroup;
@@ -275,7 +275,7 @@ export class InputManager implements System {
                     if (flashlight) {
                         const defaultIntensity = FLASHLIGHT.intensity;
                         const multiplier = session.state.vehicle?.active ? 2.0 : 1.0;
-                        flashlight.intensity = session.state.flashlightOn ? (defaultIntensity * multiplier) : 0;
+                        flashlight.intensity = session.state.ui.flashlightOn ? (defaultIntensity * multiplier) : 0;
                     }
                 }
             }

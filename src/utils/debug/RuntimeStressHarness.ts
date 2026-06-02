@@ -17,10 +17,10 @@ export class RuntimeStressHarness {
             return !!hudState.debugMode;
         }
 
-        // 2. Check gameEngine sectorContext override
+        // 2. Check gameEngine SectorBuildContext override
         const gameEngine = (window as any).gameEngine;
-        if (gameEngine?.sectorContext && gameEngine.sectorContext.debugMode !== undefined) {
-            return !!gameEngine.sectorContext.debugMode;
+        if (gameEngine?.SectorBuildContext && gameEngine.SectorBuildContext.debugMode !== undefined) {
+            return !!gameEngine.SectorBuildContext.debugMode;
         }
 
         // 3. Check developer console/global override

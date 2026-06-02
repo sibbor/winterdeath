@@ -5,7 +5,7 @@ import { InteractionType, InteractionPromptId, MetaActionId } from './ui/UIEvent
 import { HudStore, HudStateSoA } from '../store/HudStore';
 import { StatusStore } from '../store/StatusStore';
 import { MAX_STATUS_EFFECTS, MAX_PASSIVES, MAX_BUFFS, MAX_DEBUFFS, MAX_MAP_ITEMS } from '../components/ui/hud/HudTypes';
-import { PlayerStatID, PlayerStatusFlags } from '../entities/player/PlayerTypes';
+import { PlayerStatID, PlayerStatusFlags } from '../types/CareerStats';
 import { DataResolver } from '../core/data/DataResolver';
 import { ToolID } from '../entities/player/CombatTypes';
 import { InputAction } from '../core/engine/InputManager';
@@ -76,19 +76,19 @@ export const HudSystem = {
     enabled: true,
     persistent: true,
     emitFastUpdate: (state: any, input: any, now: number, props: any) => {
-        const wep = DataResolver.getWeapons()[state.activeWeapon];
-        const stats = state.statsBuffer;
+        const wep = DataResolver.getWeapons()[state.combat.activeWeapon];
+        const stats = state.player.statsBuffer;
 
         // Clamp reloadProgress for stable rendering
         const reloadDuration = (wep?.reloadTime || 1000) + (input.actions[InputAction.FIRE] ? 1000 : 0);
-        const reloadRemaining = state.reloadEndTime - now;
-        const reloadProgress = state.isReloading
+        const reloadRemaining = state.combat.reloadEndTime - now;
+        const reloadProgress = state.combat.isReloading
             ? Math.max(0, Math.min(1, 1 - (reloadRemaining / reloadDuration)))
             : 0;
 
         // Boss logic
         let bossHp = -1;
-        const activeBoss = state.activeBoss;
+        const activeBoss = state.enemies.pool.activeBoss;
         if (activeBoss) {
             bossHp = activeBoss.hp / activeBoss.maxHp;
         }
@@ -97,7 +97,7 @@ export const HudSystem = {
         _fastUpdateDetail.maxHp = stats[PlayerStatID.MAX_HP] || 100;
         _fastUpdateDetail.stamina = stats[PlayerStatID.STAMINA] || 0;
         _fastUpdateDetail.maxStamina = stats[PlayerStatID.MAX_STAMINA] || 100;
-        _fastUpdateDetail.ammo = state.weaponAmmo[state.activeWeapon] || 0;
+        _fastUpdateDetail.ammo = state.combat.weaponAmmo[state.combat.activeWeapon] || 0;
         _fastUpdateDetail.currentXp = stats[PlayerStatID.CURRENT_XP] || 0;
         _fastUpdateDetail.nextLevelXp = stats[PlayerStatID.NEXT_LEVEL_XP] || 1000;
         _fastUpdateDetail.reloadProgress = isFinite(reloadProgress) ? reloadProgress : 0;
@@ -106,8 +106,8 @@ export const HudSystem = {
         _fastUpdateDetail.throttleState = state.vehicle.active ? (state.vehicle.throttle || 0) : 0;
         _fastUpdateDetail.isSkidding = state.vehicle.active ? !!state.vehicle.isSkidding : false;
         _fastUpdateDetail.kills = state.sessionStats.kills || 0;
-        _fastUpdateDetail.scrap = state.statsBuffer[PlayerStatID.SCRAP] || 0;
-        _fastUpdateDetail.challengePoints = state.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0;
+        _fastUpdateDetail.scrap = state.player.statsBuffer[PlayerStatID.SCRAP] || 0;
+        _fastUpdateDetail.challengePoints = state.player.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0;
         const directSp = state.sessionStats.spGained || 0;
         const collSp = state.sessionStats.discoveredCollectibles?.length || 0;
         const poiSp = state.sessionStats.discoveredPois?.length || 0;
@@ -124,17 +124,17 @@ export const HudSystem = {
 
             // Zero-GC Interaction Bridge
             UIEventBridge.setInteractionPrompt(InteractionPromptId.EXIT_VEHICLE);
-        } else if (state.hasInteractionTarget && state.interactionTargetPos) {
+        } else if (state.triggers.hasInteractionTarget && state.triggers.interactionTargetPos) {
             _fastUpdateDetail.interactionActive = true;
-            _fastUpdateDetail.interactionId = state.interaction.promptId;
-            _fastUpdateDetail.interactionType = state.interaction.type;
-            _fastUpdateDetail.interactionLabel = state.interaction.label;
+            _fastUpdateDetail.interactionId = state.triggers.interaction.promptId;
+            _fastUpdateDetail.interactionType = state.triggers.interaction.type;
+            _fastUpdateDetail.interactionLabel = state.triggers.interaction.label;
 
             _fastUpdateDetail.interactionX = 0;
             _fastUpdateDetail.interactionY = 0;
 
             // Zero-GC Interaction Bridge
-            UIEventBridge.setInteractionPrompt(state.interaction.promptId);
+            UIEventBridge.setInteractionPrompt(state.triggers.interaction.promptId);
         } else {
             _fastUpdateDetail.interactionActive = false;
             _fastUpdateDetail.interactionId = 0;
@@ -142,7 +142,7 @@ export const HudSystem = {
         }
 
         // Sync StatusStore flags with the main engine state (Zero-GC)
-        StatusStore.setStatusFlags(state.statusFlags || 0);
+        StatusStore.setStatusFlags(state.combat.statusFlags || 0);
 
         // ZERO-GC: Replaced CustomEvent with direct callback registry
         HudStore.emitFastUpdate(_fastUpdateDetail);
@@ -168,8 +168,8 @@ export const HudSystem = {
         const vecBuf = _current.vectorBuffer;
         for (let i = 0; i < 256; i++) vecBuf[i] = -99999; // Sentinel value for "Inactive"
 
-        const enemies = state.enemies;
-        let activeBoss = state.activeBoss;
+        const enemies = state.enemies.pool;
+        let activeBoss = state.enemies.pool.activeBoss;
         let entitiesWritten = 0;
 
         // Write enemies (Max 100 to leave space for loot/points)
@@ -196,7 +196,7 @@ export const HudSystem = {
         }
 
         let famSignal = 0;
-        if (state.activeWeapon === ToolID.RADIO && familyMemberMesh) {
+        if (state.combat.activeWeapon === ToolID.RADIO && familyMemberMesh) {
             const distSq = playerPos.distanceToSquared(familyMemberMesh.position);
             if (distSq < 40000) {
                 famSignal = Math.max(0, 1 - (Math.sqrt(distSq) / 200));
@@ -208,18 +208,18 @@ export const HudSystem = {
             _current.familyPos.z = familyMemberMesh.position.z;
         }
 
-        const wep = DataResolver.getWeapons()[state.activeWeapon];
-        _current.reloadProgress = state.isReloading
-            ? 1 - ((state.reloadEndTime - now) / ((wep?.reloadTime || 1000) + (input.actions[InputAction.FIRE] ? 1000 : 0)))
+        const wep = DataResolver.getWeapons()[state.combat.activeWeapon];
+        _current.reloadProgress = state.combat.isReloading
+            ? 1 - ((state.combat.reloadEndTime - now) / ((wep?.reloadTime || 1000) + (input.actions[InputAction.FIRE] ? 1000 : 0)))
             : 0;
 
         const spGained = state.sessionStats.spGained;
 
         // Status Effects (Zero-GC SoA Mutation)
-        const effectDurations = state.effectDurations;
-        const effectIntensities = state.effectIntensities;
-        const activePassives = state.activePassives;
-        const activePassivesCount = state.activePassivesCount;
+        const effectDurations = state.combat.effectDurations;
+        const effectIntensities = state.combat.effectIntensities;
+        const activePassives = state.combat.activePassives;
+        const activePassivesCount = state.combat.activePassivesCount;
         let effectCount = 0;
 
         // Safety check for PERKS array bounds
@@ -240,7 +240,7 @@ export const HudSystem = {
                 }
                 if (isPassive) continue;
 
-                const maxDur = state.effectMaxDurations[i] || 1;
+                const maxDur = state.combat.effectMaxDurations[i] || 1;
 
                 _current.StatusEffectIDs[effectCount] = i;
                 _current.statusEffectDurations[effectCount] = duration;
@@ -258,56 +258,56 @@ export const HudSystem = {
         _current.playerPos.z = playerPos.z;
         _current.playerRotY = playerRotY;
 
-        _current.isDisoriented = (state.statusFlags & PlayerStatusFlags.DISORIENTED) !== 0;
+        _current.isDisoriented = (state.combat.statusFlags & PlayerStatusFlags.DISORIENTED) !== 0;
 
         // Zero-GC Buffer Copy for Passives/Buffs/Debuffs
-        _current.statusFlags = state.statusFlags;
+        _current.statusFlags = state.combat.statusFlags;
 
         let pCount = 0;
-        const passives = state.activePassives;
+        const passives = state.combat.activePassives;
         if (passives) {
-            const len = Math.min(state.activePassivesCount, MAX_PASSIVES);
+            const len = Math.min(state.combat.activePassivesCount, MAX_PASSIVES);
             for (let i = 0; i < len; i++) _current.activePassives[pCount++] = passives[i];
         }
         _current.activePassivesCount = pCount;
 
         let bCount = 0;
-        const buffs = state.activeBuffs;
+        const buffs = state.combat.activeBuffs;
         if (buffs) {
-            const len = Math.min(state.activeBuffsCount, MAX_BUFFS);
+            const len = Math.min(state.combat.activeBuffsCount, MAX_BUFFS);
             for (let i = 0; i < len; i++) _current.activeBuffs[bCount++] = buffs[i];
         }
         _current.activeBuffsCount = bCount;
 
         let dCount = 0;
-        const debuffs = state.activeDebuffs;
+        const debuffs = state.combat.activeDebuffs;
         if (debuffs) {
-            const len = Math.min(state.activeDebuffsCount, MAX_DEBUFFS);
+            const len = Math.min(state.combat.activeDebuffsCount, MAX_DEBUFFS);
             for (let i = 0; i < len; i++) _current.activeDebuffs[dCount++] = debuffs[i];
         }
         _current.activeDebuffsCount = dCount;
 
-        _current.statsBuffer.set(state.statsBuffer);
+        _current.statsBuffer.set(state.player.statsBuffer);
 
-        _current.hp = state.statsBuffer[PlayerStatID.HP] || 0;
-        _current.maxHp = state.statsBuffer[PlayerStatID.MAX_HP] || 100;
-        _current.stamina = state.statsBuffer[PlayerStatID.STAMINA] || 0;
-        _current.maxStamina = state.statsBuffer[PlayerStatID.MAX_STAMINA] || 100;
-        _current.ammo = state.weaponAmmo[state.activeWeapon] || 0;
+        _current.hp = state.player.statsBuffer[PlayerStatID.HP] || 0;
+        _current.maxHp = state.player.statsBuffer[PlayerStatID.MAX_HP] || 100;
+        _current.stamina = state.player.statsBuffer[PlayerStatID.STAMINA] || 0;
+        _current.maxStamina = state.player.statsBuffer[PlayerStatID.MAX_STAMINA] || 100;
+        _current.ammo = state.combat.weaponAmmo[state.combat.activeWeapon] || 0;
         _current.magSize = wep?.magSize || 0;
-        _current.score = state.statsBuffer[PlayerStatID.SCORE] || 0;
-        _current.scrap = state.statsBuffer[PlayerStatID.SCRAP] || 0;
-        _current.challengePoints = state.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0;
-        _current.activeWeapon = state.activeWeapon;
-        _current.isReloading = state.isReloading;
-        _current.bossSpawned = state.bossSpawned;
+        _current.score = state.player.statsBuffer[PlayerStatID.SCORE] || 0;
+        _current.scrap = state.player.statsBuffer[PlayerStatID.SCRAP] || 0;
+        _current.challengePoints = state.player.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0;
+        _current.activeWeapon = state.combat.activeWeapon;
+        _current.isReloading = state.combat.isReloading;
+        _current.bossSpawned = state.enemies.bossSpawned;
         _current.bossDefeated = activeBoss ? activeBoss.dead : false;
-        _current.familyFound = state.familyFound;
+        _current.familyFound = state.world.familyFound;
         _current.familySignal = isFinite(famSignal) ? famSignal : 0;
-        _current.level = state.statsBuffer[PlayerStatID.LEVEL] || 1;
-        _current.currentXp = state.statsBuffer[PlayerStatID.CURRENT_XP] || 0;
-        _current.nextLevelXp = state.statsBuffer[PlayerStatID.NEXT_LEVEL_XP] || 1000;
-        _current.throwableAmmo = state.weaponAmmo[props.loadout?.throwable] || 0;
+        _current.level = state.player.statsBuffer[PlayerStatID.LEVEL] || 1;
+        _current.currentXp = state.player.statsBuffer[PlayerStatID.CURRENT_XP] || 0;
+        _current.nextLevelXp = state.player.statsBuffer[PlayerStatID.NEXT_LEVEL_XP] || 1000;
+        _current.throwableAmmo = state.combat.weaponAmmo[props.loadout?.throwable] || 0;
         _current.distanceTraveled = Math.floor(distanceTraveled) || 0;
         _current.kills = state.sessionStats.kills || 0;
         _current.spEarned = state.sessionStats.spGained || 0;
@@ -318,14 +318,14 @@ export const HudSystem = {
 
         // Sync persistent telemetry
         if (state.stats) {
-            _current.enemyKills.set(state.enemyKills);
+            _current.enemyKills.set(state.enemies.enemyKills);
 
-            _current.discoveredZombies = state.stats.discoveredZombies;
-            _current.discoveredBosses = state.stats.discoveredBosses;
+            _current.discoveredZombies = state.gameState.stats.discoveredZombies;
+            _current.discoveredBosses = state.gameState.stats.discoveredBosses;
 
             // Sync challenge tiers
-            if (state.stats.challengeTiers) {
-                _current.challengeTiers.set(state.stats.challengeTiers);
+            if (state.gameState.stats.challengeTiers) {
+                _current.challengeTiers.set(state.gameState.stats.challengeTiers);
             }
         }
 
@@ -340,16 +340,16 @@ export const HudSystem = {
         _current.throttleState = state.vehicle.throttle || 0;
         _current.spEarned = spGained;
 
-        _current.isDead = (state.statusFlags & PlayerStatusFlags.DEAD) !== 0;
-        _current.killerName = state.killerName;
-        _current.killerAttackName = state.killerAttackName;
-        _current.killedByEnemy = state.killedByEnemy;
-        _current.lethalSourceId = state.lethalSourceId ?? -1;
-        _current.lethalStatusEffect = state.lethalStatusEffect ?? -1;
+        _current.isDead = (state.combat.statusFlags & PlayerStatusFlags.DEAD) !== 0;
+        _current.killerName = state.player.killerName;
+        _current.killerAttackName = state.player.killerAttackName;
+        _current.killedByEnemy = state.player.killedByEnemy;
+        _current.lethalSourceId = state.player.lethalSourceId ?? -1;
+        _current.lethalStatusEffect = state.player.lethalStatusEffect ?? -1;
 
         // Map Items Sync (Zero-GC Mutation)
         let mCount = 0;
-        const mapItems = state.mapItems;
+        const mapItems = state.world.mapItems;
         if (mapItems) {
             const len = Math.min(mapItems.length, MAX_MAP_ITEMS);
             for (let i = 0; i < len; i++) {
@@ -368,14 +368,14 @@ export const HudSystem = {
         }
         _current.mapItemsCount = mCount;
         _current.fps = PerformanceMonitor.getInstance().getFps();
-        _current.hudVisible = state.hudVisible ?? _current.hudVisible;
-        _current.sectorName = state.sectorName || '';
+        _current.hudVisible = state.ui.hudVisible ?? _current.hudVisible;
+        _current.sectorName = state.world.sectorName || '';
         _current.currentSector = props.currentSector || 0;
 
         // --- ZERO-GC SECTOR-SPECIFIC DISCOVERY TALLYING ---
         let cCount = 0;
-        if (state.discoverySets?.discoveredClues) {
-            for (const id of state.discoverySets.discoveredClues) {
+        if (state.discovery.discoverySets?.discoveredClues) {
+            for (const id of state.discovery.discoverySets.discoveredClues) {
                 const resolved = DataResolver.resolveClueID(id);
                 if (resolved !== undefined && CLUES[resolved]?.sector === _current.currentSector) cCount++;
             }
@@ -383,8 +383,8 @@ export const HudSystem = {
         _current.cluesFoundCount = cCount;
 
         let poiCount = 0;
-        if (state.discoverySets?.discoveredPois) {
-            for (const id of state.discoverySets.discoveredPois) {
+        if (state.discovery.discoverySets?.discoveredPois) {
+            for (const id of state.discovery.discoverySets.discoveredPois) {
                 const resolved = DataResolver.resolvePoiID(id);
                 if (resolved !== undefined && POIS[resolved]?.sector === _current.currentSector) poiCount++;
             }
@@ -392,8 +392,8 @@ export const HudSystem = {
         _current.poisFoundCount = poiCount;
 
         let colCount = 0;
-        if (state.discoverySets?.discoveredCollectibles) {
-            for (const id of state.discoverySets.discoveredCollectibles) {
+        if (state.discovery.discoverySets?.discoveredCollectibles) {
+            for (const id of state.discovery.discoverySets.discoveredCollectibles) {
                 const resolved = DataResolver.resolveCollectibleID(id);
                 if (resolved !== undefined && COLLECTIBLES[resolved]?.sector === _current.currentSector) colCount++;
             }
@@ -423,41 +423,41 @@ export const HudSystem = {
             _bufferB.interactionY = _cachedHeight - 150;
 
             UIEventBridge.setInteractionPrompt(InteractionPromptId.EXIT_VEHICLE);
-        } else if (state.hasInteractionTarget && state.interactionTargetPos) {
-            _v1.copy(state.interactionTargetPos);
+        } else if (state.triggers.hasInteractionTarget && state.triggers.interactionTargetPos) {
+            _v1.copy(state.triggers.interactionTargetPos);
             _v1.project(camera);
             const screenX = (0.5 + _v1.x * 0.5) * _cachedWidth;
             const screenY = (0.5 - _v1.y * 0.5) * _cachedHeight;
 
             _bufferA.interactionActive = true;
-            _bufferA.interactionType = state.interaction.type;
-            _bufferA.interactionLabel = state.interaction.label;
-            _bufferA.interactionTargetId = state.interaction.targetId;
+            _bufferA.interactionType = state.triggers.interaction.type;
+            _bufferA.interactionLabel = state.triggers.interaction.label;
+            _bufferA.interactionTargetId = state.triggers.interaction.targetId;
             _bufferA.interactionX = screenX;
             _bufferA.interactionY = screenY;
 
             _bufferB.interactionActive = true;
-            _bufferB.interactionType = state.interaction.type;
-            _bufferB.interactionLabel = state.interaction.label;
-            _bufferB.interactionTargetId = state.interaction.targetId;
+            _bufferB.interactionType = state.triggers.interaction.type;
+            _bufferB.interactionLabel = state.triggers.interaction.label;
+            _bufferB.interactionTargetId = state.triggers.interaction.targetId;
             _bufferB.interactionX = screenX;
             _bufferB.interactionY = screenY;
 
-            UIEventBridge.setInteractionPrompt(state.interaction.promptId);
+            UIEventBridge.setInteractionPrompt(state.triggers.interaction.promptId);
         } else {
             _bufferA.interactionActive = false;
             _bufferB.interactionActive = false;
             UIEventBridge.setInteractionPrompt(0); // InteractionPromptId.NONE
         }
 
-        _bufferA.cinematicActive = !!state.cinematicActive;
-        _bufferA.dialogueActive = !!state.cinematicLine.active;
-        _bufferA.dialogueSpeaker = state.cinematicLine.speaker !== undefined ? state.cinematicLine.speaker : '';
-        _bufferA.dialogueText = state.cinematicLine.text || '';
-        _bufferB.cinematicActive = !!state.cinematicActive;
-        _bufferB.dialogueActive = !!state.cinematicLine.active;
-        _bufferB.dialogueSpeaker = state.cinematicLine.speaker !== undefined ? state.cinematicLine.speaker : '';
-        _bufferB.dialogueText = state.cinematicLine.text || '';
+        _bufferA.cinematicActive = !!state.ui.cinematicActive;
+        _bufferA.dialogueActive = !!state.ui.cinematicLine.active;
+        _bufferA.dialogueSpeaker = state.ui.cinematicLine.speaker !== undefined ? state.ui.cinematicLine.speaker : '';
+        _bufferA.dialogueText = state.ui.cinematicLine.text || '';
+        _bufferB.cinematicActive = !!state.ui.cinematicActive;
+        _bufferB.dialogueActive = !!state.ui.cinematicLine.active;
+        _bufferB.dialogueSpeaker = state.ui.cinematicLine.speaker !== undefined ? state.ui.cinematicLine.speaker : '';
+        _bufferB.dialogueText = state.ui.cinematicLine.text || '';
 
         // --- ZERO-GC NAVIGATION SIGNAL SYNC ---
         const engineSignal = UIEventBridge.consumeEngineSignal();
@@ -502,9 +502,9 @@ export const HudSystem = {
         _current.debugInfo.performance.memory.heapLimit = gcInfo.heapLimitMB;
         _current.debugInfo.performance.memory.heapTotal = gcInfo.heapLimitMB;
         _current.debugInfo.performance.memory.heapUsed = gcInfo.heapUsedMB;
-        _current.debugInfo.modes = state.interaction.active ? state.interaction.type : InteractionType.NONE;
+        _current.debugInfo.modes = state.triggers.interaction.active ? state.triggers.interaction.type : InteractionType.NONE;
         _current.debugInfo.enemies = enemies.length;
-        _current.debugInfo.objects = state.obstacles?.length || 0;
+        _current.debugInfo.objects = state.world.obstacles?.length || 0;
 
         return _current;
     },

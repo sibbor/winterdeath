@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { PlayerStats, StatEnemyIndex } from '../../../entities/player/PlayerTypes';
+import { CareerStats, StatEnemyIndex } from '../../../types/CareerStats';
 import { t } from '../../../utils/i18n';
 import { useOrientation } from '../../../hooks/useOrientation';
 import ModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalTab } from './ModalLayout';
@@ -16,7 +16,7 @@ import { FormatUtils } from '../../../utils/ui/FormatUtils';
 import { PerkCategory } from '../../../content/perks';
 
 interface ScreenAdventureLogProps {
-    stats: PlayerStats;
+    stats: CareerStats;
     onClose: () => void;
     onMarkCollectiblesViewed?: (collectibleIds: string[]) => void;
     onToggleChallengeTracking?: (challengeId: number) => void;
@@ -46,7 +46,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
     const [activeTab, setActiveTab] = useState<DiscoveryType>(initialTab ?? DiscoveryType.CHALLENGE);
     const [showAllData, setShowAllData] = useState(false);
 
-    const isDebugMode = (debugMode !== undefined ? debugMode : false) || (window as any).gameEngine?.sectorContext?.debugMode || (window as any).WD_DEBUG === true || localStorage.getItem('wd_debug') === 'true';
+    const isDebugMode = (debugMode !== undefined ? debugMode : false) || (window as any).gameEngine?.SectorBuildContext?.debugMode || (window as any).WD_DEBUG === true || localStorage.getItem('wd_debug') === 'true';
 
     // Sync tab when initialTab changes (e.g. when opened from Pause Menu)
     useEffect(() => {
@@ -205,7 +205,7 @@ const CHALLENGE_CATEGORIES = [
     { id: ChallengeCategory.PLAYER, label: 'ui.category_player' },
 ];
 
-const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebug?: boolean, onToggleTracking?: (id: number) => void }> = React.memo(({ stats, isMobileDevice, isDebug, onToggleTracking }) => {
+const ChallengesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, isDebug?: boolean, onToggleTracking?: (id: number) => void }> = React.memo(({ stats, isMobileDevice, isDebug, onToggleTracking }) => {
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
     const toggleCategory = useCallback((id: string) => {
@@ -361,7 +361,7 @@ const ChallengesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, is
 
 const ChallengeCard: React.FC<{
     challenge: ChallengeDef;
-    stats: PlayerStats;
+    stats: CareerStats;
     isMobileDevice?: boolean;
     isTracked: boolean;
     isHero?: boolean;
@@ -441,7 +441,7 @@ const ChallengeCard: React.FC<{
     );
 });
 
-const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, isDebug }) => {
+const ZombiesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, isDebug }) => {
     const zombies = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.ZOMBIE), []);
 
     const seenEnemySet = useMemo(() => new Set(StatsBridge.getDiscoveredZombies(stats)), [stats]);
@@ -554,7 +554,7 @@ const ZombiesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDeb
     );
 });
 
-const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, isDebug }) => {
+const BossesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, isDebug }) => {
     const sectorsList = useMemo(() => DataResolver.getSectors(), []);
     const themesList = useMemo(() => DataResolver.getSectorThemes(), []);
     const bossesList = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.BOSS), []);
@@ -702,7 +702,7 @@ const BossesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, isDebu
     );
 });
 
-const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
+const CollectiblesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
     const foundIds = StatsBridge.getDiscoveredCollectibles(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.COLLECTIBLE), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
@@ -809,7 +809,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
     );
 });
 
-const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
+const CluesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
     const foundIds = StatsBridge.getDiscoveredClues(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.CLUE), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
@@ -929,7 +929,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effecti
     );
 });
 
-const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
+const PoiTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
     const visitedList = StatsBridge.getDiscoveredPois(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.POI), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
@@ -1054,7 +1054,7 @@ const PoiTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effective
     );
 });
 
-const PerkItem: React.FC<{ perk: any, stats: PlayerStats, isSeen: boolean }> = React.memo(({ perk, stats, isSeen }) => {
+const PerkItem: React.FC<{ perk: any, stats: CareerStats, isSeen: boolean }> = React.memo(({ perk, stats, isSeen }) => {
     const activations = StatsBridge.getPerkTimesGained(stats, perk.id);
     const categoryLabel = perk.category === PerkCategory.PASSIVE ? 'ui.passive' : (perk.category === PerkCategory.BUFF ? 'ui.buff' : 'ui.debuff');
     const color = perk.category === PerkCategory.PASSIVE ? COLORS.BLUE : (perk.category === PerkCategory.BUFF ? COLORS.GREEN : COLORS.RED);
@@ -1111,7 +1111,7 @@ const PerkItem: React.FC<{ perk: any, stats: PlayerStats, isSeen: boolean }> = R
     );
 });
 
-const PerksTab: React.FC<{ stats: PlayerStats, effectiveLandscape: boolean, isDebug?: boolean }> = React.memo(({ stats, effectiveLandscape, isDebug }) => {
+const PerksTab: React.FC<{ stats: CareerStats, effectiveLandscape: boolean, isDebug?: boolean }> = React.memo(({ stats, effectiveLandscape, isDebug }) => {
     const discovered = useMemo(() => StatsBridge.getPerkDiscoveredMap(stats), [stats]);
     const gained = useMemo(() => StatsBridge.getPerkTimesGainedMap(stats), [stats]);
 

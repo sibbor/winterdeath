@@ -26,7 +26,7 @@ export class DiscoverySystem implements System {
         const state = session.state;
         if (!state) return false;
 
-        const sets = state.discoverySets;
+        const sets = state.discovery.discoverySets;
         const stats = state.sessionStats;
         let isNew = false;
 
@@ -54,7 +54,7 @@ export class DiscoverySystem implements System {
             }
             case DiscoveryType.PERK: {
                 const perkSmi = Number(uiSmi !== undefined ? uiSmi : id);
-                const globalDiscovered = state.stats?.discoveredPerksMap ? state.stats.discoveredPerksMap[perkSmi] === 1 : false;
+                const globalDiscovered = state.careerStats?.discoveredPerksMap ? state.careerStats.discoveredPerksMap[perkSmi] === 1 : false;
 
                 if (stats.discoveredPerksMap && perkSmi < stats.discoveredPerksMap.length && !stats.discoveredPerksMap[perkSmi] && !globalDiscovered) {
                     isNew = true;
@@ -68,7 +68,7 @@ export class DiscoverySystem implements System {
             const smi = uiSmi || (typeof id === 'number' ? id : 0);
             UIEventRingBuffer.push(UIEventType.DISCOVERY, smi, type, state.simTime);
 
-            if (state.isPlayground) return true; // Block career persistence
+            if (state.world.isPlayground) return true; // Block career persistence
 
             // Persist the discovery
             switch (type) {
@@ -94,8 +94,8 @@ export class DiscoverySystem implements System {
                     if (stats.discoveredPerksMap && perkSmi < stats.discoveredPerksMap.length) {
                         stats.discoveredPerksMap[perkSmi] = 1;
                     }
-                    if (state.stats && state.stats.discoveredPerksMap && perkSmi < state.stats.discoveredPerksMap.length) {
-                        state.stats.discoveredPerksMap[perkSmi] = 1;
+                    if (state.careerStats && state.careerStats.discoveredPerksMap && perkSmi < state.careerStats.discoveredPerksMap.length) {
+                        state.careerStats.discoveredPerksMap[perkSmi] = 1;
                     }
                     break;
                 }

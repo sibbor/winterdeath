@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { Enemy, EnemyFlags } from '../entities/enemies/EnemyTypes';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 // --- SHARED GHOST GEOMETRY (one capsule for all entities) ---
 const _capsuleGeo = new THREE.CapsuleGeometry(0.35, 1.25, 4, 8);
@@ -110,8 +111,8 @@ export class OcclusionSystem implements System {
         this.activeFamilyMembers = activeFamilyMembers;
     }
 
-    update(ctx: any, delta: number, simTime: number, renderTime: number): void {
-        const state = ctx.state;
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number): void {
+        const state = session.state;
 
         // 1. PLAYER ghost
         const playerGroup = this.playerGroup.current;
@@ -136,7 +137,7 @@ export class OcclusionSystem implements System {
         }
 
         // 3. ENEMY ghosts
-        const enemies = state.enemies;
+        const enemies = state.enemies.pool;
         for (let i = 0; i < enemies.length; i++) {
             const enemy: Enemy = enemies[i];
             if (!enemy || !enemy.mesh || (enemy.statusFlags & EnemyFlags.DEAD) !== 0) continue;
@@ -154,10 +155,10 @@ export class OcclusionSystem implements System {
         // FIX 2: Bytte ut felkällan (.length jämförelsen) mot ett robust Set-upplägg
         if (this.ghostedEnemies.size > 0) {
             const activeSet: Set<THREE.Object3D> = new Set();
-            const enemies = state.enemies;
-            for (let i = 0; i < enemies.length; i++) {
-                if (((enemies[i].statusFlags & EnemyFlags.DEAD) === 0) && enemies[i].mesh) {
-                    activeSet.add(enemies[i].mesh);
+            const enemiesPool = state.enemies.pool;
+            for (let i = 0; i < enemiesPool.length; i++) {
+                if (((enemiesPool[i].statusFlags & EnemyFlags.DEAD) === 0) && enemiesPool[i].mesh) {
+                    activeSet.add(enemiesPool[i].mesh);
                 }
             }
 

@@ -34,7 +34,7 @@ export class ZombieRenderer {
     private getMat(color: number) {
         // Material cloning is fine during init/constructor
         const m = MATERIALS.zombie.clone() as THREE.MeshStandardMaterial;
-        // [VINTERDÖD] Låter basfärgen förbli här. Instansfärger multipliceras sedan med denna.
+        // Låter basfärgen förbli här. Instansfärger multipliceras sedan med denna.
         m.color.set(color);
         return m;
     }

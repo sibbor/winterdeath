@@ -1,25 +1,13 @@
-import { WeaponID } from '../entities/player/CombatTypes';
-import { PlayerStats } from '../entities/player/PlayerTypes';
-import { GameSettings, WeatherType, EnvironmentOverride } from '../core/engine/EngineTypes';
-import { SectorStats, SectorState } from './StateTypes';
+import { SessionStats } from './SessionStats';
+import { WeatherType, EnvironmentOverride } from '../core/engine/EnvironmentalTypes';
+import { GameState } from './StateTypes';
 
 export interface GameCanvasProps {
-  stats: PlayerStats;
-  loadout: {
-    primary: WeaponID;
-    secondary: WeaponID;
-    throwable: WeaponID;
-    special: WeaponID;
-  };
-  weaponLevels: Partial<Record<WeaponID, number>>;
-  currentSector: number;
-  deadBossIndices: number[];
-  rescuedFamilyIndices: number[];
-  debugMode?: boolean;
+  gameState: GameState;
   isGameRunning: boolean;
   isPaused: boolean;
-  onDie: (stats: SectorStats, killer: string) => void;
-  onSectorEnded: (stats: SectorStats) => void;
+  onDie: (sessionStats: SessionStats, killer: string) => void;
+  onSectorEnded: (sessionStats: SessionStats) => void;
   onPauseToggle: (val: boolean) => void;
   onOpenMap: () => void;
   triggerEndSector: boolean;
@@ -44,13 +32,9 @@ export interface GameCanvasProps {
   onBossIntroStateChange: (active: boolean) => void;
   onUpdateLoadout?: (loadout: any, levels: any) => void;
   onEnvironmentOverrideChange?: (overrides: EnvironmentOverride, weather: WeatherType) => void;
-  environmentOverrides?: Record<number, EnvironmentOverride>;
   onInteractionStateChange?: (type: string | null) => void;
   isMobileDevice?: boolean;
   disableInput?: boolean;
   isWarmup?: boolean;
-  weather: WeatherType;
-  settings: GameSettings;
   currentSectorData?: any;
-  sectorState?: SectorState;
 }

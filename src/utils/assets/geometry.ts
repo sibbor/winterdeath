@@ -72,7 +72,7 @@ const createPetTailGeo = () => {
 };
 
 const createSplashGeo = () => {
-    // [VINTERDÖD] Crossed droplet planes for splash. 25% larger than the previous 0.2 sphere limit.
+    // Crossed droplet planes for splash. 25% larger than the previous 0.2 sphere limit.
     const w = 0.25;
     const h = 0.4;
 

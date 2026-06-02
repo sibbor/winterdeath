@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { MATERIALS } from '../utils/assets/materials';
 import { WindUniforms } from '../utils/assets/materials_wind';
 import { System, SystemID } from './System';
-
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 export class WindSystem implements System {
   readonly systemId = SystemID.WIND;
@@ -33,7 +33,7 @@ export class WindSystem implements System {
   constructor() { }
 
   /**
-   * [VINTERDÖD] Binds a material's uniforms to this WindSystem.
+   * Binds a material's uniforms to this WindSystem.
    * Since we pre-allocate in userData, we don't have to worry about when the shader compiles.
    */
   public bindMaterial(mat: THREE.Material | undefined) {
@@ -86,7 +86,7 @@ export class WindSystem implements System {
     this.setRandomWind(minStrength, maxStrength, baseAngle, angleVariance);
   }
 
-  update(ctx: any, delta: number, simTime: number, renderTime: number): THREE.Vector2 {
+  update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number): THREE.Vector2 {
     // Ensure all core materials are bound once.
     if (!this.materialsBound) {
       this.bindMaterial(MATERIALS.hedge);
@@ -122,7 +122,7 @@ export class WindSystem implements System {
 
     // Faster wind transitions (0.3 -> 0.8) for better responsiveness.
     const lerpFactor = 1.0 - Math.exp(-0.8 * delta);
-    this.current.lerp(this.target, lerpFactor); 
+    this.current.lerp(this.target, lerpFactor);
     this.direction.set(this.current.x, 0, this.current.y).normalize();
     this.strength = this.current.length();
 

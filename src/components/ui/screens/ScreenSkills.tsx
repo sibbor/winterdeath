@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { PlayerStats, PlayerStatID } from '../../../entities/player/PlayerTypes';
+import { CareerStats, PlayerStatID } from '../../../types/CareerStats';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
@@ -15,8 +15,8 @@ const SKILLS_CONFIG = [
 ];
 
 interface ScreenSkillsProps {
-    stats: PlayerStats;
-    onSave: (newStats: PlayerStats) => void;
+    stats: CareerStats;
+    onSave: (newStats: CareerStats) => void;
     onClose: () => void;
     isMobileDevice?: boolean;
 }

@@ -8,6 +8,7 @@ import { FXParticleType } from '../types/FXTypes';
 import { ChunkManager } from '../core/world/ChunkManager';
 import { SPATIAL_CONFIG } from '../config/SpatialConfig';
 import { WinterEngine } from '../core/engine/WinterEngine';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 import { WaterFloraType, WaterBodyType, WaterShape, WaterBodyDef } from '../types/WaterTypes';
 
@@ -371,10 +372,11 @@ export class WaterSystem implements System {
         }
     }
 
-    public getBuoyancyResult() { return _buoyancyResult; }
+    public getBuoyancyResult() {
+        return _buoyancyResult;
+    }
 
-    public update(ctx: any, delta: number, simTime: number, renderTime: number): void {
-
+    public update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number): void {
         // Auto-sync with Engine Wind
         const engine = WinterEngine.getInstance();
         if (engine && engine.wind) {

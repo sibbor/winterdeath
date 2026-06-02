@@ -1,7 +1,7 @@
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System, SystemID } from './System';
 import { GAME_CHALLENGES, ChallengeID, MAX_CHALLENGE_TIER } from '../content/ChallengeTypes';
-import { PlayerStatID, StatWeaponIndex, StatEnemyIndex } from '../entities/player/PlayerTypes';
+import { PlayerStatID, StatWeaponIndex, StatEnemyIndex } from '../types/CareerStats';
 import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 
 /**
@@ -23,8 +23,8 @@ export class ChallengeSystem implements System {
     private lastEvalTime = 0;
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
-        if (!session || !session.state || session.state.isPlayground) return;
-        const stats = session.state.stats;
+        if (!session || !session.state || session.state.world.isPlayground) return;
+        const stats = session.state.careerStats;
         if (!stats) return;
 
         // Run evaluation logic
@@ -44,7 +44,7 @@ export class ChallengeSystem implements System {
      * @param silent If true, tiers are updated without emitting UI events or awarding CP (used for initialization)
      */
     private evaluateAll(session: GameSessionLogic, silent: boolean = false) {
-        const stats = session.state.stats;
+        const stats = session.state.careerStats;
         const tiers = stats.challengeTiers;
         if (!tiers) return;
 
@@ -88,7 +88,7 @@ export class ChallengeSystem implements System {
      * Optimized: Direct buffer access.
      */
     private getChallengeValue(session: GameSessionLogic, id: ChallengeID): number {
-        const stats = session.state.stats;
+        const stats = session.state.careerStats;
         const buffer = stats.statsBuffer;
         const wk = stats.weaponKills;
         const ek = stats.enemyKills;

@@ -3,7 +3,7 @@ import { GameSessionState } from './GameSessionState';
 import { useRef, useState, useEffect } from 'react';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { DeathPhase } from '../../types/SessionTypes';
-import { SectorContext } from '../../game/session/SectorTypes';
+import { SectorBuildContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { CinematicBubbleHandle } from '../../components/ui/hud/CinematicBubble';
@@ -35,7 +35,7 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
     const gameSessionRef = useRef<GameSessionLogic | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
-    const sectorContextRef = useRef<SectorContext | null>(null);
+    const SectorBuildContextRef = useRef<SectorBuildContext | null>(null);
 
     // Core State Ref
     const stateRef = useRef<GameSessionState>(null!);
@@ -54,7 +54,7 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
     // Gameplay Logic Refs
     const activeBubbles = useRef<any[]>([]);
     const hasEndedSector = useRef(false);
-    const collectedCluesRef = useRef<string[]>(props.stats.discoveredClues || []);
+    const collectedCluesRef = useRef<string[]>(props.gameState.stats.discoveredClues || []);
     const distanceTraveledRef = useRef(0);
     const lastTeleportRef = useRef<number>(0);
     const lastDrawCallsRef = useRef(0);
@@ -149,11 +149,11 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
     useEffect(() => {
         hasPlayedIntroRef.current = false;
         isBuildingSectorRef.current = true;
-    }, [props.currentSector]);
+    }, [props.gameState.currentSector]);
 
     return {
         refs: {
-            propsRef, engineRef, gameSessionRef, containerRef, chatOverlayRef, sectorContextRef,
+            propsRef, engineRef, gameSessionRef, containerRef, chatOverlayRef, SectorBuildContextRef,
             stateRef, activeModalRef, isBuildingSectorRef, deathPhaseRef, interactionTypeRef,
             lastInteractionPosRef, activeBubbles, hasEndedSector, collectedCluesRef, distanceTraveledRef,
             lastTeleportRef, lastDrawCallsRef, hasPlayedIntroRef, lastHeartbeatRef, bossIntroTimerRef,

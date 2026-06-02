@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../../../utils/assets/materials';
-import { SectorContext } from '../../../game/session/SectorTypes';
-import { GroundType } from '../../engine/EngineTypes';
+import { SectorBuildContext } from '../../../game/session/SectorTypes';
+import { GroundType } from '../../engine/EnvironmentalTypes';
 import { SectorBuilder } from '../SectorBuilder';
 import { GeneratorUtils } from './GeneratorUtils';
 import { PhysicsGroup, ColliderType } from '../CollisionResolution';
@@ -121,7 +121,7 @@ export const PathGenerator = {
         return result;
     },
 
-    createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string, isClosed: boolean = false) => {
+    createBoundry: (ctx: SectorBuildContext, polygon: THREE.Vector3[], name: string, isClosed: boolean = false) => {
         if (!polygon || polygon.length < 2) return;
         const height = 50;
         const thickness = 4.0;
@@ -153,7 +153,7 @@ export const PathGenerator = {
         }
     },
 
-    createRoad: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 8, texture: THREE.Texture = null, matType: MaterialType = MaterialType.ASPHALT, spawnLoot: boolean = false): Promise<THREE.CatmullRomCurve3> => {
+    createRoad: async (ctx: SectorBuildContext, points: THREE.Vector3[], width: number = 8, texture: THREE.Texture = null, matType: MaterialType = MaterialType.ASPHALT, spawnLoot: boolean = false): Promise<THREE.CatmullRomCurve3> => {
         if (points.length < 2) return null;
 
         const curve = new THREE.CatmullRomCurve3(points);
@@ -186,11 +186,11 @@ export const PathGenerator = {
         return curve;
     },
 
-    createGravelRoad: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 6): Promise<THREE.CatmullRomCurve3> => {
+    createGravelRoad: async (ctx: SectorBuildContext, points: THREE.Vector3[], width: number = 6): Promise<THREE.CatmullRomCurve3> => {
         return PathGenerator.createRoad(ctx, points, width, null, MaterialType.GRAVEL);
     },
 
-    createDirtPath: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, texture: THREE.Texture = null, showBorder: boolean = false, spawnLoot: boolean = false): Promise<THREE.CatmullRomCurve3> => {
+    createDirtPath: async (ctx: SectorBuildContext, points: THREE.Vector3[], width: number = 4, texture: THREE.Texture = null, showBorder: boolean = false, spawnLoot: boolean = false): Promise<THREE.CatmullRomCurve3> => {
         if (points.length < 2) return null;
 
         const curve = new THREE.CatmullRomCurve3(points);
@@ -217,7 +217,7 @@ export const PathGenerator = {
         return curve;
     },
 
-    createRailTrack: async (ctx: SectorContext, points: THREE.Vector3[]): Promise<THREE.CatmullRomCurve3> => {
+    createRailTrack: async (ctx: SectorBuildContext, points: THREE.Vector3[]): Promise<THREE.CatmullRomCurve3> => {
         if (points.length < 2) return null;
         const curve = new THREE.CatmullRomCurve3(points);
         const len = curve.getLength();
@@ -308,7 +308,7 @@ export const PathGenerator = {
         return curve;
     },
 
-    createDecalPath: async (ctx: SectorContext, points: THREE.Vector3[], options: { spacing: number, size: number, material: THREE.Material, variance?: number, color?: number, randomRotation?: boolean, yOffset?: number }) => {
+    createDecalPath: async (ctx: SectorBuildContext, points: THREE.Vector3[], options: { spacing: number, size: number, material: THREE.Material, variance?: number, color?: number, randomRotation?: boolean, yOffset?: number }) => {
         if (points.length < 2) return;
         const curve = new THREE.CatmullRomCurve3(points);
         const count = Math.ceil(curve.getLength() / options.spacing);
@@ -371,14 +371,14 @@ export const PathGenerator = {
         _pathLayerIndex++;
     },
 
-    createBloodPath: (ctx: SectorContext, points: THREE.Vector3[], spacing = 0.5, size = 0.8) => {
+    createBloodPath: (ctx: SectorBuildContext, points: THREE.Vector3[], spacing = 0.5, size = 0.8) => {
         PathGenerator.createDecalPath(ctx, points, { spacing, size, material: MATERIALS.bloodStainDecal, variance: 0.4, yOffset: 0.12 });
     },
 
-    createFootprintPath: (ctx: SectorContext, points: THREE.Vector3[], spacing = 0.5, size = 0.5) => {
+    createFootprintPath: (ctx: SectorBuildContext, points: THREE.Vector3[], spacing = 0.5, size = 0.5) => {
         PathGenerator.createDecalPath(ctx, points, { spacing, size, material: MATERIALS.footprintDecal, variance: 0.2, randomRotation: false });
     },
-    createFence: async (ctx: SectorContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' | 'mesh' = 'wood', height: number = 1.2, strict: boolean = false) => {
+    createFence: async (ctx: SectorBuildContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' | 'mesh' = 'wood', height: number = 1.2, strict: boolean = false) => {
         if (points.length < 2) return;
 
         let mat = MATERIALS.wood;
@@ -471,7 +471,7 @@ export const PathGenerator = {
         }
     },
 
-    createGuardrail: async (ctx: SectorContext, points: THREE.Vector3[], floating: boolean = false) => {
+    createGuardrail: async (ctx: SectorBuildContext, points: THREE.Vector3[], floating: boolean = false) => {
         if (points.length < 2) return;
         const height = 0.8;
         const thickness = 0.3;
@@ -522,7 +522,7 @@ export const PathGenerator = {
         }
     },
 
-    createEmbankment: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 20, height: number = 5, material: THREE.Material = MATERIALS.dirt) => {
+    createEmbankment: async (ctx: SectorBuildContext, points: THREE.Vector3[], width: number = 20, height: number = 5, material: THREE.Material = MATERIALS.dirt) => {
         if (points.length < 2) return;
 
         let startTime = performance.now();

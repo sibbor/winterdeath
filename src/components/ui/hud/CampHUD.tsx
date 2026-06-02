@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { PlayerStats, PlayerStatID } from '../../../entities/player/PlayerTypes';
+import { CareerStats, PlayerStatID } from '../../../types/CareerStats';
 import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import { DiscoveryType } from '../hud/HudTypes';
@@ -7,7 +7,7 @@ import { StatsBridge } from '../../../core/data/StatsBridge';
 import { FormatUtils } from '../../../utils/ui/FormatUtils';
 
 interface CampHUDProps {
-    stats: PlayerStats;
+    stats: CareerStats;
     hoveredStation: string | null;
     currentSectorName: string;
     hasCheckpoint: boolean;

@@ -4,15 +4,16 @@ import { GameCanvasProps } from '../../types/CanvasTypes';
 import { SectorStats } from '../../types/StateTypes';
 import { Enemy, NoiseType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
+import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
 import { WorldStreamer } from '../../core/world/WorldStreamer';
 import { GameSessionState } from './GameSessionState';
 import { System, SystemID } from '../../systems/System';
 import { WEAPONS } from '../../content/weapons';
-import { PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../entities/player/PlayerTypes';
+import { PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex } from '../../types/CareerStats';
 import { VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
 import { allocateGameSessionState, resetGameSessionState } from './GameSessionState';
 import { FXSystem } from '../../systems/FXSystem';
-import { SectorID } from './SectorTypes';
+import { SectorBuildContext, SectorID } from './SectorTypes';
 import { FXParticleType } from '../../types/FXTypes';
 import { clearEffects } from '../../systems/EffectManager';
 import { TriggerSystem } from '../../systems/TriggerSystem';
@@ -37,11 +38,11 @@ export class GameSessionLogic {
     public cinematicActive: boolean = false;
     public engine: WinterEngine;
     public state!: GameSessionState;
-    public playerPos: THREE.Vector3 | null = null;
     public detectionSystem!: EnemyDetectionSystem;
     public worldStreamer!: WorldStreamer;
     public triggerSystem!: TriggerSystem;
-    public sectorCtx!: any; // Set during GameSessionSetup
+    public damageTracker!: DamageTrackerSystem;
+    public sectorCtx!: SectorBuildContext; // Set during GameSessionSetup
 
     /**
      * Zero-GC Reset Logic
@@ -53,46 +54,55 @@ export class GameSessionLogic {
         // --- VINTERDÖD FIX: PURGE VFX POOLS ---
         clearEffects();
 
-        // Update Discovery Sets (Zero-GC: reuse Sets)
-        state.discoverySets.discoveredClues.clear();
-        (props.stats.discoveredClues || []).forEach((c: any) => {
-            const resolved = DataResolver.resolveClueID(c);
-            if (resolved !== undefined) state.discoverySets.discoveredClues.add(resolved);
-        });
+        // Update Discovery Sets (Zero-GC: reuse Sets, use fast for loops to prevent closure allocations)
+        state.discovery.discoverySets.discoveredClues.clear();
+        const clues = props.gameState.stats.discoveredClues || [];
+        for (let i = 0; i < clues.length; i++) {
+            const resolved = DataResolver.resolveClueID(clues[i]);
+            if (resolved !== undefined) state.discovery.discoverySets.discoveredClues.add(resolved);
+        }
 
-        state.discoverySets.discoveredPois.clear();
-        (props.stats.discoveredPois || []).forEach((p: any) => {
-            const resolved = DataResolver.resolvePoiID(p);
-            if (resolved !== undefined) state.discoverySets.discoveredPois.add(resolved);
-        });
+        state.discovery.discoverySets.discoveredPois.clear();
+        const pois = props.gameState.stats.discoveredPois || [];
+        for (let i = 0; i < pois.length; i++) {
+            const resolved = DataResolver.resolvePoiID(pois[i]);
+            if (resolved !== undefined) state.discovery.discoverySets.discoveredPois.add(resolved);
+        }
 
-        state.discoverySets.discoveredCollectibles.clear();
-        (props.stats.discoveredCollectibles || []).forEach((c: any) => {
-            const resolved = DataResolver.resolveCollectibleID(c);
-            if (resolved !== undefined) state.discoverySets.discoveredCollectibles.add(resolved);
-        });
+        state.discovery.discoverySets.discoveredCollectibles.clear();
+        const collectibles = props.gameState.stats.discoveredCollectibles || [];
+        for (let i = 0; i < collectibles.length; i++) {
+            const resolved = DataResolver.resolveCollectibleID(collectibles[i]);
+            if (resolved !== undefined) state.discovery.discoverySets.discoveredCollectibles.add(resolved);
+        }
 
-        state.discoverySets.discoveredZombies.clear();
-        (props.stats.discoveredZombies || []).forEach(e => state.discoverySets.discoveredZombies.add(e));
+        state.discovery.discoverySets.discoveredZombies.clear();
+        const zombies = props.gameState.stats.discoveredZombies || [];
+        for (let i = 0; i < zombies.length; i++) {
+            state.discovery.discoverySets.discoveredZombies.add(zombies[i]);
+        }
 
-        state.discoverySets.discoveredBosses.clear();
-        (props.stats.discoveredBosses || []).forEach(b => state.discoverySets.discoveredBosses.add(b));
+        state.discovery.discoverySets.discoveredBosses.clear();
+        const bosses = props.gameState.stats.discoveredBosses || [];
+        for (let i = 0; i < bosses.length; i++) {
+            state.discovery.discoverySets.discoveredBosses.add(bosses[i]);
+        }
 
         // [VINTERDÖD FIX] Seed perk discovery from global stats to prevent repeat popups
-        if (props.stats.discoveredPerksMap) {
-            state.sessionStats.discoveredPerksMap.set(props.stats.discoveredPerksMap);
+        if (props.gameState.stats.discoveredPerksMap) {
+            state.sessionStats.discoveredPerksMap.set(props.gameState.stats.discoveredPerksMap);
         }
 
         // Re-calculate Session Stats
         this.resetSessionStats(state.sessionStats, props);
 
         // Handle loadout ammo
-        state.weaponAmmo[props.loadout.primary] = WEAPONS[props.loadout.primary]?.magSize || 0;
-        state.weaponAmmo[props.loadout.secondary] = WEAPONS[props.loadout.secondary]?.magSize || 0;
-        state.weaponAmmo[props.loadout.throwable] = WEAPONS[props.loadout.throwable]?.magSize || 0;
-        state.weaponAmmo[props.loadout.special] = WEAPONS[props.loadout.special]?.magSize || 0;
+        state.combat.weaponAmmo[props.gameState.loadout.primary] = WEAPONS[props.gameState.loadout.primary]?.magSize || 0;
+        state.combat.weaponAmmo[props.gameState.loadout.secondary] = WEAPONS[props.gameState.loadout.secondary]?.magSize || 0;
+        state.combat.weaponAmmo[props.gameState.loadout.throwable] = WEAPONS[props.gameState.loadout.throwable]?.magSize || 0;
+        state.combat.weaponAmmo[props.gameState.loadout.special] = WEAPONS[props.gameState.loadout.special]?.magSize || 0;
 
-        state.isPlayground = props.currentSector === SectorID.PLAYGROUND;
+        state.world.isPlayground = props.gameState.currentSector === SectorID.PLAYGROUND;
 
         // Register callbacks
         if (!state.callbacks) {
@@ -269,8 +279,8 @@ export class GameSessionLogic {
             if (result && enemy.hp <= 0) {
                 const statsSys = this.getSystem<any>(SystemID.PLAYER_STATS);
                 if (statsSys) {
-                    const dx = enemy.mesh.position.x - this.playerPos!.x;
-                    const dz = enemy.mesh.position.z - this.playerPos!.z;
+                    const dx = enemy.mesh.position.x - this.state.player.position.x;
+                    const dz = enemy.mesh.position.z - this.state.player.position.z;
                     const distSq = dx * dx + dz * dz;
                     statsSys.onEnemyKilled(this, enemy, this.engine.simTime, source, distSq);
                 }
@@ -279,10 +289,6 @@ export class GameSessionLogic {
             return result;
         };
 
-        if (this.state.worldStreamer) {
-            this.worldStreamer = this.state.worldStreamer;
-            this.engine.registerSystem(SystemID.WORLD_STREAMER, this.state.worldStreamer);
-        }
     }
 
     update(delta: number, sectorId: number = 0) {
@@ -290,17 +296,11 @@ export class GameSessionLogic {
         if (!this.state) return;
 
         // --- TRACK PERSISTENT GAME TIME (Zero-GC) ---
-        if (!this.state.isPlayground) {
-            this.state.statsBuffer[PlayerStatID.TOTAL_GAME_TIME] += delta;
+        if (!this.state.world.isPlayground) {
+            this.state.player.statsBuffer[PlayerStatID.TOTAL_GAME_TIME] += delta;
         }
         this.state.sessionStats.timePlayed += delta;
         this.state.sessionStats.timeElapsed = this.state.sessionStats.timePlayed;
-
-        // Sync player position from the playerGroup reference (live fallback)
-        const pg = (this as any).playerGroup;
-        if (pg) {
-            this.playerPos = pg.position;
-        }
     }
 
     makeNoise(pos: THREE.Vector3, type: NoiseType = NoiseType.OTHER, radius?: number) {
@@ -352,12 +352,12 @@ export class GameSessionLogic {
     /** Convenience methods for FX spawning (delegates to FXSystem) */
     spawnParticle(x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) {
         if (!this.state) return;
-        FXSystem.spawnParticle(this.engine.scene, this.state.particles, x, y, z, type, count, customMesh, customVel, color, scale, life);
+        FXSystem.spawnParticle(this.engine.scene, this.state.combat.particles, x, y, z, type, count, customMesh, customVel, color, scale, life);
     }
 
     spawnDecal(x: number, z: number, scale: number, material?: THREE.Material, type?: any) {
         if (!this.state) return;
-        FXSystem.spawnDecal(this.engine.scene, this.state.bloodDecals, x, z, scale, material, type);
+        FXSystem.spawnDecal(this.engine.scene, this.state.world.bloodDecals, x, z, scale, material, type);
     }
 
     get scene() {
@@ -376,29 +376,27 @@ export class GameSessionLogic {
 
         // 2. Zero-GC: Explicit array clearing avoids V8 deoptimization from dynamic property iteration
         if (this.state) {
-            this.state.enemies.length = 0;
-            this.state.particles.length = 0;
-            this.state.activeEffects.length = 0;
-            this.state.projectiles.length = 0;
-            this.state.fireZones.length = 0;
-            this.state.scrapItems.length = 0;
-            this.state.chests.length = 0;
-            this.state.bloodDecals.length = 0;
+            this.state.enemies.pool.length = 0;
+            this.state.combat.particles.length = 0;
+            this.state.combat.projectiles.length = 0;
+            this.state.combat.fireZones.length = 0;
+            this.state.world.scrapItems.length = 0;
+            this.state.world.chests.length = 0;
+            this.state.world.bloodDecals.length = 0;
 
-            this.state.bossesDefeated.length = 0;
+            this.state.enemies.bossesDefeated.length = 0;
             this.triggerSystem.reset();
-            this.state.obstacles.length = 0;
-            this.state.mapItems.length = 0;
-            this.state.mapItems.length = 0;
+            this.state.world.obstacles.length = 0;
+            this.state.world.mapItems.length = 0;
 
             // Clean up sessionStats breakdowns (Zero-GC: keep object shape but reset values)
-            GameSessionLogic.resetSessionStats(this.state.sessionStats, this.state.stats as any);
+            GameSessionLogic.resetSessionStats(this.state.sessionStats, this.state.careerStats as any);
 
-            this.state.discoverySets.discoveredClues.clear();
-            this.state.discoverySets.discoveredPois.clear();
-            this.state.discoverySets.discoveredCollectibles.clear();
-            this.state.discoverySets.discoveredZombies.clear();
-            this.state.discoverySets.discoveredBosses.clear();
+            this.state.discovery.discoverySets.discoveredClues.clear();
+            this.state.discovery.discoverySets.discoveredPois.clear();
+            this.state.discovery.discoverySets.discoveredCollectibles.clear();
+            this.state.discovery.discoverySets.discoveredZombies.clear();
+            this.state.discovery.discoverySets.discoveredBosses.clear();
 
             this.state.vehicle.active = false;
             this.state.vehicle.mesh = null;
@@ -410,18 +408,17 @@ export class GameSessionLogic {
             this.state.vehicle.suspVelY = 0;
 
             this.state.discovery.active = false;
-            this.state.initialAim.active = false;
-            this.state.interaction.active = false;
+            this.state.triggers.interaction.active = false;
 
-            if (this.state.worldStreamer) {
-                this.state.worldStreamer.clear();
+            if (this.worldStreamer) {
+                this.worldStreamer.clear();
             }
 
             FootprintSystem.clear();
 
             // --- CINEMATIC CLEANUP ---
-            this.state.cinematicActive = false;
-            this.state.cinematicLine.active = false;
+            this.state.ui.cinematicActive = false;
+            this.state.ui.cinematicLine.active = false;
 
         }
     }

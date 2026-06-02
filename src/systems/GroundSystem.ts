@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { MATERIALS, GEOMETRY } from '../utils/assets';
-import { GroundType } from '../core/engine/EngineTypes';
+import { GroundType } from '../core/engine/EnvironmentalTypes';
 import { MaterialType } from '../content/environment';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 /**
  * GroundSystem: Manages visual terrain and infinite ground plane.
@@ -87,7 +88,7 @@ export class GroundSystem implements System {
     public getGroundHeight(x: number, z: number, session: any, y: number = 0): number {
         // 1. Frame-stamped cache — invalidate when the engine frame counter advances.
         // engine.frameCount is the canonical 60Hz integer, always available.
-        const frame = (session.engine?.frameCount as number) ?? 0;
+        const frame = (session.engine && session.engine.frameCount) ? (session.engine.frameCount as number) : 0;
         if (frame !== this._cacheFrame) {
             this._cache.clear();
             this._cacheFrame = frame;
@@ -113,7 +114,7 @@ export class GroundSystem implements System {
         //    registered water zone (+ 2m margin for smooth entry approach).
         const nearWater = !isAirborne && this._isNearWater(x, z);
 
-        if (nearWater && session.engine.water) {
+        if (nearWater && session.engine && session.engine.water) {
             session.engine.water.checkBuoyancy(x, y, z, session.state.renderTime);
             const b = session.engine.water.getBuoyancyResult();
             if (b.inWater) {
@@ -124,7 +125,7 @@ export class GroundSystem implements System {
         }
 
         // 4. Dry-land fallback — WorldStreamer is the authority for non-liquid terrain.
-        result = session.state.worldStreamer
+        result = (session.state && session.state.worldStreamer)
             ? session.state.worldStreamer.getGroundHeight(x, z)
             : 0;
         this._cache.set(cacheKey, result);
@@ -188,11 +189,12 @@ export class GroundSystem implements System {
     public update(context: any, delta: number, simTime: number, renderTime: number): void {
         if (!this.enabled) return;
 
-        const playerPos = context.playerPos || (context.state?.playerPos);
-        if (!playerPos) return;
+        const targetPos = context.engine?.camera?.threeCamera?.position || context.cameraPosition || context.playerPos || (context.state?.player?.position);
+        if (!targetPos) return;
 
-        // Move the infinite ground plane to stay centered on the player (Visual Illusion)
-        this.groundPlane.position.x = playerPos.x;
-        this.groundPlane.position.z = playerPos.z;
+        // Move the infinite ground plane to stay centered on the target position (Visual Illusion)
+        this.groundPlane.position.x = targetPos.x;
+        this.groundPlane.position.z = targetPos.z;
     }
+
 }

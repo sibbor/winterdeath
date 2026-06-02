@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { MATERIALS, ModelFactory } from '../../utils/assets';
 import { EffectType, SubEffectType } from '../../systems/EffectManager';
 import { FXParticleType } from '../../types/FXTypes';
-import { SectorContext, ChestType, NatureFillType, EnvironmentalZone, TerminalType } from '../../game/session/SectorTypes';
+import { SectorBuildContext, ChestType, NatureFillType, EnvironmentalZone, TerminalType } from '../../game/session/SectorTypes';
 import { ObjectGenerator } from './generators/ObjectGenerator';
 import { VehicleGenerator } from './generators/VehicleGenerator';
 import { TerrainGenerator } from './generators/TerrainGenerator';
@@ -31,7 +31,7 @@ import { MapItemType } from '../../components/ui/hud/HudTypes';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { PhysicsGroup, ColliderType } from './CollisionResolution';
 import { warmupProceduralTextures, isProceduralTexturesReady } from '../../utils/assets/procedural';
-import { GroundType } from '../engine/EngineTypes';
+import { GroundType } from '../engine/EnvironmentalTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1_sg = new THREE.Vector3();
@@ -59,7 +59,7 @@ export interface InteractableParams {
 
 export const SectorBuilder = {
 
-    addObstacle: (ctx: SectorContext, obstacle: any) => {
+    addObstacle: (ctx: SectorBuildContext, obstacle: any) => {
         // Zero-GC check instead of .includes()
         let exists = false;
         const len = ctx.obstacles.length;
@@ -112,7 +112,7 @@ export const SectorBuilder = {
         ctx.worldStreamer.registerObstacle(obstacle);
     },
 
-    addInteractable: (ctx: SectorContext, object: THREE.Object3D, params?: InteractableParams) => {
+    addInteractable: (ctx: SectorBuildContext, object: THREE.Object3D, params?: InteractableParams) => {
         if (!object) return;
 
         object.userData.isInteractable = true;
@@ -158,7 +158,7 @@ export const SectorBuilder = {
         ctx.worldStreamer.registerInteractable(object, object.position.x, object.position.z, radius);
     },
 
-    generateAutomaticContent: async (ctx: SectorContext, def: any) => {
+    generateAutomaticContent: async (ctx: SectorBuildContext, def: any) => {
         if (def.ground !== undefined && def.ground !== null) {
             // During warmup, we only need a 1x1 plane to compile the ground material.
             const size = ctx.isWarmup ? { width: 1, depth: 1 } : (def.groundSize || { width: 2000, depth: 2000 });
@@ -192,7 +192,7 @@ export const SectorBuilder = {
         if (ctx.yield) await ctx.yield();
     },
 
-    createWarmupContext: (scene: THREE.Scene, sectorId: number, yieldFn?: () => Promise<void>): SectorContext => {
+    createWarmupContext: (scene: THREE.Scene, sectorId: number, yieldFn?: () => Promise<void>): SectorBuildContext => {
         const NOOP = () => { };
         const NOOP_ARRAY = () => [] as any[];
         const STUB_STREAMER: any = {
@@ -209,7 +209,7 @@ export const SectorBuilder = {
             wind: { sync: NOOP, setOverride: NOOP, clearOverride: NOOP, setRandomWind: NOOP },
             weather: { sync: NOOP }, fog: { sync: NOOP },
             syncEnvironment: (env: any, ground?: any, targetScene?: THREE.Scene) => {
-                // Procedural Sky handles lighting in SectorContext
+                // Procedural Sky handles lighting in SectorBuildContext
             },
             renderer: { setClearColor: NOOP },
             updateAtmosphere: NOOP
@@ -217,7 +217,7 @@ export const SectorBuilder = {
         return {
             scene, engine: MOCK_ENGINE, sectorId, isWarmup: true, worldStreamer: STUB_STREAMER,
             obstacles: [], chests: [], triggers: [], mapItems: [],
-            interactables: [], collectibles: [], dynamicLights: [], flickeringLights: [], burningObjects: [], smokeEmitters: [],
+            interactables: [], collectibles: [], dynamicLights: [], burningObjects: [], smokeEmitters: [],
             environmentalZones: [],
             rng: Math.random, debugMode: false,
             textures: {} as any, sectorState: {} as any, state: { sectorState: {} } as any, activeFamilyMembers: [],
@@ -228,7 +228,7 @@ export const SectorBuilder = {
         };
     },
 
-    build: async (ctx: SectorContext, def: any) => {
+    build: async (ctx: SectorBuildContext, def: any) => {
         const engine = ctx.engine || WinterEngine.getInstance();
 
         // Idempotency check: Clear state arrays to prevent duplication on re-renders
@@ -304,7 +304,7 @@ export const SectorBuilder = {
         }
     },
 
-    generateGround: async (ctx: SectorContext, type: GroundType, size: { width: number, depth: number }) => {
+    generateGround: async (ctx: SectorBuildContext, type: GroundType, size: { width: number, depth: number }) => {
         const ground = TerrainGenerator.createGroundLayer(type, size.width, size.depth);
         ctx.scene.add(ground);
 
@@ -323,7 +323,7 @@ export const SectorBuilder = {
         return ground;
     },
 
-    spawnCollisionBox: (ctx: SectorContext, x: number, z: number, width: number, height: number, depth: number, rotation: number = 0) => {
+    spawnCollisionBox: (ctx: SectorBuildContext, x: number, z: number, width: number, height: number, depth: number, rotation: number = 0) => {
         _q1_sg.setFromAxisAngle(_axisY, rotation);
         _v1_sg.set(x, height / 2, z);
         _v2_sg.set(width, height, depth);
@@ -336,7 +336,7 @@ export const SectorBuilder = {
         });
     },
 
-    generateBoundaries: (ctx: SectorContext, bounds: { width: number, depth: number }) => {
+    generateBoundaries: (ctx: SectorBuildContext, bounds: { width: number, depth: number }) => {
         const h = 50;
         const w = bounds.width;
         const d = bounds.depth;
@@ -359,7 +359,7 @@ export const SectorBuilder = {
         createWall(w / 2, 0, 2, d);
     },
 
-    spawnChest: (ctx: SectorContext, x: number, z: number, type: ChestType = ChestType.STANDARD, rot: number = 0, logicId?: number) => {
+    spawnChest: (ctx: SectorBuildContext, x: number, z: number, type: ChestType = ChestType.STANDARD, rot: number = 0, logicId?: number) => {
         const chest = ObjectGenerator.createChest(type);
         chest.position.set(x, 0, z);
         chest.rotation.y = rot;
@@ -428,7 +428,7 @@ export const SectorBuilder = {
         });
     },
 
-    spawnCollectible: (ctx: SectorContext, x: number, z: number, id: string, type: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy', respawnable: boolean = false) => {
+    spawnCollectible: (ctx: SectorBuildContext, x: number, z: number, id: string, type: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy', respawnable: boolean = false) => {
         if (Math.abs(x) < 0.001 && Math.abs(z) < 0.001) return;
 
         // Persistence Check
@@ -505,7 +505,7 @@ export const SectorBuilder = {
         });
     },
 
-    spawnBoxTrigger: (ctx: SectorContext, id: SectorTrigger['id'], x: number, z: number, width: number, depth: number, type: TriggerType, content: string = '', actions?: TriggerAction[], resetOnExit: boolean = false, rotation: number = 0) => {
+    spawnBoxTrigger: (ctx: SectorBuildContext, id: SectorTrigger['id'], x: number, z: number, width: number, depth: number, type: TriggerType, content: string = '', actions?: TriggerAction[], resetOnExit: boolean = false, rotation: number = 0) => {
         ctx.triggers.push({
             id,
             type,
@@ -518,7 +518,7 @@ export const SectorBuilder = {
         });
     },
 
-    setOnFire: (ctx: SectorContext, object: THREE.Object3D, opts?: { smoke?: boolean, color?: number, intensity?: number, distance?: number, offset?: THREE.Vector3, onRoof?: boolean, area?: THREE.Vector3 }) => {
+    setOnFire: (ctx: SectorBuildContext, object: THREE.Object3D, opts?: { smoke?: boolean, color?: number, intensity?: number, distance?: number, offset?: THREE.Vector3, onRoof?: boolean, area?: THREE.Vector3 }) => {
         // Direct assignment avoiding Object Spread GC allocation
         const targetArea = opts?.area || object.userData.size as THREE.Vector3;
         let targetOffset = opts?.offset;
@@ -556,7 +556,7 @@ export const SectorBuilder = {
         }
     },
 
-    extinguishFire: (ctx: SectorContext, object: THREE.Object3D) => {
+    extinguishFire: (ctx: SectorBuildContext, object: THREE.Object3D) => {
         object.userData.isFire = false;
         object.userData.effects = [];
 
@@ -568,23 +568,30 @@ export const SectorBuilder = {
             }
         }
 
-        if (ctx.flickeringLights) {
-            for (let i = ctx.flickeringLights.length - 1; i >= 0; i--) {
-                const fl = ctx.flickeringLights[i];
-                const distSq = fl.light.position.distanceToSquared(object.position);
+        if (ctx.dynamicLights) {
+            for (let i = ctx.dynamicLights.length - 1; i >= 0; i--) {
+                const fl = ctx.dynamicLights[i] as any;
+                const lightObj = fl.isLogicalLight ? null : fl.light;
+                const pos = fl.isLogicalLight ? fl.position : (lightObj ? lightObj.position : null);
+                if (!pos) continue;
+
+                const distSq = pos.distanceToSquared(object.position);
                 if (distSq < 400) {
-                    // [VINTERDÖD] Dispose shadow map to prevent memory creep during long sessions
-                    if (fl.light.shadow && (fl.light.shadow as any).map) {
-                        (fl.light.shadow as any).map.dispose();
+                    if (lightObj) {
+                        // Dispose shadow map to prevent memory creep during long sessions
+                        if (lightObj.shadow && (lightObj.shadow as any).map) {
+                            (lightObj.shadow as any).map.dispose();
+                        }
+                        ctx.scene.remove(lightObj);
                     }
-                    ctx.scene.remove(fl.light);
-                    ctx.flickeringLights.splice(i, 1);
+                    ctx.dynamicLights[i] = ctx.dynamicLights[ctx.dynamicLights.length - 1];
+                    ctx.dynamicLights.pop();
                 }
             }
         }
     },
 
-    spawnDeadBody: (ctx: SectorContext, x: number, z: number, type: EnemyType | 'PLAYER' | 'HUMAN', rot: number = 0, blood: boolean = true) => {
+    spawnDeadBody: (ctx: SectorBuildContext, x: number, z: number, type: EnemyType | 'PLAYER' | 'HUMAN', rot: number = 0, blood: boolean = true) => {
         const body = ObjectGenerator.createDeadBody(type, rot, blood);
         body.position.set(x, 0, z);
         GeneratorUtils.freezeStatic(body);
@@ -592,7 +599,7 @@ export const SectorBuilder = {
         return body;
     },
 
-    spawnHaybale: (ctx: SectorContext, x: number, z: number, rotation: number = 0, scale: number = 1.0) => {
+    spawnHaybale: (ctx: SectorBuildContext, x: number, z: number, rotation: number = 0, scale: number = 1.0) => {
         const bale = ObjectGenerator.createHaybale(scale);
         bale.position.set(x, 0, z);
         bale.rotation.y = rotation;
@@ -606,7 +613,7 @@ export const SectorBuilder = {
         });
     },
 
-    spawnTimberPile: (ctx: SectorContext, x: number, z: number, rotation: number = 0, scale: number = 1.0) => {
+    spawnTimberPile: (ctx: SectorBuildContext, x: number, z: number, rotation: number = 0, scale: number = 1.0) => {
         const timber = ObjectGenerator.createTimberPile(scale);
         timber.position.set(x, 0, z);
         timber.rotation.y = rotation;
@@ -626,7 +633,7 @@ export const SectorBuilder = {
         });
     },
 
-    spawnBuilding(ctx: SectorContext, x: number, z: number, width: number, height: number, depth: number, rotation: number, color: number, createRoof: boolean = true, withLights: boolean = false, lightProbability: number = 0.5) {
+    spawnBuilding(ctx: SectorBuildContext, x: number, z: number, width: number, height: number, depth: number, rotation: number, color: number, createRoof: boolean = true, withLights: boolean = false, lightProbability: number = 0.5) {
         const building = ObjectGenerator.createBuilding(width, height, depth, color, createRoof, withLights, lightProbability);
 
         building.position.set(x, 0, z);
@@ -681,7 +688,7 @@ export const SectorBuilder = {
         return building;
     },
 
-    createScarecrow(ctx: SectorContext, x: number, y: number) {
+    createScarecrow(ctx: SectorBuildContext, x: number, y: number) {
         const scarecrow = ObjectGenerator.createScarecrow(x, y);
         ctx.scene.add(scarecrow);
         SectorBuilder.addObstacle(ctx, {
@@ -691,7 +698,7 @@ export const SectorBuilder = {
         });
     },
 
-    spawnVehicle: (ctx: SectorContext, x: number, z: number, rotation: number, type: VehicleID = VehicleID.STATION_WAGON, colorOverride?: number, addSnow?: boolean) => {
+    spawnVehicle: (ctx: SectorBuildContext, x: number, z: number, rotation: number, type: VehicleID = VehicleID.STATION_WAGON, colorOverride?: number, addSnow?: boolean) => {
         const vId = type;
 
         const vehicle = VehicleGenerator.createVehicle(vId, colorOverride, addSnow);
@@ -728,7 +735,7 @@ export const SectorBuilder = {
         return vehicle;
     },
 
-    spawnDriveableVehicle: (ctx: SectorContext, x: number, z: number, rotation: number, vehicleType: VehicleID, colorOverride?: number, addSnow?: boolean) => {
+    spawnDriveableVehicle: (ctx: SectorBuildContext, x: number, z: number, rotation: number, vehicleType: VehicleID, colorOverride?: number, addSnow?: boolean) => {
         const def = VEHICLES[vehicleType];
         if (!def) return null;
 
@@ -792,17 +799,17 @@ export const SectorBuilder = {
         return vehicleRoot;
     },
 
-    spawnFloatableVehicle: (ctx: SectorContext, x: number, z: number, rotation: number, vehicleType: VehicleType = VehicleID.BOAT, colorOverride?: number) => {
+    spawnFloatableVehicle: (ctx: SectorBuildContext, x: number, z: number, rotation: number, vehicleType: VehicleType = VehicleID.BOAT, colorOverride?: number) => {
         return SectorBuilder.spawnDriveableVehicle(ctx, x, z, rotation, vehicleType, colorOverride, false);
     },
 
-    addWaterBody: (ctx: SectorContext, type: WaterBodyType, x: number, z: number, width: number, depth: number, options?: { shape?: WaterShape; flowDirection?: THREE.Vector2; flowStrength?: number; maxDepth?: number; }): WaterBody | null => {
+    addWaterBody: (ctx: SectorBuildContext, type: WaterBodyType, x: number, z: number, width: number, depth: number, options?: { shape?: WaterShape; flowDirection?: THREE.Vector2; flowStrength?: number; maxDepth?: number; }): WaterBody | null => {
         const engine = WinterEngine.getInstance();
         if (!engine?.water) return null;
         return engine.water.addWaterBody(type, x, z, width, depth, options);
     },
 
-    spawnLakeBed: (ctx: SectorContext, x: number, z: number, width: number, depth: number, floorDepth: number = 4.0, shape: WaterShape = WaterShape.RECT) => {
+    spawnLakeBed: (ctx: SectorBuildContext, x: number, z: number, width: number, depth: number, floorDepth: number = 4.0, shape: WaterShape = WaterShape.RECT) => {
         const lake = TerrainGenerator.createLakeBed(width, depth, floorDepth, shape);
         lake.position.set(x, -0.1, z);
         ctx.scene.add(lake);
@@ -813,7 +820,7 @@ export const SectorBuilder = {
      * Registers a dynamic environmental zone. 
      * These zones override the sector's default environment when the player is inside.
      */
-    addEnvironmentalZone: (ctx: SectorContext, zone: EnvironmentalZone) => {
+    addEnvironmentalZone: (ctx: SectorBuildContext, zone: EnvironmentalZone) => {
         if (!ctx.environmentalZones) ctx.environmentalZones = [];
         const idx = ctx.environmentalZones.length;
         ctx.environmentalZones.push(zone);
@@ -845,7 +852,7 @@ export const SectorBuilder = {
         }
     },
 
-    addLake: (ctx: SectorContext, x: number, z: number, radius: number, floorDepth: number = 5.0) => {
+    addLake: (ctx: SectorBuildContext, x: number, z: number, radius: number, floorDepth: number = 5.0) => {
         const water = SectorBuilder.addWaterBody(ctx, WaterBodyType.LAKE, x, z, radius * 2, radius * 2, { shape: WaterShape.CIRCLE, maxDepth: floorDepth });
         SectorBuilder.spawnLakeBed(ctx, x, z, radius * 2, radius * 2, floorDepth, WaterShape.CIRCLE);
 
@@ -907,7 +914,7 @@ export const SectorBuilder = {
         return water;
     },
 
-    spawnContainer: (ctx: SectorContext, x: number, z: number, rotation: number, colorOverride?: number, addSnow: boolean = true) => {
+    spawnContainer: (ctx: SectorBuildContext, x: number, z: number, rotation: number, colorOverride?: number, addSnow: boolean = true) => {
         const container = ObjectGenerator.createContainer(colorOverride, addSnow);
         container.position.set(x, 0, z);
         container.rotation.y = rotation;
@@ -931,7 +938,7 @@ export const SectorBuilder = {
         return container;
     },
 
-    spawnNeonSign: (ctx: SectorContext, x: number, z: number, rotation: number, text: string, color: number = 0x00ffff, withBacking: boolean = true, scale: number = 1.0, backgroundColor: number = 0x050505) => {
+    spawnNeonSign: (ctx: SectorBuildContext, x: number, z: number, rotation: number, text: string, color: number = 0x00ffff, withBacking: boolean = true, scale: number = 1.0, backgroundColor: number = 0x050505) => {
         const sign = ObjectGenerator.createNeonSign(text, color, withBacking, scale, backgroundColor);
 
         sign.position.set(x, 5.5, z);
@@ -942,7 +949,7 @@ export const SectorBuilder = {
         return sign;
     },
 
-    spawnStreetLight: (ctx: SectorContext, x: number, z: number, rotation: number = 0) => {
+    spawnStreetLight: (ctx: SectorBuildContext, x: number, z: number, rotation: number = 0) => {
         const lightGroup = ObjectGenerator.createStreetLamp();
         lightGroup.position.set(x, 0, z);
         lightGroup.rotation.y = rotation;
@@ -959,7 +966,7 @@ export const SectorBuilder = {
         return lightGroup;
     },
 
-    spawnCaveLamp: (ctx: SectorContext, x: number, y: number, z: number) => {
+    spawnCaveLamp: (ctx: SectorBuildContext, x: number, y: number, z: number) => {
         const lamp = ObjectGenerator.createCaveLamp();
         lamp.position.set(x, y, z);
         GeneratorUtils.freezeStatic(lamp);
@@ -988,7 +995,7 @@ export const SectorBuilder = {
         return lamp;
     },
 
-    spawnStorefrontBuilding: (ctx: SectorContext, x: number, z: number, width: number, height: number, depth: number, rotation: number, opts: any = {}) => {
+    spawnStorefrontBuilding: (ctx: SectorBuildContext, x: number, z: number, width: number, height: number, depth: number, rotation: number, opts: any = {}) => {
         const building = ObjectGenerator.createStorefrontBuilding(width, height, depth, opts);
         building.position.set(x, 0, z);
         building.rotation.y = rotation;
@@ -1026,7 +1033,7 @@ export const SectorBuilder = {
         return building;
     },
 
-    spawnNeonHeart: (ctx: SectorContext, x: number, y: number, z: number, rotation: number, color: number = 0xff0000, scale: number = 1.0) => {
+    spawnNeonHeart: (ctx: SectorBuildContext, x: number, y: number, z: number, rotation: number, color: number = 0xff0000, scale: number = 1.0) => {
         const heart = ObjectGenerator.createNeonHeart(color, scale);
         heart.position.set(x, y, z);
         heart.rotation.y = rotation;
@@ -1035,7 +1042,7 @@ export const SectorBuilder = {
         return heart;
     },
 
-    spawnGlassStaircase: (ctx: SectorContext, x: number, z: number, width: number, height: number, depth: number, rotation: number) => {
+    spawnGlassStaircase: (ctx: SectorBuildContext, x: number, z: number, width: number, height: number, depth: number, rotation: number) => {
         const stairs = ObjectGenerator.createGlassStaircase(width, height, depth);
 
         stairs.position.set(x, 0, z);
@@ -1054,7 +1061,7 @@ export const SectorBuilder = {
         return stairs;
     },
 
-    spawnElectricPole: (ctx: SectorContext, x: number, z: number, rotation: number = 0) => {
+    spawnElectricPole: (ctx: SectorBuildContext, x: number, z: number, rotation: number = 0) => {
         const pole = ObjectGenerator.createElectricPole();
         pole.position.set(x, 0, z);
         pole.rotation.y = rotation;
@@ -1066,7 +1073,7 @@ export const SectorBuilder = {
         return pole;
     },
 
-    spawnContainerStack: (ctx: SectorContext, x: number, z: number, rotation: number, stackHeight: number = 2, colorOverride?: number, addSnow: boolean = true) => {
+    spawnContainerStack: (ctx: SectorBuildContext, x: number, z: number, rotation: number, stackHeight: number = 2, colorOverride?: number, addSnow: boolean = true) => {
         const group = new THREE.Group();
         group.position.set(x, 0, z);
         group.rotation.y = rotation;
@@ -1091,7 +1098,7 @@ export const SectorBuilder = {
         return group;
     },
 
-    spawnVehicleStack(ctx: SectorContext, x: number, z: number, rotation: number, stackIndex: number, addSnow?: boolean) {
+    spawnVehicleStack(ctx: SectorBuildContext, x: number, z: number, rotation: number, stackIndex: number, addSnow?: boolean) {
         const maxJitter = 15;
         const posJitter = 0.25;
         const toRad = (deg: number) => deg * (Math.PI / 180);
@@ -1135,7 +1142,7 @@ export const SectorBuilder = {
         });
     },
 
-    spawnTree: (ctx: SectorContext, type: 'spruce' | 'pine' | 'birch', x: number, z: number, scaleMultiplier: number = 1.0) => {
+    spawnTree: (ctx: SectorBuildContext, type: 'spruce' | 'pine' | 'birch', x: number, z: number, scaleMultiplier: number = 1.0) => {
         let genType: VEGETATION_TYPE = VEGETATION_TYPE.PINE;
         if (type === 'birch') genType = VEGETATION_TYPE.BIRCH;
         if (type === 'spruce') genType = VEGETATION_TYPE.SPRUCE;
@@ -1153,14 +1160,14 @@ export const SectorBuilder = {
         });
     },
 
-    spawnEnemy: (ctx: SectorContext, type: string, x: number, z: number) => {
+    spawnEnemy: (ctx: SectorBuildContext, type: string, x: number, z: number) => {
         ctx.mapItems.push({
             id: `enemy_spawn_${x}_${z}`,
             x, z, type: MapItemType.ENEMY, label: type, color: '#f00', radius: 1, icon: null
         });
     },
 
-    spawnBarrel: (ctx: SectorContext, x: number, z: number, explosive: boolean = false, logicId?: number) => {
+    spawnBarrel: (ctx: SectorBuildContext, x: number, z: number, explosive: boolean = false, logicId?: number) => {
         const barrel = ObjectGenerator.createBarrel(explosive);
         barrel.position.set(x, 0, z);
         GeneratorUtils.freezeStatic(barrel);
@@ -1174,11 +1181,11 @@ export const SectorBuilder = {
     },
 
 
-    fillArea: async (ctx: SectorContext, center: { x: number, z: number }, size: { width: number, height: number } | number, count: number, type: NatureFillType, avoidCenterRadius: number = 0, exclusionZones: { pos: THREE.Vector3, radius: number }[] = []) => {
+    fillArea: async (ctx: SectorBuildContext, center: { x: number, z: number }, size: { width: number, height: number } | number, count: number, type: NatureFillType, avoidCenterRadius: number = 0, exclusionZones: { pos: THREE.Vector3, radius: number }[] = []) => {
         await NaturePropGenerator.fillArea(ctx, center, size, count, type, avoidCenterRadius);
     },
 
-    fillVegetation: async (ctx: SectorContext, type: VEGETATION_TYPE | VEGETATION_TYPE[], region: THREE.Vector3[] | { x: number, z: number, w: number, d: number }, density: number = 1.0) => {
+    fillVegetation: async (ctx: SectorBuildContext, type: VEGETATION_TYPE | VEGETATION_TYPE[], region: THREE.Vector3[] | { x: number, z: number, w: number, d: number }, density: number = 1.0) => {
         if (Array.isArray(region) && region.length >= 3) {
             const isTree = [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.OAK, VEGETATION_TYPE.BIRCH, VEGETATION_TYPE.DEAD_TREE]
                 .includes(Array.isArray(type) ? type[0] : type);
@@ -1202,11 +1209,11 @@ export const SectorBuilder = {
         await VegetationGenerator.fillArea(ctx, type, region, density);
     },
 
-    createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string, isClosed: boolean = false) => {
+    createBoundry: (ctx: SectorBuildContext, polygon: THREE.Vector3[], name: string, isClosed: boolean = false) => {
         PathGenerator.createBoundry(ctx, polygon, name, isClosed);
     },
 
-    createMountain: (ctx: SectorContext, points: THREE.Vector3[], depth: number = 20, height: number = 15, caveConfig?: { position: THREE.Vector3, rotation?: number }) => {
+    createMountain: (ctx: SectorBuildContext, points: THREE.Vector3[], depth: number = 20, height: number = 15, caveConfig?: { position: THREE.Vector3, rotation?: number }) => {
         const len = points.length;
         const pts = new Array(len);
         for (let i = 0; i < len; i++) pts[i] = { x: points[i].x, z: points[i].z };
@@ -1224,7 +1231,7 @@ export const SectorBuilder = {
         return TerrainGenerator.createMountainOpening(tunnelDepth);
     },
 
-    createForest: async (ctx: SectorContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'random') => {
+    createForest: async (ctx: SectorBuildContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'random') => {
         const len = polygon.length;
         const pts = new Array(len);
         for (let i = 0; i < len; i++) pts[i] = { x: polygon[i].x, z: polygon[i].z };
@@ -1248,37 +1255,37 @@ export const SectorBuilder = {
         await VegetationGenerator.createForest(ctx, polygon, spacing, genType as any);
     },
 
-    createFence: async (ctx: SectorContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' | 'mesh' = 'wood', height: number = 1.2, strict: boolean = false) => {
+    createFence: async (ctx: SectorBuildContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' | 'mesh' = 'wood', height: number = 1.2, strict: boolean = false) => {
         await PathGenerator.createFence(ctx, points, color as any, height, strict);
     },
 
-    createHedge: async (ctx: SectorContext, length: number, height: number = 4, thickness: number = 1.5) => {
+    createHedge: async (ctx: SectorBuildContext, length: number, height: number = 4, thickness: number = 1.5) => {
         const mesh = VegetationGenerator.createHedge(length, height, thickness);
         ctx.scene.add(mesh);
     },
 
-    createHedgePath: async (ctx: SectorContext, points: THREE.Vector3[], height: number = 4, thickness: number = 1.5) => {
+    createHedgePath: async (ctx: SectorBuildContext, points: THREE.Vector3[], height: number = 4, thickness: number = 1.5) => {
         await VegetationGenerator.createHedgePath(ctx, points, height, thickness);
     },
 
-    createStoneWall: async (ctx: SectorContext, length: number, height: number = 1.5, thickness: number = 0.8) => {
+    createStoneWall: async (ctx: SectorBuildContext, length: number, height: number = 1.5, thickness: number = 0.8) => {
         const mesh = VegetationGenerator.createStoneWall(length, height, thickness);
         ctx.scene.add(mesh);
     },
 
-    createStoneWallPath: async (ctx: SectorContext, points: THREE.Vector3[], height: number = 1.5, thickness: number = 0.8) => {
+    createStoneWallPath: async (ctx: SectorBuildContext, points: THREE.Vector3[], height: number = 1.5, thickness: number = 0.8) => {
         await VegetationGenerator.createStoneWallPath(ctx, points, height, thickness);
     },
 
-    createEmbankment: async (ctx: SectorContext, points: THREE.Vector3[], width: number = 20, height: number = 5, material: THREE.Material = MATERIALS.dirt) => {
+    createEmbankment: async (ctx: SectorBuildContext, points: THREE.Vector3[], width: number = 20, height: number = 5, material: THREE.Material = MATERIALS.dirt) => {
         await PathGenerator.createEmbankment(ctx, points, width, height, material);
     },
 
-    createGuardrail: async (ctx: SectorContext, points: THREE.Vector3[], floating: boolean = false) => {
+    createGuardrail: async (ctx: SectorBuildContext, points: THREE.Vector3[], floating: boolean = false) => {
         await PathGenerator.createGuardrail(ctx, points, floating);
     },
 
-    spawnPoi: (ctx: SectorContext, type: PoiType, x: number, z: number, rotation: number = 0, opts?: any): THREE.Group => {
+    spawnPoi: (ctx: SectorBuildContext, type: PoiType, x: number, z: number, rotation: number = 0, opts?: any): THREE.Group => {
         let poi: THREE.Group | null = null;
         switch (type) {
             case PoiType.CHURCH: poi = PoiGenerator.createChurch(); break;
@@ -1410,7 +1417,7 @@ export const SectorBuilder = {
         return poi;
     },
 
-    addTriggers: (ctx: SectorContext, triggers: SectorTrigger[]) => {
+    addTriggers: (ctx: SectorBuildContext, triggers: SectorTrigger[]) => {
         const len = triggers.length;
         for (let i = 0; i < len; i++) {
             const trigger = triggers[i];
@@ -1423,7 +1430,7 @@ export const SectorBuilder = {
                 trigger.statusFlags = flags;
             }
 
-            // [VINTERDÖD] Buffer trigger for batch registration
+            // Buffer trigger for batch registration
             ctx.triggers.push(trigger);
 
             if (trigger.type === TriggerType.POI) {
@@ -1446,7 +1453,7 @@ export const SectorBuilder = {
         }
     },
 
-    attachEffect: (ctx: SectorContext, parent: THREE.Object3D, eff: { type: EffectType, color?: number, intensity?: number, offset?: { x: number, y: number, z: number }, onRoof?: boolean }) => {
+    attachEffect: (ctx: SectorBuildContext, parent: THREE.Object3D, eff: { type: EffectType, color?: number, intensity?: number, offset?: { x: number, y: number, z: number }, onRoof?: boolean }) => {
         const oX = eff.offset?.x || 0;
         const oY = eff.offset?.y || 0;
         const oZ = eff.offset?.z || 0;
@@ -1492,12 +1499,12 @@ export const SectorBuilder = {
         }
     },
 
-    spawnRubble: (ctx: SectorContext, x: number, z: number, count: number, material?: THREE.Material, directionBias?: number) => {
+    spawnRubble: (ctx: SectorBuildContext, x: number, z: number, count: number, material?: THREE.Material, directionBias?: number) => {
         const mesh = NaturePropGenerator.spawnRubble(ctx, x, z, count, material, directionBias);
         return mesh;
     },
 
-    spawnTerminal: (ctx: SectorContext, x: number, z: number, type: TerminalType, scale: number = 1.0) => {
+    spawnTerminal: (ctx: SectorBuildContext, x: number, z: number, type: TerminalType, scale: number = 1.0) => {
         const terminal = ObjectGenerator.createTerminal(type, scale);
         terminal.position.set(x, 0, z);
         ctx.scene.add(terminal);
@@ -1525,7 +1532,7 @@ export const SectorBuilder = {
         return terminal;
     },
 
-    spawnFamily: (ctx: SectorContext, id: FamilyMemberID, x: number, z: number, rotation: number = 0, opts?: { following?: boolean, found?: boolean, visible?: boolean }) => {
+    spawnFamily: (ctx: SectorBuildContext, id: FamilyMemberID, x: number, z: number, rotation: number = 0, opts?: { following?: boolean, found?: boolean, visible?: boolean }) => {
         const fmData = FAMILY_MEMBERS.find(f => f.id === id);
         if (!fmData) return null;
 

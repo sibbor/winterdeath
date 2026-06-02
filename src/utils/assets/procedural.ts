@@ -35,7 +35,7 @@ export const createProceduralDiffuse = () => {
         const canvas = document.createElement('canvas');
         canvas.width = sw;
         canvas.height = sh;
-        const ctx = canvas.getContext('2d', { alpha: false })!; // [VINTERDÖD] Om inte alfakanal behövs explicit, säg det för prestanda.
+        const ctx = canvas.getContext('2d', { alpha: false })!; // Om inte alfakanal behövs explicit, säg det för prestanda.
 
         fn(ctx, QUALITY);
 
@@ -346,7 +346,7 @@ export const createProceduralDiffuse = () => {
     const treeLeaves = drawAlpha(512, 512, (ctx, s) => {
         const w = ctx.canvas.width; const h = ctx.canvas.height;
         ctx.clearRect(0, 0, w, h);
-        
+
         const colors = [
             '#1a2e1a', // Darkest shadow green
             '#2d4c2d', // Medium green
@@ -361,24 +361,24 @@ export const createProceduralDiffuse = () => {
             const y = Math.random() * h;
             const size = (4 + Math.random() * 8) * s;
             const angle = Math.random() * Math.PI * 2;
-            
+
             ctx.save();
             ctx.translate(x, y);
             ctx.rotate(angle);
             ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
             ctx.globalAlpha = 0.8 + Math.random() * 0.2;
-            
+
             // Draw a simple leaf shape (ellipse)
             ctx.beginPath();
             ctx.ellipse(0, 0, size, size * 0.5, 0, 0, Math.PI * 2);
             ctx.fill();
-            
+
             // Sub-pixel shadow for "grittiness"
             if (Math.random() > 0.7) {
                 ctx.fillStyle = 'rgba(0,0,0,0.3)';
                 ctx.fillRect(-size * 0.2, -size * 0.2, size * 1.5, 1 * s);
             }
-            
+
             ctx.restore();
         }
     });
@@ -390,7 +390,7 @@ export const createProceduralDiffuse = () => {
 };
 
 /**
- * [VINTERDÖD] TextureReady Semaphore
+ * TextureReady Semaphore
  * Ensures all procedural textures are fully generated and committed.
  */
 let _isTexturesReady = false;

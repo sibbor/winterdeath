@@ -1,14 +1,3 @@
-export interface GameSettings {
-  antialias: boolean;
-  shadows: boolean;
-  shadowMapType: number;
-  shadowResolution: number;
-  pixelRatio: number;
-  textureQuality: number;
-  volumetricFog: boolean;
-  showDiscoveryPopups: boolean;
-}
-
 /**
  * SMI Enum for Weather type.
  * Zero-GC: integer comparison replaces string equality checks in hot loops.
@@ -50,7 +39,7 @@ export interface EnvironmentalWind {
   angleVariance?: number;
 }
 
-export interface SectorEnvironment {
+export interface EnvironmentConfig {
   bgColor: number;
   fog?: EnvironmentalFog;
   groundColor: number;
@@ -90,7 +79,7 @@ export interface TargetEnvironment {
   maxWeight: number; // To determine if zone weather should dominate
 }
 
-export interface EnvironmentOverride extends Partial<Omit<SectorEnvironment, 'weather'>> {
+export interface EnvironmentOverride extends Partial<Omit<EnvironmentConfig, 'weather'>> {
   weather?: WeatherType | EnvironmentalWeather;
   fogColor?: number;
   fogDensity?: number;

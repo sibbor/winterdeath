@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { CelestialType, MATERIALS_SKY, SkyConfig, SKY_KEYFRAMES, SkyCloudConfig, SkyKeyframe } from '../utils/assets/materials_sky';
 import { GEOMETRY } from '../utils/assets';
-import { LIGHT_SYSTEM, SKY_SYSTEM } from '../content/constants';
+import { SKY_SYSTEM } from '../content/constants';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 // Zero-GC Module Scratchpads and Mathematical Constants
 const _c1 = new THREE.Color();
@@ -306,7 +307,7 @@ export class SkySystem implements System {
         // Pre-instantiate and attach THREE.Color objects directly to keyframe elements to completely bypass Map hash lookup in hot-paths
         for (let i = 0; i < SKY_KEYFRAMES.length; i++) {
             const kf = SKY_KEYFRAMES[i];
-            
+
             kf.atmosphereColorObj = new THREE.Color(kf.atmosphereColor);
             kf.celestialColorObj = new THREE.Color(kf.celestialColor);
             kf.lightColorObj = new THREE.Color(kf.lightColor);
@@ -495,8 +496,8 @@ export class SkySystem implements System {
         }
     }
 
-    public update(ctx: any, delta: number, _simTime: number, renderTime: number): void {
-        if (!this.activeConfig) return;
+    public update(ctx: GameSessionLogic, delta: number, _simTime: number, renderTime: number): void {
+        if (!this.activeConfig || !ctx.state) return;
 
         // 1. CELESTIAL SCALING & WARPING PULSES
         if (this.sunGroup && this.sunGroup.visible) {
@@ -516,8 +517,14 @@ export class SkySystem implements System {
         }
 
         // 2. PARALLAX GRAPH TRACKING
-        const pPos = ctx.playerPos || ctx.state?.playerPos;
-        if (pPos && this.lastTrackedPos.distanceToSquared(pPos) > 100.0) {
+        let pPos = this.lastTrackedPos;
+        if (ctx.state && ctx.state.player) {
+            pPos = ctx.state.player.position;
+        } else if (ctx.engine && ctx.engine.camera && ctx.engine.camera.threeCamera) {
+            pPos = ctx.engine.camera.threeCamera.position;
+        }
+
+        if (this.lastTrackedPos.distanceToSquared(pPos) > 100.0) {
             this.lastTrackedPos.copy(pPos);
             this.root.position.copy(pPos);
 
@@ -636,7 +643,7 @@ export class SkySystem implements System {
 
         // 3. HEMISPHERE FILL
         const kfHemiSky = _c2.copy(k1.hemiSkyColorObj).lerp(k2.hemiSkyColorObj, alpha);
-        
+
         let hemiSkyColorObj: THREE.Color;
         if (this._hasHemiSkyColor) {
             hemiSkyColorObj = _c3.copy(this._activeHemiSkyColor);
@@ -655,7 +662,7 @@ export class SkySystem implements System {
 
         // 4. CELESTIAL VISUALS TRACKING
         const isDay = normalizedTime > 0.25 && normalizedTime < 0.75;
-        
+
         let celColorObj: THREE.Color;
         if (this._hasCelestialColor) {
             celColorObj = _c3.copy(this._activeCelestialColor);

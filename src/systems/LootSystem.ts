@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
-import { PlayerStatID } from '../entities/player/PlayerTypes';
+import { PlayerStatID } from '../types/CareerStats';
 import { MAX_ENTITIES, LOOT } from '../content/constants';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _tempQuat = new THREE.Quaternion();
@@ -91,7 +92,7 @@ export class LootSystem implements System {
         LootSystem.instance = this;
     }
 
-    update(ctx: any, delta: number, simTime: number, renderTime: number) {
+    update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         // 1. Process pending spawns from ring buffer
         const pendingSpawns = this.spawnHead - this.spawnTail;
         if (pendingSpawns > 0) {
@@ -117,8 +118,8 @@ export class LootSystem implements System {
             if (this.callbacks?.gainScrap) {
                 this.callbacks.gainScrap(collected);
             } else {
-                ctx.state.statsBuffer[PlayerStatID.SCRAP] += collected;
-                ctx.state.statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += collected;
+                session.state.player.statsBuffer[PlayerStatID.SCRAP] += collected;
+                session.state.player.statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += collected;
             }
         }
     }

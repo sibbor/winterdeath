@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import { StatusEffectID } from '../../content/perks';
-import { DamageID } from './CombatTypes';
+import { StatusEffectID } from '../content/perks';
+import { DamageID } from '../entities/player/CombatTypes';
 
 /**
- * Player DOD & Zero-GC Refactor (Phase 9)
- * * This file defines the core Data-Oriented structures for the player.
+ * Player DOD & Zero-GC Refactor (Career Stats)
+ * * This file defines the core Data-Oriented structures for the player's career profile.
  * High-frequency stats are stored in contiguous Float32Arrays to ensure
  * L1/L2 cache locality and prevent V8 hidden-class deoptimizations.
  */
@@ -84,7 +84,6 @@ export enum PlayerStatID {
     // Buffer Size
     COUNT = 64
 }
-
 
 /**
  * SMI-indexed index for weapon-specific statistics.
@@ -212,23 +211,18 @@ export interface PlayerNodes {
 }
 
 /**
- * REFACTORED: PlayerStats
- * Removes individual high-frequency fields in favor of contiguous Float32Arrays.
- * No Getters/Setters: Use raw buffer access for Zero-GC performance.
+ * CareerStats Interface
+ * Holds persistent, serializable lifetime aggregated player statistics and career progression.
+ * Purged of all transient runtime physics vectors and skeletal nodes to prevent leaks.
  */
-export interface PlayerStats {
-    // --- VOLATILE ENTITY STATE (Zero-GC / Phase 13) ---
-    velocity: THREE.Vector3;        // Bypasses userData indirection
-    nodes: PlayerNodes;             // O(1) bone/equipment lookup
-    baseScale: number;              // Cached from ModelFactory
-    baseY: number;                  // Cached from ModelFactory
+export interface CareerStats {
     // --- DOD BUFFERS (Zero-GC / O(1)) ---
     statsBuffer: Float32Array;      // Sized by PlayerStatID.COUNT
-    effectDurations: Float32Array;  // Sized by StatusEffectID (e.g. 16/32)
+    effectDurations: Float32Array;  // Sized by StatusEffectID (e.g. 128)
     effectMaxDurations: Float32Array;
     effectIntensities: Float32Array;
 
-    // --- WEAPON PERFORMANCE BUFFERS (Zero-GC / Phase 12) ---
+    // --- WEAPON PERFORMANCE BUFFERS ---
     // All indexed by StatWeaponIndex
     weaponKills: Float64Array;
     weaponDamageDealt: Float64Array;
@@ -237,8 +231,8 @@ export interface PlayerStats {
     weaponTimeActive: Float64Array;
     weaponEngagementDistSq: Float64Array;
 
-    // --- PERK PERFORMANCE BUFFERS (Zero-GC / Phase 12) ---
-    // All indexed by StatusEffectID (0-31)
+    // --- PERK PERFORMANCE BUFFERS ---
+    // All indexed by StatusEffectID
     perkTimesGained: Float64Array;
     perkDamageAbsorbed: Float64Array;
     perkDamageDealt: Float64Array;
@@ -250,8 +244,6 @@ export interface PlayerStats {
     deathsByEnemyType: Float64Array;
 
     // --- INCOMING DAMAGE BUFFER (Zero-GC / Flattened) ---
-    // Index = (SourceID * 32) + AttackID
-    // SourceID 0-15: EnemyType, 16-63: DamageID
     incomingDamageBuffer: Float64Array;
 
     // --- SMI STATE ---
@@ -282,7 +274,6 @@ export interface PlayerStats {
     familyFoundCount: number;
 
     // --- CHALLENGE PROGRESSION ---
-    // Stores current tier (0-3) for each ChallengeID
     challengeTiers: Int32Array;
     totalChallengePoints: number;
     trackedChallengeIds: number[];
@@ -291,7 +282,7 @@ export interface PlayerStats {
 /**
  * Serialization Helpers (Zero-GC Friendly)
  */
-export const PlayerStatsUtils = {
+export const CareerStatsUtils = {
     /**
      * Serializes the Float32Array statsBuffer to a standard array for save-game JSON.
      * V8-Opt: Uses a raw for-loop instead of Array.from() to prevent iterator allocation.
@@ -349,13 +340,8 @@ export const PlayerStatsUtils = {
     /**
      * Initializes the DOD buffers for a new session.
      */
-    initBuffers: () => {
+    initBuffers: (): CareerStats => {
         return {
-            velocity: new THREE.Vector3(),
-            nodes: { gun: null, laserSight: null, barrelTip: null } as PlayerNodes,
-            baseScale: 1.0,
-            baseY: 0,
-
             statsBuffer: new Float32Array(PlayerStatID.COUNT),
             effectDurations: new Float32Array(StatPerkIndex.COUNT),
             effectMaxDurations: new Float32Array(StatPerkIndex.COUNT),
@@ -378,6 +364,7 @@ export const PlayerStatsUtils = {
             incomingDamageBuffer: new Float64Array(TELEMETRY_BUFFER_SIZE),
             challengeTiers: new Int32Array(64),
 
+            statusFlags: 0,
             activePassives: [] as StatusEffectID[],
             activeBuffs: [] as StatusEffectID[],
             activeDebuffs: [] as StatusEffectID[],
@@ -407,17 +394,112 @@ export const PlayerStatsUtils = {
     // --- BITWISE HELPERS (O(1) Check & Mutate) ---
 
     /** Checks if a specific status flag is currently active */
-    hasFlag: (playerStats: PlayerStats, flag: PlayerStatusFlags): boolean => {
-        return (playerStats.statusFlags & flag) !== 0;
+    hasFlag: (careerStats: CareerStats, flag: PlayerStatusFlags): boolean => {
+        return (careerStats.statusFlags & flag) !== 0;
     },
 
     /** Sets a specific status flag to active */
-    setFlag: (playerStats: PlayerStats, flag: PlayerStatusFlags) => {
-        playerStats.statusFlags |= flag;
+    setFlag: (careerStats: CareerStats, flag: PlayerStatusFlags) => {
+        careerStats.statusFlags |= flag;
     },
 
     /** Removes a specific status flag */
-    clearFlag: (playerStats: PlayerStats, flag: PlayerStatusFlags) => {
-        playerStats.statusFlags &= ~flag;
+    clearFlag: (careerStats: CareerStats, flag: PlayerStatusFlags) => {
+        careerStats.statusFlags &= ~flag;
     }
+};
+
+/**
+ * INITIAL_STATS constant
+ * Default starting career stats object for a new save game profile.
+ * Completely decoupled from constant files to prevent circular dependencies.
+ */
+export const INITIAL_STATS: CareerStats = {
+    statsBuffer: (function () {
+        const buffer = new Float32Array(PlayerStatID.COUNT);
+        buffer[PlayerStatID.HP] = 100;
+        buffer[PlayerStatID.MAX_HP] = 100;
+        buffer[PlayerStatID.STAMINA] = 100;
+        buffer[PlayerStatID.MAX_STAMINA] = 100;
+        buffer[PlayerStatID.XP] = 0;
+        buffer[PlayerStatID.LEVEL] = 1;
+        buffer[PlayerStatID.CURRENT_XP] = 0;
+        buffer[PlayerStatID.NEXT_LEVEL_XP] = 1500;
+        buffer[PlayerStatID.SKILL_POINTS] = 0;
+        buffer[PlayerStatID.SCRAP] = 0;
+        buffer[PlayerStatID.SPEED] = 20.0; // PLAYER.BASE_SPEED (20.0)
+
+        // --- TOTALS ---
+        buffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] = 0;
+        buffer[PlayerStatID.TOTAL_DAMAGE_DEALT] = 0;
+        buffer[PlayerStatID.TOTAL_DAMAGE_TAKEN] = 0;
+        buffer[PlayerStatID.TOTAL_DISTANCE_TRAVELED] = 0;
+        buffer[PlayerStatID.TOTAL_KILLS] = 0;
+        buffer[PlayerStatID.SCORE] = 0;
+
+        // --- MULTIPLIERS ---
+        buffer[PlayerStatID.MULTIPLIER_SPEED] = 1.0;
+        buffer[PlayerStatID.MULTIPLIER_RELOAD] = 1.0;
+        buffer[PlayerStatID.MULTIPLIER_FIRERATE] = 1.0;
+        buffer[PlayerStatID.MULTIPLIER_DMG_RESIST] = 1.0;
+        buffer[PlayerStatID.MULTIPLIER_RANGE] = 1.0;
+
+        // --- BASE MULTIPLIERS ---
+        buffer[PlayerStatID.BASE_MULTIPLIER_SPEED] = 1.0;
+        buffer[PlayerStatID.BASE_MULTIPLIER_RELOAD] = 1.0;
+        buffer[PlayerStatID.BASE_MULTIPLIER_FIRERATE] = 1.0;
+        buffer[PlayerStatID.BASE_MULTIPLIER_DMG_RESIST] = 1.0;
+        buffer[PlayerStatID.BASE_MULTIPLIER_RANGE] = 1.0;
+
+        // --- BAKE FINAL PRE-CALCULATED STATS (Zero-GC) ---
+        buffer[PlayerStatID.FINAL_SPEED] = buffer[PlayerStatID.SPEED] * buffer[PlayerStatID.BASE_MULTIPLIER_SPEED] * buffer[PlayerStatID.MULTIPLIER_SPEED] * (1.0 / 3.6); // KMH_TO_MS
+
+        return buffer;
+    })(),
+
+    effectDurations: new Float32Array(128), // Sized by MAX_ENTITIES.PERKS (128)
+    effectMaxDurations: new Float32Array(128),
+    effectIntensities: new Float32Array(128),
+
+    weaponKills: new Float64Array(StatWeaponIndex.COUNT),
+    weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
+    weaponShotsFired: new Float64Array(StatWeaponIndex.COUNT),
+    weaponShotsHit: new Float64Array(StatWeaponIndex.COUNT),
+    weaponTimeActive: new Float64Array(StatWeaponIndex.COUNT),
+    weaponEngagementDistSq: new Float64Array(StatWeaponIndex.COUNT),
+
+    perkTimesGained: new Float64Array(StatPerkIndex.COUNT),
+    perkDamageAbsorbed: new Float64Array(StatPerkIndex.COUNT),
+    perkDamageDealt: new Float64Array(StatPerkIndex.COUNT),
+    perkDebuffsCleansed: new Float64Array(StatPerkIndex.COUNT),
+
+    enemyKills: new Float64Array(StatEnemyIndex.COUNT),
+    deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
+    incomingDamageBuffer: new Float64Array(TELEMETRY_BUFFER_SIZE),
+
+    statusFlags: 0,
+    activePassives: [],
+    activeBuffs: [],
+    activeDebuffs: [],
+
+    sectorsCompleted: 0,
+    totalSkillPointsEarned: 0,
+
+    discoveredCollectibles: [],
+    viewedCollectibles: [],
+    discoveredClues: [],
+    discoveredPois: [],
+    discoveredZombies: [],
+    discoveredBosses: [],
+    deadBossIndices: [],
+    discoveredPerksMap: new Uint8Array(256), // Sized by MAX_ENTITIES.DISCOVERY_MAP_SIZE (256)
+
+    prologueSeen: false,
+    rescuedFamilyIndices: [],
+    familyFoundCount: 0,
+    mostUsedWeapon: DamageID.NONE,
+    challengeTiers: new Int32Array(64), // Sized by MAX_ENTITIES.CHALLENGES (64)
+    totalEnemiesKilled: 0,
+    totalChallengePoints: 0,
+    trackedChallengeIds: [],
 };

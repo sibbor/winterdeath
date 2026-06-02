@@ -11,6 +11,7 @@ import { DialogueLineType } from '../game/session/SectorTypes';
 import { DataResolver } from '../core/data/DataResolver';
 import { InputAction } from '../core/engine/InputManager';
 import { CinematicBubbleHandle } from '../components/ui/hud/CinematicBubble';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 // Zero-GC Vectors for camera math (Allocated only at startup)
 const _v1 = new THREE.Vector3();
@@ -72,7 +73,7 @@ export class CinematicSystem implements System {
         this.state = opts.state;
     }
 
-    public startCinematic(session: any, target: THREE.Object3D, sectorId: number, dialogueId?: number, params: any = {}) {
+    public startCinematic(session: GameSessionLogic, target: THREE.Object3D, sectorId: number, dialogueId?: number, params: any = {}) {
         const sectorScripts = STORY_SCRIPTS[sectorId];
 
         console.log(`[CinematicSystem] startCinematic called: Sector=${sectorId}, Dialogue=${dialogueId}`);
@@ -133,7 +134,7 @@ export class CinematicSystem implements System {
         cinematic.startPos = this.camera.position.clone();
         cinematic.startLookAt = this.camera.lookAtTarget ? this.camera.lookAtTarget.clone() : new THREE.Vector3();
 
-        this.state.cinematicActive = true;
+        this.state.ui.cinematicActive = true;
         this.callbacks.setCinematicActive(true);
 
         const startLine = params.lineIndex || 0;
@@ -184,8 +185,8 @@ export class CinematicSystem implements System {
             cinematic.fadingOut = true;
 
             // Immediately clear the previous line to give the transition space
-            this.state.cinematicLine.active = false;
-            this.state.cinematicLine.text = '';
+            this.state.ui.cinematicLine.active = false;
+            this.state.ui.cinematicLine.text = '';
 
             // Run triggers
             const triggers = Array.isArray(line.trigger) ? line.trigger : [line.trigger];
@@ -219,10 +220,10 @@ export class CinematicSystem implements System {
         cinematic.currentSpeakerId = resolvedId;
 
         // Sync to the high-performance telemetry bridge for React/HUD
-        this.state.cinematicLine.currentSpeakerId = resolvedId;
-        this.state.cinematicLine.active = true;
-        this.state.cinematicLine.speaker = line.speaker !== undefined ? line.speaker : '';
-        this.state.cinematicLine.text = line.text || '';
+        this.state.ui.cinematicLine.currentSpeakerId = resolvedId;
+        this.state.ui.cinematicLine.active = true;
+        this.state.ui.cinematicLine.speaker = line.speaker !== undefined ? line.speaker : '';
+        this.state.ui.cinematicLine.text = line.text || '';
 
         // Notify the React layer (Triggers re-render of the CinematicBubble typewriter)
         this.callbacks.setCurrentLine(line);
@@ -247,11 +248,11 @@ export class CinematicSystem implements System {
         // Reset state & Flush pending triggers
         this.state.sectorState.pendingTrigger = null;
 
-        this.state.cinematicLine.active = false;
-        this.state.cinematicLine.speaker = '';
-        this.state.cinematicLine.text = '';
+        this.state.ui.cinematicLine.active = false;
+        this.state.ui.cinematicLine.speaker = '';
+        this.state.ui.cinematicLine.text = '';
 
-        this.state.cinematicActive = false;
+        this.state.ui.cinematicActive = false;
         this.callbacks.setCurrentLine(null);
         this.callbacks.setCinematicActive(false);
 
@@ -266,7 +267,7 @@ export class CinematicSystem implements System {
         this.callbacks.endCinematic();
     }
 
-    public update(context: any, delta: number, simTime: number, renderTime: number) {
+    public update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         const cinematic = this.cinematicRef.current;
         if (!cinematic.active && !cinematic.isClosing) return;
 
@@ -408,12 +409,12 @@ export class CinematicSystem implements System {
         const speakerId = activeScriptLine?.speaker ?? FamilyMemberID.UNKNOWN;
 
         // --- INPUT SKIP HANDLING (RPG Fast-Forward) ---
-        const input = context.input || (context.engine?.input);
+        const input = (session as any).input || session.engine.input;
         if (input && (input.isPressed(InputAction.INTERACT) || input.isPressed(InputAction.FIRE))) {
             const skipNow = now;
             if (skipNow - (cinematic.lastSkipTime || 0) > 250) {
                 cinematic.lastSkipTime = skipNow;
-                this.state.cinematicLine.lastSkipTime = skipNow;
+                this.state.ui.cinematicLine.lastSkipTime = skipNow;
 
                 if (timeInLine < cinematic.typingDuration) {
                     // Skip typing

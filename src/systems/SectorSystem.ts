@@ -8,7 +8,7 @@ import { SKY_SYSTEM } from '../content/constants';
 import { InteractionType } from './ui/UIEventBridge';
 import { FXParticleType } from '../types/FXTypes';
 import { ToneType, SoundID } from '../utils/audio/AudioTypes';
-import { TargetEnvironment, WeatherType } from '../core/engine/EngineTypes';
+import { TargetEnvironment, WeatherType } from '../core/engine/EnvironmentalTypes';
 import { isPointInPolygon } from '../utils/math/GeometryUtils';
 import { DamageType, DamageID, EnemyAttackType } from '../entities/player/CombatTypes';
 import { StatusEffectID } from '../types/StatusEffects';
@@ -73,6 +73,7 @@ export class SectorSystem implements System {
 
     // Cache the event object and context to strictly prevent garbage collection overhead during the 60fps loop
     private cachedEvents: any = null;
+    private _cachedUpdateContext: any = null;
 
     // --- SCENE CACHE (Avoids traversal in 60fps loop) ---
     private _cachedGround: THREE.Mesh | null = null;
@@ -155,7 +156,7 @@ export class SectorSystem implements System {
 
         // 1. Optimized Proximity Check (Zero-GC)
         if (simTime - this.lastChimeTime > 2500) {
-            const items = state.mapItems;
+            const items = state.world.mapItems;
             const itemsLen = items.length;
             for (let i = 0; i < itemsLen; i++) {
                 const item = items[i];
@@ -163,7 +164,7 @@ export class SectorSystem implements System {
                     // FIX: Substring(12) safely slices off "collectible_". 
                     // V8 handles this internally as a "Sliced String" (a pointer), averting large allocations.
                     const realId = item.id.substring(12);
-                    if (state.stats && state.stats.discoveredCollectibles && state.stats.discoveredCollectibles.includes(realId)) continue;
+                    if (state.careerStats && state.careerStats.discoveredCollectibles && state.careerStats.discoveredCollectibles.includes(realId)) continue;
 
                     const dx = item.x - pPos.x;
                     const dz = item.z - pPos.z;
@@ -182,9 +183,9 @@ export class SectorSystem implements System {
                 spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => {
                     const newEnemy = EnemyManager.spawn(
                         scene, pPos, forcedType, forcedPos,
-                        state.bossSpawned, state.enemies.length
+                        state.enemies.bossSpawned, state.enemies.pool.length
                     );
-                    if (newEnemy) state.enemies.push(newEnemy);
+                    if (newEnemy) state.enemies.pool.push(newEnemy);
                 },
                 setBubble: this.callbacks.setBubble,
                 setInteraction: this.callbacks.setInteraction,
@@ -268,14 +269,29 @@ export class SectorSystem implements System {
                     return this.callbacks.applyDamage(enemy, amount, damageType, damageSource, isHighImpact);
                 },
             };
+            this._cachedUpdateContext = {
+                delta: 0,
+                simTime: 0,
+                renderTime: 0,
+                playerPos: pPos,
+                gameState: null,
+                sectorState: null,
+                triggerSystem: null,
+                ctx: null,
+                state: null,
+                engine: null,
+                worldStreamer: null,
+                scene: null,
+                ...this.cachedEvents
+            };
         }
 
         // Use the cached reference
         const events = this.cachedEvents;
 
         // 3. Process Interaction Requests
-        if (state.interactionRequest.active && state.interactionRequest.type === InteractionType.SECTOR_SPECIFIC) {
-            const req = state.interactionRequest;
+        if (state.triggers.interactionRequest.active && state.triggers.interactionRequest.type === InteractionType.SECTOR_SPECIFIC) {
+            const req = state.triggers.interactionRequest;
             if (this.currentSector.onInteract) {
                 this.currentSector.onInteract(req.id, req.object as THREE.Object3D, state, events);
             }
@@ -287,21 +303,21 @@ export class SectorSystem implements System {
 
         // 5. Finalize Sector Logic (Authoritative Hook)
         if (this.currentSector.onSectorUpdate) {
-            this.currentSector.onSectorUpdate({
-                delta: dt,
-                simTime: simTime,
-                renderTime: renderTime,
-                playerPos: pPos,
-                gameState: session.state,
-                sectorState: session.state.sectorState,
-                triggerSystem: session.triggerSystem,
-                ctx: session.sectorCtx,
-                state: session.state,
-                engine: session.engine,
-                worldStreamer: session.state.worldStreamer,
-                scene: session.engine.scene,
-                ...events
-            });
+            const ctx = this._cachedUpdateContext;
+            ctx.delta = dt;
+            ctx.simTime = simTime;
+            ctx.renderTime = renderTime;
+            ctx.playerPos = pPos;
+            ctx.gameState = session.state;
+            ctx.sectorState = session.state.sectorState;
+            ctx.triggerSystem = session.triggerSystem;
+            ctx.ctx = session.sectorCtx;
+            ctx.state = session.state;
+            ctx.engine = session.engine;
+            ctx.worldStreamer = session.worldStreamer;
+            ctx.scene = session.engine.scene;
+
+            this.currentSector.onSectorUpdate(ctx);
         }
     }
 
@@ -311,7 +327,7 @@ export class SectorSystem implements System {
         const staticZones = this.currentSector.environmentalZones;
         const state = session.state;
         const sectorState = state.sectorState;
-        const streamer = state.worldStreamer;
+        const streamer = session.worldStreamer;
 
         const settings = engine.settings;
         const defaultWeatherCount = defaultEnv.weather?.particles ?? 1000;

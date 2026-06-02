@@ -326,7 +326,7 @@ export class VehicleMovementSystem implements System {
                             pColor = 0x886644;
                         }
 
-                        FXSystem.spawnParticle(session.engine.scene, state.particles, groundX, groundY + 0.1, groundZ, pType, 1, undefined, undefined, pColor, 0.4);
+                        FXSystem.spawnParticle(session.engine.scene, state.combat.particles, groundX, groundY + 0.1, groundZ, pType, 1, undefined, undefined, pColor, 0.4);
                     }
                 }
             } else if (speedSq > 4.0 && Math.random() < 0.4) {
@@ -334,7 +334,7 @@ export class VehicleMovementSystem implements System {
                 _v1.addScaledVector(_right, (Math.random() - 0.5) * 2.0);
                 
                 const splashY = session.engine.water?.getBuoyancyResult().waterLevel || 0.1;
-                FXSystem.spawnParticle(session.engine.scene, state.particles, vehicle.position.x + _v1.x, splashY + 0.05, vehicle.position.z + _v1.z, FXParticleType.SPLASH, 1, undefined, undefined, 0xffffff, 0.5 + Math.random() * 0.5);
+                FXSystem.spawnParticle(session.engine.scene, state.combat.particles, vehicle.position.x + _v1.x, splashY + 0.05, vehicle.position.z + _v1.z, FXParticleType.SPLASH, 1, undefined, undefined, 0xffffff, 0.5 + Math.random() * 0.5);
             }
 
             // --- SYNC PLAYER TO VEHICLE ---

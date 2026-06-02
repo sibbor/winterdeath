@@ -9,7 +9,7 @@ import { haptic } from '../../utils/HapticManager';
 import { WeaponSounds } from '../../utils/audio/AudioLib';
 import { WaterSystem, _buoyancyResult } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
-import { PlayerStatusFlags } from '../../entities/player/PlayerTypes';
+import { PlayerStatusFlags } from '../../types/CareerStats';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { EnemyAnimator } from './EnemyAnimator';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';

@@ -3,7 +3,7 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 import { MATERIALS, GEOMETRY, ModelFactory } from '../../../utils/assets';
 import { EffectManager, EffectType, SubEffectType } from '../../../systems/EffectManager';
 import { FXParticleType } from '../../../types/FXTypes';
-import { SectorContext, ChestType, TerminalType } from '../../../game/session/SectorTypes';
+import { SectorBuildContext, ChestType, TerminalType } from '../../../game/session/SectorTypes';
 import { ZOMBIE_TYPES } from '../../../content/enemies/zombies';
 import { EnemyType } from '../../../entities/enemies/EnemyTypes';
 import { MaterialType } from '../../../content/environment';
@@ -372,7 +372,7 @@ export const ObjectGenerator = {
         return GeneratorUtils.freezeStatic(group);
     },
 
-    createFire: (ctx: SectorContext, x: number, z: number, y: number = 0, scale: number = 1.0) => {
+    createFire: (ctx: SectorBuildContext, x: number, z: number, y: number = 0, scale: number = 1.0) => {
         const group = new THREE.Group();
         group.position.set(x, y, z);
         group.scale.setScalar(scale);
@@ -803,7 +803,7 @@ export const ObjectGenerator = {
     },
 
     // Note: Grass should be fully handled by VegetationGenerator, but keeping this optimized just in case.
-    createGrassField: (ctx: SectorContext, x: number, z: number, width: number, depth: number, count: number) => {
+    createGrassField: (ctx: SectorBuildContext, x: number, z: number, width: number, depth: number, count: number) => {
         const mesh = new THREE.InstancedMesh(SHARED_GEO.cone, MATERIALS.grass, count);
         mesh.frustumCulled = false;
         mesh.castShadow = false;

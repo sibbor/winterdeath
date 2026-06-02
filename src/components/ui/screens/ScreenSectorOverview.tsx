@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { t } from '../../../utils/i18n';
 import { useOrientation } from '../../../hooks/useOrientation';
 import ModalLayout, { TacticalCard, TacticalTab } from './ModalLayout';
-import { PlayerStats } from '../../../entities/player/PlayerTypes';
+import { CareerStats } from '../../../types/CareerStats';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { COLORS } from '../../../utils/ui/ColorUtils';
@@ -15,17 +15,17 @@ const SECTOR_INDICES: number[] = DataResolver.getSectorThemes().map((_, i) => i)
 
 interface ScreenSectorOverviewProps {
     currentSector: number;
-    rescuedFamilyIndices: number[];
-    deadBossIndices: number[];
     debugMode: boolean;
-    stats: PlayerStats;
+    stats: CareerStats;
     onSelectSector: (sectorIndex: number) => void;
     onStartSector: () => void;
     onClose: () => void;
     isMobileDevice?: boolean;
 }
 
-const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSector, rescuedFamilyIndices, deadBossIndices, debugMode, stats, onSelectSector, onStartSector, onClose, isMobileDevice }) => {
+const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSector, debugMode, stats, onSelectSector, onStartSector, onClose, isMobileDevice }) => {
+    const rescuedFamilyIndices = StatsBridge.getRescuedFamilyIndices(stats);
+    const deadBossIndices = StatsBridge.getDeadBossIndices(stats);
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
     const [selectedSectorIndex, setSelectedSectorIndex] = useState(currentSector);

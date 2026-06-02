@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { PlayerStats, PlayerStatID, StatEnemyIndex, StatWeaponIndex } from '../../../entities/player/PlayerTypes';
+import { CareerStats, PlayerStatID, StatEnemyIndex, StatWeaponIndex } from '../../../types/CareerStats';
 import { t } from '../../../utils/i18n';
 import { useOrientation } from '../../../hooks/useOrientation';
 import ModalLayout, { TacticalCard, TacticalTab, } from './ModalLayout';
@@ -14,7 +14,7 @@ import { FormatUtils } from '../../../utils/ui/FormatUtils';
 import CollectiblePreview from '../core/CollectiblePreview';
 
 interface ScreenStatisticsProps {
-    stats: PlayerStats;
+    stats: CareerStats;
     onClose: () => void;
     onOpenDiscovery?: () => void;
     onMarkCollectiblesViewed?: (collectibleIds: string[]) => void;
@@ -221,7 +221,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
 };
 
 const OverviewTab: React.FC<{
-    stats: PlayerStats, level: number, currentXp: number, nextLevelXp: number,
+    stats: CareerStats, level: number, currentXp: number, nextLevelXp: number,
     totalDistance: string, totalTimeFormatted: string, discoveryPoints: number, marathonProgress: string,
     isMobileDevice?: boolean, onOpenDiscovery?: () => void
 }> = React.memo(({ stats, level, currentXp, nextLevelXp, totalDistance, totalTimeFormatted, discoveryPoints, marathonProgress, isMobileDevice, onOpenDiscovery }) => {
@@ -340,7 +340,7 @@ const OverviewTab: React.FC<{
     );
 });
 
-const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: number, onOpenDiscovery?: () => void, isMobileDevice?: boolean }> = React.memo(({ stats, level, currentXp, onOpenDiscovery, isMobileDevice }) => {
+const PerformanceTab: React.FC<{ stats: CareerStats, level: number, currentXp: number, onOpenDiscovery?: () => void, isMobileDevice?: boolean }> = React.memo(({ stats, level, currentXp, onOpenDiscovery, isMobileDevice }) => {
     const totalDodges = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_DODGES);
     const totalRushes = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_RUSHES);
     const totalRushDistance = FormatUtils.formatDistanceSmart(StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_RUSH_DISTANCE));
@@ -413,7 +413,7 @@ const PerformanceTab: React.FC<{ stats: PlayerStats, level: number, currentXp: n
     );
 });
 
-const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
+const CombatTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
 
     const { efficiency, kdRatio, lethality, longestKillstreak, crisisSaves, nemesis, peakAggression, time } = useMemo(() => {
         const kills = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_KILLS);
@@ -549,7 +549,7 @@ const CombatTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Re
     );
 });
 
-const WeaponEntry: React.FC<{ stats: PlayerStats, wep: any }> = React.memo(({ stats, wep }) => {
+const WeaponEntry: React.FC<{ stats: CareerStats, wep: any }> = React.memo(({ stats, wep }) => {
     const fired = StatsBridge.getWeaponShotsFired(stats, wep.id);
     const hit = StatsBridge.getWeaponShotsHit(stats, wep.id);
     const kills = StatsBridge.getWeaponKillCount(stats, wep.id);
@@ -570,7 +570,7 @@ const WeaponEntry: React.FC<{ stats: PlayerStats, wep: any }> = React.memo(({ st
     );
 });
 
-const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
+const WeaponsTab: React.FC<{ stats: CareerStats, color: string, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
     // 1. Unified Domain Resolution (Zero-GC Pattern)
     const { arsenal, tactics, vehicles, environment } = useMemo(() => {
         const arsenalItems: any[] = [];
@@ -733,7 +733,7 @@ const WeaponsTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?:
     );
 });
 
-const PerkItem: React.FC<{ perk: any, stats: PlayerStats, t: (key: string) => string }> = React.memo(({ perk, stats, t }) => {
+const PerkItem: React.FC<{ perk: any, stats: CareerStats, t: (key: string) => string }> = React.memo(({ perk, stats, t }) => {
     return (
         <div key={perk.id} id={`log-item-${perk.id}`} className="bg-zinc-900/40 border border-zinc-800 p-6 relative group/hvr overflow-hidden">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
@@ -779,14 +779,14 @@ const PerkItem: React.FC<{ perk: any, stats: PlayerStats, t: (key: string) => st
     );
 });
 
-const PerksTab: React.FC<{ stats: PlayerStats, t: (key: string) => string, effectiveLandscape: boolean }> = React.memo(({ stats, t, effectiveLandscape }) => {
+const PerksTab: React.FC<{ stats: CareerStats, t: (key: string) => string, effectiveLandscape: boolean }> = React.memo(({ stats, t, effectiveLandscape }) => {
 
     const { uptime, resilience, roiDealt, roiAbsorb, totalROI } = useMemo(() => {
         const time = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME);
         const buffTime = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_BUFF_TIME);
         const resisted = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_DEBUFFS_RESISTED);
 
-        // [VINTERDÖD] Zero-GC Guard: Ensure time is strictly positive before division
+        // Zero-GC Guard: Ensure time is strictly positive before division
         const safeTime = Math.max(0.001, time);
         const uptimePercent = Math.min(100, (buffTime / safeTime) * 100);
 

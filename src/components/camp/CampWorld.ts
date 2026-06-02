@@ -4,7 +4,7 @@ import { VegetationGenerator } from '../../core/world/generators/VegetationGener
 import { ChunkManager } from '../../core/world/ChunkManager';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { WEATHER_SYSTEM } from '../../content/constants';
-import { WeatherType } from '../../core/engine/EngineTypes';
+import { WeatherType } from '../../core/engine/EnvironmentalTypes';
 import { LogicalLight } from '../../systems/LightSystem';
 
 // ============================================================================
