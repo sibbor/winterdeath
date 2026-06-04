@@ -6,6 +6,7 @@ import { FXParticleType } from '../types/FXTypes';
 import { VehicleSounds } from '../utils/audio/AudioLib';
 import { audioEngine } from '../utils/audio/AudioEngine';
 import { VehicleDef } from '../content/vehicles';
+import { MaterialType } from '../content/environment';
 import { VehicleManager } from './VehicleManager';
 import { _buoyancyResult } from './WaterSystem';
 import { KMH_TO_MS } from '../content/constants';
@@ -28,14 +29,14 @@ export class VehicleMovementSystem implements System {
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         // --- VINTERDÖD LIFECYCLE GUARD ---
-        if (!session?.state?.sectorState?.ctx) return;
+        if (!session?.sectorCtx) return;
 
         VehicleManager.tick(session, this.playerGroup, delta, simTime, renderTime);
 
         const state = session.state;
         const input = session.engine.input.state;
 
-        const interactables = state.sectorState.ctx.interactables;
+        const interactables = session.sectorCtx.interactables;
         if (!interactables) return;
 
         const len = interactables.length;
@@ -319,10 +320,10 @@ export class VehicleMovementSystem implements System {
                         let pType = FXParticleType.SMOKE;
                         let pColor = 0xaaaaaa;
                         
-                        if (groundMat === 1) { // SNOW (Hardcoded check for now, can be optimized)
+                        if (groundMat === MaterialType.SNOW || groundMat === MaterialType.NONE) {
                             pType = FXParticleType.SNOW_PUFF;
                             pColor = 0xffffff;
-                        } else if (groundMat === 2) { // DIRT
+                        } else if (groundMat === MaterialType.DIRT || groundMat === MaterialType.WOOD) {
                             pColor = 0x886644;
                         }
 

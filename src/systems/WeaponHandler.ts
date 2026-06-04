@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WeaponCategory, WeaponBehavior, WEAPONS, WeaponStats } from '../content/weapons';
 import { DamageID, ToolID, HoldableID, WeaponID } from '../entities/player/CombatTypes';
-import { PlayerStatID } from '../types/CareerStats';
+import { StatID } from '../types/CareerStats';
 import { ProjectileSystem } from './ProjectileSystem';
 import { WeaponSounds, UiSounds } from '../utils/audio/AudioLib';
 import { haptic } from '../utils/HapticManager';
@@ -39,7 +39,7 @@ interface ContinuousContext {
     spawnParticle: Function | null;
     showDamageText: Function;
     spawnDecal: Function | null;
-    addScore: Function | null;
+    rewardXP: Function | null;
     fireZones: any[];
     simTime: number;
     renderTime: number;
@@ -59,7 +59,7 @@ const _continuousCtx: ContinuousContext = {
     spawnParticle: null,
     showDamageText: _NOOP_DAMAGE_TEXT,
     spawnDecal: null,
-    addScore: null,
+    rewardXP: null,
     fireZones: [],
     simTime: 0,
     renderTime: 0,
@@ -95,8 +95,8 @@ function _executeThrow(
     // which may have snapped towards the move direction during release.
     _v1.set(0, 0, 1).applyQuaternion(state.combat.throwChargeRotation).normalize();
 
-    const rangeMult = state.player.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0;
-    const reloadMult = state.player.statsBuffer[PlayerStatID.MULTIPLIER_RELOAD] || 1.0;
+    const rangeMult = state.player.statsBuffer[StatID.MULTIPLIER_RANGE] || 1.0;
+    const reloadMult = state.player.statsBuffer[StatID.MULTIPLIER_RELOAD] || 1.0;
     const maxDist = (wep.range || 25.0) * rangeMult;
     const dist = Math.max(2.0, ratio * maxDist);
 
@@ -235,7 +235,7 @@ export const WeaponHandler = {
 
         if (acts[InputAction.RELOAD] && !state.combat.isReloading && !isThrowable && !isRadio && !isEnergy && (state.combat.weaponAmmo[state.combat.activeWeapon] || 0) < (wep.magSize || 0)) {
             state.combat.isReloading = true;
-            const actualReloadTime = (wep.reloadTime || 0) * (state.player.statsBuffer[PlayerStatID.MULTIPLIER_RELOAD] || 1.0);
+            const actualReloadTime = (wep.reloadTime || 0) * (state.player.statsBuffer[StatID.MULTIPLIER_RELOAD] || 1.0);
             state.combat.reloadEndTime = simTime + actualReloadTime;
             UIEventRingBuffer.push(UIEventType.RELOAD_START, actualReloadTime, 0, simTime);
             WeaponSounds.playMagOut();
@@ -317,7 +317,7 @@ export const WeaponHandler = {
                             state.combat.weaponAmmo[state.combat.activeWeapon] -= 20 * delta;
                             if (state.combat.weaponAmmo[state.combat.activeWeapon] < 0) state.combat.weaponAmmo[state.combat.activeWeapon] = 0;
                         } else if (!isUnlimited) {
-                            const actualFireRate = (wep.fireRate || 0) * (state.player.statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] || 1.0);
+                            const actualFireRate = (wep.fireRate || 0) * (state.player.statsBuffer[StatID.MULTIPLIER_FIRERATE] || 1.0);
                             if (simTime > state.combat.lastShotTime + actualFireRate) {
                                 state.combat.weaponAmmo[state.combat.activeWeapon]--;
                                 state.combat.lastShotTime = simTime;
@@ -343,7 +343,7 @@ export const WeaponHandler = {
                         _continuousCtx.spawnParticle = cb?.spawnParticle;
                         _continuousCtx.showDamageText = cb?.showDamageText || _NOOP_DAMAGE_TEXT;
                         _continuousCtx.spawnDecal = cb?.spawnDecal;
-                        _continuousCtx.addScore = cb?.gainXp;
+                        _continuousCtx.rewardXP = cb?.rewardXP;
                         _continuousCtx.fireZones = state.combat.fireZones;
                         _continuousCtx.simTime = simTime;
                         _continuousCtx.renderTime = renderTime;
@@ -397,7 +397,7 @@ export const WeaponHandler = {
                 if (input.actions[InputAction.FIRE]) {
                     const isUnlimited = !!state.sectorState?.unlimitedAmmo;
                     const hasAmmo = state.combat.weaponAmmo[state.combat.activeWeapon] > 0 || isUnlimited;
-                    const actualFireRate = (wep.fireRate || 0) * (state.player.statsBuffer[PlayerStatID.MULTIPLIER_FIRERATE] || 1.0);
+                    const actualFireRate = (wep.fireRate || 0) * (state.player.statsBuffer[StatID.MULTIPLIER_FIRERATE] || 1.0);
 
                     if (simTime > state.combat.lastShotTime + actualFireRate && hasAmmo) {
                         state.combat.lastShotTime = simTime;
@@ -441,7 +441,7 @@ export const WeaponHandler = {
                             }
                             _v3.normalize();
 
-                            const rangeMult = state.player.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0;
+                            const rangeMult = state.player.statsBuffer[StatID.MULTIPLIER_RANGE] || 1.0;
                             const bulletLife = ((wep.range || 15) / (wep.bulletSpeed || 70)) * rangeMult;
 
                             ProjectileSystem.launchBullet(state.combat.projectiles, _v2, _v3, wep.name as unknown as DamageID, damagePerPellet, bulletLife);
@@ -451,7 +451,7 @@ export const WeaponHandler = {
                         WeaponFX.createMuzzleEffect(scene, state.combat.activeWeapon, _v2, _v3);
                     } else if (input.actions[InputAction.FIRE] && (state.combat.weaponAmmo[state.combat.activeWeapon] || 0) <= 0 && simTime > state.combat.lastShotTime + (wep.fireRate || 0)) {
                         state.combat.lastShotTime = simTime;
-                        if (state.sectorState.noReload) {
+                        if (state.sectorState?.noReload) {
                             state.combat.weaponAmmo[state.combat.activeWeapon] = wep.magSize || 0;
                         } else {
                             WeaponSounds.playEmptyClick();
@@ -492,7 +492,7 @@ export const WeaponHandler = {
                     // Use the LOCKED rotation for trajectory line/visuals
                     _v1.set(0, 0, 1).applyQuaternion(state.combat.throwChargeRotation).normalize();
 
-                    const maxDist = (wep.range || 25.0) * (state.player.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0);
+                    const maxDist = (wep.range || 25.0) * (state.player.statsBuffer[StatID.MULTIPLIER_RANGE] || 1.0);
                     const dist = Math.max(2.0, ratio * maxDist);
 
                     _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0));

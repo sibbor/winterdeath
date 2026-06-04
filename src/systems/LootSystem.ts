@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
-import { PlayerStatID } from '../types/CareerStats';
+import { StatID } from '../types/CareerStats';
 import { MAX_ENTITIES, LOOT } from '../content/constants';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
@@ -58,7 +58,7 @@ export class LootSystem implements System {
     constructor(
         private playerGroup: THREE.Group,
         scene: THREE.Scene,
-        private callbacks?: { gainScrap: (val: number) => void }
+        private callbacks?: { rewardScrap: (val: number) => void }
     ) {
         this.instancedMesh = new THREE.InstancedMesh(GEOMETRY.scrap, MATERIALS.scrap, LootSystem.MAX_SCRAP);
         this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -115,11 +115,11 @@ export class LootSystem implements System {
 
         // 3. Callback execution
         if (collected > 0) {
-            if (this.callbacks?.gainScrap) {
-                this.callbacks.gainScrap(collected);
+            if (this.callbacks?.rewardScrap) {
+                this.callbacks.rewardScrap(collected);
             } else {
-                session.state.player.statsBuffer[PlayerStatID.SCRAP] += collected;
-                session.state.player.statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += collected;
+                session.state.player.statsBuffer[StatID.SCRAP] += collected;
+                session.state.player.statsBuffer[StatID.TOTAL_SCRAP_COLLECTED] += collected;
             }
         }
     }

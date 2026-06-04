@@ -21,7 +21,7 @@ import { SectorSystem } from '../../systems/SectorSystem';
 import { HudStore } from '../../store/HudStore';
 import { PlayerStatsSystem } from '../../systems/PlayerStatsSystem';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
-import { PlayerStatID } from '../../types/CareerStats';
+import { StatID } from '../../types/CareerStats';
 import { DataResolver } from '../../core/data/DataResolver';
 import { TriggerType, TriggerActionType } from '../../types/TriggerTypes';
 import { BossID, SectorID } from './SectorTypes';
@@ -35,7 +35,6 @@ import { StatusEffectID } from '../../types/StatusEffects';
 import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 import { useUIEventBridge } from '../../hooks/useUIEventBridge';
 import { InteractionType, InteractionSubType, InteractionPromptId, MetaActionId } from '../../systems/ui/UIEventBridge';
-import { safeCopyBuffer } from './GameSessionState';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -102,14 +101,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         stats.accuracy = (stats.shotsFired > 0 ? (stats.shotsHit / stats.shotsFired) : 1) * 100;
         stats.distanceTraveled = refs.distanceTraveledRef.current;
 
-        // Sync active perks for Pause/Recap screens (Zero-GC Buffer Sync)
-        safeCopyBuffer(stats.activePassives, state.activePassives);
-        stats.activePassivesCount = state.activePassivesCount;
-        safeCopyBuffer(stats.activeBuffs, state.activeBuffs);
-        stats.activeBuffsCount = state.activeBuffsCount;
-        safeCopyBuffer(stats.activeDebuffs, state.activeDebuffs);
-        stats.activeDebuffsCount = state.activeDebuffsCount;
-
         // --- PERK TELEMETRY SYNC (Sector-specific delta calculations) ---
         const pStats = state.stats;
         if (pStats) {
@@ -125,7 +116,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         return stats;
     }, [refs]);
 
-    const concludeSector = useCallback((isExtraction: boolean) => {
+    const endSector = useCallback((isExtraction: boolean) => {
         if (!refs.hasEndedSector.current) {
             refs.hasEndedSector.current = true;
             if (isExtraction) {
@@ -141,59 +132,61 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration, refs.gameSessionRef.current?.state.simTime || 0);
     }, []);
 
-    const gainXp = useCallback((amount: number) => {
+    const rewardXP = useCallback((amount: number) => {
         const session = refs.gameSessionRef.current;
         if (!session) return;
 
         const state = session.state;
         if (state.isPlayground) return;
+
         const statsBuffer = state.player.statsBuffer;
 
         // Telemetry
         state.sessionStats.xpGained += amount;
 
         // --- DOD Progression Fix: Zero-GC ---
-        statsBuffer[PlayerStatID.SCORE] += amount;
-        statsBuffer[PlayerStatID.CURRENT_XP] += amount;
-        statsBuffer[PlayerStatID.XP] += amount;
+        statsBuffer[StatID.SCORE] += amount;
+        statsBuffer[StatID.CURRENT_XP] += amount;
+        statsBuffer[StatID.XP] += amount;
 
         let levelUps = 0;
         const maxLevel = 100;
 
         // Process level-ups in a single pass
-        while (statsBuffer[PlayerStatID.CURRENT_XP] >= statsBuffer[PlayerStatID.NEXT_LEVEL_XP] && statsBuffer[PlayerStatID.LEVEL] < maxLevel) {
-            statsBuffer[PlayerStatID.CURRENT_XP] -= statsBuffer[PlayerStatID.NEXT_LEVEL_XP];
-            statsBuffer[PlayerStatID.LEVEL]++;
-            statsBuffer[PlayerStatID.NEXT_LEVEL_XP] = Math.max(100, Math.floor(statsBuffer[PlayerStatID.NEXT_LEVEL_XP] * 1.2));
+        while (statsBuffer[StatID.CURRENT_XP] >= statsBuffer[StatID.NEXT_LEVEL_XP] && statsBuffer[StatID.LEVEL] < maxLevel) {
+            statsBuffer[StatID.CURRENT_XP] -= statsBuffer[StatID.NEXT_LEVEL_XP];
+            statsBuffer[StatID.LEVEL]++;
+            statsBuffer[StatID.SKILL_POINTS]++;
+            statsBuffer[StatID.NEXT_LEVEL_XP] = Math.max(100, Math.floor(statsBuffer[StatID.NEXT_LEVEL_XP] * 1.2));
             levelUps++;
         }
 
         if (levelUps > 0) {
-            UIEventRingBuffer.push(UIEventType.LEVEL_UP, statsBuffer[PlayerStatID.LEVEL], levelUps, state.simTime);
+            UIEventRingBuffer.push(UIEventType.LEVEL_UP, statsBuffer[StatID.LEVEL], levelUps, state.simTime);
             UiSounds.playLevelUp();
         }
 
         UIEventRingBuffer.push(UIEventType.XP_GAIN, amount, 0, state.simTime);
     }, [refs]);
 
-    const gainSp = useCallback((amount: number) => {
+    const rewardSP = useCallback((amount: number) => {
         const session = refs.gameSessionRef.current;
         if (!session || session.state.isPlayground) return;
 
         session.state.sessionStats.spGained += amount;
-        session.state.player.statsBuffer[PlayerStatID.SKILL_POINTS] += amount;
+        session.state.player.statsBuffer[StatID.SKILL_POINTS] += amount;
         UIEventRingBuffer.push(UIEventType.SP_GAIN, amount, 0, session.state.simTime);
     }, [refs]);
 
-    const gainScrap = useCallback((amount: number) => {
+    const rewardScrap = useCallback((amount: number) => {
         const session = refs.gameSessionRef.current;
         if (!session || session.state.isPlayground) return;
 
         session.state.sessionStats.scrapLooted += amount;
 
         const statsBuffer = session.state.player.statsBuffer;
-        statsBuffer[PlayerStatID.SCRAP] += amount;
-        statsBuffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] += amount;
+        statsBuffer[StatID.SCRAP] += amount;
+        statsBuffer[StatID.TOTAL_SCRAP_COLLECTED] += amount;
         UIEventRingBuffer.push(UIEventType.SCRAP_GAIN, amount, 0, session.state.simTime);
     }, [refs]);
 
@@ -257,14 +250,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             case TriggerActionType.GIVE_REWARD: {
-                if (payload.scrap) gainScrap(payload.scrap);
-                if (payload.xp) gainXp(payload.xp);
-                if (payload.sp) gainSp(payload.sp);
+                if (payload.scrap) rewardScrap(payload.scrap);
+                if (payload.xp) rewardXP(payload.xp);
+                if (payload.sp) rewardSP(payload.sp);
                 if (payload.amount) {
                     // Generic amount treated as HP if not otherwise specified
-                    const hp = state.player.statsBuffer[PlayerStatID.HP];
-                    const maxHp = state.player.statsBuffer[PlayerStatID.MAX_HP];
-                    state.player.statsBuffer[PlayerStatID.HP] = Math.min(maxHp, hp + payload.amount);
+                    const hp = state.player.statsBuffer[StatID.HP];
+                    const maxHp = state.player.statsBuffer[StatID.MAX_HP];
+                    state.player.statsBuffer[StatID.HP] = Math.min(maxHp, hp + payload.amount);
                 }
                 UiSounds.playConfirm();
                 break;
@@ -338,15 +331,20 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             case TriggerActionType.SPAWN_BOSS: {
-                UIEventRingBuffer.push(UIEventType.BOSS_SPAWN, payload.type === 'BOSS' ? 1 : 0, 0, state.simTime);
+                const bossId = payload.bossId !== undefined ? payload.bossId
+                    : payload.id !== undefined ? payload.id
+                        : BossID.NONE;
+                UIEventRingBuffer.push(UIEventType.BOSS_SPAWN, bossId, 0, state.simTime);
                 break;
             }
 
             case TriggerActionType.FAMILY_MEMBER_FOLLOW: {
                 UIEventRingBuffer.push(UIEventType.FAMILY_FOLLOW, 1, 0, state.simTime);
 
-                // TODO: Gain 2 SP if it's the first time a family member follows the player
-                // gainSp(2);
+                // Reward 2 SP the first time a family member follows the player this sector
+                if (!latestStateRef.current.props.familyAlreadyRescued) {
+                    rewardSP(2);
+                }
                 break;
             }
 
@@ -446,9 +444,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
 
                 const cinematic = refs.gameSessionRef.current?.getSystem<any>(SystemID.CINEMATIC);
-                if (cinematic) {
+                if (cinematic && refs.gameSessionRef.current) {
                     const sectorId = payload.sectorId !== undefined ? payload.sectorId : props.gameState.currentSector;
-                    cinematic.startCinematic(target, sectorId, payload.dialogueId, payload);
+                    cinematic.startCinematic(refs.gameSessionRef.current, target, sectorId, payload.dialogueId, payload);
                 }
                 break;
             }
@@ -482,19 +480,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             // TODO: Implement support for zombies waves
             case TriggerActionType.START_WAVE: {
-                /*
-                if (payload.count) {
-                    state.sectorState.zombiesKilled = 0;
-                    state.sectorState.targetKills = payload.count;
-                    state.sectorState.waveActive = true;
-                    setBubble(t('ui.wave_start'), 3000);
-                }
-                */
                 break;
             }
 
-            case TriggerActionType.CONCLUDE_SECTOR: {
-                concludeSector(payload?.isExtraction ?? false);
+            case TriggerActionType.END_SECTOR: {
+                endSector(payload?.isExtraction ?? false);
                 break;
             }
 
@@ -503,15 +493,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 break;
             }
         }
-    }, [concludeSector, gainXp, props.currentSectorData, props.familyAlreadyRescued, refs, setBubble, gainSp]);
+    }, [endSector, rewardXP, props.currentSectorData, props.familyAlreadyRescued, refs, setBubble, rewardSP]);
 
     const handleDiscovery = useCallback((type: DiscoveryType, id: any, titleKey: string = '', detailsKey: string = '', payload?: any, fromBridge: boolean = false) => {
         const state = refs.stateRef.current;
         const currentProps = latestStateRef.current.props;
-        if (!state || !state.sessionStats || !state.discoverySets) return;
+        if (!state || !state.sessionStats || !state.careerStats) return;
 
-        const stats = state.sessionStats;
-        const sets = state.discoverySets;
+        const career = state.careerStats;
         let isNew = false;
 
         titleKey = titleKey || payload?.titleKey || '';
@@ -520,15 +509,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         switch (type) {
             case DiscoveryType.ZOMBIE: {
                 const enemyId = Number(id);
-                if (fromBridge || !sets.discoveredZombies.has(enemyId)) {
-                    sets.discoveredZombies.add(enemyId);
-
-                    let foundEnemy = false;
-                    for (let i = 0; i < stats.discoveredZombies.length; i++) {
-                        if (stats.discoveredZombies[i] === enemyId) { foundEnemy = true; break; }
-                    }
-                    if (!foundEnemy) stats.discoveredZombies.push(enemyId);
-
+                if (fromBridge || (career.discoveredZombies && career.discoveredZombies[enemyId] !== 1)) {
+                    if (career.discoveredZombies) career.discoveredZombies[enemyId] = 1;
                     isNew = true;
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.ZOMBIE);
                     detailsKey = DataResolver.getZombieName(enemyId);
@@ -539,15 +521,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             case DiscoveryType.BOSS: {
                 const bossId = Number(id);
-                if (fromBridge || !sets.discoveredBosses.has(bossId)) {
-                    sets.discoveredBosses.add(bossId);
-
-                    let foundBoss = false;
-                    for (let i = 0; i < stats.discoveredBosses.length; i++) {
-                        if (stats.discoveredBosses[i] === bossId) { foundBoss = true; break; }
-                    }
-                    if (!foundBoss) stats.discoveredBosses.push(bossId);
-
+                if (fromBridge || (career.discoveredBosses && career.discoveredBosses[bossId] !== 1)) {
+                    if (career.discoveredBosses) career.discoveredBosses[bossId] = 1;
                     isNew = true;
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.BOSS);
                     detailsKey = DataResolver.getBossName(bossId);
@@ -563,12 +538,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.COLLECTIBLE);
                     detailsKey = detailsKey || payload?.detailsKey || DataResolver.getCollectibleName(strId);
 
-                    if (fromBridge || !sets.discoveredCollectibles.has(colSmi)) {
-                        sets.discoveredCollectibles.add(colSmi);
-                        if (!stats.discoveredCollectibles.includes(strId)) {
-                            stats.discoveredCollectibles.push(strId);
-                            isNew = true;
-                        }
+                    if (fromBridge || (career.discoveredCollectibles && career.discoveredCollectibles[colSmi] !== 1)) {
+                        if (career.discoveredCollectibles) career.discoveredCollectibles[colSmi] = 1;
+                        isNew = true;
                         state.sessionCollectiblesDiscovered.push(strId);
                     }
 
@@ -583,14 +555,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     const strId = DataResolver.resolvePoiId(poiSmi);
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.POI);
                     detailsKey = payload?.detailsKey || DataResolver.getPoiName(strId);
-                    if (fromBridge || !sets.discoveredPois.has(poiSmi)) {
-                        sets.discoveredPois.add(poiSmi);
-
-                        if (!stats.discoveredPois.includes(strId)) {
-                            stats.discoveredPois.push(strId);
-                            isNew = true;
-                        }
-
+                    if (fromBridge || (career.discoveredPois && career.discoveredPois[poiSmi] !== 1)) {
+                        if (career.discoveredPois) career.discoveredPois[poiSmi] = 1;
+                        isNew = true;
                         if (currentProps.onPOIdiscovered) currentProps.onPOIdiscovered(payload || strId);
                     }
                 }
@@ -599,15 +566,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             case DiscoveryType.PERK: {
                 const perkId = Number(id);
-                if (fromBridge || state.discoveredPerksMap[perkId] === 0) {
-                    state.discoveredPerksMap[perkId] = 1;
+                if (fromBridge || (career.discoveredPerks && career.discoveredPerks[perkId] === 0)) {
+                    if (career.discoveredPerks) career.discoveredPerks[perkId] = 1;
                     isNew = true;
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.PERK);
                     const perk = PERKS[perkId];
                     detailsKey = perk ? perk.displayName : 'ui.perk_discovered';
-                    if (state.sessionStats.discoveredPerksMap) {
-                        state.sessionStats.discoveredPerksMap[perkId] = 1;
-                    }
                     if (currentProps.onPerkDiscovered) currentProps.onPerkDiscovered(perkId);
                 }
                 break;
@@ -620,15 +584,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     const strId = DataResolver.resolveClueId(clueSmi);
                     titleKey = DataResolver.getDiscoveryTitle(DiscoveryType.CLUE);
                     detailsKey = detailsKey || 'ui.clue_found';
-                    if (fromBridge || !sets.discoveredClues.has(clueSmi)) {
-                        sets.discoveredClues.add(clueSmi);
+                    if (fromBridge || (career.discoveredClues && career.discoveredClues[clueSmi] !== 1)) {
+                        if (career.discoveredClues) career.discoveredClues[clueSmi] = 1;
+                        isNew = true;
                         const cluePayload = payload || { id: strId, content: detailsKey };
-
-                        if (!stats.discoveredClues.includes(strId)) {
-                            stats.discoveredClues.push(strId);
-                            isNew = true;
-                        }
-
                         if (currentProps.onClueDiscovered) currentProps.onClueDiscovered(cluePayload);
                     }
                 }
@@ -640,11 +599,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             // Immediately patch HudStore with the updated count to prevent stale display in the popup
             const hudState = HudStore.getState();
             if (type === DiscoveryType.CLUE) {
-                HudStore.patch({ cluesFoundCount: hudState.cluesFoundCount + 1 });
+                HudStore.patch({ discoveredCluesCount: hudState.discoveredCluesCount + 1 });
             } else if (type === DiscoveryType.POI) {
-                HudStore.patch({ poisFoundCount: hudState.poisFoundCount + 1 });
+                HudStore.patch({ discoveredPoisCount: hudState.discoveredPoisCount + 1 });
             } else if (type === DiscoveryType.COLLECTIBLE) {
-                HudStore.patch({ collectiblesFoundCount: hudState.collectiblesFoundCount + 1 });
+                HudStore.patch({ discoveredCollectiblesCount: hudState.discoveredCollectiblesCount + 1 });
             }
 
             if (currentProps.settings?.showDiscoveryPopups !== false) {
@@ -717,10 +676,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             const currentProps = latestStateRef.current.props;
             if (currentProps.onSaveStats) currentProps.onSaveStats(newStats);
             const sb = refs.stateRef.current.player.statsBuffer;
-            sb[PlayerStatID.HP] = newStats.maxHp;
-            sb[PlayerStatID.MAX_HP] = newStats.maxHp;
-            sb[PlayerStatID.STAMINA] = newStats.maxStamina;
-            sb[PlayerStatID.MAX_STAMINA] = newStats.maxStamina;
+            sb[StatID.HP] = newStats.maxHp;
+            sb[StatID.MAX_HP] = newStats.maxHp;
+            sb[StatID.STAMINA] = newStats.maxStamina;
+            sb[StatID.MAX_STAMINA] = newStats.maxStamina;
             refs.stateRef.current.sectorState = { ...refs.stateRef.current.sectorState, ...newSectorState };
             closeModal();
         },
@@ -735,14 +694,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             refs.SectorBuildContextRef.current?.spawnZombie(type, pos);
         },
         onAction,
-        gainXp
-    }), [closeModal, gainXp, onAction, refs, setBubble, updateUiState]);
+        rewardXP
+    }), [closeModal, rewardXP, onAction, refs, setBubble, updateUiState]);
 
     const handleUIEvent = useCallback((type: UIEventType, p1: any, p2: number) => {
         switch (type) {
             case UIEventType.BOSS_SPAWN: {
-                const bossType = p1 === 1 ? 'BOSS' : 'BOSS';
                 const sectorData = props.currentSectorData || SectorSystem.getSector(props.gameState.currentSector || 0);
+                const defaultBoss = sectorData?.bossId !== undefined ? sectorData.bossId : (props.gameState.currentSector || 0);
+                const bossType = (p1 !== BossID.NONE && p1 !== undefined) ? p1 : defaultBoss;
                 const pos = sectorData?.bossSpawn || _spawnPosScratch.set(0, 0, 0);
 
                 const boss = refs.SectorBuildContextRef.current?.spawnBoss(bossType, pos);
@@ -892,7 +852,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         getSectorStats,
         getMergedSessionStats: () => {
             const sessionStats = getSectorStats(false, false);
-            return aggregateStats(latestStateRef.current.props.gameState.stats, sessionStats, false, false, latestStateRef.current.props.gameState.currentSector, 0);
+            return aggregateStats(latestStateRef.current.props.gameState.stats, sessionStats, false, false, latestStateRef.current.props.gameState.currentSector);
         },
         triggerInput: (input: string | InputAction) => {
             const action = typeof input === 'string' ? INPUT_KEY_MAP[input] : input;
@@ -986,7 +946,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         */
 
         engine.onUpdateContext = session;
-        if (props.gameState.debugMode) (window as any).gameSession = session;
+        if (props.gameState.settings.debugMode) (window as any).gameSession = session;
 
         const initSector = async () => {
             const ctx: SetupContext = {
@@ -1011,6 +971,22 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     setBubbleTailPosition: (val: any) => updateUiState({ bubbleTailPosition: val }),
                     setCurrentLine: (val: any) => {
                         updateUiState({ currentLine: val });
+
+                        const hData = HudStore.getState();
+
+                        if (val) {
+                            hData.cinematicActive = true;
+                            hData.dialogueActive = true;
+                            hData.dialogueSpeaker = val.speaker !== undefined ? val.speaker : '';
+                            hData.dialogueText = val.text || '';
+                        } else {
+                            // Om val är null städar vi bort dialogen
+                            hData.dialogueActive = false;
+                            hData.dialogueSpeaker = '';
+                            hData.dialogueText = '';
+                        }
+
+                        HudStore.update(hData);
                     },
                     setCinematicActive: (val: boolean) => {
                         updateUiState({ cinematicActive: val });
@@ -1065,14 +1041,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                             : new THREE.Vector3(sectorData.playerSpawn.x || 0, 0, sectorData?.playerSpawn?.z || 0);
                         refs.SectorBuildContextRef.current?.spawnZombie(forcedType as EnemyType, forcedPos || origin);
                     },
-                    concludeSector,
-                    gainXp,
-                    gainSp,
-                    gainScrap,
+                    endSector,
+                    rewardXP,
+                    rewardSP,
+                    rewardScrap,
                     onSectorLoaded: props.onSectorLoaded,
                     collectedCluesRef: refs.collectedCluesRef,
                     setInteraction: (interaction: any) => {
-                        const s = refs.stateRef.current;
+                        const state = refs.stateRef.current;
+                        const s = state.triggers;
                         if (interaction) {
                             s.interaction.active = true;
                             s.interaction.targetId = interaction.id;
@@ -1080,12 +1057,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                             s.interaction.subType = interaction.subType || InteractionSubType.NONE;
                             s.interaction.label = interaction.label;
                             s.interaction.promptId = interaction.promptId || InteractionPromptId.INTERACT;
-                            if (interaction.position) s.interactionTargetPos.copy(interaction.position);
-                            s.hasInteractionTarget = true;
+                            if (interaction.position) state.interactionTargetPos.copy(interaction.position);
+                            state.hasInteractionTarget = true;
                         } else {
                             s.interaction.active = false;
                             s.interaction.promptId = InteractionPromptId.NONE;
-                            s.hasInteractionTarget = false;
+                            state.hasInteractionTarget = false;
                         }
                     },
                     onBossKilled: (id: number) => {
@@ -1093,7 +1070,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         const pProps = latestStateRef.current.props;
                         const sectorData = pProps.currentSectorData || SectorSystem.getSector(pProps.currentSector || 0);
                         if (sectorData?.ambientLoop) audioEngine.playMusic(sectorData.ambientLoop);
-                        gainSp(2);
+                        rewardSP(2);
 
                         // Current family member set to rescued
                         const currentFamilyMember = refs.familyMemberRef.current;
@@ -1125,7 +1102,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             refs,
             propsRef: refs.propsRef,
             callbacks: {
-                concludeSector,
+                endSector,
                 spawnParticle,
                 spawnDecal,
                 showDamageText,
@@ -1147,19 +1124,20 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000, refs.stateRef.current?.simTime || 0);
                 },
                 setInteraction: (interaction: any) => {
-                    const s = refs.stateRef.current.triggers;
+                    const state = refs.stateRef.current;
+                    const s = state.triggers;
                     if (interaction) {
                         s.interaction.active = true;
                         s.interaction.targetId = interaction.id;
                         s.interaction.type = interaction.type;
                         s.interaction.label = interaction.label;
                         s.interaction.promptId = interaction.promptId || InteractionPromptId.INTERACT;
-                        if (interaction.position) s.interactionTargetPos.copy(interaction.position);
-                        s.hasInteractionTarget = true;
+                        if (interaction.position) state.interactionTargetPos.copy(interaction.position);
+                        state.hasInteractionTarget = true;
                     } else {
                         s.interaction.active = false;
                         s.interaction.promptId = InteractionPromptId.NONE;
-                        s.hasInteractionTarget = false;
+                        state.hasInteractionTarget = false;
                     }
                 },
                 setOverlay: (type: number | null) => props.onInteractionStateChange?.(type),
@@ -1173,9 +1151,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     refs.cameraOverrideRef.current = params;
                 },
                 makeNoise: (pos: any, type: any, radius?: number) => session.makeNoise(pos, type, radius || 10),
-                gainXp,
-                gainSp,
-                gainScrap
+                rewardXP,
+                rewardSP,
+                rewardScrap
             }
         });
 

@@ -471,7 +471,7 @@ export const Generators = {
     walker_groan: (ctx: AudioContext) => createMoan(ctx, 'sawtooth', 60, 40, 1.5),
     runner_scream: (ctx: AudioContext) => createScreen(ctx, 400, 800, 300, 0.6),
     tank_roar: (ctx: AudioContext) => createRoar(ctx, 80, 200, 2.0),
-    bomber_beep: (ctx: AudioContext) => createSweep(ctx, 'sine', 800, 1200, 0.1, 0.1),
+    bloater_beep: (ctx: AudioContext) => createSweep(ctx, 'sine', 800, 1200, 0.1, 0.1),
 
     // --- DASH & UTILITY ---
     dash: (ctx: AudioContext) => {
@@ -1032,7 +1032,7 @@ export function registerSoundGenerators() {
     map(SoundID.ZOMBIE_GROWL_WALKER, Generators.walker_groan);
     map(SoundID.ZOMBIE_GROWL_RUNNER, Generators.runner_scream);
     map(SoundID.ZOMBIE_GROWL_TANK, Generators.tank_roar);
-    map(SoundID.ZOMBIE_GROWL_BOMBER, Generators.bomber_beep);
+    map(SoundID.ZOMBIE_GROWL_BLOATER, Generators.bloater_beep);
 
     // Ambients
     map(SoundID.AMBIENT_WIND, Generators.ambient_wind);

@@ -50,7 +50,6 @@ export const en = {
         sector_cleared: "SECTOR CLEARED",
         threat_neutralized: "THREAT NEUTRALIZED",
         zombies_neutralized: "ZOMBIES NEUTRALIZED",
-        target_extracted: "TARGET EXTRACTED",
         missing: "MISSING",
         found: "FOUND",
         locked: "LOCKED",
@@ -186,14 +185,15 @@ export const en = {
             walker_exterminator: { title: "Walker Exterminator", desc: "Kill {target} Walkers specifically." },
             knee_capper: { title: "Knee Capper", desc: "Dismember {target} enemy limbs." },
             tank_buster: { title: "Tank Buster", desc: "Defeat {target} heavy armored enemies." },
+            bloater_gore: { title: "Bloater Gore", desc: "Neutralize {target} Bloaters specifically." },
             boss_slayer: { title: "Boss Slayer", desc: "Defeat {target} Sector Bosses." },
             gibber: { title: "Gibber", desc: "Explode {target} enemies into pieces." },
             pyromaniac: { title: "Pyromaniac", desc: "Ignite {target} enemies with fire." },
             shock_therapy: { title: "Shock Therapy", desc: "Electrocute {target} enemies." },
             demolition_expert: { title: "Demolition Expert", desc: "Kill {target} enemies with explosives." },
             brawler: { title: "Brawler", desc: "Kill {target} enemies with melee attacks." },
-            sharpshooter: { title: "Sharpshooter", desc: "Kill {target} enemies with long-range shots." },
-            survivor: { title: "Survivor", desc: "Survive for {target} minutes in a single sector." },
+            sharpshooter: { title: "Sharpshooter", desc: "Kill {target} enemies with long-range shots (25 meters)." },
+            survivor: { title: "Survivor", desc: "Survive for a total of {target} minutes across all sectors." },
             veteran: { title: "Veteran", desc: "Complete {target} sectors successfully." },
             untouchable: { title: "Untouchable", desc: "Complete a sector taking less than {target} damage." }
         },
@@ -496,9 +496,10 @@ export const en = {
         explorer: { title: "Explorer", desc: "Discover {target} unique locations" },
         treasure_hunter: { title: "Treasure Hunter", desc: "Open {target} supply chests" },
         scavenger: { title: "Scavenger", desc: "Gather {target} consumables" },
-        zombie_hunter: { title: "Zombie Hunter", desc: "Eliminate {target} infected" },
+        zombie_hunter: { title: "Zombie Hunter", desc: "Eliminate {target} zombies" },
         walker_exterminator: { title: "Walker Exterminator", desc: "Eliminate {target} Walkers" },
         knee_capper: { title: "Knee Capper", desc: "Eliminate {target} Runners" },
+        bloater_gore: { title: "Bloater Gore", desc: "Eliminate {target} Bloaters" },
         tank_buster: { title: "Tank Buster", desc: "Eliminate {target} heavy Tanks" },
         boss_slayer: { title: "Boss Slayer", desc: "Eliminate {target} legendary Bosses" },
         gibber: { title: "Gibber", desc: "Eliminate {target} enemies by blowing them apart" },
@@ -506,7 +507,7 @@ export const en = {
         shock_therapy: { title: "Shock Therapy", desc: "Eliminate {target} enemies with electricity" },
         demolition_expert: { title: "Demolition Expert", desc: "Eliminate {target} enemies with explosions" },
         brawler: { title: "Brawler", desc: "Eliminate {target} enemies with melee or rushing" },
-        sharpshooter: { title: "Sharpshooter", desc: "Eliminate {target} enemies from long range" },
+        sharpshooter: { title: "Sharpshooter", desc: "Eliminate {target} enemies from long range (X meters)" },
         survivor: { title: "Survivor", desc: "Survive for {target} days in the wasteland" },
         veteran: { title: "Veteran", desc: "Reach Player Level {target}" },
         untouchable: { title: "Untouchable", desc: "Achieve a killstreak of {target}" }
@@ -571,8 +572,8 @@ export const en = {
                 name: "Tank",
                 story: "Heavily armored juggernaut. Absorbs significant small-arms fire. Explosives recommended."
             },
-            BOMBER: {
-                name: "Bomber",
+            BLOATER: {
+                name: "Bloater",
                 story: "Unstable biological payload. Explodes on proximity. Keep safe distance."
             }
         },
@@ -869,12 +870,7 @@ export const en = {
             "1": { reaction: "Blood stains! Are they hurt?!" },
             "2": { reaction: "It's chaos! They must be terrified." },
             "3": { reaction: "The tracks continues in this direction." },
-            "4": { reaction: "The tracks disappear... they must be here somewhere." },
-            "5": { reaction: "Hmm... The tunnel leading to the train station is blocked by a crashed bus." },
-            "6": { reaction: "What an explosion! What the HELL was that?! It came from the trainyard!" },
-            "7": { reaction: "Let's clear the tunnel by blowing up that fucking bus up!?" },
-            "8": { reaction: "There we go - the tunnel has been cleared!" },
-            "9": { reaction: "Fuck! The explosion attracted zombies!" }
+            "4": { reaction: "The tracks disappear... they must be here somewhere." }
         },
         "1": {
             "0": { reaction: "Loke said the others followed these rails. Let's see where it leads us..." },
@@ -889,6 +885,19 @@ export const en = {
         },
         "3": {
             "0": { reaction: "The metal is groaning in the wind. Or is that the 'Titan' Nathalie mentioned?" }
+        }
+    },
+    sector_events: {
+        "0": {
+            "0": { reaction: "Hmm... The tunnel leading to the train station is blocked by a crashed bus." },
+            "1": { reaction: "What an explosion! What the HELL was that?! It came from the trainyard!" },
+            "2": { reaction: "Let's clear the tunnel by blowing up that fucking bus up!?" },
+            "3": { reaction: "There we go - the tunnel has been cleared!" },
+            "4": { reaction: "Fuck! The explosion attracted zombies!" }
+        },
+        "2": {
+            "1": { reaction: "Zombies inside the compound..." },
+            "2": { reaction: "The area is clear..." }
         }
     },
     pois: {
@@ -932,13 +941,13 @@ export const en = {
         "1": {
             "0": {
                 title: "Abandoned Campfire",
-                description: "Someone was here recently. The embers are still warm. They must have left in a hurry.",
+                description: "Someone was here recently. The embers are still warm. The people must have left in a hurry.",
                 reaction: "A campfire. Someone must have been here recently. Do you think it's them?"
             },
             "1": {
-                title: "Blocked Tunnel",
-                description: "The tunnel that connects the mountain. It's completely sealed with rubble and debris.",
-                reaction: "The tunnel is blocked. Let's head another direction."
+                title: "Blocked Train Tunnel",
+                description: "The train tunnel leads through the mountain, but it's completely sealed with rubble and debris.",
+                reaction: "The train tunnel is blocked. Let's head another direction."
             },
             "2": {
                 title: "Mountain Cave Entrance",
@@ -947,8 +956,9 @@ export const en = {
             },
             "3": {
                 title: "The Mountain Vault",
-                description: "An old Cold War shelter. The massive steel doors are closed tight. My youngest son is in there.",
-                reaction: "These huge doors must lead to the shelter. Let's hope they're inside!"
+                description: "An old Cold War shelter. The massive steel doors are closed tight.",
+                reaction: "The huge steel doors must lead to the shelter?! Let's hope the others are inside!"
+
             }
         },
         "2": {
@@ -1092,6 +1102,5 @@ export const en = {
         "3_24": "(Whispering in radio) /Ready. COME IN./",
         "3_25": "(Whispering) /1... 2... 3, run!/",
         "3_26": "COME GET SOME, YOU BASTARD!"
-    }
-
+    },
 };

@@ -801,13 +801,14 @@ export const Sector4: SectorDef = {
                 events.makeNoise(_busOriginalPos.clone(), NoiseType.OTHER, 100);
             }
 
-            // Clear bus
+            // (Re)move the bus object
             const _busObj = (ctx as any).busObject as THREE.Object3D | null;
-
             if (_busObj) {
                 _busObj.position.set(0, -1000, 0);
+                //_busObj.updateMatrixWorld(true);
             }
 
+            // (Re)move the bus object
             const _obsArray = ctx.obstacles;
             if (_obsArray) {
                 for (let i = 0; i < _obsArray.length; i++) {
@@ -818,23 +819,23 @@ export const Sector4: SectorDef = {
                         if (o.mesh) {
                             o.mesh.position.set(99999, -1000, 99999);
                         }
-                    _obsArray[i] = _obsArray[_obsArray.length - 1];
-                    _obsArray.pop();
-                    break;
+                        _obsArray[i] = _obsArray[_obsArray.length - 1];
+                        _obsArray.pop();
+                        break;
                     }
                 }
             }
 
-            // Activate Rubble
+            // Bus rubble  (actual explosion)
             const rMesh = (ctx as any).busRubble;
             if (rMesh) {
-                // sectorState.busRubbleActive = true; // Not strictly needed if we just check visibility
-                rMesh.position.set(0, 0, 0); // [VINTERDÖD FIX] Snap to origin so absolute instance coordinates work
+                rMesh.position.set(0, 0, 0);
                 rMesh.visible = true;
                 rMesh.userData.active = true;
                 if (rMesh.userData.hasLanded) rMesh.userData.hasLanded.fill(0);
 
                 const data = rMesh.userData;
+
                 for (let i = 0; i < rMesh.count; i++) {
                     const ix = i * 3;
                     const arcAngle = Math.random() * Math.PI * 2;
@@ -865,11 +866,12 @@ export const Sector4: SectorDef = {
                 // Activate Tires
                 const tires = (ctx as any).busTires;
                 if (tires) {
-                    tires.position.set(0, 0, 0); // [VINTERDÖD FIX] Snap to origin
+                    tires.position.set(0, 0, 0);
                     tires.visible = true;
                     tires.userData.active = true;
                     const tData = tires.userData;
                     tData.hasLanded.fill(0);
+
                     for (let i = 0; i < 4; i++) {
                         const ix = i * 3;
                         tData.positions[ix] = EXPLODING_BUS_POS.x + (Math.random() - 0.5) * 4;

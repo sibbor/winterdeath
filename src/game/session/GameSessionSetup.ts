@@ -23,7 +23,7 @@ import { AssetLoader } from '../../utils/assets/AssetLoader';
 import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, BOSSES, PLAYER, FamilyMemberID, INITIAL_ENEMY_POOL, MAX_ENTITIES } from '../../content/constants';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { SubEffectType } from '../../systems/EffectManager';
-import { PlayerStatID, PlayerStatusFlags } from '../../types/CareerStats';
+import { StatID, PlayerStatusFlags } from '../../types/CareerStats';
 import { PlayerDeathState, DamageID, DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { StatusEffectID } from '../../types/StatusEffects';
 import { SoundID, ToneType, MusicID } from '../../utils/audio/AudioTypes';
@@ -44,6 +44,7 @@ import { DeathSystem } from '../../systems/DeathSystem';
 import { DataResolver } from '../../core/data/DataResolver';
 import { HudStore } from '../../store/HudStore';
 import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
+import { EnemyWaveSystem } from '../../systems/EnemyWaveSystem';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { ChallengeSystem } from '../../systems/ChallengeSystem';
 import { HudSystem } from '../../systems/HudSystem';
@@ -90,7 +91,7 @@ export interface SetupContext {
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
         showDamageText: (x: number, y: number, z: number, text: string, color?: number) => void;
         spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => void;
-        concludeSector: (isExtraction: boolean) => void;
+        endSector: (isExtraction: boolean) => void;
         onSectorLoaded?: () => void;
         onTrigger: (type: TriggerType, duration: number) => void;
         onBossKilled: (id: number) => void;
@@ -101,9 +102,9 @@ export interface SetupContext {
         collectedCluesRef: any;
 
         onDiscovery?: (type: DiscoveryType, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
-        gainXp: (amount: number) => void;
-        gainSp: (amount: number) => void;
-        gainScrap: (amount: number) => void;
+        rewardXP: (amount: number) => void;
+        rewardSP: (amount: number) => void;
+        rewardScrap: (amount: number) => void;
     }
 }
 
@@ -169,7 +170,7 @@ export class GameSessionSetup {
 
             const triggerSystem = new TriggerSystem(MAX_ENTITIES.TRIGGERS);
             session.triggerSystem = triggerSystem;
-            
+
             const worldStreamer = new WorldStreamer();
             session.worldStreamer = worldStreamer;
 
@@ -439,15 +440,7 @@ export class GameSessionSetup {
                 state.enemies.pool.push(boss);
                 state.enemies.bossSpawned = true;
 
-                const idStr = String(bossId);
-                let seen = false;
-                for (let j = 0; j < props.gameState.stats.discoveredBosses.length; j++) {
-                    if (props.gameState.stats.discoveredBosses[j] === bossId) {
-                        seen = true;
-                        break;
-                    }
-                }
-
+                const seen = props.gameState.stats.discoveredBosses[bossId] === 1;
                 if (!seen && callbacks.onDiscovery) {
                     callbacks.onDiscovery(DiscoveryType.BOSS as any, bossId as any, 'ui.discovered_boss', DataResolver.getBossName(bossId));
                 }
@@ -457,7 +450,7 @@ export class GameSessionSetup {
         return {
             scene: engine.scene, engine, obstacles: state.world.obstacles, chests: state.world.chests,
             worldStreamer: ctx.session.worldStreamer,
-            dynamicLights, burningObjects, rng, mapItems, debugMode: props.gameState.debugMode,
+            dynamicLights, burningObjects, rng, mapItems, debugMode: props.gameState.settings.debugMode,
             interactables: [], triggers: [], sectorId: props.gameState.currentSector, smokeEmitters: [],
             sectorState: state.sectorState, state: state, activeFamilyMembers: ctx.refs.activeFamilyMembers.current, yield: yielder,
             textures, spawnZombie: realSpawnZombie, spawnHorde, spawnBoss, collectibles: [],
@@ -505,9 +498,9 @@ export class GameSessionSetup {
                 }
                 return null;
             },
-            gainXp: (amount: number) => callbacks.gainXp(amount),
-            gainSp: (amount: number) => callbacks.gainSp(amount),
-            gainScrap: (amount: number) => callbacks.gainScrap(amount),
+            rewardXP: (amount: number) => callbacks.rewardXP(amount),
+            rewardSP: (amount: number) => callbacks.rewardSP(amount),
+            rewardScrap: (amount: number) => callbacks.rewardScrap(amount),
             onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
                 const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
                 if (statsSystem) {
@@ -516,30 +509,20 @@ export class GameSessionSetup {
             },
             onDiscovery: (type: DiscoveryType, id: string, titleKey: string, detailsKey: string, payload?: any) => {
                 // O(1) Optimization: Avoid React overhead if already found in this session or prior
-                const sets = state.discovery.discoverySets;
-                if (!sets) return;
+                const careerStats = state.careerStats;
+                if (!careerStats) return;
 
                 const isRespawnable = payload?.respawnable || false;
-                const stats = state.sessionStats;
                 let alreadyFound = false;
 
                 // Replaced .some() and .includes() with Zero-GC for-loops
                 switch (type) {
                     case DiscoveryType.CLUE: {
                         const clueSmi = DataResolver.resolveClueID(id);
-                        if (clueSmi !== undefined) {
-                            alreadyFound = sets.discoveredClues.has(clueSmi);
-                            if (!alreadyFound) {
-                                if (!isRespawnable) sets.discoveredClues.add(clueSmi);
-
-                                let foundClue = false;
-                                for (let i = 0; i < stats.discoveredClues.length; i++) {
-                                    const c = stats.discoveredClues[i];
-                                    if ((typeof c === 'string' ? c : c.id) === id) { foundClue = true; break; }
-                                }
-                                if (!isRespawnable && !foundClue) {
-                                    stats.discoveredClues.push(id as string);
-                                }
+                        if (clueSmi !== undefined && careerStats.discoveredClues) {
+                            alreadyFound = careerStats.discoveredClues[clueSmi] === 1;
+                            if (!alreadyFound && !isRespawnable) {
+                                careerStats.discoveredClues[clueSmi] = 1;
                             }
                         }
                         break;
@@ -547,18 +530,10 @@ export class GameSessionSetup {
 
                     case DiscoveryType.POI: {
                         const poiSmi = DataResolver.resolvePoiID(id);
-                        if (poiSmi !== undefined) {
-                            alreadyFound = sets.discoveredPois.has(poiSmi);
-                            if (!alreadyFound) {
-                                if (!isRespawnable) sets.discoveredPois.add(poiSmi);
-
-                                let foundPOI = false;
-                                for (let i = 0; i < stats.discoveredPois.length; i++) {
-                                    if (stats.discoveredPois[i] === id) { foundPOI = true; break; }
-                                }
-                                if (!isRespawnable && !foundPOI) {
-                                    stats.discoveredPois.push(id);
-                                }
+                        if (poiSmi !== undefined && careerStats.discoveredPois) {
+                            alreadyFound = careerStats.discoveredPois[poiSmi] === 1;
+                            if (!alreadyFound && !isRespawnable) {
+                                careerStats.discoveredPois[poiSmi] = 1;
                             }
                         }
                         break;
@@ -566,18 +541,10 @@ export class GameSessionSetup {
 
                     case DiscoveryType.COLLECTIBLE: {
                         const colSmi = DataResolver.resolveCollectibleID(id);
-                        if (colSmi !== undefined) {
-                            alreadyFound = sets.discoveredCollectibles.has(colSmi);
-                            if (!alreadyFound) {
-                                if (!isRespawnable) sets.discoveredCollectibles.add(colSmi);
-
-                                let foundCol = false;
-                                for (let i = 0; i < stats.discoveredCollectibles.length; i++) {
-                                    if (stats.discoveredCollectibles[i] === id) { foundCol = true; break; }
-                                }
-                                if (!isRespawnable && !foundCol) {
-                                    stats.discoveredCollectibles.push(id);
-                                }
+                        if (colSmi !== undefined && careerStats.discoveredCollectibles) {
+                            alreadyFound = careerStats.discoveredCollectibles[colSmi] === 1;
+                            if (!alreadyFound && !isRespawnable) {
+                                careerStats.discoveredCollectibles[colSmi] = 1;
                             }
                         }
                         break;
@@ -594,52 +561,61 @@ export class GameSessionSetup {
                     const awardsSp = type === DiscoveryType.CLUE || type === DiscoveryType.POI || type === DiscoveryType.COLLECTIBLE;
                     if (awardsSp && !alreadyFound && !isRespawnable) {
                         // Update live DOD buffer and telemetry via unified callback
-                        callbacks.gainSp(1);
+                        callbacks.rewardSP(1);
 
                         // Authoritative Sector-Specific Recalculation (Immune to double-registration!)
                         const currentSector = sectorCtx.sectorId;
 
                         if (type === DiscoveryType.CLUE) {
                             let cCount = 0;
-                            if (state.discovery.discoverySets?.discoveredClues) {
-                                for (const cid of state.discovery.discoverySets.discoveredClues) {
-                                    const resolved = DataResolver.resolveClueID(cid);
-                                    if (resolved !== undefined && CLUES[resolved]?.sector === currentSector) cCount++;
+                            const clues = careerStats.discoveredClues;
+                            if (clues) {
+                                for (let i = 0; i < clues.length; i++) {
+                                    if (clues[i] === 1) {
+                                        const resolved = DataResolver.resolveClueID(i);
+                                        if (resolved !== undefined && CLUES[resolved]?.sector === currentSector) cCount++;
+                                    }
                                 }
                             }
                             const thisClueSmi = DataResolver.resolveClueID(id);
-                            if (thisClueSmi !== undefined && (!state.discovery.discoverySets?.discoveredClues || !state.discovery.discoverySets.discoveredClues.has(thisClueSmi))) {
+                            if (thisClueSmi !== undefined && (!clues || clues[thisClueSmi] !== 1)) {
                                 if (CLUES[thisClueSmi]?.sector === currentSector) cCount++;
                             }
-                            HudStore.patch({ cluesFoundCount: cCount });
+                            HudStore.patch({ discoveredCluesCount: cCount });
 
                         } else if (type === DiscoveryType.POI) {
                             let poiCount = 0;
-                            if (state.discovery.discoverySets?.discoveredPois) {
-                                for (const pid of state.discovery.discoverySets.discoveredPois) {
-                                    const resolved = DataResolver.resolvePoiID(pid);
-                                    if (resolved !== undefined && POIS[resolved]?.sector === currentSector) poiCount++;
+                            const pois = careerStats.discoveredPois;
+                            if (pois) {
+                                for (let i = 0; i < pois.length; i++) {
+                                    if (pois[i] === 1) {
+                                        const resolved = DataResolver.resolvePoiID(i);
+                                        if (resolved !== undefined && POIS[resolved]?.sector === currentSector) poiCount++;
+                                    }
                                 }
                             }
                             const thisPoiSmi = DataResolver.resolvePoiID(id);
-                            if (thisPoiSmi !== undefined && (!state.discovery.discoverySets?.discoveredPois || !state.discovery.discoverySets.discoveredPois.has(thisPoiSmi))) {
+                            if (thisPoiSmi !== undefined && (!pois || pois[thisPoiSmi] !== 1)) {
                                 if (POIS[thisPoiSmi]?.sector === currentSector) poiCount++;
                             }
-                            HudStore.patch({ poisFoundCount: poiCount });
+                            HudStore.patch({ discoveredPoisCount: poiCount });
 
                         } else if (type === DiscoveryType.COLLECTIBLE) {
                             let colCount = 0;
-                            if (state.discovery.discoverySets?.discoveredCollectibles) {
-                                for (const colid of state.discovery.discoverySets.discoveredCollectibles) {
-                                    const resolved = DataResolver.resolveCollectibleID(colid);
-                                    if (resolved !== undefined && COLLECTIBLES[resolved]?.sector === currentSector) colCount++;
+                            const cols = careerStats.discoveredCollectibles;
+                            if (cols) {
+                                for (let i = 0; i < cols.length; i++) {
+                                    if (cols[i] === 1) {
+                                        const resolved = DataResolver.resolveCollectibleID(i);
+                                        if (resolved !== undefined && COLLECTIBLES[resolved]?.sector === currentSector) colCount++;
+                                    }
                                 }
                             }
                             const thisColSmi = DataResolver.resolveCollectibleID(id);
-                            if (thisColSmi !== undefined && (!state.discovery.discoverySets?.discoveredCollectibles || !state.discovery.discoverySets.discoveredCollectibles.has(thisColSmi))) {
+                            if (thisColSmi !== undefined && (!cols || cols[thisColSmi] !== 1)) {
                                 if (COLLECTIBLES[thisColSmi]?.sector === currentSector) colCount++;
                             }
-                            HudStore.patch({ collectiblesFoundCount: colCount });
+                            HudStore.patch({ discoveredCollectiblesCount: colCount });
                         }
                     }
 
@@ -686,11 +662,11 @@ export class GameSessionSetup {
         state.world.mapItems = mapItems;
 
         const sb = state.player.statsBuffer;
-        sb[PlayerStatID.MAX_HP] = (sb[PlayerStatID.MAX_HP] <= 0) ? 100 : Math.max(100, sb[PlayerStatID.MAX_HP]);
-        sb[PlayerStatID.HP] = sb[PlayerStatID.MAX_HP];
-        sb[PlayerStatID.MAX_STAMINA] = (sb[PlayerStatID.MAX_STAMINA] <= 0) ? 100 : Math.max(100, sb[PlayerStatID.MAX_STAMINA]);
-        sb[PlayerStatID.STAMINA] = sb[PlayerStatID.MAX_STAMINA];
-        sb[PlayerStatID.SPEED] = (sb[PlayerStatID.SPEED] <= 0) ? PLAYER.BASE_SPEED : Math.max(10.0, sb[PlayerStatID.SPEED]);
+        sb[StatID.MAX_HP] = (sb[StatID.MAX_HP] <= 0) ? 100 : Math.max(100, sb[StatID.MAX_HP]);
+        sb[StatID.HP] = sb[StatID.MAX_HP];
+        sb[StatID.MAX_STAMINA] = (sb[StatID.MAX_STAMINA] <= 0) ? 100 : Math.max(100, sb[StatID.MAX_STAMINA]);
+        sb[StatID.STAMINA] = sb[StatID.MAX_STAMINA];
+        sb[StatID.SPEED] = (sb[StatID.SPEED] <= 0) ? PLAYER.BASE_SPEED : Math.max(10.0, sb[StatID.SPEED]);
 
         const activeEffects: any[] = [];
         scene.traverse((child) => {
@@ -737,7 +713,7 @@ export class GameSessionSetup {
         }
 
         // Developer override
-        if (props.gameState.debugMode && props.gameState.currentSector >= SectorID.MOUNTAIN_VAULT && rescuedIndices.length === 0) {
+        if (props.gameState.settings.debugMode && props.gameState.currentSector >= SectorID.MOUNTAIN_VAULT && rescuedIndices.length === 0) {
             for (let i = 0; i < props.gameState.currentSector; i++) {
                 let found = false;
                 for (let j = 0; j < rescuedIndices.length; j++) {
@@ -831,8 +807,8 @@ export class GameSessionSetup {
         session.addSystem(new DamageTrackerSystem());
         session.addSystem(new ChallengeSystem());
         session.addSystem(new DiscoverySystem());
-        session.addSystem(new ProjectileSystem());
         session.addSystem(new ParticleSystem());
+        session.addSystem(new EnemyWaveSystem());
 
         // --- ZERO-GC PARTICLE RENDERER ---
         const particleRenderer = new ParticleRenderer(engine.scene);
@@ -862,16 +838,17 @@ export class GameSessionSetup {
         engine.registerSystem(SystemID.ENEMY_MANAGER, EnemyManager);
         engine.registerSystem(SystemID.HUD, HudSystem);
 
-        session.addSystem(new PerkSystem(playerGroup, refs.activeFamilyMembers));
-        const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
+        const playerStatsSystem = new PlayerStatsSystem(playerGroup);
         session.addSystem(playerStatsSystem);
+        session.addSystem(new PerkSystem(playerGroup, refs.activeFamilyMembers));
+        session.addSystem(new ProjectileSystem());
         PerkFX.init(playerGroup);
 
         session.addSystem(new PlayerMovementSystem(playerGroup));
         session.addSystem(new VehicleMovementSystem(playerGroup));
         session.addSystem(new PlayerCombatSystem(playerGroup));
         session.addSystem(new InteractionSystem(
-            playerGroup, callbacks.concludeSector, sectorCtx.collectibles, refs.activeFamilyMembers, engine.scene,
+            playerGroup, callbacks.endSector, sectorCtx.collectibles, refs.activeFamilyMembers, engine.scene,
             (id, respawnable) => {
                 if (callbacks.onDiscovery) {
                     const col = DataResolver.getCollectibles()[id];
@@ -884,7 +861,7 @@ export class GameSessionSetup {
 
         session.addSystem(new EnemySystem({
             setBubble: callbacks.setBubble,
-            gainXp: callbacks.gainXp,
+            rewardXP: callbacks.rewardXP,
             t: callbacks.t,
             onBossKilled: (id: number) => {
                 let seen = false;
@@ -932,9 +909,9 @@ export class GameSessionSetup {
             spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => sectorCtx.spawnHorde(count, type, pos),
             setOverlay: ui.setOverlay,
             onAction: (action: any) => callbacks.onAction(action),
-            gainXp: (amount: number) => callbacks.gainXp(amount),
-            gainSp: (amount: number) => callbacks.gainSp(amount),
-            gainScrap: (amount: number) => callbacks.gainScrap(amount),
+            rewardXP: (amount: number) => callbacks.rewardXP(amount),
+            rewardSP: (amount: number) => callbacks.rewardSP(amount),
+            rewardScrap: (amount: number) => callbacks.rewardScrap(amount),
             onDiscovery: (type: any, id: string, titleKey: string, detailsKey: string, payload?: any) => {
                 // Bridge to the GameSessionSetup internal onDiscovery logic if needed, 
                 // or just call the props/callbacks version.
@@ -955,7 +932,7 @@ export class GameSessionSetup {
             }
         }));
 
-        session.addSystem(new LootSystem(playerGroup, engine.scene, { gainScrap: callbacks.gainScrap }));
+        session.addSystem(new LootSystem(playerGroup, engine.scene, { rewardScrap: callbacks.rewardScrap }));
 
         session.addSystem(new FamilySystem(playerGroup, refs.activeFamilyMembers, refs.cinematicRef, {
             setFoundMember: (id: FamilyMemberID) => ctx.ui.setFoundMember && ctx.ui.setFoundMember(id)
@@ -1051,12 +1028,13 @@ export class GameSessionSetup {
 
         // --- 1. RESET PLAYER STATE (DOD / Zero-GC) ---
         // --- STATUS & EFFECT RESET (Zero-GC Clean Slate) ---
+        engine.input.clearActions();
         state.combat.statusFlags = PlayerStatusFlags.NONE; // Reset all flags (Dead, Airborne, etc.)
         state.ui.hudVisible = true;
         refs.deathPhaseRef.current = DeathPhase.NONE;
         state.player.deathState = PlayerDeathState.ALIVE;
-        state.player.statsBuffer[PlayerStatID.HP] = state.player.statsBuffer[PlayerStatID.MAX_HP];
-        state.player.statsBuffer[PlayerStatID.STAMINA] = state.player.statsBuffer[PlayerStatID.MAX_STAMINA];
+        state.player.statsBuffer[StatID.HP] = state.player.statsBuffer[StatID.MAX_HP];
+        state.player.statsBuffer[StatID.STAMINA] = state.player.statsBuffer[StatID.MAX_STAMINA];
         state.combat.isReloading = false;
         state.triggers.isInteractionOpen = false;
         state.vehicle.active = false;
@@ -1100,7 +1078,6 @@ export class GameSessionSetup {
         state.player.killerType = DamageType.NONE;
         state.player.killerName = '';
         state.player.killerAttackName = '';
-        state.enemies.incomingDamageBuffer.fill(0);
 
         // Zero-out contiguous status arrays
         state.combat.activePassives.fill(0);
@@ -1121,13 +1098,10 @@ export class GameSessionSetup {
         state.triggers.isInteractionOpen = false;
         state.inputState.eDepressed = false;
         state.triggers.interaction.active = false;
-        state.discovery.active = false;
 
         // Empty pools:
         state.enemies.pool.length = 0;
         state.world.bloodDecals.length = 0;
-
-        // Purge ghost cells to prevent immediate collision conflicts with new spawns
 
         // Weapons:
         for (const key in state.combat.weaponAmmo) {
@@ -1245,7 +1219,7 @@ export class GameSessionSetup {
         }
 
         // --- 7. FIX THE UI ---
-        HudStore.patch({ isDead: false, hp: state.player.statsBuffer[PlayerStatID.MAX_HP] });
+        HudStore.patch({ isDead: false, hp: state.player.statsBuffer[StatID.MAX_HP] });
 
         setDeathPhase(DeathPhase.NONE);
     }
@@ -1283,8 +1257,8 @@ export class GameSessionSetup {
         state.world.bloodDecals.length = 0;
 
         state.combat.statusFlags &= ~PlayerStatusFlags.DEAD;
-        state.player.statsBuffer[PlayerStatID.HP] = state.player.statsBuffer[PlayerStatID.MAX_HP];
-        state.player.statsBuffer[PlayerStatID.STAMINA] = state.player.statsBuffer[PlayerStatID.MAX_STAMINA];
+        state.player.statsBuffer[StatID.HP] = state.player.statsBuffer[StatID.MAX_HP];
+        state.player.statsBuffer[StatID.STAMINA] = state.player.statsBuffer[StatID.MAX_STAMINA];
 
         // Reset simulation timers to prevent lockout
         state.simTime = 0;

@@ -288,12 +288,13 @@ export const MATERIALS = {
     grenade: new THREE.MeshStandardMaterial({ color: 0x3f663f, roughness: 0.6 }),
     molotov: new THREE.MeshStandardMaterial({ color: 0x331100, roughness: 0.3, emissive: 0x331100, emissiveIntensity: 0.2 }),
     flashbang: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, emissive: 0xffffff, emissiveIntensity: 0.2 }),
-    scrap: new THREE.MeshStandardMaterial({
-        color: 0xffaa00,
-        emissive: 0xffaa00,
-        emissiveIntensity: 0.8,
-        metalness: 0.8,
-        roughness: 0.2
+    flamethrower_flame: new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 1.0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: false, // Prevent SpotLight shadow depth-pass from culling additive flame particles
     }),
     arc_cannon_bolt: new THREE.LineBasicMaterial({
         color: 0x00ffff,
@@ -337,6 +338,7 @@ export const MATERIALS = {
         opacity: 1.0,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
+        depthTest: false, // Prevent SpotLight shadow depth-pass from culling additive flame particles
         userData: { isSharedAsset: true }
     }),
     camp_spark: new THREE.MeshBasicMaterial({ color: 0xffffff, userData: { isSharedAsset: true } }),
@@ -383,6 +385,15 @@ export const MATERIALS = {
         opacity: 0.3,
         side: THREE.DoubleSide,
         depthWrite: false
+    }),
+
+    // ---- LOOT ----
+    scrap: new THREE.MeshStandardMaterial({
+        color: 0xffaa00,
+        emissive: 0xffaa00,
+        emissiveIntensity: 0.8,
+        metalness: 0.8,
+        roughness: 0.2
     }),
 
     // Chests

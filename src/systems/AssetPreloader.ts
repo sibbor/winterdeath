@@ -72,7 +72,7 @@ const FX_GAS = [
     FXParticleType.BLOOD_SPLATTER, FXParticleType.BLACK_SMOKE, FXParticleType.DEBRIS_TRAIL
 ];
 const ALL_FX = [...FX_SOLID, ...FX_GAS];
-const DEAD_BODY_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, EnemyType.BOMBER];
+const DEAD_BODY_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, EnemyType.BLOATER];
 const TREE_TYPES = [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.OAK, VEGETATION_TYPE.BIRCH, VEGETATION_TYPE.DEAD_TREE];
 
 // Reusable dummy scene for compilation

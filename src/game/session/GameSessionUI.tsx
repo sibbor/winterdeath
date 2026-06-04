@@ -2,7 +2,7 @@ import React, { useCallback, memo } from 'react';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { GameSessionUiState } from './useGameSessionState';
 import TouchController from '../../components/ui/hud/TouchController';
-import CinematicBubble from '../../components/ui/hud/CinematicBubble';
+import CinematicDialogue from '../../components/ui/hud/CinematicDialogue';
 import GameUI from '../../components/ui/hud/GameUI';
 
 // Zero-GC: Static empty function to prevent allocation and VDOM thrashing on every render
@@ -98,7 +98,7 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
             {/* Mobile Controls Overlay */}
             {gameProps.isMobileDevice && gameProps.isGameRunning && !gameProps.isPaused && !uiState.bossIntroActive && (
                 <div className="absolute inset-0 pointer-events-none z-30">
-                    <TouchController 
+                    <TouchController
                         inputState={refs.engineRef.current?.input.state}
                         onPause={() => callbacks.onPauseToggle(true)}
                     />
@@ -115,7 +115,7 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
                 style={{ height: uiState.cinematicActive ? '12%' : '0%' }}
             />
 
-            <CinematicBubble
+            <CinematicDialogue
                 ref={refs.bubbleRef}
                 isMobileDevice={gameProps.isMobileDevice}
             />

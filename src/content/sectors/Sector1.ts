@@ -325,10 +325,10 @@ export const Sector1: SectorDef = {
         });
         await yieldIfBudgetExceeded();
 
-        await SectorBuilder.spawnPoi(ctx, PoiType.TRAIN_TUNNEL, LOCATIONS.POIS.TUNNEL.x, LOCATIONS.POIS.TUNNEL.z, 0, {
+        await SectorBuilder.spawnPoi(ctx, PoiType.TRAIN_TUNNEL, LOCATIONS.POIS.TRAIN_TUNNEL.x, LOCATIONS.POIS.TRAIN_TUNNEL.z, 0, {
             points: [
-                new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x, 0, LOCATIONS.POIS.TUNNEL.z),
-                new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x + 10, 0, LOCATIONS.POIS.TUNNEL.z)
+                new THREE.Vector3(LOCATIONS.POIS.TRAIN_TUNNEL.x, 0, LOCATIONS.POIS.TRAIN_TUNNEL.z),
+                new THREE.Vector3(LOCATIONS.POIS.TRAIN_TUNNEL.x + 10, 0, LOCATIONS.POIS.TRAIN_TUNNEL.z)
             ]
         });
         await yieldIfBudgetExceeded();
@@ -573,7 +573,7 @@ export const Sector1: SectorDef = {
                         const offZ = (Math.random() - 0.5) * 20;
                         let type = EnemyType.WALKER;
                         if (r.id === 6 && Math.random() > 0.8) type = EnemyType.TANK;
-                        if (r.id === 5 && Math.random() > 0.7) type = EnemyType.BOMBER;
+                        if (r.id === 5 && Math.random() > 0.7) type = EnemyType.BLOATER;
                         else if (Math.random() > 0.7) type = EnemyType.RUNNER;
 
                         _vS1.set(r.x + offX, 0, r.z + offZ);

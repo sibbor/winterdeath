@@ -11,7 +11,7 @@ import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { HudStore } from '../store/HudStore';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { FXParticleType, FXDecalType } from '../types/FXTypes';
-import { PlayerStatusFlags, PlayerStatID } from '../types/CareerStats';
+import { PlayerStatusFlags, StatID } from '../types/CareerStats';
 import { DeathPhase } from '../types/SessionTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -335,7 +335,7 @@ export class DeathSystem implements System {
                 _griefAnimState.isMoving = isWalking;
                 _griefAnimState.renderTime = state.renderTime;
                 _griefAnimState.simTime = state.simTime;
-                _griefAnimState.staminaRatio = state.player.statsBuffer[PlayerStatID.STAMINA] / Math.max(1, state.player.statsBuffer[PlayerStatID.MAX_STAMINA]);
+                _griefAnimState.staminaRatio = state.player.statsBuffer[StatID.STAMINA] / Math.max(1, state.player.statsBuffer[StatID.MAX_STAMINA]);
                 PlayerAnimator.update(body, _griefAnimState, renderTime, delta);
             }
         }

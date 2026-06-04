@@ -398,10 +398,12 @@ export class TriggerSystem implements System {
         }
     }
 
-    public getTriggerById(id: string | number): number {
+    public getTriggerById(id: string | number, type?: TriggerType): number {
         for (let i = 0; i < this.maxTriggers; i++) {
             if (this.activeFlags[i] === 1 && this.metadata[i].id === id) {
-                return i | 0;
+                if (type === undefined || this.triggerTypes[i] === type) {
+                    return i | 0;
+                }
             }
         }
         return -1;
@@ -531,6 +533,18 @@ export class TriggerSystem implements System {
                 const col = DataResolver.getCollectibles()[m.id as any];
                 const colSmi = col ? col.id : 0;
                 this.discoverySystem.handleDiscovery(session, DiscoveryType.COLLECTIBLE, m.id, colSmi);
+                break;
+            }
+
+            case TriggerType.SPEAK:
+            case TriggerType.THOUGHT: {
+                if (m.content) {
+                    const subType = type === TriggerType.SPEAK ? ChatBubbleSubtype.SPEAK : ChatBubbleSubtype.THOUGHT;
+                    const duration = CHAT_BUBBLE_DURATIONS[subType];
+                    const encodedP2 = duration | (subType << 16);
+                    const numericId = typeof m.id === 'number' ? m.id : DataResolver.getReactionSmi(String(m.id));
+                    UIEventRingBuffer.push(UIEventType.CHAT_BUBBLE, numericId, encodedP2, simTime);
+                }
                 break;
             }
         }

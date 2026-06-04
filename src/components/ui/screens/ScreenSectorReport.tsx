@@ -10,6 +10,7 @@ import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
 import { FormatUtils } from '../../../utils/ui/FormatUtils';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 import { SectorID } from '../../../game/session/SectorTypes';
+import { CHALLENGES, ChallengeCategory, ChallengeDef, ChallengeID } from '../../../content/ChallengeTypes';
 
 interface ScreenSectorReportProps {
     stats: SectorStats;
@@ -28,7 +29,7 @@ interface ScreenSectorReportProps {
  * Features a paged layout for better clarity and hierarchy.
  */
 const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerStats, deathDetails, onReturnCamp, onRestartSector, onRespawn, onNextSector, currentSector, isMobileDevice }) => {
-    const [activeTab, setActiveTab] = useState<0 | 1>(0);
+    const [activeTab, setActiveTab] = useState<0 | 1 | 2>(0);
 
     const isFailed = !!deathDetails;
 
@@ -79,7 +80,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
     const totalIncoming = StatsBridge.getSectorDamageTaken(stats);
     const totalOutgoing = StatsBridge.getSectorDamageDealt(stats);
 
-    const handleTabChange = React.useCallback((index: 0 | 1) => {
+    const handleTabChange = React.useCallback((index: 0 | 1 | 2) => {
         setActiveTab(index);
         UiSounds.playClick();
     }, []);
@@ -114,30 +115,33 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
 
     const discoveredSectorCollectibles = useMemo(() => {
         const found = StatsBridge.getDiscoveredCollectibles(playerStats);
-        const foundSet = new Set<string>(found);
+        const foundSet = new Set<number>();
+        for (let i = 0; i < found.length; i++) if (found[i] === 1) foundSet.add(i);
         let count = 0;
         for (let i = 0; i < sectorCollectibles.length; i++) {
-            if (foundSet.has(String(sectorCollectibles[i].id))) count++;
+            if (foundSet.has(sectorCollectibles[i].id)) count++;
         }
         return count;
     }, [playerStats, sectorCollectibles]);
 
     const discoveredSectorClues = useMemo(() => {
         const found = StatsBridge.getDiscoveredClues(playerStats);
-        const foundSet = new Set<string>(found.map((c: any) => String(typeof c === 'string' ? c : c.id)));
+        const foundSet = new Set<number>();
+        for (let i = 0; i < found.length; i++) if (found[i] === 1) foundSet.add(i);
         let count = 0;
         for (let i = 0; i < sectorClues.length; i++) {
-            if (foundSet.has(String(sectorClues[i].id))) count++;
+            if (foundSet.has(sectorClues[i].id)) count++;
         }
         return count;
     }, [playerStats, sectorClues]);
 
     const discoveredSectorPOIs = useMemo(() => {
         const found = StatsBridge.getDiscoveredPois(playerStats);
-        const foundSet = new Set<string>(found.map(String));
+        const foundSet = new Set<number>();
+        for (let i = 0; i < found.length; i++) if (found[i] === 1) foundSet.add(i);
         let count = 0;
         for (let i = 0; i < sectorPOIs.length; i++) {
-            if (foundSet.has(String(sectorPOIs[i].id))) count++;
+            if (foundSet.has(sectorPOIs[i].id)) count++;
         }
         return count;
     }, [playerStats, sectorPOIs]);
@@ -166,6 +170,11 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
                     label={t('ui.details')}
                     isActive={activeTab === 1}
                     onClick={() => handleTabChange(1)}
+                />
+                <TacticalTab
+                    label={t('challenges.title')}
+                    isActive={activeTab === 2}
+                    onClick={() => handleTabChange(2)}
                 />
             </div>
 
@@ -231,7 +240,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
                         </div>
                     </div>
                 </div>
-            ) : (
+            ) : activeTab === 1 ? (
                 /* PAGE 2: DETAILED COMBAT BREAKDOWN */
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-300 items-start">
                     <TacticalCard color={COLORS.RED} className="p-5">
@@ -339,6 +348,8 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
                         </div>
                     </TacticalCard>
                 </div>
+            ) : (
+                <ChallengesProgressPage stats={stats} playerStats={playerStats} isMobileDevice={isMobileDevice} />
             )}
         </ModalLayout>
     );
@@ -372,6 +383,142 @@ const LineItem = React.memo(({ title, val, isHeal = false, color = COLORS.BLUE }
         <span className={isHeal ? "text-green-400 font-mono" : "text-white font-mono"}>{Math.round(val)}</span>
     </TacticalRow>
 ));
+
+const CHALLENGE_CATEGORY_COLORS: Record<number, ColorPair> = {
+    [ChallengeCategory.WORLD]: COLORS.BLUE,
+    [ChallengeCategory.COMBAT]: COLORS.RED,
+    [ChallengeCategory.WEAPONS]: COLORS.YELLOW,
+    [ChallengeCategory.TACTICS]: COLORS.PURPLE,
+    [ChallengeCategory.PLAYER]: COLORS.GREEN,
+};
+
+const ChallengesProgressPage: React.FC<{
+    stats: SectorStats;
+    playerStats: CareerStats;
+    isMobileDevice?: boolean;
+}> = React.memo(({ stats, playerStats, isMobileDevice }) => {
+    const progressedChallenges = useMemo(() => {
+        const list: Array<{
+            def: ChallengeDef;
+            startVal: number;
+            currentVal: number;
+            added: number;
+            tier: number;
+            target: number;
+            prevTarget: number;
+            categoryColor: ColorPair;
+        }> = [];
+
+        for (let i = 0; i < ChallengeID.COUNT; i++) {
+            const def = CHALLENGES[i];
+            const startVal = stats.challengeStartValues ? stats.challengeStartValues[i] : 0;
+            const currentVal = StatsBridge.getChallengeValue(playerStats, i);
+            const added = currentVal - startVal;
+
+            if (added > 0.0001) {
+                const tier = StatsBridge.getChallengeTier(playerStats, i);
+                const nextTier = tier < 3 ? tier + 1 : 3;
+                const target = def.targets[nextTier - 1] || 1;
+                const prevTarget = tier > 0 ? def.targets[tier - 1] : 0;
+                const categoryColor = CHALLENGE_CATEGORY_COLORS[def.categoryId] || COLORS.GRAY;
+
+                list.push({ def, startVal, currentVal, added, tier, target, prevTarget, categoryColor });
+            }
+        }
+        return list;
+    }, [stats, playerStats]);
+
+    if (progressedChallenges.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-zinc-800 rounded bg-zinc-950/20 text-center animate-in fade-in duration-300">
+                <span className="text-zinc-500 font-mono text-xs uppercase tracking-widest">
+                    {t('challenges.no_progress') || 'NO CHALLENGE PROGRESS REGISTERED THIS SESSION'}
+                </span>
+            </div>
+        );
+    }
+
+    return (
+        <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-1 md:grid-cols-2 gap-6'} pb-12 animate-in fade-in duration-300`}>
+            {progressedChallenges.map(({ def, startVal, currentVal, added, tier, target, prevTarget, categoryColor }) => {
+                const nextTier = tier < 3 ? tier + 1 : 3;
+                const isMaxed = tier >= 3;
+
+                // Stacked progress calculations relative to current tier bracket
+                const range = target - prevTarget;
+                const startProgressPercent = Math.max(0, ((startVal - prevTarget) / range) * 100);
+                const currentProgressPercent = Math.min(100, ((currentVal - prevTarget) / range) * 100);
+                const sessionProgressPercent = Math.max(0, currentProgressPercent - startProgressPercent);
+
+                return (
+                    <TacticalCard
+                        key={def.id}
+                        showHover={true}
+                        color={categoryColor}
+                        className="p-4 bg-zinc-900/50 border-white/5 relative overflow-hidden"
+                    >
+                        <div className="flex justify-between items-start mb-2 relative z-10">
+                            <div className="flex flex-col">
+                                <h4 className="text-lg font-bold text-white uppercase tracking-tight">
+                                    {t(def.titleKey)}
+                                </h4>
+                                <p className="text-[11px] text-zinc-500 italic mt-1 leading-tight max-w-[85%]">
+                                    {t(def.descriptionKey).replace('{target}', target.toString())}
+                                </p>
+                            </div>
+
+                            <div className="flex flex-col items-end">
+                                <div className="flex gap-1">
+                                    {[1, 2, 3].map(i => (
+                                        <div
+                                            key={i}
+                                            className={`w-3 h-1.5 rounded-full ${i <= tier ? 'bg-yellow-500' : 'bg-zinc-800'}`}
+                                        />
+                                    ))}
+                                </div>
+                                <span className="text-[10px] font-black text-zinc-600 uppercase mt-1">
+                                    {isMaxed ? t('ui.challenge_mastered') : t('ui.challenge_tier', { tier: nextTier })}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="mt-4 space-y-1.5 relative z-10">
+                            <div className="flex justify-between text-[10px] font-mono">
+                                <div className="flex items-center gap-1 font-bold">
+                                    <span className="text-white">{Math.floor(startVal).toLocaleString()}</span>
+                                    <span className="text-yellow-500">+{Math.floor(added).toLocaleString()}</span>
+                                </div>
+                                <span className="text-zinc-400">{target.toLocaleString()}</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden flex">
+                                {isMaxed ? (
+                                    <div className="h-full w-full bg-yellow-500" />
+                                ) : (
+                                    <>
+                                        {/* Start Value Progress segment */}
+                                        {startProgressPercent > 0 && (
+                                            <div
+                                                style={{ width: `${startProgressPercent}%`, backgroundColor: categoryColor.str }}
+                                                className="h-full opacity-40"
+                                            />
+                                        )}
+                                        {/* Session Progress segment */}
+                                        {sessionProgressPercent > 0 && (
+                                            <div
+                                                style={{ width: `${sessionProgressPercent}%` }}
+                                                className="h-full bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)] animate-pulse"
+                                            />
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </TacticalCard>
+                );
+            })}
+        </div>
+    );
+});
 
 export default ScreenSectorReport;
 

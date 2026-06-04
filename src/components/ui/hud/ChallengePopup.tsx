@@ -3,7 +3,7 @@ import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
 import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
 import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
-import { GAME_CHALLENGES, ChallengeDef } from '../../../content/ChallengeTypes';
+import { CHALLENGES, ChallengeDef } from '../../../content/ChallengeTypes';
 import { DiscoveryType } from './HudTypes';
 import { HudStore } from '../../../store/HudStore';
 import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputManager';
@@ -52,7 +52,7 @@ const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog }) =
             // DECODE: (ChallengeID << 8) | NewTier
             const challengeId = p1 >> 8;
             const tier = p1 & 0xFF;
-            const challenge = GAME_CHALLENGES[challengeId];
+            const challenge = CHALLENGES[challengeId];
 
             if (challenge) {
                 setActiveChallenge({ def: challenge, tier, timestamp: Date.now() });

@@ -1,19 +1,20 @@
 import * as THREE from 'three';
 import { StatusEffectID } from '../content/perks';
 import { DamageID } from '../entities/player/CombatTypes';
+import { MAX_ENTITIES } from '../content/constants';
 
 /**
  * Player DOD & Zero-GC Refactor (Career Stats)
- * * This file defines the core Data-Oriented structures for the player's career profile.
+ * This file defines the core Data-Oriented structures for the player's career profile.
  * High-frequency stats are stored in contiguous Float32Arrays to ensure
  * L1/L2 cache locality and prevent V8 hidden-class deoptimizations.
  */
 
 /**
- * SMI-indexed IDs for the Player statsBuffer.
+ * SMI-indexed IDs for the statsBuffer.
  * Pre-allocated to ensure O(1) direct memory access.
  */
-export enum PlayerStatID {
+export enum StatID {
     HP = 0,
     MAX_HP = 1,
     STAMINA = 2,
@@ -80,6 +81,7 @@ export enum PlayerStatID {
     TOTAL_CHALLENGE_POINTS = 49,
     TOTAL_GIBBED = 50,
     TOTAL_UNIQUE_ENEMIES_HIT_BY_EXPLOSIVES = 51,
+    TOTAL_GIBBED_BY_REVOLVER_SHOTGUN = 52,
 
     // Buffer Size
     COUNT = 64
@@ -142,7 +144,7 @@ export enum StatWeaponIndex {
  */
 export enum TelemetrySourceOffset {
     ENEMY = 0,       // 0 - 15: EnemyType
-    BOSS = 16,      // 16 - 23: BossID
+    BOSS = 16,       // 16 - 23: BossID
     ENVIRONMENT = 24 // 24 - 63: DamageID
 }
 
@@ -158,7 +160,7 @@ export enum StatEnemyIndex {
     WALKER = 0,
     RUNNER = 1,
     TANK = 2,
-    BOMBER = 3,
+    BLOATER = 3,
     BOSS = 4,
     COUNT = 8 // Sized for future variants
 }
@@ -222,14 +224,17 @@ export interface CareerStats {
     effectMaxDurations: Float32Array;
     effectIntensities: Float32Array;
 
-    // --- WEAPON PERFORMANCE BUFFERS ---
+    // --- INCOMING DAMAGE BUFFER (Zero-GC / Flattened) ---
+    incomingDamageBuffer: Float64Array;
+
+    // --- OUTGOING PERFORMANCE BUFFERS ---
     // All indexed by StatWeaponIndex
-    weaponKills: Float64Array;
-    weaponDamageDealt: Float64Array;
-    weaponShotsFired: Float64Array;
-    weaponShotsHit: Float64Array;
-    weaponTimeActive: Float64Array;
-    weaponEngagementDistSq: Float64Array;
+    outgoingKillsBuffer: Float64Array;
+    outgoingDamageBuffer: Float64Array;
+    outgoingShotsFiredBuffer: Float64Array;
+    outgoingShotsHitBuffer: Float64Array;
+    outgoingTimeActiveBuffer: Float64Array;
+    outgoingEngagementDistSqBuffer: Float64Array;
 
     // --- PERK PERFORMANCE BUFFERS ---
     // All indexed by StatusEffectID
@@ -243,11 +248,11 @@ export interface CareerStats {
     enemyKills: Float64Array;
     deathsByEnemyType: Float64Array;
 
-    // --- INCOMING DAMAGE BUFFER (Zero-GC / Flattened) ---
-    incomingDamageBuffer: Float64Array;
+    mostUsedWeapon: DamageID;
+    totalEnemiesKilled: number;
 
     // --- SMI STATE ---
-    statusFlags: number;            // Bitmask (PlayerStatusFlags)
+    statusFlags: number; // Bitmask (PlayerStatusFlags)
     activePassives: StatusEffectID[];
     activeBuffs: StatusEffectID[];
     activeDebuffs: StatusEffectID[];
@@ -256,16 +261,13 @@ export interface CareerStats {
     sectorsCompleted: number;
     totalSkillPointsEarned: number;
 
-    // --- COLLECTION DATA ---
-    discoveredCollectibles: string[];
-    viewedCollectibles?: string[];
-    discoveredClues: string[];
-    mostUsedWeapon: DamageID;
-    totalEnemiesKilled: number;
-    discoveredZombies: number[];
-    discoveredBosses: number[];
-    discoveredPerksMap: Uint8Array;
-    discoveredPois: string[];
+    // --- DISCOVERY DATA (Uint8Array maps, indexed by resolved SMI) ---
+    discoveredClues: Uint8Array;
+    discoveredPois: Uint8Array;
+    discoveredCollectibles: Uint8Array;
+    discoveredZombies: Uint8Array;
+    discoveredBosses: Uint8Array;
+    discoveredPerks: Uint8Array;
 
     // --- STORY & PROGRESSION ---
     prologueSeen?: boolean;
@@ -342,17 +344,17 @@ export const CareerStatsUtils = {
      */
     initBuffers: (): CareerStats => {
         return {
-            statsBuffer: new Float32Array(PlayerStatID.COUNT),
+            statsBuffer: new Float32Array(StatID.COUNT),
             effectDurations: new Float32Array(StatPerkIndex.COUNT),
             effectMaxDurations: new Float32Array(StatPerkIndex.COUNT),
             effectIntensities: new Float32Array(StatPerkIndex.COUNT),
 
-            weaponKills: new Float64Array(StatWeaponIndex.COUNT),
-            weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
-            weaponShotsFired: new Float64Array(StatWeaponIndex.COUNT),
-            weaponShotsHit: new Float64Array(StatWeaponIndex.COUNT),
-            weaponTimeActive: new Float64Array(StatWeaponIndex.COUNT),
-            weaponEngagementDistSq: new Float64Array(StatWeaponIndex.COUNT),
+            outgoingKillsBuffer: new Float64Array(StatWeaponIndex.COUNT),
+            outgoingDamageBuffer: new Float64Array(StatWeaponIndex.COUNT),
+            outgoingShotsFiredBuffer: new Float64Array(StatWeaponIndex.COUNT),
+            outgoingShotsHitBuffer: new Float64Array(StatWeaponIndex.COUNT),
+            outgoingTimeActiveBuffer: new Float64Array(StatWeaponIndex.COUNT),
+            outgoingEngagementDistSqBuffer: new Float64Array(StatWeaponIndex.COUNT),
 
             perkTimesGained: new Float64Array(StatPerkIndex.COUNT),
             perkDamageAbsorbed: new Float64Array(StatPerkIndex.COUNT),
@@ -368,18 +370,15 @@ export const CareerStatsUtils = {
             activePassives: [] as StatusEffectID[],
             activeBuffs: [] as StatusEffectID[],
             activeDebuffs: [] as StatusEffectID[],
-            discoveredPerksMap: new Uint8Array(256),
+            discoveredPerks: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
+            discoveredClues: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
+            discoveredPois: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
+            discoveredCollectibles: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
+            discoveredZombies: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
+            discoveredBosses: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
             rescuedFamilyIndices: [] as number[],
             deadBossIndices: [] as number[],
             trackedChallengeIds: [] as number[],
-
-            // Collection data
-            discoveredCollectibles: [] as string[],
-            viewedCollectibles: [] as string[],
-            discoveredClues: [] as string[],
-            discoveredPois: [] as string[],
-            discoveredZombies: [] as number[],
-            discoveredBosses: [] as number[],
 
             // Progression
             sectorsCompleted: 0,
@@ -416,43 +415,43 @@ export const CareerStatsUtils = {
  */
 export const INITIAL_STATS: CareerStats = {
     statsBuffer: (function () {
-        const buffer = new Float32Array(PlayerStatID.COUNT);
-        buffer[PlayerStatID.HP] = 100;
-        buffer[PlayerStatID.MAX_HP] = 100;
-        buffer[PlayerStatID.STAMINA] = 100;
-        buffer[PlayerStatID.MAX_STAMINA] = 100;
-        buffer[PlayerStatID.XP] = 0;
-        buffer[PlayerStatID.LEVEL] = 1;
-        buffer[PlayerStatID.CURRENT_XP] = 0;
-        buffer[PlayerStatID.NEXT_LEVEL_XP] = 1500;
-        buffer[PlayerStatID.SKILL_POINTS] = 0;
-        buffer[PlayerStatID.SCRAP] = 0;
-        buffer[PlayerStatID.SPEED] = 20.0; // PLAYER.BASE_SPEED (20.0)
+        const buffer = new Float32Array(StatID.COUNT);
+        buffer[StatID.HP] = 100;
+        buffer[StatID.MAX_HP] = 100;
+        buffer[StatID.STAMINA] = 100;
+        buffer[StatID.MAX_STAMINA] = 100;
+        buffer[StatID.XP] = 0;
+        buffer[StatID.LEVEL] = 1;
+        buffer[StatID.CURRENT_XP] = 0;
+        buffer[StatID.NEXT_LEVEL_XP] = 1500;
+        buffer[StatID.SKILL_POINTS] = 0;
+        buffer[StatID.SCRAP] = 0;
+        buffer[StatID.SPEED] = 20.0; // PLAYER.BASE_SPEED (20.0)
 
         // --- TOTALS ---
-        buffer[PlayerStatID.TOTAL_SCRAP_COLLECTED] = 0;
-        buffer[PlayerStatID.TOTAL_DAMAGE_DEALT] = 0;
-        buffer[PlayerStatID.TOTAL_DAMAGE_TAKEN] = 0;
-        buffer[PlayerStatID.TOTAL_DISTANCE_TRAVELED] = 0;
-        buffer[PlayerStatID.TOTAL_KILLS] = 0;
-        buffer[PlayerStatID.SCORE] = 0;
+        buffer[StatID.TOTAL_SCRAP_COLLECTED] = 0;
+        buffer[StatID.TOTAL_DAMAGE_DEALT] = 0;
+        buffer[StatID.TOTAL_DAMAGE_TAKEN] = 0;
+        buffer[StatID.TOTAL_DISTANCE_TRAVELED] = 0;
+        buffer[StatID.TOTAL_KILLS] = 0;
+        buffer[StatID.SCORE] = 0;
 
         // --- MULTIPLIERS ---
-        buffer[PlayerStatID.MULTIPLIER_SPEED] = 1.0;
-        buffer[PlayerStatID.MULTIPLIER_RELOAD] = 1.0;
-        buffer[PlayerStatID.MULTIPLIER_FIRERATE] = 1.0;
-        buffer[PlayerStatID.MULTIPLIER_DMG_RESIST] = 1.0;
-        buffer[PlayerStatID.MULTIPLIER_RANGE] = 1.0;
+        buffer[StatID.MULTIPLIER_SPEED] = 1.0;
+        buffer[StatID.MULTIPLIER_RELOAD] = 1.0;
+        buffer[StatID.MULTIPLIER_FIRERATE] = 1.0;
+        buffer[StatID.MULTIPLIER_DMG_RESIST] = 1.0;
+        buffer[StatID.MULTIPLIER_RANGE] = 1.0;
 
         // --- BASE MULTIPLIERS ---
-        buffer[PlayerStatID.BASE_MULTIPLIER_SPEED] = 1.0;
-        buffer[PlayerStatID.BASE_MULTIPLIER_RELOAD] = 1.0;
-        buffer[PlayerStatID.BASE_MULTIPLIER_FIRERATE] = 1.0;
-        buffer[PlayerStatID.BASE_MULTIPLIER_DMG_RESIST] = 1.0;
-        buffer[PlayerStatID.BASE_MULTIPLIER_RANGE] = 1.0;
+        buffer[StatID.BASE_MULTIPLIER_SPEED] = 1.0;
+        buffer[StatID.BASE_MULTIPLIER_RELOAD] = 1.0;
+        buffer[StatID.BASE_MULTIPLIER_FIRERATE] = 1.0;
+        buffer[StatID.BASE_MULTIPLIER_DMG_RESIST] = 1.0;
+        buffer[StatID.BASE_MULTIPLIER_RANGE] = 1.0;
 
         // --- BAKE FINAL PRE-CALCULATED STATS (Zero-GC) ---
-        buffer[PlayerStatID.FINAL_SPEED] = buffer[PlayerStatID.SPEED] * buffer[PlayerStatID.BASE_MULTIPLIER_SPEED] * buffer[PlayerStatID.MULTIPLIER_SPEED] * (1.0 / 3.6); // KMH_TO_MS
+        buffer[StatID.FINAL_SPEED] = buffer[StatID.SPEED] * buffer[StatID.BASE_MULTIPLIER_SPEED] * buffer[StatID.MULTIPLIER_SPEED] * (1.0 / 3.6); // KMH_TO_MS
 
         return buffer;
     })(),
@@ -461,12 +460,14 @@ export const INITIAL_STATS: CareerStats = {
     effectMaxDurations: new Float32Array(128),
     effectIntensities: new Float32Array(128),
 
-    weaponKills: new Float64Array(StatWeaponIndex.COUNT),
-    weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
-    weaponShotsFired: new Float64Array(StatWeaponIndex.COUNT),
-    weaponShotsHit: new Float64Array(StatWeaponIndex.COUNT),
-    weaponTimeActive: new Float64Array(StatWeaponIndex.COUNT),
-    weaponEngagementDistSq: new Float64Array(StatWeaponIndex.COUNT),
+    incomingDamageBuffer: new Float64Array(TELEMETRY_BUFFER_SIZE),
+
+    outgoingKillsBuffer: new Float64Array(StatWeaponIndex.COUNT),
+    outgoingDamageBuffer: new Float64Array(StatWeaponIndex.COUNT),
+    outgoingShotsFiredBuffer: new Float64Array(StatWeaponIndex.COUNT),
+    outgoingShotsHitBuffer: new Float64Array(StatWeaponIndex.COUNT),
+    outgoingTimeActiveBuffer: new Float64Array(StatWeaponIndex.COUNT),
+    outgoingEngagementDistSqBuffer: new Float64Array(StatWeaponIndex.COUNT),
 
     perkTimesGained: new Float64Array(StatPerkIndex.COUNT),
     perkDamageAbsorbed: new Float64Array(StatPerkIndex.COUNT),
@@ -475,7 +476,6 @@ export const INITIAL_STATS: CareerStats = {
 
     enemyKills: new Float64Array(StatEnemyIndex.COUNT),
     deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
-    incomingDamageBuffer: new Float64Array(TELEMETRY_BUFFER_SIZE),
 
     statusFlags: 0,
     activePassives: [],
@@ -485,14 +485,13 @@ export const INITIAL_STATS: CareerStats = {
     sectorsCompleted: 0,
     totalSkillPointsEarned: 0,
 
-    discoveredCollectibles: [],
-    viewedCollectibles: [],
-    discoveredClues: [],
-    discoveredPois: [],
-    discoveredZombies: [],
-    discoveredBosses: [],
+    discoveredClues: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
+    discoveredPois: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
+    discoveredCollectibles: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
+    discoveredZombies: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
+    discoveredBosses: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
+    discoveredPerks: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE),
     deadBossIndices: [],
-    discoveredPerksMap: new Uint8Array(256), // Sized by MAX_ENTITIES.DISCOVERY_MAP_SIZE (256)
 
     prologueSeen: false,
     rescuedFamilyIndices: [],

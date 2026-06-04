@@ -2,23 +2,23 @@ import { CollectibleType } from '../game/session/SectorTypes';
 
 export enum CollectibleID {
     // Sector 0 (0x00)
-    S0_COLLECTIBLE_1 = (0 << 8) | 0,
-    S0_COLLECTIBLE_2 = (0 << 8) | 1,
+    S0_COLLECTIBLE_1 = 10000 + ((0 << 8) | 0),
+    S0_COLLECTIBLE_2 = 10000 + ((0 << 8) | 1),
 
     // Sector 1 (0x01)
-    S1_COLLECTIBLE_1 = (1 << 8) | 0,
-    S1_COLLECTIBLE_2 = (1 << 8) | 1,
+    S1_COLLECTIBLE_1 = 10000 + ((1 << 8) | 0),
+    S1_COLLECTIBLE_2 = 10000 + ((1 << 8) | 1),
 
     // Sector 2 (0x02)
-    S2_COLLECTIBLE_1 = (2 << 8) | 0,
-    S2_COLLECTIBLE_2 = (2 << 8) | 1,
+    S2_COLLECTIBLE_1 = 10000 + ((2 << 8) | 0),
+    S2_COLLECTIBLE_2 = 10000 + ((2 << 8) | 1),
 
     // Sector 3 (0x03)
-    S3_COLLECTIBLE_1 = (3 << 8) | 0,
-    S3_COLLECTIBLE_2 = (3 << 8) | 1,
+    S3_COLLECTIBLE_1 = 10000 + ((3 << 8) | 0),
+    S3_COLLECTIBLE_2 = 10000 + ((3 << 8) | 1),
 
     // Sector 4 (Playground Test 0x04)
-    DUMMY_BADGE_TEST = (4 << 8) | 0
+    DUMMY_BADGE_TEST = 10000 + ((4 << 8) | 0)
 }
 
 export interface CollectibleDefinition {

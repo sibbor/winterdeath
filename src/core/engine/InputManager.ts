@@ -177,13 +177,21 @@ export class InputManager implements System {
     }
 
     /**
+     * Clears all pressed actions and physical inputs to prevent trailing/stuck actions. Zero-GC.
+     */
+    public clearActions() {
+        this.state.actions.fill(0);
+        this.physicalActions.fill(0);
+        this.prevActions.fill(0);
+        this.state.joystickMove.set(0, 0);
+        this.state.joystickAim.set(0, 0);
+    }
+
+    /**
      * Resets the input buffer. Zero-GC.
      */
     private resetState() {
-        this.state.actions.fill(0);
-        this.physicalActions.fill(0);
-        this.state.joystickMove.set(0, 0);
-        this.state.joystickAim.set(0, 0);
+        this.clearActions();
     }
 
     /**

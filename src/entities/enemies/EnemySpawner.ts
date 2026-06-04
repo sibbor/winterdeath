@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { ZOMBIE_TYPES, BOSSES } from '../../content/constants';
 import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
-import { EnemySounds } from '../../utils/audio/AudioLib';
-import { Enemy, AIState, EnemyDeathState, EnemyType, EnemyFlags, ENEMY_HP, ENEMY_SPEED, ENEMY_SCORE, NoiseType, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
+import { Enemy, AIState, EnemyDeathState, EnemyType, EnemyFlags, ENEMY_HP, ENEMY_SPEED, ENEMY_XP, NoiseType, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { BossID } from '../../game/session/SectorTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { KMH_TO_MS } from '../../content/constants';
@@ -26,8 +25,8 @@ export const EnemySpawner = {
         if (bossSpawned) return EnemyType.WALKER;
 
         const rand = Math.random();
-        // Probabilities: Walker 70%, Runner 15%, Tank 10%, Bomber 5%
-        if (rand > 0.90) return EnemyType.BOMBER;
+        // Probabilities: Walker 70%, Runner 15%, Tank 10%, Bloater 5%
+        if (rand > 0.90) return EnemyType.BLOATER;
         if (rand > 0.80) return EnemyType.TANK;
         if (rand > 0.65) return EnemyType.RUNNER;
         return EnemyType.WALKER;
@@ -46,7 +45,7 @@ export const EnemySpawner = {
         e.maxHp = ENEMY_HP[typeKey];
         e.hp = e.maxHp;
         e.speed = ENEMY_SPEED[typeKey] * KMH_TO_MS;
-        e.score = ENEMY_SCORE[typeKey];
+        e.xp = ENEMY_XP[typeKey];
         e.color = typeData.color.num;
         e.attacks = typeData.attacks || [];
 
@@ -127,7 +126,7 @@ export const EnemySpawner = {
             maxHp: ENEMY_HP[typeKey],
             hp: ENEMY_HP[typeKey],
             speed: ENEMY_SPEED[typeKey] * KMH_TO_MS,
-            score: ENEMY_SCORE[typeKey],
+            xp: ENEMY_XP[typeKey],
             color: typeData.color.num,
             attacks: typeData.attacks || [],
             attackCooldowns: new Float32Array(32),
@@ -256,7 +255,7 @@ export const EnemySpawner = {
             hp: bossData.hp,
             maxHp: bossData.hp,
             speed: bossData.speed * KMH_TO_MS,
-            score: 3000,
+            xp: 3000,
             color: bossData.color.num,
             originalScale: scale,
             widthScale: widthMod,

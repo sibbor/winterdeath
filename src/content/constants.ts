@@ -1,6 +1,4 @@
 import * as THREE from 'three';
-import { CareerStats, PlayerStatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex, TELEMETRY_BUFFER_SIZE } from '../types/CareerStats';
-import { DamageID } from '../entities/player/CombatTypes';
 import { GameSettings } from '../types/StateTypes';
 
 // Re-export Data
@@ -80,13 +78,13 @@ export const COMBAT = {
 };
 
 export const MAX_ENTITIES = {
-    PERKS: StatPerkIndex.COUNT,
+    PERKS: 128,
     FIRE_ZONES: 16,
     BUCKET_CAPACITY: 16,
     MAX_BOSS_IDS: 32,
     STREAK_BUFFER_SIZE: 5,
     CHALLENGES: 64,
-    DISCOVERY_MAP_SIZE: 256,
+    DISCOVERY_MAP_SIZE: 16384,
     TRIGGERS: 256,
     SCRAP: 300,
     FOOTPRINTS: 100,
@@ -208,7 +206,9 @@ export const SETTINGS_DEFAULT: GameSettings = {
     shadowResolution: 256,
     textureQuality: 1.0,
     volumetricFog: true,
-    showDiscoveryPopups: true
+    showDiscoveryPopups: true,
+    showFps: false,
+    debugMode: false
 };
 
 export enum FamilyMemberID {

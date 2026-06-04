@@ -98,17 +98,7 @@ export const EnemyAttackHandler = {
                 break;
 
             case EnemyAttackType.JUMP:
-                if (inRange) {
-                    callbacks.onPlayerHit(att.damage, e, DamageType.PHYSICAL, DamageID.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
-
-                    // Runner Jump-to-Grapple Mechanic
-                    if (e.type === EnemyType.RUNNER) {
-                        e.state = AIState.GRAPPLE;
-                        e.statusFlags |= EnemyFlags.GRAPPLING;
-                        e.grappleDuration = 1.5 + Math.random() * 0.5;
-                        e.attackTimer = -1; // Yield control to Grapple system
-                    }
-                }
+                // Damage and Grapple state transition is deferred to EnemyAI at the end of the ATTACKING phase (when attackTimer <= 0).
                 callbacks.playSound(SoundID.ZOMBIE_ATTACK_SMASH);
                 break;
 

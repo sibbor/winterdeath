@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState, SectorStats } from './types/StateTypes';
 import { GameScreen } from './types/SessionTypes';
-import { CareerStats, PlayerStatID } from './types/CareerStats';
+import { CareerStats, StatID } from './types/CareerStats';
 import { WeatherType } from './core/engine/EnvironmentalTypes';
 import { SectorTrigger } from './types/TriggerTypes';
 import { BossID, SectorID } from './game/session/SectorTypes';
@@ -58,7 +58,7 @@ const App: React.FC = () => {
     // are correctly aligned from the very first frame.
     const isInitializedRef = useRef(false);
     if (!isInitializedRef.current) {
-        HudStore.patch({ debugMode: gameState.debugMode });
+        HudStore.patch({ debugMode: gameState.settings.debugMode });
         isInitializedRef.current = true;
     }
 
@@ -91,7 +91,7 @@ const App: React.FC = () => {
     const [initialAdventureLogItem, setInitialAdventureLogItem] = useState<string | null>(null);
     const [initialStatisticsTab, setInitialStatisticsTab] = useState<string>('overview');
     const [initialStatisticsItem, setInitialStatisticsItem] = useState<string | null>(null);
-    const showFPS = !!gameState.showFps;
+    const showFPS = !!gameState.settings.showFps;
 
     const gameCanvasRef = React.useRef<GameSessionHandle>(null);
     const transitionTaskRef = useRef(false);
@@ -272,83 +272,17 @@ const App: React.FC = () => {
     const handleCheckpointReached = useCallback(() => { }, []);
 
     const handleCollectibleDiscoveredAction = useCallback((id: string) => {
+        // Open the collectible modal — persistence is handled live by DiscoverySystem/GameSession
         setActiveCollectible(id);
         setActiveOverlay(OverlayType.COLLECTIBLE);
-        setGameState(prev => {
-            if (StatsBridge.getDiscoveredCollectibles(prev.stats).includes(id)) return prev;
-
-            const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
-            newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
-
-            return {
-                ...prev,
-                stats: {
-                    ...prev.stats,
-                    statsBuffer: newStatsBuffer,
-                    discoveredCollectibles: [...StatsBridge.getDiscoveredCollectibles(prev.stats), id],
-                    totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1
-                }
-            };
-        });
     }, []);
 
-    const handleClueDiscoveredAction = useCallback((clue: SectorTrigger | string) => {
-        const clueId = String(typeof clue === 'string' ? clue : (clue?.id || ''));
-        if (!clueId) return;
-        setGameState(prev => {
-            if (StatsBridge.getDiscoveredClues(prev.stats).includes(clueId)) return prev;
-
-            const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
-            newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
-
-            return {
-                ...prev,
-                stats: {
-                    ...prev.stats,
-                    statsBuffer: newStatsBuffer,
-                    discoveredClues: [...StatsBridge.getDiscoveredClues(prev.stats), clueId],
-                    totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1
-                }
-            };
-        });
-    }, []);
-
-    const handlePOIdiscoveredAction = useCallback((poi: SectorTrigger | string) => {
-        const poiId = String(typeof poi === 'string' ? poi : (poi?.id || ''));
-        if (!poiId) return;
-        setGameState(prev => {
-            if (StatsBridge.getDiscoveredPois(prev.stats).includes(poiId)) return prev;
-
-            const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
-            newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
-
-            return {
-                ...prev,
-                stats: {
-                    ...prev.stats,
-                    statsBuffer: newStatsBuffer,
-                    discoveredPois: [...StatsBridge.getDiscoveredPois(prev.stats), poiId],
-                    totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1
-                }
-            };
-        });
-    }, []);
-
-    const handleEnemyDiscoveredAction = useCallback((type: number) => {
-        if (!type && type !== 0) return;
-        setGameState(prev => {
-            if (StatsBridge.getDiscoveredZombies(prev.stats).includes(type)) return prev;
-            return { ...prev, stats: { ...prev.stats, discoveredZombies: [...StatsBridge.getDiscoveredZombies(prev.stats), type] } };
-        });
-    }, []);
-
-    const handleBossDiscoveredAction = useCallback((id: number) => {
-        if (!id && id !== 0) return;
-        setGameState(prev => {
-            if (StatsBridge.getDiscoveredBosses(prev.stats).includes(id)) return prev;
-            return { ...prev, stats: { ...prev.stats, discoveredBosses: [...StatsBridge.getDiscoveredBosses(prev.stats), id] } };
-        });
-    }, []);
+    // Discoveries persist live to careerStats via DiscoverySystem/GameSession.
+    // These callbacks are wired to GameCanvasProps but do nothing here — persistence happens in-engine.
+    const handleClueDiscoveredAction = useCallback((_clue: SectorTrigger | string) => { }, []);
+    const handlePOIdiscoveredAction = useCallback((_poi: SectorTrigger | string) => { }, []);
+    const handleEnemyDiscoveredAction = useCallback((_type: number) => { }, []);
+    const handleBossDiscoveredAction = useCallback((_id: number) => { }, []);
 
     const handleDialogueStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? OverlayType.DIALOGUE : OverlayType.NONE), []);
     const handleDeathStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? OverlayType.DEATH : OverlayType.NONE), []);
@@ -359,7 +293,7 @@ const App: React.FC = () => {
             if (StatsBridge.getDeadBossIndices(prev.stats).includes(prev.currentSector)) return prev;
 
             const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
-            newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
+            newStatsBuffer[StatID.SKILL_POINTS] += 1;
 
             return {
                 ...prev,
@@ -378,7 +312,7 @@ const App: React.FC = () => {
             if (StatsBridge.getRescuedFamilyIndices(prev.stats).includes(prev.currentSector)) return prev;
 
             const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
-            newStatsBuffer[PlayerStatID.SKILL_POINTS] += 1;
+            newStatsBuffer[StatID.SKILL_POINTS] += 1;
 
             return {
                 ...prev,
@@ -465,21 +399,7 @@ const App: React.FC = () => {
         setActiveOverlay(OverlayType.NONE);
     }, []);
 
-    const handleMarkCollectiblesViewedAction = useCallback((ids: string[]) => {
-        setGameState(prev => {
-            const currentViewed = StatsBridge.getViewedCollectibles(prev.stats);
-            const newViewed = [...currentViewed];
-            let changed = false;
-            for (let i = 0; i < ids.length; i++) {
-                if (!newViewed.includes(ids[i])) {
-                    newViewed.push(ids[i]);
-                    changed = true;
-                }
-            }
-            if (!changed) return prev;
-            return { ...prev, stats: { ...prev.stats, viewedCollectibles: newViewed } };
-        });
-    }, []);
+
 
     const handleContinueFromDeath = useCallback(() => {
         // Extract stats BEFORE unmounting or navigating away
@@ -609,14 +529,14 @@ const App: React.FC = () => {
     }, []);
 
     const handleSelectSector = useCallback((sectorIndex: number) => {
-        setGameState(prev => ({ ...prev, currentSector: sectorIndex, sessionToken: (prev.sessionToken || 0) + 1 }));
+        setGameState(prev => ({ ...prev, currentSector: sectorIndex }));
     }, []);
 
     const aggregatePendingStats = useCallback(async () => {
         if (!sectorStats) return;
         return new Promise<void>(resolve => {
             setGameState(prev => {
-                const newStats = aggregateStats(prev.stats, sectorStats, !!deathDetails, !!sectorStats.aborted, prev.currentSector, 0);
+                const newStats = aggregateStats(prev.stats, sectorStats, !!deathDetails, !!sectorStats.aborted, prev.currentSector);
                 setTimeout(resolve, 0);
                 return { ...prev, stats: newStats };
             });
@@ -661,7 +581,8 @@ const App: React.FC = () => {
             const currentMap = StatsBridge.getPerkDiscoveredMap(prev.stats);
             if (currentMap && currentMap[perkId] === 1) return prev;
 
-            const newMap = new Uint8Array(256);
+            const length = currentMap ? currentMap.length : 16384;
+            const newMap = new Uint8Array(length);
             if (currentMap) newMap.set(currentMap);
             newMap[perkId] = 1;
 
@@ -669,7 +590,7 @@ const App: React.FC = () => {
                 ...prev,
                 stats: {
                     ...prev.stats,
-                    discoveredPerksMap: newMap
+                    discoveredPerks: newMap
                 }
             };
         });
@@ -704,7 +625,6 @@ const App: React.FC = () => {
                 ...prev,
                 screen: GameScreen.SECTOR,
                 currentSector: nextSector,
-                sessionToken: (prev.sessionToken || 0) + 1,
                 sectorState: nextSector === SectorID.PLAYGROUND ? prev.sectorState : undefined // Only persist for playground
             }));
             HudStore.update({ ...HudStore.getState(), hudVisible: false });
@@ -730,8 +650,8 @@ const App: React.FC = () => {
             setGameState(prev => ({
                 ...prev,
                 screen: GameScreen.SECTOR,
-                sessionToken: (prev.sessionToken || 0) + 1,
-                sectorState: prev.currentSector === SectorID.PLAYGROUND ? prev.sectorState : undefined // Clear if not playground
+                sectorState: prev.currentSector === SectorID.PLAYGROUND
+                    ? prev.sectorState : undefined // Clear if not playground
             }));
             HudStore.update({ ...HudStore.getState(), hudVisible: false });
         });
@@ -804,12 +724,12 @@ const App: React.FC = () => {
 
     const onStationInteraction = useCallback((type: OverlayType) => setActiveOverlay(type), []);
     const handleToggleDebug = useCallback((val: boolean) => {
-        setGameState(prev => ({ ...prev, debugMode: val }));
+        setGameState(prev => ({ ...prev, settings: { ...prev.settings, debugMode: val } }));
         HudStore.patch({ debugMode: val });
     }, []);
     const handlePauseToggle = useCallback((val: boolean) => setActiveOverlay(val ? OverlayType.PAUSE : OverlayType.NONE), []);
     const handleToggleShowFps = useCallback(() => {
-        setGameState(prev => ({ ...prev, showFps: !prev.showFps }));
+        setGameState(prev => ({ ...prev, settings: { ...prev.settings, showFps: !prev.settings.showFps } }));
         UiSounds.playClick();
     }, []);
     const handleOverlayClose = useCallback(() => setActiveOverlay(OverlayType.NONE), []);
@@ -861,7 +781,7 @@ const App: React.FC = () => {
                             currentSector={gameState.currentSector}
                             rescuedFamilyIndices={StatsBridge.getRescuedFamilyIndices(gameState.stats)}
                             deadBossIndices={StatsBridge.getDeadBossIndices(gameState.stats)}
-                            debugMode={gameState.debugMode}
+                            debugMode={gameState.settings.debugMode}
                             onSaveStats={handleSaveStats}
                             onSaveLoadout={handleSaveLoadout}
                             onSelectSector={handleSelectSector}
@@ -933,7 +853,6 @@ const App: React.FC = () => {
                                     <GameHUD
                                         loadout={gameState.loadout}
                                         weaponLevels={gameState.weaponLevels}
-                                        debugMode={gameState.debugMode}
                                         isBossIntro={activeOverlay === OverlayType.INTRO}
                                         isMobileDevice={isMobileDevice}
                                         onTogglePause={handleTogglePauseAction}
@@ -976,10 +895,9 @@ const App: React.FC = () => {
                         <ScreenAdventureLog
                             stats={gameState.screen === GameScreen.SECTOR ? (gameCanvasRef.current?.getMergedSessionStats() || gameState.stats) : gameState.stats}
                             onClose={handleCloseAction}
-                            onMarkCollectiblesViewed={handleMarkCollectiblesViewedAction}
                             onToggleChallengeTracking={handleToggleChallengeTrackingAction}
                             isMobileDevice={isMobileDevice}
-                            debugMode={gameState.debugMode}
+                            debugMode={gameState.settings.debugMode}
                             initialTab={initialAdventureLogTab}
                             initialItemId={initialAdventureLogItem}
                         />
@@ -999,7 +917,7 @@ const App: React.FC = () => {
                             onClose={handleCloseAction}
                             onOpenDiscovery={() => handleOpenAdventureLogAction(DiscoveryType.CLUE)}
                             isMobileDevice={isMobileDevice}
-                            debugMode={gameState.debugMode}
+                            debugMode={gameState.settings.debugMode}
                             initialTab={initialStatisticsTab as any}
                             initialItemId={initialStatisticsItem}
                         />
@@ -1125,7 +1043,7 @@ const App: React.FC = () => {
                             currentSector={gameState.currentSector}
                             rescuedFamilyIndices={StatsBridge.getRescuedFamilyIndices(gameState.stats)}
                             deadBossIndices={StatsBridge.getDeadBossIndices(gameState.stats)}
-                            debugMode={gameState.debugMode}
+                            debugMode={gameState.settings.debugMode}
                             stats={gameState.stats}
                             onClose={handleOverlayClose}
                             onSelectSector={handleSelectSector}
@@ -1141,7 +1059,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {(showFPS || gameState.debugMode) && (
+                    {(showFPS || gameState.settings.debugMode) && (
                         <DebugDisplay />
                     )}
 

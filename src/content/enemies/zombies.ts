@@ -9,7 +9,7 @@ Calculations, animations and sound effects are handled in the game loop.
 
 - hp = health points
 - speed = speed in km/h
-- score = score for killing the zombie
+- xp = xp for killing the zombie
 - color = color of the zombie
 - scale = scale of the zombie
 - widthScale = width scale of the zombie
@@ -39,7 +39,7 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         story: 'enemies.zombies.WALKER.story',
         hp: 50,
         speed: 15,
-        score: 20,
+        xp: 20,
         color: ENEMY_COLORS.WALKER, // Pinkish
         scale: 1.0,
         widthScale: 1.1,
@@ -65,7 +65,7 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         story: 'enemies.zombies.RUNNER.story',
         hp: 30,
         speed: 20.0,
-        score: 10,
+        xp: 10,
         color: ENEMY_COLORS.RUNNER, // Green
         scale: 0.8,
         widthScale: 1.0,
@@ -91,7 +91,7 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         story: 'enemies.zombies.TANK.story',
         hp: 175,
         speed: 13.0,
-        score: 50,
+        xp: 50,
         color: ENEMY_COLORS.TANK, // Blue
         scale: 1.5,
         widthScale: 1.2,
@@ -110,13 +110,13 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
             }
         ]
     },
-    [EnemyType.BOMBER]: {
-        name: 'enemies.zombies.BOMBER.name',
-        story: 'enemies.zombies.BOMBER.story',
+    [EnemyType.BLOATER]: {
+        name: 'enemies.zombies.BLOATER.name',
+        story: 'enemies.zombies.BLOATER.story',
         hp: 80,
         speed: 12,
-        score: 30,
-        color: ENEMY_COLORS.BOMBER,
+        xp: 30,
+        color: ENEMY_COLORS.BLOATER,
         scale: 1.25,
         widthScale: 1.4,
         attacks: [

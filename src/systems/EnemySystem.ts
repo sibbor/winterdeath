@@ -10,7 +10,7 @@ import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
 
 // --- TYPE DEFINITIONS ---
 interface Callbacks {
-    gainXp: (amount: number) => void;
+    rewardXP: (amount: number) => void;
     onBossKilled: (id: number) => void;
     onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
 }
@@ -42,11 +42,11 @@ export class EnemySystem implements System {
 
         if ((state.combat.statusFlags & PlayerStatusFlags.DEAD) !== 0) return;
 
-        // --- PHASE 9: DEFERRED CLEANUP (Zero-GC sweep) ---
+        // --- DEFERRED CLEANUP (Zero-GC sweep) ---
         // We clean up at the START of the frame before logic updates
         this.syncDeferredRecycle();
 
-        // --- PHASE 6: CONTIGUOUS DRIVER ---
+        // --- CONTIGUOUS DRIVER ---
         // We delegate the heavy lifting to EnemyManager, which now uses a flat pool.
         EnemyManager.update(session, delta, simTime, renderTime);
 

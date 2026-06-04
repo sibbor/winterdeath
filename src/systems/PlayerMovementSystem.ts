@@ -13,11 +13,12 @@ import { _buoyancyResult } from './WaterSystem';
 import { NOISE_RADIUS, NoiseType } from '../entities/enemies/EnemyTypes';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { FootprintSystem } from './FootprintSystem';
-import { PlayerStatID, PlayerStatusFlags } from '../types/CareerStats';
+import { StatID, PlayerStatusFlags } from '../types/CareerStats';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { PlayerStatsSystem } from './PlayerStatsSystem';
 import { InputAction } from '../core/engine/InputManager';
 import { PLAYER, PHYSICS, COMBAT } from '../content/constants';
+import { MaterialType } from '../content/environment';
 import type { DamageTrackerSystem } from './DamageTrackerSystem';
 import type { PerkSystem } from './PerkSystem';
 
@@ -94,7 +95,7 @@ export class PlayerMovementSystem implements System {
 
         // --- 1. SSoT SPEED AGGREGATION (Zero-GC) ---
         // Vinterdöd Refactor: Use the frame-perfect baked speed calculated by the PerkSystem.
-        const currentSpeed = stats[PlayerStatID.FINAL_SPEED];
+        const currentSpeed = stats[StatID.FINAL_SPEED];
 
         if (state.vehicle.active) {
             state.player.isMoving = false;
@@ -166,8 +167,8 @@ export class PlayerMovementSystem implements System {
                 // Increased window (150->200ms) and added '!state.isDodging' check
                 const dodgeCost = ABILITIES[AbilityID.DODGE].staminaCost || 20;
                 if (!state.player.isRushing && !state.player.isDodging && pressDuration < PLAYER.DODGE_PRESS_THRESHOLD) {
-                    if (stats[PlayerStatID.STAMINA] >= dodgeCost) {
-                        stats[PlayerStatID.STAMINA] -= dodgeCost;
+                    if (stats[StatID.STAMINA] >= dodgeCost) {
+                        stats[StatID.STAMINA] -= dodgeCost;
                         state.player.lastStaminaUseTime = simTime;
                         state.player.isDodging = true;
                         state.player.dodgeStartTime = simTime; // Logic MUST use simTime for parity
@@ -200,7 +201,7 @@ export class PlayerMovementSystem implements System {
             // Handle Rush Elevation (Hold Space)
             if (state.inputState.spaceDepressed && !state.player.isDodging) {
                 if (simTime - state.player.spacePressTime >= PLAYER.RUSH_HOLD_THRESHOLD) { // Increased threshold to avoid accidental dodge blocking
-                    if (stats[PlayerStatID.STAMINA] >= 1.0) { // Check for minimal stamina to CONTINUE rushing
+                    if (stats[StatID.STAMINA] >= 1.0) { // Check for minimal stamina to CONTINUE rushing
                         if (!state.player.isRushing) {
                             state.player.isRushing = true;
                             state.player.rushCostPaid = true;
@@ -280,9 +281,9 @@ export class PlayerMovementSystem implements System {
         const waterStaminaDrain = isSwimming ? COMBAT.STAMINA_DRAIN_SWIM : (isWading ? COMBAT.STAMINA_DRAIN_WADE : 0);
         if (waterStaminaDrain > 0 && !state.vehicle.active) {
             state.player.lastStaminaUseTime = simTime;
-            stats[PlayerStatID.STAMINA] = Math.max(0, stats[PlayerStatID.STAMINA] - waterStaminaDrain * delta);
+            stats[StatID.STAMINA] = Math.max(0, stats[StatID.STAMINA] - waterStaminaDrain * delta);
 
-            if (isSwimming && stats[PlayerStatID.STAMINA] < 0.1) {
+            if (isSwimming && stats[StatID.STAMINA] < 0.1) {
                 speed *= 0.5;
 
                 // --- Unified Drowning Logic ---
@@ -302,11 +303,11 @@ export class PlayerMovementSystem implements System {
             // --- DYNAMIC STAMINA DRAIN (Ramping based on Ability DB) ---
             const ability = ABILITIES[AbilityID.RUSH];
             const drainRate = (ability.staminaCost || 5) + (state.player.rushFactor * 17);
-            stats[PlayerStatID.STAMINA] = Math.max(0, stats[PlayerStatID.STAMINA] - delta * drainRate);
+            stats[StatID.STAMINA] = Math.max(0, stats[StatID.STAMINA] - delta * drainRate);
             state.player.lastStaminaUseTime = simTime;
             state.combat.statusFlags |= PlayerStatusFlags.RUSHING;
 
-            if (stats[PlayerStatID.STAMINA] <= 0) {
+            if (stats[StatID.STAMINA] <= 0) {
                 state.player.isRushing = false;
                 state.player.lastRushEndTime = simTime;
                 state.combat.statusFlags &= ~PlayerStatusFlags.RUSHING;
@@ -328,14 +329,14 @@ export class PlayerMovementSystem implements System {
         if (!state.player.isDodging && !state.player.isRushing && waterStaminaDrain === 0) {
             // Natural regeneration only if idle/walking and not soon after stamina use
             if (simTime - state.player.lastStaminaUseTime > COMBAT.STAMINA_REGEN_DELAY) {
-                stats[PlayerStatID.STAMINA] = Math.min(stats[PlayerStatID.MAX_STAMINA], stats[PlayerStatID.STAMINA] + COMBAT.STAMINA_REGEN_IDLE * delta);
+                stats[StatID.STAMINA] = Math.min(stats[StatID.MAX_STAMINA], stats[StatID.STAMINA] + COMBAT.STAMINA_REGEN_IDLE * delta);
             }
         }
 
-        if (stats[PlayerStatID.HP] < stats[PlayerStatID.MAX_HP] &&
+        if (stats[StatID.HP] < stats[StatID.MAX_HP] &&
             !(state.combat.statusFlags & PlayerStatusFlags.DEAD) &&
             simTime - state.player.lastDamageTime > COMBAT.HP_REGEN_DELAY) {
-            stats[PlayerStatID.HP] = Math.min(stats[PlayerStatID.MAX_HP], stats[PlayerStatID.HP] + COMBAT.HP_REGEN_IDLE * delta);
+            stats[StatID.HP] = Math.min(stats[StatID.MAX_HP], stats[StatID.HP] + COMBAT.HP_REGEN_IDLE * delta);
         }
 
         let isMovingVal = false;
@@ -388,12 +389,26 @@ export class PlayerMovementSystem implements System {
                 isMovingVal = true;
 
                 // SPAWN DODGE SMOKE CONTINUOUSLY
-                if (Math.random() < 0.4 && !inWater) {
-                    FXSystem.spawnParticle(
-                        session.engine.scene, state.combat.particles,
-                        playerGroup.position.x, 0.2, playerGroup.position.z,
-                        FXParticleType.SMOKE, 1, undefined, undefined, 0xcccccc, 1.0
-                    );
+                if (Math.random() < 0.4) {
+                    if (inWater) {
+                        FXSystem.spawnParticle(
+                            session.engine.scene, state.combat.particles,
+                            playerGroup.position.x, playerGroup.position.y + 0.1, playerGroup.position.z,
+                            FXParticleType.SPLASH, 1, undefined, undefined, 0xeeeeff, 0.8
+                        );
+                    } else {
+                        const groundMat = session.worldStreamer?.getGroundMaterial(playerGroup.position.x, playerGroup.position.z) || 0;
+                        let pType = FXParticleType.SMOKE;
+                        let pColor = 0xaaaaaa;
+                        if (groundMat === MaterialType.SNOW || groundMat === MaterialType.NONE) { pType = FXParticleType.SNOW_PUFF; pColor = 0xffffff; }
+                        else if (groundMat === MaterialType.DIRT || groundMat === MaterialType.WOOD) { pColor = 0x886644; }
+
+                        FXSystem.spawnParticle(
+                            session.engine.scene, state.combat.particles,
+                            playerGroup.position.x, playerGroup.position.y + 0.1, playerGroup.position.z,
+                            pType, 1, undefined, undefined, pColor, 0.4
+                        );
+                    }
                 }
 
                 // UNIFIED STATE SYNC
@@ -495,17 +510,34 @@ export class PlayerMovementSystem implements System {
                         let noiseType = NoiseType.PLAYER_WALK;
                         let noiseRadius = NOISE_RADIUS[NoiseType.PLAYER_WALK];
 
+                        if (inWater) {
+                            FXSystem.spawnParticle(
+                                session.engine.scene, state.combat.particles,
+                                playerGroup.position.x, playerGroup.position.y + 0.1, playerGroup.position.z,
+                                FXParticleType.SPLASH, 1, undefined, undefined, 0xeeeeff, 0.8
+                            );
+                        }
+
                         if (isSwimming) {
                             noiseType = NoiseType.PLAYER_SWIM;
                             noiseRadius = NOISE_RADIUS[NoiseType.PLAYER_SWIM];
                         } else if (state.player.isRushing) {
                             noiseType = NoiseType.PLAYER_RUSH;
                             noiseRadius = NOISE_RADIUS[NoiseType.PLAYER_RUSH];
-                            FXSystem.spawnParticle(
-                                session.engine.scene, state.combat.particles,
-                                playerGroup.position.x, 0.2, playerGroup.position.z,
-                                FXParticleType.SMOKE, 1, undefined, undefined, 0xcccccc, 0.8
-                            );
+
+                            if (!inWater) {
+                                const groundMat = session.worldStreamer?.getGroundMaterial(playerGroup.position.x, playerGroup.position.z) || 0;
+                                let pType = FXParticleType.SMOKE;
+                                let pColor = 0xaaaaaa;
+                                if (groundMat === MaterialType.SNOW || groundMat === MaterialType.NONE) { pType = FXParticleType.SNOW_PUFF; pColor = 0xffffff; }
+                                else if (groundMat === MaterialType.DIRT || groundMat === MaterialType.WOOD) { pColor = 0x886644; }
+
+                                FXSystem.spawnParticle(
+                                    session.engine.scene, state.combat.particles,
+                                    playerGroup.position.x, playerGroup.position.y + 0.1, playerGroup.position.z,
+                                    pType, 1, undefined, undefined, pColor, 0.4
+                                );
+                            }
                         }
 
                         session.makeNoise(playerGroup.position, noiseType, noiseRadius);

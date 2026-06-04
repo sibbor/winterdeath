@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { CareerStats, PlayerStatID } from '../../../types/CareerStats';
+import { CareerStats } from '../../../types/CareerStats';
 import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
 import { DiscoveryType } from '../hud/HudTypes';
@@ -138,14 +138,14 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
                     <div className="mt-3 pt-3 border-t border-blue-500/20 transition-all relative overflow-hidden bg-blue-500/5 backdrop-blur-sm rounded-md p-2">
                         {/* Shimmer overlay for premium look */}
                         <div className="absolute inset-0 pointer-events-none opacity-20 shimmer-overlay" />
-                        
+
                         <div className="flex flex-col gap-1 relative z-10">
                             <div className="flex items-center gap-2">
                                 {/* Pulse Animation - Always visible now */}
                                 <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.8)]" />
                                 <span className="text-[12px] font-black text-gray-400 uppercase tracking-widest">{t('ui.statistics')}</span>
                             </div>
-                            
+
                             <div className="flex font-mono items-center gap-2 text-[12px] uppercase tracking-tighter whitespace-nowrap overflow-hidden font-bold">
                                 <span><span className="text-gray-400/60">{t('ui.kills')}:</span> <span className="ml-1 text-white">{statsSummary.kills}</span></span>
                                 <span className="text-gray-500/40">|</span>

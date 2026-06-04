@@ -105,9 +105,9 @@ export class SectorSystem implements System {
             spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => void;
             setOverlay: (type: number | null) => void;
             onAction: (action: any) => void;
-            gainXp: (amount: number) => void;
-            gainSp: (amount: number) => void;
-            gainScrap: (amount: number) => void;
+            rewardXP: (amount: number) => void;
+            rewardSP: (amount: number) => void;
+            rewardScrap: (amount: number) => void;
             onDiscovery?: (type: any, id: string, titleKey: string, detailsKey: string, payload?: any) => boolean;
             onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
             applyDamage: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
@@ -258,9 +258,9 @@ export class SectorSystem implements System {
                 },
                 setOverlay: this.callbacks.setOverlay,
                 onAction: this.callbacks.onAction,
-                gainXp: this.callbacks.gainXp,
-                gainSp: this.callbacks.gainSp,
-                gainScrap: this.callbacks.gainScrap,
+                rewardXP: this.callbacks.rewardXP,
+                rewardSP: this.callbacks.rewardSP,
+                rewardScrap: this.callbacks.rewardScrap,
                 handleDiscovery: this.callbacks.onDiscovery,
                 onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT: boolean = false, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
                     this.callbacks.onPlayerHit(damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
@@ -407,7 +407,7 @@ export class SectorSystem implements System {
                 for (let i = 0; i < count; i++) {
                     const zoneIdx = indices[i] | 0;
                     // Indices <1000: static (SectorDef). >=1000: dynamic (added at runtime).
-                    const z = (zoneIdx < 1000) ? staticZones[zoneIdx] : sectorState.ctx?.environmentalZones?.[zoneIdx - 1000];
+                    const z = (zoneIdx < 1000) ? staticZones[zoneIdx] : session.sectorCtx?.environmentalZones?.[zoneIdx - 1000];
                     if (!z) continue;
 
                     let weight = 0;

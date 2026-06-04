@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ColliderType } from '../core/world/CollisionResolution';
 import { ProjectilePoolState, MAX_PROJECTILES } from '../core/state/ProjectilePool';
 import { DamageID, DamageType, WeaponID } from '../entities/player/CombatTypes';
-import { PlayerStatID } from '../types/CareerStats';
+import { StatID } from '../types/CareerStats';
 import { StatusEffectID } from '../content/perks';
 import { System, SystemID } from './System';
 import { ENTITY_STATUS, PHYSICS, COMBAT, MAX_ENTITIES } from '../content/constants';
@@ -198,17 +198,24 @@ export class ProjectileSystem implements System {
                     despawn = true;
                     this.triggerExplosion(i, false);
                 } else if (!despawn) {
-                    const streamer = session.worldStreamer;
-                    const poolIdx = streamer.getEnemyPool().nextIndex();
-                    // Query a wider radius (2.5m) to catch candidates along the swept path
-                    streamer.getNearbyEnemies(pool.posX[i], pool.posZ[i], 2.5, poolIdx);
-
-                    const nearby = streamer.getEnemyPool().getPool(poolIdx);
-                    const nearCount = streamer.getEnemyPool().getCount(poolIdx);
-
                     // Reconstruct swept path line segment: Start point (_v1) and Delta Offset (_v2)
                     _v1.set(pool.posX[i] - pool.velX[i] * delta, pool.posY[i] - pool.velY[i] * delta, pool.posZ[i] - pool.velZ[i] * delta);
                     _v2.set(pool.velX[i] * delta, pool.velY[i] * delta, pool.velZ[i] * delta);
+
+                    const streamer = session.worldStreamer;
+                    const poolIdx = streamer.getEnemyPool().nextIndex();
+
+                    // VINTERDÖD FIX: Query from the midpoint of the swept path, with a radius covering the whole movement.
+                    // Use Manhattan distance for cheap, safe overestimation of the swept radius without Math.sqrt()
+                    const approxPathDist = Math.abs(_v2.x) + Math.abs(_v2.y) + Math.abs(_v2.z);
+                    const queryRadius = Math.max(2.5, approxPathDist * 0.5 + 1.5);
+                    const midX = pool.posX[i] - (_v2.x * 0.5);
+                    const midZ = pool.posZ[i] - (_v2.z * 0.5);
+
+                    streamer.getNearbyEnemies(midX, midZ, queryRadius, poolIdx);
+
+                    const nearby = streamer.getEnemyPool().getPool(poolIdx);
+                    const nearCount = streamer.getEnemyPool().getCount(poolIdx);
 
                     for (let n = 0; n < nearCount; n++) {
                         const enemy = nearby[n];
@@ -216,64 +223,88 @@ export class ProjectileSystem implements System {
 
                         const enemyIdx = enemy.poolId | 0;
                         if (state.applyDamage) {
-                            // Find closest point on projectile segment in 3D to enemy center
-                            _v3.set(enemy.mesh.position.x, enemy.mesh.position.y, enemy.mesh.position.z);
-                            _v4.subVectors(_v3, _v1);
+                            // VINTERDÖD 2D HITBOX (Top-Down Shooter)
+                            // Ignore Y axis entirely for hit detection to prevent projectiles "flying over" enemies
+                            const px = _v1.x;
+                            const pz = _v1.z;
+                            const vx = _v2.x;
+                            const vz = _v2.z;
+                            const ex = enemy.mesh.position.x;
+                            const ez = enemy.mesh.position.z;
 
-                            const lenSq = _v2.lengthSq();
-                            const tProj = lenSq > 0.0001 ? Math.max(0, Math.min(1, _v4.dot(_v2) / lenSq)) : 0;
-                            _v5.copy(_v1).addScaledVector(_v2, tProj);
+                            const vLenSq = vx * vx + vz * vz;
+                            const dot = (ex - px) * vx + (ez - pz) * vz;
+                            const tProj = vLenSq > 0.0001 ? Math.max(0, Math.min(1, dot / vLenSq)) : 0;
 
-                            // Calculate horizontal distance between closest swept point and enemy
-                            const dx = _v5.x - enemy.mesh.position.x;
-                            const dz = _v5.z - enemy.mesh.position.z;
+                            const closestX = px + vx * tProj;
+                            const closestZ = pz + vz * tProj;
+
+                            const dx = closestX - ex;
+                            const dz = closestZ - ez;
                             const distSq = dx * dx + dz * dz;
 
                             const hitRad = enemy.hitRadius || 0.8;
                             if (distSq <= hitRad * hitRad) {
-                                const halfHeight = enemy.originalScale || 1.0;
-                                const enemyY = enemy.mesh.position.y;
-                                if (_v5.y >= enemyY - halfHeight && _v5.y <= enemyY + halfHeight) {
-                                    EnemyPoolState.hp[enemyIdx] -= pool.damage[i];
+                                const wepStats = WEAPONS[pool.weaponId[i]];
 
-                                    // 1. Calculate impact intensity (Tactile Feedback)
-                                    const wepStats = WEAPONS[pool.weaponId[i]];
-                                    const isKill = EnemyPoolState.hp[enemyIdx] <= 0;
-                                    const isHighImpact = pool.damage[i] > 50 || isKill || (wepStats?.impactType === EnemyDeathState.GIBBED);
+                                // 1. Trigger applyDamage — single source of truth for HP.
+                                //    applyDamage decrements enemy.hp and spawns damage numbers.
+                                //    Do NOT pre-decrement EnemyPoolState.hp here; EnemyManager
+                                //    syncs pool ← enemy.hp each frame, keeping both in sync.
+                                const isRevolver = pool.weaponId[i] === WeaponID.REVOLVER;
+                                const isShotgun = pool.weaponId[i] === WeaponID.SHOTGUN;
+                                const pPos = session.state.player.position;
+                                const dxP = pool.posX[i] - pPos.x;
+                                const dzP = pool.posZ[i] - pPos.z;
+                                const distToPlayerSq = dxP * dxP + dzP * dzP;
+                                const isCloseShotgun = isShotgun && distToPlayerSq < 16; // Close range <4m
 
-                                    // 2. Trigger Legacy Callback (For FX and Telemetry)
-                                    state.applyDamage(enemy, pool.damage[i], wepStats?.defaultDamageType || 1, pool.weaponId[i], isHighImpact);
+                                const isHighImpact = pool.damage[i] > 50 || isCloseShotgun || (wepStats?.impactType === EnemyDeathState.GIBBED && !isRevolver);
+                                const isKill = state.applyDamage(enemy, pool.damage[i], wepStats?.defaultDamageType || 1, pool.weaponId[i], isHighImpact);
 
-                                    this.session.spawnParticle(pool.posX[i], pool.posY[i], pool.posZ[i], FXParticleType.BLOOD_SPLATTER, 3);
-                                    GamePlaySounds.playImpact(MaterialType.FLESH);
+                                // 2. Sync pool hp from object so the rest of this frame's
+                                //    logic (e.g. DeathSystem queries) sees the updated value.
+                                EnemyPoolState.hp[enemyIdx] = enemy.hp;
 
-                                    // --- PIERCING & HIT-STOP ---
-                                    const canPierce = wepStats?.piercing && pool.pierceCount[i] < 3;
+                                // Apply slow duration
+                                enemy.slowDuration = Math.max(enemy.slowDuration, 1.5);
 
-                                    // 3. Kinetic Feedback (Knockback)
-                                    const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
-                                    const force = (pool.damage[i] / 3) / Math.max(0.3, mass);
-                                    _v1.set(pool.velX[i], 0, pool.velZ[i]).normalize().multiplyScalar(force);
-                                    enemy.knockbackVel.add(_v1);
+                                // Directional blood spray in the direction of the projectile
+                                _v5.set(pool.velX[i], pool.velY[i] + 2.0, pool.velZ[i]).normalize().multiplyScalar(5.0);
+                                this.session.spawnParticle(pool.posX[i], pool.posY[i], pool.posZ[i], FXParticleType.BLOOD_SPLATTER, 6, undefined, _v5);
+                                GamePlaySounds.playImpact(MaterialType.FLESH);
 
-                                    if (isKill && isHighImpact) {
-                                        enemy.deathVel.set(pool.velX[i], pool.velY[i], pool.velZ[i]).normalize().multiplyScalar(force * 2.0).setY(4.0);
-                                    }
+                                // --- PIERCING & HIT-STOP ---
+                                const canPierce = wepStats?.piercing && pool.pierceCount[i] < 3;
 
-                                    if (isHighImpact && session.state) {
-                                        const ms = isKill ? 45 : 35;
-                                        session.state.metrics.hitStopTime = Math.max(session.state.metrics.hitStopTime || 0, ms);
-                                    }
+                                // 3. Kinetic Feedback (Knockback)
+                                const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
+                                const force = (pool.damage[i] / 3) / Math.max(0.3, mass);
+                                _v1.set(pool.velX[i], 0, pool.velZ[i]).normalize().multiplyScalar(force);
+                                enemy.knockbackVel.add(_v1);
 
-                                    if (canPierce) {
-                                        pool.pierceCount[i]++;
-                                        pool.damage[i] *= (wepStats?.pierceDecay || 0.7);
-                                        despawn = false;
-                                    } else {
-                                        despawn = true;
-                                    }
-                                    break; // Hit handled, move to next projectile
+                                if (isKill && isHighImpact) {
+                                    enemy.deathVel.set(pool.velX[i], pool.velY[i], pool.velZ[i]).normalize().multiplyScalar(force * 2.0).setY(4.0);
                                 }
+
+                                if (isHighImpact && session.state) {
+                                    const ms = isKill ? 45 : 35;
+                                    session.state.metrics.hitStopTime = Math.max(session.state.metrics.hitStopTime || 0, ms);
+                                }
+
+                                if (canPierce) {
+                                    pool.pierceCount[i]++;
+                                    pool.damage[i] *= (wepStats?.pierceDecay || 0.7);
+
+                                    // Prevent double-hitting the same enemy on the next frame by pushing the projectile forward slightly past the collider
+                                    _v1.set(pool.velX[i], 0, pool.velZ[i]).normalize().multiplyScalar(hitRad + 0.1);
+                                    pool.posX[i] += _v1.x;
+                                    pool.posZ[i] += _v1.z;
+                                    despawn = false;
+                                } else {
+                                    despawn = true;
+                                }
+                                break; // Hit handled, move to next projectile
                             }
                         }
                     }
@@ -318,9 +349,21 @@ export class ProjectileSystem implements System {
             if (!enemy) continue;
             const eIdx = enemy.poolId | 0;
             if ((EnemyPoolState.statusFlags[eIdx] & ENTITY_STATUS.DEAD) !== 0) continue;
-            const dx = EnemyPoolState.posX[eIdx] - px;
-            const dz = EnemyPoolState.posZ[eIdx] - pz;
-            if (dx * dx + dz * dz < radSq) {
+            const dx = enemy.mesh.position.x - px;
+            const dz = enemy.mesh.position.z - pz;
+            const distSq = dx * dx + dz * dz;
+            if (distSq < radSq) {
+                const enemyObj = activeEnemies[eIdx];
+                if (enemyObj) {
+                    const dist = Math.sqrt(distSq);
+                    const forceMag = 15.0 + (1.0 - dist / radius) * 20.0;
+                    if (distSq > 0.001) {
+                        enemyObj.deathVel.set(dx / dist, 0, dz / dist).multiplyScalar(forceMag);
+                    } else {
+                        enemyObj.deathVel.set(0, 0, 1).multiplyScalar(forceMag);
+                    }
+                    enemyObj.deathVel.y = 8.0 + Math.random() * 4.0;
+                }
                 EnemyPoolState.hp[eIdx] -= damage;
                 this.session.state.applyDamage(activeEnemies[eIdx], damage, DamageType.EXPLOSION, pool.weaponId[idx], true);
                 hitCount++;
@@ -418,7 +461,15 @@ export class ProjectileSystem implements System {
                     const pdx = ctx.state.player.position.x - fz.x;
                     const pdz = ctx.state.player.position.z - fz.z;
                     if (pdx * pdx + pdz * pdz <= radSq) {
+                        // Apply the burning status effect (visual + debuff)
                         this.perkSystem.applyPerk(ctx, StatusEffectID.BURNING, 1500, 1.0);
+                        // Deal actual HP damage via the onPlayerHit callback
+                        if (ctx.state.callbacks?.onPlayerHit) {
+                            ctx.state.callbacks.onPlayerHit(
+                                dmg, null, DamageType.BURN, fz.sourceId || DamageID.BURN,
+                                true, StatusEffectID.BURNING, 1500, 1.0
+                            );
+                        }
                     }
                 }
 
@@ -565,7 +616,7 @@ export class ProjectileSystem implements System {
 
         const isFlame = wepId === WeaponID.FLAMETHROWER;
         const baseRange = isFlame ? 10 : 14;
-        const range = baseRange * (state.player.statsBuffer[PlayerStatID.MULTIPLIER_RANGE] || 1.0);
+        const range = baseRange * (state.player.statsBuffer[StatID.MULTIPLIER_RANGE] || 1.0);
         const rangeSq = range * range;
 
         // Base damage scaled by delta. 
@@ -617,6 +668,7 @@ export class ProjectileSystem implements System {
 
                         if (cDistSq < 64) { // 8m chain range
                             EnemyPoolState.hp[j] -= damage * 0.7;
+                            enemies[j].stunDuration = Math.max(enemies[j].stunDuration, 0.5);
                             state.applyDamage(enemies[j], damage * 0.7, DamageType.ELECTRIC, wepId as unknown as DamageID, false);
                             WeaponFX.drawArcLightning(this.session.engine.scene, _v3, enemies[j].mesh.position, false);
                             _v3.copy(enemies[j].mesh.position);
@@ -629,6 +681,10 @@ export class ProjectileSystem implements System {
 
             if (hit) {
                 EnemyPoolState.hp[i] -= damage;
+
+                if (!isFlame) {
+                    enemies[i].stunDuration = Math.max(enemies[i].stunDuration, 0.5);
+                }
 
                 state.applyDamage(enemies[i], damage, isFlame ? DamageType.BURN : DamageType.ELECTRIC, wepId as unknown as DamageID, false);
 

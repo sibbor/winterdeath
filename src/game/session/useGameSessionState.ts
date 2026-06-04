@@ -6,7 +6,7 @@ import { DeathPhase } from '../../types/SessionTypes';
 import { SectorBuildContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
-import { CinematicBubbleHandle } from '../../components/ui/hud/CinematicBubble';
+import { CinematicDialogueHandle } from '../../components/ui/hud/CinematicDialogue';
 import { InteractionType } from '../../systems/ui/UIEventBridge';
 
 export interface GameSessionUiState {
@@ -54,7 +54,7 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
     // Gameplay Logic Refs
     const activeBubbles = useRef<any[]>([]);
     const hasEndedSector = useRef(false);
-    const collectedCluesRef = useRef<string[]>(props.gameState.stats.discoveredClues || []);
+    const collectedCluesRef = useRef<Uint8Array>(props.gameState.stats.discoveredClues ?? new Uint8Array(256));
     const distanceTraveledRef = useRef(0);
     const lastTeleportRef = useRef<number>(0);
     const lastDrawCallsRef = useRef(0);
@@ -71,7 +71,7 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
     const hasSetPrevPosRef = useRef<boolean>(false);
     const playerGroupRef = useRef<THREE.Group>(new THREE.Group());
     const playerMeshRef = useRef<THREE.Object3D | null>(null);
-    const bubbleRef = useRef<CinematicBubbleHandle>(null);
+    const bubbleRef = useRef<CinematicDialogueHandle>(null);
     const skyLightRef = useRef<THREE.DirectionalLight | null>(null);
     const skyLightOffsetRef = useRef<THREE.Vector3 | null>(null);
     const familyMemberRef = useRef<{ mesh: THREE.Group; } | null>(null);

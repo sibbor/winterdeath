@@ -5,7 +5,7 @@ import { InteractionType, InteractionPromptId, MetaActionId } from './ui/UIEvent
 import { HudStore, HudStateSoA } from '../store/HudStore';
 import { StatusStore } from '../store/StatusStore';
 import { MAX_STATUS_EFFECTS, MAX_PASSIVES, MAX_BUFFS, MAX_DEBUFFS, MAX_MAP_ITEMS } from '../components/ui/hud/HudTypes';
-import { PlayerStatID, PlayerStatusFlags } from '../types/CareerStats';
+import { StatID, PlayerStatusFlags } from '../types/CareerStats';
 import { DataResolver } from '../core/data/DataResolver';
 import { ToolID } from '../entities/player/CombatTypes';
 import { InputAction } from '../core/engine/InputManager';
@@ -54,6 +54,11 @@ const _fastUpdateDetail = {
     nextLevelXp: 0,
     reloadProgress: 0,
     bossHpP: -1,
+    waveActive: false,
+    waveName: '',
+    waveProgress: 0,
+    waveKills: 0,
+    waveTarget: 0,
     vehicleSpeed: 0,
     throttleState: 0,
     isSkidding: false,
@@ -93,21 +98,38 @@ export const HudSystem = {
             bossHp = activeBoss.hp / activeBoss.maxHp;
         }
 
-        _fastUpdateDetail.hp = stats[PlayerStatID.HP] || 0;
-        _fastUpdateDetail.maxHp = stats[PlayerStatID.MAX_HP] || 100;
-        _fastUpdateDetail.stamina = stats[PlayerStatID.STAMINA] || 0;
-        _fastUpdateDetail.maxStamina = stats[PlayerStatID.MAX_STAMINA] || 100;
+        _fastUpdateDetail.hp = stats[StatID.HP] || 0;
+        _fastUpdateDetail.maxHp = stats[StatID.MAX_HP] || 100;
+        _fastUpdateDetail.stamina = stats[StatID.STAMINA] || 0;
+        _fastUpdateDetail.maxStamina = stats[StatID.MAX_STAMINA] || 100;
         _fastUpdateDetail.ammo = state.combat.weaponAmmo[state.combat.activeWeapon] || 0;
-        _fastUpdateDetail.currentXp = stats[PlayerStatID.CURRENT_XP] || 0;
-        _fastUpdateDetail.nextLevelXp = stats[PlayerStatID.NEXT_LEVEL_XP] || 1000;
+        _fastUpdateDetail.currentXp = stats[StatID.CURRENT_XP] || 0;
+        _fastUpdateDetail.nextLevelXp = stats[StatID.NEXT_LEVEL_XP] || 1000;
         _fastUpdateDetail.reloadProgress = isFinite(reloadProgress) ? reloadProgress : 0;
         _fastUpdateDetail.bossHpP = isFinite(bossHp) ? bossHp : -1;
+
+        // Wave logic
+        const sState = state.sectorState;
+        if (sState && sState.waveActive) {
+            _fastUpdateDetail.waveActive = true;
+            _fastUpdateDetail.waveName = sState.waveName || '';
+            _fastUpdateDetail.waveProgress = isFinite(sState.waveProgress) ? sState.waveProgress : 0;
+            _fastUpdateDetail.waveKills = sState.waveKills || 0;
+            _fastUpdateDetail.waveTarget = sState.waveTarget || 0;
+        } else {
+            _fastUpdateDetail.waveActive = false;
+            _fastUpdateDetail.waveName = '';
+            _fastUpdateDetail.waveProgress = 0;
+            _fastUpdateDetail.waveKills = 0;
+            _fastUpdateDetail.waveTarget = 0;
+        }
+
         _fastUpdateDetail.vehicleSpeed = state.vehicle.active ? (state.vehicle.speed || 0) : 0;
         _fastUpdateDetail.throttleState = state.vehicle.active ? (state.vehicle.throttle || 0) : 0;
         _fastUpdateDetail.isSkidding = state.vehicle.active ? !!state.vehicle.isSkidding : false;
         _fastUpdateDetail.kills = state.sessionStats.kills || 0;
-        _fastUpdateDetail.scrap = state.player.statsBuffer[PlayerStatID.SCRAP] || 0;
-        _fastUpdateDetail.challengePoints = state.player.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0;
+        _fastUpdateDetail.scrap = state.player.statsBuffer[StatID.SCRAP] || 0;
+        _fastUpdateDetail.challengePoints = state.player.statsBuffer[StatID.TOTAL_CHALLENGE_POINTS] || 0;
         const directSp = state.sessionStats.spGained || 0;
         const collSp = state.sessionStats.discoveredCollectibles?.length || 0;
         const poiSp = state.sessionStats.discoveredPois?.length || 0;
@@ -193,6 +215,21 @@ export const HudSystem = {
             _current.bossPos!.z = activeBoss.mesh.position.z;
         } else {
             _current.bossActive = false;
+        }
+
+        const sState2 = state.sectorState;
+        if (sState2 && sState2.waveActive) {
+            _current.waveActive = true;
+            _current.waveName = sState2.waveName || '';
+            _current.waveProgress = sState2.waveProgress || 0;
+            _current.waveKills = sState2.waveKills || 0;
+            _current.waveTarget = sState2.waveTarget || 0;
+        } else {
+            _current.waveActive = false;
+            _current.waveName = '';
+            _current.waveProgress = 0;
+            _current.waveKills = 0;
+            _current.waveTarget = 0;
         }
 
         let famSignal = 0;
@@ -289,32 +326,42 @@ export const HudSystem = {
 
         _current.statsBuffer.set(state.player.statsBuffer);
 
-        _current.hp = state.player.statsBuffer[PlayerStatID.HP] || 0;
-        _current.maxHp = state.player.statsBuffer[PlayerStatID.MAX_HP] || 100;
-        _current.stamina = state.player.statsBuffer[PlayerStatID.STAMINA] || 0;
-        _current.maxStamina = state.player.statsBuffer[PlayerStatID.MAX_STAMINA] || 100;
+        _current.hp = state.player.statsBuffer[StatID.HP] || 0;
+        _current.maxHp = state.player.statsBuffer[StatID.MAX_HP] || 100;
+        _current.stamina = state.player.statsBuffer[StatID.STAMINA] || 0;
+        _current.maxStamina = state.player.statsBuffer[StatID.MAX_STAMINA] || 100;
         _current.ammo = state.combat.weaponAmmo[state.combat.activeWeapon] || 0;
         _current.magSize = wep?.magSize || 0;
-        _current.score = state.player.statsBuffer[PlayerStatID.SCORE] || 0;
-        _current.scrap = state.player.statsBuffer[PlayerStatID.SCRAP] || 0;
-        _current.challengePoints = state.player.statsBuffer[PlayerStatID.TOTAL_CHALLENGE_POINTS] || 0;
+        _current.score = state.player.statsBuffer[StatID.SCORE] || 0;
+        _current.scrap = state.player.statsBuffer[StatID.SCRAP] || 0;
+        _current.challengePoints = state.player.statsBuffer[StatID.TOTAL_CHALLENGE_POINTS] || 0;
         _current.activeWeapon = state.combat.activeWeapon;
         _current.isReloading = state.combat.isReloading;
         _current.bossSpawned = state.enemies.bossSpawned;
         _current.bossDefeated = activeBoss ? activeBoss.dead : false;
         _current.familyFound = state.world.familyFound;
         _current.familySignal = isFinite(famSignal) ? famSignal : 0;
-        _current.level = state.player.statsBuffer[PlayerStatID.LEVEL] || 1;
-        _current.currentXp = state.player.statsBuffer[PlayerStatID.CURRENT_XP] || 0;
-        _current.nextLevelXp = state.player.statsBuffer[PlayerStatID.NEXT_LEVEL_XP] || 1000;
+        _current.level = state.player.statsBuffer[StatID.LEVEL] || 1;
+        _current.currentXp = state.player.statsBuffer[StatID.CURRENT_XP] || 0;
+        _current.nextLevelXp = state.player.statsBuffer[StatID.NEXT_LEVEL_XP] || 1000;
         _current.throwableAmmo = state.combat.weaponAmmo[props.loadout?.throwable] || 0;
         _current.distanceTraveled = Math.floor(distanceTraveled) || 0;
         _current.kills = state.sessionStats.kills || 0;
         _current.spEarned = state.sessionStats.spGained || 0;
-        const sStats = state.sessionStats;
-        _current.cluesFoundCount = sStats ? (sStats.discoveredClues ? sStats.discoveredClues.length : 0) : 0;
-        _current.poisFoundCount = sStats ? (sStats.discoveredPois ? sStats.discoveredPois.length : 0) : 0;
-        _current.collectiblesFoundCount = sStats ? (sStats.discoveredCollectibles ? sStats.discoveredCollectibles.length : 0) : 0;
+
+        // Count set bits in the discovery Uint8Array maps (O(256) per type, compile-friendly)
+        if (state.careerStats) {
+            let cCount = 0, pCount = 0, colCount = 0;
+            const dc = state.careerStats.discoveredClues, dp = state.careerStats.discoveredPois, dco = state.careerStats.discoveredCollectibles;
+            if (dc && dp && dco) {
+                for (let i = 0; i < dc.length; i++) if (dc[i] === 1) cCount++;
+                for (let i = 0; i < dp.length; i++) if (dp[i] === 1) pCount++;
+                for (let i = 0; i < dco.length; i++) if (dco[i] === 1) colCount++;
+            }
+            _current.discoveredCluesCount = cCount;
+            _current.discoveredPoisCount = pCount;
+            _current.discoveredCollectiblesCount = colCount;
+        }
 
         // Sync persistent telemetry
         if (state.stats) {
@@ -374,31 +421,40 @@ export const HudSystem = {
 
         // --- ZERO-GC SECTOR-SPECIFIC DISCOVERY TALLYING ---
         let cCount = 0;
-        if (state.discovery.discoverySets?.discoveredClues) {
-            for (const id of state.discovery.discoverySets.discoveredClues) {
-                const resolved = DataResolver.resolveClueID(id);
-                if (resolved !== undefined && CLUES[resolved]?.sector === _current.currentSector) cCount++;
+        const clues = state.careerStats?.discoveredClues;
+        if (clues) {
+            for (let i = 0; i < clues.length; i++) {
+                if (clues[i] === 1) {
+                    const resolved = DataResolver.resolveClueID(i);
+                    if (resolved !== undefined && CLUES[resolved]?.sector === _current.currentSector) cCount++;
+                }
             }
         }
-        _current.cluesFoundCount = cCount;
+        _current.discoveredCluesCount = cCount;
 
         let poiCount = 0;
-        if (state.discovery.discoverySets?.discoveredPois) {
-            for (const id of state.discovery.discoverySets.discoveredPois) {
-                const resolved = DataResolver.resolvePoiID(id);
-                if (resolved !== undefined && POIS[resolved]?.sector === _current.currentSector) poiCount++;
+        const pois = state.careerStats?.discoveredPois;
+        if (pois) {
+            for (let i = 0; i < pois.length; i++) {
+                if (pois[i] === 1) {
+                    const resolved = DataResolver.resolvePoiID(i);
+                    if (resolved !== undefined && POIS[resolved]?.sector === _current.currentSector) poiCount++;
+                }
             }
         }
-        _current.poisFoundCount = poiCount;
+        _current.discoveredPoisCount = poiCount;
 
         let colCount = 0;
-        if (state.discovery.discoverySets?.discoveredCollectibles) {
-            for (const id of state.discovery.discoverySets.discoveredCollectibles) {
-                const resolved = DataResolver.resolveCollectibleID(id);
-                if (resolved !== undefined && COLLECTIBLES[resolved]?.sector === _current.currentSector) colCount++;
+        const cols = state.careerStats?.discoveredCollectibles;
+        if (cols) {
+            for (let i = 0; i < cols.length; i++) {
+                if (cols[i] === 1) {
+                    const resolved = DataResolver.resolveCollectibleID(i);
+                    if (resolved !== undefined && COLLECTIBLES[resolved]?.sector === _current.currentSector) colCount++;
+                }
             }
         }
-        _current.collectiblesFoundCount = colCount;
+        _current.discoveredCollectiblesCount = colCount;
 
         _current.isMobileDevice = !!props.isMobileDevice;
 

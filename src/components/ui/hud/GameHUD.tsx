@@ -165,7 +165,7 @@ const StatusEffectIconPooled = forwardRef(({ index, isMobileDevice, isLandscapeM
     }));
 
     return (
-        <div ref={containerRef} className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-10 h-10 text-[14px]'} flex items-center justify-center bg-black/80 border-2 rounded-sm relative cursor-help`}
+        <div ref={containerRef} className={`shrink-0 ${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-10 h-10 text-[14px]'} flex items-center justify-center bg-black/80 border-2 rounded-sm relative cursor-help`}
             style={{ display: 'none' }}
             onTouchStart={isMobileDevice ? handleActionEnter : undefined}
             onMouseEnter={!isMobileDevice ? handleActionEnter : undefined}
@@ -202,7 +202,7 @@ const PassiveIconPooled = forwardRef(({ index, isMobileDevice, isLandscapeMode, 
 
     return (
         <div ref={containerRef}
-            className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-10 h-10 text-[14px]'} flex items-center justify-center bg-black/80 border-2 rounded-full transition-all cursor-help`}
+            className={`shrink-0 ${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-10 h-10 text-[14px]'} flex items-center justify-center bg-black/80 border-2 rounded-full transition-all cursor-help`}
             style={{ display: 'none', borderColor: PerkColor.PASSIVE.str, boxShadow: `0 0 10px ${PerkColor.PASSIVE.str}` }}
             onTouchStart={isMobileDevice ? handleActionEnter : undefined}
             onMouseEnter={!isMobileDevice ? handleActionEnter : undefined}
@@ -278,6 +278,27 @@ const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
     );
 });
 
+const EnemyWavePanel = React.memo(({ isMobileDevice, wavePanelRef, waveNameRef, waveBarRef, waveTextRef }: any) => {
+    return (
+        <div ref={wavePanelRef} className="w-full flex flex-col items-center animate-fadeIn pointer-events-none" style={{ display: 'none' }}>
+            <h2 ref={waveNameRef} className={`hud-wave-title ${isMobileDevice ? 'text-sm mb-1.5' : 'text-2xl mb-2'} uppercase`}>
+                WAVE
+            </h2>
+            <div className={`w-full bg-black/95 border-2 border-blue-900/60 shadow-[0_4px_15px_rgba(0,0,0,0.8),inset_0_0_10px_rgba(0,0,0,0.9)] skew-x-[-12deg] ${isMobileDevice ? 'max-w-[220px] h-2.5' : 'max-w-[500px] h-4.5'} relative overflow-hidden`}>
+                {/* HARDWARE ACCELERATED WAVE BAR */}
+                <div
+                    ref={waveBarRef}
+                    className="h-full origin-left will-change-transform hud-wave-bar"
+                    style={{ transform: 'scaleX(0)' }}
+                />
+            </div>
+            <span ref={waveTextRef} className={`${isMobileDevice ? 'text-[10px] mt-1' : 'text-xs mt-1.5'} text-zinc-300 font-mono tracking-[0.15em] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]`}>
+                0 / 0
+            </span>
+        </div>
+    );
+});
+
 const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, handleSelectWeaponInternal, ammoTextRef, reloadBarRef, speedTextRef, speedArcRef, gasPedalRef, skidPedalRef, brakePedalRef, handleActionEnter, handleActionLeave }: any) => {
     const isDriving = useHudStore(s => s.isDriving);
     const activeWeapon = useHudStore(s => s.activeWeapon);
@@ -302,7 +323,8 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
             const isThrowable = wData.category === WeaponCategory.THROWABLE;
             const isRadio = type === ToolID.RADIO;
             const size = isMobileDevice ? "w-16 h-16" : "w-20 h-20";
-            const cColor = WeaponCategoryColors[wData.category] || COLORS.WHITE;
+            const cColor = isThrowable ? COLORS.GREEN : (WeaponCategoryColors[wData.category] || COLORS.WHITE);
+            const inactiveBorderColor = isThrowable ? cColor.str : 'rgba(255, 255, 255, 0.2)';
 
             const dots = [];
             if (isThrowable) {
@@ -324,10 +346,13 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                     data-tooltip={wData.displayName ? t(wData.displayName) : wData.name}
                     className={`${SLOT_BASE} ${size} ${isActive ? 'scale-[1.15] z-20 border-[3px] hud-active-slot' : 'opacity-80 border border-white/20 hover:opacity-80'} 
                                    ${(isRadio && familyFound) || (isThrowable && throwableAmmo <= 0) ? 'grayscale' : ''}`}
-                    style={isActive ? {
+                    style={isActive || isThrowable ? {
                         borderColor: cColor.str,
                         '--slot-color': cColor.str
-                    } as any : undefined}>
+                    } as any : {
+                        borderColor: inactiveBorderColor
+                    }}>
+                    <div className={`absolute inset-0 bg-gradient-to-t ${isActive ? 'from-white/10 to-transparent' : 'from-black/60 to-black/20'}`} />
 
                     {isActive && <ReloadGrittyFill reloadBarRef={reloadBarRef} catColor={cColor.str} />}
 
@@ -452,7 +477,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
 // ============================================================================
 
 const GameHUD: React.FC<GameHUDProps> = React.memo(({
-    loadout, debugMode = false, isBossIntro = false, isMobileDevice = false,
+    loadout, isBossIntro = false, isMobileDevice = false,
     onTogglePause, onToggleMap, onSelectWeapon, onOpenAdventureLog
 }) => {
     const isDead = useHudStore(s => s.isDead);
@@ -480,6 +505,10 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const skidPedalRef = useRef<HTMLDivElement>(null);
     const brakePedalRef = useRef<HTMLDivElement>(null);
     const bossHpBarRef = useRef<HTMLDivElement>(null);
+    const wavePanelRef = useRef<HTMLDivElement>(null);
+    const waveNameRef = useRef<HTMLHeadingElement>(null);
+    const waveBarRef = useRef<HTMLDivElement>(null);
+    const waveTextRef = useRef<HTMLSpanElement>(null);
     const killsTextRef = useRef<HTMLSpanElement>(null);
     const scrapTextRef = useRef<HTMLSpanElement>(null);
     const spTextRef = useRef<HTMLSpanElement>(null);
@@ -505,6 +534,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
         hasCriticalHp: false,
         reloadProgress: -999,
         bossHpP: -999,
+        waveActive: false,
+        waveName: '',
+        waveProgress: -999,
+        waveKills: -999,
+        waveTarget: -999,
         isDriving: false,
         vehicleSpeed: -999,
         throttleState: -999,
@@ -631,6 +665,27 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     bossHpBarRef.current.style.transform = `scaleX(${Math.max(0, Math.min(1, data.bossHpP))})`;
                 }
                 cache.bossHpP = data.bossHpP;
+            }
+
+            // Wave HP/Kills Update
+            if (data.waveActive) {
+                if (wavePanelRef.current) {
+                    wavePanelRef.current.style.display = 'flex';
+                }
+                if (waveNameRef.current && data.waveName !== cache.waveName) {
+                    waveNameRef.current.innerText = t(data.waveName);
+                    cache.waveName = data.waveName;
+                }
+                if (waveBarRef.current) {
+                    waveBarRef.current.style.transform = `scaleX(${Math.max(0, Math.min(1, data.waveProgress))})`;
+                }
+                if (waveTextRef.current) {
+                    waveTextRef.current.innerText = `${data.waveKills} / ${data.waveTarget}`;
+                }
+            } else {
+                if (wavePanelRef.current) {
+                    wavePanelRef.current.style.display = 'none';
+                }
             }
 
             // 7. Vehicle Speed & Throttle (Bypassed if not driving!)
@@ -915,8 +970,15 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     </div>
                 </div>
 
-                <div className={`absolute ${isMobileDevice ? 'top-20 px-12' : 'top-32'} left-1/2 -translate-x-1/2 flex flex-col items-center w-full max-w-[600px]`}>
+                <div className={`absolute ${isMobileDevice ? 'top-20 px-12' : 'top-32'} left-1/2 -translate-x-1/2 flex flex-col items-center w-full max-w-[600px] gap-4`}>
                     <BossWavePanel isMobileDevice={isMobileDevice} bossHpBarRef={bossHpBarRef} />
+                    <EnemyWavePanel
+                        isMobileDevice={isMobileDevice}
+                        wavePanelRef={wavePanelRef}
+                        waveNameRef={waveNameRef}
+                        waveBarRef={waveBarRef}
+                        waveTextRef={waveTextRef}
+                    />
                 </div>
 
                 {/* UI RELOAD BAR OVER PLAYER HEAD */}

@@ -21,29 +21,29 @@ export enum PoiType {
 
 export enum PoiID {
     // Sector 0 (0x00)
-    S0_BUILDING_ON_FIRE = (0 << 8) | 0,
-    S0_CHURCH = (0 << 8) | 1,
-    S0_CAFE = (0 << 8) | 2,
-    S0_PIZZERIA = (0 << 8) | 3,
-    S0_GROCERY = (0 << 8) | 4,
-    S0_GYM = (0 << 8) | 5,
-    S0_TRAIN_YARD = (0 << 8) | 6,
+    S0_BUILDING_ON_FIRE = 5000 + ((0 << 8) | 0),
+    S0_CHURCH = 5000 + ((0 << 8) | 1),
+    S0_CAFE = 5000 + ((0 << 8) | 2),
+    S0_PIZZERIA = 5000 + ((0 << 8) | 3),
+    S0_GROCERY = 5000 + ((0 << 8) | 4),
+    S0_GYM = 5000 + ((0 << 8) | 5),
+    S0_TRAIN_YARD = 5000 + ((0 << 8) | 6),
 
     // Sector 1 (0x01)
-    S1_CAMPFIRE = (1 << 8) | 0,
-    S1_TRAIN_TUNNEL = (1 << 8) | 1,
-    S1_CAVE_ENTRANCE = (1 << 8) | 2,
-    S1_MOUNTAIN_VAULT = (1 << 8) | 3,
+    S1_CAMPFIRE = 5000 + ((1 << 8) | 0),
+    S1_TRAIN_TUNNEL = 5000 + ((1 << 8) | 1),
+    S1_CAVE_ENTRANCE = 5000 + ((1 << 8) | 2),
+    S1_MOUNTAIN_VAULT = 5000 + ((1 << 8) | 3),
 
     // Sector 2 (0x02)
-    S2_MAST = (2 << 8) | 0,
-    S2_FARM = (2 << 8) | 1,
-    S2_EGG_FARM = (2 << 8) | 2,
-    S2_BARN = (2 << 8) | 3,
+    S2_MAST = 5000 + ((2 << 8) | 0),
+    S2_FARM = 5000 + ((2 << 8) | 1),
+    S2_EGG_FARM = 5000 + ((2 << 8) | 2),
+    S2_BARN = 5000 + ((2 << 8) | 3),
 
     // Sector 3 (0x03)
-    S3_SHED = (3 << 8) | 0,
-    S3_SCRAPYARD = (3 << 8) | 1
+    S3_SHED = 5000 + ((3 << 8) | 0),
+    S3_SCRAPYARD = 5000 + ((3 << 8) | 1)
 }
 
 export interface PoiDefinition {

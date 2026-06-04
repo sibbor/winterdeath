@@ -44,6 +44,12 @@ export class HudStateSoA implements IHudState {
     public bossHp = 0;
     public bossMaxHp = 0;
 
+    public waveActive = false;
+    public waveName = '';
+    public waveProgress = 0;
+    public waveKills = 0;
+    public waveTarget = 0;
+
     public bossSpawned = false;
     public bossDefeated = false;
     public familyFound = false;
@@ -68,9 +74,9 @@ export class HudStateSoA implements IHudState {
     public vehicleSpeed = 0;
     public throttleState = 0;
     public currentSector = 0;
-    public cluesFoundCount = 0;
-    public poisFoundCount = 0;
-    public collectiblesFoundCount = 0;
+    public discoveredCluesCount = 0;
+    public discoveredPoisCount = 0;
+    public discoveredCollectiblesCount = 0;
     public fps = 60;
     // Sector Stats (Flattened)
     public unlimitedAmmo = false;
@@ -182,6 +188,11 @@ export class HudStateSoA implements IHudState {
         this.bossName = src.bossName;
         this.bossHp = src.bossHp;
         this.bossMaxHp = src.bossMaxHp;
+        this.waveActive = src.waveActive;
+        this.waveName = src.waveName;
+        this.waveProgress = src.waveProgress;
+        this.waveKills = src.waveKills;
+        this.waveTarget = src.waveTarget;
         this.bossSpawned = src.bossSpawned;
         this.bossDefeated = src.bossDefeated;
         this.familyFound = src.familyFound;
@@ -210,9 +221,9 @@ export class HudStateSoA implements IHudState {
         this.vehicleSpeed = src.vehicleSpeed;
         this.throttleState = src.throttleState;
         this.currentSector = src.currentSector;
-        this.cluesFoundCount = src.cluesFoundCount;
-        this.poisFoundCount = src.poisFoundCount;
-        this.collectiblesFoundCount = src.collectiblesFoundCount;
+        this.discoveredCluesCount = src.discoveredCluesCount;
+        this.discoveredPoisCount = src.discoveredPoisCount;
+        this.discoveredCollectiblesCount = src.discoveredCollectiblesCount;
         this.fps = src.fps;
         this.unlimitedAmmo = src.unlimitedAmmo;
         this.unlimitedThrowables = src.unlimitedThrowables;
@@ -358,7 +369,7 @@ class HudStoreClass {
      */
     public triggerMetaAction(actionId: MetaActionId): void {
         this.activeBuffer.lastMetaSignal = actionId;
-        this.activeBuffer.metaSignalTimestamp = Date.now();
+        this.activeBuffer.metaSignalTimestamp = performance.now();
 
         // Also bridge to engine for Zero-GC polling systems (e.g. INTERACT_TAP)
         UIEventBridge.triggerUiAction(actionId);

@@ -6,7 +6,7 @@ import { VegetationGenerator } from '../../core/world/generators/VegetationGener
 import { VEGETATION_TYPE } from '../../content/environment';
 import { PoiType, PoiID } from '../../content/pois';
 import { ClueID } from '../../content/clues';
-import { SectorEventID } from '../../content/events';
+import { SectorEventID } from '../../content/sector_events';
 import { CollectibleID } from '../../content/collectibles';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
@@ -294,7 +294,7 @@ export const Sector3: SectorDef = {
             sectorState.nathalieUnlocked = true;
             const t = triggerSystem.metadata.find((t: any) => t.id === FamilyMemberID.NATHALIE);
             if (t) {
-                const idx = triggerSystem.getTriggerById(FamilyMemberID.NATHALIE);
+                const idx = triggerSystem.getTriggerById(FamilyMemberID.NATHALIE, TriggerType.EVENT);
                 if (idx !== -1) {
                     triggerSystem.setStatusFlag(idx, TriggerStatus.ACTIVE, true);
                     triggerSystem.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);
@@ -304,7 +304,7 @@ export const Sector3: SectorDef = {
         // Stamp when Part 2 cinematic has started
         if (!sectorState.part2Played && sectorState.pendingTrigger === null) {
             // Mark Part 2 as played once s3_dialogue_2 trigger fires
-            const idx = triggerSystem.getTriggerById(SectorEventID.S3_DIALOGUE_2);
+            const idx = triggerSystem.getTriggerById(SectorEventID.S3_DIALOGUE_2, TriggerType.EVENT);
             if (idx !== -1 && triggerSystem.isTriggered(idx)) sectorState.part2Played = true;
         }
 
@@ -315,11 +315,11 @@ export const Sector3: SectorDef = {
             sectorState.epilogueTimer = simTime;
         }
 
-        // ── Boss-defeat signal absorbed here before GameSessionLoop fires concludeSector ──
-        // We do NOT want the automatic 4s→conclude flow. Instead we run the epilogue sequence.
+        // ── Boss-defeat signal absorbed here before GameSessionLoop fires endSector ──
+        // We do NOT want the automatic 4s→end flow. Instead we run the epilogue sequence.
         if (gameState.bossDefeatedTime > 0 && !sectorState.epilogueBossDefeated) {
             sectorState.epilogueBossDefeated = true;
-            // Prevent GameSessionLoop from triggering concludeSector by zeroing it immediately.
+            // Prevent GameSessionLoop from triggering endSector by zeroing it immediately.
             // We will call it ourselves after the full epilogue.
             gameState.bossDefeatedTime = -1;
             sectorState.epilogueState = EP.FAMILY_EXIT;
@@ -697,7 +697,7 @@ export const Sector3: SectorDef = {
                 sectorState.epilogueState = EP.DONE;
                 // Drive into the sunset — trigger ScreenSectorReport (final epilogue screen)
                 events.onAction([
-                    { type: TriggerActionType.CONCLUDE_SECTOR, payload: { isExtraction: true } }
+                    { type: TriggerActionType.END_SECTOR, payload: { isExtraction: true } }
                 ]);
             }
         }

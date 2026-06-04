@@ -36,13 +36,16 @@ export interface SessionStats {
     gibbedEnemies: number;
     uniqueEnemiesHitByExplosives: number;
 
-    // --- WEAPON PERFORMANCE BUFFERS ---
-    weaponKills: Float64Array;
-    weaponDamageDealt: Float64Array;
-    weaponShotsFired: Float64Array;
-    weaponShotsHit: Float64Array;
-    weaponTimeActive: Float64Array;
-    weaponEngagementDistSq: Float64Array;
+    // --- INCOMING PERFORMANCE BUFFERS ---
+    incomingDamageBuffer: Float64Array;
+
+    // --- OUTGOING PERFORMANCE BUFFERS ---
+    outgoingKillsBuffer: Float64Array;
+    outgoingDamageBuffer: Float64Array;
+    outgoingShotsFiredBuffer: Float64Array;
+    outgoingShotsHitBuffer: Float64Array;
+    outgoingTimeActiveBuffer: Float64Array;
+    outgoingEngagementDistSqBuffer: Float64Array;
 
     // --- PERK PERFORMANCE BUFFERS ---
     perkTimesGained: Float64Array;
@@ -53,7 +56,6 @@ export interface SessionStats {
     // --- ENEMY STATS BUFFERS ---
     enemyKills: Float64Array;
     enemyDeaths: Float64Array;
-    incomingDamageBuffer: Float64Array;
 
     activePassives: Int32Array;
     activePassivesCount: number;
@@ -62,19 +64,14 @@ export interface SessionStats {
     activeDebuffs: Int32Array;
     activeDebuffsCount: number;
 
-    discoveredClues: any[];
-    discoveredPois: string[];
-    discoveredZombies: number[];
-    discoveredBosses: number[];
     xpGained: number;
     spGained: number;
     killerType?: number;
     killingBlowWeapon?: number;
     killingBlowSource?: number;
-    discoveredCollectibles: string[];
     aborted: boolean;
     familyFound: boolean;
     familyExtracted: boolean;
     isExtraction: boolean;
-    discoveredPerksMap: Uint8Array;
+    challengeStartValues: Float64Array;
 }

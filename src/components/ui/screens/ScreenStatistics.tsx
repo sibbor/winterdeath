@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { CareerStats, PlayerStatID, StatEnemyIndex, StatWeaponIndex } from '../../../types/CareerStats';
+import { CareerStats, StatID, StatEnemyIndex, StatWeaponIndex } from '../../../types/CareerStats';
 import { t } from '../../../utils/i18n';
 import { useOrientation } from '../../../hooks/useOrientation';
 import ModalLayout, { TacticalCard, TacticalTab, } from './ModalLayout';
@@ -17,7 +17,6 @@ interface ScreenStatisticsProps {
     stats: CareerStats;
     onClose: () => void;
     onOpenDiscovery?: () => void;
-    onMarkCollectiblesViewed?: (collectibleIds: string[]) => void;
     isMobileDevice?: boolean;
     debugMode?: boolean;
     initialTab?: 'overview' | 'performance' | 'combat' | 'weapons' | 'perks';
@@ -55,11 +54,11 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
         scrapTotal, avgDistance, avgTime, totalDistanceKm, totalTimeH,
         discoveryPoints, marathonProgress, totalDistance, totalTimeFormatted
     } = useMemo(() => {
-        const ST = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SCRAP_COLLECTED);
-        const SESS = Math.max(1, StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SESSIONS_STARTED));
-        const totalDist = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_DISTANCE_TRAVELED);
-        const totalTime = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME);
-        const discPoints = (StatsBridge.getDiscoveredPois(stats).length) + (StatsBridge.getDiscoveredCollectibles(stats).length) + (StatsBridge.getDiscoveredClues(stats).length);
+        const ST = StatsBridge.getStatInt(stats, StatID.TOTAL_SCRAP_COLLECTED);
+        const SESS = Math.max(1, StatsBridge.getStatInt(stats, StatID.TOTAL_SESSIONS_STARTED));
+        const totalDist = StatsBridge.getStatFloat(stats, StatID.TOTAL_DISTANCE_TRAVELED);
+        const totalTime = StatsBridge.getStatFloat(stats, StatID.TOTAL_GAME_TIME);
+        const discPoints = StatsBridge.getPoisDiscoveredCount(stats) + StatsBridge.getCollectiblesDiscoveredLength(stats) + StatsBridge.getCluesDiscoveredCount(stats);
 
         return {
             scrapTotal: ST,
@@ -341,10 +340,10 @@ const OverviewTab: React.FC<{
 });
 
 const PerformanceTab: React.FC<{ stats: CareerStats, level: number, currentXp: number, onOpenDiscovery?: () => void, isMobileDevice?: boolean }> = React.memo(({ stats, level, currentXp, onOpenDiscovery, isMobileDevice }) => {
-    const totalDodges = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_DODGES);
-    const totalRushes = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_RUSHES);
-    const totalRushDistance = FormatUtils.formatDistanceSmart(StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_RUSH_DISTANCE));
-    const hasData = StatsBridge.getSectorsCompleted(stats) > 0 || StatsBridge.getTotalSkillPointsEarned(stats) > 0 || StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME) > 10;
+    const totalDodges = StatsBridge.getStatInt(stats, StatID.TOTAL_DODGES);
+    const totalRushes = StatsBridge.getStatInt(stats, StatID.TOTAL_RUSHES);
+    const totalRushDistance = FormatUtils.formatDistanceSmart(StatsBridge.getStatFloat(stats, StatID.TOTAL_RUSH_DISTANCE));
+    const hasData = StatsBridge.getSectorsCompleted(stats) > 0 || StatsBridge.getTotalSkillPointsEarned(stats) > 0 || StatsBridge.getStatFloat(stats, StatID.TOTAL_GAME_TIME) > 10;
 
     if (!hasData) {
         return (
@@ -373,12 +372,12 @@ const PerformanceTab: React.FC<{ stats: CareerStats, level: number, currentXp: n
                     <div className="bg-yellow-900/10 border-2 border-yellow-500/20 p-6 flex flex-col items-center justify-center relative group/hvr overflow-hidden shadow-inner">
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-yellow-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                         <span className="text-yellow-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 relative z-10">{t('ui.scrap_scavenged')}</span>
-                        <span className="text-2xl font-light text-white font-mono relative z-10">{StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SCRAP_COLLECTED).toLocaleString()}</span>
+                        <span className="text-2xl font-light text-white font-mono relative z-10">{StatsBridge.getStatInt(stats, StatID.TOTAL_SCRAP_COLLECTED).toLocaleString()}</span>
                     </div>
                     <div className="bg-red-900/10 border-2 border-red-500/20 p-6 flex flex-col items-center justify-center relative group/hvr overflow-hidden shadow-inner">
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-red-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
                         <span className="text-red-500/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 relative z-10">{t('ui.cp_earned')}</span>
-                        <span className="text-2xl font-light text-white font-mono relative z-10">{StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_CHALLENGE_POINTS).toLocaleString()}</span>
+                        <span className="text-2xl font-light text-white font-mono relative z-10">{StatsBridge.getStatInt(stats, StatID.TOTAL_CHALLENGE_POINTS).toLocaleString()}</span>
                     </div>
                 </div>
 
@@ -389,11 +388,11 @@ const PerformanceTab: React.FC<{ stats: CareerStats, level: number, currentXp: n
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.chests_opened')}</span>
-                        <span className="text-white font-mono text-lg">{StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_CHESTS_OPENED) + StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_BIG_CHESTS_OPENED)}</span>
+                        <span className="text-white font-mono text-lg">{StatsBridge.getStatInt(stats, StatID.TOTAL_CHESTS_OPENED) + StatsBridge.getStatInt(stats, StatID.TOTAL_BIG_CHESTS_OPENED)}</span>
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.game_time')}</span>
-                        <span className="text-white font-mono text-lg">{FormatUtils.formatTimeSmart(StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME))}</span>
+                        <span className="text-white font-mono text-lg">{FormatUtils.formatTimeSmart(StatsBridge.getStatFloat(stats, StatID.TOTAL_GAME_TIME))}</span>
                     </div>
                     <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
                         <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{t('ui.times_dodged')}</span>
@@ -416,14 +415,14 @@ const PerformanceTab: React.FC<{ stats: CareerStats, level: number, currentXp: n
 const CombatTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
 
     const { efficiency, kdRatio, lethality, longestKillstreak, crisisSaves, nemesis, peakAggression, time } = useMemo(() => {
-        const kills = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_KILLS);
-        const deaths = Math.max(1, StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_DEATHS));
-        const time = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME) || 1;
-        const shots = Math.max(1, StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SHOTS_FIRED));
-        const hits = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SHOTS_HIT);
+        const kills = StatsBridge.getStatInt(stats, StatID.TOTAL_KILLS);
+        const deaths = Math.max(1, StatsBridge.getStatInt(stats, StatID.TOTAL_DEATHS));
+        const time = StatsBridge.getStatFloat(stats, StatID.TOTAL_GAME_TIME) || 1;
+        const shots = Math.max(1, StatsBridge.getStatInt(stats, StatID.TOTAL_SHOTS_FIRED));
+        const hits = StatsBridge.getStatInt(stats, StatID.TOTAL_SHOTS_HIT);
 
-        const peakAggression = StatsBridge.getStatInt(stats, PlayerStatID.LONGEST_KILLSTREAK);
-        const crisisSaves = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_CRISIS_SAVES);
+        const peakAggression = StatsBridge.getStatInt(stats, StatID.LONGEST_KILLSTREAK);
+        const crisisSaves = StatsBridge.getStatInt(stats, StatID.TOTAL_CRISIS_SAVES);
 
         const nemesisRes = StatsBridge.getNemesis(stats);
         const nemesisId = nemesisRes[0];
@@ -611,7 +610,7 @@ const WeaponsTab: React.FC<{ stats: CareerStats, color: string, isMobileDevice?:
         return {
             signature: sigData ? { name: t(sigData.displayName), icon: sigData.icon, isPng: sigData.iconIsPng, count: sigCount } : null,
             comfort: comData ? { name: t(comData.displayName), icon: comData.icon, isPng: comData.iconIsPng } : null,
-            throwables: StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_THROWABLES_THROWN).toLocaleString()
+            throwables: StatsBridge.getStatInt(stats, StatID.TOTAL_THROWABLES_THROWN).toLocaleString()
         };
     }, [stats]);
 
@@ -782,9 +781,9 @@ const PerkItem: React.FC<{ perk: any, stats: CareerStats, t: (key: string) => st
 const PerksTab: React.FC<{ stats: CareerStats, t: (key: string) => string, effectiveLandscape: boolean }> = React.memo(({ stats, t, effectiveLandscape }) => {
 
     const { uptime, resilience, roiDealt, roiAbsorb, totalROI } = useMemo(() => {
-        const time = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME);
-        const buffTime = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_BUFF_TIME);
-        const resisted = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_DEBUFFS_RESISTED);
+        const time = StatsBridge.getStatFloat(stats, StatID.TOTAL_GAME_TIME);
+        const buffTime = StatsBridge.getStatFloat(stats, StatID.TOTAL_BUFF_TIME);
+        const resisted = StatsBridge.getStatInt(stats, StatID.TOTAL_DEBUFFS_RESISTED);
 
         // Zero-GC Guard: Ensure time is strictly positive before division
         const safeTime = Math.max(0.001, time);

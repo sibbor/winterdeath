@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { CareerStats, PlayerStatID } from '../../../types/CareerStats';
+import { CareerStats, StatID } from '../../../types/CareerStats';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 import { t } from '../../../utils/i18n';
 import { UiSounds } from '../../../utils/audio/AudioLib';
@@ -9,9 +9,9 @@ import { COLORS } from '../../../utils/ui/ColorUtils';
 import ModalLayout, { TacticalCard, TacticalButton, HORIZONTAL_HATCHING_STYLE } from './ModalLayout';
 
 const SKILLS_CONFIG = [
-    { statId: PlayerStatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', cost: 1, value: 20, base: 100 },
-    { statId: PlayerStatID.MAX_STAMINA, labelKey: 'skills.adrenaline', descKey: 'skills.adrenaline_desc', cost: 1, value: 20, base: 100 },
-    { statId: PlayerStatID.SPEED, labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', cost: 2, value: 0.5, base: PLAYER.BASE_SPEED }
+    { statId: StatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', cost: 1, value: 20, base: 100 },
+    { statId: StatID.MAX_STAMINA, labelKey: 'skills.adrenaline', descKey: 'skills.adrenaline_desc', cost: 1, value: 20, base: 100 },
+    { statId: StatID.SPEED, labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', cost: 2, value: 0.5, base: PLAYER.BASE_SPEED }
 ];
 
 interface ScreenSkillsProps {
@@ -26,7 +26,7 @@ const ScreenSkills: React.FC<ScreenSkillsProps> = React.memo(({ stats, onSave, o
     const [tempStats, setTempStats] = useState(() => StatsBridge.deepCloneStats(stats));
 
     // Upgrade Skill
-    const handleUpgradeSkill = useCallback((statId: PlayerStatID, cost: number, value: number) => {
+    const handleUpgradeSkill = useCallback((statId: StatID, cost: number, value: number) => {
         UiSounds.playUpgrade();
 
         setTempStats(prevStats => {
@@ -55,9 +55,9 @@ const ScreenSkills: React.FC<ScreenSkillsProps> = React.memo(({ stats, onSave, o
         onClose();
     }, [onSave, onClose, tempStats]);
 
-    const xpNeeded = StatsBridge.getStatInt(stats, PlayerStatID.NEXT_LEVEL_XP) - StatsBridge.getStatInt(stats, PlayerStatID.CURRENT_XP);
-    const isMaxRank = StatsBridge.getStatInt(stats, PlayerStatID.LEVEL) >= LEVEL_CAP;
-    const hasChanges = StatsBridge.getStatInt(tempStats, PlayerStatID.SKILL_POINTS) !== StatsBridge.getStatInt(stats, PlayerStatID.SKILL_POINTS);
+    const xpNeeded = StatsBridge.getStatInt(stats, StatID.NEXT_LEVEL_XP) - StatsBridge.getStatInt(stats, StatID.CURRENT_XP);
+    const isMaxRank = StatsBridge.getStatInt(stats, StatID.LEVEL) >= LEVEL_CAP;
+    const hasChanges = StatsBridge.getStatInt(tempStats, StatID.SKILL_POINTS) !== StatsBridge.getStatInt(stats, StatID.SKILL_POINTS);
 
     const spSubtitle = useMemo(() => (
         <div className="flex flex-col gap-1 mt-2">
@@ -65,11 +65,11 @@ const ScreenSkills: React.FC<ScreenSkillsProps> = React.memo(({ stats, onSave, o
                 <div className="px-3 py-1 bg-purple-950/40 border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.2)] flex items-center gap-3 relative overflow-hidden">
                     <div className="absolute inset-0 pointer-events-none opacity-40 shimmer-overlay" />
                     <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest relative z-10">{t('ui.sp')}</span>
-                    <span className="text-xl font-mono font-black text-white relative z-10">{StatsBridge.getStatInt(tempStats, PlayerStatID.SKILL_POINTS)}</span>
+                    <span className="text-xl font-mono font-black text-white relative z-10">{StatsBridge.getStatInt(tempStats, StatID.SKILL_POINTS)}</span>
                 </div>
             </div>
         </div>
-    ), [StatsBridge.getStatInt(tempStats, PlayerStatID.SKILL_POINTS), isMaxRank, xpNeeded]);
+    ), [StatsBridge.getStatInt(tempStats, StatID.SKILL_POINTS), isMaxRank, xpNeeded]);
 
     return (
         <ModalLayout
@@ -92,13 +92,13 @@ const ScreenSkills: React.FC<ScreenSkillsProps> = React.memo(({ stats, onSave, o
                         : t('ui.sp_hint_rankup', { xp: xpNeeded })}
                 </span>
             </div>
-            <div className={`grid ${(!isMobileDevice || isLandscapeMode) ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'} gap-6 md:gap-10 h-full pt-8 ${isMobileDevice ? 'overflow-y-auto touch-auto' : ''}`}>
+            <div className={`grid ${(!isMobileDevice || isLandscapeMode) ? 'grid-cols-1 md:grid-cols-3 h-full' : 'grid-cols-1'} gap-6 md:gap-10 pt-8`}>
                 {SKILLS_CONFIG.map(skill => (
                     <SkillCard
                         key={skill.statId}
                         skill={skill}
                         currentVal={StatsBridge.getStatFloat(tempStats, skill.statId)}
-                        availableSP={StatsBridge.getStatInt(tempStats, PlayerStatID.SKILL_POINTS)}
+                        availableSP={StatsBridge.getStatInt(tempStats, StatID.SKILL_POINTS)}
                         isMobileDevice={isMobileDevice}
                         onUpgrade={handleUpgradeSkill}
                     />
@@ -113,7 +113,7 @@ interface SkillCardProps {
     currentVal: number;
     availableSP: number;
     isMobileDevice?: boolean;
-    onUpgrade: (statId: PlayerStatID, cost: number, value: number) => void;
+    onUpgrade: (statId: StatID, cost: number, value: number) => void;
 }
 
 const UI_ICON_PATH = '/assets/icons/ui/';
@@ -126,7 +126,7 @@ const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, ava
     const isUpgraded = upgradeVal > 0;
 
     // Format for display
-    const isSpeed = skill.statId === PlayerStatID.SPEED;
+    const isSpeed = skill.statId === StatID.SPEED;
     const displayBase = isSpeed ? baseVal.toFixed(1) : baseVal;
     const displayUpgrade = isSpeed ? upgradeVal.toFixed(2) : upgradeVal;
 
@@ -146,9 +146,9 @@ const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, ava
 
             <div className="p-6 flex flex-col items-center text-center flex-1">
                 <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full border-2 mb-4 flex items-center justify-center transition-all duration-500 overflow-hidden ${isUpgraded ? 'border-purple-500 bg-purple-500/20 shadow-[0_0_20px_rgba(168,85,247,0.4)]' : 'border-zinc-800 bg-zinc-900/50'}`}>
-                    {skill.statId === PlayerStatID.MAX_HP && <img src={`${UI_ICON_PATH}skill_vitality.png`} alt="" className="w-full h-full object-cover mix-blend-screen opacity-80" />}
-                    {skill.statId === PlayerStatID.MAX_STAMINA && <img src={`${UI_ICON_PATH}skill_adrenaline.png`} alt="" className="w-full h-full object-cover mix-blend-screen opacity-80" />}
-                    {skill.statId === PlayerStatID.SPEED && <img src={`${UI_ICON_PATH}skill_reflex.png`} alt="" className="w-full h-full object-cover mix-blend-screen opacity-80" />}
+                    {skill.statId === StatID.MAX_HP && <img src={`${UI_ICON_PATH}skill_vitality.png`} alt="" className="w-full h-full object-cover mix-blend-screen opacity-80" />}
+                    {skill.statId === StatID.MAX_STAMINA && <img src={`${UI_ICON_PATH}skill_adrenaline.png`} alt="" className="w-full h-full object-cover mix-blend-screen opacity-80" />}
+                    {skill.statId === StatID.SPEED && <img src={`${UI_ICON_PATH}skill_reflex.png`} alt="" className="w-full h-full object-cover mix-blend-screen opacity-80" />}
                 </div>
 
                 <h3 className={`${isMobileDevice ? 'text-lg mb-1' : 'text-xl mb-2'} font-bold text-white uppercase tracking-tight`}>{t(skill.labelKey)}</h3>
@@ -161,7 +161,7 @@ const SkillCard: React.FC<SkillCardProps> = React.memo(({ skill, currentVal, ava
                                 {isSpeed ? currentVal.toFixed(2) : currentVal}
                             </span>
                             <span className="text-[10px] font-black text-purple-500 uppercase tracking-widest opacity-80">
-                                {skill.statId === PlayerStatID.MAX_HP ? t('ui.hp') : (skill.statId === PlayerStatID.MAX_STAMINA ? t('ui.stamina_short') : t('ui.speed_unit'))}
+                                {skill.statId === StatID.MAX_HP ? t('ui.hp') : (skill.statId === StatID.MAX_STAMINA ? t('ui.stamina_short') : t('ui.speed_unit'))}
                             </span>
                         </div>
                         {isUpgraded && (

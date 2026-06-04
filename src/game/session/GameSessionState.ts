@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CareerStats, PlayerStatID, StatWeaponIndex, StatPerkIndex, StatEnemyIndex, TELEMETRY_BUFFER_SIZE, PlayerNodes } from '../../types/CareerStats';
+import { CareerStats, StatID, StatWeaponIndex, StatPerkIndex, StatEnemyIndex, TELEMETRY_BUFFER_SIZE, PlayerNodes } from '../../types/CareerStats';
 import { SessionStats } from '../../types/SessionStats';
 import { SectorState, GameState } from '../../types/StateTypes';
 import { PlayerDeathState, DamageID, DamageType, WeaponID, ToolID, HoldableID } from '../../entities/player/CombatTypes';
@@ -10,7 +10,6 @@ import { Enemy } from '../../entities/enemies/EnemyManager';
 import { ScrapItem } from '../../systems/LootSystem';
 import { ParticleState } from '../../types/FXTypes';
 import { InteractionType, InteractionSubType, InteractionPromptId } from '../../systems/ui/UIEventBridge';
-import { DiscoveryType } from '../../components/ui/hud/HudTypes';
 import { VehicleState, VehicleNodes, VehicleID, VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
 import { LogicalLight } from '../../systems/LightSystem';
 
@@ -106,12 +105,12 @@ export interface PreallocatedCombatState {
     throwChargeRotation: THREE.Quaternion;
 
     // Contiguous DOD performance buffers (Float64)
-    weaponKills: Float64Array;
-    weaponDamageDealt: Float64Array;
-    weaponShotsFired: Float64Array;
-    weaponShotsHit: Float64Array;
-    weaponTimeActive: Float64Array;
-    weaponEngagementDistSq: Float64Array;
+    outgoingKillsBuffer: Float64Array;
+    outgoingDamageBuffer: Float64Array;
+    outgoingShotsFiredBuffer: Float64Array;
+    outgoingShotsHitBuffer: Float64Array;
+    outgoingTimeActiveBuffer: Float64Array;
+    outgoingEngagementDistSqBuffer: Float64Array;
 
     // Recycled entity and zone pools
     particles: ParticleState[];
@@ -161,7 +160,6 @@ export interface PreallocatedEnemyState {
     // Contiguous enemy metrics
     enemyKills: Float64Array;
     deathsByEnemyType: Float64Array;
-    incomingDamageBuffer: Float64Array;
 }
 
 export interface PreallocatedWorldState {
@@ -179,25 +177,6 @@ export interface PreallocatedWorldState {
     familyFound: boolean;
     familyAlreadyRescued: boolean;
     familyExtracted: boolean;
-}
-
-export interface PreallocatedDiscoveryState {
-    active: boolean;
-    id: string | number;
-    type: DiscoveryType;
-    title: string;
-    details: string;
-    timestamp: number;
-
-    // Authoritative O(1) Search Sets
-    discoverySets: {
-        discoveredClues: Set<number>;
-        discoveredPois: Set<number>;
-        discoveredCollectibles: Set<number>;
-        discoveredZombies: Set<number>;
-        discoveredBosses: Set<number>;
-        discoveredPerksMap: Uint8Array;
-    };
 }
 
 export interface PreallocatedTriggerState {
@@ -271,6 +250,7 @@ export interface GameSessionState {
     careerStats: CareerStats;      // Reference to persistent lifetime career profile
     sessionStats: SessionStats;    // Temporary metrics for the active run (Renamed from SectorStats)
     sectorState: SectorState;      // Configuration overlay for active sector triggers
+    sessionCollectiblesDiscovered: string[]; // List of collectibles found in the current session
 
     // --- NESTED PRE-ALLOCATED SUB-STATES (Single Alloc, Nested Paths) ---
     sector: PreallocatedSectorState;
@@ -278,11 +258,11 @@ export interface GameSessionState {
     combat: PreallocatedCombatState;
     enemies: PreallocatedEnemyState;
     world: PreallocatedWorldState;
-    discovery: PreallocatedDiscoveryState;
     triggers: PreallocatedTriggerState;
     metrics: PreallocatedTelemetryState;
     ui: PreallocatedUIState;
     vehicle: PreallocatedVehicleState;
+
 
     // --- GLOBAL CALLBACK BRIDGE ---
     applyDamage: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
@@ -312,6 +292,7 @@ export function allocateGameSessionState(): GameSessionState {
         careerStats: null as any,
         sessionStats: null as any,
         sectorState: { envOverride: undefined } as any,
+        sessionCollectiblesDiscovered: [],
 
         sector: {
             id: 0
@@ -324,7 +305,7 @@ export function allocateGameSessionState(): GameSessionState {
             nodes: { gun: null, laserSight: null, barrelTip: null },
             baseScale: 1.0,
             baseY: 0,
-            statsBuffer: new Float32Array(PlayerStatID.COUNT),
+            statsBuffer: new Float32Array(StatID.COUNT),
 
             isDodging: false,
             dodgeStartTime: 0,
@@ -383,16 +364,16 @@ export function allocateGameSessionState(): GameSessionState {
             throwChargeStart: 0,
             throwChargeRotation: new THREE.Quaternion(),
 
-            weaponKills: new Float64Array(StatWeaponIndex.COUNT),
-            weaponDamageDealt: new Float64Array(StatWeaponIndex.COUNT),
-            weaponShotsFired: new Float64Array(StatWeaponIndex.COUNT),
-            weaponShotsHit: new Float64Array(StatWeaponIndex.COUNT),
-            weaponTimeActive: new Float64Array(StatWeaponIndex.COUNT),
-            weaponEngagementDistSq: new Float64Array(StatWeaponIndex.COUNT),
+            outgoingKillsBuffer: new Float64Array(StatWeaponIndex.COUNT),
+            outgoingDamageBuffer: new Float64Array(StatWeaponIndex.COUNT),
+            outgoingShotsFiredBuffer: new Float64Array(StatWeaponIndex.COUNT),
+            outgoingShotsHitBuffer: new Float64Array(StatWeaponIndex.COUNT),
+            outgoingTimeActiveBuffer: new Float64Array(StatWeaponIndex.COUNT),
+            outgoingEngagementDistSqBuffer: new Float64Array(StatWeaponIndex.COUNT),
 
             particles: [],
             projectiles: [],
-            fireZones: Array.from({ length: MAX_ENTITIES.FIRE_ZONES }, () => ({ x: 0, z: 0, radius: 0, life: 0, damage: 0, sourceId: 0, nextTick: 0 })),
+            fireZones: Array.from({ length: MAX_ENTITIES?.FIRE_ZONES || 16 }, () => ({ x: 0, z: 0, radius: 0, life: 0, damage: 0, sourceId: 0, nextTick: 0 })),
             fireZoneCount: 0,
 
             perkTimesGained: new Float64Array(StatPerkIndex.COUNT),
@@ -401,16 +382,16 @@ export function allocateGameSessionState(): GameSessionState {
             perkDebuffsCleansed: new Float64Array(StatPerkIndex.COUNT),
 
             statusFlags: 0,
-            activePassives: new Int32Array(MAX_ENTITIES.PERKS),
+            activePassives: new Int32Array(MAX_ENTITIES?.PERKS || 128),
             activePassivesCount: 0,
-            activeBuffs: new Int32Array(MAX_ENTITIES.PERKS),
+            activeBuffs: new Int32Array(MAX_ENTITIES?.PERKS || 128),
             activeBuffsCount: 0,
-            activeDebuffs: new Int32Array(MAX_ENTITIES.PERKS),
+            activeDebuffs: new Int32Array(MAX_ENTITIES?.PERKS || 128),
             activeDebuffsCount: 0,
-            effectDurations: new Float32Array(MAX_ENTITIES.PERKS),
-            effectMaxDurations: new Float32Array(MAX_ENTITIES.PERKS),
-            effectIntensities: new Float32Array(MAX_ENTITIES.PERKS),
-            effectSources: new Uint8Array(MAX_ENTITIES.PERKS),
+            effectDurations: new Float32Array(MAX_ENTITIES?.PERKS || 128),
+            effectMaxDurations: new Float32Array(MAX_ENTITIES?.PERKS || 128),
+            effectIntensities: new Float32Array(MAX_ENTITIES?.PERKS || 128),
+            effectSources: new Uint8Array(MAX_ENTITIES?.PERKS || 128),
 
             lastReflexShieldTime: -100000,
             lastAdrenalinePatchTime: -100000,
@@ -432,8 +413,7 @@ export function allocateGameSessionState(): GameSessionState {
             bossPermanentlyDefeated: false,
 
             enemyKills: new Float64Array(StatEnemyIndex.COUNT),
-            deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT),
-            incomingDamageBuffer: new Float64Array(TELEMETRY_BUFFER_SIZE)
+            deathsByEnemyType: new Float64Array(StatEnemyIndex.COUNT)
         },
 
         world: {
@@ -451,24 +431,6 @@ export function allocateGameSessionState(): GameSessionState {
             familyFound: false,
             familyAlreadyRescued: false,
             familyExtracted: false
-        },
-
-        discovery: {
-            active: false,
-            id: '',
-            type: DiscoveryType.CLUE,
-            title: '',
-            details: '',
-            timestamp: 0,
-
-            discoverySets: {
-                discoveredClues: new Set(),
-                discoveredPois: new Set(),
-                discoveredCollectibles: new Set(),
-                discoveredZombies: new Set(),
-                discoveredBosses: new Set(),
-                discoveredPerksMap: new Uint8Array(MAX_ENTITIES.DISCOVERY_MAP_SIZE)
-            }
         },
 
         triggers: {
@@ -555,30 +517,27 @@ export function resetGameSessionState(state: GameSessionState, props: any): void
     state.combat.effectMaxDurations.fill(0);
     state.combat.effectIntensities.fill(0);
 
-    // Contiguous Buffer Sync
-    safeCopyBuffer(state.player.statsBuffer, pStats.statsBuffer);
-    safeCopyBuffer(state.combat.weaponKills, pStats.weaponKills);
-    safeCopyBuffer(state.combat.weaponDamageDealt, pStats.weaponDamageDealt);
-    safeCopyBuffer(state.combat.weaponShotsFired, pStats.weaponShotsFired);
-    safeCopyBuffer(state.combat.weaponShotsHit, pStats.weaponShotsHit);
-    safeCopyBuffer(state.combat.weaponTimeActive, pStats.weaponTimeActive);
-    safeCopyBuffer(state.combat.weaponEngagementDistSq, pStats.weaponEngagementDistSq);
-    safeCopyBuffer(state.combat.perkTimesGained, pStats.perkTimesGained);
-    safeCopyBuffer(state.combat.perkDamageAbsorbed, pStats.perkDamageAbsorbed);
-    safeCopyBuffer(state.combat.perkDamageDealt, pStats.perkDamageDealt);
-    safeCopyBuffer(state.combat.perkDebuffsCleansed, pStats.perkDebuffsCleansed);
-    safeCopyBuffer(state.combat.effectSources, pStats.effectSources || new Uint8Array(MAX_ENTITIES.PERKS));
-    safeCopyBuffer(state.enemies.enemyKills, pStats.enemyKills);
-    safeCopyBuffer(state.enemies.deathsByEnemyType, pStats.deathsByEnemyType);
-    safeCopyBuffer(state.enemies.incomingDamageBuffer, pStats.incomingDamageBuffer);
+    // Contiguous Buffer References (Live Career Progression)
+    state.player.statsBuffer = pStats.statsBuffer;
+    state.combat.outgoingKillsBuffer = pStats.outgoingKillsBuffer;
+    state.combat.outgoingDamageBuffer = pStats.outgoingDamageBuffer;
+    state.combat.outgoingShotsFiredBuffer = pStats.outgoingShotsFiredBuffer;
+    state.combat.outgoingShotsHitBuffer = pStats.outgoingShotsHitBuffer;
+    state.combat.outgoingTimeActiveBuffer = pStats.outgoingTimeActiveBuffer;
+    state.combat.outgoingEngagementDistSqBuffer = pStats.outgoingEngagementDistSqBuffer;
+    state.combat.perkTimesGained = pStats.perkTimesGained;
+    state.combat.perkDamageAbsorbed = pStats.perkDamageAbsorbed;
+    state.combat.perkDamageDealt = pStats.perkDamageDealt;
+    state.combat.perkDebuffsCleansed = pStats.perkDebuffsCleansed;
+    state.combat.effectSources = pStats.effectSources || new Uint8Array(MAX_ENTITIES.PERKS);
+    state.enemies.enemyKills = pStats.enemyKills;
+    state.enemies.deathsByEnemyType = pStats.deathsByEnemyType;
 
     // 3. State Flags & Lists
     state.combat.statusFlags = 0;
     state.combat.activePassivesCount = 0;
     state.combat.activeBuffsCount = 0;
     state.combat.activeDebuffsCount = 0;
-
-    safeCopyBuffer(state.discovery.discoverySets.discoveredPerksMap, pStats.discoveredPerksMap);
 
     // 4. Session Progression
     state.combat.activeWeapon = props.gameState.loadout.primary;
@@ -640,7 +599,6 @@ export function resetGameSessionState(state: GameSessionState, props: any): void
     state.world.activeEffects.length = 0;
 
     // 6. Discovery & Interaction
-    state.discovery.active = false;
     state.ui.cinematicActive = false;
     state.triggers.isInteractionOpen = false;
     state.triggers.interactionRequest.active = false;
@@ -674,16 +632,4 @@ export function resetGameSessionState(state: GameSessionState, props: any): void
 
     state.ui.hudVisible = true;
     state.ui.flashlightOn = false;
-}
-
-/**
- * Zero-GC Buffer Copy
- * Safely copies data from a source array (like saved data) into a preallocated target buffer.
- */
-export function safeCopyBuffer(target: Float32Array | Float64Array | Int32Array | Uint8Array, source: any): void {
-    if (!source || typeof source.length !== 'number') return;
-    const len = Math.min(target.length, source.length);
-    for (let i = 0; i < len; i++) {
-        target[i] = source[i];
-    }
 }

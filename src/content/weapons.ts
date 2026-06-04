@@ -92,7 +92,7 @@ export interface WeaponStats {
 export const WeaponCategoryColors: ColorPair[] = [
   { num: 0xef4444, str: '#ef4444' }, // PRIMARY
   { num: 0xfbbf24, str: '#fbbf24' }, // SECONDARY
-  { num: 0x10b981, str: '#10b981' }, // THROWABLE
+  { num: 0x16a34a, str: '#16a34a' }, // THROWABLE
   { num: 0xa855f7, str: '#a855f7' }  // SPECIAL
 ];
 

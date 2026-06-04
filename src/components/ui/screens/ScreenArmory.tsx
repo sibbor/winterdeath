@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { CareerStats, PlayerStatID } from '../../../types/CareerStats';
+import { CareerStats, StatID } from '../../../types/CareerStats';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 import { WeaponCategory, WeaponCategoryColors, WeaponStats } from '../../../content/weapons';
 import { WeaponID } from '../../../entities/player/CombatTypes';
@@ -79,7 +79,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
     }, []);
 
     const hasChanges = useMemo(() => {
-        if (StatsBridge.getStatInt(tempStats, PlayerStatID.SCRAP) !== StatsBridge.getStatInt(stats, PlayerStatID.SCRAP)) return true;
+        if (StatsBridge.getStatInt(tempStats, StatID.SCRAP) !== StatsBridge.getStatInt(stats, StatID.SCRAP)) return true;
         if (tempLoadout.primary !== currentLoadout.primary) return true;
         if (tempLoadout.secondary !== currentLoadout.secondary) return true;
         if (tempLoadout.throwable !== currentLoadout.throwable) return true;
@@ -107,10 +107,10 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
             <div className="px-3 py-1 bg-yellow-950/40 border border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.2)] flex items-center gap-3 w-fit relative overflow-hidden">
                 <div className="absolute inset-0 pointer-events-none opacity-40 shimmer-overlay" />
                 <span className="text-[10px] font-black text-yellow-500 uppercase tracking-widest relative z-10">{t('ui.scrap')}</span>
-                <span className="text-xl font-mono font-black text-white relative z-10">{StatsBridge.getStatInt(tempStats, PlayerStatID.SCRAP)}</span>
+                <span className="text-xl font-mono font-black text-white relative z-10">{StatsBridge.getStatInt(tempStats, StatID.SCRAP)}</span>
             </div>
         </div>
-    ), [StatsBridge.getStatInt(tempStats, PlayerStatID.SCRAP)]);
+    ), [StatsBridge.getStatInt(tempStats, StatID.SCRAP)]);
 
     const TABS = [WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL];
 
@@ -130,7 +130,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
             onTabChange={(cat) => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
             tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
         >
-            <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
+            <div className={`flex ${effectiveLandscape ? 'h-full flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
                 {/* Tabs bar */}
                 <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
                     <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex flex-nowrap gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide touch-auto cursor-pointer'}`}>
@@ -156,7 +156,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
                         activeTab={activeTab}
                         tempWeaponLevels={tempWeaponLevels}
                         tempLoadout={tempLoadout}
-                        scrapAmount={StatsBridge.getStatInt(tempStats, PlayerStatID.SCRAP)}
+                        scrapAmount={StatsBridge.getStatInt(tempStats, StatID.SCRAP)}
                         isMobileDevice={isMobileDevice}
                         isLandscapeMode={isLandscapeMode}
                         onEquip={handleEquip}
@@ -188,7 +188,7 @@ const WeaponList: React.FC<WeaponListProps> = React.memo(({ activeTab, tempWeapo
     }, [activeTab]);
 
     return (
-        <div className={`${isMobileDevice && !isLandscapeMode ? 'flex flex-col gap-10' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'} overflow-y-auto pb-8 pr-1 custom-scrollbar`}>
+        <div className={`flex-1 min-h-0 ${isMobileDevice && !isLandscapeMode ? 'flex flex-col gap-10' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'} overflow-y-auto pb-8 pr-1 custom-scrollbar`}>
             {filteredWeapons.map((weapon) => {
                 const level = tempWeaponLevels[weapon.name] || 1;
                 const cost = SCRAP_COST_BASE * level;

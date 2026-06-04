@@ -150,7 +150,7 @@ export const EnemyAI = {
                         finalDeathState = EnemyDeathState.ELECTROCUTED;
                     } else if ((e.statusFlags & EnemyFlags.BURNING) !== 0) {
                         finalDeathState = EnemyDeathState.BURNED;
-                    } else if (e.type === EnemyType.BOMBER || (e.statusFlags & EnemyFlags.BOSS) !== 0) {
+                    } else if (e.type === EnemyType.BLOATER || (e.statusFlags & EnemyFlags.BOSS) !== 0) {
                         finalDeathState = EnemyDeathState.EXPLODED;
                     } else if ((playerStatusFlags & PlayerStatusFlags.GIB_MASTER) !== 0 && weapon) {
                         // GIB_MASTER Perk allows ALL shots from ALL projectile weapons to GIB enemies on kill!
@@ -181,13 +181,13 @@ export const EnemyAI = {
                     break;
 
                 case EnemyDeathState.EXPLODED:
-                    // Bomber/Boss Detonation Logic
+                    // Bloater/Boss Detonation Logic
                     if (dmgType !== DamageID.GRENADE) {
                         const pos = e.mesh.position;
                         WeaponSounds.playExplosion(pos);
                         haptic.explosion();
 
-                        if (e.type === EnemyType.BOMBER && callbacks.queryEnemies && callbacks.applyDamage) {
+                        if (e.type === EnemyType.BLOATER && callbacks.queryEnemies && callbacks.applyDamage) {
                             const radius = 10.0;
                             const damage = 60.0;
 
@@ -216,7 +216,7 @@ export const EnemyAI = {
                                 }
                             }
                         }
-                        WinterEngine.getInstance()?.triggerHitStop(e.type === EnemyType.BOMBER ? 40 : 50);
+                        WinterEngine.getInstance()?.triggerHitStop(e.type === EnemyType.BLOATER ? 40 : 50);
                     }
                     break;
 
@@ -325,10 +325,15 @@ export const EnemyAI = {
                     const fallRatio = fallHeight;
                     const fallDamage = Math.min(e.maxHp * 0.95, fallRatio * fallRatio * 15);
 
-                    e.hp -= fallDamage;
-                    // Attribute damage to the source of the knockback (Rush/Dodge)
-                    const sourceId = e.lastKnockback || DamageID.FALL_DAMAGE;
-                    if (callbacks.applyDamage) callbacks.applyDamage(e, fallDamage, DamageType.PHYSICAL, sourceId, true);
+                    const sourceId = (e.lastKnockback === DamageID.RUSH || e.lastKnockback === DamageID.DODGE)
+                        ? e.lastKnockback
+                        : DamageID.PHYSICAL;
+
+                    if (callbacks.applyDamage) {
+                        callbacks.applyDamage(e, fallDamage, DamageType.PHYSICAL, sourceId, true);
+                    } else {
+                        e.hp -= fallDamage;
+                    }
 
                     // High Fall Landing Stun (Stay Down)
                     if (fallHeight > 2.5) {
@@ -661,7 +666,7 @@ export const EnemyAI = {
                     updateLastSeen(e, e.lastKnownPosition, simTime);
                 }
 
-                if ((!seesPlayer && simTime - e.lastSeenTime > 5000) || distSq > 2500) {
+                if (!e.isWaveEnemy && ((!seesPlayer && simTime - e.lastSeenTime > 5000) || distSq > 2500)) {
                     logStateChange(simTime, e, AIState.SEARCH);
                     e.state = AIState.SEARCH;
                     const baseTime = e.lastHeardNoiseType !== NoiseType.NONE ? (SEARCH_TIMERS[e.lastHeardNoiseType] || 5.0) : 5.0;
@@ -785,6 +790,21 @@ export const EnemyAI = {
                     }
 
                     if (e.attackTimer <= 0) {
+                        if (att && att.type === EnemyAttackType.JUMP) {
+                            if (distSq < (att.range || 6) * (att.range || 6)) {
+                                callbacks.onPlayerHit(att.damage, e, DamageType.PHYSICAL, DamageID.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
+                                if (e.type === EnemyType.RUNNER) {
+                                    logStateChange(simTime, e, AIState.GRAPPLE, 'JUMP_LANDED');
+                                    e.state = AIState.GRAPPLE;
+                                    e.statusFlags |= EnemyFlags.GRAPPLING;
+                                    e.grappleDuration = 1.5 + Math.random() * 0.5;
+                                    e.attackTimer = -1; // Yield control to Grapple system
+                                    e.attackCooldowns[att.type] = att.cooldown;
+                                    break;
+                                }
+                            }
+                        }
+
                         logStateChange(simTime, e, AIState.CHASE, 'VISUAL');
                         e.state = AIState.CHASE;
                     }
@@ -911,10 +931,12 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
         if (distSq > 0.0001) _v1.normalize();
     }
 
-    // 2. STATUS EFFECTS: Apply Slows (50% reduction)
+    // 2. STATUS EFFECTS: Apply Slows (50% reduction for materials/flags, 20% for projectile slowDuration)
     const isSlowingMaterial = (e.statusFlags & (EnemyFlags.SLOWED | EnemyFlags.WADING)) !== 0;
-    if (e.slowDuration > 0 || isSlowingMaterial) {
+    if (isSlowingMaterial) {
         speed *= 0.5;
+    } else if (e.slowDuration > 0) {
+        speed *= 0.8; // 20% slower
     }
 
     // 3. SET BASE VELOCITY (Steering Vector * Target Speed)
@@ -1000,7 +1022,7 @@ function handleStatusEffects(e: Enemy, delta: number, simTime: number, callbacks
         if (Math.random() < 0.3) {
             if (callbacks.spawnParticle) {
                 const s = e.originalScale * 1.5;
-                callbacks.spawnParticle(e.mesh.position.x + (Math.random()-0.5)*s, e.mesh.position.y + s, e.mesh.position.z + (Math.random()-0.5)*s, FXParticleType.ENEMY_EFFECT_FLAME, 1);
+                callbacks.spawnParticle(e.mesh.position.x + (Math.random() - 0.5) * s, e.mesh.position.y + s, e.mesh.position.z + (Math.random() - 0.5) * s, FXParticleType.ENEMY_EFFECT_FLAME, 1);
             }
         }
         if (simTime > (e.lastBurnTick || 0) + 500) {
@@ -1028,7 +1050,7 @@ function handleStatusEffects(e: Enemy, delta: number, simTime: number, callbacks
             if (callbacks.onEffectTick) callbacks.onEffectTick(e, EnemyEffectType.SPARK);
             if (callbacks.spawnParticle) {
                 const s = e.originalScale * 1.5;
-                callbacks.spawnParticle(e.mesh.position.x + (Math.random()-0.5)*s, e.mesh.position.y + s, e.mesh.position.z + (Math.random()-0.5)*s, FXParticleType.ENEMY_EFFECT_SPARK, 1);
+                callbacks.spawnParticle(e.mesh.position.x + (Math.random() - 0.5) * s, e.mesh.position.y + s, e.mesh.position.z + (Math.random() - 0.5) * s, FXParticleType.ENEMY_EFFECT_SPARK, 1);
             }
         }
     }

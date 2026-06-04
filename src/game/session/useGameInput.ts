@@ -24,7 +24,7 @@ export const useGameInput = (
 
             // Only trap directional keys in debug mode for camera control
             if (isArrowKey) {
-                if (!props.gameState.debugMode) return;
+                if (!props.gameState.settings.debugMode) return;
                 e.preventDefault();
             }
 
@@ -40,7 +40,7 @@ export const useGameInput = (
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [props.isMobileDevice, props.isPaused, props.gameState.debugMode, refs.engineRef]);
+    }, [props.isMobileDevice, props.isPaused, props.gameState.settings.debugMode, refs.engineRef]);
 
     // 2. Gameplay actions (Flashlight, Rolling)
     useEffect(() => {

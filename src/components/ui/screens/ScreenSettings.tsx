@@ -30,12 +30,10 @@ interface ScreenSettingsProps {
     onClose: () => void;
     settings: GameSettings;
     onUpdateGraphics: (settings: GameSettings) => void;
-    showFps?: boolean;
-    onToggleShowFps?: () => void;
     isMobileDevice?: boolean;
 }
 
-const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, settings, onUpdateGraphics, showFps, onToggleShowFps, isMobileDevice }) => {
+const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, settings, onUpdateGraphics, isMobileDevice }) => {
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
     const [activeTab, setActiveTab] = useState<'graphics' | 'general'>('graphics');
@@ -122,7 +120,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, set
                     {activeTab === 'graphics' ? (
                         <GraphicsTab tempGraphics={tempGraphics} setTempGraphics={setTempGraphics} />
                     ) : (
-                        <GeneralTab showFps={showFps} onToggleShowFps={onToggleShowFps} tempGraphics={tempGraphics} setTempGraphics={setTempGraphics} setTick={setTick} />
+                        <GeneralTab tempGraphics={tempGraphics} setTempGraphics={setTempGraphics} setTick={setTick} />
                     )}
                 </div>
             </div>
@@ -312,14 +310,12 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
 });
 
 interface GeneralTabProps {
-    showFps?: boolean;
-    onToggleShowFps?: () => void;
     tempGraphics: GameSettings;
     setTempGraphics: React.Dispatch<React.SetStateAction<GameSettings>>;
     setTick: React.Dispatch<React.SetStateAction<number>>;
 }
 
-const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ showFps, onToggleShowFps, tempGraphics, setTempGraphics, setTick }) => (
+const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ tempGraphics, setTempGraphics, setTick }) => (
     <div className="flex flex-col items-center justify-start h-full max-w-2xl mx-auto space-y-6 overflow-y-auto pr-4 custom-scrollbar py-4 px-2">
         <TacticalCard
             onClick={() => { const current = getLocale(); setLocale(current === 'en' ? 'sv' : 'en'); setTick(t => t + 1); UiSounds.playClick(); }}
@@ -337,7 +333,7 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ showFps, onToggleSho
         </TacticalCard>
 
         <TacticalCard
-            onClick={onToggleShowFps}
+            onClick={() => { setTempGraphics(prev => ({ ...prev, showFps: !prev.showFps })); UiSounds.playClick(); }}
             color={0x3b82f6}
             className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
         >
@@ -346,8 +342,8 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ showFps, onToggleSho
                 <p className="text-gray-400 text-xs font-mono">{t('ui.show_fps_desc')}</p>
             </div>
             <div className="flex gap-2">
-                <TacticalButton onClick={(e) => { e.stopPropagation(); if (!showFps && onToggleShowFps) onToggleShowFps(); }} variant={showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
-                <TacticalButton onClick={(e) => { e.stopPropagation(); if (showFps && onToggleShowFps) onToggleShowFps(); }} variant={!showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
+                <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showFps: true })); UiSounds.playClick(); }} variant={tempGraphics.showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
+                <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showFps: false })); UiSounds.playClick(); }} variant={!tempGraphics.showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
             </div>
         </TacticalCard>
 

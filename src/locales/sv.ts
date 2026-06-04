@@ -49,7 +49,6 @@ export const sv = {
         sector_cleared: "SEKTOR SÄKRAD",
         threat_neutralized: "HOT NEUTRALISERAT",
         zombies_neutralized: "ZOMBIES NEUTRALISERADE",
-        target_extracted: "MÅL EXTRAHERAT",
         missing: "SAKNAS",
         found: "HITTAD",
         locked: "LÅST",
@@ -454,14 +453,15 @@ export const sv = {
         walker_exterminator: { title: "Walker-utrotare", desc: "Eliminera {target} Walkers" },
         knee_capper: { title: "Knäskålare", desc: "Eliminera {target} Runners" },
         tank_buster: { title: "Tank-knäckare", desc: "Eliminera {target} tunga Tanks" },
+        bloater_gore: { title: "Bloater-sprängare", desc: "Eliminera {target} Bloaters" },
         boss_slayer: { title: "Boss-dräpare", desc: "Eliminera {target} legendariska bossar" },
         gibber: { title: "Sprängare", desc: "Eliminera {target} fiender genom att spränga dem i stycken" },
         pyromaniac: { title: "Pyroman", desc: "Eliminera {target} fiender med eld" },
         shock_therapy: { title: "Chockterapi", desc: "Eliminera {target} fiender med elektricitet" },
         demolition_expert: { title: "Sprängexpert", desc: "Eliminera {target} fiender med explosioner" },
         brawler: { title: "Slagsmålskämpe", desc: "Eliminera {target} fiender med närstrid eller rush" },
-        sharpshooter: { title: "Skarpskytt", desc: "Eliminera {target} fiender från långt håll" },
-        survivor: { title: "Överlevare", desc: "Överlev {target} dagar i ödemarken" },
+        sharpshooter: { title: "Skarpskytt", desc: "Eliminera {target} fiender från långt håll (25 meter)" },
+        survivor: { title: "Överlevare", desc: "Överlev totalt {target} minuter över alla sektorer." },
         veteran: { title: "Veteran", desc: "Nå spelarnivå {target}" },
         untouchable: { title: "Oåtkomlig", desc: "Uppnå en killstreak på {target}" }
     },
@@ -797,7 +797,7 @@ export const sv = {
                 name: "Tank",
                 story: "Kraftigt bepansrad juggernaut. Absorberar betydande mängder eld från lätta vapen. Explosivämnen rekommenderas."
             },
-            BOMBER: {
+            BLOATER: {
                 name: "Bombare",
                 story: "Instabil biologisk last. Exploderar vid närhet. Håll säkert avstånd."
             }
@@ -854,12 +854,7 @@ export const sv = {
             "1": { reaction: "Blodfläckar! Är de skadade?!" },
             "2": { reaction: "Det är kaos! De måste vara livrädda." },
             "3": { reaction: "Spåren fortsätter i den här riktningen." },
-            "4": { reaction: "Spåren försvinner... de måste vara här någonstans." },
-            "5": { reaction: "Hmm... Tunneln till tågstationen blockeras av en krocked buss." },
-            "6": { reaction: "Vilken explosion! Vad i HELVETE var det?! Det kom från tågvagnshallen!" },
-            "7": { reaction: "Låt oss rensa tunneln genom att spränga den där jävla bussen!" },
-            "8": { reaction: "Tunneln rensad. Smidigt!" },
-            "9": { reaction: "Helvete! Explosionen lockade till sig zombies!" }
+            "4": { reaction: "Spåren försvinner... de måste vara här någonstans." }
         },
         "1": {
             "0": { reaction: "Loke sa att de andra följde dessa skenor. Låt oss se vart det leder oss..." },
@@ -877,31 +872,112 @@ export const sv = {
             "0": { reaction: "Metallen gnisslar i vinden. Eller är det 'Titanen' som Nathalie nämnde?" }
         }
     },
-    pois: {
+    sector_events: {
         "0": {
-            "0": { title: "SMU-gården", description: "Den gamla SMU-gården står i lågor. Oklart om det var zombier eller överlevande som startade elden, men det är en dyster fyr i natten.", reaction: "Helvete! SMU-gården brinner!" },
-            "1": { title: "Kyrkan", description: "Inte ens Guds hus kunde skydda dem. Dörrarna är uppbrutna och kyrkbänkarna är fläckade av blod.", reaction: "Kyrkan brinner... Satans verk?" },
-            "2": { title: "Café 9:an", description: "Vi brukade komma hit på söndagar. Nu är fönstren krossade och doften av kaffe har ersatts av ruttet kött.", reaction: "Åh, jag saknar att sitta på caféet med min familj." },
-            "3": { title: "Gånghester Pizzeria", description: "Den lokala pizzerian. Ugnarna är kalla, men något annat kanske tillagas i mörkret.", reaction: "Uppskattar alltid att köra 'PIZZA TIME!' med min familjen här." },
-            "4": { title: "Ica Hjärtat", description: "Helt plundrad. Hyllorna gapar tomma, men någon kan ha lämnat skrot eller ammunition bakom sig i paniken.", reaction: "Mataffären verkar plundrad..." },
-            "5": { title: "Gym Gånghester", description: "En plats för att bygga styrka. Ironiskt nog är de starkaste här nu de döda.", reaction: "Brukade lyfta skrot här. Riktigt jävla tungt skrot." },
-            "6": { title: "Gånghester tågstation", description: "Den gamla järnvägsstationen. Det skedde en massiv explosion här, vilket blockerar tunneln ut ur staden.", reaction: "Hmm... röken kommer från tåget." }
-        },
-        "1": {
-            "0": { title: "Övergiven lägereld", description: "Någon har varit här nyligen. Glöden är fortfarande varm. De måste ha gett sig av i all hast.", reaction: "En lägereld. Någon måste ha varit här nyligen. Tror du att det är dem?" },
-            "1": { title: "Blockerad tunnel", description: "Tunneln som förbinder berget. Den är helt förseglad med rasmassor och bråte.", reaction: "Tunneln är blockerad. Låt oss gå åt ett annat håll." },
-            "2": { title: "Grottingång", description: "Ett mörkt gap som leder in i jorden. Det luktar fuktig sten och unken luft.", reaction: "Åh, grottingången. Låt oss se om de gömmer sig där inne!" },
-            "3": { title: "Bergrummet", description: "Ett gammalt skyddsrum från kalla kriget. De massiva ståldörrarna är tätt stängda. Min yngsta son är där inne.", reaction: "Dessa enorma dörrar måste leda till skyddsrummet. Låt oss hoppas att de är inuti!" }
+            "0": { reaction: "Hmm... Tunneln till tågstationen blockeras av en krocked buss." },
+            "1": { reaction: "Vilken explosion! Vad i HELVETE var det?! Det kom från tågvagnshallen!" },
+            "2": { reaction: "Låt oss rensa tunneln genom att sprängä den där jävla bussen!" },
+            "3": { reaction: "Tunneln rensad. Smidigt!" },
+            "4": { reaction: "Helvete! Explosionen lockade till sig zombies!" }
         },
         "2": {
-            "0": { title: "Häglaredsmasten", description: "Det stora kommunikationstornet. Esmeralda gick upp dit för att laga signalen.", reaction: "Där är den. Häglaredsmasten. Om Esmeralda är någonstans, så är hon där." },
-            "1": { title: "Äggfarmen", description: "Vi brukade köpa våra ägg här. Nu kryllar gården av odöda.", reaction: "Där är farmen. Vi brukade köpa våra ägg här." },
-            "2": { title: "Brinnande bondgård", description: "Huvudbyggnaden är helt övertänd. En dyster fyr i den kalla vinternatten.", reaction: "Huset brinner... snälla Nathalie, säg att du inte är där inne." },
-            "3": { title: "Den gamla ladan", description: "Ladan brinner. De djur som fanns där inne är sedan länge borta.", reaction: "Ladan står också i ljusan låga." }
+            "1": { reaction: "Zombies i området..." },
+            "2": { reaction: "Området säkrat!" }
+        }
+    },
+    pois: {
+        "0": {
+            "0": {
+                title: "SMU-gården",
+                description: "Den gamla SMU-gården står i lågor. Oklart om det var zombier eller överlevande som startade elden, men det är en dyster fyr i natten.",
+                reaction: "Helvete! SMU-gården brinner!"
+            },
+            "1": {
+                title: "Kyrkan",
+                description: "Inte ens Guds hus kunde skydda dem. Dörrarna är uppbrutna och kyrkbänkarna är fläckade av blod.",
+                reaction: "Kyrkan brinner... Satans verk?"
+            },
+            "2": {
+                title: "Café 9:an",
+                description: "Vi brukade komma hit på söndagar. Nu är fönstren krossade och doften av kaffe har ersatts av ruttet kött.",
+                reaction: "Åh, jag saknar att sitta på caféet med min familj."
+            },
+            "3": {
+                title: "Gånghester Pizzeria",
+                description: "Den lokala pizzerian. Ugnarna är kalla, men något annat kanske tillagas i mörkret.",
+                reaction: "Uppskattar alltid att köra 'PIZZA TIME!' med min familjen här."
+            },
+            "4": {
+                title: "Ica Hjärtat",
+                description: "Helt plundrad. Hyllorna gapar tomma, men någon kan ha lämnat skrot eller ammunition bakom sig i paniken.",
+                reaction: "Mataffären verkar plundrad..."
+            },
+            "5": {
+                title: "Gym Gånghester",
+                description: "En plats för att bygga styrka. Ironiskt nog är de starkaste här nu de döda.",
+                reaction: "Brukade lyfta skrot här. Riktigt jävla tungt skrot."
+            },
+            "6": {
+                title: "Gånghester tågstation",
+                description: "Den gamla järnvägsstationen. Det skedde en massiv explosion här, vilket blockerar tunneln ut ur staden.",
+                reaction: "Hmm... röken kommer från tåget."
+            }
+        },
+        "1": {
+            "0": {
+                title: "Övergiven lägereld",
+                description: "Någon har varit här nyligen. Glöden är fortfarande varm. Personerna måste ha gett sig av i all hast.",
+                reaction: "En lägereld. Någon måste ha varit här nyligen. Tror du att det är dem?"
+            },
+            "1": {
+                title: "Blockerad tågtunnel",
+                description: "Tågtunneln går genom berget, men den är blockerad av rasmassor och bråte.",
+                reaction: "Tågtunneln är blockerad. Låt oss gå åt ett annat håll."
+            },
+            "2": {
+                title: "Grottingång",
+                description: "Ett mörkt gap som leder in i jorden. Det luktar fuktig sten och unken luft.",
+                reaction: "Åh, grottingången. Låt oss se om de gömmer sig där inne!"
+            },
+            "3": {
+                title: "Bergrummet",
+                description: "Ett gammalt skyddsrum från Kalla kriget. De massiva ståldörrarna är tätt stängda.",
+                reaction: "De enorma ståldörrarna måste leda till skyddsrummet?! Hoppas de andra är där inne!"
+            }
+        },
+        "2": {
+            "0": {
+                title: "Häglaredsmasten",
+                description: "Det stora kommunikationstornet. Esmeralda gick upp dit för att laga signalen.",
+                reaction: "Där är den. Häglaredsmasten. Om Esmeralda är någonstans, så är hon där."
+            },
+            "1": {
+                title: "Äggfarmen",
+                description: "Vi brukade köpa våra ägg här. Nu kryllar gården av odöda.",
+                reaction: "Där är farmen. Vi brukade köpa våra ägg här."
+            },
+            "2": {
+                title: "Brinnande bondgård",
+                description: "Huvudbyggnaden är helt övertänd. En dyster fyr i den kalla vinternatten.",
+                reaction: "Huset brinner... snälla Nathalie, säg att du inte är där inne."
+            },
+            "3": {
+                title: "Den gamla ladan",
+                description: "Ladan brinner. De djur som fanns där inne är sedan länge borta.",
+                reaction: "Ladan står också i ljusan låga."
+            }
         },
         "3": {
-            "0": { title: "Förstärkt Skjul", description: "En liten kontorsbyggnad med en förstärkt dörr. Nathalie är instängd där inne, omgiven av mörker.", reaction: "Kontorsbyggnaden. Det är det enda stället med en förstärkt dörr. Hon måste vara där inne." },
-            "1": { title: "Skroten", description: "En labyrint av rostande metall och staplade bilar. En dödsfälla fylld av lurande fasor.", reaction: "Den gamla skroten... en perfekt plats att gömma sig. Eller dö." }
+            "0": {
+                title: "Förstärkt Skjul",
+                description: "En liten kontorsbyggnad med en förstärkt dörr. Nathalie är instängd där inne, omgiven av mörker.",
+                reaction: "Kontorsbyggnaden. Det är det enda stället med en förstärkt dörr. Hon måste vara där inne."
+            },
+            "1": {
+                title: "Skroten",
+                description: "En labyrint av rostande metall och staplade bilar. En dödsfälla fylld av lurande fasor.",
+                reaction: "Den gamla skroten... en perfekt plats att gömma sig. Eller dö."
+            }
         }
     },
     collectibles: {
@@ -1034,6 +1110,5 @@ export const sv = {
         "3_24": "(Viskar i radio) /Redo. KOM IN./",
         "3_25": "(Viskar) /1... 2... 3, spring!/",
         "3_26": "KOM OCH TA ME DIG DÅ, DIN JÄVEL!"
-    }
-
+    },
 };

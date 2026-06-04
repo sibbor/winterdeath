@@ -97,8 +97,7 @@ export class PlayerCombatSystem implements System {
         if (this._wasLocked) {
             this._wasLocked = false;
             // Prevent immediate actions from UI clicks that woke us up
-            input.actions[InputAction.FIRE] = 0;
-            input.actions[InputAction.RELOAD] = 0;
+            session.engine.input.clearActions();
         }
 
         // --- Weapon Slot Switching ---
@@ -116,6 +115,10 @@ export class PlayerCombatSystem implements System {
         this._p5 = !!acts[InputAction.SLOT_5];
 
         WeaponHandler.handleInput(input, state, state.gameState.loadout, simTime, false);
+
+        // Sync inputState.fire so ProjectileSystem.handleContinuousFire can read it.
+        // This is the bridge between the legacy inputState and the modern InputAction system.
+        state.inputState.fire = !!acts[InputAction.FIRE];
 
         WeaponHandler.handleFiring(
             session,

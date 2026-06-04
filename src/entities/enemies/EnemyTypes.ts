@@ -14,7 +14,7 @@ export type { ZombieTypeData };
 
 // Enemy Detection & AI Perception
 export const ENEMY_DETECTION = {
-    STEALTH_ZONE_RADIUS_SQ: 49, // 7m radius (360 vision)
+    STEALTH_ZONE_RADIUS_SQ: 9,  // 3m radius (360 vision)
     VISUAL_RANGE_SQ: 625,       // 25m radius (FOV vision)
     FOV_COS: Math.cos(65 * 0.5 * (Math.PI / 180)),
     SEARCH_DURATION: 5.0
@@ -67,7 +67,7 @@ export const ENEMY_HP = ENEMY_MAX_HP;
 export const ENEMY_BASE_SPEED = new Float32Array(32);
 export const ENEMY_SPEED = ENEMY_BASE_SPEED;
 
-export const ENEMY_SCORE = new Uint32Array(32);
+export const ENEMY_XP = new Uint32Array(32);
 export const ENEMY_COLOR = new Uint32Array(32);
 export const ENEMY_SCALE = new Float32Array(32);
 export const ENEMY_WIDTH_SCALE = new Float32Array(32);
@@ -85,7 +85,7 @@ for (let i = 0, len = zombieKeys.length; i < len; i = (i + 1) | 0) {
 
     ENEMY_MAX_HP[typeSMI] = data.hp;
     ENEMY_BASE_SPEED[typeSMI] = data.speed;
-    ENEMY_SCORE[typeSMI] = data.score;
+    ENEMY_XP[typeSMI] = data.xp;
     ENEMY_COLOR[typeSMI] = data.color.num;
     ENEMY_SCALE[typeSMI] = data.scale;
     ENEMY_WIDTH_SCALE[typeSMI] = data.widthScale;
@@ -94,7 +94,7 @@ for (let i = 0, len = zombieKeys.length; i < len; i = (i + 1) | 0) {
     if (typeSMI === EnemyType.WALKER) ENEMY_ATTACK_RANGE[typeSMI] = 1.5;
     else if (typeSMI === EnemyType.RUNNER) ENEMY_ATTACK_RANGE[typeSMI] = 2.0;
     else if (typeSMI === EnemyType.TANK) ENEMY_ATTACK_RANGE[typeSMI] = 2.5;
-    else if (typeSMI === EnemyType.BOMBER) ENEMY_ATTACK_RANGE[typeSMI] = 3.5;
+    else if (typeSMI === EnemyType.BLOATER) ENEMY_ATTACK_RANGE[typeSMI] = 3.5;
 
     // Ensure all attacks have defined force (Zero-GC safety for Handler)
     if (data.attacks) {
@@ -123,7 +123,7 @@ for (let i = 0, len = bossKeys.length; i < len; i = (i + 1) | 0) {
     // to provide a sensible global baseline for systems that don't know the specific boss ID.
     ENEMY_MAX_HP[typeSMI] = data.hp;
     ENEMY_BASE_SPEED[typeSMI] = data.speed;
-    ENEMY_SCORE[typeSMI] = 2000; // Standard Boss Score
+    ENEMY_XP[typeSMI] = 2000; // Standard Boss Score
     ENEMY_COLOR[typeSMI] = data.color?.num || ENEMY_COLORS.BOSS_0.num;
     ENEMY_SCALE[typeSMI] = data.scale || 3.0;
     ENEMY_WIDTH_SCALE[typeSMI] = data.widthScale || 1.0;
@@ -163,7 +163,7 @@ export interface Enemy {
     hp: number;
     maxHp: number;
     speed: number;
-    score: number;
+    xp: number;
     color: number;
 
     // Transform & Scaling
@@ -269,4 +269,5 @@ export interface Enemy {
     attackOffset: number;
     _sqf: number;
     _internalBucketIdx: number;
+    isWaveEnemy?: boolean;
 }

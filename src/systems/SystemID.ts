@@ -60,16 +60,17 @@ export enum SystemID {
     ENEMY_SYSTEM = 40,
     ENEMY_AI = 41,
     ENEMY_DETECTION = 42,
-    DEATH = 43,
+    ENEMY_WAVE_SYSTEM = 43,
+    DEATH = 44,
 
     // Camp (Safe Zone Subsystems)
-    CAMP_EFFECT_MANAGER = 44,
-    CAMP_CHATTER = 45,
-    CAMP_FAMILY_ANIMATION = 46,
+    CAMP_EFFECT_MANAGER = 45,
+    CAMP_CHATTER = 46,
+    CAMP_FAMILY_ANIMATION = 47,
 
-    DISCOVERY_SYSTEM = 47,
+    DISCOVERY_SYSTEM = 48,
 
-    COUNT = 48
+    COUNT = 49
 }
 
 export const getSystemName = (id: SystemID): string => {

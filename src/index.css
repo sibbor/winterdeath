@@ -213,9 +213,20 @@ canvas {
 }
 
 @keyframes level-up-shimmer {
-    0% { filter: brightness(1); box-shadow: 0 0 0px var(--hud-cyan); }
-    30% { filter: brightness(2.5); box-shadow: 0 0 20px var(--hud-cyan); }
-    100% { filter: brightness(1); box-shadow: 0 0 0px var(--hud-cyan); }
+    0% {
+        filter: brightness(1);
+        box-shadow: 0 0 0px var(--hud-cyan);
+    }
+
+    30% {
+        filter: brightness(2.5);
+        box-shadow: 0 0 20px var(--hud-cyan);
+    }
+
+    100% {
+        filter: brightness(1);
+        box-shadow: 0 0 0px var(--hud-cyan);
+    }
 }
 
 .hud-level-up-shimmer {
@@ -345,6 +356,40 @@ canvas {
     -ms-overflow-style: none;
     scrollbar-width: none;
 }
+
 .scrollbar-hide::-webkit-scrollbar {
     display: none;
-}
+}
+
+/* --- DETAILED HUD WAVE METER STYLING --- */
+.hud-wave-title {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-weight: 900;
+    letter-spacing: 0.25em;
+    text-shadow:
+        -1.5px -1.5px 0 #000,
+        1.5px -1.5px 0 #000,
+        -1.5px 1.5px 0 #000,
+        1.5px 1.5px 0 #000,
+        0 0 15px rgba(59, 130, 246, 0.5);
+    background: linear-gradient(to bottom, #ffffff 30%, #cccccc 100%);
+    -webkit-text-fill-color: transparent;
+}
+
+.hud-wave-bar {
+    background: linear-gradient(90deg, #1e3a8a 0%, #2563eb 50%, #60a5fa 100%);
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.6), inset 0 0 4px rgba(255, 255, 255, 0.4);
+    position: relative;
+}
+
+.hud-wave-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(-45deg,
+            transparent,
+            transparent 5px,
+            rgba(255, 255, 255, 0.12) 5px,
+            rgba(255, 255, 255, 0.12) 10px);
+    pointer-events: none;
+}

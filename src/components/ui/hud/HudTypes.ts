@@ -138,6 +138,12 @@ export interface HudState {
   bossHp: number;
   bossMaxHp: number;
 
+  waveActive: boolean;
+  waveName: string;
+  waveProgress: number; // 0 to 1
+  waveKills: number;
+  waveTarget: number;
+
   bossSpawned: boolean;
   bossDefeated: boolean;
   familyFound: boolean;
@@ -164,9 +170,9 @@ export interface HudState {
   vehicleSpeed: number;
   throttleState: number;
   currentSector: number;
-  cluesFoundCount: number;
-  poisFoundCount: number;
-  collectiblesFoundCount: number;
+  discoveredCluesCount: number;
+  discoveredPoisCount: number;
+  discoveredCollectiblesCount: number;
   fps: number;
 
   // Sector Stats (FLATTENED)

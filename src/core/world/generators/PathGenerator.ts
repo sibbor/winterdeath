@@ -536,7 +536,7 @@ export const PathGenerator = {
             const pos = geo.attributes.position;
             for (let i = 0; i < pos.count; i++) {
                 if (pos.getY(i) > 0) { // Top vertices
-                    pos.setX(i, pos.getX(i) * 0.1); // Taper the top width to 10%
+                    pos.setX(i, pos.getX(i) * 0.667); // Taper the top width to 66.7% (matches 12/18 road-to-embankment ratio)
                 }
             }
             geo.computeVertexNormals();
@@ -570,7 +570,7 @@ export const PathGenerator = {
 
             // Match Collision Obstacle to the visual mesh
             _pos.copy(_v1).setY(_v1.y - height / 2);
-            _scale.set(width * 0.6, height, dist); // Box collider matching the mound
+            _scale.set(width, height, dist); // Box collider matching the mound base width
 
             SectorBuilder.addObstacle(ctx, {
                 position: _pos.clone(),

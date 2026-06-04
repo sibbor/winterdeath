@@ -69,9 +69,9 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
       timestamp: timestamp,
       isMobile: state.isMobileDevice,
       sector: state.currentSector,
-      cluesFound: state.cluesFoundCount,
-      poisFound: state.poisFoundCount,
-      collectiblesFound: state.collectiblesFoundCount
+      discoveredCluesCount: state.discoveredCluesCount,
+      discoveredPoisCount: state.discoveredPoisCount,
+      discoveredCollectiblesCount: state.discoveredCollectiblesCount
     });
     setVisible(true);
     UiSounds.playDiscovery();
@@ -127,7 +127,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
   // --- CONTENT RESOLUTION ---
   const content = useMemo(() => {
     if (!activeDiscovery) return null;
-    const { id, type, sector, cluesFound, poisFound, collectiblesFound } = activeDiscovery;
+    const { id, type, sector, discoveredCluesCount, discoveredPoisCount, discoveredCollectiblesCount } = activeDiscovery;
 
     let title = activeDiscovery.title ? t(activeDiscovery.title) : '';
     let subtitle = activeDiscovery.details ? t(activeDiscovery.details) : '';
@@ -139,21 +139,21 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
       case DiscoveryType.CLUE:
         title = activeDiscovery.title ? t(activeDiscovery.title) : t('ui.discovered_clue');
         const totalClues = CLUES_BY_SECTOR[sector] || 0;
-        subtitle = `${activeDiscovery.details || t('ui.clue')} (${cluesFound}/${totalClues})`;
+        subtitle = `${activeDiscovery.details || t('ui.clue')} (${discoveredCluesCount}/${totalClues})`;
         icon = '🔍';
         break;
 
       case DiscoveryType.POI:
         title = activeDiscovery.title ? t(activeDiscovery.title) : t('ui.discovered_poi');
         const totalPois = POIS_BY_SECTOR[sector] || 0;
-        subtitle = `${activeDiscovery.details || t('ui.poi_short')} (${poisFound}/${totalPois})`;
+        subtitle = `${activeDiscovery.details || t('ui.poi_short')} (${discoveredPoisCount}/${totalPois})`;
         icon = '📍';
         break;
 
       case DiscoveryType.COLLECTIBLE:
         title = activeDiscovery.title ? t(activeDiscovery.title) : t('ui.discovered_collectible');
         const totalCollectibles = COLLECTIBLES_BY_SECTOR[sector] || 0;
-        subtitle = `${activeDiscovery.details || t(DataResolver.getCollectibleName(id))} (${collectiblesFound}/${totalCollectibles})`;
+        subtitle = `${activeDiscovery.details || t(DataResolver.getCollectibleName(id))} (${discoveredCollectiblesCount}/${totalCollectibles})`;
         icon = '📦';
         break;
 

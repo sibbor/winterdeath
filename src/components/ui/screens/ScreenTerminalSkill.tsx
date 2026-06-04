@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PlayerStatID } from '../../../types/CareerStats';
+import { StatID } from '../../../types/CareerStats';
 import { SectorState } from '../../../types/StateTypes';
 import { CareerStats } from '../../../types/CareerStats';
 import { t } from '../../../utils/i18n';
@@ -8,9 +8,9 @@ import ModalLayout, { TacticalButton, TacticalCard } from './ModalLayout';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 
 const SKILLS_CONFIG = [
-    { id: PlayerStatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', value: 20 },
-    { id: PlayerStatID.MAX_STAMINA, labelKey: 'skills.adrenaline', descKey: 'skills.adrenaline_desc', value: 20 },
-    { id: PlayerStatID.SPEED, labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', value: 0.1 }
+    { id: StatID.MAX_HP, labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', value: 20 },
+    { id: StatID.MAX_STAMINA, labelKey: 'skills.adrenaline', descKey: 'skills.adrenaline_desc', value: 20 },
+    { id: StatID.SPEED, labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', value: 0.1 }
 ];
 
 interface SkillTerminalProps {
@@ -25,11 +25,11 @@ const ScreenTerminalSkill: React.FC<SkillTerminalProps> = ({ stats, sectorState,
     const [tempStats, setTempStats] = useState(() => StatsBridge.deepCloneStats(stats));
     const [tempSectorState, setTempSectorState] = useState({ ...sectorState });
 
-    const handleUpgradeSkill = (skillId: PlayerStatID, value: number) => {
+    const handleUpgradeSkill = (skillId: StatID, value: number) => {
         UiSounds.playClick();
 
         const nextStats = StatsBridge.deepCloneStats(tempStats);
-        if (skillId === PlayerStatID.SPEED) {
+        if (skillId === StatID.SPEED) {
             StatsBridge.addStatFloat(nextStats, skillId, value);
         } else {
             StatsBridge.addStatInt(nextStats, skillId, value);
@@ -60,7 +60,7 @@ const ScreenTerminalSkill: React.FC<SkillTerminalProps> = ({ stats, sectorState,
                     <div className="flex flex-col gap-2">
                         {SKILLS_CONFIG.map(skill => {
                             const val = StatsBridge.getCoreStat(tempStats, skill.id);
-                            const displayVal = skill.id === PlayerStatID.SPEED ? val.toFixed(2) : Math.round(val);
+                            const displayVal = skill.id === StatID.SPEED ? val.toFixed(2) : Math.round(val);
 
                             return (
                                 <TacticalCard key={skill.id} showHatching={true} className="flex justify-between items-center group transition-all rounded-lg p-4">

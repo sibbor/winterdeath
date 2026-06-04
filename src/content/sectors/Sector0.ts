@@ -18,14 +18,16 @@ import { WeatherType, GroundType } from '../../core/engine/EnvironmentalTypes';
 import { FXParticleType } from '../../types/FXTypes';
 import { PoiType, PoiID } from '../../content/pois';
 import { ClueID } from '../../content/clues';
-import { SectorEventID } from '../../content/events';
+import { SectorEventID } from '../../content/sector_events';
 import { CollectibleID } from '../../content/collectibles';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
+import { SystemID } from '../../systems/SystemID';
+import { EnemyWaveSystem, EnemyWaveConfig } from '../../systems/EnemyWaveSystem';
 
 const LOCATIONS = {
     SPAWN: {
         PLAYER: { x: -21, z: 15, rot: Math.PI / 1.25 },
-        FAMILY: { x: 144, z: 400, y: 4 },
+        FAMILY: { x: 153, z: 404 },
         BOSS: { x: 174, z: 380 }
     },
     CINEMATIC: {
@@ -70,6 +72,10 @@ const LOCATIONS = {
     ]
 } as const;
 
+// --- PHYSICS SCRATCHPADS (Zero-GC) ---
+const _activeMeshesScratch: THREE.InstancedMesh[] = new Array(16);
+let _activeMeshCount = 0;
+
 const EXPLODING_BUS_ID = 'tunnel_bus';
 const EXPLODING_BUS_POS = LOCATIONS.TRIGGERS.BUS;
 
@@ -111,7 +117,92 @@ const SPOTS_ARRAY = [
     LOCATIONS.POIS.GROCERY
 ] as const;
 
-function explodeBus(dt: number, renderTime: number, gameState: any, sectorState: any, ctx: any, events: any) {
+/*
+* Creates the bus that blocks the player from continuing in the tunnel,
+* the bus that the player blows up during the event.
+*/
+async function createExplodingBus(ctx: any) {
+    const { scene } = ctx;
+
+    const bus = VehicleGenerator.createBus(0x009ddb, false);
+    bus.position.set(LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.y, LOCATIONS.TRIGGERS.BUS.z);
+    bus.rotation.set(Math.PI / 2, Math.PI / 2, 0);
+    GeneratorUtils.freezeStatic(bus);
+
+    const busBox = new THREE.Box3().setFromObject(bus);
+    const busSize = new THREE.Vector3();
+    busBox.getSize(busSize);
+
+    const busCenter = new THREE.Vector3();
+    busBox.getCenter(busCenter);
+    const colMesh = new THREE.Mesh(new THREE.BoxGeometry(busSize.x, busSize.y, busSize.z));
+    colMesh.position.copy(busCenter);
+    colMesh.visible = false;
+    GeneratorUtils.freezeStatic(colMesh);
+    scene.add(colMesh);
+    scene.add(bus);
+    SectorBuilder.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });
+
+    const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: ColliderType.BOX, size: busSize } };
+    SectorBuilder.addObstacle(ctx, obstacle_bus);
+
+    SectorBuilder.addInteractable(ctx, bus, {
+        id: 'tunnel_bus_explode',
+        label: 'ui.interact_blow_up_bus',
+        type: InteractionType.SECTOR_SPECIFIC,
+        subType: InteractionSubType.PLANT_EXPLOSIVE,
+        collider: { type: InteractionShape.SPHERE, radius: 15.0 }
+    });
+    bus.userData.isInteractable = false;
+
+    // Store references
+    (ctx as any).busObject = bus;
+    (ctx as any).busColMesh = colMesh;
+    (ctx as any).busCenter = busCenter.clone();
+    (ctx as any).busSize = busSize.clone();
+    (ctx as any).busObstacle = obstacle_bus;
+
+    // Rubble
+    const rubble = await SectorBuilder.spawnRubble(ctx, EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.z, 20, MATERIALS.busBlue, Math.PI);
+    rubble.position.set(0, 0, 0);
+    rubble.visible = false; // [VINTERDÖD FIX] Keep hidden until explosion
+    rubble.frustumCulled = false;
+    rubble.userData.active = false;
+    rubble.userData.hasLanded = new Uint8Array(rubble.count);
+    rubble.userData.positions = new Float32Array(rubble.count * 3);
+    rubble.userData.velocities = new Float32Array(rubble.count * 3);
+    (ctx as any).busRubble = rubble;
+
+    // Tires (4 bouncing tires)
+    const tireGeo = new THREE.DodecahedronGeometry(0.8, 1);
+    const tireMat = MATERIALS.vehicleTire;
+    const tires = new THREE.InstancedMesh(tireGeo, tireMat, 4);
+    tires.position.set(0, 0, 0);
+    tires.visible = false;
+    tires.userData.active = false;
+    tires.userData.hasLanded = new Uint8Array(4);
+    tires.userData.positions = new Float32Array(4 * 3);
+    tires.userData.velocities = new Float32Array(4 * 3);
+    tires.userData.rotations = new Float32Array(4 * 3);
+    tires.userData.spin = new Float32Array(4 * 3);
+    tires.userData.scales = new Float32Array(4).fill(1.0);
+    scene.add(tires);
+    (ctx as any).busTires = tires;
+
+    // Zero-GC Pre-allocation: Bus Explosion Ring
+    const busExplosionRing = new THREE.Mesh(GEOMETRY.busExplosionRing, MATERIALS.busExplosionRing);
+    busExplosionRing.rotation.x = -Math.PI / 2;
+    busExplosionRing.position.set(0, -1000, 0);
+    busExplosionRing.visible = false;
+    scene.add(busExplosionRing);
+    (ctx as any).busRing = busExplosionRing;
+}
+
+/**
+ * Explodes the bus at the given position, creating rubble
+ * (debris & tires flying in random directions)
+ */
+function explodeBus(delta: number, simTime: number, renderTime: number, gameState: any, sectorState: any, ctx: any, events: any) {
     if (!sectorState.busExplosionHandled) {
         sectorState.busExplosionHandled = true;
         sectorState.busExplosionTime = renderTime;
@@ -130,11 +221,17 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
             events.makeNoise(_busOriginalPos, NoiseType.OTHER, 100);
         }
 
+        // (Re)move the bus object
         const _busObj = (ctx as any).busObject as THREE.Object3D | null;
         if (_busObj) {
+            _busObj.traverse((child) => {
+                child.matrixAutoUpdate = true;
+            });
             _busObj.position.set(0, -1000, 0);
+            _busObj.updateMatrixWorld(true);
         }
 
+        // Remove the bus collider
         const _obsArray = ctx.obstacles;
         if (_obsArray) {
             for (let i = 0; i < _obsArray.length; i++) {
@@ -145,6 +242,9 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
                     if (o.mesh) {
                         o.mesh.position.set(99999, -1000, 99999);
                     }
+                    //if (gameState.worldStreamer && typeof gameState.worldStreamer.updateObstacle === 'function') {
+                    //    gameState.worldStreamer.updateObstacle(o);
+                    //}
                     _obsArray[i] = _obsArray[_obsArray.length - 1];
                     _obsArray.pop();
                     break;
@@ -152,40 +252,43 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
             }
         }
 
+        // Activate bus rubble
         const rMesh = (ctx as any).busRubble;
         if (rMesh) {
+            // Debris
             rMesh.position.set(0, 0, 0);
             rMesh.visible = true;
             rMesh.userData.active = true;
             if (rMesh.userData.hasLanded) rMesh.userData.hasLanded.fill(0);
 
-            const data = rMesh.userData;
+            const debrisData = rMesh.userData;
             for (let i = 0; i < rMesh.count; i++) {
                 const ix = i * 3;
                 const arcAngle = Math.random() * Math.PI * 2;
                 const power = 1.5 + Math.random();
                 const dirX = Math.cos(arcAngle) * power;
                 const dirZ = Math.sin(arcAngle) * power;
-                const dirY = 3.0 + Math.random() * 4.0;
+                const dirY = 3.0 + Math.random() * 4.0; // More vertical burst
                 const speed = 15 + Math.random() * 25;
 
                 _v1.set(dirX, dirY, dirZ).normalize().multiplyScalar(speed);
-                data.velocities[ix] = _v1.x;
-                data.velocities[ix + 1] = _v1.y;
-                data.velocities[ix + 2] = _v1.z;
+                debrisData.velocities[ix] = _v1.x;
+                debrisData.velocities[ix + 1] = _v1.y;
+                debrisData.velocities[ix + 2] = _v1.z;
 
-                data.positions[ix] = EXPLODING_BUS_POS.x + (Math.random() - 0.5) * 8;
-                data.positions[ix + 1] = EXPLODING_BUS_POS.y + 1 + Math.random() * 2;
-                data.positions[ix + 2] = EXPLODING_BUS_POS.z + (Math.random() - 0.5) * 8;
+                debrisData.positions[ix] = EXPLODING_BUS_POS.x + (Math.random() - 0.5) * 8;
+                debrisData.positions[ix + 1] = EXPLODING_BUS_POS.y + 1 + Math.random() * 2;
+                debrisData.positions[ix + 2] = EXPLODING_BUS_POS.z + (Math.random() - 0.5) * 8;
 
-                if (!data.spin) data.spin = new Float32Array(rMesh.count * 3);
-                if (!data.rotations) data.rotations = new Float32Array(rMesh.count * 3);
+                if (!debrisData.spin) debrisData.spin = new Float32Array(rMesh.count * 3);
+                if (!debrisData.rotations) debrisData.rotations = new Float32Array(rMesh.count * 3);
 
-                data.spin[ix] = (Math.random() - 0.5) * 20;
-                data.spin[ix + 1] = (Math.random() - 0.5) * 20;
-                data.spin[ix + 2] = (Math.random() - 0.5) * 20;
+                debrisData.spin[ix] = (Math.random() - 0.5) * 20;
+                debrisData.spin[ix + 1] = (Math.random() - 0.5) * 20;
+                debrisData.spin[ix + 2] = (Math.random() - 0.5) * 20;
             }
 
+            // Tires:
             const tires = (ctx as any).busTires;
             if (tires) {
                 tires.position.set(0, 0, 0);
@@ -193,6 +296,7 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
                 tires.userData.active = true;
                 const tData = tires.userData;
                 tData.hasLanded.fill(0);
+
                 for (let i = 0; i < 4; i++) {
                     const ix = i * 3;
                     tData.positions[ix] = EXPLODING_BUS_POS.x + (Math.random() - 0.5) * 4;
@@ -213,22 +317,27 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
         }
     }
 
-    const activeMeshes = [];
+    // --- RUBBLE & TIRE PHYSICS ---
+    _activeMeshCount = 0;
     const busRubble = (ctx as any).busRubble;
     const busTires = (ctx as any).busTires;
-    if (busRubble && busRubble.userData.active) activeMeshes.push(busRubble);
-    if (busTires && busTires.userData.active) activeMeshes.push(busTires);
 
-    for (const rubble of activeMeshes) {
+    if (busRubble && busRubble.userData.active) _activeMeshesScratch[_activeMeshCount++] = busRubble;
+    if (busTires && busTires.userData.active) _activeMeshesScratch[_activeMeshCount++] = busTires;
+
+    for (let mIdx = 0; mIdx < _activeMeshCount; mIdx++) {
+        const rubble = _activeMeshesScratch[mIdx];
         const isTire = rubble === busTires;
-        const rubbleWeight = isTire ? 35.0 : 18.0;
-        const bouncy = isTire ? 0.7 : 0.4;
+        const rubbleWeight = isTire ? 35.0 : 75.0;
+        const bouncy = isTire ? 0.5 : 0.2;
         const data = rubble.userData;
         let stillMoving = false;
         const elapsed = renderTime - (sectorState.busExplosionTime || 0);
 
         for (let i = 0; i < rubble.count; i++) {
             const ix = i * 3;
+
+            // [VINTERDÖD FIX] Dynamic ground height lookup
             const groundY = (gameState.worldStreamer && gameState.worldStreamer.getGroundHeight)
                 ? gameState.worldStreamer.getGroundHeight(data.positions[ix], data.positions[ix + 2])
                 : 0.1;
@@ -241,7 +350,7 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
 
             if (isAboveGround || hasVelY || hasVelX || hasVelZ) {
                 stillMoving = true;
-                const safeDelta = Math.min(dt, 0.05);
+                const safeDelta = Math.min(delta, 0.05);
 
                 data.velocities[ix + 1] -= rubbleWeight * safeDelta;
                 data.positions[ix] += data.velocities[ix] * safeDelta;
@@ -264,10 +373,12 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
                     if (Math.abs(data.velocities[ix]) < 0.2) data.velocities[ix] = 0;
                     if (Math.abs(data.velocities[ix + 2]) < 0.2) data.velocities[ix + 2] = 0;
 
-                    if (data.hasLanded && !data.hasLanded[i] && events.playSound) {
-                        if (!isTire || Math.abs(data.velocities[ix + 1]) > 2) {
-                            // TODO: change IMPACT_WOOD to IMPACT_GUM
-                            events.playSound(isTire ? SoundID.IMPACT_WOOD : SoundID.IMPACT_METAL);
+                    if (data.hasLanded && !data.hasLanded[i] && events.playSound && sectorState.busExplosionTime) {
+                        // Only play impact sounds during the active explosion window (first 10 seconds)
+                        if (simTime - sectorState.busExplosionTime < 10000) {
+                            if (!isTire || Math.abs(data.velocities[ix + 1]) > 2) {
+                                events.playSound(isTire ? SoundID.IMPACT_METAL : SoundID.IMPACT_METAL);
+                            }
                         }
                         if (Math.abs(data.velocities[ix + 1]) < 2) data.hasLanded[i] = 1;
                     }
@@ -291,10 +402,11 @@ function explodeBus(dt: number, renderTime: number, gameState: any, sectorState:
                     _scale.set(1, 1, 1);
                 } else {
                     const s = data.scales ? data.scales[i] : 1.0;
+                    // [VINTERDÖD OPT] Varied bus-like shapes: Panels, Beams, Scrap
                     const type = i % 3;
-                    if (type === 0) _scale.set(4.0 * s, 0.4 * s, 6.0 * s);
-                    else if (type === 1) _scale.set(1.5 * s, 0.5 * s, 10.0 * s);
-                    else _scale.set(1.5 * s, 1.5 * s, 1.5 * s);
+                    if (type === 0) _scale.set(4.0 * s, 0.4 * s, 6.0 * s); // Huge Panels
+                    else if (type === 1) _scale.set(1.5 * s, 0.5 * s, 10.0 * s); // Long Beams
+                    else _scale.set(1.5 * s, 1.5 * s, 1.5 * s); // Scrap
                 }
 
                 _matrix.compose(_position, _quat, _scale);
@@ -540,12 +652,12 @@ export const Sector0: SectorDef = {
         const embankmentWest = [
             new THREE.Vector3(20, 5, 364),
             new THREE.Vector3(84, 5, 350),
-            new THREE.Vector3(133, 5, 345)
+            new THREE.Vector3(129, 5, 345)
         ];
         await SectorBuilder.createEmbankment(ctx, embankmentWest, 18, 5, MATERIALS.dirt);
 
         const embankmentEast = [
-            new THREE.Vector3(145, 5, 345),
+            new THREE.Vector3(147, 5, 345),
             new THREE.Vector3(264, 5, 345)
         ];
         await SectorBuilder.createEmbankment(ctx, embankmentEast, 18, 5, MATERIALS.dirt);
@@ -609,7 +721,7 @@ export const Sector0: SectorDef = {
         await yieldIfBudgetExceeded();
 
         const tunnelPos = new THREE.Vector3(LOCATIONS.TRIGGERS.TUNNEL.x, 0, LOCATIONS.TRIGGERS.TUNNEL.z);
-        const tunnel = ObjectGenerator.createStandardTunnel(6, 6, 25, 1, 1);
+        const tunnel = ObjectGenerator.createStandardTunnel(6, 6, 24, 1, 1);
         tunnel.position.copy(tunnelPos);
         ctx.scene.add(tunnel);
 
@@ -625,71 +737,8 @@ export const Sector0: SectorDef = {
             await yieldIfBudgetExceeded();
         }
 
-        const bus = VehicleGenerator.createBus(0x009ddb, false);
-        bus.position.set(LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.y, LOCATIONS.TRIGGERS.BUS.z);
-        bus.rotation.set(Math.PI / 2, Math.PI / 2, 0);
-        GeneratorUtils.freezeStatic(bus);
-
-        const busBox = new THREE.Box3().setFromObject(bus);
-        const busSize = new THREE.Vector3();
-        busBox.getSize(busSize);
-
-        const busCenter = new THREE.Vector3();
-        busBox.getCenter(busCenter);
-        const colMesh = new THREE.Mesh(new THREE.BoxGeometry(busSize.x, busSize.y, busSize.z));
-        colMesh.position.copy(busCenter);
-        colMesh.visible = false;
-        GeneratorUtils.freezeStatic(colMesh);
-        scene.add(colMesh);
-        scene.add(bus);
-        SectorBuilder.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });
-
-        const busIdx = obstacles.length;
-        const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: ColliderType.BOX, size: busSize } };
-        SectorBuilder.addObstacle(ctx, obstacle_bus);
-
-        SectorBuilder.addInteractable(ctx, bus, {
-            id: 'tunnel_bus_explode',
-            label: 'ui.interact_blow_up_bus',
-            type: InteractionType.SECTOR_SPECIFIC,
-            subType: InteractionSubType.PLANT_EXPLOSIVE,
-            collider: { type: InteractionShape.SPHERE, radius: 15.0 }
-        });
-        bus.userData.isInteractable = false;
-
-        (ctx as any).busObject = bus;
-        (ctx as any).busColMesh = colMesh;
-        (ctx as any).busObjectIdx = busIdx;
-
-        const rubble = SectorBuilder.spawnRubble(ctx, LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.z, 20, MATERIALS.busBlue, Math.PI);
-        rubble.position.y = -1000;
-        rubble.visible = false;
-        rubble.frustumCulled = true;
-        rubble.userData.hasLanded = new Uint8Array(rubble.count);
-        (ctx as any).busRubble = rubble;
-
-        const tireGeo = new THREE.DodecahedronGeometry(0.8, 1);
-        const tireMat = MATERIALS.vehicleTire;
-        const tires = new THREE.InstancedMesh(tireGeo, tireMat, 4);
-        tires.position.set(0, 0, 0);
-        tires.visible = false;
-        tires.userData.active = false;
-        tires.userData.hasLanded = new Uint8Array(4);
-        tires.userData.positions = new Float32Array(4 * 3);
-        tires.userData.velocities = new Float32Array(4 * 3);
-        tires.userData.rotations = new Float32Array(4 * 3);
-        tires.userData.spin = new Float32Array(4 * 3);
-        tires.userData.scales = new Float32Array(4).fill(1.0);
-        scene.add(tires);
-        (ctx as any).busTires = tires;
-
-        // Zero-GC Pre-allocation: Bus Explosion Ring
-        const busExplosionRing = new THREE.Mesh(GEOMETRY.busExplosionRing, MATERIALS.busExplosionRing);
-        busExplosionRing.rotation.x = -Math.PI / 2;
-        busExplosionRing.position.set(0, -1000, 0);
-        busExplosionRing.visible = false;
-        scene.add(busExplosionRing);
-        (ctx as any).busRing = busExplosionRing;
+        // Create the explodeable bus, blocking the tunnel
+        createExplodingBus(ctx);
 
         const ty = LOCATIONS.POIS.TRAIN_YARD;
         const fenceHeight = 3;
@@ -936,16 +985,16 @@ export const Sector0: SectorDef = {
             { id: PoiID.S0_GYM, position: LOCATIONS.POIS.GYM, size: { width: 65, depth: 45 }, type: TriggerType.POI, content: "pois.0.5.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
             { id: PoiID.S0_TRAIN_YARD, position: LOCATIONS.POIS.TRAIN_YARD, size: { width: 150, depth: 110 }, type: TriggerType.POI, content: "pois.0.6.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
 
-            { id: SectorEventID.S0_TUNNEL_BLOCKED, position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: TriggerType.EVENT, content: "clues.0.5.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [] },
+            { id: SectorEventID.S0_TUNNEL_BLOCKED, position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: TriggerType.EVENT, content: "sector_events.0.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [] },
 
             {
                 id: FamilyMemberID.LOKE,
                 position: LOCATIONS.SPAWN.FAMILY,
                 familyId: FamilyMemberID.LOKE,
-                radius: 8,
+                radius: 5,
                 type: TriggerType.EVENT,
                 content: '',
-                statusFlags: TriggerStatus.ONCE,
+                statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
                 actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.LOKE, dialogueId: 0, sectorId: 0 } }]
             }
         ]);
@@ -962,7 +1011,127 @@ export const Sector0: SectorDef = {
         }
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, triggerSystem, ctx, ...events }) => {
+    onPlayerRespawn: (ctx: SectorBuildContext, state: any, engine: any) => {
+        if (!state.sectorState) return;
+
+        /*
+        // Reset wave variables
+        state.sectorState.waveActive = false;
+        state.sectorState.waveName = '';
+        state.sectorState.waveProgress = 0;
+        state.sectorState.waveKills = 0;
+        state.sectorState.waveTarget = 0;
+
+        // Reset bus event data
+        state.sectorState.busEventState = 0;
+        state.sectorState.busEventTimer = 0;
+        state.sectorState.busExplosionHandled = false;
+        state.sectorState.busExplosionTime = 0;
+        state.sectorState.lastBeepTime = 0;
+        state.sectorState.busInteractionTriggered = false;
+        state.sectorState.busCanBeInteractedWith = false;
+        state.sectorState.busExploded = false;
+        state.sectorState.lokeUnlocked = false;
+
+        const bus = (ctx as any).busObject;
+        if (bus) {
+            bus.position.set(LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.y, LOCATIONS.TRIGGERS.BUS.z);
+            bus.userData.isInteractable = false;
+        }
+
+        const rubble = (ctx as any).busRubble;
+        if (rubble) {
+            rubble.visible = false;
+            rubble.position.y = -1000;
+            if (rubble.userData) rubble.userData.active = false;
+        }
+
+        const tires = (ctx as any).busTires;
+        if (tires) {
+            tires.visible = false;
+            tires.position.y = -1000;
+            if (tires.userData) tires.userData.active = false;
+        }
+
+        const busRing = (ctx as any).busRing;
+        if (busRing) {
+            busRing.visible = false;
+            busRing.position.y = -1000;
+        }
+
+        // Restore collision obstacle
+        const colMesh = (ctx as any).busColMesh;
+        const busSize = new THREE.Vector3();
+        if (bus) {
+            const busBox = new THREE.Box3().setFromObject(bus);
+            busBox.getSize(busSize);
+            const busCenter = new THREE.Vector3();
+            busBox.getCenter(busCenter);
+
+            if (colMesh) {
+                colMesh.position.copy(busCenter);
+                colMesh.visible = false;
+            }
+
+            const obstacle_bus = {
+                id: EXPLODING_BUS_ID,
+                mesh: colMesh,
+                position: busCenter,
+                collider: { type: ColliderType.BOX, size: busSize }
+            };
+
+            let exists = false;
+            for (let i = 0; i < ctx.obstacles.length; i++) {
+                if (ctx.obstacles[i] && ctx.obstacles[i].id === EXPLODING_BUS_ID) {
+                    ctx.obstacles[i] = obstacle_bus;
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                ctx.obstacles.push(obstacle_bus);
+            }
+
+            if (ctx.worldStreamer && typeof ctx.worldStreamer.registerObstacle === 'function') {
+                ctx.worldStreamer.registerObstacle(obstacle_bus);
+            }
+        }
+
+        // Re-register the S0_TUNNEL_BLOCKED event trigger if it got deleted
+        const triggerSystem = engine.getSystem(SystemID.TRIGGER_SYSTEM);
+        if (triggerSystem) {
+            const existingIdx = triggerSystem.getTriggerById(SectorEventID.S0_TUNNEL_BLOCKED, TriggerType.EVENT);
+            if (existingIdx === -1) {
+                triggerSystem.addTrigger({
+                    id: SectorEventID.S0_TUNNEL_BLOCKED,
+                    type: TriggerType.EVENT,
+                    x: LOCATIONS.TRIGGERS.BUS.x,
+                    y: 0,
+                    z: LOCATIONS.TRIGGERS.BUS.z,
+                    radius: 15,
+                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                    actions: []
+                });
+            }
+
+            const lokeIdx = triggerSystem.getTriggerById(FamilyMemberID.LOKE, TriggerType.EVENT);
+            if (lokeIdx === -1) {
+                triggerSystem.addTrigger({
+                    id: FamilyMemberID.LOKE,
+                    type: TriggerType.EVENT,
+                    x: LOCATIONS.SPAWN.FAMILY.x,
+                    y: LOCATIONS.SPAWN.FAMILY.y || 0,
+                    z: LOCATIONS.SPAWN.FAMILY.z,
+                    radius: 8,
+                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                    actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.LOKE, dialogueId: 0, sectorId: 0 } }]
+                });
+            }
+        }
+        */
+    },
+
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, triggerSystem, ctx, engine, ...events }) => {
         if (!sectorState.spawns) sectorState.spawns = {};
 
         if (!sectorState.spawns.initial && simTime - gameState.startTime > 0) {
@@ -1013,7 +1182,7 @@ export const Sector0: SectorDef = {
                 let type = EnemyType.WALKER;
                 const rand = Math.random();
                 if (rand > 0.8) type = EnemyType.TANK;
-                else if (rand > 0.9) type = EnemyType.BOMBER;
+                else if (rand > 0.9) type = EnemyType.BLOATER;
                 else if (rand > 0.7) type = EnemyType.RUNNER;
 
                 const offX = (Math.random() - 0.5) * 40;
@@ -1038,7 +1207,7 @@ export const Sector0: SectorDef = {
         }
 
         if (!sectorState.busEventState) {
-            const busTrigIdx = triggerSystem.getTriggerById(SectorEventID.S0_TUNNEL_BLOCKED);
+            const busTrigIdx = triggerSystem.getTriggerById(SectorEventID.S0_TUNNEL_BLOCKED, TriggerType.EVENT);
             if (triggerSystem.isTriggered(busTrigIdx)) {
                 sectorState.busEventState = 1;
                 sectorState.busEventTimer = simTime;
@@ -1057,18 +1226,10 @@ export const Sector0: SectorDef = {
                 TriggerType.SPEAK,
                 playerPos.x, 0, playerPos.z,
                 100, TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                "clues.0.6.reaction"
+                "sector_events.0.1.reaction"
             );
-            triggerSystem.addTrigger({
-                id: 's0_event_explosives_planted',
-                type: TriggerType.EVENT,
-                x: EXPLODING_BUS_POS.x, y: 0, z: EXPLODING_BUS_POS.z,
-                radius: 15,
-                statusFlags: TriggerStatus.ONCE | TriggerStatus.ACTIVE,
-                actions: [{ type: TriggerActionType.CONCLUDE_SECTOR, payload: { isExtraction: false } }]
-            });
             triggerSystem.addTriggerPrimitive(
-                's0_event_bus_rubble',
+                ClueID.S0_EVENT_BUS_RUBBLE,
                 TriggerType.CLUE,
                 EXPLODING_BUS_POS.x, 0, EXPLODING_BUS_POS.z,
                 20,
@@ -1111,52 +1272,50 @@ export const Sector0: SectorDef = {
 
             triggerSystem.addTriggerPrimitive(
                 SectorEventID.S0_TUNNEL_EXPLOSION_ATTRACTED_ZOMBIES,
-                TriggerType.CLUE,
+                TriggerType.THOUGHT,
                 playerPos.x, 0, playerPos.z,
                 100, TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                "clues.0.9.reaction"
+                "sector_events.0.4.reaction"
             );
 
-            for (let i = 0; i < SPOTS_ARRAY.length; i++) {
-                _viewPos.set(SPOTS_ARRAY[i].x, 0, SPOTS_ARRAY[i].z);
-                if (events.spawnHorde) {
-                    events.spawnHorde(6, undefined, _viewPos);
+            // TODO: implement support for proper enemy wave spawning
+            // In this case: spawn 1 wave with 18 zombies from different locations
+            // 'zombiesKilled' & 'zombiesKillTarget' will go into the enemy wave system
+            // 'startingKills' should be removed
+            // enemies needs either pooled into a wave or tagged with "waveId: 0" or the like
+            // in order to be tracked by the enemy wave system
+            // Start the wave using the EnemyWaveSystem
+            const enemyWaveSystem = engine.getSystem(SystemID.ENEMY_WAVE_SYSTEM) as EnemyWaveSystem;
+            if (enemyWaveSystem) {
+                const spawns: Array<{ type: EnemyType; pos: { x: number; z: number } }> = [];
+                for (let i = 0; i < SPOTS_ARRAY.length; i++) {
+                    const spot = SPOTS_ARRAY[i];
+                    for (let j = 0; j < 6; j++) {
+                        spawns.push({
+                            type: EnemyType.WALKER,
+                            pos: { x: spot.x, z: spot.z }
+                        });
+                    }
                 }
+                const waveConfigs: EnemyWaveConfig[] = [{
+                    name: 'Wave 1: The Tunnel Horde',
+                    targetRatio: 0.8, // 80%
+                    spawns: spawns,
+                    attractorPos: { x: LOCATIONS.TRIGGERS.TUNNEL.x, z: LOCATIONS.TRIGGERS.TUNNEL.z }
+                }];
+                enemyWaveSystem.startWaveChain(waveConfigs);
             }
-
-            sectorState.zombiesKillTarget = 1;
-            sectorState.zombiesKilled = 0;
-            sectorState.startingKills = gameState.sessionStats.kills;
         }
         else if (sectorState.busEventState === 5) {
-            sectorState.zombiesKilled = gameState.sessionStats.kills - sectorState.startingKills;
-
-            if (sectorState.zombiesKilled >= sectorState.zombiesKillTarget) {
+            if (!sectorState.waveActive) {
                 sectorState.busEventState = 6;
                 sectorState.busEventTimer = simTime;
-
                 triggerSystem.addTriggerPrimitive(
                     SectorEventID.S0_TUNNEL_PLANT_EXPLOSIVES,
-                    TriggerType.CLUE,
+                    TriggerType.THOUGHT,
                     playerPos.x, 0, playerPos.z,
                     100, TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                    "clues.0.7.reaction"
-                );
-                triggerSystem.addTrigger({
-                    id: SectorEventID.S0_LOKE_DIALOGUE,
-                    type: TriggerType.EVENT,
-                    x: LOCATIONS.TRIGGERS.START_TRACKS.x, y: 0, z: LOCATIONS.TRIGGERS.START_TRACKS.z,
-                    radius: 20,
-                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                    actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 0, dialogueId: 0 } }]
-                });
-                triggerSystem.addTriggerPrimitive(
-                    FamilyMemberID.LOKE,
-                    TriggerType.POI,
-                    LOCATIONS.TRIGGERS.START_TRACKS.x, 0, LOCATIONS.TRIGGERS.START_TRACKS.z,
-                    25,
-                    TriggerStatus.ACTIVE,
-                    "pois.0.0.reaction"
+                    "sector_events.0.2.reaction"
                 );
 
                 sectorState.busCanBeInteractedWith = true;
@@ -1237,7 +1396,7 @@ export const Sector0: SectorDef = {
         else if (sectorState.busEventState === 8) {
             const elapsed = simTime - sectorState.busEventTimer;
 
-            explodeBus(delta, renderTime, gameState, sectorState, ctx, events);
+            explodeBus(delta, simTime, renderTime, gameState, sectorState, ctx, events);
 
             if (elapsed > 10000 || (!(ctx as any).busRubble?.userData.active)) {
                 sectorState.busEventState = 9;
@@ -1247,21 +1406,26 @@ export const Sector0: SectorDef = {
 
                 triggerSystem.addTriggerPrimitive(
                     SectorEventID.S0_TUNNEL_CLEARED,
-                    TriggerType.CLUE,
+                    TriggerType.THOUGHT,
                     playerPos.x, 0, playerPos.z,
                     100, TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                    "clues.0.8.reaction"
+                    "sector_events.0.3.reaction"
                 );
             }
         }
         else if (sectorState.busEventState === 9 && !sectorState.lokeUnlocked) {
             if (simTime - sectorState.busEventTimer > 1500) {
                 sectorState.lokeUnlocked = true;
-
-                const idx = triggerSystem.getTriggerById(FamilyMemberID.LOKE);
-                if (idx !== -1) {
-                    triggerSystem.setStatusFlag(idx, TriggerStatus.ACTIVE, true);
-                    triggerSystem.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);
+            }
+        }
+        else if (sectorState.lokeUnlocked && !sectorState.lokeCinematicTriggered) {
+            _v1.set(LOCATIONS.SPAWN.FAMILY.x, 0, LOCATIONS.SPAWN.FAMILY.z);
+            if (playerPos.distanceToSquared(_v1) < 4) { // 2 units — matches setupContent trigger radius
+                sectorState.lokeCinematicTriggered = true;
+                if (events.startCinematic) {
+                    // Pass Loke's mesh so the camera pans to him correctly
+                    const lokeMesh = ctx.activeFamilyMembers?.find((fm: any) => fm.id === FamilyMemberID.LOKE)?.mesh || null;
+                    events.startCinematic(lokeMesh, 0, 0);
                 }
             }
         }

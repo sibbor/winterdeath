@@ -22,7 +22,9 @@ export const ParticlePoolState = {
 
     // VISUALS & LIFECYCLE
     scale: new Float32Array(POOL_PARTICLE_MAX),
+    initialScale: new Float32Array(POOL_PARTICLE_MAX),
     life: new Float32Array(POOL_PARTICLE_MAX),
+    maxLife: new Float32Array(POOL_PARTICLE_MAX),
 
     // COLOR (SoA)
     colorR: new Float32Array(POOL_PARTICLE_MAX),
@@ -46,7 +48,9 @@ export const ParticlePool = {
         ParticlePoolState.velY[i] = vy;
         ParticlePoolState.velZ[i] = vz;
         ParticlePoolState.scale[i] = scale;
+        ParticlePoolState.initialScale[i] = scale;
         ParticlePoolState.life[i] = life;
+        ParticlePoolState.maxLife[i] = life;
         ParticlePoolState.colorR[i] = r;
         ParticlePoolState.colorG[i] = g;
         ParticlePoolState.colorB[i] = b;
@@ -68,7 +72,9 @@ export const ParticlePool = {
             ParticlePoolState.velY[index] = ParticlePoolState.velY[last];
             ParticlePoolState.velZ[index] = ParticlePoolState.velZ[last];
             ParticlePoolState.scale[index] = ParticlePoolState.scale[last];
+            ParticlePoolState.initialScale[index] = ParticlePoolState.initialScale[last];
             ParticlePoolState.life[index] = ParticlePoolState.life[last];
+            ParticlePoolState.maxLife[index] = ParticlePoolState.maxLife[last];
             ParticlePoolState.colorR[index] = ParticlePoolState.colorR[last];
             ParticlePoolState.colorG[index] = ParticlePoolState.colorG[last];
             ParticlePoolState.colorB[index] = ParticlePoolState.colorB[last];

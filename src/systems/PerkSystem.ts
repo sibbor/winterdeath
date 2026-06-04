@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { PERKS, PerkCategory, StatusEffectID } from '../content/perks';
-import { PlayerStatID, PlayerStatusFlags } from '../types/CareerStats';
+import { StatID, PlayerStatusFlags } from '../types/CareerStats';
 import { FXSystem } from './FXSystem';
 import { FXParticleType } from '../types/FXTypes';
 import { DamageID, DamageType } from '../entities/player/CombatTypes';
@@ -179,8 +179,8 @@ export class PerkSystem implements System {
         const perk = PERKS[perkID];
         if (!perk) return;
 
-        const hp = state.player.statsBuffer[PlayerStatID.HP];
-        const maxHp = state.player.statsBuffer[PlayerStatID.MAX_HP];
+        const hp = state.player.statsBuffer[StatID.HP];
+        const maxHp = state.player.statsBuffer[StatID.MAX_HP];
 
         if (hp > 0 && hp < maxHp * COMBAT.CRISIS_HP_RATIO) {
             const cooldown = perk.cooldown ?? 60000;
@@ -218,11 +218,11 @@ export class PerkSystem implements System {
         const stats = state.player.statsBuffer;
 
         // Reset Base Multipliers
-        stats[PlayerStatID.BASE_MULTIPLIER_SPEED] = 1.0;
-        stats[PlayerStatID.BASE_MULTIPLIER_RELOAD] = 1.0;
-        stats[PlayerStatID.BASE_MULTIPLIER_FIRERATE] = 1.0;
-        stats[PlayerStatID.BASE_MULTIPLIER_DMG_RESIST] = 1.0;
-        stats[PlayerStatID.BASE_MULTIPLIER_RANGE] = 1.0;
+        stats[StatID.BASE_MULTIPLIER_SPEED] = 1.0;
+        stats[StatID.BASE_MULTIPLIER_RELOAD] = 1.0;
+        stats[StatID.BASE_MULTIPLIER_FIRERATE] = 1.0;
+        stats[StatID.BASE_MULTIPLIER_DMG_RESIST] = 1.0;
+        stats[StatID.BASE_MULTIPLIER_RANGE] = 1.0;
 
         state.combat.activePassivesCount = 0;
 
@@ -247,11 +247,11 @@ export class PerkSystem implements System {
                 // Apply permanent base upgrade
                 const perk = PERKS[passiveId];
                 if (perk) {
-                    if (perk.speedModifier) stats[PlayerStatID.BASE_MULTIPLIER_SPEED] += (perk.speedModifier / 100);
-                    if (perk.reloadModifier) stats[PlayerStatID.BASE_MULTIPLIER_RELOAD] *= (1.0 / (1.0 + perk.reloadModifier / 100));
-                    if (perk.fireRateModifier) stats[PlayerStatID.BASE_MULTIPLIER_FIRERATE] *= (1.0 / (1.0 + perk.fireRateModifier / 100));
-                    if (perk.damageResistModifier) stats[PlayerStatID.BASE_MULTIPLIER_DMG_RESIST] *= (1.0 - (perk.damageResistModifier / 100));
-                    if (perk.rangeModifier) stats[PlayerStatID.BASE_MULTIPLIER_RANGE] += (perk.rangeModifier / 100);
+                    if (perk.speedModifier) stats[StatID.BASE_MULTIPLIER_SPEED] += (perk.speedModifier / 100);
+                    if (perk.reloadModifier) stats[StatID.BASE_MULTIPLIER_RELOAD] *= (1.0 / (1.0 + perk.reloadModifier / 100));
+                    if (perk.fireRateModifier) stats[StatID.BASE_MULTIPLIER_FIRERATE] *= (1.0 / (1.0 + perk.fireRateModifier / 100));
+                    if (perk.damageResistModifier) stats[StatID.BASE_MULTIPLIER_DMG_RESIST] *= (1.0 - (perk.damageResistModifier / 100));
+                    if (perk.rangeModifier) stats[StatID.BASE_MULTIPLIER_RANGE] += (perk.rangeModifier / 100);
                 }
             }
         }
@@ -263,11 +263,11 @@ export class PerkSystem implements System {
         const durations = state.combat.effectDurations;
 
         // 1. Initialize Multipliers from Permanent Base Layer (Phase 11 Refactor)
-        stats[PlayerStatID.MULTIPLIER_SPEED] = stats[PlayerStatID.BASE_MULTIPLIER_SPEED];
-        stats[PlayerStatID.MULTIPLIER_RELOAD] = stats[PlayerStatID.BASE_MULTIPLIER_RELOAD];
-        stats[PlayerStatID.MULTIPLIER_FIRERATE] = stats[PlayerStatID.BASE_MULTIPLIER_FIRERATE];
-        stats[PlayerStatID.MULTIPLIER_DMG_RESIST] = stats[PlayerStatID.BASE_MULTIPLIER_DMG_RESIST];
-        stats[PlayerStatID.MULTIPLIER_RANGE] = stats[PlayerStatID.BASE_MULTIPLIER_RANGE];
+        stats[StatID.MULTIPLIER_SPEED] = stats[StatID.BASE_MULTIPLIER_SPEED];
+        stats[StatID.MULTIPLIER_RELOAD] = stats[StatID.BASE_MULTIPLIER_RELOAD];
+        stats[StatID.MULTIPLIER_FIRERATE] = stats[StatID.BASE_MULTIPLIER_FIRERATE];
+        stats[StatID.MULTIPLIER_DMG_RESIST] = stats[StatID.BASE_MULTIPLIER_DMG_RESIST];
+        stats[StatID.MULTIPLIER_RANGE] = stats[StatID.BASE_MULTIPLIER_RANGE];
 
         // 2. Clear high-frequency flags driven by perks
         state.combat.statusFlags &= ~(
@@ -322,7 +322,7 @@ export class PerkSystem implements System {
         }
 
         // --- FINAL BAKE ---
-        stats[PlayerStatID.FINAL_SPEED] = stats[PlayerStatID.SPEED] * stats[PlayerStatID.MULTIPLIER_SPEED] * KMH_TO_MS;
+        stats[StatID.FINAL_SPEED] = stats[StatID.SPEED] * stats[StatID.MULTIPLIER_SPEED] * KMH_TO_MS;
 
         // Track Buff Uptime for Statistics
         if (state.combat.activeBuffsCount > 0) {
@@ -331,11 +331,11 @@ export class PerkSystem implements System {
     }
 
     private aggregateModifiers(stats: Float32Array, perk: any) {
-        if (perk.speedModifier) stats[PlayerStatID.MULTIPLIER_SPEED] += (perk.speedModifier / 100);
-        if (perk.reloadModifier) stats[PlayerStatID.MULTIPLIER_RELOAD] *= (1.0 / (1.0 + perk.reloadModifier / 100));
-        if (perk.fireRateModifier) stats[PlayerStatID.MULTIPLIER_FIRERATE] *= (1.0 / (1.0 + perk.fireRateModifier / 100));
-        if (perk.damageResistModifier) stats[PlayerStatID.MULTIPLIER_DMG_RESIST] *= (1.0 - (perk.damageResistModifier / 100));
-        if (perk.rangeModifier) stats[PlayerStatID.MULTIPLIER_RANGE] += (perk.rangeModifier / 100);
+        if (perk.speedModifier) stats[StatID.MULTIPLIER_SPEED] += (perk.speedModifier / 100);
+        if (perk.reloadModifier) stats[StatID.MULTIPLIER_RELOAD] *= (1.0 / (1.0 + perk.reloadModifier / 100));
+        if (perk.fireRateModifier) stats[StatID.MULTIPLIER_FIRERATE] *= (1.0 / (1.0 + perk.fireRateModifier / 100));
+        if (perk.damageResistModifier) stats[StatID.MULTIPLIER_DMG_RESIST] *= (1.0 - (perk.damageResistModifier / 100));
+        if (perk.rangeModifier) stats[StatID.MULTIPLIER_RANGE] += (perk.rangeModifier / 100);
     }
 
     private syncPerkFlags(state: any, id: StatusEffectID) {
@@ -389,7 +389,10 @@ export class PerkSystem implements System {
 
         const dmgID = this.getDebuffDamageID(i);
         const dmgType = this.getDebuffDamageType(i);
-        this.playerStats.handlePlayerHit(session, totalDamage, null, dmgType, dmgID, true, i);
+
+        if (this.playerStats) {
+            this.playerStats.handlePlayerHit(session, totalDamage, null, dmgType, dmgID, true, i);
+        }
 
         state.combat.perkDamageDealt[i] += totalDamage;
         this.spawnTickFX(session, perk.id);

@@ -63,10 +63,17 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
     // -- Stats Calculation -- Zero-GC: for-loops replacing Object.values+filter chains
     const { collectibles, clues, pois } = useMemo(() => {
-        const foundCollectiblesSet = new Set<number>(StatsBridge.getDiscoveredCollectibles(stats).map(Number));
-        const foundCluesRaw = StatsBridge.getDiscoveredClues(stats);
-        const foundCluesSet = new Set<string>(foundCluesRaw.map((c: any) => String(typeof c === 'string' ? c : c.id)));
-        const foundPoisSet = new Set<number>(StatsBridge.getDiscoveredPois(stats).map(Number));
+        const foundCollectiblesSet = new Set<number>();
+        const fc = StatsBridge.getDiscoveredCollectibles(stats);
+        for (let i = 0; i < fc.length; i++) if (fc[i] === 1) foundCollectiblesSet.add(i);
+
+        const foundCluesSet = new Set<number>();
+        const fcl = StatsBridge.getDiscoveredClues(stats);
+        for (let i = 0; i < fcl.length; i++) if (fcl[i] === 1) foundCluesSet.add(i);
+
+        const foundPoisSet = new Set<number>();
+        const fp = StatsBridge.getDiscoveredPois(stats);
+        for (let i = 0; i < fp.length; i++) if (fp[i] === 1) foundPoisSet.add(i);
 
         const allCollectibles = DataResolver.getCollectibles();
         let collTotal = 0;
@@ -86,7 +93,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
             const c = allClues[key];
             if (c.sector === selectedSectorIndex) {
                 clueTotal++;
-                if (foundCluesSet.has(String(c.id))) clueFound++;
+                if (foundCluesSet.has(c.id)) clueFound++;
             }
         }
 
@@ -143,7 +150,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
             onTabChange={handleSelect}
             tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
         >
-            <div className={`flex h-full gap-4 md:gap-8 ${effectiveLandscape ? 'flex-row' : 'flex-col overflow-y-auto touch-auto'}`}>
+            <div className={`flex gap-4 md:gap-8 ${effectiveLandscape ? 'h-full flex-row' : 'flex-col'}`}>
                 {/* LEFT: Sector List */}
                 <div className={`${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : 'w-full shrink-0 relative'}`}>
                     <div className={`${!effectiveLandscape ? 'flex flex-nowrap gap-2 overflow-x-auto pb-4 px-10 snap-x snap-mandatory pt-2 scrollbar-hide touch-auto cursor-pointer' : 'flex flex-col gap-4 pt-4 pr-10'}`}>

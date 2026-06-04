@@ -117,7 +117,7 @@ export const ENEMY_COLORS = {
     WALKER: { num: 0xc27ba0, str: '#c27ba0' } as const,
     RUNNER: { num: 0x33a366, str: '#33a366' } as const,
     TANK: { num: 0x2b6599, str: '#2b6599' } as const,
-    BOMBER: { num: 0xcf6e36, str: '#cf6e36' } as const,
+    BLOATER: { num: 0xcf6e36, str: '#cf6e36' } as const,
     BOSS_0: { num: 0x4a0404, str: '#4a0404' } as const,
     BOSS_1: { num: 0x2c3e50, str: '#2c3e50' } as const,
     BOSS_2: { num: 0x8e44ad, str: '#8e44ad' } as const,

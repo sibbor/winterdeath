@@ -2,26 +2,26 @@ import { ClueType } from '../game/session/SectorTypes';
 
 export enum ClueID {
     // Sector 0 (0x00)
-    S0_START_TRACKS = (0 << 8) | 0,
-    S0_BLOOD_STAINS = (0 << 8) | 1,
-    S0_THEY_MUST_BE_SCARED = (0 << 8) | 2,
-    S0_STILL_TRACKING = (0 << 8) | 3,
-    S0_TOWN_CENTER = (0 << 8) | 4,
-    S0_EVENT_BUS_RUBBLE = (0 << 8) | 5,
+    S0_START_TRACKS = 1000 + ((0 << 8) | 0),
+    S0_BLOOD_STAINS = 1000 + ((0 << 8) | 1),
+    S0_THEY_MUST_BE_SCARED = 1000 + ((0 << 8) | 2),
+    S0_STILL_TRACKING = 1000 + ((0 << 8) | 3),
+    S0_TOWN_CENTER = 1000 + ((0 << 8) | 4),
+    S0_EVENT_BUS_RUBBLE = 1000 + ((0 << 8) | 5),
 
     // Sector 1 (0x01)
-    S1_START = (1 << 8) | 0,
-    S1_COMBAT = (1 << 8) | 1,
-    S1_CAVE_LIGHTS = (1 << 8) | 2,
-    S1_CAVE_LOOT = (1 << 8) | 3,
-    S1_CAVE_LOOT_MORE = (1 << 8) | 4,
+    S1_START = 1000 + ((1 << 8) | 0),
+    S1_COMBAT = 1000 + ((1 << 8) | 1),
+    S1_CAVE_LIGHTS = 1000 + ((1 << 8) | 2),
+    S1_CAVE_LOOT = 1000 + ((1 << 8) | 3),
+    S1_CAVE_LOOT_MORE = 1000 + ((1 << 8) | 4),
 
     // Sector 2 (0x02)
-    S2_FOREST_NOISE = (2 << 8) | 0,
-    S2_TRACTOR = (2 << 8) | 1,
+    S2_FOREST_NOISE = 1000 + ((2 << 8) | 0),
+    S2_TRACTOR = 1000 + ((2 << 8) | 1),
 
     // Sector 3 (0x03)
-    S3_CREEPY_NOISE = (3 << 8) | 0
+    S3_CREEPY_NOISE = 1000 + ((3 << 8) | 0)
 }
 
 export interface ClueDefinition {

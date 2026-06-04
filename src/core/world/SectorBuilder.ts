@@ -1536,35 +1536,38 @@ export const SectorBuilder = {
         const fmData = FAMILY_MEMBERS.find(f => f.id === id);
         if (!fmData) return null;
 
-        const mesh = ModelFactory.createFamilyMember(fmData);
-        mesh.position.set(x, 0, z);
-        mesh.rotation.y = rotation;
-        mesh.userData.id = id;
-        mesh.userData.name = fmData.name;
-        mesh.userData.isFamilyMember = true;
-        mesh.visible = opts?.visible !== false;
+        // Model
+        const familyMemberMesh = ModelFactory.createFamilyMember(fmData);
+        familyMemberMesh.position.set(x, 0, z);
+        familyMemberMesh.rotation.y = rotation;
+        familyMemberMesh.userData.id = id;
+        familyMemberMesh.userData.name = fmData.name;
+        familyMemberMesh.userData.isFamilyMember = true;
+        familyMemberMesh.visible = opts?.visible !== false;
 
-        const markerGroup = new THREE.Group();
-        markerGroup.userData.isRing = true;
-        markerGroup.position.y = 0.2;
+        // Family ring
+        const familyRing = new THREE.Group();
+        familyRing.userData.isRing = true;
+        familyRing.rotation.x = -Math.PI / 2;
+        familyRing.position.y = 0.2;
 
-        // Note: Using shared materials where possible is preferred over .clone()
         const darkColor = new THREE.Color(fmData.color.num).multiplyScalar(0.2);
-        const fillMat = MATERIALS.familyRingFill.clone();
-        fillMat.color.set(darkColor);
-        const fill = new THREE.Mesh(GEOMETRY.familyRingFill, fillMat);
-        markerGroup.add(fill);
+        const familyRingFill = MATERIALS.familyRingFill.clone();
+        familyRingFill.color.set(darkColor);
+        const fill = new THREE.Mesh(GEOMETRY.familyRingFill, familyRingFill);
+        familyRing.add(fill);
 
-        const borderMat = MATERIALS.familyRingBorder.clone();
-        borderMat.color.set(fmData.color.num);
-        const border = new THREE.Mesh(GEOMETRY.familyRingBorder, borderMat);
-        markerGroup.add(border);
-        mesh.add(markerGroup);
+        const familyRingBorder = MATERIALS.familyRingBorder.clone();
+        familyRingBorder.color.set(fmData.color.num);
+        const border = new THREE.Mesh(GEOMETRY.familyRingBorder, familyRingBorder);
+        familyRing.add(border);
 
-        ctx.scene.add(mesh);
+        familyMemberMesh.add(familyRing);
+
+        ctx.scene.add(familyMemberMesh);
 
         const memberObj = {
-            mesh,
+            mesh: familyMemberMesh,
             found: opts?.found !== false,
             following: opts?.following === true,
             rescued: opts?.found !== false,
@@ -1572,15 +1575,15 @@ export const SectorBuilder = {
             id: fmData.id,
             scale: fmData.scale,
             seed: Math.random() * 100,
-            ring: markerGroup,
-            spawnPos: new THREE.Vector3(mesh.position.x, mesh.position.y, mesh.position.z)
+            ring: familyRing,
+            spawnPos: new THREE.Vector3(familyMemberMesh.position.x, familyMemberMesh.position.y, familyMemberMesh.position.z)
         };
 
         if (ctx.activeFamilyMembers) {
             ctx.activeFamilyMembers.push(memberObj);
         }
 
-        return mesh;
+        return familyMemberMesh;
     }
 
 };

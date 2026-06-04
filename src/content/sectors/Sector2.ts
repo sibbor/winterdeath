@@ -12,7 +12,7 @@ import { EnemyType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { FamilyMemberID } from '../constants';
 import { PoiType, PoiID } from '../../content/pois';
 import { ClueID } from '../../content/clues';
-import { SectorEventID } from '../../content/events';
+import { SectorEventID } from '../../content/sector_events';
 import { CollectibleID } from '../../content/collectibles';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { WeatherType } from '../../core/engine/EnvironmentalTypes';
@@ -528,7 +528,7 @@ export const Sector2: SectorDef = {
                 sectorState.mastEventState = 1;
                 sectorState.mastEventTimer = simTime;
                 // Tell the player something is happening
-                events.setBubble((events as any).t?.('clues.2.mast_enter') || 'Zombies inside the compound...', 3500);
+                events.setBubble((events as any).t?.('sector_events.2.1.reaction') || 'Zombies inside the compound...', 3500);
             }
         }
 
@@ -555,7 +555,7 @@ export const Sector2: SectorDef = {
                     // All mast zombies dead — transition to Esmeralda exit
                     sectorState.mastEventState = 2;
                     sectorState.mastEventTimer = simTime;
-                    events.setBubble((events as any).t?.('clues.2.mast_clear') || 'The area is clear...', 3000);
+                    events.setBubble((events as any).t?.('sector_events.2.2.reaction') || 'The area is clear...', 3000);
                 }
                 sectorState.mastZombiesSpawnedAt = sectorState.mastZombiesSpawnedAt || simTime; // Set once
             }
@@ -591,7 +591,7 @@ export const Sector2: SectorDef = {
                         }
 
                         // Activate the proximity trigger as a fallback (player walked in late)
-                        const idx = triggerSystem.getTriggerById(FamilyMemberID.ESMERALDA);
+                        const idx = triggerSystem.getTriggerById(FamilyMemberID.ESMERALDA, TriggerType.EVENT);
                         if (idx !== -1) {
                             triggerSystem.setStatusFlag(idx, TriggerStatus.ACTIVE, true);
                             triggerSystem.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);

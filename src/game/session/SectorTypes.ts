@@ -224,9 +224,9 @@ export interface SectorUpdateContext {
     setCameraOverride: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
     makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
     applyDamage?: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
-    gainXp: (amount: number) => void;
-    gainSp: (amount: number) => void;
-    gainScrap: (amount: number) => void;
+    rewardXP: (amount: number) => void;
+    rewardSP: (amount: number) => void;
+    rewardScrap: (amount: number) => void;
 
     // --- ENVIRONMENT CONTROLS ---
     setWeather?: (type: WeatherType, count?: number) => void;

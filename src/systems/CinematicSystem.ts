@@ -10,7 +10,7 @@ import { System, SystemID } from './System';
 import { DialogueLineType } from '../game/session/SectorTypes';
 import { DataResolver } from '../core/data/DataResolver';
 import { InputAction } from '../core/engine/InputManager';
-import { CinematicBubbleHandle } from '../components/ui/hud/CinematicBubble';
+import { CinematicDialogueHandle } from '../components/ui/hud/CinematicDialogue';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 // Zero-GC Vectors for camera math (Allocated only at startup)
@@ -38,7 +38,7 @@ export class CinematicSystem implements System {
     public cinematicRef: React.MutableRefObject<any>;
     private camera: CameraSystem;
     private playerMeshRef: React.MutableRefObject<THREE.Group | null>;
-    private bubbleRef: React.RefObject<CinematicBubbleHandle>;
+    private bubbleRef: React.RefObject<CinematicDialogueHandle>;
     private activeFamilyMembers: React.MutableRefObject<any[]>;
     private callbacks: {
         setCurrentLine: (line: any) => void;
@@ -53,7 +53,7 @@ export class CinematicSystem implements System {
         cinematicRef: React.MutableRefObject<any>;
         camera: CameraSystem;
         playerMeshRef: React.MutableRefObject<THREE.Group | null>;
-        bubbleRef: React.RefObject<CinematicBubbleHandle>;
+        bubbleRef: React.RefObject<CinematicDialogueHandle>;
         activeFamilyMembers: React.MutableRefObject<any[]>;
         callbacks: {
             setCurrentLine: (line: any) => void;
@@ -194,9 +194,11 @@ export class CinematicSystem implements System {
                 if (this.callbacks.onAction) this.callbacks.onAction(typeof t === 'string' ? { type: t } : t);
             });
 
+            const currentScript = cinematic.script;
             setTimeout(() => {
                 // [VINTERDÖD FIX] Only advance if we haven't already moved to this line (e.g. via click)
-                if (cinematic.active && cinematic.lineIndex < index) {
+                // AND if the script hasn't changed due to a new cinematic starting.
+                if (cinematic.active && cinematic.lineIndex < index && cinematic.script === currentScript) {
                     this.playLine(index);
                 }
             }, 800);
@@ -207,7 +209,7 @@ export class CinematicSystem implements System {
         console.log(`[CinematicSystem] Activating line ${index}: "${line.text}"`);
 
         cinematic.lineIndex = index;
-        cinematic.lineStartTime = Date.now();
+        cinematic.lineStartTime = currentNow;
         cinematic.fadingOut = false;
 
         // 4. Calculate durations (Zero-GC)
@@ -225,7 +227,7 @@ export class CinematicSystem implements System {
         this.state.ui.cinematicLine.speaker = line.speaker !== undefined ? line.speaker : '';
         this.state.ui.cinematicLine.text = line.text || '';
 
-        // Notify the React layer (Triggers re-render of the CinematicBubble typewriter)
+        // Notify the React layer (Triggers re-render of the CinematicDialogue typewriter)
         this.callbacks.setCurrentLine(line);
     }
 

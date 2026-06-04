@@ -108,7 +108,7 @@ export const CharacterModels = {
         laserSight.position.set(0.3, 0.4, 0.5);
 
         laserSight.frustumCulled = false;
-        laserSight.renderOrder = 999;
+        laserSight.renderOrder = 6;
         (laserSight.material as THREE.Material).depthTest = false;
 
         laserSight.userData.isLaserSight = true;

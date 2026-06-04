@@ -4,9 +4,10 @@ import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { MaterialType } from '../content/environment';
 import { FXParticleType, FXDecalType, ParticleState, FXSpawnRequest } from '../types/FXTypes';
 import { COLORS } from '../utils/ui/ColorUtils';
-import { SystemID } from './SystemID';
-import { ChunkManager } from '../core/world/ChunkManager';
 import { MAX_ENTITIES, FX } from '../content/constants';
+import { SystemID } from './SystemID';
+import { WinterEngine } from '../core/engine/WinterEngine';
+import { ChunkManager } from '../core/world/ChunkManager';
 
 // --- DOD JUMP TABLES (Zero-GC Lookups) ---
 const NUM_PARTICLE_TYPES = FX.NUM_PARTICLE_TYPES; // Increased to accommodate SCRAP, MEAT, and future expansion
@@ -559,7 +560,7 @@ export const FXSystem = {
 
         const req = DECAL_REQUEST_POOL.pop();
         if (!req) return; // Drop request to maintain Zero-GC stability
-        
+
         req.scene = scene; req.x = x; req.z = z; req.type = type;
         req.scale = scale; req.material = material;
         FXSystem.decalQueue.push(req);
@@ -601,6 +602,11 @@ export const FXSystem = {
         const scaledDelta = delta * globalTimeScale;
         const safeDelta = scaledDelta > 0.1 ? 0.1 : scaledDelta;
 
+        const engine = WinterEngine.getInstance();
+        const wind = engine?.wind?.current;
+        const windX = wind ? wind.x : 0;
+        const windZ = wind ? wind.y : 0;
+
         const iKeys = FXSystem._activeInstancedKeys;
         for (let k = 0; k < iKeys.length; k++) {
             const imesh = FXSystem._instancedMeshes[iKeys[k]];
@@ -618,11 +624,22 @@ export const FXSystem = {
             if (p.life <= 0) { FXSystem._killParticle(i, particlesList); continue; }
 
             if (!p.landed) {
-                p.pos.x += p.vel.x * safeDelta;
-                p.pos.y += p.vel.y * safeDelta;
-                p.pos.z += p.vel.z * safeDelta;
-
                 const t = p.type;
+                const isSmoke = t === FXParticleType.SMOKE || t === FXParticleType.LARGE_SMOKE || t === FXParticleType.BLACK_SMOKE || t === FXParticleType.CAMPFIRE_SMOKE || t === FXParticleType.MUZZLE_SMOKE;
+
+                let driftX = 0;
+                let driftZ = 0;
+                if (isSmoke && wind) {
+                    const ageRatio = p.maxLife > 0 ? 1.0 - (p.life / p.maxLife) : 0;
+                    const windForce = 12.0 + ageRatio * 20.0;
+                    driftX = windX * windForce;
+                    driftZ = windZ * windForce;
+                }
+
+                p.pos.x += (p.vel.x + driftX) * safeDelta;
+                p.pos.y += p.vel.y * safeDelta;
+                p.pos.z += (p.vel.z + driftZ) * safeDelta;
+
                 if (p.isPhysics) {
                     p.vel.y -= FX.GRAVITY * safeDelta;
                     if (t !== FXParticleType.SPLASH && t !== FXParticleType.BLOOD_SPLATTER) {
@@ -788,7 +805,9 @@ export const FXSystem = {
                 case FXParticleType.ENEMY_EFFECT_FLAME:
                 case FXParticleType.FLAMETHROWER_FIRE:
                     geo = GEOMETRY.flame;
-                    mat = (type === FXParticleType.ENEMY_EFFECT_FLAME) ? MATERIALS.enemy_effect_flame : MATERIALS.fire;
+                    mat = (type === FXParticleType.ENEMY_EFFECT_FLAME) ? MATERIALS.enemy_effect_flame :
+                          (type === FXParticleType.FLAMETHROWER_FIRE) ? MATERIALS.flamethrower_flame :
+                          MATERIALS.fire;
                     break;
                 case FXParticleType.SPARK:
                 case FXParticleType.SMOKE:

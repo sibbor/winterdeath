@@ -195,10 +195,11 @@ export class EnemyDetectionSystem implements System {
                 }
             }
 
-            // 3. AUDIO CHECK - Skip if already in an aggressive state
-            const isAggressive = e.state === AIState.CHASE || e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING || e.state === AIState.GRAPPLE;
+            // 3. AUDIO CHECK - Skip if currently attacking, grappling, OR if currently seeing the player
+            const isAggressive = e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING || e.state === AIState.GRAPPLE;
+            const seesPlayer = simTime - (e.lastSeenTime || 0) < 500 && e.awareness > 0.8;
 
-            if (!isAggressive && this.activeNoiseCount > 0) {
+            if (!isAggressive && !seesPlayer && this.activeNoiseCount > 0) {
                 const hearingThreshold = e.hearingThreshold || 1.0;
                 // Max potential hearing range is limited to VISUAL_RANGE_SQ
                 const maxRangeSq = ENEMY_DETECTION.VISUAL_RANGE_SQ * hearingThreshold * hearingThreshold;
@@ -220,7 +221,7 @@ export class EnemyDetectionSystem implements System {
                         e.lastHeardNoiseType = evt.type;
                         e.awareness = 1.0;
 
-                        if (e.state === AIState.IDLE || e.state === AIState.WANDER) {
+                        if (e.state === AIState.IDLE || e.state === AIState.WANDER || e.state === AIState.SEARCH) {
                             e.state = AIState.SEARCH;
                             e.searchTimer = ENEMY_DETECTION.SEARCH_DURATION;
 

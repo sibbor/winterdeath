@@ -338,7 +338,8 @@ export const MATERIALS_SKY = {
                     }
                 `,
                 transparent: true,
-                depthWrite: false
+                depthWrite: false,
+                precision: 'highp'
             });
             // Assign pre-allocated flat uniform reference directly to avoid UniformsUtils.clone() allocation
             _starMaterial.uniforms = STAR_UNIFORMS;
@@ -514,7 +515,8 @@ export const MATERIALS_SKY = {
                 transparent: true,
                 blending: THREE.AdditiveBlending,
                 depthWrite: false,
-                fog: false
+                fog: false,
+                precision: 'highp'
             });
             // Assign pre-allocated flat uniform reference directly to avoid UniformsUtils.clone() allocation and THREE.Color instantiation
             _sunRaysMaterial.uniforms = SUN_RAYS_UNIFORMS;

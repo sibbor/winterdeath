@@ -13,10 +13,9 @@ export class ParticleRenderer {
     private instancedMesh: THREE.InstancedMesh;
 
     constructor(scene: THREE.Scene) {
-        // We use a simple red mesh for blood/sparks to keep fill-rate high
         this.instancedMesh = new THREE.InstancedMesh(
-            GEOMETRY.particle,
-            MATERIALS.bloodSplatter,
+            GEOMETRY.flame,
+            MATERIALS.flamethrower_flame,
             POOL_PARTICLE_MAX
         );
 

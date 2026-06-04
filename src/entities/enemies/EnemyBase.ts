@@ -54,7 +54,7 @@ export enum EnemyType {
     WALKER = 0,
     RUNNER = 1,
     TANK = 2,
-    BOMBER = 3,
+    BLOATER = 3,
     BOSS = 4
 }
 
@@ -107,7 +107,7 @@ export interface ZombieTypeData {
     story: string;
     hp: number;
     speed: number;
-    score: number;
+    xp: number;
     color: ColorPair;
     scale: number;
     widthScale: number;

@@ -2,8 +2,7 @@ import { ClueID } from '../content/clues';
 import { CollectibleID } from '../content/collectibles';
 import { FamilyMemberID } from '../content/constants';
 import { PoiID } from '../content/pois';
-import { SectorEventID } from '../content/events';
-import { BossID } from '../game/session/SectorTypes';
+import { SectorEventID } from '../content/sector_events';
 
 /**
  * Centralized Trigger Types & Statuses.
@@ -42,7 +41,7 @@ export enum TriggerActionType {
   FAMILY_MEMBER_FOLLOW = 10,
   FAMILY_MEMBER_FOUND = 11,
   SET_SECTOR_FLAG = 12,
-  CONCLUDE_SECTOR = 13,
+  END_SECTOR = 13,
   CAMERA_SHAKE = 14,
   CAMERA_PAN = 15,
   START_WAVE = 16

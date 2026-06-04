@@ -18,6 +18,7 @@ import { t } from '../../utils/i18n';
 import { en } from '../../locales/en';
 import { StatusEffectID } from '../../types/StatusEffects';
 import { COLORS } from '../../utils/ui/ColorUtils';
+import { SectorEventID } from '../../content/sector_events';
 
 /**
  * DataResolver.ts
@@ -148,6 +149,18 @@ for (let i = 0; i < poiValues.length; i++) {
   REACTION_SMI_MAP[hashStringToSMI(String(p.id))] = key;
 }
 
+// Pre-hash Sector Event reactions
+for (const key in SectorEventID) {
+  const val = SectorEventID[key];
+  if (typeof val === 'number') {
+    const sector = ((val - 15000) >> 8) & 0xFF;
+    const index = (val - 15000) & 0xFF;
+    const reactionKey = `sector_events.${sector}.${index}.reaction`;
+    REACTION_SMI_MAP[val] = reactionKey;
+    REACTION_SMI_MAP[hashStringToSMI(String(val))] = reactionKey;
+  }
+}
+
 // --- SPEAKER MAPPING (Zero-GC) ---
 const SPEAKER_TO_ID: Record<string, FamilyMemberID> = {
   'robert': FamilyMemberID.ROBERT,
@@ -174,11 +187,19 @@ for (let i = 0; i < FAMILY_MEMBERS.length; i++) {
 }
 
 export const DataResolver = {
-  // --- NARRATIVE & SPEAKERS ---
 
+  // --- NARRATIVE & SPEAKERS ---
   resolveSpeaker(idOrKey: number | string): FamilyMemberID {
     if (typeof idOrKey === 'number') return idOrKey as FamilyMemberID;
-    const key = idOrKey.toLowerCase();
+
+    // FIX 1: Catch the ID if it's a string (e.g. "2" from HudStore)
+    const parsedNum = Number(idOrKey);
+    if (!isNaN(parsedNum) && String(idOrKey).trim() !== '') {
+      return parsedNum as FamilyMemberID;
+    }
+
+    // 3. Fallback for text keys
+    const key = String(idOrKey).toLowerCase();
     return SPEAKER_TO_ID[key] ?? FamilyMemberID.UNKNOWN;
   },
 
@@ -188,11 +209,13 @@ export const DataResolver = {
     return color ? color.str : COLORS.WHITE.str;
   },
 
-  getFamilyMemberName(idOrKey: number | string): string {
+  getFamilyMemberName(idOrKey: FamilyMemberID | string): string {
     const speakerId = this.resolveSpeaker(idOrKey);
-    if (speakerId === FamilyMemberID.ROBERT) return PLAYER_CHARACTER.name;
+    if (speakerId === FamilyMemberID.ROBERT) return this.getPlayerName();
+
     const member = FAMILY_MEMBERS.find(m => m.id === speakerId);
-    return member ? t(member.name) : 'ui.unknown';
+
+    return member ? member.name : t('ui.unknown');
   },
 
   getPlayerName(): string {
@@ -562,6 +585,17 @@ export const DataResolver = {
     return '';
   },
 
+  getSectorEventReaction(id: string | number | SectorEventID): string {
+    if (id === undefined || id === null) return '';
+    const numId = Number(id);
+    if (!isNaN(numId)) {
+      const sector = ((numId - 15000) >> 8) & 0xFF;
+      const index = (numId - 15000) & 0xFF;
+      return `sector_events.${sector}.${index}.reaction`;
+    }
+    return '';
+  },
+
   getDiscoveryTitle(type: DiscoveryType): string {
     switch (type) {
       case DiscoveryType.CLUE: return 'ui.discovered_clue';
@@ -600,7 +634,6 @@ export const DataResolver = {
   },
 
   // --- PERKS ---
-
   getPerkName(id: StatusEffectID, logFriendly: boolean = false): string {
     const perk = PERKS[id];
     const key = perk ? perk.displayName : 'ui.unknown';

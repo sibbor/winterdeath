@@ -1,4 +1,4 @@
-import { CareerStats, PlayerStatID, StatEnemyIndex, StatWeaponIndex, TELEMETRY_ATTACKS_PER_SOURCE } from '../../types/CareerStats';
+import { CareerStats, StatID, StatEnemyIndex, StatWeaponIndex, TELEMETRY_ATTACKS_PER_SOURCE } from '../../types/CareerStats';
 import { SessionStats } from '../../types/SessionStats';
 import { ChallengeID } from '../../content/ChallengeTypes';
 
@@ -26,7 +26,7 @@ export class StatsBridge {
     // CORE STATS
     // ========================================================================
 
-    public static getCoreStat(stats: CareerStats, statId: PlayerStatID): number {
+    public static getCoreStat(stats: CareerStats, statId: StatID): number {
         return stats.statsBuffer[statId];
     }
 
@@ -36,14 +36,14 @@ export class StatsBridge {
      * Safely retrieves an integer stat from the buffer with zero allocation.
      * Uses bitwise OR to force V8 to truncate to a 32-bit integer.
      */
-    public static getStatInt(stats: CareerStats, statId: PlayerStatID): number {
+    public static getStatInt(stats: CareerStats, statId: StatID): number {
         return stats.statsBuffer[statId] | 0;
     }
 
     /**
      * Safely retrieves a floating-point stat from the buffer.
      */
-    public static getStatFloat(stats: CareerStats, statId: PlayerStatID): number {
+    public static getStatFloat(stats: CareerStats, statId: StatID): number {
         return stats.statsBuffer[statId] || 0.0;
     }
 
@@ -56,7 +56,7 @@ export class StatsBridge {
     public static getSectorDamageTaken(stats: SessionStats): number { return stats.damageTaken || 0.0; }
     public static getSectorXPGained(stats: SessionStats): number { return stats.xpGained | 0; }
     public static getSectorSPGained(stats: SessionStats): number {
-        return (stats.spGained | 0) + (stats?.discoveredCollectibles?.length || 0) + (stats?.discoveredPois?.length || 0);
+        return stats.spGained | 0;
     }
     public static getSectorScrapLooted(stats: SessionStats): number { return stats.scrapLooted | 0; }
     public static getSectorTimeElapsed(stats: SessionStats): number { return stats.timeElapsed || 0.0; }
@@ -80,7 +80,9 @@ export class StatsBridge {
     // ========================================================================
 
     public static hasPerk(stats: AnyStatsEntity, perkId: number): boolean {
-        return (stats.discoveredPerksMap && stats.discoveredPerksMap[perkId] > 0) || false;
+        if (!('discoveredPerks' in stats)) return false;
+        const perks = (stats as CareerStats).discoveredPerks;
+        return (perks != null && perks[perkId] > 0) || false;
     }
 
     public static isEffectActive(stats: { effectDurations: Float32Array }, perkId: number): boolean {
@@ -119,12 +121,12 @@ export class StatsBridge {
     public static getSignatureWeapon(stats: CareerStats): Int32Array {
         let maxKills = 0;
         let signatureIdx = -1;
-        const buffer = stats.weaponKills;
+        const buffer = stats.outgoingKillsBuffer;
 
         for (let i = 0; i < buffer.length; i++) {
             // Skip technical/move indices and environmental/tactical indices
-            if (i === StatWeaponIndex.NONE || 
-                i === StatWeaponIndex.RADIO || 
+            if (i === StatWeaponIndex.NONE ||
+                i === StatWeaponIndex.RADIO ||
                 (i >= StatWeaponIndex.RUSH && i < StatWeaponIndex.PHYSICAL) || // Abilities/Vehicles
                 i >= StatWeaponIndex.PHYSICAL) continue;      // Environment
 
@@ -149,13 +151,13 @@ export class StatsBridge {
     public static getComfortWeapon(stats: CareerStats): Float64Array {
         let maxTime = 0;
         let comfortIdx = -1;
-        const buffer = stats.weaponTimeActive;
+        const buffer = stats.outgoingTimeActiveBuffer;
 
         for (let i = 0; i < buffer.length; i++) {
             // Skip technical/move indices
-            if (i === StatWeaponIndex.NONE || 
-                i === StatWeaponIndex.RADIO || 
-                (i >= StatWeaponIndex.RUSH && i < StatWeaponIndex.PHYSICAL) || 
+            if (i === StatWeaponIndex.NONE ||
+                i === StatWeaponIndex.RADIO ||
+                (i >= StatWeaponIndex.RUSH && i < StatWeaponIndex.PHYSICAL) ||
                 i >= StatWeaponIndex.PHYSICAL) continue;
 
             if (buffer[i] > maxTime) {
@@ -176,8 +178,8 @@ export class StatsBridge {
      * Calculates the raw combat efficiency (kills per minute).
      */
     public static getCombatEfficiency(stats: CareerStats): number {
-        const kills = StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_KILLS);
-        const timeSeconds = StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME) || 1.0;
+        const kills = StatsBridge.getStatInt(stats, StatID.TOTAL_KILLS);
+        const timeSeconds = StatsBridge.getStatFloat(stats, StatID.TOTAL_GAME_TIME) || 1.0;
         return kills / (timeSeconds / 60);
     }
 
@@ -209,30 +211,30 @@ export class StatsBridge {
      * O(1) buffer read.
      */
     public static getChallengeValue(stats: CareerStats, id: ChallengeID): number {
-        const buffer = stats.statsBuffer;
-        const wk = stats.weaponKills;
-        const ek = stats.enemyKills;
+        const killsBuffer = stats.outgoingKillsBuffer;
+        const enemyKills = stats.enemyKills;
 
         switch (id) {
-            case ChallengeID.MARATHON: return StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_DISTANCE_TRAVELED);
-            case ChallengeID.SCRAPPER: return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SCRAP_COLLECTED);
-            case ChallengeID.EXPLORER: return stats?.discoveredPois.length;
-            case ChallengeID.TREASURE_HUNTER: return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_CHESTS_OPENED);
-            case ChallengeID.SCAVENGER: return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_ITEMS_COLLECTED);
-            case ChallengeID.ZOMBIE_HUNTER: return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_KILLS);
-            case ChallengeID.WALKER_EXTERMINATOR: return ek[StatEnemyIndex.WALKER];
-            case ChallengeID.KNEE_CAPPER: return ek[StatEnemyIndex.RUNNER];
-            case ChallengeID.TANK_BUSTER: return ek[StatEnemyIndex.TANK];
-            case ChallengeID.BOSS_SLAYER: return ek[StatEnemyIndex.BOSS];
-            case ChallengeID.GIBBER: return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_GIBBED);
-            case ChallengeID.PYROMANIAC: return wk[StatWeaponIndex.BURN] + wk[StatWeaponIndex.MOLOTOV] + wk[StatWeaponIndex.FLAMETHROWER];
-            case ChallengeID.SHOCK_THERAPY: return wk[StatWeaponIndex.ELECTRIC] + wk[StatWeaponIndex.ARC_CANNON];
-            case ChallengeID.DEMOLITION_EXPERT: return wk[StatWeaponIndex.EXPLOSION] + wk[StatWeaponIndex.GRENADE];
-            case ChallengeID.BRAWLER: return wk[StatWeaponIndex.RUSH] + wk[StatWeaponIndex.PHYSICAL] + wk[StatWeaponIndex.DODGE];
-            case ChallengeID.SHARPSHOOTER: return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_LONG_RANGE_KILLS);
-            case ChallengeID.SURVIVOR: return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_SECTORS_COMPLETED);
-            case ChallengeID.VETERAN: return StatsBridge.getStatInt(stats, PlayerStatID.LEVEL);
-            case ChallengeID.UNTOUCHABLE: return StatsBridge.getStatInt(stats, PlayerStatID.LONGEST_KILLSTREAK);
+            case ChallengeID.MARATHON: return StatsBridge.getStatFloat(stats, StatID.TOTAL_DISTANCE_TRAVELED);
+            case ChallengeID.SCRAPPER: return StatsBridge.getStatInt(stats, StatID.TOTAL_SCRAP_COLLECTED);
+            case ChallengeID.EXPLORER: return StatsBridge.getPoisDiscoveredCount(stats);
+            case ChallengeID.TREASURE_HUNTER: return StatsBridge.getStatInt(stats, StatID.TOTAL_CHESTS_OPENED);
+            case ChallengeID.SCAVENGER: return StatsBridge.getStatInt(stats, StatID.TOTAL_ITEMS_COLLECTED);
+            case ChallengeID.ZOMBIE_HUNTER: return StatsBridge.getStatInt(stats, StatID.TOTAL_KILLS);
+            case ChallengeID.WALKER_EXTERMINATOR: return enemyKills[StatEnemyIndex.WALKER];
+            case ChallengeID.KNEE_CAPPER: return enemyKills[StatEnemyIndex.RUNNER];
+            case ChallengeID.TANK_BUSTER: return enemyKills[StatEnemyIndex.TANK];
+            case ChallengeID.BLOATER_GORE: return enemyKills[StatEnemyIndex.BLOATER];
+            case ChallengeID.BOSS_SLAYER: return enemyKills[StatEnemyIndex.BOSS];
+            case ChallengeID.GIBBER: return StatsBridge.getStatInt(stats, StatID.TOTAL_GIBBED_BY_REVOLVER_SHOTGUN);
+            case ChallengeID.PYROMANIAC: return killsBuffer[StatWeaponIndex.BURN] + killsBuffer[StatWeaponIndex.MOLOTOV] + killsBuffer[StatWeaponIndex.FLAMETHROWER];
+            case ChallengeID.SHOCK_THERAPY: return killsBuffer[StatWeaponIndex.ELECTRIC] + killsBuffer[StatWeaponIndex.ARC_CANNON];
+            case ChallengeID.DEMOLITION_EXPERT: return killsBuffer[StatWeaponIndex.GRENADE];
+            case ChallengeID.BRAWLER: return killsBuffer[StatWeaponIndex.RUSH] + killsBuffer[StatWeaponIndex.PHYSICAL] + killsBuffer[StatWeaponIndex.DODGE];
+            case ChallengeID.SHARPSHOOTER: return StatsBridge.getStatInt(stats, StatID.TOTAL_LONG_RANGE_KILLS);
+            case ChallengeID.SURVIVOR: return Math.floor(StatsBridge.getStatFloat(stats, StatID.TOTAL_GAME_TIME) / 60000);
+            case ChallengeID.VETERAN: return StatsBridge.getStatInt(stats, StatID.LEVEL);
+            case ChallengeID.UNTOUCHABLE: return StatsBridge.getStatInt(stats, StatID.LONGEST_KILLSTREAK);
             default: return 0;
         }
     }
@@ -242,19 +244,19 @@ export class StatsBridge {
     // ========================================================================
 
     public static getWeaponKillCount(stats: AnyStatsEntity, weaponIdx: StatWeaponIndex): number {
-        return (stats.weaponKills && stats.weaponKills[weaponIdx]) | 0;
+        return (stats.outgoingKillsBuffer && stats.outgoingKillsBuffer[weaponIdx]) | 0;
     }
 
     public static getWeaponDamageDealt(stats: AnyStatsEntity, weaponIdx: StatWeaponIndex): number {
-        return (stats.weaponDamageDealt && stats.weaponDamageDealt[weaponIdx]) || 0.0;
+        return (stats.outgoingDamageBuffer && stats.outgoingDamageBuffer[weaponIdx]) || 0.0;
     }
 
     public static getWeaponShotsFired(stats: AnyStatsEntity, weaponIdx: StatWeaponIndex): number {
-        return (stats.weaponShotsFired && stats.weaponShotsFired[weaponIdx]) | 0;
+        return (stats.outgoingShotsFiredBuffer && stats.outgoingShotsFiredBuffer[weaponIdx]) | 0;
     }
 
     public static getWeaponShotsHit(stats: AnyStatsEntity, weaponIdx: StatWeaponIndex): number {
-        return (stats.weaponShotsHit && stats.weaponShotsHit[weaponIdx]) | 0;
+        return (stats.outgoingShotsHitBuffer && stats.outgoingShotsHitBuffer[weaponIdx]) | 0;
     }
 
     public static getEnemyKillCount(stats: AnyStatsEntity, enemyIdx: StatEnemyIndex): number {
@@ -282,15 +284,51 @@ export class StatsBridge {
         return stats.perkDebuffsCleansed[perkIdx] | 0;
     }
 
-    public static getPerkDiscoveredMap(stats: CareerStats): Uint8Array { return stats.discoveredPerksMap; }
+    public static getPerkDiscoveredMap(stats: CareerStats): Uint8Array { return stats.discoveredPerks; }
     public static getPerkTimesGainedMap(stats: CareerStats): Float64Array { return stats.perkTimesGained; }
 
     public static isPerkDiscovered(stats: CareerStats, perkId: number): boolean {
-        return (stats.discoveredPerksMap && stats.discoveredPerksMap[perkId] > 0) || false;
+        return (stats.discoveredPerks && stats.discoveredPerks[perkId] > 0) || false;
     }
 
     public static getCollectiblesDiscoveredLength(stats: CareerStats): number {
-        return stats?.discoveredCollectibles ? (stats?.discoveredCollectibles.length | 0) : 0;
+        if (!stats?.discoveredCollectibles) return 0;
+        let count = 0;
+        const arr = stats.discoveredCollectibles;
+        for (let i = 0; i < arr.length; i++) if (arr[i] === 1) count++;
+        return count;
+    }
+
+    public static getCluesDiscoveredCount(stats: CareerStats): number {
+        if (!stats?.discoveredClues) return 0;
+        let count = 0;
+        const arr = stats.discoveredClues;
+        for (let i = 0; i < arr.length; i++) if (arr[i] === 1) count++;
+        return count;
+    }
+
+    public static getPoisDiscoveredCount(stats: CareerStats): number {
+        if (!stats?.discoveredPois) return 0;
+        let count = 0;
+        const arr = stats.discoveredPois;
+        for (let i = 0; i < arr.length; i++) if (arr[i] === 1) count++;
+        return count;
+    }
+
+    public static getZombiesDiscoveredCount(stats: CareerStats): number {
+        if (!stats?.discoveredZombies) return 0;
+        let count = 0;
+        const arr = stats.discoveredZombies;
+        for (let i = 0; i < arr.length; i++) if (arr[i] === 1) count++;
+        return count;
+    }
+
+    public static getBossesDiscoveredCount(stats: CareerStats): number {
+        if (!stats?.discoveredBosses) return 0;
+        let count = 0;
+        const arr = stats.discoveredBosses;
+        for (let i = 0; i < arr.length; i++) if (arr[i] === 1) count++;
+        return count;
     }
 
     public static getIncomingDamage(stats: AnyStatsEntity, sourceId: number, attackId: number): number {
@@ -307,11 +345,11 @@ export class StatsBridge {
      * Enforces zero-GC boundary and performs a strict balance check.
      */
     public static consumeSkillPoints(stats: CareerStats, amount: number): boolean {
-        const currentSp = stats.statsBuffer[PlayerStatID.SKILL_POINTS] | 0;
+        const currentSp = stats.statsBuffer[StatID.SKILL_POINTS] | 0;
         const cost = amount | 0;
 
         if (currentSp >= cost) {
-            stats.statsBuffer[PlayerStatID.SKILL_POINTS] = (currentSp - cost) | 0;
+            stats.statsBuffer[StatID.SKILL_POINTS] = (currentSp - cost) | 0;
             return true;
         }
 
@@ -323,11 +361,11 @@ export class StatsBridge {
      * Enforces zero-GC boundary and performs a strict balance check.
      */
     public static consumeScrap(stats: CareerStats, amount: number): boolean {
-        const currentScrap = stats.statsBuffer[PlayerStatID.SCRAP] | 0;
+        const currentScrap = stats.statsBuffer[StatID.SCRAP] | 0;
         const cost = amount | 0;
 
         if (currentScrap >= cost) {
-            stats.statsBuffer[PlayerStatID.SCRAP] = (currentScrap - cost) | 0;
+            stats.statsBuffer[StatID.SCRAP] = (currentScrap - cost) | 0;
             return true;
         }
 
@@ -339,11 +377,11 @@ export class StatsBridge {
      * Enforces zero-GC boundary and performs a strict balance check.
      */
     public static consumeChallengePoints(stats: CareerStats, amount: number): boolean {
-        const currentCp = stats.statsBuffer[PlayerStatID.CHALLENGE_POINTS] | 0;
+        const currentCp = stats.statsBuffer[StatID.CHALLENGE_POINTS] | 0;
         const cost = amount | 0;
 
         if (currentCp >= cost) {
-            stats.statsBuffer[PlayerStatID.CHALLENGE_POINTS] = (currentCp - cost) | 0;
+            stats.statsBuffer[StatID.CHALLENGE_POINTS] = (currentCp - cost) | 0;
             return true;
         }
 
@@ -354,7 +392,7 @@ export class StatsBridge {
      * Increments an integer stat in the buffer.
      * Uses bitwise OR to maintain SMI (Small Integer) optimization in V8.
      */
-    public static addStatInt(stats: CareerStats, statId: PlayerStatID, amount: number): void {
+    public static addStatInt(stats: CareerStats, statId: StatID, amount: number): void {
         const current = stats.statsBuffer[statId] | 0;
         stats.statsBuffer[statId] = (current + (amount | 0)) | 0;
     }
@@ -362,7 +400,7 @@ export class StatsBridge {
     /**
      * Increments a floating-point stat in the buffer.
      */
-    public static addStatFloat(stats: CareerStats, statId: PlayerStatID, amount: number): void {
+    public static addStatFloat(stats: CareerStats, statId: StatID, amount: number): void {
         const current = stats.statsBuffer[statId] || 0.0;
         stats.statsBuffer[statId] = current + amount;
     }
@@ -371,17 +409,16 @@ export class StatsBridge {
     // DISCOVERY & PROGRESSION ARRAYS
     // ========================================================================
 
-    public static getDiscoveredCollectibles(stats: CareerStats): string[] { return stats?.discoveredCollectibles || []; }
-    public static getViewedCollectibles(stats: CareerStats): string[] { return stats?.viewedCollectibles || []; }
-    public static getDiscoveredClues(stats: CareerStats): string[] { return stats?.discoveredClues || []; }
-    public static getDiscoveredPois(stats: CareerStats): string[] { return stats?.discoveredPois || []; }
-    public static getDiscoveredZombies(stats: CareerStats): number[] { return stats?.discoveredZombies || []; }
-    public static getDiscoveredBosses(stats: CareerStats): number[] { return stats?.discoveredBosses || []; }
+    public static getDiscoveredCollectibles(stats: CareerStats): Uint8Array { return stats?.discoveredCollectibles || new Uint8Array(0); }
+    public static getDiscoveredClues(stats: CareerStats): Uint8Array { return stats?.discoveredClues || new Uint8Array(0); }
+    public static getDiscoveredPois(stats: CareerStats): Uint8Array { return stats?.discoveredPois || new Uint8Array(0); }
+    public static getDiscoveredZombies(stats: CareerStats): Uint8Array { return stats?.discoveredZombies || new Uint8Array(0); }
+    public static getDiscoveredBosses(stats: CareerStats): Uint8Array { return stats?.discoveredBosses || new Uint8Array(0); }
     public static getDeadBossIndices(stats: CareerStats): number[] { return stats?.deadBossIndices || []; }
     public static getRescuedFamilyIndices(stats: CareerStats): number[] { return stats?.rescuedFamilyIndices || []; }
     public static getTrackedChallengeIds(stats: CareerStats): number[] { return stats?.trackedChallengeIds || []; }
     public static getChallengeTier(stats: CareerStats, id: ChallengeID): number { return stats?.challengeTiers[id] | 0; }
-    
+
     public static getActivePassives(stats: any): number[] {
         if (stats.activePassivesCount !== undefined && stats.activePassives instanceof Int32Array) {
             const result = new Array(stats.activePassivesCount);
@@ -408,7 +445,7 @@ export class StatsBridge {
         }
         return stats.activeDebuffs || [];
     }
-    
+
     public static getFamilyFoundCount(stats: CareerStats): number { return stats.familyFoundCount | 0; }
     public static getTotalSkillPointsEarned(stats: CareerStats): number { return stats.totalSkillPointsEarned | 0; }
 
@@ -416,19 +453,19 @@ export class StatsBridge {
     // CORE STAT SHORTHANDS
     // ========================================================================
 
-    public static getLevel(stats: CareerStats): number { return StatsBridge.getStatInt(stats, PlayerStatID.LEVEL); }
-    public static getExperience(stats: CareerStats): number { return StatsBridge.getStatInt(stats, PlayerStatID.CURRENT_XP); }
-    public static getNextLevelExperience(stats: CareerStats): number { return StatsBridge.getStatInt(stats, PlayerStatID.NEXT_LEVEL_XP); }
-    public static getScrap(stats: CareerStats): number { return StatsBridge.getStatInt(stats, PlayerStatID.SCRAP); }
-    public static getSkillPoints(stats: CareerStats): number { return StatsBridge.getStatInt(stats, PlayerStatID.SKILL_POINTS); }
-    public static getChallengePoints(stats: CareerStats): number { return StatsBridge.getStatInt(stats, PlayerStatID.CHALLENGE_POINTS); }
-    public static getTotalChallengePoints(stats: CareerStats): number { return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_CHALLENGE_POINTS); }
+    public static getLevel(stats: CareerStats): number { return StatsBridge.getStatInt(stats, StatID.LEVEL); }
+    public static getExperience(stats: CareerStats): number { return StatsBridge.getStatInt(stats, StatID.CURRENT_XP); }
+    public static getNextLevelExperience(stats: CareerStats): number { return StatsBridge.getStatInt(stats, StatID.NEXT_LEVEL_XP); }
+    public static getScrap(stats: CareerStats): number { return StatsBridge.getStatInt(stats, StatID.SCRAP); }
+    public static getSkillPoints(stats: CareerStats): number { return StatsBridge.getStatInt(stats, StatID.SKILL_POINTS); }
+    public static getChallengePoints(stats: CareerStats): number { return StatsBridge.getStatInt(stats, StatID.CHALLENGE_POINTS); }
+    public static getTotalChallengePoints(stats: CareerStats): number { return StatsBridge.getStatInt(stats, StatID.TOTAL_CHALLENGE_POINTS); }
     public static getSectorsCompleted(stats: CareerStats): number { return stats.sectorsCompleted | 0; }
-    public static getTotalKills(stats: CareerStats): number { return StatsBridge.getStatInt(stats, PlayerStatID.TOTAL_KILLS); }
-    public static getTotalGameTime(stats: CareerStats): number { return StatsBridge.getStatFloat(stats, PlayerStatID.TOTAL_GAME_TIME); }
-    public static getMaxHP(stats: CareerStats): number { return StatsBridge.getStatInt(stats, PlayerStatID.MAX_HP); }
-    public static getMaxStamina(stats: CareerStats): number { return StatsBridge.getStatInt(stats, PlayerStatID.MAX_STAMINA); }
-    public static getSpeed(stats: CareerStats): number { return StatsBridge.getStatFloat(stats, PlayerStatID.SPEED); }
+    public static getTotalKills(stats: CareerStats): number { return StatsBridge.getStatInt(stats, StatID.TOTAL_KILLS); }
+    public static getTotalGameTime(stats: CareerStats): number { return StatsBridge.getStatFloat(stats, StatID.TOTAL_GAME_TIME); }
+    public static getMaxHP(stats: CareerStats): number { return StatsBridge.getStatInt(stats, StatID.MAX_HP); }
+    public static getMaxStamina(stats: CareerStats): number { return StatsBridge.getStatInt(stats, StatID.MAX_STAMINA); }
+    public static getSpeed(stats: CareerStats): number { return StatsBridge.getStatFloat(stats, StatID.SPEED); }
 
     /**
      * Compatibility alias for deepCloneCareerStats to resolve UI-level invocations.
@@ -451,12 +488,14 @@ export class StatsBridge {
         if (stats.effectMaxDurations) clone.effectMaxDurations = stats.effectMaxDurations.slice();
         if (stats.effectIntensities) clone.effectIntensities = stats.effectIntensities.slice();
 
-        if (stats.weaponKills) clone.weaponKills = stats.weaponKills.slice();
-        if (stats.weaponDamageDealt) clone.weaponDamageDealt = stats.weaponDamageDealt.slice();
-        if (stats.weaponShotsFired) clone.weaponShotsFired = stats.weaponShotsFired.slice();
-        if (stats.weaponShotsHit) clone.weaponShotsHit = stats.weaponShotsHit.slice();
-        if (stats.weaponTimeActive) clone.weaponTimeActive = stats.weaponTimeActive.slice();
-        if (stats.weaponEngagementDistSq) clone.weaponEngagementDistSq = stats.weaponEngagementDistSq.slice();
+        if (stats.incomingDamageBuffer) clone.incomingDamageBuffer = stats.incomingDamageBuffer.slice();
+
+        if (stats.outgoingKillsBuffer) clone.outgoingKillsBuffer = stats.outgoingKillsBuffer.slice();
+        if (stats.outgoingDamageBuffer) clone.outgoingDamageBuffer = stats.outgoingDamageBuffer.slice();
+        if (stats.outgoingShotsFiredBuffer) clone.outgoingShotsFiredBuffer = stats.outgoingShotsFiredBuffer.slice();
+        if (stats.outgoingShotsHitBuffer) clone.outgoingShotsHitBuffer = stats.outgoingShotsHitBuffer.slice();
+        if (stats.outgoingTimeActiveBuffer) clone.outgoingTimeActiveBuffer = stats.outgoingTimeActiveBuffer.slice();
+        if (stats.outgoingEngagementDistSqBuffer) clone.outgoingEngagementDistSqBuffer = stats.outgoingEngagementDistSqBuffer.slice();
 
         if (stats.perkTimesGained) clone.perkTimesGained = stats.perkTimesGained.slice();
         if (stats.perkDamageAbsorbed) clone.perkDamageAbsorbed = stats.perkDamageAbsorbed.slice();
@@ -465,21 +504,19 @@ export class StatsBridge {
 
         if (stats.enemyKills) clone.enemyKills = stats.enemyKills.slice();
         if (stats.deathsByEnemyType) clone.deathsByEnemyType = stats.deathsByEnemyType.slice();
-        if (stats.incomingDamageBuffer) clone.incomingDamageBuffer = stats.incomingDamageBuffer.slice();
 
         if (stats?.challengeTiers) clone.challengeTiers = stats?.challengeTiers.slice();
-        if (stats.discoveredPerksMap) clone.discoveredPerksMap = stats.discoveredPerksMap.slice();
+        if (stats.discoveredPerks) clone.discoveredPerks = stats.discoveredPerks.slice();
 
         // PERFORMANCE FIX: Use .slice() instead of spread operator [...] to avoid JS iterator overhead
         if (stats.activePassives) clone.activePassives = stats.activePassives.slice();
         if (stats.activeBuffs) clone.activeBuffs = stats.activeBuffs.slice();
         if (stats.activeDebuffs) clone.activeDebuffs = stats.activeDebuffs.slice();
-        if (stats?.discoveredCollectibles) clone.discoveredCollectibles = stats?.discoveredCollectibles.slice();
-        clone.viewedCollectibles = stats?.viewedCollectibles ? stats?.viewedCollectibles.slice() : [];
-        if (stats?.discoveredClues) clone.discoveredClues = stats?.discoveredClues.slice();
-        if (stats?.discoveredZombies) clone.discoveredZombies = stats?.discoveredZombies.slice();
-        if (stats?.discoveredBosses) clone.discoveredBosses = stats?.discoveredBosses.slice();
-        if (stats?.discoveredPois) clone.discoveredPois = stats?.discoveredPois.slice();
+        if (stats?.discoveredCollectibles) clone.discoveredCollectibles = stats.discoveredCollectibles.slice();
+        if (stats?.discoveredClues) clone.discoveredClues = stats.discoveredClues.slice();
+        if (stats?.discoveredZombies) clone.discoveredZombies = stats.discoveredZombies.slice();
+        if (stats?.discoveredBosses) clone.discoveredBosses = stats.discoveredBosses.slice();
+        if (stats?.discoveredPois) clone.discoveredPois = stats.discoveredPois.slice();
         if (stats?.rescuedFamilyIndices) clone.rescuedFamilyIndices = stats?.rescuedFamilyIndices.slice();
         if (stats?.trackedChallengeIds) clone.trackedChallengeIds = stats?.trackedChallengeIds.slice();
 

@@ -15,7 +15,7 @@ import { WEAPONS, WeaponBehavior } from '../../content/weapons';
 import { Enemy, EnemyFlags, EnemyDeathState, NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
 import { StatusEffectID } from '../../types/StatusEffects';
 import { DeathPhase } from '../../types/SessionTypes';
-import { PlayerStatID, PlayerStatusFlags } from '../../types/CareerStats';
+import { StatID, PlayerStatusFlags } from '../../types/CareerStats';
 import { DamageID, DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
@@ -30,7 +30,6 @@ import { WeaponFX } from '../../systems/WeaponFX';
 import { PerkFX } from '../../systems/PerkFX';
 import { SectorUpdateContext } from './SectorTypes';
 import { ChunkManager } from '../../core/world/ChunkManager';
-import { DiscoverySystem } from '../../systems/DiscoverySystem';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -39,7 +38,7 @@ interface LoopContext {
     refs: any;
     propsRef: any;
     callbacks: {
-        concludeSector: (val: boolean) => void;
+        endSector: (val: boolean) => void;
         spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
         showDamageText: (x: number, y: number, z: number, text: string, color?: number) => void;
@@ -59,9 +58,9 @@ interface LoopContext {
         startCinematic: (target: any, sectorId: number, dialogueId?: number, params?: any) => void;
         setCameraOverride: (params: any) => void;
         makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
-        gainXp: (amount: number) => void;
-        gainSp: (amount: number) => void;
-        gainScrap: (amount: number) => void;
+        rewardXP: (amount: number) => void;
+        rewardSP: (amount: number) => void;
+        rewardScrap: (amount: number) => void;
     };
 }
 
@@ -145,9 +144,9 @@ const _sectorUpdateContext: SectorUpdateContext = {
     setBackgroundColor: null as any,
     setGroundColor: null as any,
     setFOV: null as any,
-    gainXp: null as any,
-    gainSp: null as any,
-    gainScrap: null as any,
+    rewardXP: null as any,
+    rewardSP: null as any,
+    rewardScrap: null as any,
     setLight: null as any
 };
 
@@ -160,11 +159,11 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
     let lastBossIntroShakeTime = 0;
     ChunkManager.clear();
 
-    // System references
-    const damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-    const playerStats = session.getSystem<any>(SystemID.PLAYER_STATS);
-    const discoverySystem = session.getSystem<DiscoverySystem>(SystemID.DISCOVERY_SYSTEM);
-    const windSystem = session.getSystem<any>(SystemID.WIND);
+    // Cache system references to avoid Map/registry lookup overhead
+    let damageTracker: any = null;
+    let playerStats: any = null;
+    let discoverySystem: any = null;
+    let windSystem: any = null;
 
     const getActiveCallbacks = () => state.callbacks || callbacks || EMPTY_OBJECT;
 
@@ -187,9 +186,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
     _sectorUpdateContext.startCinematic = callbacks.startCinematic;
     _sectorUpdateContext.setCameraOverride = callbacks.setCameraOverride;
     _sectorUpdateContext.makeNoise = callbacks.makeNoise;
-    _sectorUpdateContext.gainXp = callbacks.gainXp;
-    _sectorUpdateContext.gainSp = callbacks.gainSp;
-    _sectorUpdateContext.gainScrap = callbacks.gainScrap;
+    _sectorUpdateContext.rewardXP = callbacks.rewardXP;
+    _sectorUpdateContext.rewardSP = callbacks.rewardSP;
+    _sectorUpdateContext.rewardScrap = callbacks.rewardScrap;
     _sectorUpdateContext.t = callbacks.t;
     _sectorUpdateContext.scene = engine.scene;
     _sectorUpdateContext.gameState = state;
@@ -271,6 +270,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             enemy._accumulatedDamage += amount;
 
             if (actualDmg > 0) {
+                if (!damageTracker) damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
                 if (damageTracker) {
                     damageTracker.recordOutgoingDamage(session, actualDmg, weaponId, isBoss);
                 }
@@ -279,6 +279,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             const isDeadNow = enemy.hp <= 0;
 
             if (isDeadNow) {
+                if (!playerStats) playerStats = session.getSystem<any>(SystemID.PLAYER_STATS);
                 if (playerStats) {
                     const playerPos = state.player.position;
                     const dx = enemy.mesh.position.x - playerPos.x;
@@ -293,7 +294,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             const isContinuous = weaponData?.behavior === WeaponBehavior.CONTINUOUS || damageSource === DamageID.BURN || damageSource === DamageID.DROWNING;
             const textThrottle = isContinuous ? 250 : 0;
 
-            if (_gameContext.simTime - enemy._lastDamageTextTime > textThrottle) {
+            if (isDeadNow || (_gameContext.simTime - enemy._lastDamageTextTime > textThrottle)) {
                 if (_gameContext.showDamageText && enemy._accumulatedDamage >= 1) {
                     const textX = enemy.mesh.position.x;
                     const textY = enemy.originalScale * 1.8 + 1.2;
@@ -369,7 +370,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             return;
         }
 
-        engine.isSimulationPaused = false;
+        if (engine.isSimulationPaused) {
+            engine.input.clearActions();
+            engine.isSimulationPaused = false;
+        }
 
         // --- Simulation & Visual Clocks ---
         state.lastSimDelta = delta;
@@ -406,10 +410,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
         state.metrics.framesSinceHudUpdate++;
 
-        if (state.discovery.active && now - state.discovery.timestamp > 4000) {
-            state.discovery.active = false;
-        }
-
         // 3. Boss Intro overrides
         if (isBossIntro && refs.bossIntroRef.current.bossMesh) {
             const bossMesh = refs.bossIntroRef.current.bossMesh;
@@ -440,8 +440,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         if (now - lastThrottledTime >= 100) {
             lastThrottledTime = now;
             const sb = state.player.statsBuffer;
-            const hp = sb[PlayerStatID.HP];
-            const maxHp = sb[PlayerStatID.MAX_HP];
+            const hp = sb[StatID.HP];
+            const maxHp = sb[StatID.MAX_HP];
 
             if (hp < maxHp * HEALTH_CRITICAL_THRESHOLD && !isDead) {
                 if (simTime - state.combat.lastHeartbeat > 800) {
@@ -509,7 +509,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             if (simTime - state.enemies.bossDefeatedTime < 10000) {
                 state.player.invulnerableUntil = simTime + 10000;
                 if (simTime - state.enemies.bossDefeatedTime > 4000) {
-                    callbacks.concludeSector(state.world.familyFound);
+                    callbacks.endSector(state.world.familyFound);
                     return;
                 }
             } else {
@@ -518,7 +518,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         }
 
         if (propsRef.current.triggerEndSector) {
-            callbacks.concludeSector(false);
+            callbacks.endSector(false);
             return;
         }
 
@@ -591,6 +591,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         _sectorUpdateContext.playerPos = state.player.position;
         _sectorUpdateContext.triggerSystem = session.triggerSystem;
         _sectorUpdateContext.handleDiscovery = (type: any, id: any, smi?: number, title?: string, details?: string, payload?: any) => {
+            if (!discoverySystem) discoverySystem = session.getSystem<any>(SystemID.DISCOVERY_SYSTEM);
             return discoverySystem ? discoverySystem.handleDiscovery(session, type, id, smi, title, details, payload) : false;
         };
 
@@ -637,7 +638,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         if (refs.playerMeshRef.current) {
             const sb = state.player.statsBuffer;
             const sf = state.combat.statusFlags;
-            _animStateScratch.staminaRatio = sb[PlayerStatID.STAMINA] / sb[PlayerStatID.MAX_STAMINA];
+            _animStateScratch.staminaRatio = sb[StatID.STAMINA] / sb[StatID.MAX_STAMINA];
             _animStateScratch.isMoving = state.player.isMoving;
             _animStateScratch.isRushing = (sf & PlayerStatusFlags.RUSHING) !== 0;
             _animStateScratch.isDodging = (sf & PlayerStatusFlags.DODGING) !== 0;
@@ -874,6 +875,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         );
 
         // 20. VEGETATION INTERACTION (Optimerad för platta och strikta Array/LOD-kontroller)
+        if (!windSystem) windSystem = session.getSystem<any>(SystemID.WIND);
         if (windSystem && windSystem.enabled) {
             for (let i = 0; i < 8; i++) {
                 _bendInteractors[i].w = 0.0;

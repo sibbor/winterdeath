@@ -92,14 +92,17 @@ export const UIEventRingBuffer = {
         stringPool[idx] = str;
         stringPoolIdx = (stringPoolIdx + 1) & 63; // Wrap at 64
 
-        UIEventRingBuffer.push(type, idx, p2, timestamp);
+        // Encode string index as a negative number to avoid collision with SMIs
+        UIEventRingBuffer.push(type, -(idx + 1), p2, timestamp);
     },
 
     /**
      * Returns the string associated with a p1 index from the pool.
      */
     getString: (idx: number): string => {
-        return stringPool[idx] || '';
+        if (idx >= 0) return ''; // SMI, not a string pool index
+        const realIdx = -(idx + 1);
+        return stringPool[realIdx] || '';
     },
 
     /**

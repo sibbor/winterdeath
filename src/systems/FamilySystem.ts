@@ -3,7 +3,7 @@ import type React from 'react';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System, SystemID } from './System';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
-import { PlayerStatID, PlayerStatusFlags } from '../types/CareerStats';
+import { StatID, PlayerStatusFlags } from '../types/CareerStats';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { _buoyancyResult } from './WaterSystem';
 import { FamilyMemberID } from '../content/constants';
@@ -69,7 +69,7 @@ export class FamilySystem implements System {
         const isDead = (state.combat.statusFlags & PlayerStatusFlags.DEAD) !== 0;
 
         // --- Mirror player speed for the follow movement ---
-        const baseSpeed = state.player.statsBuffer[PlayerStatID.FINAL_SPEED];
+        const baseSpeed = state.player.statsBuffer[StatID.FINAL_SPEED];
         const playerCurrentSpeed = baseSpeed * state.player.currentSpeedRatio;
 
         // Family follows at exactly the player's current speed
@@ -283,7 +283,7 @@ export class FamilySystem implements System {
                 _animState.isMoving = fmIsMoving;
                 _animState.isRushing = fmIsRushing;
                 _animState.isDodging = false;
-                _animState.staminaRatio = state.player.statsBuffer[PlayerStatID.STAMINA] / Math.max(1, state.player.statsBuffer[PlayerStatID.MAX_STAMINA]);
+                _animState.staminaRatio = state.player.statsBuffer[StatID.STAMINA] / Math.max(1, state.player.statsBuffer[StatID.MAX_STAMINA]);
 
                 _animState.isIdleLong = isIdleLong;
 

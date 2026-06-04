@@ -6,52 +6,51 @@ import { GameScreen } from './SessionTypes';
 import { SETTINGS_DEFAULT } from '../content/constants';
 
 export interface GameSettings {
-  antialias: boolean;
-  shadows: boolean;
-  shadowMapType: number;
-  shadowResolution: number;
-  pixelRatio: number;
-  textureQuality: number;
-  volumetricFog: boolean;
-  showDiscoveryPopups: boolean;
+    antialias: boolean;
+    shadows: boolean;
+    shadowMapType: number;
+    shadowResolution: number;
+    pixelRatio: number;
+    textureQuality: number;
+    volumetricFog: boolean;
+    showDiscoveryPopups: boolean;
+    showFps: boolean;
+    debugMode: boolean;
 }
 
 export type SectorStats = SessionStats;
 
 export interface SectorState {
-  unlimitedThrowables?: boolean;
-  unlimitedAmmo?: boolean;
-  noReload?: boolean;
-  isInvincible?: boolean;
-  envOverride?: EnvironmentOverride;
-  ctx?: any;
+    unlimitedThrowables?: boolean;
+    unlimitedAmmo?: boolean;
+    noReload?: boolean;
+    isInvincible?: boolean;
+    envOverride?: EnvironmentOverride;
+    ctx?: any;
 
-  // The Generic Bridge API
-  pendingTrigger?: string | null;
-  keepCamera?: boolean;
+    // The Generic Bridge API
+    pendingTrigger?: string | null;
+    keepCamera?: boolean;
 
-  [key: string]: any;
+    [key: string]: any;
 }
 
 export interface GameState {
-  settings: GameSettings;
-  screen: GameScreen;
-  currentSector: number;
-  stats: CareerStats;
+    settings: GameSettings;
+    screen: GameScreen;
+    currentSector: number;
+    stats: CareerStats;
 
-  loadout: {
-    primary: WeaponID;
-    secondary: WeaponID;
-    throwable: WeaponID;
-    special: WeaponID;
-  };
-  weaponLevels: Partial<Record<WeaponID, number>>;
+    loadout: {
+        primary: WeaponID;
+        secondary: WeaponID;
+        throwable: WeaponID;
+        special: WeaponID;
+    };
+    weaponLevels: Partial<Record<WeaponID, number>>;
 
-  sectorState?: SectorState;
-  showFps?: boolean;
-  debugMode?: boolean;
-  environmental: EnvironmentConfig;
-  sessionToken: number;
+    sectorState?: SectorState;
+    environmental: EnvironmentConfig;
 }
 
 export const DEFAULT_STATE: GameState = {
@@ -72,9 +71,11 @@ export const DEFAULT_STATE: GameState = {
         [WeaponID.FLAMETHROWER]: 1,
         [WeaponID.ARC_CANNON]: 1,
     },
-    debugMode: true,
-    showFps: false,
-    settings: SETTINGS_DEFAULT,
+    settings: {
+        ...SETTINGS_DEFAULT,
+        debugMode: false,
+        showFps: false
+    },
     environmental: {
         bgColor: 0x161629,
         fog: {
@@ -116,6 +117,5 @@ export const DEFAULT_STATE: GameState = {
         noReload: false,
         unlimitedThrowables: false,
         isInvincible: false
-    },
-    sessionToken: 0
+    }
 };

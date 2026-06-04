@@ -8,7 +8,7 @@ import { UiSounds } from '../../../utils/audio/AudioLib';
 import { DiscoveryType } from '../hud/HudTypes';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { SectorID } from '../../../game/session/SectorTypes';
-import { GAME_CHALLENGES, ChallengeCategory, ChallengeDef } from '../../../content/ChallengeTypes';
+import { CHALLENGES, ChallengeCategory, ChallengeDef } from '../../../content/ChallengeTypes';
 import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputManager';
 import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
 import { StatsBridge } from '../../../core/data/StatsBridge';
@@ -18,7 +18,6 @@ import { PerkCategory } from '../../../content/perks';
 interface ScreenAdventureLogProps {
     stats: CareerStats;
     onClose: () => void;
-    onMarkCollectiblesViewed?: (collectibleIds: string[]) => void;
     onToggleChallengeTracking?: (challengeId: number) => void;
     isMobileDevice?: boolean;
     debugMode?: boolean;
@@ -40,7 +39,7 @@ const TAB_IDS = TABS.map(t => t.id);
 const SECTORS = [SectorID.VILLAGE, SectorID.MOUNTAIN_VAULT, SectorID.MAST, SectorID.SCRAPYARD];
 const THEME_COLOR = '#16a34a'; // green-600
 
-const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, onToggleChallengeTracking, isMobileDevice, debugMode, initialTab, initialItemId }) => {
+const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onToggleChallengeTracking, isMobileDevice, debugMode, initialTab, initialItemId }) => {
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
     const [activeTab, setActiveTab] = useState<DiscoveryType>(initialTab ?? DiscoveryType.CHALLENGE);
@@ -54,26 +53,6 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
             setActiveTab(initialTab);
         }
     }, [initialTab]);
-
-    // Mark all found collectibles as viewed when the log is opened
-    useEffect(() => {
-        const foundIds = StatsBridge.getDiscoveredCollectibles(stats);
-        const viewedIds = StatsBridge.getViewedCollectibles(stats);
-
-        let hasNew = false;
-        const newIds: string[] = [];
-
-        for (let i = 0; i < foundIds.length; i++) {
-            if (!viewedIds.includes(foundIds[i])) {
-                newIds.push(foundIds[i]);
-                hasNew = true;
-            }
-        }
-
-        if (hasNew && onMarkCollectiblesViewed) {
-            onMarkCollectiblesViewed(newIds);
-        }
-    }, [stats, onMarkCollectiblesViewed]);
 
     // Scroll to item if provided
     useEffect(() => {
@@ -218,8 +197,8 @@ const ChallengesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, is
 
     const trackedChallenges = useMemo(() => {
         const list: ChallengeDef[] = [];
-        for (let i = 0; i < GAME_CHALLENGES.length; i++) {
-            const c = GAME_CHALLENGES[i];
+        for (let i = 0; i < CHALLENGES.length; i++) {
+            const c = CHALLENGES[i];
             if (trackedSet.has(c.id)) {
                 list.push(c as any);
             }
@@ -232,8 +211,8 @@ const ChallengesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, is
         for (let i = 0; i < CHALLENGE_CATEGORIES.length; i++) {
             const cat = CHALLENGE_CATEGORIES[i];
             const list: ChallengeDef[] = [];
-            for (let j = 0; j < GAME_CHALLENGES.length; j++) {
-                const c = GAME_CHALLENGES[j];
+            for (let j = 0; j < CHALLENGES.length; j++) {
+                const c = CHALLENGES[j];
                 if (c.categoryId === cat.id) {
                     list.push(c as any);
                 }
@@ -444,7 +423,14 @@ const ChallengeCard: React.FC<{
 const ZombiesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, isDebug }) => {
     const zombies = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.ZOMBIE), []);
 
-    const seenEnemySet = useMemo(() => new Set(StatsBridge.getDiscoveredZombies(stats)), [stats]);
+    const seenEnemySet = useMemo(() => {
+        const set = new Set<number>();
+        const discovered = StatsBridge.getDiscoveredZombies(stats);
+        for (let i = 0; i < discovered.length; i++) {
+            if (discovered[i] === 1) set.add(i);
+        }
+        return set;
+    }, [stats]);
 
     const filteredZombies = useMemo(() => {
         const list: typeof zombies = [];
@@ -560,8 +546,13 @@ const BossesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, isDebu
     const bossesList = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.BOSS), []);
 
     const { seenBossesSet, defeatedBossesSet } = useMemo(() => {
+        const seenSet = new Set<number>();
+        const discovered = StatsBridge.getDiscoveredBosses(stats);
+        for (let i = 0; i < discovered.length; i++) {
+            if (discovered[i] === 1) seenSet.add(i);
+        }
         return {
-            seenBossesSet: new Set(StatsBridge.getDiscoveredBosses(stats)),
+            seenBossesSet: seenSet,
             defeatedBossesSet: new Set(StatsBridge.getDeadBossIndices(stats))
         };
     }, [stats]);
@@ -600,7 +591,7 @@ const BossesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, isDebu
                     }
                 }
                 const theme = themesList[sectorIndex];
-                const isSectorUnlocked = isDebug || StatsBridge.getSectorsCompleted(stats) >= sectorIndex - 1;
+                const isSectorUnlocked = isDebug || sectorIndex === SectorID.VILLAGE || StatsBridge.getSectorsCompleted(stats) >= sectorIndex;
                 const sectorName = isSectorUnlocked ? (theme ? t(DataResolver.getSectorName(sectorIndex)) : `${t('ui.sector')} ${sectorIndex}`) : '???';
 
                 const isBossUnlocked = isDebug || (boss && (seenBossesSet.has(sectorIndex) || defeatedBossesSet.has(sectorIndex)));
@@ -726,9 +717,8 @@ const CollectiblesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, 
     const resolvedFoundSet = useMemo(() => {
         const set = new Set<number>();
         for (let i = 0; i < foundIds.length; i++) {
-            const resolved = DataResolver.resolveCollectibleID(foundIds[i]);
-            if (resolved !== undefined) {
-                set.add(resolved);
+            if (foundIds[i] === 1) {
+                set.add(i);
             }
         }
         return set;
@@ -739,7 +729,7 @@ const CollectiblesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, 
         for (let s = 0; s < SECTORS.length; s++) {
             const sectorId = SECTORS[s];
             const sectorItems = itemsBySector[sectorId] || [];
-            
+
             const discoveredItems: typeof items = [];
             for (let i = 0; i < sectorItems.length; i++) {
                 const item = sectorItems[i];
@@ -749,7 +739,7 @@ const CollectiblesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, 
             }
 
             const itemsToShow = isDebug ? sectorItems : discoveredItems;
-            const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
+            const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId;
             const foundCount = isSectorUnlocked ? discoveredItems.length : 0;
 
             data[sectorId] = {
@@ -769,7 +759,7 @@ const CollectiblesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, 
                 const sData = sectorData[sectorId];
                 if (!sData || sData.sectorItems.length === 0) return null;
 
-                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
+                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId;
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -833,9 +823,8 @@ const CluesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effecti
     const resolvedFoundSet = useMemo(() => {
         const set = new Set<number>();
         for (let i = 0; i < foundIds.length; i++) {
-            const resolved = DataResolver.resolveClueID(foundIds[i]);
-            if (resolved !== undefined) {
-                set.add(resolved);
+            if (foundIds[i] === 1) {
+                set.add(i);
             }
         }
         return set;
@@ -846,7 +835,7 @@ const CluesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effecti
         for (let s = 0; s < SECTORS.length; s++) {
             const sectorId = SECTORS[s];
             const sectorItems = itemsBySector[sectorId] || [];
-            
+
             const discoveredItems: typeof items = [];
             for (let i = 0; i < sectorItems.length; i++) {
                 const item = sectorItems[i];
@@ -856,7 +845,7 @@ const CluesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effecti
             }
 
             const itemsToShow = isDebug ? sectorItems : discoveredItems;
-            const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
+            const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId;
             const foundCount = isSectorUnlocked ? discoveredItems.length : 0;
 
             data[sectorId] = {
@@ -876,7 +865,7 @@ const CluesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effecti
                 const sData = sectorData[sectorId];
                 if (!sData || sData.sectorItems.length === 0) return null;
 
-                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
+                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId;
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -953,9 +942,8 @@ const PoiTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effective
     const resolvedFoundSet = useMemo(() => {
         const set = new Set<number>();
         for (let i = 0; i < visitedList.length; i++) {
-            const resolved = DataResolver.resolvePoiID(visitedList[i]);
-            if (resolved !== undefined) {
-                set.add(resolved);
+            if (visitedList[i] === 1) {
+                set.add(i);
             }
         }
         return set;
@@ -966,7 +954,7 @@ const PoiTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effective
         for (let s = 0; s < SECTORS.length; s++) {
             const sectorId = SECTORS[s];
             const sectorItems = itemsBySector[sectorId] || [];
-            
+
             const discoveredItems: typeof items = [];
             for (let i = 0; i < sectorItems.length; i++) {
                 const item = sectorItems[i];
@@ -976,7 +964,7 @@ const PoiTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effective
             }
 
             const itemsToShow = isDebug ? sectorItems : discoveredItems;
-            const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
+            const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId;
             const foundCount = isSectorUnlocked ? discoveredItems.length : 0;
 
             data[sectorId] = {
@@ -995,7 +983,7 @@ const PoiTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effective
                 const sData = sectorData[sectorId];
                 if (!sData || sData.sectorItems.length === 0) return null;
 
-                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId - 1;
+                const isSectorUnlocked = isDebug || sectorId === SectorID.VILLAGE || sectorsCompleted >= sectorId;
 
                 return (
                     <div key={sectorId} className="space-y-6">

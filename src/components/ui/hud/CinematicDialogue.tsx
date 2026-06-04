@@ -3,12 +3,12 @@ import { t } from '../../../utils/i18n';
 import { HudStore } from '../../../store/HudStore';
 import { DataResolver } from '../../../core/data/DataResolver';
 
-interface CinematicBubbleProps {
+interface CinematicDialogueProps {
     isMobileDevice?: boolean;
     onComplete?: () => void;
 }
 
-export interface CinematicBubbleHandle {
+export interface CinematicDialogueHandle {
     finishTyping: () => boolean;
 }
 
@@ -21,13 +21,15 @@ interface TextToken {
 const CONTAINER_HIDDEN = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out bottom-[-20%] opacity-0";
 const CONTAINER_VISIBLE = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-5000 ease-out bottom-[calc(12%+25px)] opacity-100";
 
-const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(({ isMobileDevice, onComplete }, ref) => {
-    // ZERO-GC: No more reactive useHudStore selectors for fast data.
-    // We'll manage visibility and text via local state but update content via ref.
+const CinematicDialogue = forwardRef<CinematicDialogueHandle, CinematicDialogueProps>(({ isMobileDevice, onComplete }, ref) => {
     const [isVisible, setIsVisible] = useState(false);
     const [isFinished, setIsFinished] = useState(false);
     const [speakerName, setSpeakerName] = useState('');
     const [bgColor, setBgColor] = useState('#000');
+
+    // FIX: Använd refs för att undvika "Stale Closures" inuti HudStore.subscribe
+    const isVisibleRef = useRef(false);
+    const isFinishedRef = useRef(false);
 
     const timerRef = useRef<number | null>(null);
     const visibleCountRef = useRef<number>(0);
@@ -36,7 +38,6 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
     const rawTextRef = useRef('');
     const lastDialogueKeyRef = useRef<string | null>(null);
 
-    // Pre-calculate tokens locally when text changes via subscription
     const currentTokens = useRef<TextToken[]>([]);
     const totalCharsRef = useRef(0);
 
@@ -67,7 +68,6 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
         textContainerRef.current.innerHTML = html;
     }, []);
 
-    // ZERO-GC: Use synchronous store listener instead of reactive hooks
     useEffect(() => {
         return HudStore.subscribe(() => {
             const state = HudStore.getState();
@@ -81,7 +81,6 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
                 if (newText !== rawTextRef.current) {
                     rawTextRef.current = newText;
 
-                    // Tokenize (Once per line)
                     const regex = /(\([^)]+\)|\/[^/]+\/)/g;
                     const parts = newText.split(regex);
                     currentTokens.current = parts.map((part): TextToken => {
@@ -92,15 +91,24 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
 
                     totalCharsRef.current = currentTokens.current.reduce((acc, t) => acc + t.cleanContent.length, 0);
 
-                    setSpeakerName(DataResolver.getFamilyMemberName(state.dialogueSpeaker || ''));
-                    setBgColor(DataResolver.getSpeakerColor(state.dialogueSpeaker || ''));
+                    setSpeakerName(DataResolver.getFamilyMemberName(state.dialogueSpeaker));
+                    setBgColor(DataResolver.getSpeakerColor(state.dialogueSpeaker));
+
+                    // Uppdatera både state och Ref synkront
                     setIsVisible(true);
+                    isVisibleRef.current = true;
+
                     startTyping();
                 }
             } else {
-                lastDialogueKeyRef.current = null;
-                if (isVisible) {
+                // FIX: Läs från isVisibleRef istället för React-staten. Nu fungerar uppstädningen!
+                if (isVisibleRef.current || rawTextRef.current !== '') {
+                    console.log("CinematicDialogue: active = false. Cleaning up.");
+                    lastDialogueKeyRef.current = null;
+
                     setIsVisible(false);
+                    isVisibleRef.current = false;
+
                     rawTextRef.current = '';
                     if (timerRef.current) {
                         clearInterval(timerRef.current);
@@ -109,11 +117,14 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
                 }
             }
         });
-    }, [isVisible, updateDOMText]);
+    }, [updateDOMText]);
 
     const startTyping = () => {
         visibleCountRef.current = 0;
+
         setIsFinished(false);
+        isFinishedRef.current = false;
+
         updateDOMText(0);
 
         if (timerRef.current !== null) clearInterval(timerRef.current);
@@ -127,6 +138,7 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
                     timerRef.current = null;
                 }
                 setIsFinished(true);
+                isFinishedRef.current = true;
                 if (onComplete) onComplete();
             }
         }, 30);
@@ -134,12 +146,15 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
 
     useImperativeHandle(ref, () => ({
         finishTyping: () => {
-            if (!isFinished && isVisible) {
+            // FIX: Använd refs här också för absolut stabilitet!
+            if (!isFinishedRef.current && isVisibleRef.current) {
                 if (timerRef.current !== null) {
                     clearInterval(timerRef.current);
                     timerRef.current = null;
                 }
                 setIsFinished(true);
+                isFinishedRef.current = true;
+
                 visibleCountRef.current = totalCharsRef.current;
                 updateDOMText(totalCharsRef.current);
                 if (onComplete) onComplete();
@@ -179,4 +194,4 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
     );
 });
 
-export default CinematicBubble;
+export default CinematicDialogue;

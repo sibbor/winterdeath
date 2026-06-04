@@ -1,7 +1,7 @@
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System, SystemID } from './System';
 import { DamageID } from '../entities/player/CombatTypes';
-import { StatWeaponIndex, PlayerStatID, StatEnemyIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE, TELEMETRY_BUFFER_SIZE, TelemetrySourceOffset } from '../types/CareerStats';
+import { StatWeaponIndex, StatID, StatEnemyIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE, TELEMETRY_BUFFER_SIZE, TelemetrySourceOffset } from '../types/CareerStats';
 import { COMBAT, MAX_ENTITIES } from '../content/constants';
 
 // Zero-GC: Pre-allocate boss keys to prevent template literal string allocations during runtime
@@ -33,7 +33,10 @@ export class DamageTrackerSystem implements System {
             const idx = activeWeapon as number;
             //  HARDENING: Strict bounds check (64 slots)
             if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
-                state.sessionStats.weaponTimeActive[idx] += delta;
+                state.sessionStats.outgoingTimeActiveBuffer[idx] += delta;
+                if (state.combat.outgoingTimeActiveBuffer) {
+                    state.combat.outgoingTimeActiveBuffer[idx] += delta;
+                }
             }
         }
     }
@@ -63,7 +66,7 @@ export class DamageTrackerSystem implements System {
         const playerStats = state.player.statsBuffer;
 
         stats.damageTaken += amount;
-        playerStats[PlayerStatID.TOTAL_DAMAGE_TAKEN] += amount;
+        playerStats[StatID.TOTAL_DAMAGE_TAKEN] += amount;
 
         if (isBoss) stats.bossDamageTaken += amount;
 
@@ -81,7 +84,9 @@ export class DamageTrackerSystem implements System {
         // Final sanity check before write
         if (bufferIdx >= 0 && bufferIdx < TELEMETRY_BUFFER_SIZE) {
             stats.incomingDamageBuffer[bufferIdx] += amount;
-            state.enemies.incomingDamageBuffer[bufferIdx] += amount;
+            if (state.careerStats?.incomingDamageBuffer) {
+                state.careerStats.incomingDamageBuffer[bufferIdx] += amount;
+            }
         }
     }
 
@@ -101,13 +106,16 @@ export class DamageTrackerSystem implements System {
         const playerStats = session.state.player.statsBuffer;
 
         stats.damageDealt += amount;
-        playerStats[PlayerStatID.TOTAL_DAMAGE_DEALT] += amount;
+        playerStats[StatID.TOTAL_DAMAGE_DEALT] += amount;
 
         if (isBoss) stats.bossDamageDealt += amount;
 
         const idx = weaponId as number;
         if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
-            stats.weaponDamageDealt[idx] += amount;
+            stats.outgoingDamageBuffer[idx] += amount;
+            if (session.state.combat.outgoingDamageBuffer) {
+                session.state.combat.outgoingDamageBuffer[idx] += amount;
+            }
         }
     }
 
@@ -122,11 +130,14 @@ export class DamageTrackerSystem implements System {
         const playerStats = session.state.player.statsBuffer;
 
         stats.shotsFired++;
-        playerStats[PlayerStatID.TOTAL_SHOTS_FIRED]++;
+        playerStats[StatID.TOTAL_SHOTS_FIRED]++;
 
         const idx = weaponId as number;
         if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
-            stats.weaponShotsFired[idx]++;
+            stats.outgoingShotsFiredBuffer[idx]++;
+            if (session.state.combat.outgoingShotsFiredBuffer) {
+                session.state.combat.outgoingShotsFiredBuffer[idx]++;
+            }
         }
     }
 
@@ -141,11 +152,14 @@ export class DamageTrackerSystem implements System {
         const playerStats = session.state.player.statsBuffer;
 
         stats.shotsHit++;
-        playerStats[PlayerStatID.TOTAL_SHOTS_HIT]++;
+        playerStats[StatID.TOTAL_SHOTS_HIT]++;
 
         const idx = weaponId as number;
         if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
-            stats.weaponShotsHit[idx]++;
+            stats.outgoingShotsHitBuffer[idx]++;
+            if (session.state.combat.outgoingShotsHitBuffer) {
+                session.state.combat.outgoingShotsHitBuffer[idx]++;
+            }
         }
     }
 
@@ -167,12 +181,12 @@ export class DamageTrackerSystem implements System {
             const playerStats = session.state.player.statsBuffer;
 
             stats.kills++;
-            playerStats[PlayerStatID.TOTAL_KILLS]++;
+            playerStats[StatID.TOTAL_KILLS]++;
 
             this.currentKillstreak++;
-            const maxK = playerStats[PlayerStatID.LONGEST_KILLSTREAK];
+            const maxK = playerStats[StatID.LONGEST_KILLSTREAK];
             if (this.currentKillstreak > maxK) {
-                playerStats[PlayerStatID.LONGEST_KILLSTREAK] = this.currentKillstreak;
+                playerStats[StatID.LONGEST_KILLSTREAK] = this.currentKillstreak;
                 stats.maxKillstreak = this.currentKillstreak;
             }
 
@@ -187,33 +201,39 @@ export class DamageTrackerSystem implements System {
         const playerStats = session.state.player.statsBuffer;
 
         stats.kills++;
-        playerStats[PlayerStatID.TOTAL_KILLS]++;
+        playerStats[StatID.TOTAL_KILLS]++;
 
         // Long Range Kill: > 25m (625 units squared)
         if (distSq !== undefined && distSq > COMBAT.LONG_RANGE_SQ) {
-            playerStats[PlayerStatID.TOTAL_LONG_RANGE_KILLS]++;
+            playerStats[StatID.TOTAL_LONG_RANGE_KILLS]++;
         }
 
         // Killstreak handling
         this.currentKillstreak++;
-        const maxK = playerStats[PlayerStatID.LONGEST_KILLSTREAK];
+        const maxK = playerStats[StatID.LONGEST_KILLSTREAK];
         if (this.currentKillstreak > maxK) {
-            playerStats[PlayerStatID.LONGEST_KILLSTREAK] = this.currentKillstreak;
+            playerStats[StatID.LONGEST_KILLSTREAK] = this.currentKillstreak;
             stats.maxKillstreak = this.currentKillstreak;
         }
 
         // Engagement distance (Squared)
         if (distSq !== undefined) {
             stats.engagementDistSqKills += distSq;
-            playerStats[PlayerStatID.TOTAL_ENGAGEMENT_DISTANCE_SQ] += distSq;
+            playerStats[StatID.TOTAL_ENGAGEMENT_DISTANCE_SQ] += distSq;
         }
 
         if (weaponId && (weaponId as number) !== DamageID.NONE) {
             const idx = weaponId as number;
             if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
-                stats.weaponKills[idx]++;
+                stats.outgoingKillsBuffer[idx]++;
+                if (session.state.combat.outgoingKillsBuffer) {
+                    session.state.combat.outgoingKillsBuffer[idx]++;
+                }
                 if (distSq !== undefined) {
-                    stats.weaponEngagementDistSq[idx] += distSq;
+                    stats.outgoingEngagementDistSqBuffer[idx] += distSq;
+                    if (session.state.combat.outgoingEngagementDistSqBuffer) {
+                        session.state.combat.outgoingEngagementDistSqBuffer[idx] += distSq;
+                    }
                 }
             }
         }
@@ -244,7 +264,7 @@ export class DamageTrackerSystem implements System {
         const playerStats = session.state.player.statsBuffer;
         const globalStats = session.state;
 
-        playerStats[PlayerStatID.TOTAL_DEATHS]++;
+        playerStats[StatID.TOTAL_DEATHS]++;
 
         // sourceId < 16 usually indicates an enemy type (EnemyType enum)
         let enemyTypeIdx = -1;
@@ -279,11 +299,14 @@ export class DamageTrackerSystem implements System {
         const playerStats = session.state.player.statsBuffer;
 
         stats.throwablesThrown++;
-        playerStats[PlayerStatID.TOTAL_THROWABLES_THROWN]++;
+        playerStats[StatID.TOTAL_THROWABLES_THROWN]++;
 
         const idx = weaponId as number;
         if (idx >= 0 && idx < StatWeaponIndex.COUNT) {
-            stats.weaponShotsFired[idx]++; // For throwables, fired = hit attempt
+            stats.outgoingShotsFiredBuffer[idx]++; // For throwables, fired = hit attempt
+            if (session.state.combat.outgoingShotsFiredBuffer) {
+                session.state.combat.outgoingShotsFiredBuffer[idx]++;
+            }
         }
     }
 
@@ -293,16 +316,19 @@ export class DamageTrackerSystem implements System {
     recordUniqueEnemiesHitByExplosive(session: GameSessionLogic, count: number) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.uniqueEnemiesHitByExplosives += count;
-        session.state.player.statsBuffer[PlayerStatID.TOTAL_UNIQUE_ENEMIES_HIT_BY_EXPLOSIVES] += count;
+        session.state.player.statsBuffer[StatID.TOTAL_UNIQUE_ENEMIES_HIT_BY_EXPLOSIVES] += count;
     }
 
     /**
      * Records an enemy being gibbed.
      */
-    recordGib(session: GameSessionLogic) {
+    recordGib(session: GameSessionLogic, damageType?: DamageID) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.gibbedEnemies++;
-        session.state.player.statsBuffer[PlayerStatID.TOTAL_GIBBED]++;
+        session.state.player.statsBuffer[StatID.TOTAL_GIBBED]++;
+        if (damageType === DamageID.SHOTGUN || damageType === DamageID.REVOLVER) {
+            session.state.player.statsBuffer[StatID.TOTAL_GIBBED_BY_REVOLVER_SHOTGUN]++;
+        }
     }
 
     /**
@@ -311,7 +337,7 @@ export class DamageTrackerSystem implements System {
     recordDodge(session: GameSessionLogic) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.dodges++;
-        session.state.player.statsBuffer[PlayerStatID.TOTAL_DODGES]++;
+        session.state.player.statsBuffer[StatID.TOTAL_DODGES]++;
     }
 
     /**
@@ -320,7 +346,7 @@ export class DamageTrackerSystem implements System {
     recordRush(session: GameSessionLogic) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.rushes++;
-        session.state.player.statsBuffer[PlayerStatID.TOTAL_RUSHES]++;
+        session.state.player.statsBuffer[StatID.TOTAL_RUSHES]++;
     }
 
     /**
@@ -329,7 +355,7 @@ export class DamageTrackerSystem implements System {
     recordRushDistance(session: GameSessionLogic, distance: number) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.rushDistance += distance;
-        session.state.player.statsBuffer[PlayerStatID.TOTAL_RUSH_DISTANCE] += distance;
+        session.state.player.statsBuffer[StatID.TOTAL_RUSH_DISTANCE] += distance;
     }
 
     /**
@@ -338,7 +364,7 @@ export class DamageTrackerSystem implements System {
     recordDistance(session: GameSessionLogic, distance: number) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.distanceTraveled += distance;
-        session.state.player.statsBuffer[PlayerStatID.TOTAL_DISTANCE_TRAVELED] += distance;
+        session.state.player.statsBuffer[StatID.TOTAL_DISTANCE_TRAVELED] += distance;
     }
 
     /**
@@ -347,7 +373,7 @@ export class DamageTrackerSystem implements System {
     recordCrisisSave(session: GameSessionLogic) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.crisisSaves++;
-        session.state.player.statsBuffer[PlayerStatID.TOTAL_CRISIS_SAVES]++;
+        session.state.player.statsBuffer[StatID.TOTAL_CRISIS_SAVES]++;
     }
 
     /**
@@ -356,7 +382,7 @@ export class DamageTrackerSystem implements System {
     recordBuffTime(session: GameSessionLogic, delta: number) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.buffTime += delta;
-        session.state.player.statsBuffer[PlayerStatID.TOTAL_BUFF_TIME] += delta;
+        session.state.player.statsBuffer[StatID.TOTAL_BUFF_TIME] += delta;
     }
 
     /**
@@ -365,7 +391,7 @@ export class DamageTrackerSystem implements System {
     recordDebuffsResisted(session: GameSessionLogic, count: number) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.debuffsResisted += count;
-        session.state.player.statsBuffer[PlayerStatID.TOTAL_DEBUFFS_RESISTED] += count;
+        session.state.player.statsBuffer[StatID.TOTAL_DEBUFFS_RESISTED] += count;
     }
 
     clear() {

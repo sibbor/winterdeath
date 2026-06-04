@@ -37,22 +37,24 @@ export enum ChallengeID {
     WALKER_EXTERMINATOR = 6,
     KNEE_CAPPER = 7,
     TANK_BUSTER = 8,
-    BOSS_SLAYER = 9,
+    BLOATER_GORE = 9,
+    BOSS_SLAYER = 10,
 
     // WEAPONS/TACTICS
-    GIBBER = 10,
-    PYROMANIAC = 11,
-    SHOCK_THERAPY = 12,
-    DEMOLITION_EXPERT = 13,
-    BRAWLER = 14,
-    SHARPSHOOTER = 15,
+    BRAWLER = 11,
+    SHARPSHOOTER = 12,
+    GIBBER = 13,
+    PYROMANIAC = 14,
+    SHOCK_THERAPY = 15,
+    DEMOLITION_EXPERT = 16,
 
     // PLAYER
-    SURVIVOR = 16,
-    VETERAN = 17,
-    UNTOUCHABLE = 18,
+    SURVIVOR = 17,
+    VETERAN = 18,
+    UNTOUCHABLE = 19,
 
-    COUNT
+    // NUMBER OF CHALLENGES
+    COUNT = 20
 }
 
 /**
@@ -72,7 +74,7 @@ export interface ChallengeDef {
  * Master Challenge Registry
  * INDEX MUST MATCH ChallengeID ENUM EXACTLY.
  */
-export const GAME_CHALLENGES: ReadonlyArray<ChallengeDef> = [
+export const CHALLENGES: ReadonlyArray<ChallengeDef> = [
     // --- WORLD ---
     {
         id: ChallengeID.MARATHON,
@@ -121,81 +123,57 @@ export const GAME_CHALLENGES: ReadonlyArray<ChallengeDef> = [
         categoryId: ChallengeCategory.COMBAT,
         titleKey: 'challenges.zombie_hunter.title',
         descriptionKey: 'challenges.zombie_hunter.desc',
-        targets: [100, 1000, 10000],
-        cpRewards: [10, 50, 250]
+        targets: [25, 100, 400],
+        cpRewards: [5, 15, 50]
     },
     {
         id: ChallengeID.WALKER_EXTERMINATOR,
         categoryId: ChallengeCategory.COMBAT,
         titleKey: 'challenges.walker_exterminator.title',
         descriptionKey: 'challenges.walker_exterminator.desc',
-        targets: [50, 500, 5000],
-        cpRewards: [10, 25, 100]
+        targets: [10, 50, 100],
+        cpRewards: [15, 50, 150]
     },
     {
         id: ChallengeID.KNEE_CAPPER,
         categoryId: ChallengeCategory.COMBAT,
         titleKey: 'challenges.knee_capper.title',
         descriptionKey: 'challenges.knee_capper.desc',
-        targets: [25, 250, 2500],
-        cpRewards: [10, 25, 100]
+        targets: [10, 50, 100],
+        cpRewards: [15, 50, 150]
     },
     {
         id: ChallengeID.TANK_BUSTER,
         categoryId: ChallengeCategory.COMBAT,
         titleKey: 'challenges.tank_buster.title',
         descriptionKey: 'challenges.tank_buster.desc',
-        targets: [5, 50, 250],
-        cpRewards: [20, 50, 200]
+        targets: [5, 15, 30],
+        cpRewards: [15, 50, 150]
+    },
+    {
+        id: ChallengeID.BLOATER_GORE,
+        categoryId: ChallengeCategory.COMBAT,
+        titleKey: 'challenges.bloater_gore.title',
+        descriptionKey: 'challenges.bloater_gore.desc',
+        targets: [5, 15, 30],
+        cpRewards: [15, 50, 150]
     },
     {
         id: ChallengeID.BOSS_SLAYER,
         categoryId: ChallengeCategory.COMBAT,
         titleKey: 'challenges.boss_slayer.title',
         descriptionKey: 'challenges.boss_slayer.desc',
-        targets: [1, 5, 25],
-        cpRewards: [50, 150, 500]
+        targets: [1, 4],
+        cpRewards: [50, 250]
     },
 
-    // --- WEAPONS/TACTICS ---
-    {
-        id: ChallengeID.GIBBER,
-        categoryId: ChallengeCategory.WEAPONS,
-        titleKey: 'challenges.gibber.title',
-        descriptionKey: 'challenges.gibber.desc',
-        targets: [50, 500, 5000],
-        cpRewards: [15, 40, 150]
-    },
-    {
-        id: ChallengeID.PYROMANIAC,
-        categoryId: ChallengeCategory.TACTICS,
-        titleKey: 'challenges.pyromaniac.title',
-        descriptionKey: 'challenges.pyromaniac.desc',
-        targets: [30, 300, 3000],
-        cpRewards: [10, 30, 120]
-    },
-    {
-        id: ChallengeID.SHOCK_THERAPY,
-        categoryId: ChallengeCategory.TACTICS,
-        titleKey: 'challenges.shock_therapy.title',
-        descriptionKey: 'challenges.shock_therapy.desc',
-        targets: [30, 300, 3000],
-        cpRewards: [10, 30, 120]
-    },
-    {
-        id: ChallengeID.DEMOLITION_EXPERT,
-        categoryId: ChallengeCategory.TACTICS,
-        titleKey: 'challenges.demolition_expert.title',
-        descriptionKey: 'challenges.demolition_expert.desc',
-        targets: [20, 200, 2000],
-        cpRewards: [10, 30, 120]
-    },
+    // --- WEAPONS ---
     {
         id: ChallengeID.BRAWLER,
         categoryId: ChallengeCategory.WEAPONS,
         titleKey: 'challenges.brawler.title',
         descriptionKey: 'challenges.brawler.desc',
-        targets: [50, 250, 1000],
+        targets: [5, 25, 50],
         cpRewards: [15, 50, 200]
     },
     {
@@ -203,8 +181,42 @@ export const GAME_CHALLENGES: ReadonlyArray<ChallengeDef> = [
         categoryId: ChallengeCategory.WEAPONS,
         titleKey: 'challenges.sharpshooter.title',
         descriptionKey: 'challenges.sharpshooter.desc',
-        targets: [10, 100, 500],
+        targets: [10, 25, 50],
         cpRewards: [20, 60, 250]
+    },
+    {
+        id: ChallengeID.GIBBER,
+        categoryId: ChallengeCategory.WEAPONS,
+        titleKey: 'challenges.gibber.title',
+        descriptionKey: 'challenges.gibber.desc',
+        targets: [10, 25, 50],
+        cpRewards: [15, 40, 150]
+    },
+
+    // --- TACTICS ---
+    {
+        id: ChallengeID.PYROMANIAC,
+        categoryId: ChallengeCategory.TACTICS,
+        titleKey: 'challenges.pyromaniac.title',
+        descriptionKey: 'challenges.pyromaniac.desc',
+        targets: [10, 25, 50],
+        cpRewards: [15, 40, 150]
+    },
+    {
+        id: ChallengeID.SHOCK_THERAPY,
+        categoryId: ChallengeCategory.TACTICS,
+        titleKey: 'challenges.shock_therapy.title',
+        descriptionKey: 'challenges.shock_therapy.desc',
+        targets: [10, 25, 50],
+        cpRewards: [15, 40, 150]
+    },
+    {
+        id: ChallengeID.DEMOLITION_EXPERT,
+        categoryId: ChallengeCategory.TACTICS,
+        titleKey: 'challenges.demolition_expert.title',
+        descriptionKey: 'challenges.demolition_expert.desc',
+        targets: [10, 25, 50],
+        cpRewards: [15, 40, 150]
     },
 
     // --- PLAYER ---
@@ -213,7 +225,7 @@ export const GAME_CHALLENGES: ReadonlyArray<ChallengeDef> = [
         categoryId: ChallengeCategory.PLAYER,
         titleKey: 'challenges.survivor.title',
         descriptionKey: 'challenges.survivor.desc',
-        targets: [1, 7, 30],
+        targets: [30, 60, 120],
         cpRewards: [25, 100, 500]
     },
     {
@@ -221,15 +233,15 @@ export const GAME_CHALLENGES: ReadonlyArray<ChallengeDef> = [
         categoryId: ChallengeCategory.PLAYER,
         titleKey: 'challenges.veteran.title',
         descriptionKey: 'challenges.veteran.desc',
-        targets: [10, 30, 60],
-        cpRewards: [50, 200, 1000]
+        targets: [5, 10, 20],
+        cpRewards: [50, 150, 300]
     },
     {
         id: ChallengeID.UNTOUCHABLE,
         categoryId: ChallengeCategory.PLAYER,
         titleKey: 'challenges.untouchable.title',
         descriptionKey: 'challenges.untouchable.desc',
-        targets: [10, 25, 50],
+        targets: [5, 10, 20],
         cpRewards: [20, 50, 200]
     }
 ];

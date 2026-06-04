@@ -82,7 +82,7 @@ const OVERLAY_BASE = "absolute inset-0 z-[100] flex items-center justify-center 
 const MODAL_BOX_BASE = "bg-zinc-950 border shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden flex flex-col transition-all duration-300 origin-center";
 const HEADER_CONTAINER = "p-6 md:p-12 pb-0 relative z-20 shrink-0 pl-3 pr-3";
 const HEADER_INNER = "border-b-2 border-zinc-800/80 pb-4 md:pb-6 relative flex justify-between items-center w-full";
-const CONTENT_AREA = "flex-1 overflow-y-auto custom-scrollbar bg-transparent touch-auto relative z-20 px-safe px-4 md:px-14 pb-6";
+const CONTENT_AREA = "flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-transparent touch-auto relative z-20 px-safe px-4 md:px-14 pb-6";
 const FOOTER_CONTAINER = "bg-zinc-900/30 p-4 md:p-6 border-t border-zinc-800 flex justify-center gap-4 shrink-0 relative z-20 px-safe";
 
 const BUTTON_STYLE = "px-4 md:px-8 py-3 md:py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg text-xs md:text-base hover:scale-105 active:scale-95 whitespace-nowrap flex-1 md:flex-none relative overflow-hidden group/btn";
@@ -455,7 +455,7 @@ export const TacticalTab: React.FC<{
     orientation?: 'vertical' | 'horizontal',
     className?: string
 }> = React.memo(({ label, isActive, onClick, color = COLORS.GREEN, orientation = 'horizontal', className = '' }) => {
-    const baseStyle = "px-6 py-2 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700 relative overflow-hidden group/tab font-bold uppercase tracking-widest transition-all";
+    const baseStyle = "shrink-0 px-6 py-2 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700 relative overflow-hidden group/tab font-bold uppercase tracking-widest transition-all";
     const activeStyle = isActive ? "text-white animate-tab-pulsate" : "bg-transparent text-zinc-400 hover:bg-white/5 border-zinc-700";
     const orientationStyle = orientation === 'vertical' ? "w-full text-left p-3 md:p-6 text-sm md:text-xl tracking-wider mx-0 md:mx-2" : "text-[10px] md:text-lg";
 

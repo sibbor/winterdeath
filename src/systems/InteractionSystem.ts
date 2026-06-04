@@ -14,7 +14,7 @@ import { InputAction } from '../core/engine/InputManager';
 import { TriggerSystem } from './TriggerSystem';
 import { VehicleManager } from './VehicleManager';
 import { DataResolver } from '../core/data/DataResolver';
-import { PlayerStatID } from '../types/CareerStats';
+import { StatID } from '../types/CareerStats';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -138,7 +138,7 @@ export class InteractionSystem implements System {
             } else {
                 triggerIndices = null;
                 tCount = session.triggerSystem.capacity;
-                interactables = (state.sectorState.ctx?.interactables || this.EMPTY_ARRAY);
+                interactables = (session.sectorCtx?.interactables || this.EMPTY_ARRAY);
                 iCount = interactables.length || 0;
             }
 
@@ -209,7 +209,7 @@ export class InteractionSystem implements System {
 
             // Smooth braking (ease-out)
             const easeOut = 1.0 - Math.pow(1.0 - anim.progress, 3);
- 
+
             anim.obj.position.set(anim.startX, anim.startY, anim.startZ);
             anim.obj.rotation.set(0, 0, 0);
 
@@ -518,9 +518,11 @@ export class InteractionSystem implements System {
         switch (type) {
             case InteractionType.VEHICLE:
                 if (_detectionResult.object) {
-                    state.vehicle.active = true;
-                    state.vehicle.mesh = _detectionResult.object;
-                    state.vehicle.type = _detectionResult.object.userData.vehicleDef?.type ?? VehicleID.NONE;
+                    const vehicle = _detectionResult.object;
+                    const def = vehicle.userData.vehicleDef;
+                    if (def) {
+                        VehicleManager.enterVehicle(this.playerGroup, vehicle, state, def);
+                    }
                 }
                 break;
 
@@ -636,10 +638,10 @@ export class InteractionSystem implements System {
 
             if (chest.subType === InteractionSubType.BIG_CHEST) {
                 if (state.sessionStats) state.sessionStats.bigChestsOpened++;
-                state.player.statsBuffer[PlayerStatID.TOTAL_BIG_CHESTS_OPENED]++;
+                state.player.statsBuffer[StatID.TOTAL_BIG_CHESTS_OPENED]++;
             } else {
                 if (state.sessionStats) state.sessionStats.chestsOpened++;
-                state.player.statsBuffer[PlayerStatID.TOTAL_CHESTS_OPENED]++;
+                state.player.statsBuffer[StatID.TOTAL_CHESTS_OPENED]++;
             }
         }
     }

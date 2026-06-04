@@ -1,0 +1,27 @@
+/**
+ * SectorEventID
+ * Single Source of Truth for sector-specific script, cinematic, and gameplay events.
+ * Cleanly separated from search-driven exploration Clues and Points of Interest.
+ */
+export enum SectorEventID {
+    // Sector 0 (0x00)
+    S0_TUNNEL_BLOCKED = 15000 + ((0 << 8) | 0),
+    S0_TUNNEL_WHATS_HAPPENING = 15000 + ((0 << 8) | 1),
+    S0_TUNNEL_PLANT_EXPLOSIVES = 15000 + ((0 << 8) | 2),
+    S0_TUNNEL_CLEARED = 15000 + ((0 << 8) | 3),
+    S0_TUNNEL_EXPLOSION_ATTRACTED_ZOMBIES = 15000 + ((0 << 8) | 4),
+    S0_EXPLOSIVES_PLANTED = 15000 + ((0 << 8) | 5),
+    S0_LOKE_DIALOGUE = 15000 + ((0 << 8) | 6),
+
+    // Sector 1 (0x01)
+    //...
+
+    // Sector 2 (0x02)
+    S2_MAST_ZONE_ENTER = 15000 + ((2 << 8) | 0),
+    S2_MAST_ENTER = 15000 + ((2 << 8) | 1),
+    S2_MAST_CLEAR = 15000 + ((2 << 8) | 2),
+
+    // Sector 3 (0x03)
+    S3_DIALOGUE_1 = 15000 + ((3 << 8) | 0),
+    S3_DIALOGUE_2 = 15000 + ((3 << 8) | 1)
+}

@@ -16,7 +16,7 @@ interface SpawnerTerminalProps {
     isMobileDevice?: boolean;
 }
 
-const ZOMBIE_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, EnemyType.BOMBER];
+const ZOMBIE_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, EnemyType.BLOATER];
 const SPAWN_LOCATIONS = ['NEAR', 'FOREST', 'FARM', 'VILLAGE'];
 const BOSS_IDS = [BossID.SECTOR_0, BossID.SECTOR_1, BossID.SECTOR_2, BossID.SECTOR_3];
 
@@ -30,7 +30,7 @@ export const ScreenTerminalSpawner: React.FC<SpawnerTerminalProps> = ({ onClose,
         [EnemyType.WALKER]: 1,
         [EnemyType.RUNNER]: 1,
         [EnemyType.TANK]: 1,
-        [EnemyType.BOMBER]: 1,
+        [EnemyType.BLOATER]: 1,
     });
     const [selectedBoss, setSelectedBoss] = useState<number | null>(null);
     const [spread, setSpread] = useState(10);

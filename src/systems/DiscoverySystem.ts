@@ -26,37 +26,34 @@ export class DiscoverySystem implements System {
         const state = session.state;
         if (!state) return false;
 
-        const sets = state.discovery.discoverySets;
-        const stats = state.sessionStats;
+        const career = state.careerStats;
         let isNew = false;
 
         switch (type) {
             case DiscoveryType.ZOMBIE:
-                if (!sets.discoveredZombies.has(id)) isNew = true;
+                if (career?.discoveredZombies && career.discoveredZombies[id] !== 1) isNew = true;
                 break;
             case DiscoveryType.BOSS:
-                if (!sets.discoveredBosses.has(id)) isNew = true;
+                if (career?.discoveredBosses && career.discoveredBosses[id] !== 1) isNew = true;
                 break;
             case DiscoveryType.CLUE: {
                 const clueSmi = DataResolver.resolveClueID(id);
-                if (clueSmi !== undefined && !sets.discoveredClues.has(clueSmi)) isNew = true;
+                if (clueSmi !== undefined && career?.discoveredClues && career.discoveredClues[clueSmi] !== 1) isNew = true;
                 break;
             }
             case DiscoveryType.POI: {
                 const poiSmi = DataResolver.resolvePoiID(id);
-                if (poiSmi !== undefined && !sets.discoveredPois.has(poiSmi)) isNew = true;
+                if (poiSmi !== undefined && career?.discoveredPois && career.discoveredPois[poiSmi] !== 1) isNew = true;
                 break;
             }
             case DiscoveryType.COLLECTIBLE: {
                 const colSmi = DataResolver.resolveCollectibleID(id);
-                if (colSmi !== undefined && !sets.discoveredCollectibles.has(colSmi)) isNew = true;
+                if (colSmi !== undefined && career?.discoveredCollectibles && career.discoveredCollectibles[colSmi] !== 1) isNew = true;
                 break;
             }
             case DiscoveryType.PERK: {
                 const perkSmi = Number(uiSmi !== undefined ? uiSmi : id);
-                const globalDiscovered = state.careerStats?.discoveredPerksMap ? state.careerStats.discoveredPerksMap[perkSmi] === 1 : false;
-
-                if (stats.discoveredPerksMap && perkSmi < stats.discoveredPerksMap.length && !stats.discoveredPerksMap[perkSmi] && !globalDiscovered) {
+                if (career?.discoveredPerks && perkSmi < career.discoveredPerks.length && !career.discoveredPerks[perkSmi]) {
                     isNew = true;
                     uiSmi = perkSmi;
                 }
@@ -68,32 +65,39 @@ export class DiscoverySystem implements System {
             const smi = uiSmi || (typeof id === 'number' ? id : 0);
             UIEventRingBuffer.push(UIEventType.DISCOVERY, smi, type, state.simTime);
 
-            // Persist the discovery to session sets (deduplication)
+            // Persist the discovery directly to the career profile
             switch (type) {
-                case DiscoveryType.ZOMBIE: sets.discoveredZombies.add(id); break;
-                case DiscoveryType.BOSS: sets.discoveredBosses.add(id); break;
+                case DiscoveryType.ZOMBIE:
+                    if (career?.discoveredZombies) career.discoveredZombies[id] = 1;
+                    break;
+                case DiscoveryType.BOSS:
+                    if (career?.discoveredBosses) career.discoveredBosses[id] = 1;
+                    break;
                 case DiscoveryType.CLUE: {
                     const clueSmi = DataResolver.resolveClueID(id);
-                    if (clueSmi !== undefined) sets.discoveredClues.add(clueSmi);
+                    if (clueSmi !== undefined) {
+                        if (career?.discoveredClues) career.discoveredClues[clueSmi] = 1;
+                    }
                     break;
                 }
                 case DiscoveryType.POI: {
                     const poiSmi = DataResolver.resolvePoiID(id);
-                    if (poiSmi !== undefined) sets.discoveredPois.add(poiSmi);
+                    if (poiSmi !== undefined) {
+                        if (career?.discoveredPois) career.discoveredPois[poiSmi] = 1;
+                    }
                     break;
                 }
                 case DiscoveryType.COLLECTIBLE: {
                     const colSmi = DataResolver.resolveCollectibleID(id);
-                    if (colSmi !== undefined) sets.discoveredCollectibles.add(colSmi);
+                    if (colSmi !== undefined) {
+                        if (career?.discoveredCollectibles) career.discoveredCollectibles[colSmi] = 1;
+                    }
                     break;
                 }
                 case DiscoveryType.PERK: {
                     const perkSmi = Number(uiSmi !== undefined ? uiSmi : id);
-                    if (stats.discoveredPerksMap && perkSmi < stats.discoveredPerksMap.length) {
-                        stats.discoveredPerksMap[perkSmi] = 1;
-                    }
-                    if (state.careerStats && state.careerStats.discoveredPerksMap && perkSmi < state.careerStats.discoveredPerksMap.length) {
-                        state.careerStats.discoveredPerksMap[perkSmi] = 1;
+                    if (career?.discoveredPerks && perkSmi < career.discoveredPerks.length) {
+                        career.discoveredPerks[perkSmi] = 1;
                     }
                     break;
                 }

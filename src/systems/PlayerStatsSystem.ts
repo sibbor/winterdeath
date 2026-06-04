@@ -5,7 +5,7 @@ import { VoiceSounds } from '../utils/audio/AudioLib';
 import { FXSystem } from './FXSystem';
 import { PlayerDeathState, DamageID, EnemyAttackType, DamageType } from '../entities/player/CombatTypes';
 import { PERKS } from '../content/perks';
-import { PlayerStatID, PlayerStatusFlags, TelemetrySourceOffset } from '../types/CareerStats';
+import { StatID, PlayerStatusFlags, TelemetrySourceOffset } from '../types/CareerStats';
 import { EnemyType, EnemyFlags } from '../entities/enemies/EnemyTypes';
 import { MAX_ENTITIES } from '../content/constants';
 import { DataResolver } from '../core/data/DataResolver';
@@ -26,17 +26,21 @@ export class PlayerStatsSystem implements System {
     isFixedStep = true;
 
     private damageTracker!: DamageTrackerSystem;
-    private perkSystem!: PerkSystem;
+    private perkSystem: PerkSystem | undefined;
 
     constructor(
-        private playerGroup: THREE.Group,
-        private t: (key: string) => string,
-        private activeFamilyMembers: { current: any[] }
+        private playerGroup: THREE.Group
     ) { }
+
+    private getPerkSystem(session: GameSessionLogic): PerkSystem {
+        if (!this.perkSystem) {
+            this.perkSystem = session.getSystem<PerkSystem>(SystemID.PERK_SYSTEM)!;
+        }
+        return this.perkSystem;
+    }
 
     init(session: GameSessionLogic) {
         this.damageTracker = session.getSystem<DamageTrackerSystem>(SystemID.DAMAGE_TRACKER)!;
-        this.perkSystem = session.getSystem<PerkSystem>(SystemID.PERK_SYSTEM)!;
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
@@ -69,10 +73,10 @@ export class PlayerStatsSystem implements System {
         if (state.combat.statusFlags & PlayerStatusFlags.DEAD) return;
 
         // Invulnerability Guard (Skip for DoTs/Hazards)
-        if (!isDoT && state.simTime < state.player.invulnerableUntil) return;
+        if (!isDoT && now < state.player.invulnerableUntil) return;
 
         // --- DAMAGE RESISTANCE ---
-        const resistance = state.player.statsBuffer[PlayerStatID.MULTIPLIER_DMG_RESIST] || 1.0;
+        const resistance = state.player.statsBuffer[StatID.MULTIPLIER_DMG_RESIST] || 1.0;
         const absorbed = damage * (1.0 - resistance);
         const damageAfterResist = damage * resistance;
 
@@ -85,7 +89,7 @@ export class PlayerStatsSystem implements System {
         }
 
         const actualDmg = Math.max(0, damageAfterResist);
-        state.player.statsBuffer[PlayerStatID.HP] -= actualDmg;
+        state.player.statsBuffer[StatID.HP] -= actualDmg;
 
         const isBite = damageSource === DamageID.BITE;
         let attackIndex = isBite ? EnemyAttackType.BITE : EnemyAttackType.HIT;
@@ -112,7 +116,7 @@ export class PlayerStatsSystem implements System {
         this.damageTracker.recordIncomingDamage(session, actualDmg, telemetrySourceKey as any, telemetryAttackIndex, (attacker?.statusFlags & EnemyFlags.BOSS) !== 0);
 
         if (effectType !== undefined) {
-            this.perkSystem.applyPerk(session, effectType, effectDuration, effectIntensity);
+            this.getPerkSystem(session).applyPerk(session, effectType, effectDuration, effectIntensity);
         }
 
         if (!isDoT) {
@@ -131,8 +135,8 @@ export class PlayerStatsSystem implements System {
             FXSystem.spawnParticle(session.engine.scene, state.combat.particles, this.playerGroup.position.x, 1.5, this.playerGroup.position.z, FXParticleType.BLOOD_SPLATTER, 6);
         }
 
-        if (state.player.statsBuffer[PlayerStatID.HP] <= 0) {
-            state.player.statsBuffer[PlayerStatID.HP] = 0;
+        if (state.player.statsBuffer[StatID.HP] <= 0) {
+            state.player.statsBuffer[StatID.HP] = 0;
             let finalAttackType = specificAttackType !== undefined ? specificAttackType : EnemyAttackType.HIT;
             if (isDoT && effectType !== undefined) {
                 finalAttackType = EnemyAttackType.ENVIRONMENTAL;
@@ -244,7 +248,7 @@ export class PlayerStatsSystem implements System {
             const cooldown = PERKS[StatusEffectID.ADRENALINE_PATCH]?.cooldown || 15000;
             if (now - (state.combat.lastAdrenalineTime || 0) > cooldown) {
                 state.combat.lastAdrenalineTime = now;
-                this.perkSystem.applyPerk(session, StatusEffectID.ADRENALINE_PATCH);
+                this.getPerkSystem(session).applyPerk(session, StatusEffectID.ADRENALINE_PATCH);
             }
         }
 
@@ -253,7 +257,7 @@ export class PlayerStatsSystem implements System {
             const cooldown = PERKS[StatusEffectID.GIB_MASTER]?.cooldown || 30000;
             if (now - (state.combat.lastGibMasterTime || 0) > cooldown) {
                 state.combat.lastGibMasterTime = now;
-                this.perkSystem.applyPerk(session, StatusEffectID.GIB_MASTER);
+                this.getPerkSystem(session).applyPerk(session, StatusEffectID.GIB_MASTER);
             }
         }
 
@@ -262,7 +266,7 @@ export class PlayerStatsSystem implements System {
             const cooldown = qfPerk.cooldown || 10000;
             if (now - (state.combat.lastQuickFingerTime || 0) > cooldown) {
                 state.combat.lastQuickFingerTime = now;
-                this.perkSystem.applyPerk(session, StatusEffectID.QUICK_FINGER);
+                this.getPerkSystem(session).applyPerk(session, StatusEffectID.QUICK_FINGER);
             }
         }
 

@@ -26,7 +26,7 @@ export class ZombieRenderer {
         this.createInstances(EnemyType.WALKER, this.getMat(ZOMBIE_TYPES[EnemyType.WALKER].color.num));
         this.createInstances(EnemyType.RUNNER, this.getMat(ZOMBIE_TYPES[EnemyType.RUNNER].color.num));
         this.createInstances(EnemyType.TANK, this.getMat(ZOMBIE_TYPES[EnemyType.TANK].color.num));
-        this.createInstances(EnemyType.BOMBER, this.getMat(ZOMBIE_TYPES[EnemyType.BOMBER].color.num));
+        this.createInstances(EnemyType.BLOATER, this.getMat(ZOMBIE_TYPES[EnemyType.BLOATER].color.num));
 
         this._updateMeshList();
     }

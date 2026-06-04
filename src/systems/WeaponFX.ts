@@ -49,9 +49,9 @@ let _lightsInjected = false;
 const initPools = (scene: THREE.Scene) => {
     if (_poolsInitialized) return;
 
-    // [VINTERDÖD FIX] Rock-solid dual-material setup that works perfectly for lightning
-    const matMain = new THREE.LineBasicMaterial({ color: COLORS.ELECTRIC_FLASH.num, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 });
-    const matCore = new THREE.LineBasicMaterial({ color: COLORS.WHITE.num, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.9 });
+    // Arc cannon lightning uses shared materials from the central registry (no per-init allocations)
+    const matMain = MATERIALS.arc_cannon_bolt;
+    const matCore = MATERIALS.arc_cannon_core;
 
     for (let i = 0; i < LIGHTNING_POOL_SIZE; i++) {
         const geoMain = new THREE.BufferGeometry();
@@ -179,24 +179,26 @@ export const WeaponFX = {
     // Flamethrower flames
     drawFlames: (scene: THREE.Scene, start: THREE.Vector3, direction: THREE.Vector3, range: number) => {
         // Ported to Zero-GC ParticlePool
-        const spread = 0.035; // Narrow spread to prevent massive cone!
-        const speed = 26 + Math.random() * 4;
-        const life = range / speed; // Reaches exactly as long as the weapon does damage!
+        const spread = 0.16; // Wider spread for a clean, expanding cone
+        const baseSpeed = 22.0;
 
-        const vx = direction.x * speed + (Math.random() - 0.5) * spread * speed;
-        const vy = direction.y * speed + (Math.random() - 0.5) * spread * speed;
-        const vz = direction.z * speed + (Math.random() - 0.5) * spread * speed;
+        for (let i = 0; i < 2; i++) {
+            const speed = baseSpeed + Math.random() * 6.0;
+            const life = (range / speed) * (0.85 + Math.random() * 0.3); // Reaches exactly as long as the weapon does damage!
 
-        const scale = 0.28 + Math.random() * 0.35; // Larger, more visible flames
+            const vx = direction.x * speed + (Math.random() - 0.5) * spread * speed;
+            const vy = direction.y * speed + (Math.random() - 0.5) * spread * speed;
+            const vz = direction.z * speed + (Math.random() - 0.5) * spread * speed;
 
-        // Dynamic fire colors
-        let r = 1.0, g = 0.4, b = 0.0;
-        const rand = Math.random();
-        if (rand > 0.8) { r = 1.0; g = 0.8; b = 0.0; } // Yellow
-        else if (rand > 0.4) { r = 1.0; g = 0.26; b = 0.0; } // Orange
-        else { r = 0.66; g = 0.06; b = 0.0; } // Dark Red
+            const scale = 0.35 + Math.random() * 0.3; // Base scale
 
-        ParticlePool.spawnParticle(start.x, start.y, start.z, vx, vy, vz, scale, life, r, g, b);
+            // Initial color: bright yellow (low blue so it is immediately classified as a flame)
+            const r = 1.0;
+            const g = 0.95;
+            const b = 0.1;
+
+            ParticlePool.spawnParticle(start.x, start.y, start.z, vx, vy, vz, scale, life, r, g, b);
+        }
 
         // A logical light throws fire color from the flames (at ~20% frequency)
         if (Math.random() < 0.20) {

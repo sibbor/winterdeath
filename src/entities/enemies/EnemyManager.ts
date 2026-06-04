@@ -3,7 +3,7 @@ import { SystemID } from '../../systems/System';
 import { MATERIALS } from '../../utils/assets';
 import { KMH_TO_MS, AI_LOD } from '../../content/constants';
 import { EnemyPoolState, ENEMY_POOL_SIZE } from '../../core/state/EnemyPool';
-import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_SCORE, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType, EnemyDeathDecal, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
+import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_XP, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType, EnemyDeathDecal, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { COLORS, ENEMY_COLORS } from '../../utils/ui/ColorUtils';
 import { AbilityID, DamageID, DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { StatusEffectID } from '../../types/StatusEffects';
@@ -169,8 +169,6 @@ const _aiContext: AIContext = {
     _realOnPlayerHit: null
 };
 
-// Removed buckets for flat pool optimization (Phase 6)
-
 export const EnemyManager = {
     systemId: SystemID.ENEMY_MANAGER,
     id: 'enemy_manager',
@@ -252,11 +250,11 @@ export const EnemyManager = {
         const playerStatusFlags = state.combat.statusFlags;
         const water = session.engine.water;
         const ground = session.engine.ground;
-        const callbacks = state.callbacks;
+        const callbacks = session.sectorCtx as any;
         const onPlayerHit = callbacks?.onPlayerHit;
         const spawnParticle = callbacks?.spawnParticle;
         const spawnDecal = callbacks?.spawnDecal;
-        const applyDamage = state.applyDamage;
+        const applyDamage = callbacks?.applyDamage;
 
         _frameCount++;
         _syncList.length = 0;
@@ -274,7 +272,7 @@ export const EnemyManager = {
         const cameraPos = camera.threeCamera.position;
         const cameraDir = _camDir.set(0, 0, -1).applyQuaternion(camera.threeCamera.quaternion);
 
-        // --- PHASE 6: CONTIGUOUS POOL UPDATE ---
+        // --- CONTIGUOUS POOL UPDATE ---
         for (let i = 0; i < activeCount; i++) {
             const e = activeEnemies[i];
             if (!e) continue;
@@ -629,7 +627,7 @@ export const EnemyManager = {
         e.maxHp = ENEMY_MAX_HP[newType];
         e.hp = e.maxHp;
         e.speed = ENEMY_BASE_SPEED[newType] * KMH_TO_MS;
-        e.score = ENEMY_SCORE[newType];
+        e.xp = ENEMY_XP[newType];
         e.color = ENEMY_COLOR[newType];
         e.originalScale = ENEMY_SCALE[newType];
         e.widthScale = ENEMY_WIDTH_SCALE[newType];
@@ -826,7 +824,7 @@ export const EnemyManager = {
             enemy.statusFlags |= EnemyFlags.GIBBED;
             if (callbacks.session) {
                 const tracker = (callbacks.session as GameSessionLogic).getSystem<any>(SystemID.DAMAGE_TRACKER);
-                if (tracker) tracker.recordGib(callbacks.session);
+                if (tracker) tracker.recordGib(callbacks.session, enemy.lastDamageType);
             }
         }
 
@@ -1139,7 +1137,8 @@ export const EnemyManager = {
                 const damage = (isRush || isDodge) ? baseDamage : Math.ceil(maxDamage * falloff);
 
                 if (damage > 0 || (isRush || isDodge)) {
-                    if (ctx.applyDamage) ctx.applyDamage(e, damage, damageType, damageSource, maxForce >= 20);
+                    const finalDamageSource = damageSource;
+                    if (ctx.applyDamage) ctx.applyDamage(e, damage, damageType, finalDamageSource, maxForce >= 20);
                     else e.hp -= damage;
                 }
 
@@ -1197,14 +1196,12 @@ export const EnemyManager = {
 
         const scene = session.engine.scene;
 
-        // Redirect damage through the centralized system to ensure proper telemetry and XP attribution
-        session.damageTracker.recordOutgoingDamage(session, baseDamage, DamageID.VEHICLE_SPLATTER, (e.statusFlags & EnemyFlags.BOSS) !== 0);
-
-        // Call applyDamage instead of direct HP mutation to trigger centralized onEnemyKilled
+        // Call applyDamage instead of direct HP mutation to trigger centralized onEnemyKilled and telemetry
         const applyDamage = session.state.applyDamage;
         if (applyDamage) {
             applyDamage(e, baseDamage, vehicleDef.defaultDamageType as DamageType, vehicleDef.defaultDamageID as DamageID);
         } else {
+            session.damageTracker.recordOutgoingDamage(session, baseDamage, DamageID.VEHICLE_SPLATTER, (e.statusFlags & EnemyFlags.BOSS) !== 0);
             e.hp -= baseDamage;
         }
 
@@ -1273,9 +1270,9 @@ export const EnemyManager = {
     ) => {
         const scene = session.engine.scene;
         const state = session.state;
-        const callbacks = state.callbacks;
+        const callbacks = session.sectorCtx as any;
 
-        // --- PHASE 6: CONTIGUOUS CLEANUP ---
+        // --- CONTIGUOUS CLEANUP ---
         let i = 0;
         while (i < activeCount) {
             const e = activeEnemies[i];
@@ -1316,10 +1313,10 @@ export const EnemyManager = {
             if (shouldCleanup) {
                 // [VINTERDÖD FIX] Telemetry is now handled centrally by GameSessionLogic/PlayerStatsSystem 
                 // during the applyDamage tick. recordKill here was causing double-counting.
-                if (callbacks.gainXp) callbacks.gainXp(e.score || 10);
+                if (callbacks?.rewardXP) callbacks.rewardXP(e.xp || 10);
 
                 if ((e.statusFlags & EnemyFlags.BOSS) !== 0 && e.bossId !== undefined && e.bossId !== -1) {
-                    if (callbacks.onBossKilled) callbacks.onBossKilled(e.bossId);
+                    if (callbacks?.onBossKilled) callbacks.onBossKilled(e.bossId);
                     LootSystem.spawnScrapExplosion(scene, e.mesh.position.x, e.mesh.position.z, 500);
                 } else if (Math.random() < 0.15) {
                     LootSystem.spawnScrapExplosion(scene, e.mesh.position.x, e.mesh.position.z, 1 + Math.floor(Math.random() * 5));
