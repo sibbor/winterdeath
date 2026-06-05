@@ -603,9 +603,11 @@ export const EnemyAI = {
                     logStateChange(simTime, e, AIState.WANDER);
                     e.state = AIState.WANDER;
 
+                    // Choose a wander target within 5 to 10 meters of spawnPos
                     const angle = Math.random() * (TWO_PI);
+                    const wanderRadius = 5.0 + Math.random() * 5.0; // 5-10 meters
                     const spawnY = ground.getGroundHeight(e.spawnPos.x, e.spawnPos.z, session);
-                    _v1.set(e.spawnPos.x + Math.cos(angle) * 6, spawnY, e.spawnPos.z + Math.sin(angle) * 6);
+                    _v1.set(e.spawnPos.x + Math.cos(angle) * wanderRadius, spawnY, e.spawnPos.z + Math.sin(angle) * wanderRadius);
                     e.velocity.subVectors(_v1, e.mesh.position).normalize().multiplyScalar(e.speed * 0.5);
                     e.searchTimer = 2.0 + Math.random() * 3.0;
                 }
@@ -618,6 +620,12 @@ export const EnemyAI = {
                 // Movement Lock Guard applied ONLY to physical displacement
                 if (!isTier4 && !isKnockedBackH) {
                     moveEntity(e, _v1, delta, e.speed * 0.5, streamer, ground, session, _v5, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                }
+
+                // If wandering takes us too far from spawn pos, return towards it
+                const distToSpawnSq = e.mesh.position.distanceToSquared(e.spawnPos);
+                if (distToSpawnSq > 144.0) { // 12m limit threshold (squared)
+                    e.velocity.subVectors(e.spawnPos, e.mesh.position).normalize().multiplyScalar(e.speed * 0.5);
                 }
 
                 if (seesPlayer) {
@@ -649,13 +657,36 @@ export const EnemyAI = {
                     logStateChange(simTime, e, AIState.IDLE);
                     e.state = AIState.IDLE;
                     e.idleTimer = 1.0 + Math.random() * 2.0;
-                } else if (e.mesh.position.distanceToSquared(e.lastKnownPosition) > 2.25) { // 1.5m threshold (squared)
-                    // Movement Lock Guard
-                    if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, streamer, ground, session, _v5, simTime, renderTime, false, isTier1, isTier2, frameOffset);
-                    }
                 } else {
-                    e.mesh.rotation.y += delta * 2.5;
+                    const distToLastSq = e.mesh.position.distanceToSquared(e.lastKnownPosition);
+                    if (distToLastSq > 4.0) { // 2.0m threshold (squared)
+                        // Movement Lock Guard
+                        if (!isTier4 && !isKnockedBackH) {
+                            moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, streamer, ground, session, _v5, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                        }
+                    } else {
+                        // Once they reach the player's last known location, they wander locally within 4-8m of it searching
+                        if (!e.localSearchTarget) {
+                            e.localSearchTarget = new THREE.Vector3();
+                        }
+                        
+                        const timeInSec = Math.floor(simTime / 1000);
+                        if (e.localSearchTarget.lengthSq() === 0 || (timeInSec % 3 === 0 && Math.random() > 0.7)) {
+                            const angle = Math.random() * (TWO_PI);
+                            const searchRad = 4.0 + Math.random() * 4.0;
+                            const searchY = ground.getGroundHeight(e.lastKnownPosition.x, e.lastKnownPosition.z, session);
+                            e.localSearchTarget.set(
+                                e.lastKnownPosition.x + Math.cos(angle) * searchRad,
+                                searchY,
+                                e.lastKnownPosition.z + Math.sin(angle) * searchRad
+                            );
+                        }
+
+                        if (!isTier4 && !isKnockedBackH) {
+                            moveEntity(e, e.localSearchTarget, delta, e.speed * 0.6, streamer, ground, session, _v5, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                        }
+                        e.mesh.rotation.y += delta * 1.5;
+                    }
                 }
                 break;
 

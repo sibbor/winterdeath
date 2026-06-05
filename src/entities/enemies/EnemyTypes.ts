@@ -270,4 +270,5 @@ export interface Enemy {
     _sqf: number;
     _internalBucketIdx: number;
     isWaveEnemy?: boolean;
+    localSearchTarget?: THREE.Vector3;
 }
