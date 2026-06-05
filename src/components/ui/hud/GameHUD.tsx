@@ -670,22 +670,54 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             // Wave HP/Kills Update
             if (data.waveActive) {
                 if (wavePanelRef.current) {
-                    wavePanelRef.current.style.display = 'flex';
+                    if (wavePanelRef.current.style.display !== 'flex') {
+                        wavePanelRef.current.style.display = 'flex';
+                        wavePanelRef.current.classList.add('hud-wave-panel-active');
+                    }
                 }
-                if (waveNameRef.current && data.waveName !== cache.waveName) {
-                    waveNameRef.current.innerText = t(data.waveName);
+                const isCleared = data.waveProgress >= 1.0;
+                if (waveNameRef.current && (data.waveName !== cache.waveName || isCleared !== cache.waveCleared)) {
+                    if (isCleared) {
+                        waveNameRef.current.innerText = t('ui.wave_cleared') || 'WAVE CLEARED';
+                        waveNameRef.current.classList.add('hud-wave-cleared-text');
+                    } else {
+                        waveNameRef.current.innerText = t(data.waveName);
+                        waveNameRef.current.classList.remove('hud-wave-cleared-text');
+                    }
                     cache.waveName = data.waveName;
+                    cache.waveCleared = isCleared;
                 }
                 if (waveBarRef.current) {
                     waveBarRef.current.style.transform = `scaleX(${Math.max(0, Math.min(1, data.waveProgress))})`;
+                    if (isCleared) {
+                        waveBarRef.current.classList.add('hud-wave-cleared-bar');
+                    } else {
+                        waveBarRef.current.classList.remove('hud-wave-cleared-bar');
+                    }
                 }
                 if (waveTextRef.current) {
                     waveTextRef.current.innerText = `${data.waveKills} / ${data.waveTarget}`;
+                    if (isCleared) {
+                        waveTextRef.current.classList.add('hud-wave-cleared-text');
+                    } else {
+                        waveTextRef.current.classList.remove('hud-wave-cleared-text');
+                    }
                 }
             } else {
                 if (wavePanelRef.current) {
                     wavePanelRef.current.style.display = 'none';
+                    wavePanelRef.current.classList.remove('hud-wave-panel-active');
                 }
+                if (waveNameRef.current) {
+                    waveNameRef.current.classList.remove('hud-wave-cleared-text');
+                }
+                if (waveBarRef.current) {
+                    waveBarRef.current.classList.remove('hud-wave-cleared-bar');
+                }
+                if (waveTextRef.current) {
+                    waveTextRef.current.classList.remove('hud-wave-cleared-text');
+                }
+                cache.waveCleared = false;
             }
 
             // 7. Vehicle Speed & Throttle (Bypassed if not driving!)

@@ -106,6 +106,9 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
       if (state.metaSignalTimestamp > lastProcessedTimestamp) {
         lastProcessedTimestamp = state.metaSignalTimestamp;
         if (state.lastMetaSignal === MetaActionId.NAV_CONFIRM) {
+          // Do not steal [Enter] while a cinematic dialogue is playing —
+          // the player is advancing dialogue lines, not confirming the popup.
+          if (state.cinematicActive || state.dialogueActive) return;
           handleInteraction();
         }
       }

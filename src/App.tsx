@@ -42,6 +42,7 @@ import { HudStore } from './store/HudStore';
 import { SectorSystem } from './systems/SectorSystem';
 import { OverlayType, DiscoveryType } from './components/ui/hud/HudTypes';
 import { StatsBridge } from './core/data/StatsBridge';
+import { MAX_ENTITIES } from './content/constants';
 
 // ============================================================================
 // ZERO-GC: Static Fallback Objects
@@ -581,7 +582,7 @@ const App: React.FC = () => {
             const currentMap = StatsBridge.getPerkDiscoveredMap(prev.stats);
             if (currentMap && currentMap[perkId] === 1) return prev;
 
-            const length = currentMap ? currentMap.length : 16384;
+            const length = currentMap ? currentMap.length : MAX_ENTITIES.DISCOVERY_MAP_SIZE;
             const newMap = new Uint8Array(length);
             if (currentMap) newMap.set(currentMap);
             newMap[perkId] = 1;

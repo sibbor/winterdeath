@@ -48,28 +48,40 @@ const disposeMaterialTextures = (material: THREE.Material) => {
     if (m.envMap) m.envMap.dispose();
 };
 
-// --- HELPER: Generate a simple Environment Map for reflections ---
-const createEnvMap = () => {
+/**
+ * Build a PMREM-prefiltered environment cube map from a simple gradient.
+ * Must be called AFTER a WebGLRenderer exists so PMREMGenerator can
+ * compile its internal shaders on that context.
+ * The raw equirectangular texture is disposed immediately after processing
+ * to free GPU memory — only the filtered cube is kept.
+ */
+const buildPmremEnvMap = (renderer: THREE.WebGLRenderer): THREE.Texture => {
     const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 256;
-    const context = canvas.getContext('2d');
-    if (context) {
-        // Create a simple gradient to simulate a sky/ground environment
-        const gradient = context.createLinearGradient(0, 0, 0, 256);
-        gradient.addColorStop(0, '#555566'); // "Sky"
-        gradient.addColorStop(0.5, '#ffffff'); // "Horizon line" (bright reflection)
-        gradient.addColorStop(1, '#222222'); // "Ground"
-        context.fillStyle = gradient;
-        context.fillRect(0, 0, 512, 256);
+    // 256×128 is sufficient for a simple gradient env map and keeps GPU cost low.
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        const gradient = ctx.createLinearGradient(0, 0, 0, 128);
+        gradient.addColorStop(0,   '#555566'); // Sky
+        gradient.addColorStop(0.5, '#ffffff'); // Horizon (bright reflection)
+        gradient.addColorStop(1,   '#222222'); // Ground
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 256, 128);
     }
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.mapping = THREE.EquirectangularReflectionMapping;
-    texture.minFilter = THREE.LinearFilter; // Prevent unnecessary mipmap generation warnings
-    return texture;
-};
+    const equirect = new THREE.CanvasTexture(canvas);
+    equirect.mapping = THREE.EquirectangularReflectionMapping;
 
-const envMapTexture = createEnvMap();
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    const envMap = pmrem.fromEquirectangular(equirect).texture;
+
+    // Release the PMREM generator and the temporary equirectangular texture.
+    pmrem.dispose();
+    equirect.dispose();
+
+    return envMap;
+};
 
 const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked, autoReady }) => {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -127,7 +139,6 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
         const height = size.height > 0 ? size.height : container.clientHeight || 256;
 
         const scene = new THREE.Scene();
-        scene.environment = envMapTexture;
 
         const aspect = width / Math.max(0.1, height);
         const camera = new THREE.PerspectiveCamera(45, aspect, 0.01, 100);
@@ -140,11 +151,18 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
             antialias: true,
             alpha: true,
             powerPreference: 'high-performance',
-            precision: 'highp'
+            precision: 'mediump'
         });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(width, height);
         container.appendChild(renderer.domElement);
+
+        // Build the PMREM-filtered env map now that we have a live renderer.
+        // Assigning this (not a raw equirectangular texture) to scene.environment
+        // is what Three.js MeshStandardMaterial physically expects — skipping
+        // PMREM causes the HLSL/GLSL polar-face divide-by-zero warnings.
+        const pmremEnvMap = buildPmremEnvMap(renderer);
+        scene.environment = pmremEnvMap;
 
         // --- Lighting ---
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
@@ -248,6 +266,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked,
             dropShadow.geometry.dispose();
             disposeMaterialTextures(dropShadow.material);
             (dropShadow.material as THREE.Material).dispose();
+            pmremEnvMap.dispose();
             scene.clear();
             renderer.dispose();
             renderer.forceContextLoss();
