@@ -66,6 +66,10 @@ export interface EnvironmentalZone {
   windStrength?: number;
   polygon?: { x: number, z: number }[];
   polygonFadeDistance?: number;
+  minX?: number;
+  maxX?: number;
+  minZ?: number;
+  maxZ?: number;
 }
 
 export interface TargetEnvironment {

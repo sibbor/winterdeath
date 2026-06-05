@@ -179,30 +179,12 @@ export class CinematicSystem implements System {
             return;
         }
 
-        // 2. Handle Trigger-based pauses (Sector logic / Cutscenes)
-        if (line.trigger && !cinematic.fadingOut) {
-            console.log(`[CinematicSystem] Line ${index} has trigger. Fading out.`);
-            cinematic.fadingOut = true;
-
-            // Immediately clear the previous line to give the transition space
-            this.state.ui.cinematicLine.active = false;
-            this.state.ui.cinematicLine.text = '';
-
-            // Run triggers
+        // Run triggers immediately when the line starts to ensure state changes (e.g. boss spawn, family found) execute.
+        if (line.trigger) {
             const triggers = Array.isArray(line.trigger) ? line.trigger : [line.trigger];
             triggers.forEach(t => {
                 if (this.callbacks.onAction) this.callbacks.onAction(typeof t === 'string' ? { type: t } : t);
             });
-
-            const currentScript = cinematic.script;
-            setTimeout(() => {
-                // [VINTERDÖD FIX] Only advance if we haven't already moved to this line (e.g. via click)
-                // AND if the script hasn't changed due to a new cinematic starting.
-                if (cinematic.active && cinematic.lineIndex < index && cinematic.script === currentScript) {
-                    this.playLine(index);
-                }
-            }, 800);
-            return;
         }
 
         // --- LINE ACTIVATION ---

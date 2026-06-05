@@ -105,6 +105,7 @@ export interface SetupContext {
         rewardXP: (amount: number) => void;
         rewardSP: (amount: number) => void;
         rewardScrap: (amount: number) => void;
+        onPlayerHit?: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
     }
 }
 
@@ -462,6 +463,7 @@ export class GameSessionSetup {
             spawnParticle: callbacks.spawnParticle,
             spawnDecal: callbacks.spawnDecal,
             applyDamage: state.applyDamage,
+            onPlayerHit: callbacks.onPlayerHit,
             environmentalZones: []
         };
     }

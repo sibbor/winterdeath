@@ -656,7 +656,8 @@ export const EnemyManager = {
             e.mesh.position.set(playerPos.x + Math.cos(angle) * dist, 0, playerPos.z + Math.sin(angle) * dist);
         }
 
-
+        e.spawnPos.copy(e.mesh.position);
+        e.lastKnownPosition.copy(e.mesh.position);
         e.deathState = EnemyDeathState.ALIVE;
         e.velocity.set(0, 0, 0);
         e.knockbackVel.set(0, 0, 0);

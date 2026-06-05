@@ -1278,12 +1278,6 @@ export const Sector0: SectorDef = {
                 "sector_events.0.4.reaction"
             );
 
-            // TODO: implement support for proper enemy wave spawning
-            // In this case: spawn 1 wave with 18 zombies from different locations
-            // 'zombiesKilled' & 'zombiesKillTarget' will go into the enemy wave system
-            // 'startingKills' should be removed
-            // enemies needs either pooled into a wave or tagged with "waveId: 0" or the like
-            // in order to be tracked by the enemy wave system
             // Start the wave using the EnemyWaveSystem
             const enemyWaveSystem = engine.getSystem(SystemID.ENEMY_WAVE_SYSTEM) as EnemyWaveSystem;
             if (enemyWaveSystem) {

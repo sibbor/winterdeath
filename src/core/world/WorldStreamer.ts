@@ -214,8 +214,11 @@ export class WorldStreamer implements System {
         this.resetQueryPools();
 
         // --- AUTOMATIC HIBERNATION ---
-        // Recycle chunks that are out of simulation range to keep the pool healthy.
-        // We look up the player position from the session state.
+        // VINTERDÖD AUDIT FIX: Disabled automatic hibernation.
+        // Static props (obstacles, interactables, triggers) are registered once during sector setup.
+        // Hibernating chunk grids removes these static colliders and triggers, leaving meshes visible but without physical collision when the player returns.
+        // Since sector dimensions are bounded and grids are pooled, maintaining active grids for the session is safe, high-performance, and Zero-GC.
+        /*
         const playerPos = session.state?.player?.position || (session.playerGroup?.position);
 
         if (playerPos && this.chunks.size > 0) {
@@ -223,7 +226,6 @@ export class WorldStreamer implements System {
             const pZ = playerPos.z;
             const HIBERNATION_RADIUS_SQ = SPATIAL_CONFIG.AI_HIBERNATION_RADIUS_SQ;
 
-            // Fix 1: Map Destructuring GC Overhead & Hibernate Loop Safety (Optimized: Bounded Loop)
             _hibernateKeyCount = 0;
             for (let i = 0; i < this._activeChunkCount; i++) {
                 const key = this._activeChunkKeys[i];
@@ -246,6 +248,7 @@ export class WorldStreamer implements System {
                 this.hibernateChunk(_hibernateKeyScratch[i]);
             }
         }
+        */
 
         // --- STRESS HARNESS: MONITOR EXECUTION BUDGET ---
         RuntimeStressHarness.monitorFrame(startTime);

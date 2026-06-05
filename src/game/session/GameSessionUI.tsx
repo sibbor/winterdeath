@@ -118,6 +118,7 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
             <CinematicDialogue
                 ref={refs.bubbleRef}
                 isMobileDevice={gameProps.isMobileDevice}
+                onComplete={callbacks.triggerCinematicNext}
             />
 
             {!uiState.isSectorLoading && !uiState.cinematicActive && !uiState.forceHideHUD && (

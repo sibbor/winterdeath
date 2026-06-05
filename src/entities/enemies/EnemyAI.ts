@@ -19,8 +19,9 @@ import { NavigationSystem } from '../../systems/NavigationSystem';
 import { applyCollisionResolution } from '../../core/world/CollisionResolution';
 import { FXParticleType } from '../../types/FXTypes';
 import { StatusEffectID } from '../../types/StatusEffects';
-import { COMBAT, MAX_ENTITIES, AI_LOD } from '../../content/constants';
+import { COMBAT } from '../../content/constants';
 import { ENEMY_DETECTION } from '../../entities/enemies/EnemyTypes';
+import { SystemID } from '../../systems/SystemID';
 
 const _waterCheckResult = { flatDepth: 0 };
 
@@ -30,6 +31,7 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
+const _wanderTarget = new THREE.Vector3();
 
 // --- PRE-CALCULATED CONSTANTS ---
 const TWO_PI = Math.PI * 2;
@@ -42,8 +44,6 @@ export const logStateChange = (simTime: number, e: Enemy, newState: AIState, rea
     const typeName = DataResolver.getEnemyName(e.type, e.bossId);
     console.log(`[EnemyAI] ${typeName} ${e.id} changed state: ${AIState[e.state]} -> ${AIState[newState]} ${reason ? `(${reason})` : ''}`);
 };
-
-import { SystemID } from '../../systems/SystemID';
 
 export const EnemyAI = {
     systemId: SystemID.ENEMY_AI,
@@ -615,11 +615,11 @@ export const EnemyAI = {
 
             case AIState.WANDER:
                 e.searchTimer -= delta;
-                _v1.set(e.mesh.position.x + e.velocity.x * delta, e.mesh.position.y + e.velocity.y * delta, e.mesh.position.z + e.velocity.z * delta);
+                _wanderTarget.set(e.mesh.position.x + e.velocity.x * delta, e.mesh.position.y + e.velocity.y * delta, e.mesh.position.z + e.velocity.z * delta);
 
                 // Movement Lock Guard applied ONLY to physical displacement
                 if (!isTier4 && !isKnockedBackH) {
-                    moveEntity(e, _v1, delta, e.speed * 0.5, streamer, ground, session, _v5, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                    moveEntity(e, _wanderTarget, delta, e.speed * 0.5, streamer, ground, session, _v5, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                 }
 
                 // If wandering takes us too far from spawn pos, return towards it
@@ -669,7 +669,7 @@ export const EnemyAI = {
                         if (!e.localSearchTarget) {
                             e.localSearchTarget = new THREE.Vector3();
                         }
-                        
+
                         const timeInSec = Math.floor(simTime / 1000);
                         if (e.localSearchTarget.lengthSq() === 0 || (timeInSec % 3 === 0 && Math.random() > 0.7)) {
                             const angle = Math.random() * (TWO_PI);
@@ -950,10 +950,14 @@ export const EnemyAI = {
 
 // --- HELPERS ---
 function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, streamer: WorldStreamer, ground: any, session: any, sepForce: THREE.Vector3, simTime: number, renderTime: number, isChasing: boolean, isTier1: boolean, isTier2: boolean, frameOffset: number) {
-    // 1. NAVIGATION: Get desired steering vector from FlowField
-    NavigationSystem.getFlowVector(e.mesh.position.x, e.mesh.position.z, _v1);
+    // 1. NAVIGATION: Get desired steering vector from FlowField (only when actively chasing the player)
+    if (isChasing) {
+        NavigationSystem.getFlowVector(e.mesh.position.x, e.mesh.position.z, _v1);
+    } else {
+        _v1.set(0, 0, 0);
+    }
 
-    // Fallback to straight-line to target if outside flow grid or target reached
+    // Fallback to straight-line to target if outside flow grid, target reached, or not chasing
     if (_v1.x === 0 && _v1.z === 0) {
         _v1.set(target.x, e.mesh.position.y, target.z);
         _v1.sub(e.mesh.position);

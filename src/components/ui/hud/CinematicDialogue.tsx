@@ -101,9 +101,7 @@ const CinematicDialogue = forwardRef<CinematicDialogueHandle, CinematicDialogueP
                     startTyping();
                 }
             } else {
-                // FIX: Läs från isVisibleRef istället för React-staten. Nu fungerar uppstädningen!
                 if (isVisibleRef.current || rawTextRef.current !== '') {
-                    console.log("CinematicDialogue: active = false. Cleaning up.");
                     lastDialogueKeyRef.current = null;
 
                     setIsVisible(false);
@@ -139,33 +137,43 @@ const CinematicDialogue = forwardRef<CinematicDialogueHandle, CinematicDialogueP
                 }
                 setIsFinished(true);
                 isFinishedRef.current = true;
-                if (onComplete) onComplete();
             }
         }, 30);
     };
 
-    useImperativeHandle(ref, () => ({
-        finishTyping: () => {
-            // FIX: Använd refs här också för absolut stabilitet!
-            if (!isFinishedRef.current && isVisibleRef.current) {
-                if (timerRef.current !== null) {
-                    clearInterval(timerRef.current);
-                    timerRef.current = null;
-                }
-                setIsFinished(true);
-                isFinishedRef.current = true;
-
-                visibleCountRef.current = totalCharsRef.current;
-                updateDOMText(totalCharsRef.current);
-                if (onComplete) onComplete();
-                return true;
+    const finishTyping = useCallback(() => {
+        if (!isFinishedRef.current && isVisibleRef.current) {
+            if (timerRef.current !== null) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
             }
-            return false;
+            setIsFinished(true);
+            isFinishedRef.current = true;
+
+            visibleCountRef.current = totalCharsRef.current;
+            updateDOMText(totalCharsRef.current);
+            return true;
         }
+        return false;
+    }, [updateDOMText]);
+
+    useImperativeHandle(ref, () => ({
+        finishTyping
     }));
 
     return (
-        <div ref={containerRef} className={isVisible ? CONTAINER_VISIBLE : CONTAINER_HIDDEN}>
+        <div 
+            ref={containerRef} 
+            className={`${isVisible ? CONTAINER_VISIBLE : CONTAINER_HIDDEN} pointer-events-auto cursor-pointer`}
+            onClick={() => {
+                if (isVisible) {
+                    const wasTyping = finishTyping();
+                    if (!wasTyping) {
+                        if (onComplete) onComplete();
+                    }
+                }
+            }}
+        >
             <div className={`w-[90%] md:w-[60%] max-w-4xl relative ${isMobileDevice ? 'scale-90 origin-bottom' : ''}`}>
                 <div className="hud-bar-container bg-black/95 backdrop-blur-xl p-6 md:p-8 min-h-[100px] relative shadow-2xl">
                     <div className="absolute top-0 left-0 w-2 h-full opacity-60" style={{ backgroundColor: bgColor }} />
