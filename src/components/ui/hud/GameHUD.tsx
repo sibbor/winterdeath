@@ -400,6 +400,7 @@ const ActionBarPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, h
             result.push(
                 <button key={slot} data-slot={slot}
                     onClick={handleSelectWeaponInternal}
+                    onTouchStart={handleSelectWeaponInternal}
                     onMouseEnter={!isMobileDevice ? handleActionEnter : undefined}
                     onMouseLeave={!isMobileDevice ? handleActionLeave : undefined}
                     data-tooltip={wData.displayName ? t(wData.displayName) : wData.id}
@@ -1028,6 +1029,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
     const handleSelectWeaponInternal = useCallback((e: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>) => {
         e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
         const slot = e.currentTarget.dataset.slot;
         if (slot && onSelectWeapon) {
             onSelectWeapon(slot);
@@ -1043,6 +1045,10 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const catColor = COLORS.WHITE.str;
     const hudVisible = useHudStore(s => s.hudVisible);
     const showRestOfHUD = hudVisible && !isSectorBannerActive;
+
+    useEffect(() => {
+        HudStore.setHudVisible(!isSectorBannerActive);
+    }, [isSectorBannerActive]);
 
     // ZERO-GC: Pre-allocated arrays to assign pooled ref storage stably in render
     const passivePoolRefs = useMemo(() => getCachedArray(POOL_SIZE_PASSIVE).map(i => (el: any) => { if (el) passiveRefs.current[i] = el; }), []);

@@ -33,8 +33,15 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
     const rightCenter = useRef<{ x: number; y: number }>();
     if (!rightCenter.current) rightCenter.current = { x: 0, y: 0 };
 
-    const isInteractiveElement = (target: EventTarget) => {
-        return (target as HTMLElement).tagName === 'BUTTON';
+    const isInteractiveElement = (target: EventTarget, currentTarget: EventTarget) => {
+        let el = target as HTMLElement | null;
+        while (el && el !== currentTarget) {
+            if (el.tagName === 'BUTTON' || el.tagName === 'A' || el.classList.contains('pointer-events-auto')) {
+                return true;
+            }
+            el = el.parentElement;
+        }
+        return false;
     };
 
     // Reset inputs when HUD becomes hidden
@@ -76,12 +83,14 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
 
     const handleActionTouchStart = useCallback((e: React.TouchEvent<HTMLButtonElement>) => {
         e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
         const action = Number(e.currentTarget.dataset.action);
         if (!isNaN(action)) handleAction(action as InputAction, true);
     }, [handleAction]);
 
     const handleActionTouchEnd = useCallback((e: React.TouchEvent<HTMLButtonElement>) => {
         e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
         const action = Number(e.currentTarget.dataset.action);
         if (!isNaN(action)) handleAction(action as InputAction, false);
     }, [handleAction]);
@@ -93,15 +102,18 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
         const w = window.innerWidth;
         const h = window.innerHeight;
 
+        const leftBound = isLandscapeMode ? 0.4 : 0.45;
+        const rightBound = isLandscapeMode ? 0.6 : 0.55;
+
         for (let i = 0; i < touches.length; i++) {
             const t = touches[i];
-            if (isInteractiveElement(t.target)) continue;
+            if (isInteractiveElement(t.target, e.currentTarget)) continue;
 
             const x = t.clientX;
             const y = t.clientY;
 
             // --- LEFT ZONE (Movement) ---
-            if (x < w * 0.4 && y > h * 0.3 && leftTouchId.current === null) {
+            if (x < w * leftBound && y > h * 0.3 && leftTouchId.current === null) {
                 leftTouchId.current = t.identifier;
                 leftCenter.current.x = x;
                 leftCenter.current.y = y;
@@ -112,7 +124,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 }
             }
             // --- RIGHT ZONE (Aiming) ---
-            else if (x > w * 0.5 && y > h * 0.3 && rightTouchId.current === null) {
+            else if (x > w * rightBound && y > h * 0.3 && rightTouchId.current === null) {
                 rightTouchId.current = t.identifier;
                 rightCenter.current.x = x;
                 rightCenter.current.y = y;
@@ -123,7 +135,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 }
             }
         }
-    }, []);
+    }, [isLandscapeMode]);
 
     const handleTouchMove = useCallback((e: React.TouchEvent) => {
         if (e.cancelable) e.preventDefault();
@@ -217,10 +229,10 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
     }, [inputState]);
 
     return (
-        <div className={`absolute inset-0 pointer-events-none z-[10] overflow-hidden select-none touch-none transition-opacity duration-1000 ${hudVisible ? 'opacity-100' : 'opacity-0'}`}>
+        <div className={`absolute inset-0 pointer-events-none z-[120] overflow-hidden select-none touch-none transition-opacity duration-1000 ${hudVisible ? 'opacity-100' : 'opacity-0'}`}>
             {/* LEFT TOUCH ZONE (Movement) */}
             <div
-                className={`absolute left-0 w-[45%] h-[75%] ${hudVisible ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                className={`absolute left-0 ${isLandscapeMode ? 'w-[40%] h-[65%]' : 'w-[45%] h-[75%]'} ${hudVisible ? 'pointer-events-auto' : 'pointer-events-none'}`}
                 style={{ top: HUD_GUTTER, touchAction: 'none' }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
@@ -230,7 +242,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
 
             {/* RIGHT TOUCH ZONE (Aiming) */}
             <div
-                className={`absolute right-0 w-[45%] h-[75%] ${hudVisible ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                className={`absolute right-0 ${isLandscapeMode ? 'w-[40%] h-[65%]' : 'w-[45%] h-[75%]'} ${hudVisible ? 'pointer-events-auto' : 'pointer-events-none'}`}
                 style={{ top: HUD_GUTTER, touchAction: 'none' }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
@@ -277,15 +289,15 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
             {/* Action Buttons */}
             <div className={`absolute flex z-40 pr-safe pb-safe ${hudVisible ? 'pointer-events-auto' : 'pointer-events-none'} ${isLandscapeMode ? 'bottom-4 right-4 flex-col gap-3' : 'bottom-24 right-4 flex-col gap-3'}`}>
                 <div className="flex justify-end">
-                    <button data-action={InputAction.FLASHLIGHT} className="w-14 h-14 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2.5 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
+                    <button data-action={InputAction.FLASHLIGHT} className="w-14 h-14 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2.5 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd} onTouchCancel={handleActionTouchEnd}>
                         <img src="/assets/icons/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain pointer-events-none" />
                     </button>
                 </div>
                 <div className="flex items-end gap-3">
-                    <button data-action={InputAction.RELOAD} className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3.5 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
+                    <button data-action={InputAction.RELOAD} className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3.5 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd} onTouchCancel={handleActionTouchEnd}>
                         <img src="/assets/icons/ui/icon_reload.png" alt="R" className="w-full h-full object-contain pointer-events-none" />
                     </button>
-                    <button data-action={InputAction.DODGE} className="w-20 h-20 md:w-24 md:h-24 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4.5 shadow-[0_0_20px_rgba(255,0,0,0.4)] opacity-80 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
+                    <button data-action={InputAction.DODGE} className="w-20 h-20 md:w-24 md:h-24 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4.5 shadow-[0_0_20px_rgba(255,0,0,0.4)] opacity-80 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd} onTouchCancel={handleActionTouchEnd}>
                         <img src="/assets/icons/ui/icon_dodge.png" alt="Dodge" className="w-full h-full object-contain pointer-events-none" />
                     </button>
                 </div>

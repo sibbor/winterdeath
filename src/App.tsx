@@ -910,6 +910,7 @@ const App: React.FC = () => {
                                     onBossKilled={handleBossDefeatedAction}
                                     onFamilyRescued={handleFamilyRescuedAction}
                                     onPerkDiscovered={handlePerkDiscoveredAction}
+                                    isSectorBannerActive={isSectorBannerActive}
                                 />
 
                                 {showHUD && (
