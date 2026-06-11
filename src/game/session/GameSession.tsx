@@ -857,6 +857,18 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     console.log("GameSession.handleEvent() -> UIEventType.FAMILY_FOUND: update passives");
                     const perkSystem = refs.gameSessionRef.current.systems.perkSystem;
                     if (perkSystem) perkSystem.refreshBaseStats(refs.gameSessionRef.current);
+
+                    // Set checkpoint at player position when family member starts following
+                    const playerPos = refs.playerGroupRef.current?.position;
+                    const session = refs.gameSessionRef.current;
+                    if (playerPos && session && session.state) {
+                        session.state.checkpoint.x = playerPos.x;
+                        session.state.checkpoint.y = playerPos.y;
+                        session.state.checkpoint.z = playerPos.z;
+                        session.state.checkpoint.active = true;
+                        session.state.checkpoint.familyMemberId = targetId;
+                        console.log("Saved checkpoint at:", playerPos.x, playerPos.y, playerPos.z, "for familyId:", targetId);
+                    }
                 }
                 break;
             }

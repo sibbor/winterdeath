@@ -444,3 +444,112 @@ canvas {
         transform: scale(1.05);
     }
 }
+
+/* --- PREMIUM WAVE PANELS ANIMATIONS --- */
+.animate-wave-appear {
+    animation: waveAppear 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes waveAppear {
+    0% {
+        transform: translateY(-40px) scale(0.9);
+        opacity: 0;
+        filter: blur(8px);
+    }
+    70% {
+        transform: translateY(2px) scale(1.02);
+    }
+    100% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+        filter: blur(0);
+    }
+}
+
+.animate-wave-disappear {
+    animation: waveDisappear 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes waveDisappear {
+    0% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+        filter: blur(0);
+    }
+    100% {
+        transform: translateY(30px) scale(0.95);
+        opacity: 0;
+        filter: blur(8px);
+    }
+}
+
+/* --- PREMIUM BOSS PANEL ANIMATIONS --- */
+.animate-boss-appear {
+    animation: bossAppear 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes bossAppear {
+    0% {
+        transform: translateY(-50px) scale(1.1);
+        opacity: 0;
+        filter: blur(10px) brightness(2);
+    }
+    50% {
+        filter: blur(2px) brightness(1.5);
+    }
+    100% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+        filter: blur(0) brightness(1);
+    }
+}
+
+.animate-boss-killed {
+    animation: bossKilledEffect 4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes bossKilledEffect {
+    0% {
+        transform: scale(1);
+        filter: brightness(1) saturate(1);
+    }
+    5% {
+        transform: scale(1.04) rotate(0.4deg);
+        filter: brightness(1.8) saturate(1.4);
+    }
+    10% {
+        transform: scale(1) rotate(-0.4deg);
+        filter: brightness(1.6) saturate(1.2);
+    }
+    15% {
+        transform: scale(1.01) rotate(0deg);
+        filter: brightness(1.4) saturate(1);
+    }
+    30% {
+        transform: scale(1);
+        filter: brightness(0.9) saturate(0.6);
+    }
+    100% {
+        transform: translateY(40px) scale(0.9);
+        opacity: 0;
+        filter: brightness(0.2) saturate(0) blur(8px);
+    }
+}
+
+.animate-boss-killed h2 {
+    color: #ef4444 !important;
+    text-shadow: 0 0 20px rgba(239, 68, 68, 0.9), 0 0 40px rgba(0, 0, 0, 1) !important;
+    text-decoration: line-through;
+    animation: glitchText 0.3s steps(2) infinite;
+}
+
+@keyframes glitchText {
+    0% { transform: translate(1px, 1px) skewX(0.5deg); }
+    50% { transform: translate(-1px, -1px) skewX(-0.5deg); }
+    100% { transform: translate(0, 0); }
+}
+
+.animate-boss-killed .main-hp-bar {
+    background: linear-gradient(90deg, #27272a 0%, #09090b 100%) !important;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.8) !important;
+}

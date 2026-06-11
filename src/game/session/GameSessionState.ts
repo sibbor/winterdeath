@@ -263,6 +263,13 @@ export interface GameSessionState {
     ui: PreallocatedUIState;
     vehicle: PreallocatedVehicleState;
 
+    checkpoint: {
+        x: number;
+        y: number;
+        z: number;
+        active: boolean;
+        familyMemberId: number;
+    };
 
     // --- GLOBAL CALLBACK BRIDGE ---
     handleEnemyHit: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
@@ -487,6 +494,14 @@ export function allocateGameSessionState(): GameSessionState {
             prevPos: new THREE.Vector3(0, -1000, 0)
         },
 
+        checkpoint: {
+            x: 0,
+            y: 0,
+            z: 0,
+            active: false,
+            familyMemberId: -1
+        },
+
         handleEnemyHit: () => false,
         callbacks: null
     };
@@ -632,4 +647,10 @@ export function resetGameSessionState(state: GameSessionState, props: any): void
 
     state.ui.hudVisible = true;
     state.ui.flashlightOn = false;
+
+    state.checkpoint.x = 0;
+    state.checkpoint.y = 0;
+    state.checkpoint.z = 0;
+    state.checkpoint.active = false;
+    state.checkpoint.familyMemberId = -1;
 }

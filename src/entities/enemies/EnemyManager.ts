@@ -882,8 +882,8 @@ export const EnemyManager = {
 
         // 3. Gore:
         const goreCount = (enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 12 : 6;
-        const massScale = enemy.originalScale * enemy.originalScale;
-        const goreScale = (enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? (massScale / 12) : (massScale / 6);
+        const enemyBodyMass = enemy.originalScale * enemy.widthScale;
+        const goreScale = (enemyBodyMass * 3.0) / goreCount;
 
         _v1.set(0, 0, 0);
         if (forceDir) {

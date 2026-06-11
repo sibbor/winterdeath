@@ -347,7 +347,7 @@ export class GameSessionLogic {
             this.state.world.bloodDecals.length = 0;
 
             this.state.enemies.bossesDefeated.length = 0;
-            this.triggerSystem.reset();
+            //this.triggerSystem.reset();
             this.state.world.obstacles.length = 0;
             this.state.world.mapItems.length = 0;
 

@@ -59,6 +59,8 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
     return (
         <ModalLayout
             title={bossName}
+            subtitle={t('ui.has_been_killed')}
+            subtitleClass={COLORS.RED}
             isMobileDevice={isMobileDevice}
             onConfirm={onProceed}
             confirmLabel={t('ui.continue')}
@@ -68,12 +70,9 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
             titleColorClass="text-white"
             onClose={onExplore}
         >
-            <div className="flex flex-col items-center mb-6">
-                <span className="text-base md:text-2xl text-red-500 font-light tracking-[0.2em] mb-1 md:mb-2 uppercase opacity-90">{t('ui.boss_killed')}</span>
-            </div>
 
             <TacticalCard color={COLORS.RED} className={`${isMobileDevice ? 'p-4' : 'p-8'} mb-6 md:mb-10 shadow-[0_0_30px_rgba(153,27,27,0.2)]`}>
-                <p className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} leading-relaxed font-light italic mb-4 md:mb-8 text-gray-200`}>
+                <p className={`${isMobileDevice ? 'text-lg' : 'text-lg'} leading-relaxed font-light italic mb-4 md:mb-8 text-gray-200`}>
                     "{t(DataResolver.getBossDeathStory(sectorIndex))}"
                 </p>
 

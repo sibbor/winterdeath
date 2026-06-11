@@ -37,6 +37,25 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
         return (target as HTMLElement).tagName === 'BUTTON';
     };
 
+    // Reset inputs when HUD becomes hidden
+    React.useEffect(() => {
+        if (!hudVisible) {
+            leftTouchId.current = null;
+            rightTouchId.current = null;
+            if (inputState?.joystickMove) inputState.joystickMove.set(0, 0);
+            if (inputState?.joystickAim) inputState.joystickAim.set(0, 0);
+            if (leftStickContainerRef.current) leftStickContainerRef.current.style.display = 'none';
+            if (rightStickContainerRef.current) rightStickContainerRef.current.style.display = 'none';
+            
+            const inputManager = (window as any).inputManager;
+            if (inputManager) {
+                inputManager.handleVirtualAction(InputAction.FIRE, false);
+            } else if (inputState?.actions) {
+                inputState.actions[InputAction.FIRE] = 0;
+            }
+        }
+    }, [hudVisible, inputState]);
+
     /**
      * SMI-Hardened action handler.
      * Updates the shared input buffer via the InputManager singleton context.
@@ -201,7 +220,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
         <div className={`absolute inset-0 pointer-events-none z-[10] overflow-hidden select-none touch-none transition-opacity duration-1000 ${hudVisible ? 'opacity-100' : 'opacity-0'}`}>
             {/* LEFT TOUCH ZONE (Movement) */}
             <div
-                className="absolute left-0 w-[45%] h-[75%] pointer-events-auto"
+                className={`absolute left-0 w-[45%] h-[75%] ${hudVisible ? 'pointer-events-auto' : 'pointer-events-none'}`}
                 style={{ top: HUD_GUTTER, touchAction: 'none' }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
@@ -211,7 +230,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
 
             {/* RIGHT TOUCH ZONE (Aiming) */}
             <div
-                className="absolute right-0 w-[45%] h-[75%] pointer-events-auto"
+                className={`absolute right-0 w-[45%] h-[75%] ${hudVisible ? 'pointer-events-auto' : 'pointer-events-none'}`}
                 style={{ top: HUD_GUTTER, touchAction: 'none' }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
@@ -256,7 +275,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
             </div>
 
             {/* Action Buttons */}
-            <div className={`absolute pointer-events-auto flex z-40 pr-safe pb-safe ${isLandscapeMode ? 'bottom-4 right-4 flex-col gap-3' : 'bottom-24 right-4 flex-col gap-3'}`}>
+            <div className={`absolute flex z-40 pr-safe pb-safe ${hudVisible ? 'pointer-events-auto' : 'pointer-events-none'} ${isLandscapeMode ? 'bottom-4 right-4 flex-col gap-3' : 'bottom-24 right-4 flex-col gap-3'}`}>
                 <div className="flex justify-end">
                     <button data-action={InputAction.FLASHLIGHT} className="w-14 h-14 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2.5 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
                         <img src="/assets/icons/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain pointer-events-none" />

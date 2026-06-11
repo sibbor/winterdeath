@@ -6,6 +6,7 @@ import { PlayerDeathState, DamageID } from '../entities/player/CombatTypes';
 import { PLAYER } from '../content/constants';
 import { MATERIALS } from '../utils/assets';
 import { VoiceSounds } from '../utils/audio/AudioLib';
+import { audioEngine } from '../utils/audio/AudioEngine';
 import { HudSystem } from './HudSystem';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { HudStore } from '../store/HudStore';
@@ -128,6 +129,7 @@ export class DeathSystem implements System {
             case DeathPhase.NONE:
                 this.deathPhaseRef.current = DeathPhase.ANIMATION;
                 this.setDeathPhase(DeathPhase.ANIMATION);
+                audioEngine.stopAll();
                 VoiceSounds.playDeathScream();
 
                 // Fetch HUD data once for death state to avoid GC hits

@@ -297,6 +297,13 @@ const App: React.FC = () => {
     const handleBossIntroStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? OverlayType.INTRO : OverlayType.NONE), []);
 
     const handleBossDefeatedAction = useCallback((bossId: BossID) => {
+        // FIX 1: Capture sectorStats immediately so progress is persisted even if the app closes.
+        if (gameCanvasRef.current) {
+            const stats = gameCanvasRef.current.getSectorStats(true, false);
+            setSectorStats(stats);
+        }
+
+        // Update persistent career stats (deadBossIndices, skill points) right away
         setGameState(prev => {
             if (StatsBridge.getDeadBossIndices(prev.stats).includes(prev.currentSector)) return prev;
 
@@ -305,7 +312,6 @@ const App: React.FC = () => {
 
             return {
                 ...prev,
-                screen: GameScreen.BOSS_KILLED,
                 stats: {
                     ...prev.stats,
                     statsBuffer: newStatsBuffer,
@@ -315,10 +321,16 @@ const App: React.FC = () => {
             };
         });
 
-        if (gameCanvasRef.current) {
-            const stats = gameCanvasRef.current.getSectorStats(true, false);
-            setSectorStats(stats);
-        }
+        // FIX 3: Delay screen transition so the boss death animation has time to play (~3.5s).
+        // The game loop already grants player invulnerability and fires endSector after 4s,
+        // so this window is safe and consistent.
+        setTimeout(() => {
+            setGameState(prev => {
+                // Guard: only switch screen if still in-sector (player hasn't navigated away).
+                if (prev.screen !== GameScreen.SECTOR && prev.screen !== GameScreen.BOSS_KILLED) return prev;
+                return { ...prev, screen: GameScreen.BOSS_KILLED };
+            });
+        }, 3500);
     }, []);
 
     const handleFamilyRescuedAction = useCallback((familyId: number) => {
@@ -562,12 +574,16 @@ const App: React.FC = () => {
         if (!sectorStats) return;
         return new Promise<void>(resolve => {
             setGameState(prev => {
-                const newStats = aggregateStats(prev.stats, sectorStats, !!deathDetails, !!sectorStats.aborted, prev.currentSector);
+                // BUGFIX: Use sectorStats.isCompleted as the authoritative "not died" signal.
+                // !!deathDetails is a stale React closure value and can be incorrect across
+                // state update batches (e.g., death → recap → return to camp).
+                const died = !sectorStats.isCompleted;
+                const newStats = aggregateStats(prev.stats, sectorStats, died, !!sectorStats.aborted, prev.currentSector);
                 setTimeout(resolve, 0);
                 return { ...prev, stats: newStats };
             });
         });
-    }, [sectorStats, deathDetails]);
+    }, [sectorStats]);
 
     const handleReturnToCamp = useCallback(async () => {
         UISounds.playConfirm();

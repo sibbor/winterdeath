@@ -449,10 +449,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             return;
         }
 
-        // 6. Teleport Logic delegated to PlayerManager
+        // 6. Session updates
+        const isBusEvent = state.sectorState?.busEventState >= 1 && state.sectorState?.busEventState <= 3;
 
-        // 7. Session updates
-        if (isCinematic || isBossIntro) {
+        if (isCinematic || isBossIntro || isDead || isBusEvent) {
             session.inputDisabled = true;
         } else {
             session.inputDisabled = !!propsRef.current.disableInput || (!!refs.cameraOverrideRef.current?.active);

@@ -704,7 +704,7 @@ export class GameSessionSetup {
         const propIndices = props.gameState.stats.rescuedFamilyIndices || [];
         const rescuedIndices = [...propIndices];
         for (let i = 0; i < propIndices.length; i++) {
-            if (propIndices[i] < props.gameState.currentSector) {
+            if (propIndices[i] >= props.gameState.currentSector) {
                 const fmId = DataResolver.getSectorFamilyMemberId(propIndices[i]);
                 if (fmId !== undefined) {
                     const idx = rescuedIndices.indexOf(propIndices[i]);
@@ -1182,14 +1182,24 @@ export class GameSessionSetup {
         for (let i = 0; i < fmArr.length; i++) {
             const fm = fmArr[i];
             if (fm.id === currentFMId) {
-                // Current sector's member MUST be reset to un-rescued state
-                fm.following = false;
-                fm.rescued = false;
-                fm.found = false;
-                if (fm.mesh) {
-                    fm.mesh.visible = (fm.spawnPos && fm.spawnPos.y > -500);
-                    if (fm.spawnPos) fm.mesh.position.copy(fm.spawnPos);
-                    else fm.mesh.position.set(0, -1000, 0);
+                if (state.checkpoint && state.checkpoint.active && state.checkpoint.familyMemberId === currentFMId) {
+                    // Checkpoint is active: keep them rescued and following!
+                    fm.following = true;
+                    fm.rescued = true;
+                    fm.found = true;
+                    if (fm.mesh) {
+                        fm.mesh.visible = true;
+                    }
+                } else {
+                    // Current sector's member MUST be reset to un-rescued state
+                    fm.following = false;
+                    fm.rescued = false;
+                    fm.found = false;
+                    if (fm.mesh) {
+                        fm.mesh.visible = (fm.spawnPos && fm.spawnPos.y > -500);
+                        if (fm.spawnPos) fm.mesh.position.copy(fm.spawnPos);
+                        else fm.mesh.position.set(0, -1000, 0);
+                    }
                 }
             } else {
                 // Previously rescued members keep following but reset position to player cluster
@@ -1217,8 +1227,22 @@ export class GameSessionSetup {
 
         // 6.2 PLAYER & FAMILY MEMBER POSITIONING
         if (refs.playerGroupRef.current) {
-            const spawn = currentSectorData.playerSpawn || { x: 0, y: 0, z: 0 };
-            refs.playerGroupRef.current.position.set(spawn.x || 0, spawn.y || 0, spawn.z || 0);
+            let spawnX = 0;
+            let spawnY = 0;
+            let spawnZ = 0;
+
+            if (state.checkpoint && state.checkpoint.active) {
+                spawnX = state.checkpoint.x;
+                spawnY = state.checkpoint.y;
+                spawnZ = state.checkpoint.z;
+            } else {
+                const spawn = currentSectorData.playerSpawn || { x: 0, y: 0, z: 0 };
+                spawnX = spawn.x || 0;
+                spawnY = spawn.y || 0;
+                spawnZ = spawn.z || 0;
+            }
+
+            refs.playerGroupRef.current.position.set(spawnX, spawnY, spawnZ);
             engine.camera.snapToTarget();
 
             // Family members:  
@@ -1238,9 +1262,9 @@ export class GameSessionSetup {
 
                     if (fm.rescued || fm.following) {
                         fm.mesh.position.set(
-                            spawn.x + (Math.random() - 0.5) * 5,
-                            spawn.y || 0,
-                            spawn.z + 5 + Math.random() * 5
+                            spawnX + (Math.random() - 0.5) * 5,
+                            spawnY || 0,
+                            spawnZ + 5 + Math.random() * 5
                         );
                     } else if (fm.spawnPos) {
                         fm.mesh.position.copy(fm.spawnPos);
@@ -1248,6 +1272,14 @@ export class GameSessionSetup {
                         fm.mesh.position.set(fSpawn.x, fSpawn.y || 0, fSpawn.z);
                     }
                 }
+            }
+        }
+
+        // Spawn boss if respawning at checkpoint
+        if (state.checkpoint && state.checkpoint.active) {
+            const bossPos = currentSectorData.bossSpawn;
+            if (bossPos) {
+                session.onAction({ type: TriggerActionType.SPAWN_BOSS, payload: { pos: bossPos } });
             }
         }
 

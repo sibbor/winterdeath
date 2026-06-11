@@ -273,14 +273,16 @@ const CurrencyPanel = React.memo(({ isMobileDevice, isLandscapeMode, isBossIntro
     );
 });
 
-const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
-    const bossActive = useHudStore(s => s.bossActive && !s.bossDefeated);
+const BossPanel = React.memo(({ isMobileDevice, bossHpBarRef, bossHpTrailBarRef }: any) => {
+    const bossActive = useHudStore(s => s.bossActive);
+    const bossDefeated = useHudStore(s => s.bossDefeated);
     const bossName = useHudStore(s => s.bossActive ? s.bossName : '');
 
-    if (!bossActive) return null;
+    const isVisible = bossActive;
+    const isKilled = bossDefeated;
 
     return (
-        <div className="relative w-full flex flex-col items-center justify-center p-6 text-center animate-fadeIn pointer-events-none">
+        <div className={`relative w-full flex flex-col items-center justify-center p-6 text-center pointer-events-none transition-all duration-1000 ease-out ${isVisible ? (isKilled ? 'animate-boss-killed' : 'animate-boss-appear') : 'opacity-0 -translate-y-6 blur-lg scale-95'}`}>
             {/* SMOKY CINEMATIC BACKGROUND */}
             <div
                 className="absolute inset-0 pointer-events-none"
@@ -296,20 +298,31 @@ const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
                     {t(bossName)}
                 </h2>
                 <div className={`w-full bg-black/40 border border-white/10 rounded-sm shadow-md ${isMobileDevice ? 'max-w-[250px] h-2.5' : 'max-w-[500px] h-4'} overflow-hidden relative`}>
+                    {/* Boss HP Damage highlight trail bar */}
+                    <div
+                        ref={bossHpTrailBarRef}
+                        className="absolute inset-y-0 left-0 w-full origin-left bg-orange-400/40"
+                        style={{ transform: 'scaleX(1)', transition: 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s' }}
+                    />
+                    {/* Main HP Bar */}
                     <div
                         ref={bossHpBarRef}
-                        className="h-full origin-left will-change-transform"
-                        style={{ transform: 'scaleX(1)', backgroundColor: COLORS.RED.str }}
+                        className="main-hp-bar absolute inset-y-0 left-0 w-full origin-left bg-gradient-to-r from-red-700 to-red-500"
+                        style={{ transform: 'scaleX(1)', transition: 'transform 0.1s ease-out' }}
                     />
+                    {/* Delimiters at 25%, 50%, 75% */}
+                    <div className="absolute top-0 bottom-0 w-[1px] bg-white/20 border-l border-black/30 z-20 pointer-events-none" style={{ left: '25%' }} />
+                    <div className="absolute top-0 bottom-0 w-[1px] bg-white/20 border-l border-black/30 z-20 pointer-events-none" style={{ left: '50%' }} />
+                    <div className="absolute top-0 bottom-0 w-[1px] bg-white/20 border-l border-black/30 z-20 pointer-events-none" style={{ left: '75%' }} />
                 </div>
             </div>
         </div>
     );
 });
 
-const EnemyWavePanel = React.memo(({ isMobileDevice, wavePanelRef, waveNameRef, waveBarRef, waveTextRef }: any) => {
+const EnemyWavePanel = React.memo(({ isMobileDevice, wavePanelRef, waveNameRef, waveBarRef, waveTrailBarRef, waveTextRef }: any) => {
     return (
-        <div ref={wavePanelRef} className="relative w-full flex flex-col items-center justify-center p-6 text-center animate-fadeIn pointer-events-none" style={{ display: 'none' }}>
+        <div ref={wavePanelRef} className="relative w-full flex flex-col items-center justify-center p-6 text-center transition-all duration-700 ease-out opacity-0 -translate-y-4 blur-md pointer-events-none" style={{ display: 'none' }}>
             {/* SMOKY CINEMATIC BACKGROUND */}
             <div
                 className="absolute inset-0 pointer-events-none"
@@ -325,11 +338,17 @@ const EnemyWavePanel = React.memo(({ isMobileDevice, wavePanelRef, waveNameRef, 
                     WAVE
                 </h2>
                 <div className={`w-full bg-black/40 border border-white/10 rounded-sm shadow-md ${isMobileDevice ? 'max-w-[220px] h-2.5' : 'max-w-[500px] h-4'} relative overflow-hidden`}>
-                    {/* HARDWARE ACCELERATED WAVE BAR */}
+                    {/* Trail / Highlight Bar */}
+                    <div
+                        ref={waveTrailBarRef}
+                        className="absolute inset-y-0 left-0 w-full origin-left bg-orange-400/50"
+                        style={{ transform: 'scaleX(1)', transition: 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s' }}
+                    />
+                    {/* Main Progress Bar (Zombies Remaining) */}
                     <div
                         ref={waveBarRef}
-                        className="h-full origin-left will-change-transform hud-wave-bar"
-                        style={{ transform: 'scaleX(0)' }}
+                        className="absolute inset-y-0 left-0 w-full origin-left bg-gradient-to-r from-orange-600 to-amber-500"
+                        style={{ transform: 'scaleX(1)', transition: 'transform 0.1s ease-out' }}
                     />
                 </div>
                 <span ref={waveTextRef} className={`${isMobileDevice ? 'text-[10px]' : 'text-xs'} mt-2 text-zinc-300 font-mono tracking-[0.15em] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]`}>
@@ -555,9 +574,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const skidPedalRef = useRef<HTMLDivElement>(null);
     const brakePedalRef = useRef<HTMLDivElement>(null);
     const bossHpBarRef = useRef<HTMLDivElement>(null);
+    const bossHpTrailBarRef = useRef<HTMLDivElement>(null);
     const wavePanelRef = useRef<HTMLDivElement>(null);
     const waveNameRef = useRef<HTMLHeadingElement>(null);
     const waveBarRef = useRef<HTMLDivElement>(null);
+    const waveTrailBarRef = useRef<HTMLDivElement>(null);
     const waveTextRef = useRef<HTMLSpanElement>(null);
     const waveIndicatorRef = useRef<HTMLDivElement>(null);
     const killsTextRef = useRef<HTMLSpanElement>(null);
@@ -721,6 +742,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 if (bossHpBarRef.current && data.bossHpP >= 0) {
                     bossHpBarRef.current.style.transform = `scaleX(${Math.max(0, Math.min(1, data.bossHpP))})`;
                 }
+                if (bossHpTrailBarRef.current && data.bossHpP >= 0) {
+                    bossHpTrailBarRef.current.style.transform = `scaleX(${Math.max(0, Math.min(1, data.bossHpP))})`;
+                }
                 cache.bossHpP = data.bossHpP;
             }
 
@@ -729,7 +753,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 if (wavePanelRef.current) {
                     if (wavePanelRef.current.style.display !== 'flex') {
                         wavePanelRef.current.style.display = 'flex';
-                        wavePanelRef.current.classList.add('hud-wave-panel-active');
+                        void wavePanelRef.current.offsetHeight; // trigger reflow
+                        wavePanelRef.current.classList.remove('opacity-0', '-translate-y-4', 'blur-md', 'animate-wave-disappear');
+                        wavePanelRef.current.classList.add('animate-wave-appear');
                     }
                 }
                 const isCleared = data.waveProgress >= 1.0;
@@ -744,13 +770,19 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     cache.waveName = data.waveName;
                     cache.waveCleared = isCleared;
                 }
+
+                // Draining meter: starts full (1.0) and drains to empty (0)
+                const remaining = Math.max(0, Math.min(1, 1.0 - data.waveProgress));
                 if (waveBarRef.current) {
-                    waveBarRef.current.style.transform = `scaleX(${Math.max(0, Math.min(1, data.waveProgress))})`;
+                    waveBarRef.current.style.transform = `scaleX(${remaining})`;
                     if (isCleared) {
                         waveBarRef.current.classList.add('hud-wave-cleared-bar');
                     } else {
                         waveBarRef.current.classList.remove('hud-wave-cleared-bar');
                     }
+                }
+                if (waveTrailBarRef.current) {
+                    waveTrailBarRef.current.style.transform = `scaleX(${remaining})`;
                 }
                 if (waveTextRef.current) {
                     waveTextRef.current.innerText = `${data.waveKills} / ${data.waveTarget}`;
@@ -761,9 +793,17 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     }
                 }
             } else {
-                if (wavePanelRef.current) {
-                    wavePanelRef.current.style.display = 'none';
-                    wavePanelRef.current.classList.remove('hud-wave-panel-active');
+                if (wavePanelRef.current && wavePanelRef.current.style.display !== 'none') {
+                    wavePanelRef.current.classList.remove('animate-wave-appear');
+                    wavePanelRef.current.classList.add('animate-wave-disappear');
+                    const ref = wavePanelRef.current;
+                    setTimeout(() => {
+                        const curTelemetry = prevTelemetry.current as any;
+                        if (!curTelemetry.waveActive && ref) {
+                            ref.style.display = 'none';
+                            ref.classList.remove('animate-wave-disappear');
+                        }
+                    }, 800);
                 }
                 if (waveNameRef.current) {
                     waveNameRef.current.classList.remove('hud-wave-cleared-text');
@@ -1023,9 +1063,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
             <ChallengePopup onOpenAdventureLog={onOpenAdventureLog} />
 
-            <SectorBanner active={isSectorBannerActive} onComplete={onSectorBannerComplete || (() => {})} />
+            <SectorBanner active={isSectorBannerActive} onComplete={onSectorBannerComplete || (() => { })} />
 
-            <div className={`${HUD_WRAPPER} ${!showRestOfHUD || isDead || isDisoriented ? 'opacity-0 -translate-y-4 blur-[5px]' : 'opacity-100 translate-y-0 blur-0 animate-hudFadeIn'}`}>
+            <div className={`${HUD_WRAPPER} ${!showRestOfHUD || isDead || isDisoriented || isBossIntro ? 'opacity-0 -translate-y-4 blur-[5px]' : 'opacity-100 translate-y-0 blur-0 animate-hudFadeIn'}`}>
 
                 {/* --- GRADIENTS OVERLAY (TOP & BOTTOM) --- */}
                 <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/80 to-transparent pointer-events-none z-0" />
@@ -1095,12 +1135,19 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 </div>
 
                 <div className={`absolute ${isMobileDevice ? 'top-20 px-12' : 'top-32'} left-1/2 -translate-x-1/2 flex flex-col items-center w-full max-w-[600px] gap-4`}>
-                    <BossWavePanel isMobileDevice={isMobileDevice} bossHpBarRef={bossHpBarRef} />
+
+                    <BossPanel
+                        isMobileDevice={isMobileDevice}
+                        bossHpBarRef={bossHpBarRef}
+                        bossHpTrailBarRef={bossHpTrailBarRef}
+                    />
+
                     <EnemyWavePanel
                         isMobileDevice={isMobileDevice}
                         wavePanelRef={wavePanelRef}
                         waveNameRef={waveNameRef}
                         waveBarRef={waveBarRef}
+                        waveTrailBarRef={waveTrailBarRef}
                         waveTextRef={waveTextRef}
                     />
                 </div>

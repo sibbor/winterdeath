@@ -1266,6 +1266,13 @@ export const Sector0: SectorDef = {
                 }
             }
         }
+
+        // Hide/show HUD based on bus event state
+        if (sectorState.busEventState >= 1 && sectorState.busEventState <= 3) {
+            gameState.ui.hudVisible = false;
+        } else if (sectorState.busEventState === 4) {
+            gameState.ui.hudVisible = true;
+        }
     },
 
     onPlayerRespawn: (ctx: SectorBuildContext, state: any, engine: any) => {
@@ -1277,6 +1284,15 @@ export const Sector0: SectorDef = {
         state.sectorState.waveProgress = 0;
         state.sectorState.waveKills = 0;
         state.sectorState.waveTarget = 0;
+
+        if (state.checkpoint && state.checkpoint.active && state.checkpoint.familyMemberId === FamilyMemberID.LOKE) {
+            // Player is respawning at Loke checkpoint! Keep Loke unlocked and bus exploded.
+            state.sectorState.busEventState = 9;
+            state.sectorState.lokeUnlocked = true;
+            state.sectorState.lokeCinematicTriggered = true;
+            state.sectorState.busExploded = true;
+            return;
+        }
 
         // Reset bus event data
         state.sectorState.busEventState = 0;

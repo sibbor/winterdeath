@@ -14,6 +14,11 @@ const SectorBanner: React.FC<SectorBannerProps> = ({ active, onComplete }) => {
 
     const [animationState, setAnimationState] = useState<'idle' | 'in' | 'visible' | 'out'>('idle');
 
+    const onCompleteRef = React.useRef(onComplete);
+    useEffect(() => {
+        onCompleteRef.current = onComplete;
+    }, [onComplete]);
+
     useEffect(() => {
         if (!active) {
             setAnimationState('idle');
@@ -29,22 +34,22 @@ const SectorBanner: React.FC<SectorBannerProps> = ({ active, onComplete }) => {
         // 2250ms: Complete and notify parent to show the rest of the HUD
         const t1 = setTimeout(() => {
             setAnimationState('visible');
-        }, 500);
+        }, 1000);
 
         const t2 = setTimeout(() => {
             setAnimationState('out');
-        }, 2000);
+        }, 3000);
 
         const t3 = setTimeout(() => {
-            onComplete();
-        }, 2250);
+            onCompleteRef.current();
+        }, 3250);
 
         return () => {
             clearTimeout(t1);
             clearTimeout(t2);
             clearTimeout(t3);
         };
-    }, [active, onComplete]);
+    }, [active]);
 
     if (!active || animationState === 'idle') return null;
 
@@ -62,7 +67,7 @@ const SectorBanner: React.FC<SectorBannerProps> = ({ active, onComplete }) => {
     }
 
     return (
-        <div className={`fixed bottom-24 left-16 z-[500] pointer-events-none ${animationClass}`}>
+        <div className={`fixed bottom-24 left-0 z-[500] pointer-events-none ${animationClass}`}>
             <div className="relative p-8 flex flex-col items-start min-w-[400px]">
                 {/* SMOKY GRADIENT BACKGROUND (Cinematic, fading to the right) */}
                 <div
@@ -89,7 +94,7 @@ const SectorBanner: React.FC<SectorBannerProps> = ({ active, onComplete }) => {
 
                     {/* SECTOR INDEX (Teal/Cyan capsule indented) */}
                     <div className="relative mt-1 ml-8 px-4 py-1 flex items-center justify-center rounded bg-[#132224]/90 border border-[#2dd4bf]/30 backdrop-blur-md shadow-[0_0_15px_rgba(45,212,212,0.15)]">
-                        <span className="text-[11px] font-mono font-bold text-[#2dd4bf] tracking-[0.3em] uppercase">
+                        <span className="text-[11px] font-mono font-bold text-[#cccccc] tracking-[0.3em] uppercase">
                             {indexText}
                         </span>
                     </div>

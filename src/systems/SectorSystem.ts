@@ -194,7 +194,7 @@ export class SectorSystem implements System {
                 cameraShake: this.callbacks.cameraShake,
                 t: this.callbacks.t,
                 scene: scene,
-                spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, scale?: number, life?: number) => this.callbacks.spawnParticle(x, y, z, type, count, undefined, undefined, undefined, scale, life),
+                spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number, life?: number) => this.callbacks.spawnParticle(x, y, z, type, count, customMesh, customVel, color, scale, life),
                 startCinematic: (target?: THREE.Object3D | null, sectorId?: number, dialogueId?: number, params?: any) => session.startCinematic(target, sectorId, dialogueId, params),
                 setCameraOverride: this.callbacks.setCameraOverride,
                 setWind: (direction: number, strength: number) => session.engine.wind.setOverride(direction, strength),

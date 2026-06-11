@@ -569,12 +569,12 @@ export const ObjectGenerator = {
 
     createElectricPole: (withWires: boolean = false) => {
         const group = new THREE.Group();
-        const pole = new THREE.Mesh(SHARED_GEO.cylinder, MATERIALS.treeTrunk);
+        const pole = new THREE.Mesh(SHARED_GEO.cylinder, MATERIALS.treeBark);
         pole.scale.set(0.2, 10, 0.2);
         pole.position.y = 5;
         group.add(pole);
 
-        const crossArm = new THREE.Mesh(SHARED_GEO.box, MATERIALS.treeTrunk);
+        const crossArm = new THREE.Mesh(SHARED_GEO.box, MATERIALS.treeBark);
         crossArm.scale.set(3, 0.2, 0.2);
         crossArm.position.y = 9;
         group.add(crossArm);
