@@ -152,6 +152,7 @@ export const en = {
         discovered: "DISCOVERED",
         collected: "COLLECTED",
         continue: "CONTINUE",
+        explore_more: "EXPLORE MORE",
         teleport: "TELEPORT",
         chest: "CHEST",
         large_chest: "LARGE CHEST",
@@ -839,7 +840,6 @@ export const en = {
                 audio: "Zombies groaning and attacking."
             }
         ],
-        bus_rubble_reaction: "The path is clear now. Let's move!",
     },
     family: {
         dad: "Dad",
@@ -866,25 +866,25 @@ export const en = {
     },
     clues: {
         "0": {
-            "0": { reaction: "Footprints! They went this way... what did Loke mean by 'D'?" },
-            "1": { reaction: "Blood stains! Are they hurt?!" },
-            "2": { reaction: "It's chaos! They must be terrified." },
-            "3": { reaction: "The tracks continues in this direction." },
-            "4": { reaction: "The tracks disappear... they must be here somewhere." }
+            "0": { title: "Footprints", reaction: "Footprints! They went this way... what did Loke mean by 'D'?" },
+            "1": { title: "Blood stains", reaction: "Blood stains! Are they hurt?!" },
+            "2": { title: "Chaos", reaction: "It's chaos! They must be terrified." },
+            "3": { title: "Continued tracks", reaction: "The tracks continues in this direction." },
+            "4": { title: "Disappearing tracks", reaction: "The tracks disappear... they must be here somewhere." }
         },
         "1": {
-            "0": { reaction: "Loke said the others followed these rails. Let's see where it leads us..." },
-            "1": { reaction: "FUCK! Zombies everywhere. Keep on fighting, Loke! We've got this." },
-            "2": { reaction: "Electric lights. The power generator is running..." },
-            "3": { reaction: "Old military supplies. Let's see what we can find." },
-            "4": { reaction: "More supplies. Most of it looted already. By who?! Natahlie? Esmeralda? Jordan?" }
+            "0": { title: "Trailing", reaction: "Loke said the others followed these rails. Let's see where it leads us..." },
+            "1": { title: "Zombies in the woods", reaction: "FUCK! Zombies everywhere. Keep on fighting, Loke! We've got this." },
+            "2": { title: "Power generator", reaction: "Electric lights. The power generator is running..." },
+            "3": { title: "Military supplies", reaction: "Old military supplies. Let's see what we can find." },
+            "4": { title: "Looted supplies", reaction: "More supplies. Most of it looted already. By who?! Natahlie? Esmeralda? Jordan?" }
         },
         "2": {
-            "0": { reaction: "Every snap of a twig sounds like a runner..." },
-            "1": { reaction: "Nice tractor. Wonder if it's working?" }
+            "0": { title: "Sounds in the woods", reaction: "Every snap of a twig sounds like a runner..." },
+            "1": { title: "Tractor", reaction: "Nice tractor. Wonder if it's working?" }
         },
         "3": {
-            "0": { reaction: "The metal is groaning in the wind. Or is that the 'Titan' Nathalie mentioned?" }
+            "0": { title: "Metal groans", reaction: "The metal is groaning in the wind. Or is that the 'Titan' Nathalie mentioned?" }
         }
     },
     sector_events: {
@@ -896,8 +896,8 @@ export const en = {
             "4": { reaction: "Fuck! The explosion attracted zombies!" }
         },
         "2": {
-            "1": { reaction: "Zombies inside the compound..." },
-            "2": { reaction: "The area is clear..." }
+            "1": { reaction: "DAMN! Zombies inside the compound." },
+            "2": { reaction: "The area is clear... Phew!" }
         }
     },
     pois: {

@@ -13,6 +13,7 @@ import { AssetPreloader } from '../../systems/AssetPreloader';
 import { SkySystem } from '../../systems/SkySystem';
 import { EnvironmentManager } from '../../systems/EnvironmentManager';
 import { GroundSystem } from '../../systems/GroundSystem';
+import { SystemRegistry } from '../../systems/SystemRegistry';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { System, SystemID } from '../../systems/System';
 import { GroundType, EnvironmentConfig, EnvironmentOverride } from '../../core/engine/EnvironmentalTypes';
@@ -127,7 +128,7 @@ export class WinterEngine {
     private sharedMatSet: Set<any> | null = null;
 
     // --- HYBRID SYSTEM REGISTRY (Zero-GC) ---
-    private _systems: (System | any)[] = new Array(SystemID.COUNT).fill(null);
+    public readonly systems = new SystemRegistry();
     private _tickableSystems: System[] = []; // Sub-list of systems that implement update()
     private _preallocatedSystemItems = Array.from(
         { length: SystemID.COUNT },
@@ -170,7 +171,6 @@ export class WinterEngine {
         this.wind.isFixedStep = false;
         this.weather.isFixedStep = false;
         this.water.isFixedStep = false;
-        // Fog & Light stay variable for smooth visual interpolation/shadows
 
         (window as any).WinterEngineInstance = this;
 
@@ -189,7 +189,7 @@ export class WinterEngine {
         // Register the singleton monitor as a passive system
         this.registerSystem(SystemID.PERFORMANCE_MONITOR, PerformanceMonitor.getInstance());
 
-        // Register the asset preloader as a passive system
+        // Register the AssetPreloader as a passive system
         this.registerSystem(SystemID.ASSET_PRELOADER, AssetPreloader);
 
         window.addEventListener('resize', this.handleResize);
@@ -401,7 +401,7 @@ export class WinterEngine {
      * @param includingPersistent If true, even systemic meshes (weather/water/fog) are disposed.
      */
     public clearActiveScene(includingPersistent: boolean = false) {
-        const monitor = PerformanceMonitor.getInstance();
+        const monitor = this.systems.performanceMonitor!;
         monitor.begin('cleanup');
 
         const disposableObjects: THREE.Object3D[] = [];
@@ -631,7 +631,7 @@ export class WinterEngine {
             this._accumulator += realDelta;
         }
 
-        const monitor = PerformanceMonitor.getInstance();
+        const monitor = this.systems.performanceMonitor!;
         monitor.startFrame();
 
         const FIXED_DT = WinterEngine.FIXED_DELTA;
@@ -657,7 +657,7 @@ export class WinterEngine {
             this.updateSystems(context, FIXED_DT, true);
 
             // Vinterdöd Hardening: Track logic simulation health
-            PerformanceMonitor.getInstance().tickLogic();
+            monitor.tickLogic();
 
             this._accumulator -= FIXED_DT;
 
@@ -762,6 +762,115 @@ export class WinterEngine {
         return { ...this.settings };
     }
 
+    private _updateRegistryProp(id: SystemID, sys: any) {
+        switch (id) {
+            case SystemID.SECTOR: this.systems.sector = sys; break;
+            case SystemID.CINEMATIC: this.systems.cinematic = sys; break;
+            case SystemID.HUD: this.systems.hud = sys; break;
+            case SystemID.PERFORMANCE_MONITOR: this.systems.performanceMonitor = sys; break;
+            case SystemID.ASSET_PRELOADER: this.systems.assetPreloader = sys; break;
+            case SystemID.ENVIRONMENT_MANAGER: this.systems.environment = sys; break;
+            case SystemID.SKY: this.systems.sky = sys; break;
+            case SystemID.WIND: this.systems.wind = sys; break;
+            case SystemID.WEATHER: this.systems.weather = sys; break;
+            case SystemID.FOG: this.systems.fog = sys; break;
+            case SystemID.WATER: this.systems.water = sys; break;
+            case SystemID.GROUND: this.systems.ground = sys; break;
+            case SystemID.LIGHT: this.systems.light = sys; break;
+            case SystemID.CAMERA: this.systems.camera = sys; break;
+            case SystemID.INPUT: this.systems.input = sys; break;
+            case SystemID.SPATIAL_GRID: this.systems.spatialGrid = sys; break;
+            case SystemID.WORLD_STREAMER: this.systems.worldStreamer = sys; break;
+            case SystemID.NAVIGATION: this.systems.navigation = sys; break;
+            case SystemID.OCCLUSION: this.systems.occlusion = sys; break;
+            case SystemID.TRIGGER_HANDLER: this.systems.triggerHandler = sys; break;
+            case SystemID.TRIGGER_SYSTEM: this.systems.triggerSystem = sys; break;
+            case SystemID.LOOT: this.systems.loot = sys; break;
+            case SystemID.FX: this.systems.fx = sys; break;
+            case SystemID.PARTICLE: this.systems.particle = sys; break;
+            case SystemID.FOOTPRINT: this.systems.footprint = sys; break;
+            case SystemID.PLAYER_STATS: this.systems.playerStats = sys; break;
+            case SystemID.PLAYER_MOVEMENT: this.systems.playerMovement = sys; break;
+            case SystemID.PLAYER_COMBAT: this.systems.playerCombat = sys; break;
+            case SystemID.PLAYER_MANAGER: this.systems.playerManager = sys; break;
+            case SystemID.INTERACTION: this.systems.interaction = sys; break;
+            case SystemID.PERK_SYSTEM: this.systems.perkSystem = sys; break;
+            case SystemID.FAMILY: this.systems.family = sys; break;
+            case SystemID.VEHICLE_MANAGER: this.systems.vehicleManager = sys; break;
+            case SystemID.VEHICLE_MOVEMENT: this.systems.vehicleMovement = sys; break;
+            case SystemID.WEAPON_HANDLER: this.systems.weaponHandler = sys; break;
+            case SystemID.PROJECTILE: this.systems.projectile = sys; break;
+            case SystemID.CHALLENGE_TRACKER: this.systems.challengeTracker = sys; break;
+            case SystemID.DAMAGE_NUMBER: this.systems.damageNumber = sys; break;
+            case SystemID.CAREER_STATS: this.systems.careerStats = sys; break;
+            case SystemID.ENEMY_MANAGER: this.systems.enemyManager = sys; break;
+            case SystemID.ENEMY_SYSTEM: this.systems.enemySystem = sys; break;
+            case SystemID.ENEMY_AI: this.systems.enemyAI = sys; break;
+            case SystemID.ENEMY_DETECTION: this.systems.enemyDetection = sys; break;
+            case SystemID.ENEMY_WAVE_SYSTEM: this.systems.enemyWave = sys; break;
+            case SystemID.DEATH: this.systems.death = sys; break;
+            case SystemID.CAMP_EFFECT_MANAGER: this.systems.campEffects = sys; break;
+            case SystemID.CAMP_CHATTER: this.systems.campChatter = sys; break;
+            case SystemID.CAMP_FAMILY_ANIMATION: this.systems.campFamilyAnimation = sys; break;
+            case SystemID.DISCOVERY_SYSTEM: this.systems.discovery = sys; break;
+        }
+    }
+
+    private _getRegistryProp(id: SystemID): any {
+        switch (id) {
+            case SystemID.SECTOR: return this.systems.sector;
+            case SystemID.CINEMATIC: return this.systems.cinematic;
+            case SystemID.HUD: return this.systems.hud;
+            case SystemID.PERFORMANCE_MONITOR: return this.systems.performanceMonitor;
+            case SystemID.ASSET_PRELOADER: return this.systems.assetPreloader;
+            case SystemID.ENVIRONMENT_MANAGER: return this.systems.environment;
+            case SystemID.SKY: return this.systems.sky;
+            case SystemID.WIND: return this.systems.wind;
+            case SystemID.WEATHER: return this.systems.weather;
+            case SystemID.FOG: return this.systems.fog;
+            case SystemID.WATER: return this.systems.water;
+            case SystemID.GROUND: return this.systems.ground;
+            case SystemID.LIGHT: return this.systems.light;
+            case SystemID.CAMERA: return this.systems.camera;
+            case SystemID.INPUT: return this.systems.input;
+            case SystemID.SPATIAL_GRID: return this.systems.spatialGrid;
+            case SystemID.WORLD_STREAMER: return this.systems.worldStreamer;
+            case SystemID.NAVIGATION: return this.systems.navigation;
+            case SystemID.OCCLUSION: return this.systems.occlusion;
+            case SystemID.TRIGGER_HANDLER: return this.systems.triggerHandler;
+            case SystemID.TRIGGER_SYSTEM: return this.systems.triggerSystem;
+            case SystemID.LOOT: return this.systems.loot;
+            case SystemID.FX: return this.systems.fx;
+            case SystemID.PARTICLE: return this.systems.particle;
+            case SystemID.FOOTPRINT: return this.systems.footprint;
+            case SystemID.PLAYER_STATS: return this.systems.playerStats;
+            case SystemID.PLAYER_MOVEMENT: return this.systems.playerMovement;
+            case SystemID.PLAYER_COMBAT: return this.systems.playerCombat;
+            case SystemID.PLAYER_MANAGER: return this.systems.playerManager;
+            case SystemID.INTERACTION: return this.systems.interaction;
+            case SystemID.PERK_SYSTEM: return this.systems.perkSystem;
+            case SystemID.FAMILY: return this.systems.family;
+            case SystemID.VEHICLE_MANAGER: return this.systems.vehicleManager;
+            case SystemID.VEHICLE_MOVEMENT: return this.systems.vehicleMovement;
+            case SystemID.WEAPON_HANDLER: return this.systems.weaponHandler;
+            case SystemID.PROJECTILE: return this.systems.projectile;
+            case SystemID.CHALLENGE_TRACKER: return this.systems.challengeTracker;
+            case SystemID.DAMAGE_NUMBER: return this.systems.damageNumber;
+            case SystemID.CAREER_STATS: return this.systems.careerStats;
+            case SystemID.ENEMY_MANAGER: return this.systems.enemyManager;
+            case SystemID.ENEMY_SYSTEM: return this.systems.enemySystem;
+            case SystemID.ENEMY_AI: return this.systems.enemyAI;
+            case SystemID.ENEMY_DETECTION: return this.systems.enemyDetection;
+            case SystemID.ENEMY_WAVE_SYSTEM: return this.systems.enemyWave;
+            case SystemID.DEATH: return this.systems.death;
+            case SystemID.CAMP_EFFECT_MANAGER: return this.systems.campEffects;
+            case SystemID.CAMP_CHATTER: return this.systems.campChatter;
+            case SystemID.CAMP_FAMILY_ANIMATION: return this.systems.campFamilyAnimation;
+            case SystemID.DISCOVERY_SYSTEM: return this.systems.discovery;
+            default: return null;
+        }
+    }
+
     public registerSystem(id: SystemID, sys: any, isTickable: boolean = true) {
         if (!sys) return;
 
@@ -774,16 +883,16 @@ export class WinterEngine {
             }
         }
 
-        this._systems[id] = sys;
+        this._updateRegistryProp(id, sys);
         if (isTickable && typeof sys.update === 'function') {
             this._tickableSystems.push(sys);
         }
     }
 
     public unregisterSystem(id: SystemID) {
-        const sys = this._systems[id];
+        const sys = this._getRegistryProp(id);
         if (sys) {
-            this._systems[id] = null;
+            this._updateRegistryProp(id, null);
             const idx = this._tickableSystems.indexOf(sys);
             if (idx !== -1) {
                 this._tickableSystems[idx] = this._tickableSystems[this._tickableSystems.length - 1];
@@ -793,14 +902,10 @@ export class WinterEngine {
         }
     }
 
-    public getSystem<T>(id: SystemID): T {
-        return this._systems[id] as T;
-    }
-
     public getSystems() {
         let count = 0;
         for (let i = 0; i < SystemID.COUNT; i++) {
-            const sys = this._systems[i];
+            const sys = this._getRegistryProp(i as SystemID);
             if (sys && sys.systemId !== SystemID.PERFORMANCE_MONITOR && typeof sys.update === 'function') {
                 const item = this._preallocatedSystemItems[count];
                 item.systemId = sys.systemId;
@@ -816,7 +921,7 @@ export class WinterEngine {
 
     public clearSystems() {
         for (let i = 0; i < SystemID.COUNT; i++) {
-            const sys = this._systems[i];
+            const sys = this._getRegistryProp(i as SystemID);
             if (sys && !sys.persistent) {
                 this.unregisterSystem(i as SystemID);
             }
@@ -839,7 +944,7 @@ export class WinterEngine {
      * Provision standardized timing: env systems get renderTime; simulation systems get simTime.
      */
     private updateSystems(context: any, delta: number, fixedOnly?: boolean): void {
-        const monitor = PerformanceMonitor.getInstance();
+        const monitor = this.systems.performanceMonitor!;
 
         // Hard-gate systems during loading/paused rendering
         // Prevents systems like CampChatter or Weather from running and playing sounds 
@@ -875,7 +980,7 @@ export class WinterEngine {
     }
 
     public setSystemEnabled(id: SystemID, enabled: boolean) {
-        const sys = this._systems[id];
+        const sys = this._getRegistryProp(id);
         if (sys) {
             sys.enabled = enabled;
         }

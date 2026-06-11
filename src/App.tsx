@@ -33,8 +33,7 @@ import ScreenSectorOverview from './components/ui/screens/ScreenSectorOverview';
 import ScreenResetConfirm from './components/ui/screens/ScreenResetConfirm';
 import DebugDisplay from './components/ui/core/DebugDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
-import { useGlobalInput } from './hooks/useGlobalInput';
-import { UiSounds } from './utils/audio/AudioLib';
+import { UISounds } from './utils/audio/AudioLib';
 import { checkIsMobileDevice } from './utils/device';
 import { AssetPreloader } from './systems/AssetPreloader';
 import { WinterEngine, GameSettings } from './core/engine/WinterEngine';
@@ -43,6 +42,7 @@ import { SectorSystem } from './systems/SectorSystem';
 import { OverlayType, DiscoveryType } from './components/ui/hud/HudTypes';
 import { StatsBridge } from './core/data/StatsBridge';
 import { MAX_ENTITIES } from './content/constants';
+import { useInput } from './game/session/useInput';
 
 // ============================================================================
 // ZERO-GC: Static Fallback Objects
@@ -267,7 +267,7 @@ const App: React.FC = () => {
 
     const handleOpenMap = useCallback(() => {
         setActiveOverlay(OverlayType.MAP);
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
     }, []);
 
     const handleCheckpointReached = useCallback(() => { }, []);
@@ -298,6 +298,7 @@ const App: React.FC = () => {
 
             return {
                 ...prev,
+                screen: GameScreen.BOSS_KILLED,
                 stats: {
                     ...prev.stats,
                     statsBuffer: newStatsBuffer,
@@ -306,6 +307,11 @@ const App: React.FC = () => {
                 }
             };
         });
+
+        if (gameCanvasRef.current) {
+            const stats = gameCanvasRef.current.getSectorStats(true, false);
+            setSectorStats(stats);
+        }
     }, []);
 
     const handleFamilyRescuedAction = useCallback((familyId: number) => {
@@ -341,12 +347,12 @@ const App: React.FC = () => {
 
     const handleTogglePauseAction = useCallback(() => {
         setActiveOverlay(OverlayType.PAUSE);
-        UiSounds.playClick();
+        UISounds.playClick();
     }, []);
 
     const handleToggleMapAction = useCallback(() => {
         setActiveOverlay(OverlayType.MAP);
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
     }, []);
 
     const handleSelectWeaponAction = useCallback((slot: string) => {
@@ -380,7 +386,7 @@ const App: React.FC = () => {
         setInitialAdventureLogTab(resolvedTab);
         setInitialAdventureLogItem(itemId || null);
         setActiveOverlay(OverlayType.ADVENTURE_LOG);
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
     }, []);
 
     const handleOpenStatisticsAction = useCallback((tab?: string, itemId?: string) => {
@@ -389,7 +395,7 @@ const App: React.FC = () => {
         setInitialStatisticsTab(resolvedTab);
         setInitialStatisticsItem(itemId || null);
         setActiveOverlay(OverlayType.STATION_STATISTICS);
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
     }, []);
 
     const handleCloseAction = useCallback(() => {
@@ -410,7 +416,7 @@ const App: React.FC = () => {
         // 1. Process technical death (updates permanent stats)
         handleDie(stats as any, finalHud.killerName);
 
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
         setGameState(prev => ({ ...prev, screen: GameScreen.RECAP }));
         setActiveOverlay(OverlayType.NONE);
     }, [handleDie]);
@@ -453,9 +459,21 @@ const App: React.FC = () => {
     }, []);
 
     const handleBossKilledProceed = useCallback(() => {
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
         setGameState(prev => ({ ...prev, screen: GameScreen.RECAP }));
     }, []);
+
+    const handleBossKilledExplore = useCallback(() => {
+        UISounds.playConfirm();
+        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+        // Resume simulation and input
+        const engine = WinterEngine.getInstance();
+        engine.isSimulationPaused = false;
+        engine.input.enable();
+        if (!isMobileDevice && gameCanvasRef.current) {
+            gameCanvasRef.current.requestPointerLock();
+        }
+    }, [isMobileDevice]);
 
     const handlePrologueCompleteAction = useCallback(() => {
         setGameState(prev => ({
@@ -465,7 +483,7 @@ const App: React.FC = () => {
             stats: { ...prev.stats, prologueSeen: true }
         }));
         HudStore.update({ ...HudStore.getState(), hudVisible: true });
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
     }, []);
 
     const handleCancelReset = useCallback(() => setActiveOverlay(OverlayType.NONE), []);
@@ -517,7 +535,7 @@ const App: React.FC = () => {
                 }
             };
         });
-        UiSounds.playClick();
+        UISounds.playClick();
     }, []);
 
     const handleSaveGraphics = useCallback((newG: GameSettings) => {
@@ -545,12 +563,10 @@ const App: React.FC = () => {
     }, [sectorStats, deathDetails]);
 
     const handleReturnToCamp = useCallback(async () => {
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
         await aggregatePendingStats();
 
         triggerLoadingTransition('CAMP', async () => {
-            AssetPreloader.releaseSectorAssets(latestStateRef.current.gameState.currentSector);
-
             const yieldToMain = () => new Promise<void>(resolve => {
                 requestAnimationFrame(() => setTimeout(resolve, 0));
             });
@@ -598,7 +614,7 @@ const App: React.FC = () => {
     }, []);
 
     const handleNextSector = useCallback(() => {
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
         aggregatePendingStats();
 
         triggerLoadingTransition('SECTOR', async () => {
@@ -606,12 +622,9 @@ const App: React.FC = () => {
 
             // If it's the last sector, stay at the last story sector.
             if (nextSector > SectorID.SCRAPYARD) {
-                AssetPreloader.releaseSectorAssets(latestStateRef.current.gameState.currentSector);
                 setGameState(prev => ({ ...prev, screen: GameScreen.CAMP, currentSector: SectorID.SCRAPYARD, weather: WeatherType.SNOW }));
                 return;
             }
-
-            AssetPreloader.releaseSectorAssets(latestStateRef.current.gameState.currentSector);
 
             const yieldToMain = () => new Promise<void>(resolve => {
                 requestAnimationFrame(() => setTimeout(resolve, 0));
@@ -659,7 +672,7 @@ const App: React.FC = () => {
     }, [triggerLoadingTransition]);
 
     const handleRespawnSector = useCallback(() => {
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
 
         // Keep gameCanvasRef alive and trigger resurrection
         if (gameCanvasRef.current) {
@@ -679,7 +692,7 @@ const App: React.FC = () => {
     }, []);
 
     const handleRestartSector = useCallback(() => {
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
 
         gameCanvasRef.current?.restartSector();
 
@@ -697,7 +710,7 @@ const App: React.FC = () => {
         setActiveOverlay(OverlayType.NONE);
         const stats = gameCanvasRef.current.getSectorStats(false, true);
         handleSectorEnded(stats);
-        UiSounds.playClick();
+        UISounds.playClick();
     }, [handleSectorEnded]);
 
     const handleResetGame = useCallback(() => {
@@ -731,18 +744,45 @@ const App: React.FC = () => {
     const handlePauseToggle = useCallback((val: boolean) => setActiveOverlay(val ? OverlayType.PAUSE : OverlayType.NONE), []);
     const handleToggleShowFps = useCallback(() => {
         setGameState(prev => ({ ...prev, settings: { ...prev.settings, showFps: !prev.settings.showFps } }));
-        UiSounds.playClick();
+        UISounds.playClick();
     }, []);
     const handleOverlayClose = useCallback(() => setActiveOverlay(OverlayType.NONE), []);
 
-    const globalInputActions = React.useMemo(() => ({
-        setActiveOverlay,
-        setTeleportInitialCoords,
-        requestPointerLock: () => { if (!latestStateRef.current.isMobileDevice) gameCanvasRef.current?.requestPointerLock(); },
-        onCollectibleClose: handleCollectibleClose
-    }), [handleCollectibleClose]);
-
-    useGlobalInput(activeOverlay, { screen: gameState.screen }, globalInputActions);
+    // ============================================================================
+    // UNIFIED GAME INPUT ENGINE BRIDGE
+    // Centralized Zero-GC pipeline synchronized directly to the engine frame ticks.
+    // Prevents uninitialized cross-wiring and resolves pointer lock focus losses.
+    // ============================================================================
+    useInput(
+        { engineRef, engine: engineRef.current, cinematicRef: { current: { active: false } }, bossIntroTimerRef: { current: null }, stateRef: { current: null } },
+        {
+            isPaused: activeOverlay !== OverlayType.NONE,
+            isGameRunning: !isInitialBoot && !isLoadingSector && !isLoadingCamp,
+            isMobileDevice: isMobileDevice,
+            gameState: gameState,
+            activeOverlay: activeOverlay // Secure pass-through to satisfy internal layout gates
+        } as any,
+        {
+            setActiveOverlay,
+            setTeleportInitialCoords,
+            // Wired directly to your stable instance handler to prevent state duplication
+            onPauseToggle: (pause: boolean) => {
+                if (pause) {
+                    handleTogglePauseAction();
+                    if (document.pointerLockElement) document.exitPointerLock();
+                } else {
+                    handleResumeAction();
+                }
+            },
+            // Wired directly to line 709's validated persistence handler
+            onCollectibleClose: handleCollectibleClose,
+            requestPointerLock: () => {
+                if (!isMobileDevice && gameCanvasRef.current) {
+                    gameCanvasRef.current.requestPointerLock();
+                }
+            }
+        }
+    );
 
     const cursorHidden = isMobileDevice || isPointerLocked || (hasInteracted && gameState.screen === GameScreen.SECTOR && activeOverlay === OverlayType.NONE);
     const showHUD = hasInteracted && (activeOverlay === OverlayType.NONE || activeOverlay === OverlayType.INTRO) && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && gameState.screen !== GameScreen.PROLOGUE;
@@ -754,7 +794,6 @@ const App: React.FC = () => {
             gameState.screen === GameScreen.RECAP ||
             gameState.screen === GameScreen.BOSS_KILLED ||
             gameState.screen === GameScreen.DEATH);
-    // Tog bort "&& !transitionTaskRef.current"
 
     return (
         <div
@@ -818,7 +857,7 @@ const App: React.FC = () => {
                                     gameState={gameState.screen === GameScreen.PROLOGUE ? { ...gameState, currentSector: 0 } : gameState}
                                     currentSectorData={SectorSystem.getSector(gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector)}
                                     isGameRunning={gameState.screen === GameScreen.SECTOR && !activeOverlay && !isLoadingSector}
-                                    isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE || gameState.screen === GameScreen.RECAP || gameState.screen === GameScreen.DEATH}
+                                    isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE || gameState.screen === GameScreen.RECAP || gameState.screen === GameScreen.DEATH || gameState.screen === GameScreen.BOSS_KILLED}
                                     disableInput={activeOverlay === OverlayType.COLLECTIBLE || isLoadingSector || activeOverlay === OverlayType.ADVENTURE_LOG}
                                     onDie={handleDie}
                                     onSectorEnded={handleSectorEnded}
@@ -1008,6 +1047,7 @@ const App: React.FC = () => {
                             sectorIndex={gameState.currentSector}
                             stats={sectorStats || undefined}
                             onProceed={handleBossKilledProceed}
+                            onExplore={handleBossKilledExplore}
                             isMobileDevice={isMobileDevice}
                         />
                     )}

@@ -46,6 +46,72 @@ const FALLBACK_DATA: UnifiedCombatData = {
   categoryName: 'misc'
 };
 
+// --- DISCOVERY DATA ---
+// Tracks maximum clearable limits per sector for DiscoveryType:
+// CLUE, POI and COLLECTIBLE - it's onlt these three that's got a max cap/sector
+// Monomorphic structure initialized at sector boot time to maximize V8 JIT caching.
+interface SectorTotals {
+  [DiscoveryType.CLUE]: number;
+  [DiscoveryType.POI]: number;
+  [DiscoveryType.COLLECTIBLE]: number;
+}
+
+interface PresentationPayload {
+  id: number;
+  type: DiscoveryType;
+  title: string;
+  progressString: string; // Pre-baked to avoid dynamic string interpolation in UI layout frames
+  isUnique: boolean;
+}
+
+// Fixed shape maps initialized at boot to protect V8 hidden classes
+const SECTOR_DISCOVERY_TOTALS: Record<number, SectorTotals> = {};
+const DISCOVERY_PAYLOAD_CACHE: Record<number, PresentationPayload> = {};
+
+/**
+ * Automatically pre-calculates and caches the maximum configuration boundaries 
+ * for all sectors using zero-parameter static evaluation at module load time.
+ */
+const initDiscoveryTotals = (): void => {
+  const sectors = DataResolver.getSectors();
+  const sectorLen = sectors.length;
+
+  for (let i = 0; i < sectorLen; i++) {
+    SECTOR_DISCOVERY_TOTALS[sectors[i]] = {
+      [DiscoveryType.CLUE]: 0,
+      [DiscoveryType.POI]: 0,
+      [DiscoveryType.COLLECTIBLE]: 0
+    };
+  }
+
+  // 1. Automatically compile Clues totals using optimized index loops
+  const clueKeys = Object.keys(CLUES);
+  for (let i = 0; i < clueKeys.length; i++) {
+    const c = CLUES[clueKeys[i] as any];
+    if (c && SECTOR_DISCOVERY_TOTALS[c.sector]) {
+      SECTOR_DISCOVERY_TOTALS[c.sector][DiscoveryType.CLUE]++;
+    }
+  }
+
+  // 2. Automatically compile POIs totals
+  const poiKeys = Object.keys(POIS);
+  for (let i = 0; i < poiKeys.length; i++) {
+    const p = POIS[poiKeys[i] as any];
+    if (p && SECTOR_DISCOVERY_TOTALS[p.sector]) {
+      SECTOR_DISCOVERY_TOTALS[p.sector][DiscoveryType.POI]++;
+    }
+  }
+
+  // 3. Automatically compile Collectibles totals
+  const colKeys = Object.keys(COLLECTIBLES);
+  for (let i = 0; i < colKeys.length; i++) {
+    const col = COLLECTIBLES[colKeys[i] as any];
+    if (col && SECTOR_DISCOVERY_TOTALS[col.sector]) {
+      SECTOR_DISCOVERY_TOTALS[col.sector][DiscoveryType.COLLECTIBLE]++;
+    }
+  }
+};
+
 const DISCOVERY_BUCKETS: Record<number, any[]> = {
   [DiscoveryType.POI]: Object.values(POIS),
   [DiscoveryType.COLLECTIBLE]: Object.values(COLLECTIBLES),
@@ -241,7 +307,7 @@ export const DataResolver = {
         return {
           id: id as number,
           name: wep.displayName,
-          description: `weapons.${wep.name}.description`,
+          description: `weapons.${wep.id}.description`,
           icon: wep.icon || 'weapon-generic',
           iconIsPng: wep.iconIsPng,
           categoryName: 'weapon'
@@ -573,6 +639,18 @@ export const DataResolver = {
     return '';
   },
 
+  getClueTitle(id: string | number | ClueID): string {
+    const resolved = resolveClueID(id);
+    if (resolved !== undefined) {
+      const clue = CLUES[resolved];
+      if (clue) return `clues.${clue.sector}.${clue.index}.title`;
+      const sector = (resolved >> 8) & 0xFF;
+      const index = resolved & 0xFF;
+      return `clues.${sector}.${index}.title`;
+    }
+    return '';
+  },
+
   getClueReaction(id: string | number | ClueID): string {
     const resolved = resolveClueID(id);
     if (resolved !== undefined) {
@@ -606,6 +684,65 @@ export const DataResolver = {
       case DiscoveryType.PERK: return 'ui.discovered_perk';
       default: return 'ui.discovery';
     }
+  },
+
+  /**
+   * Returns the static maximum capacity for a specific sector and type.
+   * O(1) dictionary lookup without allocations.
+   */
+  getSectorMaxCapacity(sectorId: number, type: DiscoveryType): number {
+    const sector = SECTOR_DISCOVERY_TOTALS[sectorId];
+    if (!sector) return 0;
+
+    switch (type) {
+      case DiscoveryType.CLUE: return sector[DiscoveryType.CLUE];
+      case DiscoveryType.POI: return sector[DiscoveryType.POI];
+      case DiscoveryType.COLLECTIBLE: return sector[DiscoveryType.COLLECTIBLE];
+    }
+
+    return 0;
+  },
+
+  /**
+   * Registers or recycles a computed UI presentation block.
+   * Executed by the simulation loop when pushing updates over the event buffer.
+   */
+  registerPresentationPayload(
+    discoveryId: number,
+    type: DiscoveryType,
+    title: string,
+    currentProgress: number,
+    maxProgress: number,
+    isUnique: boolean
+  ): void {
+    let payload = DISCOVERY_PAYLOAD_CACHE[discoveryId];
+
+    // Object pooling pattern: reuse existing references to bypass the Garbage Collector
+    if (!payload) {
+      payload = {
+        id: discoveryId,
+        type: type,
+        title: title,
+        progressString: "",
+        isUnique: isUnique
+      };
+      DISCOVERY_PAYLOAD_CACHE[discoveryId] = payload;
+    }
+
+    payload.type = type;
+    payload.title = title;
+    payload.isUnique = isUnique;
+    // Bakes string here to eliminate allocation overhead during the UI render step
+    payload.progressString = `${currentProgress}/${maxProgress}`;
+  },
+
+  /**
+   * Safe presentation lookup used by passive UI layers (e.g., React popups).
+   * Returns a static reference without allocating memory.
+   */
+  getPresentationPayload(discoveryId: number): PresentationPayload | null {
+    const payload = DISCOVERY_PAYLOAD_CACHE[discoveryId];
+    return payload ? payload : null;
   },
 
   getDiscoveryList(type: DiscoveryType): any[] {
@@ -655,20 +792,11 @@ export const DataResolver = {
     return PERK_CATALOG[cat] || [];
   },
 
-  getCategoryLabel(cat: PerkCategory): string {
-    switch (cat) {
-      case PerkCategory.PASSIVE: return 'ui.passives';
-      case PerkCategory.BUFF: return 'ui.buffs';
-      case PerkCategory.DEBUFF: return 'ui.debuffs';
-      default: return 'ui.unknown';
-    }
-  },
-
   getPerkCategoryKey(cat: PerkCategory): string {
     switch (cat) {
-      case PerkCategory.PASSIVE: return 'categories.passive';
-      case PerkCategory.BUFF: return 'categories.buff';
-      case PerkCategory.DEBUFF: return 'categories.debuff';
+      case PerkCategory.PASSIVE: return 'ui.passive';
+      case PerkCategory.BUFF: return 'ui.buff';
+      case PerkCategory.DEBUFF: return 'ui.debuff';
       default: return 'ui.unknown';
     }
   },
@@ -717,3 +845,7 @@ export const DataResolver = {
     }
   },
 };
+
+// CRITICAL: This invocation needs to be called after of export DataResolver,
+// to ensure all internal maps and constants are fully bound.
+initDiscoveryTotals();

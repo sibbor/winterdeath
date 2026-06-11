@@ -4,8 +4,9 @@ import { MATERIALS } from '../utils/assets';
 import { LogicalLight } from './LightSystem';
 import { FXParticleType, FXDecalType } from '../types/FXTypes';
 import { COLORS } from '../utils/ui/ColorUtils';
-import { ParticlePool } from '../core/state/ParticlePool';
-import { DamageID } from '../entities/player/CombatTypes';
+import { ParticlePool } from '../core/pools/ParticlePool';
+import { WeaponID } from '../entities/player/CombatTypes';
+import { COMBAT } from '../content/constants';
 import { WEAPONS, WeaponStats, DEFAULT_MUZZLE } from '../content/weapons';
 
 export enum WeaponLightType {
@@ -176,23 +177,31 @@ export const WeaponFX = {
         }
     },
 
-    // Flamethrower flames
+    /**
+         * Spawns flamethrower particles strictly bounded by the mathematical
+         * limitations of the gameplay collision cone (FLAMETHROWER_CONE_COS).
+         */
     drawFlames: (scene: THREE.Scene, start: THREE.Vector3, direction: THREE.Vector3, range: number) => {
-        // Ported to Zero-GC ParticlePool
-        const spread = 0.16; // Wider spread for a clean, expanding cone
+        // Enforce absolute mathematical boundary convergence with ProjectileSystem damage cone
+        const halfAngle = Math.acos(COMBAT.FLAMETHROWER_CONE_COS);
+        const baseAngle = Math.atan2(direction.x, direction.z);
         const baseSpeed = 22.0;
 
         for (let i = 0; i < 2; i++) {
             const speed = baseSpeed + Math.random() * 6.0;
-            const life = (range / speed) * (0.85 + Math.random() * 0.3); // Reaches exactly as long as the weapon does damage!
+            const life = (range / speed) * (0.85 + Math.random() * 0.3);
 
-            const vx = direction.x * speed + (Math.random() - 0.5) * spread * speed;
-            const vy = direction.y * speed + (Math.random() - 0.5) * spread * speed;
-            const vz = direction.z * speed + (Math.random() - 0.5) * spread * speed;
+            // Zero-GC: Pick a uniform angular vector inside the exact radian arc bounds
+            const randomAngle = baseAngle + (Math.random() - 0.5) * 2.0 * halfAngle;
 
-            const scale = 0.35 + Math.random() * 0.3; // Base scale
+            const vx = Math.sin(randomAngle) * speed;
+            const vz = Math.cos(randomAngle) * speed;
 
-            // Initial color: bright yellow (low blue so it is immediately classified as a flame)
+            // Retain vertical volumetric expansion to simulate climbing thermal gas pressure
+            const vy = direction.y * speed + (Math.random() * 2.0 - 0.7) * 2.5;
+            const scale = 0.35 + Math.random() * 0.3;
+
+            // Initial ignition color profile (Bright Yellow-Orange)
             const r = 1.0;
             const g = 0.95;
             const b = 0.1;
@@ -200,7 +209,7 @@ export const WeaponFX = {
             ParticlePool.spawnParticle(start.x, start.y, start.z, vx, vy, vz, scale, life, r, g, b);
         }
 
-        // A logical light throws fire color from the flames (at ~20% frequency)
+        // Project localized structural fire ignition glow fields
         if (Math.random() < 0.20) {
             _v1.copy(start).addScaledVector(direction, range * 0.5);
             _v1.y += 0.5;
@@ -273,9 +282,14 @@ export const WeaponFX = {
 
             attrMain.needsUpdate = true;
             attrCore.needsUpdate = true;
+
+            // FIXED: Re-compute bounding volumes inline to prevent WebGL frustum culling from dropping the line draw calls
+            activeNode.lineMain.geometry.computeBoundingSphere();
+            activeNode.lineMain.geometry.computeBoundingBox();
+            activeNode.lineCore.geometry.computeBoundingSphere();
+            activeNode.lineCore.geometry.computeBoundingBox();
         }
 
-        // Flashing cyan logical light thrown around the electricity center
         if (Math.random() < 0.25) {
             _v2.copy(start).add(end).multiplyScalar(0.5);
             _v2.y += 0.5;
@@ -394,8 +408,8 @@ export const WeaponFX = {
         ctx.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.scorchDecal, FXDecalType.SCORCH);
     },
 
-    createMuzzleEffect: (scene: THREE.Scene, weapon: DamageID, start: THREE.Vector3, direction: THREE.Vector3) => {
-        if (!scene || weapon === DamageID.NONE) return;
+    createMuzzleEffect: (scene: THREE.Scene, weapon: WeaponID, start: THREE.Vector3, direction: THREE.Vector3) => {
+        if (!scene || weapon === WeaponID.NONE) return;
 
         // O(1) Data Lookup från vår Single Source of Truth
         const wepStats = WEAPONS[weapon] as WeaponStats;

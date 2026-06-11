@@ -3,11 +3,9 @@ import { ZOMBIE_TYPES, BOSSES } from '../../content/constants';
 import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
 import { Enemy, AIState, EnemyDeathState, EnemyType, EnemyFlags, ENEMY_HP, ENEMY_SPEED, ENEMY_XP, NoiseType, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { BossID } from '../../game/session/SectorTypes';
-import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
+import { WinterEngine } from '../../core/engine/WinterEngine';
 import { KMH_TO_MS } from '../../content/constants';
 import { DamageID } from '../../entities/player/CombatTypes';
-
-const _v1 = new THREE.Vector3();
 
 let _nextPoolId = 0;
 
@@ -219,7 +217,7 @@ export const EnemySpawner = {
         g.add(enemyIndicatorRing);
         enemy.indicatorRing = enemyIndicatorRing;
 
-        if (!isWarmup && PerformanceMonitor.getInstance().aiLoggingEnabled) {
+        if (!isWarmup && (WinterEngine.getInstance().systems.performanceMonitor?.aiLoggingEnabled ?? true)) {
             console.log(`[EnemySpawner] Spawns ${EnemyType[typeKey]}_${enemy.id} at (${x.toFixed(1)}, ${z.toFixed(1)})`);
         }
 
@@ -344,7 +342,7 @@ export const EnemySpawner = {
         boss.add(bossIndicatorRing);
         enemy.indicatorRing = bossIndicatorRing;
 
-        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+        if (WinterEngine.getInstance().systems.performanceMonitor?.aiLoggingEnabled ?? true) {
             console.log(`[Spawner] Spawns BOSS at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`);
         }
         return enemy;

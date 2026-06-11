@@ -52,16 +52,10 @@ export class PlayerCombatSystem implements System {
         this.trajectoryLine.renderOrder = 999;
         scene.add(this.trajectoryLine);
 
-        // --- Cache Laser Sight (Zero-GC Array Iteration) ---
-        this.laserSight = null;
-        const children = this.playerGroup.children;
-        const len = children.length;
-        for (let i = 0; i < len; i++) {
-            if (children[i].userData.isLaserSight) {
-                this.laserSight = children[i] as THREE.Mesh;
-                break;
-            }
-        }
+        // --- Cache Laser Sight ---
+        // The laser is parented to 'body' (a nested child), not directly to playerGroup,
+        // so we use getObjectByName to traverse the full hierarchy.
+        this.laserSight = (this.playerGroup.getObjectByName('laserSight') as THREE.Mesh) || null;
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {

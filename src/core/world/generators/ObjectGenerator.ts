@@ -255,7 +255,25 @@ export const ObjectGenerator = {
 
         // 1. Skapa huskroppen som en separat mesh
         const bodyGeo = new THREE.BoxGeometry(width, height, depth);
+
+        // Scale UV coordinates for correct brick bumpmap tiling (every 2.5 meters)
+        const uvAttr = bodyGeo.attributes.uv;
+        for (let face = 0; face < 6; face++) {
+            let rx = 1, ry = 1;
+            if (face === 0 || face === 1) { // Left/Right (depth x height)
+                rx = depth / 2.5; ry = height / 2.5;
+            } else if (face === 2 || face === 3) { // Top/Bottom (width x depth)
+                rx = width / 2.5; ry = depth / 2.5;
+            } else { // Front/Back (width x height)
+                rx = width / 2.5; ry = height / 2.5;
+            }
+            for (let v = 0; v < 4; v++) {
+                const i = face * 4 + v;
+                uvAttr.setXY(i, uvAttr.getX(i) * rx, uvAttr.getY(i) * ry);
+            }
+        }
         bodyGeo.translate(0, height / 2, 0);
+
         const bodyMesh = new THREE.Mesh(bodyGeo, material);
         bodyMesh.castShadow = true;
         bodyMesh.receiveShadow = true;
@@ -275,7 +293,7 @@ export const ObjectGenerator = {
             const roofGeo = new THREE.ExtrudeGeometry(shape, { depth: depth, bevelEnabled: false });
             roofGeo.translate(0, height, -depth / 2);
 
-            const roofMesh = new THREE.Mesh(roofGeo, material);
+            const roofMesh = new THREE.Mesh(roofGeo, MATERIALS.roofTiles);
             roofMesh.castShadow = true;
             roofMesh.receiveShadow = true;
             group.add(roofMesh);
@@ -610,7 +628,31 @@ export const ObjectGenerator = {
 
         const midPoint = height * 0.4;
 
-        const lowerMesh = new THREE.Mesh(SHARED_GEO.box, lowerMat || MATERIALS.whiteBrick);
+        let finalLowerMat = lowerMat || MATERIALS.whiteBrick;
+        if (mapRepeat && (finalLowerMat as any).map) {
+            const cacheKey = `storefront_lower_${finalLowerMat.uuid}_${mapRepeat.x}_${mapRepeat.y}`;
+            if (!concreteCache[cacheKey]) {
+                const clones = finalLowerMat.clone();
+                (clones as any).map = (clones as any).map.clone();
+                (clones as any).map.repeat.set(mapRepeat.x, mapRepeat.y);
+                (clones as any).map.wrapS = (clones as any).map.wrapT = THREE.RepeatWrapping;
+                (clones as any).map.matrixAutoUpdate = false;
+                (clones as any).map.updateMatrix();
+                (clones as any).map.needsUpdate = true;
+                if ((clones as any).bumpMap) {
+                    (clones as any).bumpMap = (clones as any).bumpMap.clone();
+                    (clones as any).bumpMap.repeat.set(mapRepeat.x, mapRepeat.y);
+                    (clones as any).bumpMap.wrapS = (clones as any).bumpMap.wrapT = THREE.RepeatWrapping;
+                    (clones as any).bumpMap.matrixAutoUpdate = false;
+                    (clones as any).bumpMap.updateMatrix();
+                    (clones as any).bumpMap.needsUpdate = true;
+                }
+                concreteCache[cacheKey] = clones as any;
+            }
+            finalLowerMat = concreteCache[cacheKey];
+        }
+
+        const lowerMesh = new THREE.Mesh(SHARED_GEO.box, finalLowerMat);
         lowerMesh.scale.set(width, midPoint, depth);
         lowerMesh.position.y = midPoint / 2;
         lowerMesh.castShadow = true; lowerMesh.receiveShadow = true;
@@ -629,13 +671,23 @@ export const ObjectGenerator = {
 
         let finalUpperMat = upperMat || MATERIALS.wooden_fasade;
         if (mapRepeat && (finalUpperMat as any).map) {
-            const cacheKey = `storefront_${mapRepeat.x}_${mapRepeat.y}`;
+            const cacheKey = `storefront_upper_${finalUpperMat.uuid}_${mapRepeat.x}_${mapRepeat.y}`;
             if (!concreteCache[cacheKey]) {
                 const clones = finalUpperMat.clone();
                 (clones as any).map = (clones as any).map.clone();
                 (clones as any).map.repeat.set(mapRepeat.x, mapRepeat.y);
                 (clones as any).map.wrapS = (clones as any).map.wrapT = THREE.RepeatWrapping;
+                (clones as any).map.matrixAutoUpdate = false;
+                (clones as any).map.updateMatrix();
                 (clones as any).map.needsUpdate = true;
+                if ((clones as any).bumpMap) {
+                    (clones as any).bumpMap = (clones as any).bumpMap.clone();
+                    (clones as any).bumpMap.repeat.set(mapRepeat.x, mapRepeat.y);
+                    (clones as any).bumpMap.wrapS = (clones as any).bumpMap.wrapT = THREE.RepeatWrapping;
+                    (clones as any).bumpMap.matrixAutoUpdate = false;
+                    (clones as any).bumpMap.updateMatrix();
+                    (clones as any).bumpMap.needsUpdate = true;
+                }
                 concreteCache[cacheKey] = clones as any;
             }
             finalUpperMat = concreteCache[cacheKey];
@@ -650,7 +702,7 @@ export const ObjectGenerator = {
         if (withRoof) {
             const roofHeight = 3;
             const roofGeo = new THREE.ConeGeometry(Math.max(width, depth) * 0.7, roofHeight, 4).rotateY(Math.PI / 4);
-            const roof = new THREE.Mesh(roofGeo, MATERIALS.stone);
+            const roof = new THREE.Mesh(roofGeo, MATERIALS.roofTiles);
             roof.position.y = height + roofHeight / 2;
             roof.castShadow = true;
             group.add(roof);

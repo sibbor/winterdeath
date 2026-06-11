@@ -3,7 +3,7 @@ import { t } from '../../../utils/i18n';
 import ModalLayout, { TacticalButton, TacticalTab } from './ModalLayout';
 import { EnvironmentOverride, WeatherType } from '../../../core/engine/EnvironmentalTypes';;
 import { Sector4 } from '../../../content/sectors/Sector4';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 
 // Zero-GC: static config hoisted outside component to prevent re-allocation on every render
 const WEATHER_OPTIONS: { id: WeatherType; key: string }[] = [
@@ -183,7 +183,7 @@ export const ScreenTerminalEnvironment: React.FC<EnvironmentTerminalProps> = ({ 
                                 key={w.id}
                                 label={t(`weather.${w.key}`)}
                                 isActive={currentWeather === w.id}
-                                onClick={() => { UiSounds.playClick(); onWeatherChange(w.id); }}
+                                onClick={() => { UISounds.playClick(); onWeatherChange(w.id); }}
                             />
                         ))}
                     </div>

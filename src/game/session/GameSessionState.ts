@@ -176,7 +176,7 @@ export interface PreallocatedWorldState {
     clueActive: boolean;
     familyFound: boolean;
     familyAlreadyRescued: boolean;
-    familyExtracted: boolean;
+    familyRescued: boolean;
 }
 
 export interface PreallocatedTriggerState {
@@ -265,7 +265,7 @@ export interface GameSessionState {
 
 
     // --- GLOBAL CALLBACK BRIDGE ---
-    applyDamage: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
+    handleEnemyHit: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
     callbacks: any;
 }
 
@@ -430,7 +430,7 @@ export function allocateGameSessionState(): GameSessionState {
             clueActive: false,
             familyFound: false,
             familyAlreadyRescued: false,
-            familyExtracted: false
+            familyRescued: false
         },
 
         triggers: {
@@ -487,7 +487,7 @@ export function allocateGameSessionState(): GameSessionState {
             prevPos: new THREE.Vector3(0, -1000, 0)
         },
 
-        applyDamage: () => false,
+        handleEnemyHit: () => false,
         callbacks: null
     };
 }
@@ -615,7 +615,7 @@ export function resetGameSessionState(state: GameSessionState, props: any): void
     state.world.busUnlocked = false;
     state.world.familyFound = false;
     state.world.familyAlreadyRescued = !!props.familyAlreadyRescued;
-    state.world.familyExtracted = false;
+    state.world.familyRescued = false;
 
     // 8. Input State
     state.inputState.w = false;

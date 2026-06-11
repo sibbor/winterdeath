@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { t } from '../../../utils/i18n';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import ModalLayout, { TacticalCard } from './ModalLayout';
 import { DataResolver } from '../../../core/data/DataResolver';
 import CollectiblePreview from '../core/CollectiblePreview';
@@ -15,7 +15,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
     const def = DataResolver.getCollectibles()[collectibleId as any];
 
     useEffect(() => {
-        UiSounds.playLevelUp();
+        UISounds.playDiscovery();
     }, []);
 
     if (!def) return null;

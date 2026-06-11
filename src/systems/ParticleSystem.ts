@@ -1,5 +1,5 @@
 import { System, SystemID } from './System';
-import { ParticlePool, ParticlePoolState } from '../core/state/ParticlePool';
+import { ParticlePool, ParticlePoolState } from '../core/pools/ParticlePool';
 
 /**
  * Instanced Particle System (Phase 10)

@@ -46,7 +46,6 @@ export enum FXParticleType {
     ENEMY_EFFECT_FLAME,
     ENEMY_EFFECT_SPARK,
     SCRAP,
-    MEAT,
     SNOW_PUFF
 }
 

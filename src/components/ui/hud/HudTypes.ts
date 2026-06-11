@@ -241,8 +241,6 @@ export interface HudState {
   discoveryTimestamp: number;
 
   challengeTiers: Int32Array;
-  lastMetaSignal: MetaActionId;
-  metaSignalTimestamp: number;
 
   hasCriticalHp: boolean;
 }

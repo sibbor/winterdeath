@@ -7,7 +7,7 @@ import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
 import { VehicleDef } from '../content/vehicles';
 import { FLASHLIGHT } from '../content/constants';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
-import { VehicleState, VehicleNodes, VehicleTypes, VehicleCategory, VehicleID, VehicleEngineState, VehicleImpactIntensity } from '../entities/vehicles/VehicleTypes';
+import { VehicleState, VehicleNodes, VehicleTypes, VehicleEngineState, VehicleImpactIntensity } from '../entities/vehicles/VehicleTypes';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { SystemID } from './SystemID';
 import { InputAction } from '../core/engine/InputManager';
@@ -23,7 +23,7 @@ const _dismountDir = new THREE.Vector3();
 // Zero-GC context bridge for EnemyManager physics
 const _vehicleKnockbackCtx: any = {
     worldStreamer: null,
-    applyDamage: null,
+    handleEnemyHit: null,
     scene: null,
     engine: null,
     particles: null
@@ -294,7 +294,7 @@ export const VehicleManager = {
 
         // --- WORLD STREAMER ENEMY LOOKUP ---
         // Look around the *front* of the vehicle
-        const streamer = session.worldStreamer;
+        const streamer = session.systems.worldStreamer;
         const enPool = streamer.getEnemyPool();
         const enPoolIdx = enPool.nextIndex();
         streamer.getNearbyEnemies(_toEnemy.x, _toEnemy.z, hitRadius, enPoolIdx);
@@ -324,15 +324,9 @@ export const VehicleManager = {
             e.lastVehicleHit = simTime;
             hitAnyone = true;
 
-            // --- DATA-DRIVEN KNOCKBACK ---
-            // If going > 20 km/h, the force explodes. Otherwise, it's a gentle push.
-            const forceMult = speedKmh > 20 ? (speedKmh * 0.5) : 5.0;
-            const maxForce = forceMult * massRatio;
-            const maxDamage = (speedKmh * def.collisionDamageMultiplier * 0.8) * massRatio;
-
             // Prepare context for EnemyManager
-            _vehicleKnockbackCtx.worldStreamer = session.worldStreamer;
-            _vehicleKnockbackCtx.applyDamage = state.callbacks?.applyDamage;
+            _vehicleKnockbackCtx.worldStreamer = session.systems.worldStreamer;
+            _vehicleKnockbackCtx.handleEnemyHit = state.handleEnemyHit;
             _vehicleKnockbackCtx.scene = session.engine.scene;
             _vehicleKnockbackCtx.engine = session.engine;
             _vehicleKnockbackCtx.particles = state.combat.particles;
@@ -371,7 +365,7 @@ export const VehicleManager = {
         const hitRadius = (def.size.x > def.size.z ? def.size.x : def.size.z) * 0.5;
 
         // --- WORLD STREAMER OBSTACLE LOOKUP ---
-        const streamer = session.worldStreamer;
+        const streamer = session.systems.worldStreamer;
         const obsPool = streamer.getObstaclePool();
         const obsPoolIdx = obsPool.nextIndex();
         streamer.getNearbyObstacles(vehicle.position.x, vehicle.position.z, hitRadius + 2.0, obsPoolIdx);

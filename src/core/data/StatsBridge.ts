@@ -1,6 +1,8 @@
 import { CareerStats, StatID, StatEnemyIndex, StatWeaponIndex, TELEMETRY_ATTACKS_PER_SOURCE } from '../../types/CareerStats';
 import { SessionStats } from '../../types/SessionStats';
-import { ChallengeID } from '../../content/ChallengeTypes';
+import { ChallengeID } from '../../content/challenges';
+import { DiscoveryType } from '../../components/ui/hud/HudTypes';
+import { DataResolver } from './DataResolver';
 
 export type AnyStatsEntity = CareerStats | SessionStats;
 
@@ -230,7 +232,7 @@ export class StatsBridge {
             case ChallengeID.PYROMANIAC: return killsBuffer[StatWeaponIndex.BURN] + killsBuffer[StatWeaponIndex.MOLOTOV] + killsBuffer[StatWeaponIndex.FLAMETHROWER];
             case ChallengeID.SHOCK_THERAPY: return killsBuffer[StatWeaponIndex.ELECTRIC] + killsBuffer[StatWeaponIndex.ARC_CANNON];
             case ChallengeID.DEMOLITION_EXPERT: return killsBuffer[StatWeaponIndex.GRENADE];
-            case ChallengeID.BRAWLER: return killsBuffer[StatWeaponIndex.RUSH] + killsBuffer[StatWeaponIndex.PHYSICAL] + killsBuffer[StatWeaponIndex.DODGE];
+            case ChallengeID.BRAWLER: return killsBuffer[StatWeaponIndex.RUSH] + killsBuffer[StatWeaponIndex.DODGE] + killsBuffer[StatWeaponIndex.PHYSICAL];
             case ChallengeID.SHARPSHOOTER: return StatsBridge.getStatInt(stats, StatID.TOTAL_LONG_RANGE_KILLS);
             case ChallengeID.SURVIVOR: return Math.floor(StatsBridge.getStatFloat(stats, StatID.TOTAL_GAME_TIME) / 60000);
             case ChallengeID.VETERAN: return StatsBridge.getStatInt(stats, StatID.LEVEL);
@@ -408,7 +410,50 @@ export class StatsBridge {
     // ========================================================================
     // DISCOVERY & PROGRESSION ARRAYS
     // ========================================================================
+    /**
+         * Safely evaluates and aggregates runtime discovery metrics for a specific sector.
+         * Scans the contiguous DOD binary buffers and maps against static layouts. Zero-GC.
+         */
+    public static getSectorDiscoveryCount(stats: CareerStats, sectorId: number, type: DiscoveryType): number {
+        let count = 0;
 
+        if (type === DiscoveryType.CLUE) {
+            if (!stats.discoveredClues) return 0;
+            const clues = DataResolver.getClues();
+            const keys = Object.keys(clues);
+            const len = keys.length;
+            for (let i = 0; i < len; i++) {
+                const c = clues[keys[i] as any];
+                if (c && c.sector === sectorId && stats.discoveredClues[c.id] === 1) {
+                    count++;
+                }
+            }
+        } else if (type === DiscoveryType.POI) {
+            if (!stats.discoveredPois) return 0;
+            const pois = DataResolver.getPois();
+            const keys = Object.keys(pois);
+            const len = keys.length;
+            for (let i = 0; i < len; i++) {
+                const p = pois[keys[i] as any];
+                if (p && p.sector === sectorId && stats.discoveredPois[p.id] === 1) {
+                    count++;
+                }
+            }
+        } else if (type === DiscoveryType.COLLECTIBLE) {
+            if (!stats.discoveredCollectibles) return 0;
+            const collectibles = DataResolver.getCollectibles();
+            const keys = Object.keys(collectibles);
+            const len = keys.length;
+            for (let i = 0; i < len; i++) {
+                const col = collectibles[keys[i] as any];
+                if (col && col.sector === sectorId && stats.discoveredCollectibles[col.id] === 1) {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
     public static getDiscoveredCollectibles(stats: CareerStats): Uint8Array { return stats?.discoveredCollectibles || new Uint8Array(0); }
     public static getDiscoveredClues(stats: CareerStats): Uint8Array { return stats?.discoveredClues || new Uint8Array(0); }
     public static getDiscoveredPois(stats: CareerStats): Uint8Array { return stats?.discoveredPois || new Uint8Array(0); }

@@ -10,7 +10,7 @@ import { System, SystemID } from './System';
 import { DialogueLineType } from '../game/session/SectorTypes';
 import { DataResolver } from '../core/data/DataResolver';
 import { InputAction } from '../core/engine/InputManager';
-import { CinematicDialogueHandle } from '../components/ui/hud/CinematicDialogue';
+import { DialogueUIHandle } from '../components/ui/hud/DialogueUI';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 // Zero-GC Vectors for camera math (Allocated only at startup)
@@ -38,7 +38,7 @@ export class CinematicSystem implements System {
     public cinematicRef: React.MutableRefObject<any>;
     private camera: CameraSystem;
     private playerMeshRef: React.MutableRefObject<THREE.Group | null>;
-    private bubbleRef: React.RefObject<CinematicDialogueHandle>;
+    private dialogueRef: React.RefObject<DialogueUIHandle>;
     private activeFamilyMembers: React.MutableRefObject<any[]>;
     private callbacks: {
         setCurrentLine: (line: any) => void;
@@ -53,7 +53,7 @@ export class CinematicSystem implements System {
         cinematicRef: React.MutableRefObject<any>;
         camera: CameraSystem;
         playerMeshRef: React.MutableRefObject<THREE.Group | null>;
-        bubbleRef: React.RefObject<CinematicDialogueHandle>;
+        dialogueRef: React.RefObject<DialogueUIHandle>;
         activeFamilyMembers: React.MutableRefObject<any[]>;
         callbacks: {
             setCurrentLine: (line: any) => void;
@@ -67,7 +67,7 @@ export class CinematicSystem implements System {
         this.cinematicRef = opts.cinematicRef;
         this.camera = opts.camera;
         this.playerMeshRef = opts.playerMeshRef;
-        this.bubbleRef = opts.bubbleRef;
+        this.dialogueRef = opts.dialogueRef;
         this.activeFamilyMembers = opts.activeFamilyMembers;
         this.callbacks = opts.callbacks;
         this.state = opts.state;
@@ -183,7 +183,10 @@ export class CinematicSystem implements System {
         if (line.trigger) {
             const triggers = Array.isArray(line.trigger) ? line.trigger : [line.trigger];
             triggers.forEach(t => {
-                if (this.callbacks.onAction) this.callbacks.onAction(typeof t === 'string' ? { type: t } : t);
+                if (this.callbacks.onAction) {
+                    const actionObj = (typeof t === 'string' || typeof t === 'number') ? { type: t } : t;
+                    this.callbacks.onAction(actionObj);
+                }
             });
         }
 
@@ -222,7 +225,9 @@ export class CinematicSystem implements System {
 
     public stop() {
         const cinematic = this.cinematicRef.current;
-        if (!cinematic.active) return;
+        if (!cinematic.active && !cinematic.isClosing) return;
+
+        VoiceSounds.stopAllDialogueBeeps?.();
 
         console.log(`[CinematicSystem] Stopping cinematic.`);
         cinematic.active = false;
@@ -403,7 +408,7 @@ export class CinematicSystem implements System {
                 if (timeInLine < cinematic.typingDuration) {
                     // Skip typing
                     cinematic.lineStartTime = now - cinematic.typingDuration;
-                    this.bubbleRef.current?.finishTyping();
+                    this.dialogueRef.current?.finishTyping();
                 } else {
                     // Advance to next line (This flushes triggers of the current line)
                     this.playLine(cinematic.lineIndex + 1);

@@ -55,6 +55,7 @@ export enum TriggerStatus {
   ONCE = 1 << 3,
   HIDDEN = 1 << 4,
   REPEATABLE = 1 << 5,
+  IS_INSIDE = 1 << 6,
 }
 
 export interface TriggerAction {

@@ -1,32 +1,29 @@
 /**
  * UI Event Ring Buffer
- * 
- * An asynchronous, Zero-GC communication bridge between the simulation loop
+ * * An asynchronous, Zero-GC communication bridge between the simulation loop
  * and the React UI. Uses a fixed-size circular buffer to store event packets.
- * 
- * Each packet is exactly 4 integers:
+ * * Each packet is exactly 4 integers:
  * [TYPE_SMI, PARAM_1, PARAM_2, SIM_TIMESTAMP]
  */
 
 export enum UIEventType {
     NONE = 0,
-    DISCOVERY = 1,      // P1: Discovery ID (SMI), P2: Discovery Type (DiscoveryType)
-    CHAT_BUBBLE = 2,    // P1: Content String Hash or ID, P2: Duration (ms)
-    BOSS_SPAWN = 3,     // P1: Boss ID
-    FAMILY_FOUND = 4,   // P1: Member ID
-    FAMILY_FOLLOW = 5,  // P1: Member ID, P2: State (0=Stop, 1=Follow)
-    XP_GAIN = 6,        // P1: Amount
-    LEVEL_UP = 7,       // P1: New Level
-    HUD_COMMAND = 8,    // P1: Command (0=HIDE, 1=SHOW)
-    RELOAD_START = 9,   // P1: Duration (ms)
-    AMMO_LOW = 10,      // P1: Remaining Ammo
+    DISCOVERY = 1,           // P1: Discovery ID (SMI), P2: Discovery Type (DiscoveryType)
+    CHAT_BUBBLE = 2,         // P1: Content String Hash or ID, P2: Duration (ms)
+    SPAWN_BOSS = 3,          // P1: Boss ID
+    FAMILY_FOUND = 4,        // P1: Member ID
+    FAMILY_FOLLOW = 5,       // P1: Member ID, P2: State (0=Stop, 1=Follow)
+    XP_GAIN = 6,             // P1: Amount
+    LEVEL_UP = 7,            // P1: New Level
+    HUD_VISIBILITY = 8,      // P1: Command (0=HIDE, 1=SHOW)
+    RELOAD_WEAPON = 9,       // P1: Duration (ms)
+    AMMO_LOW = 10,           // P1: Remaining Ammo
     CHALLENGE_COMPLETE = 11, // P1: Challenge ID
-    SYNC_STATUS = 12,        // P1: Status Bitmask (StatusEffect SMI)
-    SP_GAIN = 13,            // P1: Amount
-    SCRAP_GAIN = 14,         // P1: Amount
-    CP_GAIN = 15,            // P1: Amount
-    BUFF_GAIN = 16,          // P1: StatusEffectID
-    DEBUFF_GAIN = 17,        // P1: StatusEffectID
+    SP_GAIN = 12,            // P1: Amount
+    SCRAP_GAIN = 13,         // P1: Amount
+    CP_GAIN = 14,            // P1: Amount
+    BUFF_GAIN = 15,          // P1: StatusEffectID
+    DEBUFF_GAIN = 16,        // P1: StatusEffectID
 }
 
 export enum ChatBubbleSubtype {
@@ -48,9 +45,10 @@ const buffer = new Int32Array(BUFFER_SIZE);
 let head = 0; // Write index
 let tail = 0; // Read index
 
+// Monotonic tracking token to protect against Int32 temporal truncation drops
+let lastInsertedTimestamp = 0;
+
 // --- STRING POOL (Zero-GC Sidecar) ---
-// We use a small circular pool of strings for things like Chat Bubbles
-// p1 will store the index into this pool.
 const stringPool = new Array<string>(64).fill('');
 let stringPoolIdx = 0;
 
@@ -58,19 +56,27 @@ export const UIEventRingBuffer = {
 
     /**
      * Pushes a new event packet into the buffer.
-     * Zero-GC: No allocations.
+     * Zero-GC: No allocations. Guarantees monotonic timestamp progression.
      */
     push: (type: UIEventType, p1: number = 0, p2: number = 0, timestamp: number) => {
-        // We use bitwise mask for wrap-around instead of modulo (%) 
-        // to maximize performance in the hot loop.
         const writeIdx = head;
         const nextHead = (head + PACKET_SIZE) & (BUFFER_SIZE - 1);
 
+        // Force convert floating timestamp to 32-bit signed integer
+        let serializedTime = timestamp | 0;
+
+        // CRITICAL FIX: If multiple events fire on the exact same simulation frame/millisecond,
+        // increment the token to guarantee a strictly increasing sequence for the UI latch.
+        if (serializedTime <= lastInsertedTimestamp) {
+            serializedTime = (lastInsertedTimestamp + 1) | 0;
+        }
+        lastInsertedTimestamp = serializedTime;
+
         if (typeof window !== 'undefined' && (window as any).WD_DEBUG === true) {
-            console.log(`[UIEvent] ${UIEventType[type]} | P1: ${p1} | P2: ${p2} | TS: ${timestamp.toFixed(2)}`);
+            console.log(`[UIEvent] ${UIEventType[type]} | P1: ${p1} | P2: ${p2} | TS: ${serializedTime}`);
         }
 
-        // Overflow check: If head catches tail, we drop the oldest event to maintain real-time stability
+        // Overflow check: Drop the oldest event if the buffer fills up to preserve frame budget
         if (nextHead === tail) {
             tail = (tail + PACKET_SIZE) & (BUFFER_SIZE - 1);
         }
@@ -78,7 +84,7 @@ export const UIEventRingBuffer = {
         buffer[writeIdx] = type;
         buffer[writeIdx + 1] = p1;
         buffer[writeIdx + 2] = p2;
-        buffer[writeIdx + 3] = timestamp;
+        buffer[writeIdx + 3] = serializedTime;
 
         head = nextHead;
     },
@@ -129,6 +135,7 @@ export const UIEventRingBuffer = {
     clear: () => {
         head = 0;
         tail = 0;
+        lastInsertedTimestamp = 0;
         buffer.fill(0);
     }
 };

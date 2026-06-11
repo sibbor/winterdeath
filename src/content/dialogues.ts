@@ -1,4 +1,4 @@
-import { DialogueLineType } from '../game/session/SectorTypes';
+import { DialogueLineType, BossID } from '../game/session/SectorTypes';
 import { FamilyMemberID } from './constants';
 import { TriggerActionType, TriggerAction } from '../types/TriggerTypes';
 
@@ -34,7 +34,7 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.0_11" },
             {
                 speaker: FamilyMemberID.LOKE, text: "dialogue.0_12",
-                trigger: [TriggerActionType.FAMILY_MEMBER_FOUND, TriggerActionType.SPAWN_BOSS]
+                trigger: [TriggerActionType.FAMILY_MEMBER_FOUND, { type: TriggerActionType.SPAWN_BOSS, payload: { bossId: BossID.SECTOR_0 } }]
             }
         ]
     },
@@ -101,7 +101,7 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.2_12" },
             {
                 speaker: FamilyMemberID.ROBERT, text: "dialogue.2_13",
-                trigger: [TriggerActionType.FAMILY_MEMBER_FOUND, TriggerActionType.SPAWN_BOSS]
+                trigger: [TriggerActionType.FAMILY_MEMBER_FOUND, { type: TriggerActionType.SPAWN_BOSS, payload: { bossId: BossID.SECTOR_2 } }]
             }
         ],
         // mast_flyover intro
@@ -153,7 +153,7 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
                 trigger: [
                     TriggerActionType.FAMILY_MEMBER_FOUND,
                     { type: TriggerActionType.SET_SECTOR_FLAG, payload: { flag: 'RUSH_TO_NATHALIE' } },
-                    TriggerActionType.SPAWN_BOSS
+                    { type: TriggerActionType.SPAWN_BOSS, payload: { bossId: BossID.SECTOR_3 } }
                 ]
             }
         ]

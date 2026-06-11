@@ -39,35 +39,19 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
 
     /**
      * SMI-Hardened action handler.
-     * Updates the shared input buffer via the InputManager.
+     * Updates the shared input buffer via the InputManager singleton context.
      */
     const handleAction = useCallback((action: InputAction, pressed: boolean) => {
-        // --- VINTERDÖD FIX: Use centralized virtual action handler ---
-        const engine = (window as any).engine; // The engine instance is usually attached or accessible
-        // Better: access via winterEngine singleton or the passed inputState if we can get the manager
-        // Since we have inputState, we can't directly get the manager unless we pass it.
-        // But wait, App.tsx has the engineRef.
-        // Actually, I'll just look for the manager in the window or similar if possible, 
-        // but wait, I can just use a custom event or a bridge.
-
-        // RE-EVALUATION: InputManager.ts's handleVirtualAction is exactly what we need.
-        // We need a way to call it. I'll use a global bridge or just reach into the engine.
+        // Enforce structural synchronization directly into the global execution thread
         const inputManager = (window as any).inputManager;
+
         if (inputManager) {
             inputManager.handleVirtualAction(action, pressed);
         } else {
-            // Fallback to direct state mutation (may be overwritten)
+            // High-performance fallback primitive array mutation if singleton hasn't locked yet
             if (action < InputAction.COUNT) {
                 inputState.actions[action] = pressed ? 1 : 0;
             }
-        }
-
-        // DODGE -> RUSH logic
-        if (action === InputAction.DODGE) {
-            // The PlayerMovementSystem handles the hold-to-rush logic 
-            // based on the DODGE action's duration. We just set the state.
-            if (inputManager) inputManager.handleVirtualAction(InputAction.DODGE, pressed);
-            else inputState.actions[InputAction.DODGE] = pressed ? 1 : 0;
         }
     }, [inputState]);
 
@@ -136,20 +120,20 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
                 if (dist > 2) {
-                    const normMag = Math.min(1.0, dist / MAX_DIST);
-                    const angle = Math.atan2(dy, dx);
-                    inputState.joystickMove.set(Math.cos(angle) * normMag, Math.sin(angle) * normMag);
+                    const normMag = dist >= 42 ? 1.0 : (dist / 42);
+                    const invDist = 1.0 / dist;
+                    const nx = dx * invDist;
+                    const ny = dy * invDist;
+                    inputState.joystickMove.set(nx * normMag, ny * normMag);
+
+                    if (leftStickKnobRef.current) {
+                        const visualDist = Math.min(dist, MAX_DIST);
+                        const vx = nx * visualDist;
+                        const vy = ny * visualDist;
+                        leftStickKnobRef.current.style.transform = `translate3d(${vx}px, ${vy}px, 0)`;
+                    }
                 } else {
                     inputState.joystickMove.set(0, 0);
-                }
-
-                if (leftStickKnobRef.current) {
-                    const visualDist = Math.min(dist, MAX_DIST);
-                    const visualAngle = Math.atan2(dy, dx);
-                    const vx = Math.cos(visualAngle) * visualDist;
-                    const vy = Math.sin(visualAngle) * visualDist;
-                    // Direct DOM manipulation is safer and faster than CSS variables in this context
-                    leftStickKnobRef.current.style.transform = `translate3d(${vx}px, ${vy}px, 0)`;
                 }
             }
 
@@ -160,25 +144,28 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
                 if (dist > 2) {
-                    const normMag = Math.min(1.0, dist / MAX_DIST);
-                    const angle = Math.atan2(dy, dx);
-                    inputState.joystickAim.set(Math.cos(angle) * normMag, Math.sin(angle) * normMag);
+                    const normMag = dist >= 42 ? 1.0 : (dist / 42);
+                    const invDist = 1.0 / dist;
+                    const nx = dx * invDist;
+                    const ny = dy * invDist;
+                    inputState.joystickAim.set(nx * normMag, ny * normMag);
+
+                    // Fire trigger logic synced instantly into engine state pipeline context
+                    const inputManager = (window as any).inputManager;
+                    if (inputManager) {
+                        inputManager.handleVirtualAction(InputAction.FIRE, dist > 8);
+                    } else {
+                        inputState.actions[InputAction.FIRE] = dist > 8 ? 1 : 0;
+                    }
+
+                    if (rightStickKnobRef.current) {
+                        const visualDist = Math.min(dist, MAX_DIST);
+                        const vx = nx * visualDist;
+                        const vy = ny * visualDist;
+                        rightStickKnobRef.current.style.transform = `translate3d(${vx}px, ${vy}px, 0)`;
+                    }
                 } else {
                     inputState.joystickAim.set(0, 0);
-                }
-
-                // Fire trigger logic
-                const inputManager = (window as any).inputManager;
-                if (inputManager) {
-                    inputManager.handleVirtualAction(InputAction.FIRE, dist > 8);
-                }
-
-                if (rightStickKnobRef.current) {
-                    const visualDist = Math.min(dist, MAX_DIST);
-                    const visualAngle = Math.atan2(dy, dx);
-                    const vx = Math.cos(visualAngle) * visualDist;
-                    const vy = Math.sin(visualAngle) * visualDist;
-                    rightStickKnobRef.current.style.transform = `translate3d(${vx}px, ${vy}px, 0)`;
                 }
             }
         }
@@ -199,8 +186,11 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 if (inputState?.joystickAim) {
                     inputState.joystickAim.set(0, 0);
                     const inputManager = (window as any).inputManager;
-                    if (inputManager) inputManager.handleVirtualAction(InputAction.FIRE, false);
-                    else inputState.actions[InputAction.FIRE] = 0;
+                    if (inputManager) {
+                        inputManager.handleVirtualAction(InputAction.FIRE, false);
+                    } else {
+                        inputState.actions[InputAction.FIRE] = 0;
+                    }
                 }
                 if (rightStickContainerRef.current) rightStickContainerRef.current.style.display = 'none';
             }
@@ -208,7 +198,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
     }, [inputState]);
 
     return (
-        <div className={`absolute inset-0 pointer-events-none z-[100] overflow-hidden select-none touch-none transition-opacity duration-1000 ${hudVisible ? 'opacity-100' : 'opacity-0'}`}>
+        <div className={`absolute inset-0 pointer-events-none z-[10] overflow-hidden select-none touch-none transition-opacity duration-1000 ${hudVisible ? 'opacity-100' : 'opacity-0'}`}>
             {/* LEFT TOUCH ZONE (Movement) */}
             <div
                 className="absolute left-0 w-[45%] h-[75%] pointer-events-auto"

@@ -1,19 +1,20 @@
 import * as THREE from 'three';
 import { WeaponCategory, WeaponBehavior, WEAPONS, WeaponStats } from '../content/weapons';
-import { DamageID, ToolID, HoldableID, WeaponID } from '../entities/player/CombatTypes';
+import { ToolID, HoldableID, WeaponID } from '../entities/player/CombatTypes';
 import { StatID } from '../types/CareerStats';
 import { ProjectileSystem } from './ProjectileSystem';
-import { WeaponSounds, UiSounds } from '../utils/audio/AudioLib';
+import { WeaponSounds, UISounds } from '../utils/audio/AudioLib';
 import { haptic } from '../utils/HapticManager';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
-import { _buoyancyResult } from './WaterSystem';
 import { TOOLS } from '../content/tools';
 import { WeaponFX } from './WeaponFX';
 import { SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
+import { CareerStatsSystem } from './CareerStatsSystem';
 import { InputAction } from '../core/engine/InputManager';
 import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
+import { _buoyancyResult } from './WaterSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -23,59 +24,14 @@ const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 
 const _UP = new THREE.Vector3(0, 1, 0);
+const _validWeaponsScratch: HoldableID[] = [];
 
-// Pre-defined static array for scroll iteration to avoid GC allocations
-const _SLOTS = ['primary', 'secondary', 'throwable', 'special', 'radio'];
-const _validWeaponsScratch: WeaponID[] = [];
-
-// Avoid creating empty objects and functions in loops
-const _NOOP_DAMAGE_TEXT = (x: number, y: number, z: number, t: string, c?: string) => { };
-
-// Locked Interface to guarantee V8 Shape (Zero-GC)
-interface ContinuousContext {
-    scene: THREE.Scene | null;
-    enemies: any[];
-    worldStreamer: any;
-    spawnParticle: Function | null;
-    showDamageText: Function;
-    spawnDecal: Function | null;
-    rewardXP: Function | null;
-    fireZones: any[];
-    simTime: number;
-    renderTime: number;
-    playerPos: THREE.Vector3 | null;
-    session: any;
-    noiseEvents: any;
-    makeNoise: Function | null;
-    applyDamage: Function | null;
-    onPlayerHit: Function | null;
-    weaponHandler: any;
-}
-
-const _continuousCtx: ContinuousContext = {
-    scene: null,
-    enemies: [],
-    worldStreamer: null,
-    spawnParticle: null,
-    showDamageText: _NOOP_DAMAGE_TEXT,
-    spawnDecal: null,
-    rewardXP: null,
-    fireZones: [],
-    simTime: 0,
-    renderTime: 0,
-    playerPos: null,
-    session: null,
-    noiseEvents: null,
-    makeNoise: null,
-    applyDamage: null,
-    onPlayerHit: null,
-    weaponHandler: null
-};
-
-// Extracted to prevent closure allocations per frame during throwing charge
+/**
+ * Executes a throwable weapon launch.
+ * Extracted out of hot path to eliminate closure allocation spikes.
+ */
 function _executeThrow(
     session: GameSessionLogic,
-    scene: THREE.Scene,
     playerGroup: THREE.Group,
     state: any,
     loadout: any,
@@ -88,11 +44,9 @@ function _executeThrow(
     const isUnlimited = !!state.sectorState?.unlimitedThrowables;
     if (!isUnlimited) state.combat.weaponAmmo[state.combat.activeWeapon]--;
 
-    const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-    if (tracker) tracker.recordThrowable(session, state.combat.activeWeapon);
+    CareerStatsSystem.recordThrowable(session, state.combat.activeWeapon);
 
-    // Use the locked CHARGE rotation, not the current character rotation
-    // which may have snapped towards the move direction during release.
+    // Use locked rotation to guarantee throw path consistency if player releases stick while turning
     _v1.set(0, 0, 1).applyQuaternion(state.combat.throwChargeRotation).normalize();
 
     const rangeMult = state.player.statsBuffer[StatID.MULTIPLIER_RANGE] || 1.0;
@@ -100,15 +54,14 @@ function _executeThrow(
     const maxDist = (wep.range || 25.0) * rangeMult;
     const dist = Math.max(2.0, ratio * maxDist);
 
-    _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0)); // Origin
-    _v3.copy(playerGroup.position).addScaledVector(_v1, dist); // Target
+    _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0)); // Origin height
+    _v3.copy(playerGroup.position).addScaledVector(_v1, dist); // Landing destination
     _v3.y = 0.1;
 
     const tMax = 1.0 + (dist / maxDist) * 0.5;
-
     const damage = WeaponHandler.getScaledDamage(state.combat.activeWeapon, state.gameState.weaponLevels[state.combat.activeWeapon]);
-    ProjectileSystem.launchThrowable(scene, state.combat.projectiles, _v2, _v3,
-        state.combat.activeWeapon as unknown as DamageID, tMax, damage);
+
+    ProjectileSystem.launchThrowable(_v2, _v3, state.combat.activeWeapon, tMax, damage);
 
     if (wep.reloadTime && wep.reloadTime > 0) {
         state.combat.isReloading = true;
@@ -127,16 +80,15 @@ function _executeThrow(
     if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 }
 
-
-
-
 export const WeaponHandler = {
     systemId: SystemID.WEAPON_HANDLER,
     id: 'weapon_handler',
     enabled: true,
     persistent: true,
 
-    // Handle switching weapons via 1-5 keys
+    /**
+     * Handles slot-specific input hotkeys (Keys 1-5)
+     */
     handleSlotSwitch: (state: any, loadout: any, action: InputAction) => {
         if (state.vehicle.active || state.ui.cinematicActive) return;
         let next: HoldableID | null = null;
@@ -152,15 +104,13 @@ export const WeaponHandler = {
 
         const nextDef = (WEAPONS as any)[next] || (TOOLS as any)[next];
 
-        // Restriction: Cannot switch to empty throwables
         if (nextDef?.category === WeaponCategory.THROWABLE && (state.combat.weaponAmmo[next] || 0) <= 0) {
-            UiSounds.playClick();
+            UISounds.playClick();
             return;
         }
 
-        // Restriction: Radio is only for calling family
         if (next === ToolID.RADIO && state.world.familyFound) {
-            UiSounds.playClick();
+            UISounds.playClick();
             return;
         }
 
@@ -174,32 +124,63 @@ export const WeaponHandler = {
         }
     },
 
-    // Handle weapon-related inputs (Scroll to switch, R to reload)
+    /**
+     * Handles contextual weapon inputs such as reloading and scroll-wheel weapon selection.
+     * Fully unrolled logic path to enforce monomorphic V8 shapes.
+     */
     handleInput: (input: any, state: any, loadout: any, simTime: number, disableInput: boolean) => {
-        // Block input during cinematics
         if (disableInput || state.vehicle.active || state.ui.cinematicActive) return;
 
-        // 1. Optimized Scroll Switching (Zero-GC)
         const acts = input.actions;
         if (acts[InputAction.SCROLL_DOWN] || acts[InputAction.SCROLL_UP]) {
-
             let currentIdx = -1;
             _validWeaponsScratch.length = 0;
             let vCount = 0;
+            let w: HoldableID;
+            let def: any;
 
-            for (let i = 0; i < _SLOTS.length; i++) {
-                const slotKey = _SLOTS[i];
-                const isTool = slotKey === 'radio';
-                let w = isTool ? ToolID.RADIO : loadout[slotKey];
-
-                if (w && w !== WeaponID.NONE) {
-                    const def = isTool ? (TOOLS as any)[w] : (WEAPONS as any)[w];
-                    if (def?.category === WeaponCategory.THROWABLE && (state.combat.weaponAmmo[w] || 0) <= 0) continue;
-                    if (w === ToolID.RADIO && state.world.familyFound) continue;
-
+            // Enforce Monomorphic Caching: Explicitly unroll inventory slot lookups to maintain L1 cache velocity
+            // Slot 1: Primary
+            w = loadout.primary;
+            if (w && (w as any) !== WeaponID.NONE) {
+                def = (WEAPONS as any)[w];
+                if (!(def?.category === WeaponCategory.THROWABLE && (state.combat.weaponAmmo[w] || 0) <= 0)) {
                     if (w === state.combat.activeWeapon) currentIdx = vCount;
                     _validWeaponsScratch[vCount++] = w;
                 }
+            }
+            // Slot 2: Secondary
+            w = loadout.secondary;
+            if (w && (w as any) !== WeaponID.NONE) {
+                def = (WEAPONS as any)[w];
+                if (!(def?.category === WeaponCategory.THROWABLE && (state.combat.weaponAmmo[w] || 0) <= 0)) {
+                    if (w === state.combat.activeWeapon) currentIdx = vCount;
+                    _validWeaponsScratch[vCount++] = w;
+                }
+            }
+            // Slot 3: Throwable
+            w = loadout.throwable;
+            if (w && (w as any) !== WeaponID.NONE) {
+                def = (WEAPONS as any)[w];
+                if (!(def?.category === WeaponCategory.THROWABLE && (state.combat.weaponAmmo[w] || 0) <= 0)) {
+                    if (w === state.combat.activeWeapon) currentIdx = vCount;
+                    _validWeaponsScratch[vCount++] = w;
+                }
+            }
+            // Slot 4: Special
+            w = loadout.special;
+            if (w && (w as any) !== WeaponID.NONE) {
+                def = (WEAPONS as any)[w];
+                if (!(def?.category === WeaponCategory.THROWABLE && (state.combat.weaponAmmo[w] || 0) <= 0)) {
+                    if (w === state.combat.activeWeapon) currentIdx = vCount;
+                    _validWeaponsScratch[vCount++] = w;
+                }
+            }
+            // Slot 5: Radio Tool
+            w = ToolID.RADIO;
+            if (!state.world.familyFound) {
+                if (w === state.combat.activeWeapon) currentIdx = vCount;
+                _validWeaponsScratch[vCount++] = w;
             }
 
             if (currentIdx !== -1 && vCount > 1) {
@@ -220,15 +201,13 @@ export const WeaponHandler = {
             input.actions[InputAction.SCROLL_UP] = 0;
         }
 
-        // 2. Weapon Validation
         let wep = (WEAPONS as any)[state.combat.activeWeapon] as WeaponStats;
         if (!wep) {
             state.combat.activeWeapon = loadout.primary;
             wep = (WEAPONS as any)[state.combat.activeWeapon] as WeaponStats;
-            if (!wep) return; // Both active and primary are invalid — bail out safely
+            if (!wep) return;
         }
 
-        // 3. Reload Logic
         const isThrowable = wep?.category === WeaponCategory.THROWABLE;
         const isRadio = state.combat.activeWeapon === ToolID.RADIO;
         const isEnergy = !!wep?.isEnergy;
@@ -237,16 +216,13 @@ export const WeaponHandler = {
             state.combat.isReloading = true;
             const actualReloadTime = (wep.reloadTime || 0) * (state.player.statsBuffer[StatID.MULTIPLIER_RELOAD] || 1.0);
             state.combat.reloadEndTime = simTime + actualReloadTime;
-            UIEventRingBuffer.push(UIEventType.RELOAD_START, actualReloadTime, 0, simTime);
+            UIEventRingBuffer.push(UIEventType.RELOAD_WEAPON, actualReloadTime, 0, simTime);
             WeaponSounds.playMagOut();
             haptic.reload();
         }
 
         if (state.combat.isReloading && simTime > state.combat.reloadEndTime) {
             state.combat.isReloading = false;
-
-            // Throwables use reloadTime as a cooldown, NOT an ammo refill.
-            // Only guns and special weapons (Continuous) should refill their mag on reload.
             if (wep.category !== WeaponCategory.THROWABLE) {
                 state.combat.weaponAmmo[state.combat.activeWeapon] = wep.magSize || 0;
                 WeaponSounds.playMagIn();
@@ -254,33 +230,33 @@ export const WeaponHandler = {
         }
     },
 
-    // --- AMMO UTILITIES ---
-    consumeAmmo: (state: any, weapon: DamageID) => {
-        // Consumption is primarily handled in handleFiring/ProjectileSystem.
-        // This bridge ensures we have enough to trigger visuals/SFX.
+    consumeAmmo: (state: any, weapon: WeaponID) => {
         return (state.combat.weaponAmmo[weapon] || 0) > 0 || !!state.sectorState?.unlimitedAmmo;
     },
 
-    // --- DAMAGE SCALING ---
     getScaledDamage: (weaponId: WeaponID, level: number = 0) => {
         const damage = ((WEAPONS as any)[weaponId] as WeaponStats)?.damage || 0;
-        // 10% increase per level above 1: Damage * (1 + (level - 1) * 0.1)
         return Math.floor(damage * (1 + (level - 1) * 0.1));
     },
 
-    // --- CORE FIRING LOGIC ---
+    /**
+     * Authoritative weapon execution driver loop.
+     * Enforces lightning/flame vector transformations safely inside localized buffers.
+     */
     handleFiring: (session: GameSessionLogic, scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh: THREE.Mesh | null | undefined, delta: number, simTime: number, renderTime: number) => {
         if (state.vehicle.active || state.ui.cinematicActive) return;
         if (state.player.isDodging || state.combat.isReloading) return;
 
-        let wep = (WEAPONS as any)[state.combat.activeWeapon] as WeaponStats;
-        if (!wep) {
+        let weapon = (WEAPONS as any)[state.combat.activeWeapon] as WeaponStats;
+        if (!weapon) {
             state.combat.activeWeapon = loadout.primary;
-            wep = (WEAPONS as any)[state.combat.activeWeapon] as WeaponStats;
-            if (!wep) return; // Both active and primary are invalid — bail out safely
+            weapon = (WEAPONS as any)[state.combat.activeWeapon] as WeaponStats;
+            if (!weapon) return;
         }
 
-        if (state.combat.activeWeapon === ToolID.RADIO) {
+        const wepId = state.combat.activeWeapon;
+
+        if (wepId === ToolID.RADIO) {
             if (input.actions[InputAction.FIRE]) WeaponSounds.playRadio();
             state.combat.throwChargeStart = 0;
             if (aimCrossMesh) aimCrossMesh.visible = false;
@@ -288,81 +264,65 @@ export const WeaponHandler = {
             return;
         }
 
-        // --- 0. ENERGY MANAGEMENT (Zero-GC) ---
-        // Regenerate ALL energy weapons in the loadout simultaneously
-        for (let i = 0; i < _SLOTS.length; i++) {
-            const wId = loadout[_SLOTS[i]];
-            if (wId && (WEAPONS as any)[wId]?.isEnergy) {
-                const isFiring = input.actions[InputAction.FIRE] && state.combat.activeWeapon === wId;
-                if (!isFiring) {
-                    // Regenerate 10% per second
-                    state.combat.weaponAmmo[wId] = Math.min(100, (state.combat.weaponAmmo[wId] || 0) + 10 * delta);
-                }
+        // --- OPTIMIZED ENERGY REGENERATION ---
+        if (loadout.primary && (WEAPONS as any)[loadout.primary]?.isEnergy) {
+            if (!(input.actions[InputAction.FIRE] && wepId === loadout.primary)) {
+                state.combat.weaponAmmo[loadout.primary] = Math.min(100, (state.combat.weaponAmmo[loadout.primary] || 0) + 10 * delta);
+            }
+        }
+        if (loadout.secondary && (WEAPONS as any)[loadout.secondary]?.isEnergy) {
+            if (!(input.actions[InputAction.FIRE] && wepId === loadout.secondary)) {
+                state.combat.weaponAmmo[loadout.secondary] = Math.min(100, (state.combat.weaponAmmo[loadout.secondary] || 0) + 10 * delta);
+            }
+        }
+        if (loadout.special && (WEAPONS as any)[loadout.special]?.isEnergy) {
+            if (!(input.actions[InputAction.FIRE] && wepId === loadout.special)) {
+                state.combat.weaponAmmo[loadout.special] = Math.min(100, (state.combat.weaponAmmo[loadout.special] || 0) + 10 * delta);
             }
         }
 
-        // --- BEHAVIOR-SPECIFIC LOGIC ---
-        switch (wep.behavior) {
-            case WeaponBehavior.CONTINUOUS:
+        switch (weapon.behavior) {
+            case WeaponBehavior.CONTINUOUS: {
                 if (aimCrossMesh) aimCrossMesh.visible = false;
                 if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
                 if (input.actions[InputAction.FIRE]) {
                     const isUnlimited = !!state.sectorState?.unlimitedAmmo;
-                    const hasAmmo = state.combat.weaponAmmo[state.combat.activeWeapon] > 0 || isUnlimited;
+                    const hasAmmo = state.combat.weaponAmmo[wepId] > 0 || isUnlimited;
 
                     if (hasAmmo) {
-                        if (wep.isEnergy) {
-                            // Deplete 20% per second
-                            state.combat.weaponAmmo[state.combat.activeWeapon] -= 20 * delta;
-                            if (state.combat.weaponAmmo[state.combat.activeWeapon] < 0) state.combat.weaponAmmo[state.combat.activeWeapon] = 0;
-                        } else if (!isUnlimited) {
-                            const actualFireRate = (wep.fireRate || 0) * (state.player.statsBuffer[StatID.MULTIPLIER_FIRERATE] || 1.0);
+                        if (weapon.isEnergy) {
+                            state.combat.weaponAmmo[wepId] -= 20 * delta;
+                            if (state.combat.weaponAmmo[wepId] < 0) state.combat.weaponAmmo[wepId] = 0;
+
+                            const actualFireRate = (weapon.fireRate || 100);
                             if (simTime > state.combat.lastShotTime + actualFireRate) {
-                                state.combat.weaponAmmo[state.combat.activeWeapon]--;
+                                state.combat.lastShotTime = simTime;
+                                CareerStatsSystem.recordShot(session, wepId);
+                            }
+                        } else if (!isUnlimited) {
+                            const actualFireRate = (weapon.fireRate || 0) * (state.player.statsBuffer[StatID.MULTIPLIER_FIRERATE] || 1.0);
+                            if (simTime > state.combat.lastShotTime + actualFireRate) {
+                                state.combat.weaponAmmo[wepId]--;
                                 state.combat.lastShotTime = simTime;
 
-                                if (state.combat.weaponAmmo[state.combat.activeWeapon] === 5) {
+                                if (state.combat.weaponAmmo[wepId] === 5) {
                                     UIEventRingBuffer.push(UIEventType.AMMO_LOW, 5, 0, simTime);
                                 }
 
-                                const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                                if (tracker) tracker.recordShot(session, state.combat.activeWeapon);
+                                CareerStatsSystem.recordShot(session, wepId);
                             }
                         }
 
                         _v1.set(0.3, 1.4, 0.8).applyQuaternion(playerGroup.quaternion);
                         _v2.copy(playerGroup.position).add(_v1);
-                        _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+                        _v3.set(state.player.aimDirection.x, 0, state.player.aimDirection.y).normalize();
 
-                        const cb = state.callbacks;
-
-                        _continuousCtx.scene = scene;
-                        _continuousCtx.enemies = state.enemies.pool || [];
-                        _continuousCtx.worldStreamer = session.worldStreamer;
-                        _continuousCtx.spawnParticle = cb?.spawnParticle;
-                        _continuousCtx.showDamageText = cb?.showDamageText || _NOOP_DAMAGE_TEXT;
-                        _continuousCtx.spawnDecal = cb?.spawnDecal;
-                        _continuousCtx.rewardXP = cb?.rewardXP;
-                        _continuousCtx.fireZones = state.combat.fireZones;
-                        _continuousCtx.simTime = simTime;
-                        _continuousCtx.renderTime = renderTime;
-                        _continuousCtx.playerPos = playerGroup.position;
-                        _continuousCtx.session = session;
-                        _continuousCtx.noiseEvents = state.noiseEvents;
-                        _continuousCtx.makeNoise = cb?.makeNoise;
-                        _continuousCtx.applyDamage = state.applyDamage;
-                        _continuousCtx.onPlayerHit = cb?.onPlayerHit;
-                        _continuousCtx.weaponHandler = WeaponHandler;
-
-                        if (WeaponHandler.consumeAmmo(state, state.combat.activeWeapon)) {
-                            WeaponHandler.handleContinuousFire(wep, _v2, _v3, session, delta);
-
-                            // --- MUZZLE FX (Audit Fix) ---
-                            WeaponFX.createMuzzleEffect(scene, state.combat.activeWeapon, _v2, _v3);
+                        if (WeaponHandler.consumeAmmo(state, wepId)) {
+                            WeaponFX.createMuzzleEffect(scene, wepId, _v2, _v3);
                         }
                     } else {
-                        if (state.combat.activeWeapon === WeaponID.FLAMETHROWER && (state.combat as any).lastFireState) {
+                        if (wepId === WeaponID.FLAMETHROWER && (state.combat as any).lastFireState) {
                             WeaponSounds.playFlamethrowerEnd();
                         }
 
@@ -372,13 +332,10 @@ export const WeaponHandler = {
                         }
                     }
                 } else {
-                    if (state.combat.activeWeapon === WeaponID.FLAMETHROWER && (state.combat as any).lastFireState) {
+                    if (wepId === WeaponID.FLAMETHROWER && (state.combat as any).lastFireState) {
                         WeaponSounds.playFlamethrowerEnd();
-
-                        // O(1) Node Lookup (Phase 13)
-                        const gun = state.player.nodes.gun;
                         const tip = state.player.nodes.barrelTip;
-                        if (gun && tip) {
+                        if (tip) {
                             tip.getWorldPosition(_v2);
                         } else {
                             _v1.set(0.3, 1.4, 0.8).applyQuaternion(playerGroup.quaternion);
@@ -389,46 +346,41 @@ export const WeaponHandler = {
                 }
                 (state.combat as any).lastFireState = !!input.actions[InputAction.FIRE];
                 break;
+            }
 
-            case WeaponBehavior.PROJECTILE:
+            case WeaponBehavior.PROJECTILE: {
                 if (aimCrossMesh) aimCrossMesh.visible = false;
                 if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
                 if (input.actions[InputAction.FIRE]) {
                     const isUnlimited = !!state.sectorState?.unlimitedAmmo;
-                    const hasAmmo = state.combat.weaponAmmo[state.combat.activeWeapon] > 0 || isUnlimited;
-                    const actualFireRate = (wep.fireRate || 0) * (state.player.statsBuffer[StatID.MULTIPLIER_FIRERATE] || 1.0);
+                    const hasAmmo = state.combat.weaponAmmo[wepId] > 0 || isUnlimited;
+                    const actualFireRate = (weapon.fireRate || 0) * (state.player.statsBuffer[StatID.MULTIPLIER_FIRERATE] || 1.0);
 
                     if (simTime > state.combat.lastShotTime + actualFireRate && hasAmmo) {
                         state.combat.lastShotTime = simTime;
-                        if (!isUnlimited) state.combat.weaponAmmo[state.combat.activeWeapon]--;
+                        if (!isUnlimited) state.combat.weaponAmmo[wepId]--;
 
-                        const tracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                        if (tracker) tracker.recordShot(session, state.combat.activeWeapon);
+                        CareerStatsSystem.recordShot(session, wepId);
 
-                        // O(1) Node Lookup (Phase 13)
-                        const gun = state.player.nodes.gun;
                         const tip = state.player.nodes.barrelTip;
-                        if (gun && tip) {
+                        if (tip) {
                             tip.getWorldPosition(_v2);
                         } else {
-                            // Fallback to approximate hand position
                             _v1.set(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion);
                             _v2.copy(playerGroup.position).add(_v1);
                         }
 
-                        WeaponSounds.playShot(state.combat.activeWeapon);
+                        WeaponSounds.playShot(wepId);
                         haptic.gunshot();
 
                         if (state.callbacks && state.callbacks.makeNoise) {
                             state.callbacks.makeNoise(_v2, NoiseType.GUNSHOT, NOISE_RADIUS[NoiseType.GUNSHOT]);
                         }
 
-                        const pellets = wep.name === WeaponID.SHOTGUN ? 8 : 1;
-                        const spread = wep.name === WeaponID.SHOTGUN ? 0.15 : 0;
-
-                        // Calculate total damage once (Zero-GC and faster)
-                        const totalDamage = WeaponHandler.getScaledDamage(state.combat.activeWeapon, state.gameState.weaponLevels[state.combat.activeWeapon]);
+                        const pellets = weapon.id === WeaponID.SHOTGUN ? 8 : 1;
+                        const spread = weapon.id === WeaponID.SHOTGUN ? 0.15 : 0;
+                        const totalDamage = WeaponHandler.getScaledDamage(wepId, state.gameState.weaponLevels[wepId]);
                         const damagePerPellet = totalDamage / pellets;
 
                         for (let i = 0; i < pellets; i++) {
@@ -442,31 +394,30 @@ export const WeaponHandler = {
                             _v3.normalize();
 
                             const rangeMult = state.player.statsBuffer[StatID.MULTIPLIER_RANGE] || 1.0;
-                            const bulletLife = ((wep.range || 15) / (wep.bulletSpeed || 70)) * rangeMult;
+                            const bulletLife = ((weapon.range || 15) / (weapon.bulletSpeed || 70)) * rangeMult;
 
-                            ProjectileSystem.launchBullet(state.combat.projectiles, _v2, _v3, wep.name as unknown as DamageID, damagePerPellet, bulletLife);
+                            ProjectileSystem.launchBullet(_v2, _v3, weapon.id, damagePerPellet, bulletLife);
                         }
 
-                        // --- MUZZLE FX (Audit Fix: Standard Projectiles) ---
-                        WeaponFX.createMuzzleEffect(scene, state.combat.activeWeapon, _v2, _v3);
-                    } else if (input.actions[InputAction.FIRE] && (state.combat.weaponAmmo[state.combat.activeWeapon] || 0) <= 0 && simTime > state.combat.lastShotTime + (wep.fireRate || 0)) {
+                        WeaponFX.createMuzzleEffect(scene, wepId, _v2, _v3);
+                    } else if (input.actions[InputAction.FIRE] && (state.combat.weaponAmmo[wepId] || 0) <= 0 && simTime > state.combat.lastShotTime + (weapon.fireRate || 0)) {
                         state.combat.lastShotTime = simTime;
                         if (state.sectorState?.noReload) {
-                            state.combat.weaponAmmo[state.combat.activeWeapon] = wep.magSize || 0;
+                            state.combat.weaponAmmo[wepId] = weapon.magSize || 0;
                         } else {
                             WeaponSounds.playEmptyClick();
                             state.combat.isReloading = true;
-                            const actualReloadTime = (wep.reloadTime || 0);
+                            const actualReloadTime = (weapon.reloadTime || 0);
                             state.combat.reloadEndTime = simTime + actualReloadTime;
-                            UIEventRingBuffer.push(UIEventType.RELOAD_START, actualReloadTime, 0, simTime);
+                            UIEventRingBuffer.push(UIEventType.RELOAD_WEAPON, actualReloadTime, 0, simTime);
                             WeaponSounds.playMagOut();
                         }
                     }
                 }
                 break;
-
-            case WeaponBehavior.THROWABLE:
-                const canCharge = (state.combat.weaponAmmo[state.combat.activeWeapon] > 0) && simTime > (state.combat.lastShotTime || 0) + 500;
+            }
+            case WeaponBehavior.THROWABLE: {
+                const canCharge = (state.combat.weaponAmmo[wepId] > 0) && simTime > (state.combat.lastShotTime || 0) + 500;
 
                 if (input.actions[InputAction.FIRE] && canCharge) {
                     if (state.combat.throwChargeStart === 0) {
@@ -474,25 +425,22 @@ export const WeaponHandler = {
                         state.combat.throwChargeRotation.copy(playerGroup.quaternion);
                     }
 
-                    // Update the cached rotation ONLY while the player is actively providing aim input.
-                    // This allows them to let go of the stick and keep the trajectory locked.
                     const isAiming = (input.joystickAim && input.joystickAim.lengthSq() > 0.1) || (input.aimVector && input.aimVector.lengthSq() > 1);
                     if (isAiming) {
                         state.combat.throwChargeRotation.copy(playerGroup.quaternion);
                     }
 
                     const chargeTime = 1250;
-                    const holdTime = 500; // Hold at max for 500ms before reset
+                    const holdTime = 500;
                     const totalCycle = chargeTime + holdTime;
 
                     const elapsed = simTime - state.combat.throwChargeStart;
                     const cycleElapsed = elapsed % totalCycle;
                     const ratio = cycleElapsed < chargeTime ? (cycleElapsed / chargeTime) : 1.0;
 
-                    // Use the LOCKED rotation for trajectory line/visuals
                     _v1.set(0, 0, 1).applyQuaternion(state.combat.throwChargeRotation).normalize();
 
-                    const maxDist = (wep.range || 25.0) * (state.player.statsBuffer[StatID.MULTIPLIER_RANGE] || 1.0);
+                    const maxDist = (weapon.range || 25.0) * (state.player.statsBuffer[StatID.MULTIPLIER_RANGE] || 1.0);
                     const dist = Math.max(2.0, ratio * maxDist);
 
                     _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0));
@@ -527,6 +475,15 @@ export const WeaponHandler = {
                         const engine = WinterEngine.getInstance();
                         const water = engine?.water;
 
+                        const origInWater = _buoyancyResult.inWater;
+                        const origWaterLevel = _buoyancyResult.waterLevel;
+                        const origDepth = _buoyancyResult.depth;
+                        const origMaxDepth = _buoyancyResult.maxDepth;
+                        const origGroundY = _buoyancyResult.groundY;
+                        const origBaseWaterLevel = _buoyancyResult.baseWaterLevel;
+
+                        let groundY = 0.1;
+
                         for (let i = 0; i <= 20; i++) {
                             const t = (i / 20) * tMax;
                             const tx = _v2.x + vx * t;
@@ -535,11 +492,12 @@ export const WeaponHandler = {
 
                             const instVy = vy - (g * t);
 
-                            let groundY = 0.1;
                             if (water) {
                                 water.checkBuoyancy(tx, 0.5, tz, renderTime);
                                 if (_buoyancyResult.inWater) {
                                     groundY = _buoyancyResult.waterLevel + 0.05;
+                                } else {
+                                    groundY = 0.1;
                                 }
                             }
 
@@ -554,38 +512,26 @@ export const WeaponHandler = {
                         posAttr.needsUpdate = true;
                         (trajectoryLineMesh.material as THREE.MeshBasicMaterial).opacity = 0.4 + ratio * 0.6;
                         (trajectoryLineMesh.material as THREE.MeshBasicMaterial).depthTest = false;
+
+                        _buoyancyResult.inWater = origInWater;
+                        _buoyancyResult.waterLevel = origWaterLevel;
+                        _buoyancyResult.depth = origDepth;
+                        _buoyancyResult.maxDepth = origMaxDepth;
+                        _buoyancyResult.groundY = origGroundY;
+                        _buoyancyResult.baseWaterLevel = origBaseWaterLevel;
                     }
-
-                    // Charge cycles indefinitely while fire is held.
-
                 } else if (state.combat.throwChargeStart > 0) {
-                    // Calculate release ratio with same cycling logic
                     const totalCycle = 1250 + 500;
                     const cycleElapsed = (simTime - state.combat.throwChargeStart) % totalCycle;
                     const ratio = cycleElapsed < 1250 ? (cycleElapsed / 1250) : 1.0;
 
-                    _executeThrow(session, scene, playerGroup, state, loadout, simTime, wep, ratio, aimCrossMesh, trajectoryLineMesh);
+                    _executeThrow(session, playerGroup, state, loadout, simTime, weapon, ratio, aimCrossMesh, trajectoryLineMesh);
                 } else {
                     if (aimCrossMesh) aimCrossMesh.visible = false;
                     if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
                 }
-
                 break;
-        }
-    },
-
-    // --- VISUAL FEEDBACK BRIDGE ---
-    handleContinuousFire: (weapon: WeaponStats, origin: THREE.Vector3, direction: THREE.Vector3, ctx: any, delta: number) => {
-        switch (weapon.name) {
-            case WeaponID.FLAMETHROWER:
-                WeaponFX.drawFlames(ctx.engine.scene, origin, direction, weapon.range);
-                break;
-            case WeaponID.ARC_CANNON:
-                // We let ProjectileSystem handle the authoritative hit-beam and chaining.
-                // The handler only draws the "idle" beam if no enemies are nearby, 
-                // but for now, the ProjectileSystem is the primary source of truth.
-                break;
+            }
         }
     }
-
 };

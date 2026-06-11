@@ -127,7 +127,7 @@ class FootprintSystemClass implements System {
         }
 
         // 2. Leverage frame-stamped snapped coordinate from player position (O(1) time snap)
-        const streamer = session.worldStreamer;
+        const streamer = session.systems.worldStreamer;
 
         // Extremely fast mathematical X/Z offset avoiding trig overhead where possible
         const offsetDist = isRight ? 0.15 : -0.15;

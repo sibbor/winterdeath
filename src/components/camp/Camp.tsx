@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { CareerStats, StatID } from '../../types/CareerStats';
 import { WeaponID } from '../../entities/player/CombatTypes';
 import { PLAYER_CHARACTER } from '../../content/constants';
-import { UiSounds, AmbientSounds, VoiceSounds } from '../../utils/audio/AudioLib';
+import { UISounds, AmbientSounds, VoiceSounds } from '../../utils/audio/AudioLib';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { DataResolver } from '../../core/data/DataResolver';
 import { t } from '../../utils/i18n';
@@ -12,7 +12,6 @@ import { WinterEngine, GameSettings } from '../../core/engine/WinterEngine';
 import { CampWorld } from './CampWorld';
 import { CampEffectsState, CAMP_SCENE } from './CampWorld';
 import { WeatherType } from '../../core/engine/EnvironmentalTypes';
-import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { CampEffectsSystem, CampFamilyAnimationSystem, CampChatterSystem } from './CampSystems';
 import { SystemID } from '../../systems/System';
 
@@ -69,8 +68,9 @@ const areEqual = (prevProps: CampProps, nextProps: CampProps) => {
 
 const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, settings, onCampLoaded, isMobileDevice, weather = WeatherType.SNOW, hasCheckpoint, isGameRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
     const rescuedFamilyIndices = StatsBridge.getRescuedFamilyIndices(stats);
-    const deadBossIndices = StatsBridge.getDeadBossIndices(stats);
-    const monitor = PerformanceMonitor.getInstance();
+    const rescuedFamilyIndicesStr = rescuedFamilyIndices.join(',');
+    const engineInstance = WinterEngine.getInstance();
+    const monitor = engineInstance.systems.performanceMonitor!;
 
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
@@ -294,7 +294,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             engine.unregisterSystem(SystemID.CAMP_CHATTER);
         };
 
-    }, [rescuedFamilyIndices, textures]);
+    }, [rescuedFamilyIndicesStr, textures]);
 
     // --- INTERACTIVITY EFFECT: Registers loop + events ---
     useEffect(() => {
@@ -333,9 +333,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 if (hovered.startsWith('family_') || hovered.startsWith('player_')) {
                     const familyMembers = sceneFamilyMembersRef.current;
                     const fmWrapper = familyMembers.find((fm: any) => fm.mesh.userData.id === hovered);
-                    if (fmWrapper) { fmWrapper.bounce = 1; VoiceSounds.playDialogueBeep(fmWrapper.mesh.userData.name); }
+                    if (fmWrapper) {
+                        fmWrapper.bounce = 1;
+                        VoiceSounds.playDialogueBeep(fmWrapper.mesh.userData.name);
+                    }
                 } else {
-                    UiSounds.playConfirm();
+                    UISounds.playOpenScreen();
                     const typeMap: Record<string, OverlayType> = {
                         'armory': OverlayType.STATION_ARMORY,
                         'skills': OverlayType.STATION_SKILLS,
@@ -493,7 +496,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                     // --- DIRECT DOM MANIPULATION FOR PERFORMANCE ---
                     // Only trigger a React state change if the actual hover target changed
                     if (newHover !== hoveredRef.current) {
-                        if (newHover) UiSounds.playHover();
+                        if (newHover) UISounds.playHover();
                         hoveredRef.current = newHover;
                         setHoveredStation(newHover);
                         setTooltipData(newHover ? { text: toolTipText, subText: toolTipSubText } : null);
@@ -560,7 +563,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         };
     }, [isGameRunning, stats, currentLoadout, currentSector]);
 
-    const closeModal = () => { UiSounds.playClick(); setActiveOverlay(OverlayType.NONE); };
+    const closeModal = () => { UISounds.playClick(); setActiveOverlay(OverlayType.NONE); };
 
     return (
         <div className={`relative w-full h-full bg-black font-sans overflow-hidden`} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>

@@ -21,7 +21,6 @@ import { ClueID } from '../../content/clues';
 import { SectorEventID } from '../../content/sector_events';
 import { CollectibleID } from '../../content/collectibles';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
-import { SystemID } from '../../systems/SystemID';
 import { EnemyWaveSystem, EnemyWaveConfig } from '../../systems/EnemyWaveSystem';
 
 const LOCATIONS = {
@@ -103,13 +102,21 @@ const _zoomOffsetTarget = new THREE.Vector3(22, 10, 0);
 const _zoomOffsetLook = new THREE.Vector3(0, 2, 0);
 
 // Pre-allocated flat array replacing the dynamic closure allocations
-const BUILDING_POIS = [
-    { name: 'church', pos: LOCATIONS.POIS.CHURCH, count: 6, isMixed: true, type: EnemyType.WALKER },
+interface BuildingPoi {
+    readonly name: string;
+    readonly pos: { readonly x: number; readonly z: number };
+    readonly count: number;
+    readonly isMixed: boolean;
+    readonly type?: EnemyType;
+}
+
+const BUILDING_POIS: readonly BuildingPoi[] = [
+    { name: 'church', pos: LOCATIONS.POIS.CHURCH, count: 6, isMixed: true },
     { name: 'cafe', pos: LOCATIONS.POIS.CAFE, count: 4, isMixed: false, type: EnemyType.WALKER },
-    { name: 'grocery', pos: LOCATIONS.POIS.GROCERY, count: 5, isMixed: false, type: EnemyType.RUNNER },
-    { name: 'gym', pos: LOCATIONS.POIS.GYM, count: 3, isMixed: true, type: EnemyType.WALKER },
+    { name: 'grocery', pos: LOCATIONS.POIS.GROCERY, count: 3, isMixed: true },
+    { name: 'gym', pos: LOCATIONS.POIS.GYM, count: 3, isMixed: true },
     { name: 'pizzeria', pos: LOCATIONS.POIS.PIZZERIA, count: 4, isMixed: false, type: EnemyType.WALKER },
-] as const;
+];
 
 const SPOTS_ARRAY = [
     LOCATIONS.POIS.CHURCH,
@@ -208,7 +215,7 @@ function explodeBus(delta: number, simTime: number, renderTime: number, gameStat
         sectorState.busExplosionTime = renderTime;
 
         if (events.playSound) events.playSound(SoundID.EXPLOSION);
-        if (events.cameraShake) events.cameraShake(5);
+        if (events.cameraShake) events.cameraShake(15);
 
         _busOriginalPos.set(EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.y, EXPLODING_BUS_POS.z);
 
@@ -478,8 +485,6 @@ export const Sector0: SectorDef = {
     },
 
     setupProps: async (ctx: SectorBuildContext) => {
-        console.time('[Sector0] setupProps');
-        performance.mark('sector0-props-start');
         const { scene, obstacles } = ctx;
 
         let startTime = performance.now();
@@ -837,7 +842,7 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(99, 0, 67),
             new THREE.Vector3(76, 0, 43),
         ];
-        console.time('[Sector0] Forest Generation');
+
         await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
         await yieldIfBudgetExceeded();
 
@@ -858,7 +863,6 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(24, 0, 37),
         ];
         await SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE], forestPolygon, 12);
-        console.timeEnd('[Sector0] Forest Generation');
         await yieldIfBudgetExceeded();
 
         forestPolygon = [
@@ -959,15 +963,10 @@ export const Sector0: SectorDef = {
         SectorBuilder.spawnChest(ctx, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z + 5, ChestType.STANDARD);
 
         SectorBuilder.spawnFamily(ctx, FamilyMemberID.LOKE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI);
-        performance.mark('sector0-props-end');
-        performance.measure('sector0-props', 'sector0-props-start', 'sector0-props-end');
-
-        console.timeEnd('[Sector0] setupProps');
     },
 
     setupContent: async (ctx: SectorBuildContext) => {
         if (ctx.isWarmup) return;
-        console.time('[Sector0] setupContent');
 
         // ZERO-GC FIX: Added ONCE bitmask to ensure triggers stop firing after touch
         SectorBuilder.addTriggers(ctx, [
@@ -985,7 +984,7 @@ export const Sector0: SectorDef = {
             { id: PoiID.S0_GYM, position: LOCATIONS.POIS.GYM, size: { width: 65, depth: 45 }, type: TriggerType.POI, content: "pois.0.5.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
             { id: PoiID.S0_TRAIN_YARD, position: LOCATIONS.POIS.TRAIN_YARD, size: { width: 150, depth: 110 }, type: TriggerType.POI, content: "pois.0.6.reaction", statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
 
-            { id: SectorEventID.S0_TUNNEL_BLOCKED, position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: TriggerType.EVENT, content: "sector_events.0.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [] },
+            { id: SectorEventID.S0_TUNNEL_BLOCKED, position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: TriggerType.EVENT, statusFlags: TriggerStatus.ACTIVE, actions: [] },
 
             {
                 id: FamilyMemberID.LOKE,
@@ -993,13 +992,10 @@ export const Sector0: SectorDef = {
                 familyId: FamilyMemberID.LOKE,
                 radius: 5,
                 type: TriggerType.EVENT,
-                content: '',
                 statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
                 actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.LOKE, dialogueId: 0, sectorId: 0 } }]
             }
         ]);
-
-        console.timeEnd('[Sector0] setupContent');
     },
 
     onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {
@@ -1009,126 +1005,6 @@ export const Sector0: SectorDef = {
             object.userData.isInteractable = false;
             if (events.setInteraction) events.setInteraction(null);
         }
-    },
-
-    onPlayerRespawn: (ctx: SectorBuildContext, state: any, engine: any) => {
-        if (!state.sectorState) return;
-
-        /*
-        // Reset wave variables
-        state.sectorState.waveActive = false;
-        state.sectorState.waveName = '';
-        state.sectorState.waveProgress = 0;
-        state.sectorState.waveKills = 0;
-        state.sectorState.waveTarget = 0;
-
-        // Reset bus event data
-        state.sectorState.busEventState = 0;
-        state.sectorState.busEventTimer = 0;
-        state.sectorState.busExplosionHandled = false;
-        state.sectorState.busExplosionTime = 0;
-        state.sectorState.lastBeepTime = 0;
-        state.sectorState.busInteractionTriggered = false;
-        state.sectorState.busCanBeInteractedWith = false;
-        state.sectorState.busExploded = false;
-        state.sectorState.lokeUnlocked = false;
-
-        const bus = (ctx as any).busObject;
-        if (bus) {
-            bus.position.set(LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.y, LOCATIONS.TRIGGERS.BUS.z);
-            bus.userData.isInteractable = false;
-        }
-
-        const rubble = (ctx as any).busRubble;
-        if (rubble) {
-            rubble.visible = false;
-            rubble.position.y = -1000;
-            if (rubble.userData) rubble.userData.active = false;
-        }
-
-        const tires = (ctx as any).busTires;
-        if (tires) {
-            tires.visible = false;
-            tires.position.y = -1000;
-            if (tires.userData) tires.userData.active = false;
-        }
-
-        const busRing = (ctx as any).busRing;
-        if (busRing) {
-            busRing.visible = false;
-            busRing.position.y = -1000;
-        }
-
-        // Restore collision obstacle
-        const colMesh = (ctx as any).busColMesh;
-        const busSize = new THREE.Vector3();
-        if (bus) {
-            const busBox = new THREE.Box3().setFromObject(bus);
-            busBox.getSize(busSize);
-            const busCenter = new THREE.Vector3();
-            busBox.getCenter(busCenter);
-
-            if (colMesh) {
-                colMesh.position.copy(busCenter);
-                colMesh.visible = false;
-            }
-
-            const obstacle_bus = {
-                id: EXPLODING_BUS_ID,
-                mesh: colMesh,
-                position: busCenter,
-                collider: { type: ColliderType.BOX, size: busSize }
-            };
-
-            let exists = false;
-            for (let i = 0; i < ctx.obstacles.length; i++) {
-                if (ctx.obstacles[i] && ctx.obstacles[i].id === EXPLODING_BUS_ID) {
-                    ctx.obstacles[i] = obstacle_bus;
-                    exists = true;
-                    break;
-                }
-            }
-            if (!exists) {
-                ctx.obstacles.push(obstacle_bus);
-            }
-
-            if (ctx.worldStreamer && typeof ctx.worldStreamer.registerObstacle === 'function') {
-                ctx.worldStreamer.registerObstacle(obstacle_bus);
-            }
-        }
-
-        // Re-register the S0_TUNNEL_BLOCKED event trigger if it got deleted
-        const triggerSystem = engine.getSystem(SystemID.TRIGGER_SYSTEM);
-        if (triggerSystem) {
-            const existingIdx = triggerSystem.getTriggerById(SectorEventID.S0_TUNNEL_BLOCKED, TriggerType.EVENT);
-            if (existingIdx === -1) {
-                triggerSystem.addTrigger({
-                    id: SectorEventID.S0_TUNNEL_BLOCKED,
-                    type: TriggerType.EVENT,
-                    x: LOCATIONS.TRIGGERS.BUS.x,
-                    y: 0,
-                    z: LOCATIONS.TRIGGERS.BUS.z,
-                    radius: 15,
-                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                    actions: []
-                });
-            }
-
-            const lokeIdx = triggerSystem.getTriggerById(FamilyMemberID.LOKE, TriggerType.EVENT);
-            if (lokeIdx === -1) {
-                triggerSystem.addTrigger({
-                    id: FamilyMemberID.LOKE,
-                    type: TriggerType.EVENT,
-                    x: LOCATIONS.SPAWN.FAMILY.x,
-                    y: LOCATIONS.SPAWN.FAMILY.y || 0,
-                    z: LOCATIONS.SPAWN.FAMILY.z,
-                    radius: 8,
-                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                    actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.LOKE, dialogueId: 0, sectorId: 0 } }]
-                });
-            }
-        }
-        */
     },
 
     onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, triggerSystem, ctx, engine, ...events }) => {
@@ -1164,7 +1040,7 @@ export const Sector0: SectorDef = {
                     for (let i = 0; i < poi.count; i++) {
                         let type: EnemyType = EnemyType.WALKER;
                         if (poi.isMixed) type = Math.random() > 0.8 ? EnemyType.RUNNER : EnemyType.WALKER;
-                        else type = poi.type;
+                        else if (poi.type) type = poi.type;
 
                         const offX = (Math.random() - 0.5) * 20;
                         const offZ = (Math.random() - 0.5) * 20;
@@ -1211,6 +1087,7 @@ export const Sector0: SectorDef = {
             if (triggerSystem.isTriggered(busTrigIdx)) {
                 sectorState.busEventState = 1;
                 sectorState.busEventTimer = simTime;
+                events.setBubble(events.t("sector_events.0.0.reaction"));
             }
         }
         else if (sectorState.busEventState === 1 && simTime - sectorState.busEventTimer > 2000) {
@@ -1219,23 +1096,9 @@ export const Sector0: SectorDef = {
             sectorState.busEventTimer = simTime;
 
             if (events.playSound) events.playSound(SoundID.EXPLOSION);
-            if (events.cameraShake) events.cameraShake(1.0);
+            if (events.cameraShake) events.cameraShake(15);
 
-            triggerSystem.addTriggerPrimitive(
-                SectorEventID.S0_TUNNEL_WHATS_HAPPENING,
-                TriggerType.SPEAK,
-                playerPos.x, 0, playerPos.z,
-                100, TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                "sector_events.0.1.reaction"
-            );
-            triggerSystem.addTriggerPrimitive(
-                ClueID.S0_EVENT_BUS_RUBBLE,
-                TriggerType.CLUE,
-                EXPLODING_BUS_POS.x, 0, EXPLODING_BUS_POS.z,
-                20,
-                TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                "story.bus_rubble_reaction"
-            );
+            events.setBubble(events.t("sector_events.0.1.reaction"));
         }
         else if (sectorState.busEventState === 2 && simTime - sectorState.busEventTimer > 2000) {
             sectorState.busEventState = 3;
@@ -1257,7 +1120,7 @@ export const Sector0: SectorDef = {
             sectorState.busEventTimer = simTime;
 
             if (events.playSound) events.playSound(SoundID.EXPLOSION);
-            if (events.cameraShake) events.cameraShake(5.0);
+            if (events.cameraShake) events.cameraShake(15.0);
 
             if (events.makeNoise) {
                 events.makeNoise(_trainYardPos, NoiseType.OTHER, 100);
@@ -1270,16 +1133,10 @@ export const Sector0: SectorDef = {
 
             if (events.setCameraOverride) events.setCameraOverride(null);
 
-            triggerSystem.addTriggerPrimitive(
-                SectorEventID.S0_TUNNEL_EXPLOSION_ATTRACTED_ZOMBIES,
-                TriggerType.THOUGHT,
-                playerPos.x, 0, playerPos.z,
-                100, TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                "sector_events.0.4.reaction"
-            );
+            events.setBubble(events.t("sector_events.0.4.reaction"));
 
             // Start the wave using the EnemyWaveSystem
-            const enemyWaveSystem = engine.getSystem(SystemID.ENEMY_WAVE_SYSTEM) as EnemyWaveSystem;
+            const enemyWaveSystem = engine.systems.enemyWave as EnemyWaveSystem;
             if (enemyWaveSystem) {
                 const spawns: Array<{ type: EnemyType; pos: { x: number; z: number } }> = [];
                 for (let i = 0; i < SPOTS_ARRAY.length; i++) {
@@ -1304,13 +1161,7 @@ export const Sector0: SectorDef = {
             if (!sectorState.waveActive) {
                 sectorState.busEventState = 6;
                 sectorState.busEventTimer = simTime;
-                triggerSystem.addTriggerPrimitive(
-                    SectorEventID.S0_TUNNEL_PLANT_EXPLOSIVES,
-                    TriggerType.THOUGHT,
-                    playerPos.x, 0, playerPos.z,
-                    100, TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                    "sector_events.0.2.reaction"
-                );
+                events.setBubble(events.t("sector_events.0.2.reaction"));
 
                 sectorState.busCanBeInteractedWith = true;
 
@@ -1392,25 +1243,17 @@ export const Sector0: SectorDef = {
 
             explodeBus(delta, simTime, renderTime, gameState, sectorState, ctx, events);
 
-            if (elapsed > 10000 || (!(ctx as any).busRubble?.userData.active)) {
+            if (elapsed > 10000 || (elapsed > 1000 && (!(ctx as any).busRubble?.userData.active))) {
                 sectorState.busEventState = 9;
                 sectorState.busEventTimer = simTime;
 
                 if (events.setCameraOverride) events.setCameraOverride(null);
 
-                triggerSystem.addTriggerPrimitive(
-                    SectorEventID.S0_TUNNEL_CLEARED,
-                    TriggerType.THOUGHT,
-                    playerPos.x, 0, playerPos.z,
-                    100, TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                    "sector_events.0.3.reaction"
-                );
+                events.setBubble(events.t("sector_events.0.3.reaction"));
             }
         }
         else if (sectorState.busEventState === 9 && !sectorState.lokeUnlocked) {
-            if (simTime - sectorState.busEventTimer > 1500) {
-                sectorState.lokeUnlocked = true;
-            }
+            sectorState.lokeUnlocked = true;
         }
         else if (sectorState.lokeUnlocked && !sectorState.lokeCinematicTriggered) {
             _v1.set(LOCATIONS.SPAWN.FAMILY.x, 0, LOCATIONS.SPAWN.FAMILY.z);
@@ -1423,5 +1266,123 @@ export const Sector0: SectorDef = {
                 }
             }
         }
-    }
+    },
+
+    onPlayerRespawn: (ctx: SectorBuildContext, state: any, engine: any) => {
+        if (!state.sectorState) return;
+
+        // Reset wave variables
+        state.sectorState.waveActive = false;
+        state.sectorState.waveName = '';
+        state.sectorState.waveProgress = 0;
+        state.sectorState.waveKills = 0;
+        state.sectorState.waveTarget = 0;
+
+        // Reset bus event data
+        state.sectorState.busEventState = 0;
+        state.sectorState.busEventTimer = 0;
+        state.sectorState.busExplosionHandled = false;
+        state.sectorState.busExplosionTime = 0;
+        state.sectorState.lastBeepTime = 0;
+        state.sectorState.busInteractionTriggered = false;
+        state.sectorState.busCanBeInteractedWith = false;
+        state.sectorState.busExploded = false;
+        state.sectorState.lokeUnlocked = false;
+
+        const bus = (ctx as any).busObject;
+        if (bus) {
+            bus.position.set(LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.y, LOCATIONS.TRIGGERS.BUS.z);
+            bus.userData.isInteractable = false;
+        }
+
+        const rubble = (ctx as any).busRubble;
+        if (rubble) {
+            rubble.visible = false;
+            rubble.position.y = -1000;
+            if (rubble.userData) rubble.userData.active = false;
+        }
+
+        const tires = (ctx as any).busTires;
+        if (tires) {
+            tires.visible = false;
+            tires.position.y = -1000;
+            if (tires.userData) tires.userData.active = false;
+        }
+
+        const busRing = (ctx as any).busRing;
+        if (busRing) {
+            busRing.visible = false;
+            busRing.position.y = -1000;
+        }
+
+        // Restore collision obstacle
+        const colMesh = (ctx as any).busColMesh;
+        const busSize = new THREE.Vector3();
+        if (bus) {
+            const busBox = new THREE.Box3().setFromObject(bus);
+            busBox.getSize(busSize);
+            const busCenter = new THREE.Vector3();
+            busBox.getCenter(busCenter);
+
+            if (colMesh) {
+                colMesh.position.copy(busCenter);
+                colMesh.visible = false;
+            }
+
+            const obstacle_bus = {
+                id: EXPLODING_BUS_ID,
+                mesh: colMesh,
+                position: busCenter,
+                collider: { type: ColliderType.BOX, size: busSize }
+            };
+
+            let exists = false;
+            for (let i = 0; i < ctx.obstacles.length; i++) {
+                if (ctx.obstacles[i] && ctx.obstacles[i].id === EXPLODING_BUS_ID) {
+                    ctx.obstacles[i] = obstacle_bus;
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                //ctx.obstacles.push(obstacle_bus);
+                if (ctx.worldStreamer && typeof ctx.worldStreamer.registerObstacle === 'function') {
+                    ctx.worldStreamer.registerObstacle(obstacle_bus);
+                }
+            }
+        }
+
+        // Re-register the S0_TUNNEL_BLOCKED event trigger if it got deleted
+        const triggerSystem = ctx.engine.systems.triggerSystem;
+        if (triggerSystem) {
+            const existingIdx = triggerSystem.getTriggerById(SectorEventID.S0_TUNNEL_BLOCKED, TriggerType.EVENT);
+            if (existingIdx === -1) {
+                triggerSystem.addTrigger({
+                    id: SectorEventID.S0_TUNNEL_BLOCKED,
+                    type: TriggerType.EVENT,
+                    x: LOCATIONS.TRIGGERS.BUS.x,
+                    y: 0,
+                    z: LOCATIONS.TRIGGERS.BUS.z,
+                    radius: 15,
+                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                    actions: []
+                });
+            }
+
+            const lokeIdx = triggerSystem.getTriggerById(FamilyMemberID.LOKE, TriggerType.EVENT);
+            if (lokeIdx === -1) {
+                triggerSystem.addTrigger({
+                    id: FamilyMemberID.LOKE,
+                    type: TriggerType.EVENT,
+                    x: LOCATIONS.SPAWN.FAMILY.x,
+                    y: 0,
+                    z: LOCATIONS.SPAWN.FAMILY.z,
+                    radius: 8,
+                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                    actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.LOKE, dialogueId: 0, sectorId: 0 } }]
+                });
+            }
+        }
+    },
+
 };

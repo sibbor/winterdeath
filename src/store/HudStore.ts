@@ -11,7 +11,7 @@ import {
     HudVector2,
     DebugInfoData
 } from '../components/ui/hud/HudTypes';
-import { InteractionType, InteractionPromptId, MetaActionId, UIEventBridge } from '../systems/ui/UIEventBridge';
+import { InteractionType, InteractionPromptId, UIEventBridge } from '../systems/ui/UIEventBridge';
 import { HoldableID, DamageID } from '../entities/player/CombatTypes';
 import { StatusEffectID } from '../types/StatusEffects';
 
@@ -78,6 +78,7 @@ export class HudStateSoA implements IHudState {
     public discoveredPoisCount = 0;
     public discoveredCollectiblesCount = 0;
     public fps = 60;
+
     // Sector Stats (Flattened)
     public unlimitedAmmo = false;
     public unlimitedThrowables = false;
@@ -153,12 +154,9 @@ export class HudStateSoA implements IHudState {
     public discoveryDetails = '';
     public discoveryTimestamp = 0;
     public challengeTiers = new Int32Array(64);
-    public lastMetaSignal: MetaActionId = MetaActionId.NONE;
-    public metaSignalTimestamp = 0;
     public hasCriticalHp = false;
 
     constructor() {
-        // Initialize map items pool
         this.mapItems = new Array(MAX_MAP_ITEMS);
         for (let i = 0; i < MAX_MAP_ITEMS; i++) {
             this.mapItems[i] = { id: '', x: 0, z: 0, type: MapItemType.OTHER, label: null, icon: null, color: null, radius: null, points: null };
@@ -166,7 +164,7 @@ export class HudStateSoA implements IHudState {
     }
 
     /**
-     * V8 Optimized Deep Copy (Zero-GC)
+     * V8 Optimized Deep Copy (Zero-GC execution path)
      */
     public copy(src: IHudState): void {
         this.statsBuffer.set(src.statsBuffer);
@@ -250,6 +248,7 @@ export class HudStateSoA implements IHudState {
         this.lethalSourceId = src.lethalSourceId;
         this.lethalStatusEffect = src.lethalStatusEffect;
         this.mapItemsCount = src.mapItemsCount;
+
         for (let i = 0; i < this.mapItemsCount; i++) {
             const s = src.mapItems[i];
             const d = this.mapItems[i];
@@ -265,8 +264,6 @@ export class HudStateSoA implements IHudState {
         }
 
         this.debugMode = src.debugMode;
-        // Skip deep copy of debugInfo for now if performance is an issue, 
-        // but here's a primitive sync:
         this.debugInfo.enemies = src.debugInfo.enemies;
         this.debugInfo.objects = src.debugInfo.objects;
         this.debugInfo.drawCalls = src.debugInfo.drawCalls;
@@ -277,7 +274,6 @@ export class HudStateSoA implements IHudState {
         this.dialogueActive = src.dialogueActive;
         this.dialogueSpeaker = src.dialogueSpeaker;
         this.dialogueText = src.dialogueText;
-
         this.cinematicActive = src.cinematicActive;
 
         this.interactionActive = src.interactionActive;
@@ -286,8 +282,8 @@ export class HudStateSoA implements IHudState {
         this.interactionTargetId = src.interactionTargetId;
         this.interactionX = src.interactionX;
         this.interactionY = src.interactionY;
-
         this.interactionId = src.interactionId;
+
         this.hudVisible = src.hudVisible;
         this.sectorName = src.sectorName;
         this.isMobileDevice = src.isMobileDevice;
@@ -300,9 +296,6 @@ export class HudStateSoA implements IHudState {
         this.discoveryTimestamp = src.discoveryTimestamp;
 
         this.challengeTiers.set(src.challengeTiers);
-        this.lastMetaSignal = src.lastMetaSignal;
-        this.metaSignalTimestamp = src.metaSignalTimestamp;
-
         this.hasCriticalHp = src.hasCriticalHp;
     }
 }
@@ -322,21 +315,22 @@ class HudStoreClass {
     }
 
     /**
-     * Swaps pointers and synchronizes buffers (Zero-GC).
+     * Swaps pointers and synchronizes buffers (Zero-GC tracking path).
      */
     public update(nextState: IHudState): void {
-        // Swap buffers
         const temp = this.activeBuffer;
         this.activeBuffer = this.standbyBuffer;
         this.standbyBuffer = temp;
 
-        // Sync standby to newest active
         this.activeBuffer.copy(nextState);
-
-        // Finalize pointers for React consumers
         this.notifyListeners();
     }
 
+    /**
+     * Patch tracking references securely.
+     * Note: Prefer specific assignment routes where possible over dynamic Object.assign 
+     * call signatures to guard V8 Hidden Class shapes from breaking layout optimizations.
+     */
     public patch(changes: Partial<IHudState>): void {
         Object.assign(this.activeBuffer, changes);
         if (changes.debugMode !== undefined) {
@@ -357,24 +351,11 @@ class HudStoreClass {
     }
 
     /**
-     * Bridge for UI interaction events (e.g. mobile button press).
+     * Synchronous interaction capture pipeline via the preallocated SMI buffer array bounds.
      */
     public triggerInteraction(active: boolean): void {
         UIEventBridge.setInteractionTrigger(active);
         this.emitFastUpdate({ interactionActive: active, triggerInteraction: true });
-    }
-
-    /**
-     * Bridge for UI meta actions (Pause, Map, etc.).
-     */
-    public triggerMetaAction(actionId: MetaActionId): void {
-        this.activeBuffer.lastMetaSignal = actionId;
-        this.activeBuffer.metaSignalTimestamp = performance.now();
-
-        // Also bridge to engine for Zero-GC polling systems (e.g. INTERACT_TAP)
-        UIEventBridge.triggerUiAction(actionId);
-
-        this.notifyListeners();
     }
 
     public subscribe(listener: Listener): () => void {

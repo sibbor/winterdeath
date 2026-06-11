@@ -1,6 +1,6 @@
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System, SystemID } from './System';
-import { CHALLENGES, ChallengeID, MAX_CHALLENGE_TIER } from '../content/ChallengeTypes';
+import { CHALLENGES, ChallengeID, MAX_CHALLENGE_TIER } from '../content/challenges';
 import { StatID, StatWeaponIndex, StatEnemyIndex } from '../types/CareerStats';
 import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 

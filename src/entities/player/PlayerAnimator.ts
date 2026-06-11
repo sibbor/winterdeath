@@ -73,16 +73,71 @@ export const PlayerAnimator = {
 
         // --- 3. State Machine (Priority Order) ---
 
-        // Death animation
+        // Death animation early out
         if (animState.isDead) {
-            const deathDuration = 350;
+            const isBurning = animState.isBurning || (animState as any).isBurningDead;
+            const isElectrocuted = (animState as any).isElectrocuted;
+            const isBiting = (animState as any).isBiting;
+            const deathDuration = isBurning ? 1500 : 350;
             const progress = Math.min(1.0, Math.max(0.0, (simTime - (animState.deathStartTime || simTime)) / deathDuration));
+            
             rotationX = -Math.PI / 2 * progress;
             positionY = -0.8 * progress;
+            rotationZ = 0;
+
+            let shiverX = 0;
+            let shiverZ = 0;
+
+            // Biting/Mauling Shiver
+            if (isBiting && progress < 1.0) {
+                shiverX = Math.sin(t * 0.05) * 0.1;
+                shiverZ = Math.cos(t * 0.05) * 0.1;
+            }
+
+            // Electrocuted Jitter
+            if (isElectrocuted && progress < 1.0) {
+                shiverX = (Math.random() - 0.5) * 0.08;
+                shiverZ = (Math.random() - 0.5) * 0.08;
+                rotationX += (Math.random() - 0.5) * 0.1;
+                rotationZ = (Math.random() - 0.5) * 0.1;
+            }
+
+            let scaleFactor = 1.0;
+            if (isBurning) {
+                scaleFactor = Math.max(0.0, 1.0 - progress);
+            }
+
+            const baseScale = (animState.baseScale ?? (mesh.userData.baseScale || 1.0)) * scaleFactor;
+            const baseY = animState.baseY ?? (mesh.userData.baseY || 0);
+
+            mesh.scale.set(baseScale, baseScale, baseScale);
+            mesh.rotation.x = rotationX;
+            mesh.rotation.z = rotationZ;
+            mesh.position.set(shiverX, (baseY * scaleFactor) + positionY, shiverZ);
+
+            // Hide weapons / laser sight when dead
+            const children = mesh.children;
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+                if (child.name === 'gun' || child.userData.isLaserSight) {
+                    child.visible = false;
+                }
+            }
+            return;
+        }
+
+        // Restore visibility of mesh and children when alive
+        mesh.visible = true;
+        const children = mesh.children;
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            if (child.name === 'gun') {
+                child.visible = true;
+            }
         }
 
         // Dodging animation (Athletic Leap/Dash pose)
-        else if (animState.isDodging) {
+        if (animState.isDodging) {
             const progress = Math.min(1.0, Math.max(0.0, (simTime - animState.dodgeStartTime) / 300));
             rotationX = 0.6 * (1.0 - progress * 0.5);
             const archFactor = Math.sin(progress * Math.PI);

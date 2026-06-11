@@ -71,7 +71,7 @@ export interface SessionStats {
     killingBlowSource?: number;
     aborted: boolean;
     familyFound: boolean;
-    familyExtracted: boolean;
-    isExtraction: boolean;
+    familyRescued: boolean;
+    isCompleted: boolean;
     challengeStartValues: Float64Array;
 }

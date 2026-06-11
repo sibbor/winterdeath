@@ -8,7 +8,7 @@ export interface GameCanvasProps {
   isPaused: boolean;
   onDie: (sessionStats: SessionStats, killer: string) => void;
   onSectorEnded: (sessionStats: SessionStats) => void;
-  onPauseToggle: (val: boolean) => void;
+  onPauseToggle: (pause: boolean) => void;
   onOpenMap: () => void;
   triggerEndSector: boolean;
   familyAlreadyRescued: boolean;

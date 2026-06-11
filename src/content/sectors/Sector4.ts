@@ -662,7 +662,7 @@ export const Sector4: SectorDef = {
         // No-op: Perk Zones are handled live in onSectorUpdate for optimal performance and instant feel.
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, onPlayerHit, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, handlePlayerHit, ...events }) => {
         // --- PERK ZONE LOGIC (Zero-GC) ---
         // Ambient visuals and frame-level player + enemy status effect processing
 
@@ -688,11 +688,11 @@ export const Sector4: SectorDef = {
             }
 
             // 2. Direct Player Perk Application
-            if (isInside && onPlayerHit) {
+            if (isInside && handlePlayerHit) {
                 const duration = 2000; // Refresh to 2s
                 const intensity = zone.type === 'buff' ? 0.0 : 1.0;
-                // Directly invoke onPlayerHit: 0 damage, null attacker, isDoT = true, effectType = zone.effect
-                onPlayerHit(0, null, DamageType.PHYSICAL, DamageID.OTHER, true, zone.effect, duration, intensity);
+                // Directly invoke handlePlayerHit: 0 damage, null attacker, isDoT = true, effectType = zone.effect
+                handlePlayerHit(0, null, DamageType.PHYSICAL, DamageID.OTHER, true, zone.effect, duration, intensity);
             }
 
             // Apply effects to enemies (Still manual until TriggerSystem supports multi-entity)

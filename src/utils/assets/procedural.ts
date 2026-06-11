@@ -383,8 +383,129 @@ export const createProceduralDiffuse = () => {
         }
     });
 
+    const planks = draw(512, 512, (ctx, s) => {
+        const w = ctx.canvas.width; const h = ctx.canvas.height;
+        // Grayscale base (off-white/light gray)
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(0, 0, w, h);
+
+        // Draw wood grain running vertically
+        ctx.lineCap = 'round';
+        for (let i = 0; i < 200 * s; i++) {
+            ctx.strokeStyle = Math.random() > 0.5 ? '#ffffff' : '#dcdcdc';
+            ctx.lineWidth = (1 + Math.random() * 2) * s;
+            ctx.globalAlpha = 0.2 + Math.random() * 0.2;
+
+            const x = Math.random() * w;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x + (Math.random() - 0.5) * 10 * s, h);
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1.0;
+
+        // Draw vertical plank seams (plank width is 32 * s, so 16 planks)
+        const plankWidth = 32 * s;
+        ctx.strokeStyle = '#444444';
+        for (let x = 0; x <= w; x += plankWidth) {
+            // Main dark line
+            ctx.lineWidth = 3 * s;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, h);
+            ctx.stroke();
+
+            // Subtle highlight on one edge to give 3D bevel look
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1 * s;
+            ctx.beginPath();
+            ctx.moveTo(x + 1.5 * s, 0);
+            ctx.lineTo(x + 1.5 * s, h);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#444444';
+        }
+    });
+
+    const planks_bump = draw(512, 512, (ctx, s) => {
+        const w = ctx.canvas.width; const h = ctx.canvas.height;
+        // Mid gray base
+        ctx.fillStyle = '#888888';
+        ctx.fillRect(0, 0, w, h);
+
+        // Wood grain height variations (vertical fibers)
+        for (let i = 0; i < 300 * s; i++) {
+            ctx.fillStyle = Math.random() > 0.5 ? '#777777' : '#999999';
+            const size = (1 + Math.random() * 2) * s;
+            ctx.fillRect(Math.random() * w, 0, size, h);
+        }
+
+        // Deep seams
+        const plankWidth = 32 * s;
+        for (let x = 0; x <= w; x += plankWidth) {
+            // Seam is a groove (black)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(x - 2 * s, 0, 4 * s, h);
+
+            // Highlight bevel edge (light gray)
+            ctx.fillStyle = '#dddddd';
+            ctx.fillRect(x + 2 * s, 0, 1 * s, h);
+        }
+    });
+
+    const roof_tiles_bump = draw(512, 512, (ctx, s) => {
+        const w = ctx.canvas.width; const h = ctx.canvas.height;
+        ctx.fillStyle = '#888888';
+        ctx.fillRect(0, 0, w, h);
+
+        const tileWidth = 32 * s;
+        const tileHeight = 32 * s;
+
+        // Draw tile waves and overlap shadows
+        for (let y = 0; y < h; y += tileHeight) {
+            for (let x = 0; x < w; x++) {
+                // Horizontal sinusoidal wave (s-shape curve of each tile)
+                const tx = (x % tileWidth) / tileWidth;
+                const wave = Math.sin(tx * Math.PI); // 0 to 1
+
+                // Vertical overlap gradient (tiles get thicker towards the bottom, then drop off)
+                for (let ty = 0; ty < tileHeight; ty++) {
+                    const py = y + ty;
+                    if (py >= h) break;
+
+                    const tyNorm = ty / tileHeight; // 0 to 1
+                    const heightVal = Math.floor(
+                        100 +
+                        wave * 80 +
+                        (1.0 - tyNorm) * 50 // Bevel step at the bottom
+                    );
+
+                    ctx.fillStyle = `rgb(${heightVal}, ${heightVal}, ${heightVal})`;
+                    ctx.fillRect(x, py, 1, 1);
+                }
+            }
+        }
+
+        // Draw dark shadow lines for overlapping steps
+        ctx.fillStyle = '#000000';
+        for (let y = 0; y <= h; y += tileHeight) {
+            ctx.fillRect(0, y - 2 * s, w, 3 * s);
+        }
+
+        // Draw dark lines for vertical joints
+        for (let y = 0; y < h; y += tileHeight) {
+            // Offset columns slightly per row for realistic bond pattern
+            const offset = (y / tileHeight) % 2 === 0 ? 0 : tileWidth / 2;
+            for (let x = 0; x <= w + tileWidth; x += tileWidth) {
+                const px = x + offset;
+                ctx.fillStyle = '#333333';
+                ctx.fillRect(px - 1 * s, y, 2 * s, tileHeight);
+            }
+        }
+    });
+
     // Final cache population
-    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, map, dirt, snow, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint, scorchAlpha, treeLeaves };
+    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, map, dirt, snow, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint, scorchAlpha, treeLeaves, planks, planks_bump, roof_tiles_bump };
 
     return cachedTextures;
 };

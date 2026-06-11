@@ -112,18 +112,40 @@ const createHaloTexture = () => {
     canvas.height = 128;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-        ctx.clearRect(0, 0, 128, 128); // Clean slate
-        const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-        gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-        gradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.6)');
-        gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
-        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        ctx.fillStyle = gradient;
-
-        // Fill strictly within a circular path to guarantee corner alpha transparency is 100% empty
-        ctx.beginPath();
-        ctx.arc(64, 64, 64, 0, Math.PI * 2);
-        ctx.fill();
+        // VINTERDÖD FIX: iOS WebKit has a severe bug where createRadialGradient 
+        // yields a noisy/dithered texture when uploaded to WebGL. 
+        // We write the pixels manually to bypass the canvas API entirely.
+        const imgData = ctx.createImageData(128, 128);
+        const data = imgData.data;
+        const cx = 64, cy = 64, r = 64;
+        
+        for (let y = 0; y < 128; y++) {
+            for (let x = 0; x < 128; x++) {
+                const dx = x - cx + 0.5;
+                const dy = y - cy + 0.5;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                let alpha = 0;
+                if (dist < r) {
+                    const t = dist / r;
+                    // stops: 0:1.0, 0.2:0.6, 0.5:0.2, 1.0:0.0
+                    if (t < 0.2) {
+                        alpha = 1.0 - (t / 0.2) * 0.4;
+                    } else if (t < 0.5) {
+                        alpha = 0.6 - ((t - 0.2) / 0.3) * 0.4;
+                    } else {
+                        alpha = 0.2 - ((t - 0.5) / 0.5) * 0.2;
+                    }
+                }
+                
+                const idx = (y * 128 + x) * 4;
+                data[idx] = 255;
+                data[idx + 1] = 255;
+                data[idx + 2] = 255;
+                data[idx + 3] = alpha * 255;
+            }
+        }
+        ctx.putImageData(imgData, 0, 0);
     }
     const tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter;
@@ -169,25 +191,50 @@ const createRaysTexture = () => {
     return tex;
 };
 
-// Procedural Fluffy Cloud Generation (Canvas-based to avoid external texture dependencies)
 const createCloudTexture = () => {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 256;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-        ctx.clearRect(0, 0, 256, 256); // Clean slate
+        // VINTERDÖD FIX: iOS WebKit RadialGradient Dithering bypass
+        const imgData = ctx.createImageData(256, 256);
+        const data = imgData.data;
 
-        const drawPuff = (x: number, y: number, r: number) => {
-            const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-            grad.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
-            grad.addColorStop(0.4, 'rgba(255, 255, 255, 0.8)');
-            grad.addColorStop(0.8, 'rgba(255, 255, 255, 0.2)');
-            grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.arc(x, y, r, 0, Math.PI * 2);
-            ctx.fill();
+        // Initialize with transparent
+        for (let i = 0; i < data.length; i++) data[i] = 0;
+
+        const drawPuff = (px: number, py: number, pr: number) => {
+            for (let y = 0; y < 256; y++) {
+                for (let x = 0; x < 256; x++) {
+                    const dx = x - px + 0.5;
+                    const dy = y - py + 0.5;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist < pr) {
+                        const t = dist / pr;
+                        // stops: 0: 1.0, 0.4: 0.8, 0.8: 0.2, 1: 0
+                        let a = 0;
+                        if (t < 0.4) {
+                            a = 1.0 - (t / 0.4) * 0.2;
+                        } else if (t < 0.8) {
+                            a = 0.8 - ((t - 0.4) / 0.4) * 0.6;
+                        } else {
+                            a = 0.2 - ((t - 0.8) / 0.2) * 0.2;
+                        }
+
+                        const idx = (y * 256 + x) * 4;
+                        // Source-over blending for multiple puffs
+                        const oldA = data[idx + 3] / 255;
+                        const newA = a + oldA * (1.0 - a);
+                        
+                        data[idx] = 255;
+                        data[idx + 1] = 255;
+                        data[idx + 2] = 255;
+                        data[idx + 3] = newA * 255;
+                    }
+                }
+            }
         };
 
         // Draw multiple overlapping puffs to create a natural, organic cloud shape
@@ -196,6 +243,8 @@ const createCloudTexture = () => {
         drawPuff(170, 130, 65);
         drawPuff(110, 150, 50);
         drawPuff(145, 100, 45);
+
+        ctx.putImageData(imgData, 0, 0);
     }
     const tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter;

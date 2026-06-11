@@ -23,12 +23,33 @@ export class AssetLoader {
      * @param persistent if true, the texture will never be removed from VRAM.
      *                   Perfect for global bump-maps.
      */
+    private pendingPromises: Promise<void>[] = [];
+
     public loadTexture(path: string, repeatX: number = 1, repeatY: number = 1, isColorTexture: boolean = false, persistent: boolean = true): THREE.Texture {
         const cacheKey = `${path}_${repeatX}_${repeatY}_${isColorTexture}`;
 
         if (this.textureCacheSource.has(cacheKey)) {
             return this.textureCacheSource.get(cacheKey)!;
         }
+
+        const loadPromise = new Promise<void>((resolve) => {
+            this.textureLoader.load(
+                path,
+                (tex) => {
+                    const img = tex.image;
+                    if (img && typeof img.decode === 'function') {
+                        img.decode()
+                            .then(() => resolve())
+                            .catch(() => resolve());
+                    } else {
+                        resolve();
+                    }
+                },
+                undefined,
+                () => resolve()
+            );
+        });
+        this.pendingPromises.push(loadPromise);
 
         const texture = this.textureLoader.load(path);
         if (isColorTexture) texture.colorSpace = THREE.SRGBColorSpace;
@@ -45,6 +66,12 @@ export class AssetLoader {
         texture.userData.isPersistent = persistent;
         this.textureCacheSource.set(cacheKey, texture);
         return texture;
+    }
+
+    public async waitForTextures(): Promise<void> {
+        if (this.pendingPromises.length === 0) return;
+        await Promise.all(this.pendingPromises);
+        this.pendingPromises = [];
     }
 
     public clearCache() {

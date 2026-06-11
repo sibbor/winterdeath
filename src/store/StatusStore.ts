@@ -1,3 +1,5 @@
+import { useSyncExternalStore, useCallback, useRef, useEffect } from 'react';
+
 /**
  * Status Store
  * 
@@ -38,12 +40,20 @@ class StatusStoreClass {
 
 export const StatusStore = new StatusStoreClass();
 
-// Hook implementation for React
-import { useSyncExternalStore, useCallback } from 'react';
-
 export function useStatusStore<T>(selector: (flags: number) => T): T {
-    const getSnapshot = useCallback(() => selector(StatusStore.getStatusFlags()), [selector]);
-    const subscribe = useCallback((onStoreChange: () => void) => StatusStore.subscribe(onStoreChange), []);
+    const selectorRef = useRef(selector);
+
+    useEffect(() => {
+        selectorRef.current = selector;
+    });
+
+    const getSnapshot = useCallback(() => {
+        return selectorRef.current(StatusStore.getStatusFlags());
+    }, []);
+
+    const subscribe = useCallback((onStoreChange: () => void) => {
+        return StatusStore.subscribe(onStoreChange);
+    }, []);
 
     return useSyncExternalStore(subscribe, getSnapshot);
 }

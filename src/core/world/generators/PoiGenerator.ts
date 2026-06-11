@@ -149,8 +149,6 @@ export const PoiGenerator = {
         return GeneratorUtils.freezeStatic(group);
     },
 
-
-
     createDealership: () => {
         const group = new THREE.Group();
         const shed = new THREE.Mesh(new THREE.BoxGeometry(20, 8, 20), MATERIALS.metalPanel);
@@ -283,7 +281,38 @@ export const PoiGenerator = {
 
     createSmu: () => {
         const group = new THREE.Group();
-        const smu = new THREE.Mesh(new THREE.BoxGeometry(50, 10, 50), MATERIALS.brownBrick);
+        const smuGeo = new THREE.BoxGeometry(50, 10, 50);
+
+        // Scale UV coordinates for correct brick bumpmap tiling (every 2.5 meters)
+        const uvAttr = smuGeo.attributes.uv;
+        for (let face = 0; face < 6; face++) {
+            let rx = 1, ry = 1;
+            if (face === 0 || face === 1) { // Left/Right (50 x 10)
+                rx = 50 / 2.5; ry = 10 / 2.5;
+            } else if (face === 2 || face === 3) { // Top/Bottom (50 x 50)
+                rx = 50 / 2.5; ry = 50 / 2.5;
+            } else { // Front/Back (50 x 10)
+                rx = 50 / 2.5; ry = 10 / 2.5;
+            }
+            for (let v = 0; v < 4; v++) {
+                const i = face * 4 + v;
+                uvAttr.setXY(i, uvAttr.getX(i) * rx, uvAttr.getY(i) * ry);
+            }
+        }
+        smuGeo.computeVertexNormals();
+
+        const wallMat = MATERIALS.redPlanks;
+        const roofMat = MATERIALS.roofTiles;
+        const materials = [
+            wallMat, // Right
+            wallMat, // Left
+            roofMat, // Top (Roof)
+            roofMat, // Bottom
+            wallMat, // Front
+            wallMat  // Back
+        ];
+
+        const smu = new THREE.Mesh(smuGeo, materials);
         smu.position.set(0, 5, 0);
         group.add(smu);
 

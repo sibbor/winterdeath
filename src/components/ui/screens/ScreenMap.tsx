@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { MapItem, MapItemType } from '../hud/HudTypes';
 import { t } from '../../../utils/i18n';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import ModalLayout, { TacticalCard } from './ModalLayout';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { HudStore } from '../../../store/HudStore';
@@ -468,7 +468,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
         if (longPressTimer.current) clearTimeout(longPressTimer.current);
         longPressTimer.current = setTimeout(() => {
             if (pressCoords.current) {
-                UiSounds.playConfirm();
+                UISounds.playConfirm();
                 onSelectCoords(pressCoords.current.x, pressCoords.current.z);
                 longPressTimer.current = null;
             }
@@ -483,7 +483,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
     }, []);
 
     const handleClickImmediate = useCallback((x: number, z: number) => {
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
         onSelectCoords(x, z);
     }, [onSelectCoords]);
 

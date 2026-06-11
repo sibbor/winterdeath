@@ -27,14 +27,14 @@ export const SCRAP_COST_BASE = 50;
 export const LEVEL_CAP = 20;
 export const INITIAL_ENEMY_POOL = 100;
 
-// PHASE 9: ENTITY STATE MASKING
+// ENTITY STATE MASKING
 export const ENTITY_STATUS = {
     NONE: 0,
     ALIVE: 1 << 0,
     DEAD: 1 << 1
 } as const;
 
-// --- VINTERDÖD ENGINE HARDENING (Magic Number Eradication) ---
+// --- ENGINE HARDENING (Magic Number Eradication) ---
 export enum TriggerShape { CIRCLE = 0, BOX = 1 }
 
 export const PHYSICS = {
@@ -49,6 +49,7 @@ export const PHYSICS = {
     SOFT_SHOVE_FORCE: 1.2
 };
 
+// AI LOD
 export const AI_LOD = {
     CORE_RADIUS_SQ: 5625,       // 75m (Matching Sector0 trigger distance)
     THROTTLED_RADIUS_SQ: 14400,  // 120m (Zombies are updated and visible up to spawn range)
@@ -57,10 +58,10 @@ export const AI_LOD = {
 };
 
 export const COMBAT = {
-    HYSTERESIS: 1.25,           // 25% range buffer
-    CRISIS_HP_RATIO: 0.25,      // 25% HP adrenaline trigger
-    LONG_RANGE_SQ: 625,         // 25m threshold
-    MUZZLE_CONE_COS: 0.94,      // ~20 degrees
+    HYSTERESIS: 1.25,            // 25% range buffer
+    CRISIS_HP_RATIO: 0.25,       // 25% HP adrenaline trigger
+    LONG_RANGE_SQ: 625,          // 25m threshold
+    FLAMETHROWER_CONE_COS: 0.94, // ~20 degrees
     LETHAL_DAMAGE: 9999,
     STAMINA_COST_DODGE: 15,
     STAMINA_REGEN_IDLE: 15,

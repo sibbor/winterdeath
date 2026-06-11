@@ -1,6 +1,6 @@
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System, SystemID } from './System';
-import { DamageID } from '../entities/player/CombatTypes';
+import { DamageID, WeaponID } from '../entities/player/CombatTypes';
 import { StatWeaponIndex, StatID, StatEnemyIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE, TELEMETRY_BUFFER_SIZE, TelemetrySourceOffset } from '../types/CareerStats';
 import { COMBAT, MAX_ENTITIES } from '../content/constants';
 
@@ -11,17 +11,17 @@ for (let i = 0; i < MAX_BOSS_IDS; i++) {
     _bossKeyCache[i] = `Boss_${i}`;
 }
 
-export class DamageTrackerSystem implements System {
-    readonly systemId = SystemID.DAMAGE_TRACKER;
-    id = 'damage_tracker_system';
+export class CareerStatsSystem implements System {
+    readonly systemId = SystemID.CAREER_STATS;
+    id = 'career_stats_system';
     enabled = true;
     persistent = false;
 
-    private currentKillstreak = 0;
+    private static currentKillstreak = 0;
 
     init(session: GameSessionLogic) {
-        this.currentKillstreak = 0;
-        session.damageTracker = this;
+        CareerStatsSystem.currentKillstreak = 0;
+        session.careerStats = this;
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
@@ -44,14 +44,14 @@ export class DamageTrackerSystem implements System {
     /**
      * Guards against recording TOOL/RADIO stats.
      */
-    private isTechnical(id: DamageID): boolean {
+    private static isTechnical(id: number): boolean {
         return id === DamageID.NONE;
     }
 
     /**
      * Records damage taken by the player.
      */
-    recordIncomingDamage(
+    public static recordIncomingDamage(
         session: GameSessionLogic,
         amount: number,
         sourceId: DamageID,
@@ -93,10 +93,10 @@ export class DamageTrackerSystem implements System {
     /**
      * Records damage dealt by the player to actors.
      */
-    recordOutgoingDamage(
+    public static recordOutgoingDamage(
         session: GameSessionLogic,
         amount: number,
-        weaponId: DamageID,
+        weaponId: WeaponID | DamageID,
         isBoss: boolean = false
     ) {
         if (!session || !session.state || session.state.world.isPlayground) return;
@@ -122,7 +122,7 @@ export class DamageTrackerSystem implements System {
     /**
      * Records a shot fired by the player.
      */
-    recordShot(session: GameSessionLogic, weaponId: DamageID) {
+    public static recordShot(session: GameSessionLogic, weaponId: WeaponID | DamageID) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         if (this.isTechnical(weaponId)) return;
 
@@ -144,7 +144,7 @@ export class DamageTrackerSystem implements System {
     /**
      * Records a shot hit by the player.
      */
-    recordHit(session: GameSessionLogic, weaponId: DamageID) {
+    public static recordHit(session: GameSessionLogic, weaponId: WeaponID | DamageID) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         if (this.isTechnical(weaponId)) return;
 
@@ -166,12 +166,12 @@ export class DamageTrackerSystem implements System {
     /**
      * Records an enemy kill.
      */
-    recordKill(
+    public static recordKill(
         session: GameSessionLogic,
         enemyType: number,
         isBoss: boolean = false,
         bossId?: number,
-        weaponId?: DamageID,
+        weaponId?: WeaponID | DamageID,
         distSq?: number
     ) {
         if (!session || !session.state || session.state.world.isPlayground) return;
@@ -258,7 +258,7 @@ export class DamageTrackerSystem implements System {
     /**
      * Records a player death.
      */
-    recordPlayerDeath(session: GameSessionLogic, sourceId: number, attackId: number) {
+    public static recordPlayerDeath(session: GameSessionLogic, sourceId: number, attackId: number) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         const stats = session.state.sessionStats;
         const playerStats = session.state.player.statsBuffer;
@@ -283,15 +283,14 @@ export class DamageTrackerSystem implements System {
     /**
      * Resets killstreak (e.g. on player hit or session start)
      */
-    resetKillstreak() {
+    public static resetKillstreak() {
         this.currentKillstreak = 0;
     }
-
 
     /**
      * Records a throwable thrown by the player.
      */
-    recordThrowable(session: GameSessionLogic, weaponId: DamageID) {
+    public static recordThrowable(session: GameSessionLogic, weaponId: WeaponID | DamageID) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         if (this.isTechnical(weaponId)) return;
 
@@ -313,7 +312,7 @@ export class DamageTrackerSystem implements System {
     /**
      * Records how many unique enemies were hit by a single explosive.
      */
-    recordUniqueEnemiesHitByExplosive(session: GameSessionLogic, count: number) {
+    public static recordUniqueEnemiesHitByExplosive(session: GameSessionLogic, count: number) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.uniqueEnemiesHitByExplosives += count;
         session.state.player.statsBuffer[StatID.TOTAL_UNIQUE_ENEMIES_HIT_BY_EXPLOSIVES] += count;
@@ -322,7 +321,7 @@ export class DamageTrackerSystem implements System {
     /**
      * Records an enemy being gibbed.
      */
-    recordGib(session: GameSessionLogic, damageType?: DamageID) {
+    public static recordGib(session: GameSessionLogic, damageType?: DamageID) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.gibbedEnemies++;
         session.state.player.statsBuffer[StatID.TOTAL_GIBBED]++;
@@ -334,7 +333,7 @@ export class DamageTrackerSystem implements System {
     /**
      * Records a dodge performed by the player.
      */
-    recordDodge(session: GameSessionLogic) {
+    public static recordDodge(session: GameSessionLogic) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.dodges++;
         session.state.player.statsBuffer[StatID.TOTAL_DODGES]++;
@@ -343,7 +342,7 @@ export class DamageTrackerSystem implements System {
     /**
      * Records a rush initiation by the player.
      */
-    recordRush(session: GameSessionLogic) {
+    public static recordRush(session: GameSessionLogic) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.rushes++;
         session.state.player.statsBuffer[StatID.TOTAL_RUSHES]++;
@@ -352,7 +351,7 @@ export class DamageTrackerSystem implements System {
     /**
      * Records rush distance traveled.
      */
-    recordRushDistance(session: GameSessionLogic, distance: number) {
+    public static recordRushDistance(session: GameSessionLogic, distance: number) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.rushDistance += distance;
         session.state.player.statsBuffer[StatID.TOTAL_RUSH_DISTANCE] += distance;
@@ -361,7 +360,7 @@ export class DamageTrackerSystem implements System {
     /**
      * Records total distance traveled.
      */
-    recordDistance(session: GameSessionLogic, distance: number) {
+    public static recordDistance(session: GameSessionLogic, distance: number) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.distanceTraveled += distance;
         session.state.player.statsBuffer[StatID.TOTAL_DISTANCE_TRAVELED] += distance;
@@ -370,7 +369,7 @@ export class DamageTrackerSystem implements System {
     /**
      * Records a crisis save (adrenaline patch trigger).
      */
-    recordCrisisSave(session: GameSessionLogic) {
+    public static recordCrisisSave(session: GameSessionLogic) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.crisisSaves++;
         session.state.player.statsBuffer[StatID.TOTAL_CRISIS_SAVES]++;
@@ -379,7 +378,7 @@ export class DamageTrackerSystem implements System {
     /**
      * Records buff time.
      */
-    recordBuffTime(session: GameSessionLogic, delta: number) {
+    public static recordBuffTime(session: GameSessionLogic, delta: number) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.buffTime += delta;
         session.state.player.statsBuffer[StatID.TOTAL_BUFF_TIME] += delta;
@@ -388,7 +387,7 @@ export class DamageTrackerSystem implements System {
     /**
      * Records debuffs resisted/cleansed.
      */
-    recordDebuffsResisted(session: GameSessionLogic, count: number) {
+    public static recordDebuffsResisted(session: GameSessionLogic, count: number) {
         if (!session || !session.state || session.state.world.isPlayground) return;
         session.state.sessionStats.debuffsResisted += count;
         session.state.player.statsBuffer[StatID.TOTAL_DEBUFFS_RESISTED] += count;

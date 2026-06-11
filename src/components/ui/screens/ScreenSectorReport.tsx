@@ -4,13 +4,13 @@ import { SectorStats } from '../../../types/StateTypes';
 import { CareerStats } from '../../../types/CareerStats';
 import ModalLayout, { TacticalCard, TacticalTab, TacticalRow } from './ModalLayout';
 import { StatWeaponIndex, TELEMETRY_SOURCES_COUNT, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../types/CareerStats';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
 import { FormatUtils } from '../../../utils/ui/FormatUtils';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 import { SectorID } from '../../../game/session/SectorTypes';
-import { CHALLENGES, ChallengeCategory, ChallengeDef, ChallengeID } from '../../../content/ChallengeTypes';
+import { CHALLENGES, ChallengeCategory, ChallengeDef, ChallengeID } from '../../../content/challenges';
 
 interface ScreenSectorReportProps {
     stats: SectorStats;
@@ -35,9 +35,9 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
 
     useEffect(() => {
         if (isFailed) {
-            UiSounds.playDefeat();
+            UISounds.playDefeat();
         } else {
-            UiSounds.playVictory();
+            UISounds.playVictory();
         }
     }, [isFailed]);
 
@@ -82,7 +82,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, playerSt
 
     const handleTabChange = React.useCallback((index: 0 | 1 | 2) => {
         setActiveTab(index);
-        UiSounds.playClick();
+        UISounds.playClick();
     }, []);
 
     // Sector-specific discovery totals — Zero-GC: for-loops, no Object.values allocations

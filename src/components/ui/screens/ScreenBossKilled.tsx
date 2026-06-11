@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { t } from '../../../utils/i18n';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import ModalLayout, { TacticalCard } from './ModalLayout';
 import { SectorStats } from '../../../types/StateTypes';
 import { StatWeaponIndex, TelemetrySourceOffset, TELEMETRY_ATTACKS_PER_SOURCE } from '../../../types/CareerStats';
@@ -11,15 +11,16 @@ import { COLORS } from '../../../utils/ui/ColorUtils';
 interface ScreenBossKilledProps {
     sectorIndex: number;
     onProceed: () => void;
+    onExplore: () => void;
     stats?: SectorStats;
     isMobileDevice?: boolean;
 }
 
-const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProceed, stats, isMobileDevice }) => {
+const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProceed, onExplore, stats, isMobileDevice }) => {
     const bossName = t(DataResolver.getBossName(sectorIndex)).toUpperCase();
 
     useEffect(() => {
-        UiSounds.playVictory();
+        UISounds.playVictory();
     }, []);
 
     const weaponDamageList = React.useMemo(() => {
@@ -61,7 +62,11 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
             isMobileDevice={isMobileDevice}
             onConfirm={onProceed}
             confirmLabel={t('ui.continue')}
+            onCancel={onExplore}
+            cancelLabel={t('ui.explore_more')}
+            showCancel={true}
             titleColorClass="text-white"
+            onClose={onExplore}
         >
             <div className="flex flex-col items-center mb-6">
                 <span className="text-base md:text-2xl text-red-500 font-light tracking-[0.2em] mb-1 md:mb-2 uppercase opacity-90">{t('ui.boss_killed')}</span>
@@ -88,10 +93,10 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                                     <span className="text-xs font-black text-white uppercase">{t('ui.total')}</span>
                                     <span className="text-xl font-black text-blue-400">{Math.floor(StatsBridge.getSectorDamageDealt(stats)).toLocaleString()}</span>
                                 </div>
-                                {(stats as any).killingBlowWeapon !== undefined && (
+                                {stats.killingBlowWeapon !== undefined && (
                                     <div className="flex justify-between items-center pt-2 mt-1">
                                         <span className="text-[10px] font-bold text-blue-400 uppercase tracking-tighter">{t('ui.killing_blow')}</span>
-                                        <span className="text-[10px] font-black text-white uppercase">{t(DataResolver.getDamageName((stats as any).killingBlowWeapon))}</span>
+                                        <span className="text-[10px] font-black text-white uppercase">{t(DataResolver.getDamageName(stats.killingBlowWeapon))}</span>
                                     </div>
                                 )}
                             </div>

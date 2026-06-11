@@ -3,7 +3,7 @@ import { t } from '../../../utils/i18n';
 import { useOrientation } from '../../../hooks/useOrientation';
 import ModalLayout, { TacticalCard, TacticalTab } from './ModalLayout';
 import { CareerStats } from '../../../types/CareerStats';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { COLORS } from '../../../utils/ui/ColorUtils';
 import { SectorID } from '../../../game/session/SectorTypes';
@@ -118,7 +118,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
     const handleSelect = (index: number) => {
         if (!debugMode && (index > SectorID.VILLAGE && index !== SectorID.PLAYGROUND && !deadBossIndices.includes(index - 1))) return;
-        UiSounds.playClick();
+        UISounds.playClick();
         setSelectedSectorIndex(index);
         onSelectSector(index);
     };

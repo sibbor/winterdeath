@@ -6,7 +6,8 @@ export enum EffectType {
     FIRE = 1,
     FLICKER_LIGHT = 2,
     NEON_SIGN = 3,
-    SMOKE_PLUME = 4
+    SMOKE_PLUME = 4,
+    WAVE_AURA = 5
 }
 
 export enum SubEffectType {
@@ -148,6 +149,11 @@ export class EffectManager {
                 if (opts?.smoke) {
                     allocateSubEffect(object, SubEffectType.EMITTER, 0, 0, 0, optOffX, optOffY + 1.5, optOffZ, 0, smokePart, smokeInterval, largeCount, 0.3, areaX, areaZ);
                 }
+                break;
+            }
+            case EffectType.WAVE_AURA: {
+                // Persistent blue glow for wave enemies
+                allocateSubEffect(object, SubEffectType.LIGHT, 0x0088ff, 25, 6, optOffX, optOffY + 1.0, optOffZ, 1);
                 break;
             }
 

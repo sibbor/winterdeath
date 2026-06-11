@@ -3,12 +3,12 @@ import { t } from '../../../utils/i18n';
 import { HudStore } from '../../../store/HudStore';
 import { DataResolver } from '../../../core/data/DataResolver';
 
-interface CinematicDialogueProps {
+interface DialogueUIProps {
     isMobileDevice?: boolean;
     onComplete?: () => void;
 }
 
-export interface CinematicDialogueHandle {
+export interface DialogueUIHandle {
     finishTyping: () => boolean;
 }
 
@@ -19,28 +19,23 @@ interface TextToken {
 }
 
 const CONTAINER_HIDDEN = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out bottom-[-20%] opacity-0";
-const CONTAINER_VISIBLE = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-5000 ease-out bottom-[calc(12%+25px)] opacity-100";
+const CONTAINER_VISIBLE = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out bottom-[calc(12%+25px)] opacity-100";
 
-const CinematicDialogue = forwardRef<CinematicDialogueHandle, CinematicDialogueProps>(({ isMobileDevice, onComplete }, ref) => {
+const DialogueUI = forwardRef<DialogueUIHandle, DialogueUIProps>(({ isMobileDevice, onComplete }, ref) => {
     const [isVisible, setIsVisible] = useState(false);
     const [isFinished, setIsFinished] = useState(false);
     const [speakerName, setSpeakerName] = useState('');
     const [bgColor, setBgColor] = useState('#000');
-
-    // FIX: Använd refs för att undvika "Stale Closures" inuti HudStore.subscribe
     const isVisibleRef = useRef(false);
     const isFinishedRef = useRef(false);
-
     const timerRef = useRef<number | null>(null);
     const visibleCountRef = useRef<number>(0);
     const textContainerRef = useRef<HTMLSpanElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const rawTextRef = useRef('');
     const lastDialogueKeyRef = useRef<string | null>(null);
-
     const currentTokens = useRef<TextToken[]>([]);
     const totalCharsRef = useRef(0);
-
     const updateDOMText = useCallback((count: number) => {
         if (!textContainerRef.current) return;
 
@@ -68,8 +63,42 @@ const CinematicDialogue = forwardRef<CinematicDialogueHandle, CinematicDialogueP
         textContainerRef.current.innerHTML = html;
     }, []);
 
+    const requestRef = useRef<number>();
+    const tickRef = useRef<number>(0);
+
+    const startTyping = () => {
+        visibleCountRef.current = 0;
+        setIsFinished(false);
+        isFinishedRef.current = false;
+        updateDOMText(0);
+
+        // Cancel any previous pending animation
+        if (requestRef.current) cancelAnimationFrame(requestRef.current);
+
+        const animate = () => {
+            // Stop if component is unmounted or hidden
+            if (!isVisibleRef.current) return;
+
+            const now = performance.now();
+            // Throttle to roughly 30ms (approx 33fps)
+            if (now - tickRef.current > 30) {
+                if (visibleCountRef.current < totalCharsRef.current) {
+                    visibleCountRef.current += 1;
+                    updateDOMText(visibleCountRef.current);
+                    tickRef.current = now;
+                } else {
+                    setIsFinished(true);
+                    isFinishedRef.current = true;
+                    return; // Stop loop
+                }
+            }
+            requestRef.current = requestAnimationFrame(animate);
+        };
+        requestRef.current = requestAnimationFrame(animate);
+    };
+
     useEffect(() => {
-        return HudStore.subscribe(() => {
+        const unsubscribe = HudStore.subscribe(() => {
             const state = HudStore.getState();
             const active = state.cinematicActive && state.dialogueActive && !!state.dialogueText;
 
@@ -115,31 +144,14 @@ const CinematicDialogue = forwardRef<CinematicDialogueHandle, CinematicDialogueP
                 }
             }
         });
-    }, [updateDOMText]);
 
-    const startTyping = () => {
-        visibleCountRef.current = 0;
-
-        setIsFinished(false);
-        isFinishedRef.current = false;
-
-        updateDOMText(0);
-
-        if (timerRef.current !== null) clearInterval(timerRef.current);
-        timerRef.current = window.setInterval(() => {
-            if (visibleCountRef.current < totalCharsRef.current) {
-                visibleCountRef.current += 1;
-                updateDOMText(visibleCountRef.current);
-            } else {
-                if (timerRef.current !== null) {
-                    clearInterval(timerRef.current);
-                    timerRef.current = null;
-                }
-                setIsFinished(true);
-                isFinishedRef.current = true;
+        return () => {
+            unsubscribe();
+            if (timerRef.current !== null) {
+                clearInterval(timerRef.current);
             }
-        }, 30);
-    };
+        };
+    }, [updateDOMText]);
 
     const finishTyping = useCallback(() => {
         if (!isFinishedRef.current && isVisibleRef.current) {
@@ -162,8 +174,8 @@ const CinematicDialogue = forwardRef<CinematicDialogueHandle, CinematicDialogueP
     }));
 
     return (
-        <div 
-            ref={containerRef} 
+        <div
+            ref={containerRef}
             className={`${isVisible ? CONTAINER_VISIBLE : CONTAINER_HIDDEN} pointer-events-auto cursor-pointer`}
             onClick={() => {
                 if (isVisible) {
@@ -202,4 +214,4 @@ const CinematicDialogue = forwardRef<CinematicDialogueHandle, CinematicDialogueP
     );
 });
 
-export default CinematicDialogue;
+export default DialogueUI;

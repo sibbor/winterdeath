@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { GameSessionState } from './GameSessionState';
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { DeathPhase } from '../../types/SessionTypes';
 import { SectorBuildContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
-import { CinematicDialogueHandle } from '../../components/ui/hud/CinematicDialogue';
+import { DialogueUIHandle } from '../../components/ui/hud/DialogueUI';
 import { InteractionType } from '../../systems/ui/UIEventBridge';
 
 export interface GameSessionUiState {
@@ -71,7 +71,7 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
     const hasSetPrevPosRef = useRef<boolean>(false);
     const playerGroupRef = useRef<THREE.Group>(new THREE.Group());
     const playerMeshRef = useRef<THREE.Object3D | null>(null);
-    const bubbleRef = useRef<CinematicDialogueHandle>(null);
+    const dialogueRef = useRef<DialogueUIHandle>(null);
     const skyLightRef = useRef<THREE.DirectionalLight | null>(null);
     const skyLightOffsetRef = useRef<THREE.Vector3 | null>(null);
     const familyMemberRef = useRef<{ mesh: THREE.Group; } | null>(null);
@@ -82,6 +82,8 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
     const prevInputRef = useRef<boolean>(false);
     const cameraOverrideRef = useRef<any>(null);
     const bossIntroRef = useRef<{ active: boolean, bossMesh: THREE.Object3D | null, startTime: number }>({ active: false, bossMesh: null, startTime: 0 });
+    const pendingBossSpawnRef = useRef<{ bossId: number; pos?: THREE.Vector3 } | null>(null);
+    const bossGrowlLoopIndexRef = useRef<number>(-1);
 
     // Cinematic Complex Ref
     const cinematicRef = useRef({
@@ -126,7 +128,7 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
     });
 
     // Zero-GC partial state update (prevents re-renders if nothing actually changed)
-    const updateUiState = (partial: Partial<GameSessionUiState>) => {
+    const updateUiState = useCallback((partial: Partial<GameSessionUiState>) => {
         setUiState(prev => {
             let hasChanged = false;
             for (const key in partial) {
@@ -138,7 +140,7 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
             if (!hasChanged) return prev;
             return { ...prev, ...partial };
         });
-    };
+    }, []);
 
     // Keep activeModal and deathPhase refs synced when they change via state
     useEffect(() => { activeModalRef.current = uiState.activeModal; }, [uiState.activeModal]);
@@ -151,16 +153,18 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
         isBuildingSectorRef.current = true;
     }, [props.gameState.currentSector]);
 
+    const refs = useMemo(() => ({
+        propsRef, engineRef, gameSessionRef, containerRef, chatOverlayRef, SectorBuildContextRef,
+        stateRef, activeModalRef, isBuildingSectorRef, deathPhaseRef, interactionTypeRef,
+        lastInteractionPosRef, activeBubbles, hasEndedSector, collectedCluesRef, distanceTraveledRef,
+        lastTeleportRef, lastDrawCallsRef, hasPlayedIntroRef, lastHeartbeatRef, bossIntroTimerRef,
+        gameContextRef, setupIdRef, discoveryQueueRef, prevPosRef, hasSetPrevPosRef, playerGroupRef, playerMeshRef, dialogueRef, cinematicRef,
+        skyLightRef, skyLightOffsetRef, prevInputRef, cameraOverrideRef, bossIntroRef, familyMemberRef, activeFamilyMembers,
+        flashlightRef, isMounted, pendingBossSpawnRef, bossGrowlLoopIndexRef
+    }), []);
+
     return {
-        refs: {
-            propsRef, engineRef, gameSessionRef, containerRef, chatOverlayRef, SectorBuildContextRef,
-            stateRef, activeModalRef, isBuildingSectorRef, deathPhaseRef, interactionTypeRef,
-            lastInteractionPosRef, activeBubbles, hasEndedSector, collectedCluesRef, distanceTraveledRef,
-            lastTeleportRef, lastDrawCallsRef, hasPlayedIntroRef, lastHeartbeatRef, bossIntroTimerRef,
-            gameContextRef, setupIdRef, discoveryQueueRef, prevPosRef, hasSetPrevPosRef, playerGroupRef, playerMeshRef, bubbleRef, cinematicRef,
-            skyLightRef, skyLightOffsetRef, prevInputRef, cameraOverrideRef, bossIntroRef, familyMemberRef, activeFamilyMembers,
-            flashlightRef, isMounted
-        },
+        refs,
         uiState,
         updateUiState,
         setUiState

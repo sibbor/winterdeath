@@ -1,8 +1,7 @@
 import React, { useRef, useEffect, useCallback, useMemo } from 'react';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { t } from '../../../utils/i18n';
-import { DataResolver } from '../../../core/data/DataResolver';
-import { ColorPair, COLORS, colorToHex, adjustColor } from '../../../utils/ui/ColorUtils';
+import { ColorPair, COLORS, adjustColor } from '../../../utils/ui/ColorUtils';
 import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputManager';
 
 // --- SHARED TACTICAL STYLE TOKENS (One Place to Rule Them All) ---
@@ -28,7 +27,7 @@ export const GRITTY_HEADER_TITLE_STYLE: React.CSSProperties = {
 };
 
 export const HORIZONTAL_HATCHING_STYLE_DARK: React.CSSProperties = {
-    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px)'
+    backgroundImage: 'repeating-linears-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px)'
 };
 
 interface ModalLayoutProps {
@@ -149,13 +148,13 @@ const ModalLayout: React.FC<ModalLayoutProps> = React.memo(({
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
-                UiSounds.playClick();
+                //UISounds.playClick();
                 if (currCancel) currCancel();
                 else currClose();
             } else if (action === InputAction.ENTER && currConfirm && currCanConfirm) {
                 e.stopPropagation();
                 e.preventDefault();
-                UiSounds.playConfirm();
+                //UISounds.playConfirm();
                 currConfirm();
             } else {
                 // --- Tab Navigation Logic ---
@@ -177,7 +176,7 @@ const ModalLayout: React.FC<ModalLayoutProps> = React.memo(({
                     if (nextIndex !== currentIndex) {
                         e.stopPropagation();
                         e.preventDefault();
-                        UiSounds.playClick();
+                        UISounds.playClick();
                         currChange(currTabs[nextIndex]);
                     }
                 }
@@ -193,26 +192,26 @@ const ModalLayout: React.FC<ModalLayoutProps> = React.memo(({
 
     // --- ZERO-GC HANDLERS ---
     const handleCloseInternal = useCallback(() => {
-        UiSounds.playClick();
+        UISounds.playClick();
         onClose();
     }, [onClose]);
 
     const handleCancelInternal = useCallback(() => {
-        UiSounds.playClick();
+        UISounds.playClick();
         if (onCancel) onCancel();
         else onClose();
     }, [onCancel, onClose]);
 
     const handleConfirmInternal = useCallback(() => {
         if (canConfirm && onConfirm) {
-            UiSounds.playConfirm();
+            UISounds.playConfirm();
             onConfirm();
         }
     }, [canConfirm, onConfirm]);
 
     const handleDebugInternal = useCallback(() => {
         if (debugAction) {
-            UiSounds.playClick();
+            UISounds.playClick();
             debugAction.action();
         }
     }, [debugAction]);

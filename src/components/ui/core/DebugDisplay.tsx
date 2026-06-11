@@ -77,7 +77,9 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
     isMinimizedRef.current = isMinimized;
 
     useEffect(() => {
-        const monitor = PerformanceMonitor.getInstance();
+        const engine = WinterEngine.getInstance();
+        const monitor = engine.systems.performanceMonitor;
+        if (!monitor) return;
         let rafId: number;
         let lastRefUpdate = 0;
 
@@ -102,7 +104,6 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
                 if (camYRef.current) camYRef.current.textContent = world.camY.toString();
                 if (camZRef.current) camZRef.current.textContent = world.camZ.toString();
 
-                const engine = WinterEngine.getInstance();
                 if (engine && engine.sky) {
                     const sky = engine.sky;
                     const skyTime = sky.currentTime;
@@ -147,7 +148,6 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
         // --- SLOW PANEL UPDATE (200ms interval) ---
         // Drives React re-renders for JSX-heavy sections (systems list, timings, logs).
         // Separated from rAF to prevent 60fps React reconciliation.
-        const engine = WinterEngine.getInstance();
         let lastRecActive = monitor.isRecordingActive;
         let lastRecPending = monitor._recordingPending;
 
@@ -198,7 +198,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
         localStorage.setItem('vinterdod_debug_minimized', String(next));
     };
 
-    if (!debugMode || !hudVisible) return null;
+    if (!debugMode) return null;
 
     if (isMinimized) {
         return (
@@ -224,8 +224,9 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
         );
     }
 
-    const monitor = PerformanceMonitor.getInstance();
     const engine = WinterEngine.getInstance();
+    const monitor = engine.systems.performanceMonitor;
+    if (!monitor) return null;
 
     // Use slow-polled state for JSX building. Falls back to live reads on first frame.
     const panelWorld = slowState?.world ?? monitor.getFormattedGameState();

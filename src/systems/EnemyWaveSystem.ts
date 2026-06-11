@@ -1,6 +1,8 @@
 import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { EnemyType, AIState, NoiseType } from '../entities/enemies/EnemyTypes';
+import { EffectManager } from './EffectManager';
+import { EffectType } from './EffectManager';
 import * as THREE from 'three';
 
 export interface EnemyWaveConfig {
@@ -91,6 +93,8 @@ export class EnemyWaveSystem implements System {
                 const enemy = state.enemies.pool[state.enemies.pool.length - 1];
                 if (enemy) {
                     enemy.isWaveEnemy = true;
+                    // VINTERDÖD: Add a persistent blue glow to wave enemies to make them stand out
+                    EffectManager.attachEffect(enemy.mesh, EffectType.WAVE_AURA);
                     if (attractor) {
                         enemy.state = AIState.CHASE;
                         enemy.awareness = 1.0;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Enemy, ENEMY_ATTACK_RANGE, EnemyType, AIState, EnemyFlags } from '../../entities/enemies/EnemyTypes';
 import { AttackDefinition, EnemyAttackType, DamageID } from '../../entities/player/CombatTypes';
-import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
+import { WinterEngine } from '../../core/engine/WinterEngine';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { DataResolver } from '../../core/data/DataResolver';
 import { DamageType } from '../../entities/player/CombatTypes';
@@ -17,14 +17,14 @@ const _v2 = new THREE.Vector3();
 export const EnemyAttackHandler = {
 
     executeAttack: (e: Enemy, att: AttackDefinition, distSq: number, playerPos: THREE.Vector3, streamer: WorldStreamer, callbacks: {
-        onPlayerHit: (damage: number, attacker: Enemy | null, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void,
+        handlePlayerHit: (damage: number, attacker: Enemy | null, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean,
         playSound: (id: SoundID) => void,
         spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D | null, vel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void,
-        applyDamage: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean, attributionOverride?: DamageID) => boolean,
+        handleEnemyHit: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean, attributionOverride?: DamageID) => boolean,
         queryEnemies?: (pos: THREE.Vector3, radius: number, outPoolIdx: number) => void,
         applyExternalForce?: (force: THREE.Vector3, factor: number) => void
     }, delta: number, simTime: number, renderTime: number): boolean => {
-        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+        if (WinterEngine.getInstance().systems.performanceMonitor?.aiLoggingEnabled ?? true) {
             const attackName = DataResolver.getAttackName(att.type, true);
             const enemyName = DataResolver.getEnemyName(e.type, e.bossId, true);
             console.log(`[EnemyAttackHandler] ${enemyName} ${e.id} attacking with ${attackName} (${att.damage} dmg)`);
@@ -46,7 +46,7 @@ export const EnemyAttackHandler = {
     },
 
     handleBasicHit: (e: Enemy, att: AttackDefinition, distSq: number, callbacks: {
-        onPlayerHit: (damage: number, attacker: Enemy | null, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void,
+        handlePlayerHit: (damage: number, attacker: Enemy | null, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean,
         playSound: (id: SoundID) => void
     }, delta: number, simTime: number, renderTime: number): boolean => {
         const range = att.range || ENEMY_ATTACK_RANGE[e.type];
@@ -55,7 +55,7 @@ export const EnemyAttackHandler = {
         const inRange = distSq < (bufferedRange * bufferedRange);
 
         if (inRange) {
-            callbacks.onPlayerHit(att.damage, e, DamageType.PHYSICAL, DamageID.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
+            callbacks.handlePlayerHit(att.damage, e, DamageType.PHYSICAL, DamageID.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
             const id = att.type === EnemyAttackType.HIT ? SoundID.ZOMBIE_ATTACK_HIT : SoundID.ZOMBIE_GROWL_WALKER;
             callbacks.playSound(id);
             return true;
@@ -64,10 +64,10 @@ export const EnemyAttackHandler = {
     },
 
     handleSpecialAttack: (e: Enemy, att: AttackDefinition, distSq: number, playerPos: THREE.Vector3, streamer: WorldStreamer, callbacks: {
-        onPlayerHit: (damage: number, attacker: Enemy | null, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void,
+        handlePlayerHit: (damage: number, attacker: Enemy | null, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean,
         playSound: (id: SoundID) => void,
         spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D | null, vel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void,
-        applyDamage: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean, attributionOverride?: DamageID) => boolean,
+        handleEnemyHit: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean, attributionOverride?: DamageID) => boolean,
         queryEnemies?: (pos: THREE.Vector3, radius: number, outPoolIdx: number) => void
     }, delta: number, simTime: number, renderTime: number): boolean => {
         const pos = e.mesh.position;
@@ -79,7 +79,7 @@ export const EnemyAttackHandler = {
         switch (att.type) {
             case EnemyAttackType.BITE:
                 if (inRange) {
-                    callbacks.onPlayerHit(att.damage, e, DamageType.PHYSICAL, DamageID.BITE, false, att.effect, att.effectDuration, att.effectDamage, att.type);
+                    callbacks.handlePlayerHit(att.damage, e, DamageType.PHYSICAL, DamageID.BITE, false, att.effect, att.effectDuration, att.effectDamage, att.type);
 
                     // Walker Grapple Mechanic
                     if (e.type === EnemyType.WALKER) {
@@ -103,14 +103,14 @@ export const EnemyAttackHandler = {
                 break;
 
             case EnemyAttackType.EXPLODE:
-                if (inRange) callbacks.onPlayerHit(att.damage, e, DamageType.EXPLOSION, DamageID.EXPLOSION, false, att.effect, att.effectDuration, att.effectDamage, att.type);
+                if (inRange) callbacks.handlePlayerHit(att.damage, e, DamageType.EXPLOSION, DamageID.EXPLOSION, false, att.effect, att.effectDuration, att.effectDamage, att.type);
                 if (callbacks.spawnParticle) callbacks.spawnParticle(pos.x, 1.0, pos.z, FXParticleType.LARGE_FIRE, 5);
 
                 callbacks.playSound(SoundID.ZOMBIE_DEATH_EXPLODE);
 
                 // AOE EXPLOSION: Damage surrounding enemies
                 const radius = att.radius || 10.0;
-                if (callbacks.queryEnemies && callbacks.applyDamage) {
+                if (callbacks.queryEnemies && callbacks.handleEnemyHit) {
                     const pool = streamer.getEnemyPool();
                     const poolIdx = pool.nextIndex();
                     callbacks.queryEnemies(pos, radius + 3.0, poolIdx);
@@ -128,7 +128,7 @@ export const EnemyAttackHandler = {
                         const totalRad = radius + (other.originalScale * 0.5);
 
                         if (dSq < totalRad * totalRad) {
-                            callbacks.applyDamage(other, att.damage, DamageType.EXPLOSION, DamageID.EXPLOSION, true);
+                            callbacks.handleEnemyHit(other, att.damage, DamageType.EXPLOSION, DamageID.EXPLOSION, true);
 
                             // Apply knockback (physics)
                             const force = att.force * (1.0 - Math.min(1.0, dSq / radSq));
@@ -141,7 +141,7 @@ export const EnemyAttackHandler = {
 
                 e.hp = 0;
                 e.lastDamageType = DamageID.EXPLOSION;
-                if (callbacks.applyDamage) callbacks.applyDamage(e, COMBAT.LETHAL_DAMAGE, DamageType.EXPLOSION, DamageID.EXPLOSION, true);
+                if (callbacks.handleEnemyHit) callbacks.handleEnemyHit(e, COMBAT.LETHAL_DAMAGE, DamageType.EXPLOSION, DamageID.EXPLOSION, true);
                 break;
 
             case EnemyAttackType.SMASH:
@@ -149,7 +149,7 @@ export const EnemyAttackHandler = {
                 if (inRange) {
                     const dType = att.type === EnemyAttackType.FREEZE_JUMP ? DamageType.ELECTRIC : DamageType.PHYSICAL;
                     const dSource = att.type === EnemyAttackType.FREEZE_JUMP ? DamageID.ELECTRIC : DamageID.PHYSICAL;
-                    callbacks.onPlayerHit(att.damage, e, dType, dSource, false, att.effect, att.effectDuration, att.effectDamage, att.type);
+                    callbacks.handlePlayerHit(att.damage, e, dType, dSource, false, att.effect, att.effectDuration, att.effectDamage, att.type);
                 }
                 if (callbacks.spawnParticle) {
                     callbacks.spawnParticle(pos.x, 0.2, pos.z, FXParticleType.GROUND_IMPACT, 12);
@@ -162,14 +162,14 @@ export const EnemyAttackHandler = {
                 break;
 
             case EnemyAttackType.SCREECH:
-                if (inRange) callbacks.onPlayerHit(att.damage, e, DamageType.PHYSICAL, DamageID.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
+                if (inRange) callbacks.handlePlayerHit(att.damage, e, DamageType.PHYSICAL, DamageID.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
                 if (callbacks.spawnParticle) callbacks.spawnParticle(pos.x, pos.y + 1.8, pos.z, FXParticleType.SCREECH_WAVE, 1);
                 callbacks.playSound(SoundID.ZOMBIE_GROWL_RUNNER);
                 break;
 
             case EnemyAttackType.ELECTRIC_BEAM:
             case EnemyAttackType.MAGNETIC_CHAIN:
-                if (inRange) callbacks.onPlayerHit(att.damage, e, DamageType.ELECTRIC, DamageID.ELECTRIC, false, att.effect, att.effectDuration, att.effectDamage, att.type);
+                if (inRange) callbacks.handlePlayerHit(att.damage, e, DamageType.ELECTRIC, DamageID.ELECTRIC, false, att.effect, att.effectDuration, att.effectDamage, att.type);
                 callbacks.playSound(SoundID.SHOT_ARC_CANNON);
                 break;
         }
@@ -178,7 +178,7 @@ export const EnemyAttackHandler = {
     },
 
     updateContinuousAttack: (e: Enemy, att: AttackDefinition, playerPos: THREE.Vector3, callbacks: {
-        onPlayerHit: (damage: number, attacker: Enemy | null, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void,
+        handlePlayerHit: (damage: number, attacker: Enemy | null, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean,
         spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D | null, vel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void,
         applyExternalForce?: (force: THREE.Vector3, factor: number) => void
     }, delta: number, simTime: number, renderTime: number) => {
@@ -207,7 +207,7 @@ export const EnemyAttackHandler = {
                     }
                     if (currentDistSq < rangeSq) {
                         callbacks.spawnParticle(playerPos.x, playerPos.y + 1.0, playerPos.z, FXParticleType.ELECTRIC_FLASH, 1);
-                        callbacks.onPlayerHit(att.damage * delta, e, DamageType.ELECTRIC, DamageID.ELECTRIC, true, att.effect, att.effectDuration, att.effectDamage, att.type);
+                        callbacks.handlePlayerHit(att.damage * delta, e, DamageType.ELECTRIC, DamageID.ELECTRIC, true, att.effect, att.effectDuration, att.effectDamage, att.type);
                     }
                 }
                 break;
@@ -215,7 +215,7 @@ export const EnemyAttackHandler = {
             case EnemyAttackType.MAGNETIC_CHAIN:
                 if (currentDistSq < rangeSq) {
                     if (callbacks.spawnParticle) callbacks.spawnParticle(pos.x, pos.y + 1.5, pos.z, FXParticleType.MAGNETIC_SPARKS, 2);
-                    callbacks.onPlayerHit(att.damage * delta, e, DamageType.PHYSICAL, DamageID.PHYSICAL, true, att.effect, att.effectDuration, att.effectDamage, att.type);
+                    callbacks.handlePlayerHit(att.damage * delta, e, DamageType.PHYSICAL, DamageID.PHYSICAL, true, att.effect, att.effectDuration, att.effectDamage, att.type);
 
                     if (callbacks.applyExternalForce) {
                         const invDist = (dist > 0.0001) ? -1.0 / dist : 0.0;

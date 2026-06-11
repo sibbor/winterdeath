@@ -2,14 +2,13 @@ import * as THREE from 'three';
 import type React from 'react';
 import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { UiSounds, GamePlaySounds } from '../utils/audio/AudioLib';
+import { UISounds, GamePlaySounds } from '../utils/audio/AudioLib';
 import { LootSystem } from './LootSystem';
 import { getCollectibleById } from '../content/collectibles';
 import { FXSystem } from './FXSystem';
 import { UIEventBridge, InteractionType, InteractionSubType, InteractionShape, InteractionPromptId } from './ui/UIEventBridge';
 import { FXParticleType } from '../types/FXTypes';
 import { TriggerType, TriggerStatus } from '../types/TriggerTypes';
-import { VehicleID } from '../entities/vehicles/VehicleTypes';
 import { InputAction } from '../core/engine/InputManager';
 import { TriggerSystem } from './TriggerSystem';
 import { VehicleManager } from './VehicleManager';
@@ -73,7 +72,7 @@ export class InteractionSystem implements System {
 
     constructor(
         private playerGroup: THREE.Group,
-        private onSectorEnded: (isExtraction: boolean) => void,
+        private onSectorEnded: (isCompleted: boolean) => void,
         private collectibles: THREE.Group[],
         private activeFamilyMembers?: React.MutableRefObject<any[]>,
         private scene?: THREE.Scene,
@@ -124,8 +123,8 @@ export class InteractionSystem implements System {
             let tCount = 0;
             let iCount = 0;
 
-            if (session.worldStreamer) {
-                const ws = session.worldStreamer;
+            if (session.systems.worldStreamer) {
+                const ws = session.systems.worldStreamer;
                 const tPoolIdx = ws.getTriggerPool().nextIndex();
                 ws.getNearbyTriggers(this.playerGroup.position.x, this.playerGroup.position.z, 15.0, tPoolIdx);
                 triggerIndices = ws.getTriggerPool().getPool(tPoolIdx);
@@ -137,14 +136,14 @@ export class InteractionSystem implements System {
                 iCount = ws.getInteractablePool().getCount(iPoolIdx);
             } else {
                 triggerIndices = null;
-                tCount = session.triggerSystem.capacity;
+                tCount = session.systems.triggerSystem.capacity;
                 interactables = (session.sectorCtx?.interactables || this.EMPTY_ARRAY);
                 iCount = interactables.length || 0;
             }
 
             this.detectInteraction(
                 this.playerGroup.position,
-                session.triggerSystem,
+                session.systems.triggerSystem,
                 triggerIndices,
                 tCount,
                 state,
@@ -557,7 +556,7 @@ export class InteractionSystem implements System {
         if (colSmi === undefined || !getCollectibleById(colSmi)) return;
 
         collectible.userData.pickedUp = true;
-        UiSounds.playPickUp();
+        UISounds.playPickUp();
 
         collectible.matrixAutoUpdate = true;
         for (let i = 0; i < collectible.children.length; i++) {

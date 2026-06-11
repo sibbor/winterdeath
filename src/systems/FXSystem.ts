@@ -43,7 +43,7 @@ const initTypedArrays = () => {
     [
         FXParticleType.DEBRIS, FXParticleType.GLASS, FXParticleType.GORE,
         FXParticleType.SPLASH, FXParticleType.BLOOD_SPLATTER, FXParticleType.BLACK_SMOKE,
-        FXParticleType.SCRAP, FXParticleType.MEAT
+        FXParticleType.SCRAP
     ].forEach(t => PHYSICS_FLAGS[t] = 1);
 
     // --- INSTANCED FLAGS ---
@@ -57,7 +57,7 @@ const initTypedArrays = () => {
         FXParticleType.FROST_NOVA, FXParticleType.SCREECH_WAVE, FXParticleType.ELECTRIC_BEAM,
         FXParticleType.MAGNETIC_SPARKS, FXParticleType.IMPACT, FXParticleType.BLAST_RADIUS,
         FXParticleType.BLACK_SMOKE, FXParticleType.DEBRIS_TRAIL, FXParticleType.BLOOD_SPLATTER,
-        FXParticleType.SCRAP, FXParticleType.MEAT, FXParticleType.SNOW_PUFF
+        FXParticleType.SCRAP, FXParticleType.SNOW_PUFF
     ].forEach(t => INSTANCED_FLAGS[t] = 1);
 
     // --- ESSENTIAL FLAGS ---
@@ -66,7 +66,7 @@ const initTypedArrays = () => {
         FXParticleType.SPLASH, FXParticleType.BLOOD_SPLATTER, FXParticleType.BLOOD_SPLAT,
         FXParticleType.IMPACT, FXParticleType.ENEMY_EFFECT_STUN, FXParticleType.MUZZLE,
         FXParticleType.MUZZLE_FLASH, FXParticleType.MUZZLE_SPARK, FXParticleType.MUZZLE_SMOKE,
-        FXParticleType.GORE, FXParticleType.MEAT
+        FXParticleType.GORE
     ].forEach(t => ESSENTIAL_FLAGS[t] = 1);
 
     // --- COLORS ---
@@ -98,7 +98,6 @@ const initTypedArrays = () => {
     PARTICLE_COLORS[FXParticleType.BLAST_RADIUS] = COLORS.RED.num;
     PARTICLE_COLORS[FXParticleType.DEBRIS_TRAIL] = COLORS.GRAY.num;
     PARTICLE_COLORS[FXParticleType.SCRAP] = COLORS.GRAY.num;
-    PARTICLE_COLORS[FXParticleType.MEAT] = COLORS.RED_DIM.num;
     PARTICLE_COLORS[FXParticleType.SNOW_PUFF] = COLORS.WHITE.num;
 
     // --- TTL (Seconds) ---
@@ -106,7 +105,6 @@ const initTypedArrays = () => {
     PARTICLE_TTL[FXParticleType.SPLASH] = 1.0;
     PARTICLE_TTL[FXParticleType.DEBRIS] = 2.0;
     PARTICLE_TTL[FXParticleType.GORE] = 4.0;
-    PARTICLE_TTL[FXParticleType.MEAT] = 4.0;
     PARTICLE_TTL[FXParticleType.LARGE_FIRE] = 1.6;
     PARTICLE_TTL[FXParticleType.LARGE_SMOKE] = 1.6;
     PARTICLE_TTL[FXParticleType.FLAME] = 1.4;
@@ -156,8 +154,6 @@ for (let i = 0; i < MAX_DECALS; i++) {
         scale: undefined, life: undefined, material: undefined
     });
 }
-
-let _whiteGoreMaterial: THREE.Material | null = null;
 
 const _INITIAL_STATE_POOL: ParticleState[] = [];
 const _INITIAL_STATE_FREE: number[] = [];
@@ -462,6 +458,12 @@ export const FXSystem = {
                 fs = (0.5 + Math.random() * 0.7) * s;
                 p.scaleVec.set(fs, fs, fs);
                 break;
+            case FXParticleType.GORE:
+                // Establish strict linear scalability from the enemy's structural mass profile (s)
+                // Individual meat chunks deviate by a tight 40% margin to prevent BOSS vs RUNNER scale inversion.
+                fs = s * (0.8 + Math.random() * 0.4);
+                p.scaleVec.set(fs, fs, fs);
+                break;
             case FXParticleType.ELECTRIC_BEAM:
                 p.scaleVec.set(0.2, 0.2, 5.0);
                 break;
@@ -519,12 +521,6 @@ export const FXSystem = {
         if (!MATERIALS['_blackSmoke']) MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: COLORS.BLACK.num, transparent: true, opacity: 0.6, depthWrite: false });
         if (!MATERIALS['flame']) MATERIALS['flame'] = new THREE.MeshBasicMaterial({ color: COLORS.FIRE_ORANGE.num, transparent: true, opacity: 0.9, depthWrite: false });
         if (!MATERIALS['large_fire']) MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: COLORS.FIRE_RED.num, transparent: true, opacity: 0.9, depthWrite: false });
-
-        if (!_whiteGoreMaterial) {
-            _whiteGoreMaterial = (MATERIALS.gore as THREE.MeshStandardMaterial).clone();
-            (_whiteGoreMaterial as any).color.setHex(COLORS.WHITE.num);
-            _whiteGoreMaterial.userData = { isSharedAsset: true };
-        }
 
         _dummyMatrix.makeTranslation(0, -1000, 0);
 
@@ -643,14 +639,17 @@ export const FXSystem = {
                 if (p.isPhysics) {
                     p.vel.y -= FX.GRAVITY * safeDelta;
                     if (t !== FXParticleType.SPLASH && t !== FXParticleType.BLOOD_SPLATTER) {
-                        p.rot.x += p.rotVel.x * 60 * safeDelta;
-                        p.rot.z += p.rotVel.z * 60 * safeDelta;
+                        p.rot.x += p.rotVel.x * 60 * safeDelta; p.rot.z += p.rotVel.z * 60 * safeDelta;
                     }
-                    if (p.pos.y <= (t === FXParticleType.SPLASH || t === FXParticleType.BLOOD_SPLATTER ? -5.0 : 0.05)) {
+
+                    // FIXED: Höj landningströskeln för GORE till 0.22 så de landar OVANPÅ snölagret
+                    const floorY = (t === FXParticleType.GORE) ? 0.22 : (t === FXParticleType.SPLASH || t === FXParticleType.BLOOD_SPLATTER ? -5.0 : 0.05);
+                    if (p.pos.y <= floorY) {
                         FXSystem._handleLanding(p, i, particlesList, callbacks);
                         if (!p.inUse) continue;
                     }
                 } else {
+                    // --- ZERO-GC PARTICLE SHRINK & GROWTH JUMP TABLE ---
                     p.vel.x *= safeAirFriction; p.vel.y *= safeAirFriction; p.vel.z *= safeAirFriction;
                     const pScale = p.scaleVec;
                     switch (t) {
@@ -670,11 +669,21 @@ export const FXSystem = {
                         case FXParticleType.FIRE:
                         case FXParticleType.FLAME:
                         case FXParticleType.LARGE_FIRE:
+                        case FXParticleType.ENEMY_EFFECT_FLAME:
+                        case FXParticleType.MUZZLE_FLASH:
+                        case FXParticleType.CAMPFIRE_FLAME:
                             pScale.x *= safeFireShrinkRate; pScale.y *= safeFireShrinkRate; pScale.z *= safeFireShrinkRate;
                             break;
                         case FXParticleType.BLACK_SMOKE:
                             const smGrow = 6.0 * safeDelta;
                             pScale.x += smGrow; pScale.y += smGrow; pScale.z += smGrow;
+                            break;
+                        case FXParticleType.GORE:
+                            // Let them retain 95% of their size until they hit the ground and pool away.
+                            const safeGoreShrink = Math.max(0, 1.0 - (0.5 * safeDelta));
+                            pScale.x *= safeGoreShrink;
+                            pScale.y *= safeGoreShrink;
+                            pScale.z *= safeGoreShrink;
                             break;
                         case FXParticleType.ELECTRIC_BEAM:
                             pScale.z += 20 * safeDelta; pScale.x *= 0.9; pScale.y *= 0.9;
@@ -690,7 +699,13 @@ export const FXSystem = {
                 }
             }
 
+            // --- PHYSICS & INSTANCING PIPELINE UNROLL ---
             if (p.isInstanced) {
+                // If a heavy gore chunk has landed, shrink it toward 0 over its remaining TTL
+                if (p.landed && p.type === FXParticleType.GORE) {
+                    p.scaleVec.multiplyScalar(Math.max(0, 1.0 - (0.8 * safeDelta)));
+                }
+
                 const imesh = FXSystem._instancedMeshes[p.type];
                 const idx = FXSystem._instancedCounts[p.type];
                 if (imesh && idx < MAX_INSTANCES_PER_MESH) {
@@ -760,8 +775,9 @@ export const FXSystem = {
     },
 
     _handleLanding: (p: ParticleState, index: number, list: ParticleState[], callbacks: any) => {
-        p.pos.y = 0.05;
+        p.pos.y = (p.type === FXParticleType.GORE) ? 0.22 : 0.05;
         const t = p.type;
+
         switch (t) {
             case FXParticleType.BLOOD_SPLATTER:
                 p.landed = true;
@@ -806,8 +822,8 @@ export const FXSystem = {
                 case FXParticleType.FLAMETHROWER_FIRE:
                     geo = GEOMETRY.flame;
                     mat = (type === FXParticleType.ENEMY_EFFECT_FLAME) ? MATERIALS.enemy_effect_flame :
-                          (type === FXParticleType.FLAMETHROWER_FIRE) ? MATERIALS.flamethrower_flame :
-                          MATERIALS.fire;
+                        (type === FXParticleType.FLAMETHROWER_FIRE) ? MATERIALS.flamethrower_flame :
+                            MATERIALS.fire;
                     break;
                 case FXParticleType.SPARK:
                 case FXParticleType.SMOKE:
@@ -876,16 +892,15 @@ export const FXSystem = {
                     mat = MATERIALS.bullet;
                     break;
                 case FXParticleType.GORE:
-                case FXParticleType.MEAT:
                     geo = GEOMETRY.gore;
-                    mat = _whiteGoreMaterial as THREE.Material;
+                    mat = MATERIALS.gore;
                     break;
             }
 
             if (!mat) mat = MATERIALS.bullet;
             const imesh = new THREE.InstancedMesh(geo, mat, MAX_INSTANCES_PER_MESH);
             imesh.frustumCulled = false;
-            if (type === FXParticleType.DEBRIS || type === FXParticleType.GLASS || type === FXParticleType.GORE || type === FXParticleType.MEAT) {
+            if (type === FXParticleType.DEBRIS || type === FXParticleType.GLASS || type === FXParticleType.GORE) {
                 imesh.castShadow = true; imesh.receiveShadow = !(imesh.material as any).isMeshBasicMaterial;
             } else { imesh.castShadow = false; imesh.receiveShadow = false; }
             imesh.renderOrder = 60;

@@ -1,5 +1,4 @@
 import React, { useRef, useEffect } from 'react';
-import ChatBubble from './ChatBubble';
 import { InteractionType } from '../../../systems/ui/UIEventBridge';
 
 interface GameUIProps {
@@ -16,7 +15,6 @@ const GameUI: React.FC<GameUIProps> = React.memo(({
 }) => {
     return (
         <>
-            <ChatBubble />
         </>
     );
 });

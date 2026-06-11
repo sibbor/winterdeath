@@ -6,7 +6,7 @@ import { WeaponStats } from '../../../content/weapons';
 import { WeaponID } from '../../../entities/player/CombatTypes';
 import { t } from '../../../utils/i18n';
 import { SCRAP_COST_BASE } from '../../../content/constants';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../core/data/DataResolver';
 import ModalLayout, { TacticalTab } from './ModalLayout';
 import { StatsBridge } from '../../../core/data/StatsBridge';
@@ -36,7 +36,7 @@ const ScreenTerminalArmory: React.FC<ArmoryTerminalProps> = ({ stats, sectorStat
     // Transactional upgrade — mirrors ScreenArmory pattern (GC allocation acceptable on explicit user click)
     const handleUpgradeWeapon = useCallback((e: React.MouseEvent, weapon: WeaponID) => {
         e.stopPropagation();
-        UiSounds.playClick();
+        UISounds.playClick();
 
         setTempStats(prevStats => {
             const level = tempWeaponLevels[weapon] || 1;
@@ -50,7 +50,7 @@ const ScreenTerminalArmory: React.FC<ArmoryTerminalProps> = ({ stats, sectorStat
     }, [tempWeaponLevels]);
 
     const handleEquip = useCallback((weapon: WeaponID, category: WeaponCategory) => {
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
         setTempLoadout(prev => {
             if (category === WeaponCategory.PRIMARY) return { ...prev, primary: weapon };
             if (category === WeaponCategory.SECONDARY) return { ...prev, secondary: weapon };
@@ -73,7 +73,7 @@ const ScreenTerminalArmory: React.FC<ArmoryTerminalProps> = ({ stats, sectorStat
         const allWeapons = DataResolver.getWeapons();
         for (let i = 0; i < allWeapons.length; i++) {
             if (!allWeapons[i]) continue;
-            const k = allWeapons[i].name;
+            const k = allWeapons[i].id;
             if ((tempWeaponLevels[k] || 1) !== (weaponLevels[k] || 1)) return true;
         }
 
@@ -103,7 +103,7 @@ const ScreenTerminalArmory: React.FC<ArmoryTerminalProps> = ({ stats, sectorStat
             titleColorClass="text-yellow-600"
             tabs={[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL]}
             activeTab={activeTab}
-            onTabChange={(cat) => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
+            onTabChange={(cat) => { setActiveTab(cat as WeaponCategory); UISounds.playClick(); }}
             tabOrientation="horizontal"
         >
             <div className="flex flex-col h-full overflow-hidden gap-4 md:gap-8">
@@ -137,10 +137,10 @@ const ScreenTerminalArmory: React.FC<ArmoryTerminalProps> = ({ stats, sectorStat
                 {/* Tabs bar */}
                 <div className="relative shrink-0">
                     <div className="flex flex-nowrap gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto no-scrollbar pt-2 min-h-[50px] md:min-h-[80px] items-end scroll-smooth">
-                        <TacticalTab key={WeaponCategory.PRIMARY} label={t(DataResolver.getWeaponCategoryName(WeaponCategory.PRIMARY))} isActive={activeTab === WeaponCategory.PRIMARY} onClick={() => { setActiveTab(WeaponCategory.PRIMARY); UiSounds.playClick(); }} />
-                        <TacticalTab key={WeaponCategory.SECONDARY} label={t(DataResolver.getWeaponCategoryName(WeaponCategory.SECONDARY))} isActive={activeTab === WeaponCategory.SECONDARY} onClick={() => { setActiveTab(WeaponCategory.SECONDARY); UiSounds.playClick(); }} />
-                        <TacticalTab key={WeaponCategory.THROWABLE} label={t(DataResolver.getWeaponCategoryName(WeaponCategory.THROWABLE))} isActive={activeTab === WeaponCategory.THROWABLE} onClick={() => { setActiveTab(WeaponCategory.THROWABLE); UiSounds.playClick(); }} />
-                        <TacticalTab key={WeaponCategory.SPECIAL} label={t(DataResolver.getWeaponCategoryName(WeaponCategory.SPECIAL))} isActive={activeTab === WeaponCategory.SPECIAL} onClick={() => { setActiveTab(WeaponCategory.SPECIAL); UiSounds.playClick(); }} />
+                        <TacticalTab key={WeaponCategory.PRIMARY} label={t(DataResolver.getWeaponCategoryName(WeaponCategory.PRIMARY))} isActive={activeTab === WeaponCategory.PRIMARY} onClick={() => { setActiveTab(WeaponCategory.PRIMARY); UISounds.playClick(); }} />
+                        <TacticalTab key={WeaponCategory.SECONDARY} label={t(DataResolver.getWeaponCategoryName(WeaponCategory.SECONDARY))} isActive={activeTab === WeaponCategory.SECONDARY} onClick={() => { setActiveTab(WeaponCategory.SECONDARY); UISounds.playClick(); }} />
+                        <TacticalTab key={WeaponCategory.THROWABLE} label={t(DataResolver.getWeaponCategoryName(WeaponCategory.THROWABLE))} isActive={activeTab === WeaponCategory.THROWABLE} onClick={() => { setActiveTab(WeaponCategory.THROWABLE); UISounds.playClick(); }} />
+                        <TacticalTab key={WeaponCategory.SPECIAL} label={t(DataResolver.getWeaponCategoryName(WeaponCategory.SPECIAL))} isActive={activeTab === WeaponCategory.SPECIAL} onClick={() => { setActiveTab(WeaponCategory.SPECIAL); UISounds.playClick(); }} />
                     </div>
                 </div>
 

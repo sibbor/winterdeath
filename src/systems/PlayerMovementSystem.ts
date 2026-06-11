@@ -15,12 +15,10 @@ import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { FootprintSystem } from './FootprintSystem';
 import { StatID, PlayerStatusFlags } from '../types/CareerStats';
 import { SoundID } from '../utils/audio/AudioTypes';
-import { PlayerStatsSystem } from './PlayerStatsSystem';
 import { InputAction } from '../core/engine/InputManager';
 import { PLAYER, PHYSICS, COMBAT } from '../content/constants';
+import { CareerStatsSystem } from './CareerStatsSystem';
 import { MaterialType } from '../content/environment';
-import type { DamageTrackerSystem } from './DamageTrackerSystem';
-import type { PerkSystem } from './PerkSystem';
 
 // --- SPEED AUDIT TELEMETRY (DEPRECATED) ---
 // Audit variables removed for Zero-GC compliance. Logging moved to TelemetrySystem.
@@ -45,7 +43,7 @@ export class PlayerMovementSystem implements System {
     // Zero-GC context bridge for EnemyManager physics 
     private _knockbackCtx: any = {
         worldStreamer: null,
-        applyDamage: null,
+        handleEnemyHit: null,
         scene: null,
         engine: null,
         spawnParticle: null
@@ -53,11 +51,6 @@ export class PlayerMovementSystem implements System {
 
     private _invincibilityMesh: THREE.Mesh | null = null;
     private _buffShieldMesh: THREE.Mesh | null = null;
-
-    // System references
-    private statsSystem!: PlayerStatsSystem;
-    private damageTracker!: DamageTrackerSystem;
-    private perkSystem!: PerkSystem;
 
     constructor(private playerGroup: THREE.Group) {
         // 100% Zero-GC Mesh Pre-allocation
@@ -68,9 +61,6 @@ export class PlayerMovementSystem implements System {
     }
 
     init(session: GameSessionLogic) {
-        this.statsSystem = session.getSystem<PlayerStatsSystem>(SystemID.PLAYER_STATS)!;
-        this.damageTracker = session.getSystem<DamageTrackerSystem>(SystemID.DAMAGE_TRACKER)!;
-        this.perkSystem = session.getSystem<PerkSystem>(SystemID.PERK_SYSTEM)!;
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
@@ -126,6 +116,10 @@ export class PlayerMovementSystem implements System {
             session
         );
 
+        // Sync player aimDirection with final mesh rotation for continuous weapons (e.g. Flamethrower)
+        _v1.set(0, 0, 1).applyQuaternion(this.playerGroup.quaternion);
+        state.player.aimDirection.set(_v1.x, _v1.z).normalize();
+
         this.updateInvincibleGlow(state, session.state.renderTime);
     }
 
@@ -175,8 +169,7 @@ export class PlayerMovementSystem implements System {
                         state.player.dodgeDir.set(0, 0, 0); // Reset to recalc next frame
 
                         // --- TRACK NEW METRIC (UNIFIED) ---
-                        const tracker = this.damageTracker;
-                        if (tracker) tracker.recordDodge(session);
+                        CareerStatsSystem.recordDodge(session);
                     }
                 }
             }
@@ -208,7 +201,7 @@ export class PlayerMovementSystem implements System {
                             state.combat.statusFlags |= PlayerStatusFlags.RUSHING;
 
                             // --- TRACK NEW METRIC (UNIFIED) ---
-                            this.damageTracker.recordRush(session);
+                            CareerStatsSystem.recordRush(session);
                         }
 
                         state.player.lastStaminaUseTime = simTime;
@@ -271,6 +264,11 @@ export class PlayerMovementSystem implements System {
         state.player.isSwimming = isSwimming;
         state.player.isWading = isWading;
 
+        // Cleanse drowning debuff immediately when player is no longer swimming (reached ground/wading depth)
+        if (!isSwimming && state.combat.effectDurations[StatusEffectID.DROWNING] > 0) {
+            state.combat.effectDurations[StatusEffectID.DROWNING] = 0;
+        }
+
         // --- 3. EXTINGUISH BURNING IN WATER ---
         if (inWater && state.combat.effectDurations[StatusEffectID.BURNING] > 0) {
             state.combat.effectDurations[StatusEffectID.BURNING] = 0;
@@ -288,8 +286,8 @@ export class PlayerMovementSystem implements System {
 
                 // --- Unified Drowning Logic ---
                 // We only apply the status effect here. The PlayerStatsSystem handles the damage tick.
-                if (state.callbacks && state.callbacks.onPlayerHit) {
-                    state.callbacks.onPlayerHit(0, null, DamageType.DROWNING, DamageID.DROWNING, true, StatusEffectID.DROWNING, 1500);
+                if (state.callbacks && state.callbacks.handlePlayerHit) {
+                    state.callbacks.handlePlayerHit(0, null, DamageType.DROWNING, DamageID.DROWNING, true, StatusEffectID.DROWNING, 1500);
                 }
             }
         }
@@ -313,7 +311,7 @@ export class PlayerMovementSystem implements System {
                 state.combat.statusFlags &= ~PlayerStatusFlags.RUSHING;
             }
         } else {
-            // --- VINTERDÖD FIX: Properly ramp down when not rushing ---
+            // --- Properly ramp down when not rushing ---
             state.player.rushFactor = Math.max(0, state.player.rushFactor - rushRampSpeed);
             state.combat.statusFlags &= ~PlayerStatusFlags.RUSHING;
         }
@@ -360,18 +358,18 @@ export class PlayerMovementSystem implements System {
 
             if (!state.player.dodgeSmokeSpawned && !inWater) {
                 state.player.dodgeSmokeSpawned = true;
-                audioEngine.playSound(SoundID.DASH);
+                audioEngine.playSound(SoundID.DODGE);
                 session.makeNoise(playerGroup.position, NoiseType.PLAYER_DODGING, NOISE_RADIUS[NoiseType.PLAYER_DODGING]);
 
                 // Perk: Quick Finger
                 // Proximity-Based perfect dodge mechanic
-                if (session.worldStreamer) {
-                    const pool = session.worldStreamer.getEnemyPool();
+                if (session.systems.worldStreamer) {
+                    const pool = session.systems.worldStreamer.getEnemyPool();
                     const poolIdx = pool.nextIndex();
-                    session.worldStreamer.getNearbyEnemies(playerGroup.position.x, playerGroup.position.z, 5, poolIdx);
+                    session.systems.worldStreamer.getNearbyEnemies(playerGroup.position.x, playerGroup.position.z, 5, poolIdx);
 
                     if (pool.getCount(poolIdx) > 0) {
-                        this.perkSystem.applyPerk(session, StatusEffectID.QUICK_FINGER);
+                        session.systems.perkSystem!.applyPerk(session, StatusEffectID.QUICK_FINGER);
                     }
                 }
 
@@ -397,7 +395,7 @@ export class PlayerMovementSystem implements System {
                             FXParticleType.SPLASH, 1, undefined, undefined, 0xeeeeff, 0.8
                         );
                     } else {
-                        const groundMat = session.worldStreamer?.getGroundMaterial(playerGroup.position.x, playerGroup.position.z) || 0;
+                        const groundMat = session.systems.worldStreamer?.getGroundMaterial(playerGroup.position.x, playerGroup.position.z) || 0;
                         let pType = FXParticleType.SMOKE;
                         let pColor = 0xaaaaaa;
                         if (groundMat === MaterialType.SNOW || groundMat === MaterialType.NONE) { pType = FXParticleType.SNOW_PUFF; pColor = 0xffffff; }
@@ -496,6 +494,8 @@ export class PlayerMovementSystem implements System {
                         state.player.distanceSinceLastStep = 0;
                         state.player.lastStepRight = !state.player.lastStepRight;
 
+                        let groundMaterial = session.systems.worldStreamer ? session.systems.worldStreamer.getGroundMaterial(playerGroup.position.x, playerGroup.position.z) : 0
+
                         FootprintSystem.addFootprint(
                             session,
                             playerGroup.position,
@@ -504,7 +504,7 @@ export class PlayerMovementSystem implements System {
                             state.player.isRushing,
                             inWater,
                             isSwimming,
-                            session.worldStreamer.getGroundMaterial(playerGroup.position.x, playerGroup.position.z)
+                            groundMaterial
                         );
 
                         let noiseType = NoiseType.PLAYER_WALK;
@@ -526,7 +526,7 @@ export class PlayerMovementSystem implements System {
                             noiseRadius = NOISE_RADIUS[NoiseType.PLAYER_RUSH];
 
                             if (!inWater) {
-                                const groundMat = session.worldStreamer?.getGroundMaterial(playerGroup.position.x, playerGroup.position.z) || 0;
+                                const groundMat = session.systems.worldStreamer?.getGroundMaterial(playerGroup.position.x, playerGroup.position.z) || 0;
                                 let pType = FXParticleType.SMOKE;
                                 let pColor = 0xaaaaaa;
                                 if (groundMat === MaterialType.SNOW || groundMat === MaterialType.NONE) { pType = FXParticleType.SNOW_PUFF; pColor = 0xffffff; }
@@ -571,8 +571,8 @@ export class PlayerMovementSystem implements System {
 
         if (canKnockback) {
             // Populate Zero-GC context for the plow physics
-            this._knockbackCtx.worldStreamer = session.worldStreamer;
-            this._knockbackCtx.applyDamage = state.callbacks?.applyDamage;
+            this._knockbackCtx.worldStreamer = session.systems.worldStreamer;
+            this._knockbackCtx.handleEnemyHit = state.handleEnemyHit;
             this._knockbackCtx.scene = session.engine.scene;
             this._knockbackCtx.engine = session.engine;
             this._knockbackCtx.spawnParticle = session.spawnParticle;
@@ -582,8 +582,8 @@ export class PlayerMovementSystem implements System {
                 this._knockbackCtx,
                 playerGroup.position,
                 searchRadius,
-                state.player.isDodging ? 15 : 50, // Max Force
-                0,                         // Max Damage (Damage only applied on landing!)
+                state.player.isDodging ? 15 : 40, // Max Force
+                50,                               // Max Damage (Damage only applied on landing!)
                 DamageType.PHYSICAL,
                 state.player.isDodging ? DamageID.DODGE : DamageID.RUSH,
                 state.player.isDodging ? state.player.dodgeDir : baseMoveVec
@@ -596,11 +596,11 @@ export class PlayerMovementSystem implements System {
         // - Distance tracking fires once per move call, not per sub-step.
         // - Enemy spatial query: enemies don't relocate between sub-steps of a single frame.
         //   Query once at the player's current position with a small radius (1.2m).
-        const streamer = session.worldStreamer;
+        const streamer = session.systems.worldStreamer;
 
-        this.damageTracker.recordDistance(session, distMoved);
+        CareerStatsSystem.recordDistance(session, distMoved);
         if (state.player.isRushing) {
-            this.damageTracker.recordRushDistance(session, distMoved);
+            CareerStatsSystem.recordRushDistance(session, distMoved);
         }
 
         const enPool = streamer.getEnemyPool();

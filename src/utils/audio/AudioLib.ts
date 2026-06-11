@@ -15,11 +15,11 @@ import { DataResolver } from '../../core/data/DataResolver';
  */
 export const Generators = {
     // --- UI ---
-    uiHover: (ctx: AudioContext) => createTone(ctx, 'sine', 800, 0.05, 0.05),
-    uiClick: (ctx: AudioContext) => createTone(ctx, 'triangle', 600, 0.08, 0.1),
-    uiConfirm: (ctx: AudioContext) => createSweep(ctx, 'sine', 440, 880, 0.1, 0.1),
-    uiPickUp: (ctx: AudioContext) => createSweep(ctx, 'sine', 600, 1200, 0.08, 0.1),
-    uiChime: (ctx: AudioContext) => {
+    ui_hover: (ctx: AudioContext) => createTone(ctx, 'sine', 800, 0.05, 0.05),
+    ui_click: (ctx: AudioContext) => createTone(ctx, 'triangle', 600, 0.08, 0.1),
+    ui_confirm: (ctx: AudioContext) => createSweep(ctx, 'sine', 440, 880, 0.1, 0.1),
+    ui_pickUp: (ctx: AudioContext) => createSweep(ctx, 'sine', 600, 1200, 0.08, 0.1),
+    ui_chime: (ctx: AudioContext) => {
         const duration = 0.6;
         const length = ctx.sampleRate * duration;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
@@ -45,36 +45,91 @@ export const Generators = {
         }
         return buffer;
     },
-    ui_level_up: (ctx: AudioContext) => {
-        const length = ctx.sampleRate * 1.5;
+    ui_upgrade: (ctx: AudioContext) => {
+        // Cold, snappy, industrial metallic pitch decay variant
+        const length = ctx.sampleRate * 0.8;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
+
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            const f = t < 0.2 ? 440 : t < 0.4 ? 554 : t < 0.6 ? 659 : 880;
-            const env = Math.exp(-2 * t);
-            data[i] = Math.sin(2 * Math.PI * f * t) * 0.15 * env;
+            const baseFreq = t < 0.08 ? 784 : t < 0.18 ? 698 : t < 0.3 ? 587 : 523;
+            const metallicOvertone = Math.sin(2 * Math.PI * (baseFreq * 2.5) * t);
+            const env = Math.exp(-6 * t);
+            const wave = Math.sin(2 * Math.PI * baseFreq * t) * 0.7 + metallicOvertone * 0.3;
+            data[i] = wave * 0.12 * env;
         }
         return buffer;
     },
-    owl_hoot: (ctx: AudioContext) => {
+    ui_open_screen: (ctx: AudioContext) => {
+        // High-tech terminal data swelling initialization sequence
+        const length = ctx.sampleRate * 0.35; // Snappy operational duration
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+
+            // Upward pitch trajectory to mimic UI decompression or screen expansion
+            const sweepFreq = 150 + (t * 850);
+
+            // Subtle sub-frequency baseline to add mechanical mass
+            const baseHum = Math.sin(2 * Math.PI * 60 * t);
+
+            // Hard digital clipping wave injection for low-fi grit texture
+            const wave = Math.sin(2 * Math.PI * sweepFreq * t) + (Math.sin(2 * Math.PI * 30 * t) > 0 ? 0.3 : -0.3);
+
+            // Instant linear attack scaling up to 15ms, then smooth tactile envelope decay
+            const env = t < 0.015 ? (t / 0.015) : Math.exp(-12 * (t - 0.015));
+            const digitalGrit = (Math.random() - 0.5) * 0.08;
+
+            data[i] = (wave * 0.5 + baseHum * 0.2 + digitalGrit) * 0.12 * env;
+        }
+        return buffer;
+    },
+
+    ui_close_screen: (ctx: AudioContext) => {
+        // High-tech downward terminal deflation and mechanical collapse loop sequence
+        const length = ctx.sampleRate * 0.3; // Sightly shorter duration for crisp dismissals
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+
+            // Downward pitch trajectory representing collapsing structural UI nodes
+            const sweepFreq = Math.max(50, 900 - (t * 2200));
+
+            // Low radar cathode discharge modulation frequency
+            const buzzModulation = Math.sin(2 * Math.PI * 45 * t) > 0 ? 0.4 : -0.4;
+
+            // Reversing LFO to model a rapid hardware voltage drop
+            const lfo = Math.sin(2 * Math.PI * 14 * t);
+
+            // Ultra fast 5ms initialization envelope bounding directly into heavy hardware decay
+            const env = t < 0.005 ? (t / 0.005) : Math.exp(-16 * (t - 0.005));
+            const whiteNoiseGrain = (Math.random() - 0.5) * 0.12;
+
+            // Blend everything down into a gritty static discharge click
+            data[i] = (Math.sin(2 * Math.PI * (sweepFreq + lfo * 20) * t) * 0.4 + buzzModulation + whiteNoiseGrain) * 0.09 * env;
+        }
+        return buffer;
+    },
+
+    // --- COMBAT ---
+    level_up: (ctx: AudioContext) => {
         const sr = ctx.sampleRate;
-        const dur = 1.5;
+        const dur = 1.0;
         const buf = ctx.createBuffer(1, sr * dur, sr);
         const d = buf.getChannelData(0);
         for (let i = 0; i < d.length; i++) {
             const t = i / sr;
-            // Hoo - Hoo (Double hoot)
-            const h1 = t < 0.4 ? Math.sin(Math.PI * (t / 0.4)) : 0;
-            const h2 = (t > 0.5 && t < 0.9) ? Math.sin(Math.PI * ((t - 0.5) / 0.4)) : 0;
-            const f = t < 0.4 ? 180 : 160;
-            const wave = Math.sin(2 * Math.PI * f * t) + 0.3 * Math.sin(2 * Math.PI * f * 2 * t);
-            d[i] = wave * (h1 + h2) * 0.15;
+            const env = Math.exp(-3 * t);
+            const freq = 440 + t * 440; // Rising pitch
+            d[i] = Math.sin(2 * Math.PI * freq * t) * 0.4 * env;
         }
         return buf;
     },
-
-    // --- GAMEPLAY ENHANCEMENTS ---
     passive_gained: (ctx: AudioContext) => {
         const duration = 0.4;
         const length = ctx.sampleRate * duration;
@@ -123,21 +178,6 @@ export const Generators = {
             const val = (t * freq % 1) * 2 - 1;
             const env = Math.exp(-8 * progress);
             data[i] = val * 0.2 * env;
-        }
-        return buffer;
-    },
-    steam_hiss: (ctx: AudioContext) => {
-        const duration = 0.6;
-        const length = ctx.sampleRate * duration;
-        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        let last = 0;
-        for (let i = 0; i < length; i++) {
-            const t = i / ctx.sampleRate;
-            const white = (Math.random() * 2 - 1);
-            last = white - (last * 0.9);
-            const env = Math.exp(-8 * t);
-            data[i] = last * 0.25 * env;
         }
         return buffer;
     },
@@ -193,21 +233,6 @@ export const Generators = {
     mech_mag_out: (ctx: AudioContext) => createTone(ctx, 'square', 150, 0.1, 0.5),
     mech_mag_in: (ctx: AudioContext) => createTone(ctx, 'square', 300, 0.1, 0.6),
     mech_empty_click: (ctx: AudioContext) => createTone(ctx, 'triangle', 1200, 0.05, 0.8),
-    buff_gain: (ctx: AudioContext) => createTone(ctx, 'sine', 880, 0.3, 0.4),
-    debuff_gain: (ctx: AudioContext) => createTone(ctx, 'square', 220, 0.3, 0.3),
-    level_up: (ctx: AudioContext) => {
-        const sr = ctx.sampleRate;
-        const dur = 1.0;
-        const buf = ctx.createBuffer(1, sr * dur, sr);
-        const d = buf.getChannelData(0);
-        for (let i = 0; i < d.length; i++) {
-            const t = i / sr;
-            const env = Math.exp(-3 * t);
-            const freq = 440 + t * 440; // Rising pitch
-            d[i] = Math.sin(2 * Math.PI * freq * t) * 0.4 * env;
-        }
-        return buf;
-    },
 
     explosion: (ctx: AudioContext) => createExplosion(ctx),
     explosion_water: (ctx: AudioContext) => {
@@ -275,6 +300,21 @@ export const Generators = {
             const noise = (Math.random() * 2 - 1) * Math.exp(-40 * t);
             const env = Math.exp(-8 * t);
             data[i] = (ping1 * 0.4 + noise * 0.4) * env * 0.6;
+        }
+        return buffer;
+    },
+    steam_hiss: (ctx: AudioContext) => {
+        const duration = 0.6;
+        const length = ctx.sampleRate * duration;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        let last = 0;
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const white = (Math.random() * 2 - 1);
+            last = white - (last * 0.9);
+            const env = Math.exp(-8 * t);
+            data[i] = last * 0.25 * env;
         }
         return buffer;
     },
@@ -647,8 +687,72 @@ export const Generators = {
         }
         return buf;
     },
+    owl_hoot: (ctx: AudioContext) => {
+        const sr = ctx.sampleRate;
+        const dur = 1.5;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            // Hoo - Hoo (Double hoot)
+            const h1 = t < 0.4 ? Math.sin(Math.PI * (t / 0.4)) : 0;
+            const h2 = (t > 0.5 && t < 0.9) ? Math.sin(Math.PI * ((t - 0.5) / 0.4)) : 0;
+            const f = t < 0.4 ? 180 : 160;
+            const wave = Math.sin(2 * Math.PI * f * t) + 0.3 * Math.sin(2 * Math.PI * f * 2 * t);
+            d[i] = wave * (h1 + h2) * 0.15;
+        }
+        return buf;
+    },
 
+    // --- UI SOUNDS ---
+    ui_victory: (ctx: AudioContext) => {
+        const duration = 2.0;
+        const sr = ctx.sampleRate;
+        const buf = ctx.createBuffer(1, sr * duration, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            const env = Math.exp(-2 * t);
+            // Major chord: C4 (261.63), E4 (329.63), G4 (392.00)
+            const s1 = Math.sin(2 * Math.PI * 261.63 * t);
+            const s2 = Math.sin(2 * Math.PI * 329.63 * t);
+            const s3 = Math.sin(2 * Math.PI * 392.00 * t);
+            d[i] = (s1 + s2 + s3) * 0.2 * env;
+        }
+        return buf;
+    },
+    ui_defeat: (ctx: AudioContext) => {
+        const duration = 3.0;
+        const sr = ctx.sampleRate;
+        const buf = ctx.createBuffer(1, sr * duration, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            const env = Math.exp(-0.5 * t);
+            // Low minor drone: C2 (65.41), Eb2 (77.78)
+            const s1 = Math.sin(2 * Math.PI * 65.41 * t);
+            const s2 = Math.sin(2 * Math.PI * 77.78 * t);
+            const noise = (Math.random() * 2 - 1) * 0.05;
+            d[i] = (s1 + s2 + noise) * 0.3 * env;
+        }
+        return buf;
+    },
     ui_discovery: (ctx: AudioContext) => {
+        const duration = 1.5;
+        const sr = ctx.sampleRate;
+        const buf = ctx.createBuffer(1, sr * duration, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
+            const env = Math.exp(-3 * t);
+            // Relaxed major intervals: C4 (261.63), G4 (392.00)
+            const s1 = Math.sin(2 * Math.PI * 261.63 * t);
+            const s2 = Math.sin(2 * Math.PI * 392.00 * t);
+            d[i] = (s1 + s2) * 0.15 * env;
+        }
+        return buf;
+    },
+    ui_challenge: (ctx: AudioContext) => {
         const duration = 1.5;
         const sr = ctx.sampleRate;
         const buf = ctx.createBuffer(1, sr * duration, sr);
@@ -736,40 +840,6 @@ export const Generators = {
         return buffer;
     },
 
-    ui_victory: (ctx: AudioContext) => {
-        const duration = 2.0;
-        const sr = ctx.sampleRate;
-        const buf = ctx.createBuffer(1, sr * duration, sr);
-        const d = buf.getChannelData(0);
-        for (let i = 0; i < d.length; i++) {
-            const t = i / sr;
-            const env = Math.exp(-2 * t);
-            // Major chord: C4 (261.63), E4 (329.63), G4 (392.00)
-            const s1 = Math.sin(2 * Math.PI * 261.63 * t);
-            const s2 = Math.sin(2 * Math.PI * 329.63 * t);
-            const s3 = Math.sin(2 * Math.PI * 392.00 * t);
-            d[i] = (s1 + s2 + s3) * 0.2 * env;
-        }
-        return buf;
-    },
-
-    ui_defeat: (ctx: AudioContext) => {
-        const duration = 3.0;
-        const sr = ctx.sampleRate;
-        const buf = ctx.createBuffer(1, sr * duration, sr);
-        const d = buf.getChannelData(0);
-        for (let i = 0; i < d.length; i++) {
-            const t = i / sr;
-            const env = Math.exp(-0.5 * t);
-            // Low minor drone: C2 (65.41), Eb2 (77.78)
-            const s1 = Math.sin(2 * Math.PI * 65.41 * t);
-            const s2 = Math.sin(2 * Math.PI * 77.78 * t);
-            const noise = (Math.random() * 2 - 1) * 0.05;
-            d[i] = (s1 + s2 + noise) * 0.3 * env;
-        }
-        return buf;
-    },
-
     // --- VEHICLES ---
     vehicle_engine_car: (ctx: AudioContext) => {
         const duration = 2.0; // Longer buffer for seamless looping
@@ -822,21 +892,138 @@ export const Generators = {
             d[i] = (impact + ring) * 0.8;
         }
         return buf;
+    },
+
+    chest_open: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.5;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const creak = Math.sin(2 * Math.PI * (80 + Math.sin(2 * Math.PI * 4 * t) * 20) * t) * 0.3;
+            const friction = (Math.random() * 2 - 1) * 0.08;
+            const env = Math.exp(-6 * t);
+            data[i] = (creak + friction) * env;
+        }
+        return buffer;
+    },
+    loot_scrap: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.25;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const ping1 = Math.sin(2 * Math.PI * 1800 * t);
+            const ping2 = Math.sin(2 * Math.PI * 2400 * t) * 0.5;
+            const env = Math.exp(-25 * t);
+            data[i] = (ping1 + ping2) * env * 0.25;
+        }
+        return buffer;
+    },
+    door_open: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.4;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const creak = Math.sin(2 * Math.PI * (120 - t * 40) * t) * 0.25;
+            const friction = (Math.random() * 2 - 1) * 0.05;
+            const env = Math.exp(-8 * t);
+            data[i] = (creak + friction) * env;
+        }
+        return buffer;
+    },
+    door_shut: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.3;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const thump = Math.sin(2 * Math.PI * 90 * t) * 0.4;
+            const click = (Math.random() * 2 - 1) * 0.1 * Math.exp(-80 * t);
+            const env = Math.exp(-15 * t);
+            data[i] = (thump + click) * env * 0.8;
+        }
+        return buffer;
+    },
+    door_knock: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.6;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        const knockOffsets = [0.0, 0.18, 0.36];
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            let val = 0;
+            for (let k = 0; k < knockOffsets.length; k++) {
+                const dt = t - knockOffsets[k];
+                if (dt >= 0 && dt < 0.15) {
+                    val += Math.sin(2 * Math.PI * 180 * dt) * Math.exp(-35 * dt) * 0.4;
+                }
+            }
+            data[i] = val;
+        }
+        return buffer;
+    },
+    bird_ambience: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 2.0;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        const chirps = [0.1, 0.8, 1.4];
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            let val = 0;
+            for (let c = 0; c < chirps.length; c++) {
+                const dt = t - chirps[c];
+                if (dt >= 0 && dt < 0.25) {
+                    const freq = 3000 + 1000 * Math.sin(2 * Math.PI * 8 * dt);
+                    val += Math.sin(2 * Math.PI * freq * dt) * Math.exp(-15 * dt) * 0.08;
+                }
+            }
+            data[i] = val;
+        }
+        return buffer;
+    },
+    voice_cheer: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.8;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const env = Math.exp(-4 * t);
+            const s1 = Math.sin(2 * Math.PI * 392.00 * t);
+            const s2 = Math.sin(2 * Math.PI * 493.88 * t);
+            const s3 = Math.sin(2 * Math.PI * 587.33 * t);
+            data[i] = (s1 + s2 + s3) * 0.15 * env;
+        }
+        return buffer;
+    },
+    voice_kiss: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.2;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const env = Math.exp(-30 * t);
+            const kiss = Math.sin(2 * Math.PI * (1000 - t * 4000) * t);
+            data[i] = kiss * env * 0.15;
+        }
+        return buffer;
     }
 };
 
 // --- API WRAPPERS ---
-
-export const UiSounds = {
-    playHover: () => audioEngine.playSound(SoundID.UI_HOVER, 0.15),
-    playClick: () => audioEngine.playSound(SoundID.UI_CLICK, 0.3),
-    playConfirm: () => audioEngine.playSound(SoundID.UI_CONFIRM, 0.3),
-    playLevelUp: () => audioEngine.playSound(SoundID.UI_LEVEL_UP, 0.4),
-    playUpgrade: () => audioEngine.playSound(SoundID.UI_LEVEL_UP, 0.4),
-    playPickUp: () => audioEngine.playSound(SoundID.UI_PICKUP, 0.2),
+export const UISounds = {
+    playHover: () => audioEngine.playSound(SoundID.UI_HOVER, 0.25),
+    playClick: () => audioEngine.playSound(SoundID.UI_CLICK, 0.4),
+    playConfirm: () => audioEngine.playSound(SoundID.UI_CONFIRM, 0.4),
+    playUpgrade: () => audioEngine.playSound(SoundID.UI_UPGRADE, 0.5),
+    playOpenScreen: () => audioEngine.playSound(SoundID.UI_OPEN_SCREEN, 0.8),
+    playCloseScreen: () => audioEngine.playSound(SoundID.UI_CLOSE_SCREEN, 0.8),
+    playPickUp: () => audioEngine.playSound(SoundID.UI_PICKUP, 0.5),
     playVictory: () => audioEngine.playSound(SoundID.UI_VICTORY, 0.6),
     playDefeat: () => audioEngine.playSound(SoundID.UI_DEFEAT, 0.7),
-    playDiscovery: () => audioEngine.playSound(SoundID.UI_DISCOVERY, 0.5),
+    playDiscovery: () => audioEngine.playSound(SoundID.UI_DISCOVERY, 0.7),
+    playChallenge: () => audioEngine.playSound(SoundID.UI_CHALLENGE, 0.7),
 };
 
 export const GamePlaySounds = {
@@ -888,7 +1075,7 @@ export const WeaponSounds = {
     playMolotovImpact: () => audioEngine.playSound(SoundID.MOLOTOV_IMPACT, 0.7),
     playFlashbangImpact: () => audioEngine.playSound(SoundID.FLASHBANG_IMPACT, 0.7),
     playArcCannonZap: () => audioEngine.playSound(SoundID.SHOT_ARC_CANNON, 0.5),
-    playDash: () => audioEngine.playSound(SoundID.DASH, 0.4, 0.9 + Math.random() * 0.2),
+    playDash: () => audioEngine.playSound(SoundID.DODGE, 0.4, 0.9 + Math.random() * 0.2),
     playRadio: () => audioEngine.playSound(SoundID.RADIO, 0.3),
     startFlamethrowerLoop: () => audioEngine.playLoop(SoundID.SHOT_FLAMETHROWER, 0.3, 1.0),
     startFireLoop: () => audioEngine.playLoop(SoundID.AMBIENT_FIRE, 0, 1.0),
@@ -930,6 +1117,9 @@ export const VoiceSounds = {
         const freq = params.baseFreq * pitch;
 
         audioEngine.playTone(freq, params.oscType, 0.08, 0.15);
+    },
+    stopAllDialogueBeeps: () => {
+        audioEngine.stopAll();
     }
 };
 
@@ -969,26 +1159,30 @@ export const VehicleSounds = {
  * Maps SoundID/MusicID to generator functions to populate the AudioEngine cache.
  */
 export function registerSoundGenerators() {
-    const ctx = audioEngine.ctx;
+    const ctx = audioEngine.audioContext;
 
     const map = (id: SoundID, gen: any) => audioEngine.registerBuffer(id, gen(ctx));
     const mapMusic = (id: MusicID, gen: any) => audioEngine.registerBuffer(id, gen(ctx), true);
 
     // UI
-    map(SoundID.UI_HOVER, Generators.uiHover);
-    map(SoundID.UI_CLICK, Generators.uiClick);
-    map(SoundID.UI_CONFIRM, Generators.uiConfirm);
-    map(SoundID.UI_PICKUP, Generators.uiPickUp);
-    map(SoundID.UI_CHIME, Generators.uiChime);
+    map(SoundID.UI_HOVER, Generators.ui_hover);
+    map(SoundID.UI_CLICK, Generators.ui_click);
+    map(SoundID.UI_CONFIRM, Generators.ui_confirm);
+    map(SoundID.UI_OPEN_SCREEN, Generators.ui_open_screen);
+    map(SoundID.UI_CLOSE_SCREEN, Generators.ui_close_screen);
+    map(SoundID.UI_PICKUP, Generators.ui_pickUp);
+    map(SoundID.UI_DISCOVERY, Generators.ui_discovery);
+    map(SoundID.UI_CHALLENGE, Generators.ui_challenge);
+    map(SoundID.UI_CHIME, Generators.ui_chime);
     map(SoundID.UI_VICTORY, Generators.ui_victory);
     map(SoundID.UI_DEFEAT, Generators.ui_defeat);
-    map(SoundID.UI_DISCOVERY, Generators.ui_discovery);
-    map(SoundID.UI_LEVEL_UP, Generators.ui_level_up);
-    map(SoundID.OWL_HOOT, Generators.owl_hoot);
     map(SoundID.PASSIVE_GAINED, Generators.passive_gained);
     map(SoundID.BUFF_GAINED, Generators.buff_gained);
     map(SoundID.DEBUFF_GAINED, Generators.debuff_gained);
-    map(SoundID.STEAM_HISS, Generators.steam_hiss);
+    map(SoundID.UI_UPGRADE, Generators.ui_upgrade);
+
+    // Gameplay sounds
+    map(SoundID.LEVEL_UP, Generators.level_up);
 
     // Footsteps
     map(SoundID.FOOTSTEP_SNOW, Generators.step_snow);
@@ -1019,7 +1213,7 @@ export function registerSoundGenerators() {
     map(SoundID.WEAPON_RELOAD, Generators.mech_mag_in);
     map(SoundID.WEAPON_SWITCH, Generators.mech_mag_out);
 
-    // Effects
+    // Combat Effects
     map(SoundID.EXPLOSION, Generators.explosion);
     map(SoundID.GRENADE_IMPACT, Generators.grenade_impact);
     map(SoundID.MOLOTOV_IMPACT, Generators.molotov_impact);
@@ -1027,24 +1221,17 @@ export function registerSoundGenerators() {
     map(SoundID.WATER_EXPLOSION, Generators.explosion_water);
     map(SoundID.WATER_SPLASH, Generators.splash_water);
     map(SoundID.HEARTBEAT, Generators.heartbeat);
+    map(SoundID.STEAM_HISS, Generators.steam_hiss);
+
+    // Utils & Tools
+    map(SoundID.RADIO, Generators.radio);
+    map(SoundID.DODGE, Generators.dash);
 
     // Enemies
     map(SoundID.ZOMBIE_GROWL_WALKER, Generators.walker_groan);
     map(SoundID.ZOMBIE_GROWL_RUNNER, Generators.runner_scream);
     map(SoundID.ZOMBIE_GROWL_TANK, Generators.tank_roar);
     map(SoundID.ZOMBIE_GROWL_BLOATER, Generators.bloater_beep);
-
-    // Ambients
-    map(SoundID.AMBIENT_WIND, Generators.ambient_wind);
-    map(SoundID.AMBIENT_STORM, Generators.ambient_storm);
-    map(SoundID.AMBIENT_CAVE, Generators.ambient_cave);
-    map(SoundID.AMBIENT_METAL, Generators.ambient_metal);
-    map(SoundID.AMBIENT_FOREST, Generators.ambient_forest);
-    map(SoundID.AMBIENT_FIRE, Generators.ambient_fire);
-
-    // Utils & Tools
-    map(SoundID.RADIO, Generators.radio);
-    map(SoundID.DASH, Generators.dash);
 
     // Enemy Death
     map(SoundID.ZOMBIE_DEATH_SHOT, Generators.zombie_death_shot);
@@ -1061,6 +1248,15 @@ export function registerSoundGenerators() {
     map(SoundID.VEHICLE_ENGINE_BOAT, Generators.vehicle_engine_boat);
     map(SoundID.VEHICLE_IMPACT, Generators.vehicle_impact);
     map(SoundID.VEHICLE_SKID, Generators.ambient_wind); // Use wind noise for skid for now
+
+    // Ambients
+    map(SoundID.AMBIENT_WIND, Generators.ambient_wind);
+    map(SoundID.AMBIENT_STORM, Generators.ambient_storm);
+    map(SoundID.AMBIENT_CAVE, Generators.ambient_cave);
+    map(SoundID.AMBIENT_METAL, Generators.ambient_metal);
+    map(SoundID.AMBIENT_FOREST, Generators.ambient_forest);
+    map(SoundID.AMBIENT_FIRE, Generators.ambient_fire);
+    map(SoundID.OWL_HOOT, Generators.owl_hoot);
 
     // Music
     mapMusic(MusicID.PROLOGUE, Generators.music_prologue);

@@ -20,7 +20,7 @@ import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
-import { PLAYER_CHARACTER, FAMILY_MEMBERS, CAMERA_HEIGHT, BOSSES, PLAYER, FamilyMemberID, INITIAL_ENEMY_POOL, MAX_ENTITIES } from '../../content/constants';
+import { FAMILY_MEMBERS, CAMERA_HEIGHT, BOSSES, PLAYER, FamilyMemberID, INITIAL_ENEMY_POOL, MAX_ENTITIES } from '../../content/constants';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { SubEffectType } from '../../systems/EffectManager';
 import { StatID, PlayerStatusFlags } from '../../types/CareerStats';
@@ -34,6 +34,7 @@ import { PlayerMovementSystem } from '../../systems/PlayerMovementSystem';
 import { VehicleMovementSystem } from '../../systems/VehicleMovementSystem';
 import { PlayerCombatSystem } from '../../systems/PlayerCombatSystem';
 import { PlayerStatsSystem } from '../../systems/PlayerStatsSystem';
+import { PlayerManager } from '../../systems/PlayerManager';
 import { LootSystem } from '../../systems/LootSystem';
 import { InteractionSystem } from '../../systems/InteractionSystem';
 import { EnemySystem } from '../../systems/EnemySystem';
@@ -42,8 +43,9 @@ import { FamilySystem } from '../../systems/FamilySystem';
 import { CinematicSystem } from '../../systems/CinematicSystem';
 import { DeathSystem } from '../../systems/DeathSystem';
 import { DataResolver } from '../../core/data/DataResolver';
+import { CombatEngine } from './CombatEngine';
 import { HudStore } from '../../store/HudStore';
-import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
+import { CareerStatsSystem } from '../../systems/CareerStatsSystem';
 import { EnemyWaveSystem } from '../../systems/EnemyWaveSystem';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { ChallengeSystem } from '../../systems/ChallengeSystem';
@@ -91,7 +93,7 @@ export interface SetupContext {
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
         showDamageText: (x: number, y: number, z: number, text: string, color?: number) => void;
         spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => void;
-        endSector: (isExtraction: boolean) => void;
+        endSector: (isCompleted: boolean) => void;
         onSectorLoaded?: () => void;
         onTrigger: (type: TriggerType, duration: number) => void;
         onBossKilled: (id: number) => void;
@@ -105,7 +107,7 @@ export interface SetupContext {
         rewardXP: (amount: number) => void;
         rewardSP: (amount: number) => void;
         rewardScrap: (amount: number) => void;
-        onPlayerHit?: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
+        handlePlayerHit?: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean;
     }
 }
 
@@ -128,9 +130,9 @@ export class GameSessionSetup {
         // Centralized Zero-GC Reset
         GameSessionLogic.resetState(state, props);
 
-        // [VINTERDÖD FIX] Purge Triggers to prevent sector pollution
-        if (session.triggerSystem) {
-            session.triggerSystem.clear();
+        // Purge Triggers to prevent sector pollution
+        if (session.systems.triggerSystem) {
+            session.systems.triggerSystem.clear();
         }
 
         let sectorLoaded = false;
@@ -170,10 +172,10 @@ export class GameSessionSetup {
             const textures = createProceduralTextures();
 
             const triggerSystem = new TriggerSystem(MAX_ENTITIES.TRIGGERS);
-            session.triggerSystem = triggerSystem;
+            session.systems.triggerSystem = triggerSystem;
 
             const worldStreamer = new WorldStreamer();
-            session.worldStreamer = worldStreamer;
+            session.systems.worldStreamer = worldStreamer;
 
             // Attach the streamer to the TriggerSystem so generation can add triggers to it
             triggerSystem.setStreamer(worldStreamer);
@@ -223,7 +225,7 @@ export class GameSessionSetup {
             // --- VINTERDÖD FIX: BYPASS INTRO TRIGGERS ---
             // If the sector is already cleared, mark the intro triggers as completed
             if (state.world.familyAlreadyRescued || state.enemies.bossPermanentlyDefeated) {
-                const triggers = ctx.session.triggerSystem;
+                const triggers = ctx.session.systems.triggerSystem;
                 const activeFlags = triggers.getActiveFlags();
                 const types = triggers.getTriggerTypes();
                 const metadata = triggers.metadata;
@@ -450,7 +452,7 @@ export class GameSessionSetup {
         };
         return {
             scene: engine.scene, engine, obstacles: state.world.obstacles, chests: state.world.chests,
-            worldStreamer: ctx.session.worldStreamer,
+            worldStreamer: ctx.session.systems.worldStreamer,
             dynamicLights, burningObjects, rng, mapItems, debugMode: props.gameState.settings.debugMode,
             interactables: [], triggers: [], sectorId: props.gameState.currentSector, smokeEmitters: [],
             sectorState: state.sectorState, state: state, activeFamilyMembers: ctx.refs.activeFamilyMembers.current, yield: yielder,
@@ -462,8 +464,8 @@ export class GameSessionSetup {
             onAction: callbacks.onAction,
             spawnParticle: callbacks.spawnParticle,
             spawnDecal: callbacks.spawnDecal,
-            applyDamage: state.applyDamage,
-            onPlayerHit: callbacks.onPlayerHit,
+            handleEnemyHit: state.handleEnemyHit,
+            handlePlayerHit: callbacks.handlePlayerHit,
             environmentalZones: []
         };
     }
@@ -503,11 +505,8 @@ export class GameSessionSetup {
             rewardXP: (amount: number) => callbacks.rewardXP(amount),
             rewardSP: (amount: number) => callbacks.rewardSP(amount),
             rewardScrap: (amount: number) => callbacks.rewardScrap(amount),
-            onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
-                const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
-                if (statsSystem) {
-                    statsSystem.handlePlayerHit(session, damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
-                }
+            handlePlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
+                return CombatEngine.handlePlayerHit(session, damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
             },
             onDiscovery: (type: DiscoveryType, id: string, titleKey: string, detailsKey: string, payload?: any) => {
                 // O(1) Optimization: Avoid React overhead if already found in this session or prior
@@ -805,12 +804,12 @@ export class GameSessionSetup {
             });
         }
 
-        session.addSystem(new DamageNumberSystem(engine.scene));
-        session.addSystem(new DamageTrackerSystem());
-        session.addSystem(new ChallengeSystem());
-        session.addSystem(new DiscoverySystem());
-        session.addSystem(new ParticleSystem());
-        session.addSystem(new EnemyWaveSystem());
+        session.attachSystem(new CareerStatsSystem());
+        session.attachSystem(new ChallengeSystem());
+        session.attachSystem(new DiscoverySystem());
+        session.attachSystem(new ParticleSystem());
+        session.attachSystem(new EnemyWaveSystem());
+        session.attachSystem(new DamageNumberSystem(engine.scene));
 
         // --- ZERO-GC PARTICLE RENDERER ---
         const particleRenderer = new ParticleRenderer(engine.scene);
@@ -818,38 +817,40 @@ export class GameSessionSetup {
             particleRenderer.render();
         };
 
+        // TODO: should attachSystem not handle this automatically?
+        // so it's enough with session.attachSystem(new EnemyDetectionSystem());
         const detectionSys = new EnemyDetectionSystem();
-        session.addSystem(detectionSys);
         session.detectionSystem = detectionSys;
+        session.attachSystem(detectionSys);
 
         // TriggerSystem and WorldStreamer are already instantiated in runSectorSetup
         // so that SectorBuilder can populate them during generation.
-        if (session.worldStreamer) {
-            session.addSystem(session.worldStreamer);
+        if (session.systems.worldStreamer) {
+            session.attachSystem(session.systems.worldStreamer);
         }
-        if (session.triggerSystem) {
-            session.addSystem(session.triggerSystem);
+        if (session.systems.triggerSystem) {
+            session.attachSystem(session.systems.triggerSystem);
         }
 
         // Batch register buffered triggers from construction phase
         if (sectorCtx.triggers && sectorCtx.triggers.length > 0) {
-            session.triggerSystem.addTriggers(sectorCtx.triggers);
+            session.systems.triggerSystem.addTriggers(sectorCtx.triggers);
         }
 
         // Register passive global managers in the system registry
         engine.registerSystem(SystemID.ENEMY_MANAGER, EnemyManager);
         engine.registerSystem(SystemID.HUD, HudSystem);
 
-        const playerStatsSystem = new PlayerStatsSystem(playerGroup);
-        session.addSystem(playerStatsSystem);
-        session.addSystem(new PerkSystem(playerGroup, refs.activeFamilyMembers));
-        session.addSystem(new ProjectileSystem());
+        session.attachSystem(new PlayerStatsSystem(playerGroup, refs.distanceTraveledRef));
+        session.attachSystem(new PlayerManager(playerGroup, refs.playerMeshRef, refs, refs.propsRef));
+        session.attachSystem(new PerkSystem(playerGroup, refs.activeFamilyMembers));
+        session.attachSystem(new ProjectileSystem());
         PerkFX.init(playerGroup);
 
-        session.addSystem(new PlayerMovementSystem(playerGroup));
-        session.addSystem(new VehicleMovementSystem(playerGroup));
-        session.addSystem(new PlayerCombatSystem(playerGroup));
-        session.addSystem(new InteractionSystem(
+        session.attachSystem(new PlayerMovementSystem(playerGroup));
+        session.attachSystem(new VehicleMovementSystem(playerGroup));
+        session.attachSystem(new PlayerCombatSystem(playerGroup));
+        session.attachSystem(new InteractionSystem(
             playerGroup, callbacks.endSector, sectorCtx.collectibles, refs.activeFamilyMembers, engine.scene,
             (id, respawnable) => {
                 if (callbacks.onDiscovery) {
@@ -861,7 +862,7 @@ export class GameSessionSetup {
             }
         ));
 
-        session.addSystem(new EnemySystem({
+        session.attachSystem(new EnemySystem({
             setBubble: callbacks.setBubble,
             rewardXP: callbacks.rewardXP,
             t: callbacks.t,
@@ -884,16 +885,22 @@ export class GameSessionSetup {
                     if (props.onFamilyRescued) props.onFamilyRescued(currentFM.id);
                 }
 
+                // Stop boss growl loop if active
+                if (refs.bossGrowlLoopIndexRef && refs.bossGrowlLoopIndexRef.current !== -1) {
+                    audioEngine.stopVoice(refs.bossGrowlLoopIndexRef.current);
+                    refs.bossGrowlLoopIndexRef.current = -1;
+                }
+
                 audioEngine.stopMusic();
                 const curSector = (props as any).currentSectorData || SectorSystem.getSector(props.gameState.currentSector || 0);
                 const loopId = curSector.ambientLoop || MusicID.GAMEPLAY_TENSE;
                 audioEngine.playMusic(loopId);
             },
-            onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) =>
-                playerStatsSystem.handlePlayerHit(session, damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType),
+            handlePlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) =>
+                CombatEngine.handlePlayerHit(session, damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType),
         } as any, INITIAL_ENEMY_POOL));
 
-        session.addSystem(new SectorSystem(playerGroup, props.gameState.currentSector, {
+        session.attachSystem(new SectorSystem(playerGroup, props.gameState.currentSector, {
             setBubble: (text: string, duration?: number) => {
                 callbacks.setBubble(text, duration || 3000);
             },
@@ -923,26 +930,23 @@ export class GameSessionSetup {
                 }
                 return false;
             },
-            onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
-                const statsSystem = session.getSystem<any>(SystemID.PLAYER_STATS);
-                if (statsSystem) {
-                    statsSystem.handlePlayerHit(session, damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
-                }
+            handlePlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
+                return CombatEngine.handlePlayerHit(session, damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
             },
-            applyDamage: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => {
-                return state.applyDamage(enemy, amount, damageType, damageSource, isHighImpact);
+            handleEnemyHit: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => {
+                return CombatEngine.handleEnemyHit(session, enemy, amount, damageType, damageSource, isHighImpact);
             }
         }));
 
-        session.addSystem(new LootSystem(playerGroup, engine.scene, { rewardScrap: callbacks.rewardScrap }));
+        session.attachSystem(new LootSystem(playerGroup, engine.scene, { rewardScrap: callbacks.rewardScrap }));
 
-        session.addSystem(new FamilySystem(playerGroup, refs.activeFamilyMembers, refs.cinematicRef, {
+        session.attachSystem(new FamilySystem(playerGroup, refs.activeFamilyMembers, refs.cinematicRef, {
             setFoundMember: (id: FamilyMemberID) => ctx.ui.setFoundMember && ctx.ui.setFoundMember(id)
         }));
 
-        session.addSystem(new CinematicSystem({
+        session.attachSystem(new CinematicSystem({
             cinematicRef: refs.cinematicRef, camera: engine.camera as any, playerMeshRef: refs.playerMeshRef as any,
-            bubbleRef: refs.bubbleRef, activeFamilyMembers: refs.activeFamilyMembers,
+            dialogueRef: refs.dialogueRef, activeFamilyMembers: refs.activeFamilyMembers,
             callbacks: {
                 setCurrentLine: ui.setCurrentLine,
                 setCinematicActive: ui.setCinematicActive,
@@ -953,11 +957,14 @@ export class GameSessionSetup {
             state: state
         }));
 
-        session.addSystem(new DeathSystem({
+        session.attachSystem(new DeathSystem({
             playerGroupRef: refs.playerGroupRef as any, playerMeshRef: refs.playerMeshRef as any, fmMeshRef: refs.familyMemberRef, activeFamilyMembers: refs.activeFamilyMembers,
             deathPhaseRef: refs.deathPhaseRef, inputRef: () => engine.input.state, cameraRef: () => engine.camera.threeCamera, propsRef: refs.propsRef,
             distanceTraveledRef: refs.distanceTraveledRef, fxCallbacks: callbacks, setDeathPhase: ui.setDeathPhase
         }));
+
+        // Unified 2-Pass Boot Pipeline: Initialize all systems after registration to eliminate race conditions
+        session.initSystems();
 
         // Optimize static meshes
         engine.scene.traverse((obj) => {
@@ -1043,7 +1050,7 @@ export class GameSessionSetup {
         state.vehicle.mesh = null;
         state.vehicle.speed = 0;
 
-        // --- 1.1 RESET VISUALS (VINTERDÖD FIX) ---
+        // --- 1.1 RESET VISUALS ---
         const playerGroup = refs.playerGroupRef.current;
         const playerMesh = refs.playerMeshRef.current;
         if (playerMesh) {
@@ -1051,11 +1058,15 @@ export class GameSessionSetup {
             const baseScale = playerMesh.userData.baseScale || 1.0;
             playerMesh.scale.setScalar(baseScale);
             playerMesh.rotation.set(0, 0, 0);
-
         }
 
         if (playerGroup) {
             playerGroup.visible = true;
+            // Restore laser sight — it's hidden by PlayerCombatSystem on death lock and
+            // won't be shown again until the next update cycle clears _wasLocked.
+            // Force it visible here so it appears the instant the player respawns.
+            const laserSight = playerGroup.getObjectByName('laserSight');
+            if (laserSight) laserSight.visible = true;
         }
 
         // Reset Persistent Visual Flags
@@ -1123,7 +1134,7 @@ export class GameSessionSetup {
         }
 
         // --- 3. PASSIVES, BUFFS & DEBUFFS ---
-        const perkSystem = engine.getSystem<any>(SystemID.PERK_SYSTEM);
+        const perkSystem = engine.systems.perkSystem;
         if (perkSystem) {
             // Corrected method name to match PerkSystem.ts implementation (refreshBaseStats)
             if (perkSystem.refreshBaseStats) {
@@ -1134,8 +1145,28 @@ export class GameSessionSetup {
         // --- 4. SYSTEM CLEARING ---
         ProjectileSystem.clear(scene, state.combat.projectiles, state.combat.fireZones);
         FXSystem.reset();
-        session.triggerSystem.resetTriggerStates();
+        session.systems.triggerSystem.resetTriggerStates();
         EnemyManager.clear();
+
+        // --- 4.1 BOSS TEARDOWN ---
+        // EnemyManager.clear() removes boss mesh from scene but does NOT reset
+        // bossSpawned or the HUD. Do a full state wipe so the sector can re-spawn
+        // the boss on respawn as if it was never triggered.
+        if (state.enemies.bossSpawned || state.enemies.activeBoss) {
+            state.enemies.bossSpawned = false;
+            state.enemies.activeBoss = null;
+            state.enemies.bossDefeatedTime = 0;
+
+            // Stop boss music and restore the sector's ambient loop.
+            audioEngine.stopMusic();
+            const currentSectorDataForAudio = (props as any).currentSectorData || SectorSystem.getSector(props.gameState.currentSector || 0);
+            if (currentSectorDataForAudio?.ambientLoop) {
+                audioEngine.playMusic(currentSectorDataForAudio.ambientLoop);
+            }
+
+            // Force HUD to reflect the cleared boss state immediately.
+            HudStore.patch({ bossSpawned: false });
+        }
 
         // --- 5. CLEAR DYNAMIC OBJECTS ---
         this.clearDynamicNodes(scene);
@@ -1255,7 +1286,7 @@ export class GameSessionSetup {
         state.enemies.pool.length = 0;
         state.world.obstacles.length = 0;
         state.world.chests.length = 0;
-        ctx.session.triggerSystem.clear();
+        ctx.session.systems.triggerSystem.clear();
         state.world.bloodDecals.length = 0;
 
         state.combat.statusFlags &= ~PlayerStatusFlags.DEAD;

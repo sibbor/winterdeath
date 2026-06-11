@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProceduralTextures, TREE_DEPTH_MATS } from '../utils/assets';
 import { MATERIALS_SKY } from '../utils/assets/materials_sky';
-import { TEXTURES } from '../utils/assets/AssetLoader';
+import { TEXTURES, AssetLoader } from '../utils/assets/AssetLoader';
 import { createWaterMaterial, WaterGeometryPool } from '../utils/assets/materials_water';
 import { MATERIALS_FOG } from '../utils/assets/materials_fog';
 import { MATERIALS_WEATHER } from '../utils/assets/materials_weather';
@@ -26,7 +26,7 @@ import { audioEngine } from '../utils/audio/AudioEngine';
 import { FXSystem } from './FXSystem';
 import { COLLECTIBLES } from '../content/collectibles';
 import { WEAPONS } from '../content/weapons';
-import { FXParticleType, FXDecalType } from '../types/FXTypes';
+import { FXParticleType } from '../types/FXTypes';
 import { checkIsMobileDevice } from '../utils/device';
 import { SystemID } from './System';
 
@@ -151,6 +151,8 @@ export const AssetPreloader = {
                 for (const key in procedural) {
                     engine.renderer.initTexture((procedural as any)[key]);
                 }
+
+                await AssetLoader.getInstance().waitForTextures();
 
                 for (let i = 0; i < BUMP_MAPS.length; i++) {
                     const tex = (TEXTURES as any)[BUMP_MAPS[i]];
@@ -718,6 +720,14 @@ export const AssetPreloader = {
         add(new THREE.Mesh(GEOMETRY.flashbang, MATERIALS.flashbang), false, true);
         add(new THREE.Mesh(GEOMETRY.zombieRing, MATERIALS.zombieRingMaterial), false, false);
 
+        // --- DECAL MATERIALS WARMUP ---
+        add(new THREE.Mesh(GEOMETRY.decal, MATERIALS.bloodDecal), false, false);
+        add(new THREE.Mesh(GEOMETRY.decal, MATERIALS.bloodStainDecal), false, false);
+        add(new THREE.Mesh(GEOMETRY.decal, MATERIALS.scorchDecal), false, false);
+        add(new THREE.Mesh(GEOMETRY.decal, MATERIALS.footprintDecal), false, false);
+        add(new THREE.Mesh(GEOMETRY.splatterDecal, MATERIALS.bloodDecal), false, false);
+        add(new THREE.Mesh(GEOMETRY.splatterDecal, MATERIALS.bloodStainDecal), false, false);
+
         add(ObjectGenerator.createBuilding(10, 10, 10, 0x888888, true, true, 0.5), false, true);
         add(ObjectGenerator.createBuilding(10, 10, 10, 0x888888, false, true, 0.5), false, true);
     },
@@ -726,9 +736,4 @@ export const AssetPreloader = {
 
     setLastSectorIndex: (idx: number) => { lastSectorIndex = idx; },
 
-    releaseSectorAssets: (index: number) => {
-        // We DO NOT delete the sector from cache here anymore!
-        // By keeping it, we allow the sector to survive in memory when returning to Camp.
-        // It will be evicted automatically in warmupAsync if a completely new sector is loaded.
-    }
 };

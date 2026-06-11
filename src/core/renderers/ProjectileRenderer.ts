@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ProjectilePoolState, MAX_PROJECTILES } from '../../core/state/ProjectilePool';
+import { ProjectilePoolState, MAX_PROJECTILES } from '../pools/ProjectilePool';
 import { GEOMETRY } from '../../utils/assets/geometry';
 import { MATERIALS } from '../../utils/assets/materials';
 import { DamageID } from '../../entities/player/CombatTypes';
@@ -14,13 +14,6 @@ import { DamageID } from '../../entities/player/CombatTypes';
 export class ProjectileRenderer {
     private mesh: THREE.InstancedMesh;
     private scene: THREE.Scene;
-
-    // --- PERFORMANCE SCRATCHPADS ---
-    private _matrix = new THREE.Matrix4();
-    private _position = new THREE.Vector3();
-    private _quaternion = new THREE.Quaternion();
-    private _scale = new THREE.Vector3(1, 1, 1);
-    private _color = new THREE.Color();
 
     constructor(scene: THREE.Scene) {
         this.scene = scene;
@@ -38,13 +31,13 @@ export class ProjectileRenderer {
         this.mesh.receiveShadow = false;
         this.mesh.count = 0;
 
+        // Pre-allocate instance color buffer
+        this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PROJECTILES * 3), 3);
+        this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+
         this.scene.add(this.mesh);
     }
 
-    /**
-     * Synchronizes SoA projectile state with GPU instance buffers.
-     * ZERO-GC hot path.
-     */
     syncTransforms() {
         const pool = ProjectilePoolState;
         const activeCount = pool.activeCount;
@@ -58,37 +51,62 @@ export class ProjectileRenderer {
             return;
         }
 
+        const matrixArray = this.mesh.instanceMatrix.array;
+        const colorArray = this.mesh.instanceColor!.array as Float32Array;
+
         // Standard for-loop for maximum JIT optimization
         for (let i = 0; i < activeCount; i++) {
-            this._position.set(pool.posX[i], pool.posY[i], pool.posZ[i]);
+            let scaleVal = 1.0;
+            let colorR = 1.0;
+            let colorG = 0.93;
+            let colorB = 0.73; // Warm tracer glow for standard bullets
 
-            // Select scale and color based on projectile type and weapon definition
-            let colorHex = 0xffeebb; // Warm tracer glow for standard bullets
             if (pool.type[i] === 1) {
                 // Throwable: Grenade, Molotov, Flashbang
-                this._scale.set(3.5, 3.5, 3.5);
+                scaleVal = 3.5;
                 const wep = pool.weaponId[i];
                 if (wep === DamageID.GRENADE) {
-                    colorHex = 0x22c55e; // Bright Toxic Green for visibility
+                    colorR = 0.13; colorG = 0.77; colorB = 0.37; // Bright Toxic Green
                 } else if (wep === DamageID.MOLOTOV) {
-                    colorHex = 0xf97316; // Vivid Orange
+                    colorR = 0.98; colorG = 0.45; colorB = 0.09; // Vivid Orange
                 } else if (wep === DamageID.FLASHBANG) {
-                    colorHex = 0x38bdf8; // Vivid light blue/cyan glow
+                    colorR = 0.22; colorG = 0.74; colorB = 0.95; // Vivid light blue/cyan glow
                 }
-            } else {
-                // Bullet
-                this._scale.set(1, 1, 1);
             }
 
-            // Compose the matrix for this instance
-            // Note: Since bullets are currently spheres, rotation is ignored for speed.
-            this._matrix.compose(this._position, this._quaternion, this._scale);
+            const offset = i * 16;
+            // Write identity matrix components scaled by scaleVal
+            matrixArray[offset + 0] = scaleVal;
+            matrixArray[offset + 1] = 0;
+            matrixArray[offset + 2] = 0;
+            matrixArray[offset + 3] = 0;
 
-            this.mesh.setMatrixAt(i, this._matrix);
+            matrixArray[offset + 4] = 0;
+            matrixArray[offset + 5] = scaleVal;
+            matrixArray[offset + 6] = 0;
+            matrixArray[offset + 7] = 0;
 
-            // Set color for instanced mesh
-            this._color.setHex(colorHex);
-            this.mesh.setColorAt(i, this._color);
+            matrixArray[offset + 8] = 0;
+            matrixArray[offset + 9] = 0;
+            matrixArray[offset + 10] = scaleVal;
+            matrixArray[offset + 11] = 0;
+
+            // Set Position
+            matrixArray[offset + 12] = pool.posX[i];
+            matrixArray[offset + 13] = pool.posY[i];
+            matrixArray[offset + 14] = pool.posZ[i];
+            matrixArray[offset + 15] = 1;
+
+            // Set Color
+            const cOffset = i * 3;
+            colorArray[cOffset + 0] = colorR;
+            colorArray[cOffset + 1] = colorG;
+            colorArray[cOffset + 2] = colorB;
+        }
+
+        // Hide inactive/remaining particles by moving them underground
+        for (let i = activeCount; i < MAX_PROJECTILES; i++) {
+            matrixArray[i * 16 + 13] = -1000;
         }
 
         // Notify WebGL that the instance matrix and color buffers are dirty

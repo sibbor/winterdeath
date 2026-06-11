@@ -1,11 +1,10 @@
 import * as THREE from 'three';
-import { SectorBuildContext } from '../game/session/SectorTypes';
-import { ObjectGenerator } from '../core/world/generators/ObjectGenerator';
-import { GEOMETRY, MATERIALS } from './assets';
-import { MapItemType } from '../components/ui/hud/HudTypes';
+import { SectorBuildContext } from '../../game/session/SectorTypes';
+import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
+import { GEOMETRY, MATERIALS } from '../../utils/assets';
+import { MapItemType } from '../../components/ui/hud/HudTypes';
 
 // --- ZERO-GC SCRATCHPADS ---
-const _v1 = new THREE.Vector3();
 const _pointsScratch: THREE.Vector3[] = [];
 const _materialCache = new Map<number, THREE.LineBasicMaterial>();
 

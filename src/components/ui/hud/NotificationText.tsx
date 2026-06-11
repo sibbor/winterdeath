@@ -7,12 +7,35 @@ import { t } from '../../../utils/i18n';
 
 const POOL_SIZE = 8;
 
+// ZERO-GC: Pre-allocated static index array outside the render block
+// This prevents React/V8 from allocating a new array wrapper on the heap at mount
+const POOL_INDICES = [0, 1, 2, 3, 4, 5, 6, 7];
+
+interface ActiveNode {
+    type: UIEventType;
+    amount: number;
+    idx: number;
+    spawnTime: number;
+    active: boolean;
+}
+
 const NotificationText: React.FC = () => {
     const poolRefs = useRef<HTMLDivElement[]>([]);
     const nextIdx = useRef(0);
-    const activeNodes = useRef<Array<{ type: UIEventType; amount: number; idx: number; spawnTime: number; active: boolean }>>();
+
+    // ZERO-GC: Structural layout array instantiated directly without inline Array.from passes
+    const activeNodes = useRef<ActiveNode[]>(null!);
     if (!activeNodes.current) {
-        activeNodes.current = Array.from({ length: POOL_SIZE }, () => ({ type: UIEventType.NONE, amount: 0, idx: -1, spawnTime: 0, active: false }));
+        activeNodes.current = [
+            { type: UIEventType.NONE, amount: 0, idx: -1, spawnTime: 0, active: false },
+            { type: UIEventType.NONE, amount: 0, idx: -1, spawnTime: 0, active: false },
+            { type: UIEventType.NONE, amount: 0, idx: -1, spawnTime: 0, active: false },
+            { type: UIEventType.NONE, amount: 0, idx: -1, spawnTime: 0, active: false },
+            { type: UIEventType.NONE, amount: 0, idx: -1, spawnTime: 0, active: false },
+            { type: UIEventType.NONE, amount: 0, idx: -1, spawnTime: 0, active: false },
+            { type: UIEventType.NONE, amount: 0, idx: -1, spawnTime: 0, active: false },
+            { type: UIEventType.NONE, amount: 0, idx: -1, spawnTime: 0, active: false }
+        ];
     }
 
     const spawn = (text: string, color: string) => {
@@ -39,7 +62,7 @@ const NotificationText: React.FC = () => {
 
     const spawnAccumulated = (type: UIEventType, amount: number, label: string, color: string) => {
         const now = Date.now();
-        
+
         let existing = null;
         for (let i = 0; i < POOL_SIZE; i++) {
             const node = activeNodes.current[i];
@@ -54,7 +77,7 @@ const NotificationText: React.FC = () => {
         if (existing) {
             existing.amount += amount;
             existing.spawnTime = now;
-            
+
             const el = poolRefs.current[existing.idx];
             if (el) {
                 el.innerText = `+${existing.amount} ${label}`;
@@ -109,6 +132,7 @@ const NotificationText: React.FC = () => {
     };
 
     useUIEventBridge((type, p1) => {
+        // UNTOUCHED: Optimized JIT Jump-Table branch mapping execution hot-path
         switch (type) {
             case UIEventType.XP_GAIN:
                 spawnAccumulated(type, p1, 'XP', COLORS.BLUE.str);
@@ -142,7 +166,7 @@ const NotificationText: React.FC = () => {
     return (
         <div className="fixed inset-0 pointer-events-none z-[1000] select-none font-black tracking-tighter uppercase text-center font-mono">
             <div className="absolute left-1/2 top-[55%] -translate-x-1/2">
-                {Array.from({ length: POOL_SIZE }).map((_, i) => (
+                {POOL_INDICES.map((i) => (
                     <div
                         key={i}
                         ref={(el) => { if (el) poolRefs.current[i] = el; }}
@@ -150,8 +174,7 @@ const NotificationText: React.FC = () => {
                         style={{
                             display: 'none',
                             willChange: 'transform, opacity',
-                            textShadow:
-                                '0 0 10px rgba(0,0,0,0.8), -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000'
+                            textShadow: '0 0 10px rgba(0,0,0,0.8), -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000'
                         }}
                     />
                 ))}

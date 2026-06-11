@@ -1,11 +1,10 @@
 import * as THREE from 'three';
-import { Enemy, ENEMY_DETECTION, NoiseType, NOISE_RADIUS, AIState, EnemyFlags, EnemyType } from '../entities/enemies/EnemyTypes';
+import { Enemy, ENEMY_DETECTION, NoiseType, NOISE_RADIUS, SEARCH_TIMERS, AIState, EnemyFlags, EnemyType } from '../entities/enemies/EnemyTypes';
 import { WorldStreamer } from '../core/world/WorldStreamer';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { System, SystemID } from './System';
 import { RuntimeStressHarness } from '../utils/debug/RuntimeStressHarness';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
-import { DiscoverySystem } from './DiscoverySystem';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 export interface NoiseEvent {
@@ -28,7 +27,6 @@ export class EnemyDetectionSystem implements System {
     private activeNoiseCount: number = 0;
 
     private session!: GameSessionLogic;
-    private discoverySystem!: DiscoverySystem;
 
     // Pre-allocated vectors for Zero-GC
     private _vStart = new THREE.Vector3();
@@ -53,8 +51,6 @@ export class EnemyDetectionSystem implements System {
 
     public init(session: GameSessionLogic) {
         this.session = session;
-        session.detectionSystem = this;
-        this.discoverySystem = session.getSystem<DiscoverySystem>(SystemID.DISCOVERY_SYSTEM)!;
     }
 
     /**
@@ -147,7 +143,7 @@ export class EnemyDetectionSystem implements System {
 
         const enemies = EnemyManager.getActiveEnemies();
         const activeCount = EnemyManager.getActiveCount();
-        const streamer: WorldStreamer = session.worldStreamer;
+        const streamer: WorldStreamer = session.systems.worldStreamer;
 
         if (!streamer || activeCount === 0) return;
 
@@ -188,9 +184,9 @@ export class EnemyDetectionSystem implements System {
                     // --- Discovery Logic ---
                     if ((e.statusFlags & EnemyFlags.BOSS) !== 0) {
                         const sectorIndex = session.sectorId;
-                        this.discoverySystem.handleDiscovery(session, DiscoveryType.BOSS, sectorIndex);
+                        session.systems.discovery!.handleDiscovery(session, DiscoveryType.BOSS, sectorIndex);
                     } else {
-                        this.discoverySystem.handleDiscovery(session, DiscoveryType.ZOMBIE, e.type);
+                        session.systems.discovery!.handleDiscovery(session, DiscoveryType.ZOMBIE, e.type);
                     }
                 }
             }
@@ -221,9 +217,27 @@ export class EnemyDetectionSystem implements System {
                         e.lastHeardNoiseType = evt.type;
                         e.awareness = 1.0;
 
+                        // Determine if this noise is a distracting throwable explosion/impact
+                        const isDistraction = evt.type === NoiseType.GRENADE ||
+                            evt.type === NoiseType.MOLOTOV ||
+                            evt.type === NoiseType.FLASHBANG;
+
+                        // If it's a throwable distraction, force them to search/investigate the noise position, even if in CHASE
+                        if (isDistraction) {
+                            e.state = AIState.SEARCH;
+                            e.searchTimer = SEARCH_TIMERS[evt.type] || ENEMY_DETECTION.SEARCH_DURATION;
+                            e.lastSeenTime = 0; // Clear last seen time so distraction isn't instantly overridden
+
+                            const angle = Math.atan2(dx, dz);
+                            e.mesh.rotation.y = angle;
+                            e.mesh.quaternion.setFromEuler(e.mesh.rotation);
+                            break;
+                        }
+
                         if (e.state === AIState.IDLE || e.state === AIState.WANDER || e.state === AIState.SEARCH) {
                             e.state = AIState.SEARCH;
                             e.searchTimer = ENEMY_DETECTION.SEARCH_DURATION;
+                            e.lastSeenTime = 0; // Clear last seen time so distraction isn't instantly overridden
 
                             const angle = Math.atan2(dx, dz);
                             e.mesh.rotation.y = angle;

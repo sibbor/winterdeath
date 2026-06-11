@@ -2,15 +2,16 @@ import * as THREE from 'three';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { SectorStats } from '../../types/StateTypes';
-import { Enemy, NoiseType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
+import { Enemy, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
-import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
+import { CareerStatsSystem } from '../../systems/CareerStatsSystem';
 import { WorldStreamer } from '../../core/world/WorldStreamer';
 import { GameSessionState } from './GameSessionState';
 import { System, SystemID } from '../../systems/System';
+import { SystemRegistry } from '../../systems/SystemRegistry';
 import { WEAPONS } from '../../content/weapons';
 import { StatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex, CareerStats } from '../../types/CareerStats';
-import { ChallengeID } from '../../content/ChallengeTypes';
+import { ChallengeID } from '../../content/challenges';
 import { StatsBridge } from '../../core/data/StatsBridge';
 import { VehicleEngineState } from '../../entities/vehicles/VehicleTypes';
 import { allocateGameSessionState, resetGameSessionState } from './GameSessionState';
@@ -21,6 +22,7 @@ import { clearEffects } from '../../systems/EffectManager';
 import { TriggerSystem } from '../../systems/TriggerSystem';
 import { MAX_ENTITIES } from '../../content/constants';
 import { FootprintSystem } from '../../systems/FootprintSystem';
+import { CombatEngine } from './CombatEngine';
 
 export class GameSessionLogic {
     public callbacks?: any;
@@ -38,12 +40,14 @@ export class GameSessionLogic {
     public sectorId: number = 0;
     public cinematicActive: boolean = false;
     public engine: WinterEngine;
+    public readonly systems: SystemRegistry;
     public state!: GameSessionState;
+    public sectorCtx!: SectorBuildContext; // Set during GameSessionSetup
+
     public detectionSystem!: EnemyDetectionSystem;
     public worldStreamer!: WorldStreamer;
     public triggerSystem!: TriggerSystem;
-    public damageTracker!: DamageTrackerSystem;
-    public sectorCtx!: SectorBuildContext; // Set during GameSessionSetup
+    public careerStats!: CareerStatsSystem;
 
     /**
      * Zero-GC Reset Logic
@@ -52,10 +56,8 @@ export class GameSessionLogic {
     static resetState(state: GameSessionState, props: GameCanvasProps): void {
         resetGameSessionState(state, props);
 
-        // --- VINTERDÖD FIX: PURGE VFX POOLS ---
+        // --- PURGE VFX POOLS ---
         clearEffects();
-
-
 
         // Re-calculate Session Stats
         this.resetSessionStats(state.sessionStats, props);
@@ -112,8 +114,8 @@ export class GameSessionLogic {
         stats.uniqueEnemiesHitByExplosives = 0;
         stats.aborted = false;
         stats.familyFound = !!props.familyAlreadyRescued;
-        stats.familyExtracted = false;
-        stats.isExtraction = false;
+        stats.familyRescued = false;
+        stats.isCompleted = false;
         stats.bossDamageDealt = 0;
         stats.bossDamageTaken = 0;
 
@@ -202,8 +204,8 @@ export class GameSessionLogic {
             enemyDeaths: new Float64Array(StatEnemyIndex.COUNT),
             aborted: false,
             familyFound: false,
-            familyExtracted: false,
-            isExtraction: false,
+            familyRescued: false,
+            isCompleted: false,
             bossDamageDealt: 0,
             bossDamageTaken: 0,
             gibbedEnemies: 0,
@@ -227,32 +229,14 @@ export class GameSessionLogic {
     constructor(engine: WinterEngine) {
         this.engine = engine;
         this.engine.onUpdateContext = this;
+        this.systems = engine.systems;
     }
 
     init(state: GameSessionState) {
         this.state = state;
 
-        const originalApplyDamage = this.state.applyDamage || (() => false);
-        this.state.applyDamage = (enemy: Enemy, amount: number, type: number, source: number, isHighImpact?: boolean) => {
-            if (!enemy || enemy.hp <= 0 || enemy.deathState !== EnemyDeathState.ALIVE) return false;
-
-            // Dual-Clock Visual Jitter
-            // Set the visual hit timestamp so EnemyAnimator knows to shake the mesh 
-            // even if the simulation clock (now) is paused or slowed.
-            enemy.hitRenderTime = this.state.renderTime;
-            const result = originalApplyDamage(enemy, amount, type, source, isHighImpact);
-
-            if (result && enemy.hp <= 0) {
-                const statsSys = this.getSystem<any>(SystemID.PLAYER_STATS);
-                if (statsSys) {
-                    const dx = enemy.mesh.position.x - this.state.player.position.x;
-                    const dz = enemy.mesh.position.z - this.state.player.position.z;
-                    const distSq = dx * dx + dz * dz;
-                    statsSys.onEnemyKilled(this, enemy, this.engine.simTime, source, distSq);
-                }
-            }
-
-            return result;
+        this.state.handleEnemyHit = (enemy: Enemy, amount: number, type: number, source: number, isHighImpact?: boolean) => {
+            return CombatEngine.handleEnemyHit(this, enemy, amount, type, source, isHighImpact);
         };
 
     }
@@ -275,10 +259,21 @@ export class GameSessionLogic {
         }
     }
 
-    addSystem(system: System) {
+    attachSystem(system: System) {
         if (system.enabled === undefined) system.enabled = true;
         this.engine.registerSystem(system.systemId, system);
-        if (system.init) system.init(this);
+    }
+
+    initSystems() {
+        const sys = this.systems;
+        for (const key in sys) {
+            if (Object.prototype.hasOwnProperty.call(sys, key)) {
+                const s = (sys as any)[key];
+                if (s && typeof s.init === 'function') {
+                    s.init(this);
+                }
+            }
+        }
     }
 
     /** Toggle a system on/off by id. Use in debug panel or console. */
@@ -291,27 +286,24 @@ export class GameSessionLogic {
         return this.engine.getSystems();
     }
 
-    /** Find a system by its ID. */
-    getSystem<T extends System>(id: SystemID): T | undefined {
-        return (this.engine.getSystem(id) as T) || undefined;
-    }
+
 
     /**
      * NARRATIVE BRIDGE: Centralized cinematic orchestration.
      * Prevents callback hell by providing a single entry point for all narrative triggers.
      */
     startCinematic(target?: THREE.Object3D | null, sectorId?: number, dialogueId?: number, params?: any) {
-        const sys = this.getSystem<any>(SystemID.CINEMATIC);
+        const sys = this.systems.cinematic;
         if (sys) sys.startCinematic(this, target || null, sectorId ?? this.sectorId, dialogueId || 0, params);
     }
 
     stopCinematic() {
-        const sys = this.getSystem<any>(SystemID.CINEMATIC);
+        const sys = this.systems.cinematic;
         if (sys) sys.stop();
     }
 
     playCinematicLine(index: number) {
-        const sys = this.getSystem<any>(SystemID.CINEMATIC);
+        const sys = this.systems.cinematic;
         if (sys) sys.playLine(index);
     }
 

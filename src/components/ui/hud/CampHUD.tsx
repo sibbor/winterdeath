@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { CareerStats } from '../../../types/CareerStats';
 import { t } from '../../../utils/i18n';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { DiscoveryType } from '../hud/HudTypes';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 import { FormatUtils } from '../../../utils/ui/FormatUtils';
@@ -118,7 +118,7 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
                 <div
                     className={`bg-slate-900/95 p-4 border-l-4 border-blue-500 shadow-2xl cursor-pointer pointer-events-auto hover:bg-slate-800 transition-all duration-300 w-[320px] relative overflow-hidden group ${isHovered ? 'scale-[1.02] border-l-blue-400' : ''}`}
                     onClick={onOpenStats}
-                    onMouseEnter={() => { setIsHovered(true); UiSounds.playHover(); }}
+                    onMouseEnter={() => { setIsHovered(true); UISounds.playHover(); }}
                     onMouseLeave={() => setIsHovered(false)}
                 >
                     {/* Shimmer Effect (Always visible, intensifies on hover) */}
@@ -191,7 +191,7 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
                     </div>
 
                     <div ref={debugBtnRef} onClick={() => {
-                        UiSounds.playClick();
+                        UISounds.playClick();
                         const cur = (window as any).HudStore?.getState().debugMode ?? debugModeRef.current;
                         const next = !cur;
                         (window as any).HudStore?.patch({ debugMode: next }); // Use patch to notify everyone
@@ -200,7 +200,7 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
                         <span ref={debugTextRef} className="text-xs uppercase font-bold tracking-widest text-gray-300 debug-text">{t('ui.debug_mode')}</span>
                     </div>
 
-                    <div onClick={() => { UiSounds.playClick(); onResetGame(); }} className="flex items-center gap-2 cursor-pointer bg-black px-4 py-2 border border-red-900 hover:border-red-500 hover:bg-red-900/20 transition-colors">
+                    <div onClick={() => { UISounds.playClick(); onResetGame(); }} className="flex items-center gap-2 cursor-pointer bg-black px-4 py-2 border border-red-900 hover:border-red-500 hover:bg-red-900/20 transition-colors">
                         <span className="text-xs uppercase text-red-500 font-bold tracking-widest">{t('ui.delete_save_data')}</span>
                     </div>
                 </div>

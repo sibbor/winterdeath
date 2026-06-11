@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { t, getLocale, setLocale as setGlobalLocale } from '../../../utils/i18n';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { audioEngine } from '../../../utils/audio/AudioEngine';
 import { MusicID } from '../../../utils/audio/AudioTypes';
 
@@ -20,7 +20,7 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
         };
 
         window.addEventListener('locale-changed', handleLocaleChange);
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
 
         audioEngine.playMusic(MusicID.PROLOGUE);
 
@@ -35,7 +35,7 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
         const next = current === 'en' ? 'sv' : 'en';
 
         setGlobalLocale(next);
-        UiSounds.playClick();
+        UISounds.playClick();
     };
 
     const prologueData = t('story.prologue') as any[];
@@ -54,14 +54,14 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
     const handleNext = () => {
         if (currentPage < prologueData.length - 1) {
             setCurrentIndex(prev => prev + 1);
-            UiSounds.playConfirm();
+            UISounds.playConfirm();
         } else {
             handleFinish();
         }
     };
 
     const handleFinish = () => {
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
         onComplete();
     };
 
@@ -167,7 +167,7 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
                         <button
                             key={i}
                             onClick={() => {
-                                UiSounds.playConfirm();
+                                UISounds.playConfirm();
                                 setCurrentIndex(i);
                             }}
                             className={`h-2 transition-all duration-700 rounded-full cursor-pointer hover:bg-gray-400 ${i === currentPage ? 'w-12 bg-white' : 'w-4 bg-gray-800'}`}

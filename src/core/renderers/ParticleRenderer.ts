@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ParticlePoolState } from '../../core/state/ParticlePool';
+import { ParticlePoolState } from '../pools/ParticlePool';
 import { POOL_PARTICLE_MAX } from '../../content/constants';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 

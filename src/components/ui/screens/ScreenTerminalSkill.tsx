@@ -3,7 +3,7 @@ import { StatID } from '../../../types/CareerStats';
 import { SectorState } from '../../../types/StateTypes';
 import { CareerStats } from '../../../types/CareerStats';
 import { t } from '../../../utils/i18n';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import ModalLayout, { TacticalButton, TacticalCard } from './ModalLayout';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 
@@ -26,7 +26,7 @@ const ScreenTerminalSkill: React.FC<SkillTerminalProps> = ({ stats, sectorState,
     const [tempSectorState, setTempSectorState] = useState({ ...sectorState });
 
     const handleUpgradeSkill = (skillId: StatID, value: number) => {
-        UiSounds.playClick();
+        UISounds.playClick();
 
         const nextStats = StatsBridge.deepCloneStats(tempStats);
         if (skillId === StatID.SPEED) {
@@ -90,7 +90,7 @@ const ScreenTerminalSkill: React.FC<SkillTerminalProps> = ({ stats, sectorState,
                     <div className="grid grid-cols-1 gap-3">
                         {/* Invincibility */}
                         <TacticalButton
-                            onClick={() => { UiSounds.playClick(); setTempSectorState({ ...tempSectorState, isInvincible: !tempSectorState.isInvincible }); }}
+                            onClick={() => { UISounds.playClick(); setTempSectorState({ ...tempSectorState, isInvincible: !tempSectorState.isInvincible }); }}
                             variant={tempSectorState.isInvincible ? 'danger' : 'secondary'}
                             className="p-4 h-auto flex flex-row items-center gap-4 justify-start text-left"
                         >
@@ -105,7 +105,7 @@ const ScreenTerminalSkill: React.FC<SkillTerminalProps> = ({ stats, sectorState,
 
                         {/* Unlimited Ammo */}
                         <TacticalButton
-                            onClick={() => { UiSounds.playClick(); setTempSectorState({ ...tempSectorState, unlimitedAmmo: !tempSectorState.unlimitedAmmo, noReload: !tempSectorState.unlimitedAmmo }); }}
+                            onClick={() => { UISounds.playClick(); setTempSectorState({ ...tempSectorState, unlimitedAmmo: !tempSectorState.unlimitedAmmo, noReload: !tempSectorState.unlimitedAmmo }); }}
                             variant={tempSectorState.unlimitedAmmo ? 'primary' : 'secondary'}
                             className="p-4 h-auto flex flex-row items-center gap-4 justify-start text-left"
                         >

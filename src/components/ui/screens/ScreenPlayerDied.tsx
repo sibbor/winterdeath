@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { t } from '../../../utils/i18n';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { HudStore } from '../../../store/HudStore';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { DataResolver } from '../../../core/data/DataResolver';
@@ -25,23 +25,21 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
     const lethalStatusEffect = useHudStore(s => s.lethalStatusEffect ?? StatusEffectID.NONE);
 
     useEffect(() => {
-        UiSounds.playDefeat();
+        UISounds.playDefeat();
         const tId = setTimeout(() => setIsVisible(true), 10);
         return () => clearTimeout(tId);
     }, []);
 
     // Allow pressing Enter to continue
     useEffect(() => {
-        let lastProcessedTimestamp = 0;
-        const unsubscribe = HudStore.subscribe((state) => {
-            if (state.metaSignalTimestamp > lastProcessedTimestamp) {
-                lastProcessedTimestamp = state.metaSignalTimestamp;
-                if (state.lastMetaSignal === MetaActionId.NAV_CONFIRM) {
-                    onContinue();
-                }
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                onContinue();
             }
-        });
-        return unsubscribe;
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
     }, [onContinue]);
 
     // Zero-GC: Memoize death details

@@ -109,8 +109,8 @@ export class SectorSystem implements System {
             rewardSP: (amount: number) => void;
             rewardScrap: (amount: number) => void;
             onDiscovery?: (type: any, id: string, titleKey: string, detailsKey: string, payload?: any) => boolean;
-            onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
-            applyDamage: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
+            handlePlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean;
+            handleEnemyHit: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
         }
     ) {
         this.currentSector = SectorSystem.getSector(sectorId);
@@ -181,11 +181,11 @@ export class SectorSystem implements System {
             // Created exactly once per sector load to prevent per-frame Object instantiation
             this.cachedEvents = {
                 spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => {
-                    const newEnemy = EnemyManager.spawn(
+                    // EnemyManager.spawn handles state.enemies.pool push internally
+                    EnemyManager.spawn(
                         scene, pPos, forcedType, forcedPos,
                         state.enemies.bossSpawned, state.enemies.pool.length
                     );
-                    if (newEnemy) state.enemies.pool.push(newEnemy);
                 },
                 setBubble: this.callbacks.setBubble,
                 setInteraction: this.callbacks.setInteraction,
@@ -252,8 +252,6 @@ export class SectorSystem implements System {
                 spawnHorde: (count: number, type?: EnemyType, pos?: THREE.Vector3) => {
                     if (this.callbacks.spawnHorde) {
                         this.callbacks.spawnHorde(count, type, pos);
-                    } else {
-                        for (let i = 0; i < count; i++) this.callbacks.spawnZombie(type || EnemyType.WALKER, pos);
                     }
                 },
                 setOverlay: this.callbacks.setOverlay,
@@ -262,11 +260,11 @@ export class SectorSystem implements System {
                 rewardSP: this.callbacks.rewardSP,
                 rewardScrap: this.callbacks.rewardScrap,
                 handleDiscovery: this.callbacks.onDiscovery,
-                onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT: boolean = false, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
-                    this.callbacks.onPlayerHit(damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
+                handlePlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT: boolean = false, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
+                    return this.callbacks.handlePlayerHit(damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
                 },
-                applyDamage: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact: boolean = false) => {
-                    return this.callbacks.applyDamage(enemy, amount, damageType, damageSource, isHighImpact);
+                handleEnemyHit: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact: boolean = false) => {
+                    return this.callbacks.handleEnemyHit(enemy, amount, damageType, damageSource, isHighImpact);
                 },
             };
             this._cachedUpdateContext = {
@@ -310,11 +308,11 @@ export class SectorSystem implements System {
             ctx.playerPos = pPos;
             ctx.gameState = session.state;
             ctx.sectorState = session.state.sectorState;
-            ctx.triggerSystem = session.triggerSystem;
+            ctx.triggerSystem = session.systems.triggerSystem;
             ctx.ctx = session.sectorCtx;
             ctx.state = session.state;
             ctx.engine = session.engine;
-            ctx.worldStreamer = session.worldStreamer;
+            ctx.worldStreamer = session.systems.worldStreamer;
             ctx.scene = session.engine.scene;
 
             this.currentSector.onSectorUpdate(ctx);
@@ -327,9 +325,8 @@ export class SectorSystem implements System {
         const staticZones = this.currentSector.environmentalZones;
         const state = session.state;
         const sectorState = state.sectorState;
-        const streamer = session.worldStreamer;
+        const streamer = session.systems.worldStreamer;
 
-        const settings = engine.settings;
         const defaultWeatherCount = defaultEnv.weather?.particles ?? 1000;
         const defaultWindMin = defaultEnv.wind?.strengthMin ?? 0.2;
         const defaultWindMax = defaultEnv.wind?.strengthMax ?? 1.0;

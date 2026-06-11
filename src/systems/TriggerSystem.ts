@@ -8,7 +8,6 @@ import { InteractionPromptId } from './ui/UIEventBridge';
 import { WorldStreamer } from '../core/world/WorldStreamer';
 import { TriggerShape, MAX_ENTITIES } from '../content/constants';
 import { ClueType } from '../game/session/SectorTypes';
-import { DiscoverySystem } from './DiscoverySystem';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 export class TriggerSystem implements System {
@@ -21,7 +20,6 @@ export class TriggerSystem implements System {
     private readonly maxTriggers: number;
     private activeCount: number = 0;
     private streamer: WorldStreamer | null = null;
-    private discoverySystem!: DiscoverySystem;
 
     // --- SPATIAL QUERY THROTTLING (Zero-GC) ---
     private _lastQueryX: number = -999999;
@@ -94,7 +92,6 @@ export class TriggerSystem implements System {
     }
 
     init(session: GameSessionLogic): void {
-        this.discoverySystem = (session.getSystem(SystemID.DISCOVERY_SYSTEM) as DiscoverySystem)!;
     }
 
     public setStreamer(streamer: WorldStreamer): void {
@@ -459,20 +456,15 @@ export class TriggerSystem implements System {
                 const i = nearby[j] | 0;
                 if (this.activeFlags[i] === 0) continue;
 
-                const status = this.statusFlags[i] | 0;
+                let status = this.statusFlags[i] | 0;
                 if (!(status & TriggerStatus.ACTIVE)) continue;
-                if ((status & TriggerStatus.TRIGGERED) && !(status & TriggerStatus.REPEATABLE)) continue;
-
-                if (status & TriggerStatus.REPEATABLE) {
-                    const interval = Math.max(1000, this.repeatIntervals[i]);
-                    if (simTime - this.lastTriggerTimes[i] < interval) continue;
-                }
 
                 let isInside = false;
                 const tx = this.positionsX[i];
                 const tz = this.positionsZ[i];
                 const shape = this.shapeTypes[i] | 0;
 
+                // 1. Authoritative 2D Vector Proximity Intersector
                 if (shape === TriggerShape.CIRCLE) {
                     const dx = playerPos.x - tx;
                     const dz = playerPos.z - tz;
@@ -484,8 +476,34 @@ export class TriggerSystem implements System {
                     isInside = dx < this.halfWidths[i] && dz < this.halfDepths[i];
                 }
 
+                // 2. State-Driven Hysteresis Dispatcher (O(1) Bitwise Edge Detection)
                 if (isInside) {
-                    this.trigger(i, session);
+                    // Check if this is the very first frame the player steps inside (OnTriggerEnter edge)
+                    if (!(status & TriggerStatus.IS_INSIDE)) {
+                        this.statusFlags[i] = (this.statusFlags[i] | TriggerStatus.IS_INSIDE) | 0;
+
+                        // Only execute trigger if it hasn't fired yet, or if it is repeatable
+                        if (!(status & TriggerStatus.TRIGGERED) || (status & TriggerStatus.REPEATABLE)) {
+                            this.trigger(i, session);
+                        }
+                    } else if (status & TriggerStatus.REPEATABLE) {
+                        // Continuous execution branch for repeatable triggers (e.g., hazard zones)
+                        const interval = Math.max(1000, this.repeatIntervals[i]);
+                        if (simTime - this.lastTriggerTimes[i] >= interval) {
+                            this.trigger(i, session);
+                        }
+                    }
+                } else {
+                    // Check if the player was inside during the previous tick (OnTriggerExit edge)
+                    if (status & TriggerStatus.IS_INSIDE) {
+                        this.statusFlags[i] = (this.statusFlags[i] & ~TriggerStatus.IS_INSIDE) | 0;
+
+                        // If configured to clean up upon boundary exit, wipe the triggered bitmask state
+                        if (status & TriggerStatus.RESET_ON_EXIT) {
+                            this.statusFlags[i] = (this.statusFlags[i] & ~TriggerStatus.TRIGGERED) | 0;
+                            this.lastTriggerTimes[i] = 0;
+                        }
+                    }
                 }
             }
         }
@@ -507,7 +525,7 @@ export class TriggerSystem implements System {
                 const clue = DataResolver.getClues()[m.id as any];
                 if (clue) {
                     const clueSmi = clue.id | 0;
-                    this.discoverySystem.handleDiscovery(session, DiscoveryType.CLUE, m.id, clueSmi);
+                    session.systems.discovery!.handleDiscovery(session, DiscoveryType.CLUE, m.id, clueSmi);
 
                     const subType = clue.type === ClueType.SPEAK ? ChatBubbleSubtype.SPEAK : ChatBubbleSubtype.THOUGHT;
                     const duration = CHAT_BUBBLE_DURATIONS[subType];
@@ -521,7 +539,7 @@ export class TriggerSystem implements System {
             case TriggerType.POI: {
                 const poi = DataResolver.getPois()[m.id as any];
                 const poiSmi = poi ? poi.id : 0;
-                this.discoverySystem.handleDiscovery(session, DiscoveryType.POI, m.id, poiSmi);
+                session.systems.discovery!.handleDiscovery(session, DiscoveryType.POI, m.id, poiSmi);
 
                 const duration = CHAT_BUBBLE_DURATIONS[ChatBubbleSubtype.SPEAK];
                 const encodedP2 = duration | (ChatBubbleSubtype.SPEAK << 16);
@@ -532,7 +550,7 @@ export class TriggerSystem implements System {
             case TriggerType.COLLECTIBLE: {
                 const col = DataResolver.getCollectibles()[m.id as any];
                 const colSmi = col ? col.id : 0;
-                this.discoverySystem.handleDiscovery(session, DiscoveryType.COLLECTIBLE, m.id, colSmi);
+                session.systems.discovery!.handleDiscovery(session, DiscoveryType.COLLECTIBLE, m.id, colSmi);
                 break;
             }
 

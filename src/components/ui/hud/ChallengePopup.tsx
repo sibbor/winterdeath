@@ -2,12 +2,12 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
 import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
 import { t } from '../../../utils/i18n';
-import { UiSounds } from '../../../utils/audio/AudioLib';
-import { CHALLENGES, ChallengeDef } from '../../../content/ChallengeTypes';
+import { UISounds } from '../../../utils/audio/AudioLib';
+import { CHALLENGES, ChallengeDef } from '../../../content/challenges';
 import { DiscoveryType } from './HudTypes';
 import { HudStore } from '../../../store/HudStore';
 import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputManager';
-import { ColorPair, COLORS, TIER_COLORS } from '../../../utils/ui/ColorUtils';
+import { TIER_COLORS } from '../../../utils/ui/ColorUtils';
 
 interface ChallengePopupProps {
     onOpenAdventureLog?: (tab: any, itemId: string) => void;
@@ -18,14 +18,17 @@ const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog }) =
     const timeoutRef = useRef<any>(null);
     const visibleRef = useRef(false);
 
+    // FIXED: Hysteresis latch tracks uniquely encoded milestone IDs to block ring-buffer retention loops
+    const lastProcessedP1 = useRef<number>(-1);
+
     // Sync visibility for key listener
     useEffect(() => {
         visibleRef.current = !!activeChallenge;
     }, [activeChallenge]);
 
-    const handleInteraction = useCallback(() => {
+    const handleChallengeInteraction = useCallback(() => {
         if (!activeChallenge || !onOpenAdventureLog) return;
-        UiSounds.playDiscovery();
+        UISounds.playDiscovery();
         onOpenAdventureLog(DiscoveryType.CHALLENGE, activeChallenge.def.id.toString());
         setActiveChallenge(null);
     }, [activeChallenge, onOpenAdventureLog]);
@@ -33,11 +36,11 @@ const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog }) =
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const action = INPUT_KEY_MAP[e.key];
-            const isTargetAction = action === InputAction.ENTER || action === InputAction.INTERACT;
+            const isTargetAction = action === InputAction.ENTER;
 
             if (visibleRef.current && isTargetAction) {
                 e.preventDefault();
-                handleInteraction();
+                handleChallengeInteraction();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -45,10 +48,14 @@ const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog }) =
             window.removeEventListener('keydown', handleKeyDown);
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
         };
-    }, [handleInteraction]);
+    }, [handleChallengeInteraction]);
 
     useUIEventBridge(useCallback((type, p1) => {
         if (type === UIEventType.CHALLENGE_COMPLETE) {
+            // FIXED: Early exit guard stops event duplication from triggering UI sounds or component thrashing
+            if (p1 === lastProcessedP1.current) return;
+            lastProcessedP1.current = p1; // Lock latch immediately
+
             // DECODE: (ChallengeID << 8) | NewTier
             const challengeId = p1 >> 8;
             const tier = p1 & 0xFF;
@@ -56,12 +63,12 @@ const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog }) =
 
             if (challenge) {
                 setActiveChallenge({ def: challenge, tier, timestamp: Date.now() });
-                UiSounds.playDiscovery();
+                UISounds.playDiscovery();
 
                 if (timeoutRef.current) clearTimeout(timeoutRef.current);
                 timeoutRef.current = setTimeout(() => {
                     setActiveChallenge(null);
-                }, 6000); // Slightly longer for readability with interaction
+                }, 6000);
             }
         }
     }, []));
@@ -73,18 +80,16 @@ const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog }) =
     const target = def.targets[tier - 1];
     const isMobileDevice = HudStore.getState().isMobileDevice;
 
-    // Tier colors: 1: Bronze, 2: Silver, 3: Gold
     const currentTierColor = tier === 1 ? TIER_COLORS.BRONZE : (tier === 2 ? TIER_COLORS.SILVER : TIER_COLORS.GOLD);
 
     return (
         <div
             key={activeChallenge.timestamp}
             className="fixed top-1/4 right-8 z-[10000] pointer-events-auto animate-challengePop"
-            onClick={handleInteraction}
+            onClick={handleChallengeInteraction}
             style={{ '--tier-color': currentTierColor.str } as any}
         >
             <div className="bg-black/95 border-l-4 border-[var(--tier-color)] p-5 shadow-[0_15px_50px_rgba(0,0,0,0.9)] backdrop-blur-md hud-gritty-base min-w-[300px] overflow-hidden cursor-pointer hover:bg-zinc-900/40 transition-colors">
-                {/* Header */}
                 <div className="flex flex-col relative z-10">
                     <span className="text-[11px] font-black uppercase tracking-[0.4em] leading-none mb-2 opacity-80" style={{ color: currentTierColor.str }}>
                         {t('ui.challenge_complete')}
@@ -102,13 +107,10 @@ const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog }) =
                     <div className="h-[1px] w-full bg-white/10 my-3" />
 
                     <p className="text-xs text-white/70 font-medium leading-relaxed italic mb-3">
-                        {/* Criteria met display - t() handles interpolation if we pass variables */}
                         {t(def.descriptionKey).replace('{target}', target.toString())}
                     </p>
 
-                    {/* Bottom Row: CP Reward & Interaction Hint */}
                     <div className="flex items-center justify-between mt-1">
-                        {/* Interaction Hint */}
                         <div className="flex items-center gap-1.5 opacity-60">
                             <div className="px-1.5 py-0.5 border border-white/30 rounded text-[10px] font-mono font-bold text-white uppercase">
                                 {isMobileDevice ? t('ui.tap') : 'ENTER'}
@@ -116,14 +118,12 @@ const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog }) =
                             <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{t('ui.view_details')}</span>
                         </div>
 
-                        {/* CP Reward Box */}
                         <div className="bg-red-600/20 border border-red-500/50 px-2 py-1 rounded-sm shadow-[0_0_10px_rgba(239,68,68,0.2)]">
                             <span className="text-sm font-black text-red-500 font-mono">+{cpReward} CP</span>
                         </div>
                     </div>
                 </div>
 
-                {/* Decorative Elements */}
                 <div className="absolute top-0 right-0 p-1 opacity-20 pointer-events-none">
                     <span className="text-4xl">🏆</span>
                 </div>

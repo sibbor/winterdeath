@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { t, setLocale, getLocale } from '../../../utils/i18n';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { GameSettings } from '../../../types/StateTypes';
 import { SHADOW_PRESETS } from '../../../content/constants';
 import { useOrientation } from '../../../hooks/useOrientation';
@@ -60,7 +60,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, set
     }, [tempGraphics, settings, onUpdateGraphics, onClose]);
 
     const confirmReload = useCallback(() => {
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
         onUpdateGraphics(tempGraphics);
         setTimeout(() => {
             window.location.reload();
@@ -75,7 +75,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, set
             if (action === InputAction.ESCAPE) {
                 e.stopPropagation();
                 setShowReloadConfirm(false);
-                UiSounds.playClick();
+                UISounds.playClick();
             } else if (action === InputAction.ENTER) {
                 e.stopPropagation();
                 confirmReload();
@@ -98,7 +98,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, set
             titleColorClass="text-blue-600"
             tabs={['graphics', 'general']}
             activeTab={activeTab}
-            onTabChange={(tab: any) => { setActiveTab(tab); UiSounds.playClick(); }}
+            onTabChange={(tab: any) => { setActiveTab(tab); UISounds.playClick(); }}
             tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
         >
             <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
@@ -109,7 +109,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, set
                                 key={tab}
                                 label={t('ui.' + tab)}
                                 isActive={activeTab === tab}
-                                onClick={() => { setActiveTab(tab as 'graphics' | 'general'); UiSounds.playClick(); }}
+                                onClick={() => { setActiveTab(tab as 'graphics' | 'general'); UISounds.playClick(); }}
                                 orientation={effectiveLandscape ? 'vertical' : 'horizontal'}
                             />
                         ))}
@@ -160,17 +160,17 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
 
     const setPixelRatio = useCallback((ratio: number) => {
         setTempGraphics(prev => ({ ...prev, pixelRatio: ratio }));
-        UiSounds.playClick();
+        UISounds.playClick();
     }, [setTempGraphics]);
 
     const toggleVolumetricFog = useCallback(() => {
         setTempGraphics(prev => ({ ...prev, volumetricFog: !prev.volumetricFog }));
-        UiSounds.playClick();
+        UISounds.playClick();
     }, [setTempGraphics]);
 
     const toggleAntialias = useCallback(() => {
         setTempGraphics(prev => ({ ...prev, antialias: !prev.antialias }));
-        UiSounds.playClick();
+        UISounds.playClick();
     }, [setTempGraphics]);
 
     return (
@@ -262,14 +262,14 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                 </div>
                 <div className="flex gap-2">
                     <TacticalButton
-                        onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, volumetricFog: true })); UiSounds.playClick(); }}
+                        onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, volumetricFog: true })); UISounds.playClick(); }}
                         variant={tempGraphics.volumetricFog ? 'primary' : 'secondary'}
                         className="px-6 py-1"
                     >
                         {t('ui.on')}
                     </TacticalButton>
                     <TacticalButton
-                        onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, volumetricFog: false })); UiSounds.playClick(); }}
+                        onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, volumetricFog: false })); UISounds.playClick(); }}
                         variant={!tempGraphics.volumetricFog ? 'primary' : 'secondary'}
                         className="px-6 py-1"
                     >
@@ -290,14 +290,14 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                 </div>
                 <div className="flex gap-2">
                     <TacticalButton
-                        onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, antialias: true })); UiSounds.playClick(); }}
+                        onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, antialias: true })); UISounds.playClick(); }}
                         variant={tempGraphics.antialias ? 'primary' : 'secondary'}
                         className="px-6 py-1"
                     >
                         {t('ui.on')}
                     </TacticalButton>
                     <TacticalButton
-                        onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, antialias: false })); UiSounds.playClick(); }}
+                        onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, antialias: false })); UISounds.playClick(); }}
                         variant={!tempGraphics.antialias ? 'primary' : 'secondary'}
                         className="px-6 py-1"
                     >
@@ -318,7 +318,7 @@ interface GeneralTabProps {
 const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ tempGraphics, setTempGraphics, setTick }) => (
     <div className="flex flex-col items-center justify-start h-full max-w-2xl mx-auto space-y-6 overflow-y-auto pr-4 custom-scrollbar py-4 px-2">
         <TacticalCard
-            onClick={() => { const current = getLocale(); setLocale(current === 'en' ? 'sv' : 'en'); setTick(t => t + 1); UiSounds.playClick(); }}
+            onClick={() => { const current = getLocale(); setLocale(current === 'en' ? 'sv' : 'en'); setTick(t => t + 1); UISounds.playClick(); }}
             color={0x3b82f6}
             className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
         >
@@ -327,13 +327,13 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ tempGraphics, setTem
                 <p className="text-gray-400 text-xs font-mono">{t('ui.language_sub')}</p>
             </div>
             <div className="flex gap-2">
-                <TacticalButton variant={getLocale() === 'en' ? 'primary' : 'secondary'} onClick={(e) => { e.stopPropagation(); setLocale('en'); setTick(t => t + 1); UiSounds.playClick(); }} className="px-6 py-1">EN</TacticalButton>
-                <TacticalButton variant={getLocale() === 'sv' ? 'primary' : 'secondary'} onClick={(e) => { e.stopPropagation(); setLocale('sv'); setTick(t => t + 1); UiSounds.playClick(); }} className="px-6 py-1">SV</TacticalButton>
+                <TacticalButton variant={getLocale() === 'en' ? 'primary' : 'secondary'} onClick={(e) => { e.stopPropagation(); setLocale('en'); setTick(t => t + 1); UISounds.playClick(); }} className="px-6 py-1">EN</TacticalButton>
+                <TacticalButton variant={getLocale() === 'sv' ? 'primary' : 'secondary'} onClick={(e) => { e.stopPropagation(); setLocale('sv'); setTick(t => t + 1); UISounds.playClick(); }} className="px-6 py-1">SV</TacticalButton>
             </div>
         </TacticalCard>
 
         <TacticalCard
-            onClick={() => { setTempGraphics(prev => ({ ...prev, showFps: !prev.showFps })); UiSounds.playClick(); }}
+            onClick={() => { setTempGraphics(prev => ({ ...prev, showFps: !prev.showFps })); UISounds.playClick(); }}
             color={0x3b82f6}
             className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
         >
@@ -342,13 +342,13 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ tempGraphics, setTem
                 <p className="text-gray-400 text-xs font-mono">{t('ui.show_fps_desc')}</p>
             </div>
             <div className="flex gap-2">
-                <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showFps: true })); UiSounds.playClick(); }} variant={tempGraphics.showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
-                <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showFps: false })); UiSounds.playClick(); }} variant={!tempGraphics.showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
+                <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showFps: true })); UISounds.playClick(); }} variant={tempGraphics.showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
+                <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showFps: false })); UISounds.playClick(); }} variant={!tempGraphics.showFps ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
             </div>
         </TacticalCard>
 
         <TacticalCard
-            onClick={() => { setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: !prev.showDiscoveryPopups })); UiSounds.playClick(); }}
+            onClick={() => { setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: !prev.showDiscoveryPopups })); UISounds.playClick(); }}
             color={0x3b82f6}
             className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
         >
@@ -357,8 +357,8 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ tempGraphics, setTem
                 <p className="text-gray-400 text-xs font-mono">{t('ui.discovery_popups_sub')}</p>
             </div>
             <div className="flex gap-2">
-                <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: true })); UiSounds.playClick(); }} variant={tempGraphics.showDiscoveryPopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
-                <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: false })); UiSounds.playClick(); }} variant={!tempGraphics.showDiscoveryPopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
+                <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: true })); UISounds.playClick(); }} variant={tempGraphics.showDiscoveryPopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
+                <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: false })); UISounds.playClick(); }} variant={!tempGraphics.showDiscoveryPopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
             </div>
         </TacticalCard>
     </div>

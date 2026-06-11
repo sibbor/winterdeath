@@ -12,6 +12,7 @@ import { PathGenerator } from './generators/PathGenerator';
 import { GeneratorUtils } from './generators/GeneratorUtils';
 import { EffectManager } from '../../systems/EffectManager';
 import { getCollectibleById } from '../../content/collectibles';
+import { DataResolver } from '../data/DataResolver';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { SectorTrigger, TriggerType, TriggerAction, TriggerStatus } from '../../types/TriggerTypes';
 import { WaterBodyType, WaterShape, WaterFloraType } from '../../types/WaterTypes';
@@ -215,16 +216,36 @@ export const SectorBuilder = {
             updateAtmosphere: NOOP
         };
         return {
-            scene, engine: MOCK_ENGINE, sectorId, isWarmup: true, worldStreamer: STUB_STREAMER,
-            obstacles: [], chests: [], triggers: [], mapItems: [],
-            interactables: [], collectibles: [], dynamicLights: [], burningObjects: [], smokeEmitters: [],
+            engine: MOCK_ENGINE,
+            scene,
+            sectorId,
+            isWarmup: true,
+            worldStreamer: STUB_STREAMER,
+            state: { sectorState: {} } as any,
+            obstacles: [],
+            chests: [],
+            triggers: [],
+            mapItems: [],
+            interactables: [],
+            collectibles: [],
+            dynamicLights: [],
+            burningObjects: [],
+            smokeEmitters: [],
             environmentalZones: [],
-            rng: Math.random, debugMode: false,
-            textures: {} as any, sectorState: {} as any, state: { sectorState: {} } as any, activeFamilyMembers: [],
+            rng: Math.random,
+            debugMode: false,
+            textures: {} as any,
+            sectorState: {} as any,
+            activeFamilyMembers: [],
             yield: yieldFn ?? (() => new Promise<void>(resolve => setTimeout(resolve, 0))),
-            spawnZombie: NOOP as any, spawnHorde: NOOP as any, spawnBoss: NOOP as any, makeNoise: NOOP as any, onAction: NOOP as any,
-            spawnParticle: NOOP, spawnDecal: NOOP,
-            applyDamage: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => false
+            spawnZombie: NOOP as any,
+            spawnHorde: NOOP as any,
+            spawnBoss: NOOP as any,
+            makeNoise: NOOP as any,
+            onAction: NOOP as any,
+            spawnParticle: NOOP,
+            spawnDecal: NOOP,
+            handleEnemyHit: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => false
         };
     },
 
@@ -299,7 +320,7 @@ export const SectorBuilder = {
         }
 
         if (ctx.debugMode) {
-            const { DebugVisualizer } = await import('../../utils/DebugVisualizer');
+            const { DebugVisualizer } = await import('../../utils/debug/DebugVisualizer');
             DebugVisualizer.visualizeSector(ctx, def);
         }
     },
@@ -433,6 +454,12 @@ export const SectorBuilder = {
 
         // Persistence Check
         if (!respawnable) {
+            if (ctx.state?.careerStats?.discoveredCollectibles) {
+                const colSmi = DataResolver.resolveCollectibleID(id);
+                if (colSmi !== undefined && ctx.state.careerStats.discoveredCollectibles[colSmi] === 1) {
+                    return;
+                }
+            }
             const foundList = (ctx as any).discoveredCollectibles || [];
             const len = foundList.length;
             for (let i = 0; i < len; i++) {

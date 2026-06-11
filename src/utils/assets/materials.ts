@@ -435,8 +435,11 @@ export const MATERIALS = {
     }),
     flashWhite: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending, depthWrite: false }),
     glassShard: new THREE.MeshBasicMaterial({ color: 0xccffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }),
-    gore: new THREE.MeshStandardMaterial({ color: 0x660000, roughness: 0.2 }),
-    splash: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false, vertexColors: true }),
+    gore: new THREE.MeshStandardMaterial({
+        color: 0x880000,
+        roughness: 0.5,
+        metalness: 0.1
+    }), splash: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false, vertexColors: true }),
     bloodSplatter: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false, vertexColors: true }),
     impactSplat: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false, vertexColors: true, side: THREE.DoubleSide }),
     enemy_effect_flame: new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8, depthWrite: false }),
@@ -665,12 +668,25 @@ export const MATERIALS = {
         bumpMap: DIFFUSE.containerMetal,
         bumpScale: 0.1
     }),
+    redPlanks: new THREE.MeshStandardMaterial({
+        color: 0x7c2e2e,
+        map: DIFFUSE.planks,
+        bumpMap: DIFFUSE.planks_bump,
+        bumpScale: 0.15,
+        roughness: 0.9
+    }),
     wooden_fasade: new THREE.MeshStandardMaterial({
         color: 0x111111,
-        map: DIFFUSE.wood,
+        map: DIFFUSE.planks,
         roughness: 0.9,
-        bumpMap: DIFFUSE.containerMetal,
+        bumpMap: DIFFUSE.planks_bump,
         bumpScale: 0.1
+    }),
+    roofTiles: new THREE.MeshStandardMaterial({
+        color: 0x3a3a3a, // Charcoal grey tiles
+        bumpMap: DIFFUSE.roof_tiles_bump,
+        bumpScale: 0.15,
+        roughness: 0.8
     }),
     sheet_metal: new THREE.MeshStandardMaterial({
         color: 0x666666,

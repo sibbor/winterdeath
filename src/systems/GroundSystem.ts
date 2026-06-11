@@ -3,7 +3,6 @@ import { System, SystemID } from './System';
 import { MATERIALS, GEOMETRY } from '../utils/assets';
 import { GroundType } from '../core/engine/EnvironmentalTypes';
 import { MaterialType } from '../content/environment';
-import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 /**
  * GroundSystem: Manages visual terrain and infinite ground plane.
@@ -26,6 +25,7 @@ export class GroundSystem implements System {
 
     private scene: THREE.Scene | null = null;
     private groundPlane: THREE.Mesh;
+    private groundVisualMaterials = new Map<string, THREE.Material>();
 
     // --- FRAME-STAMPED SPATIAL CACHE (Zero-GC) ---
     // Keyed by a fast integer hash of rounded (x, z), reset once per frame tick.
@@ -46,7 +46,7 @@ export class GroundSystem implements System {
 
     constructor() {
         // Initialize Infinite Ground Plane
-        this.groundPlane = new THREE.Mesh(GEOMETRY.plane, MATERIALS.snow);
+        this.groundPlane = new THREE.Mesh(GEOMETRY.plane, this.getTiledGroundMaterial(MATERIALS.snow));
         this.groundPlane.name = 'GROUND';
         this.groundPlane.rotation.x = -Math.PI / 2;
         this.groundPlane.scale.set(2000, 2000, 1); // Large enough to cover visible range
@@ -161,21 +161,53 @@ export class GroundSystem implements System {
     }
 
     /**
+     * Helper to clone a base material and configure its texture repeats to tile 
+     * properly over the giant 2000x2000 ground plane.
+     */
+    private getTiledGroundMaterial(baseMaterial: THREE.Material): THREE.Material {
+        const uuid = baseMaterial.uuid;
+        let tiled = this.groundVisualMaterials.get(uuid);
+        if (!tiled) {
+            tiled = baseMaterial.clone();
+            const standardMat = tiled as THREE.MeshStandardMaterial;
+            // A repeat count of 200 means each texture tile represents exactly 10x10 meters in world space.
+            if (standardMat.map) {
+                standardMat.map = standardMat.map.clone();
+                standardMat.map.wrapS = THREE.RepeatWrapping;
+                standardMat.map.wrapT = THREE.RepeatWrapping;
+                standardMat.map.repeat.set(200, 200);
+                standardMat.map.matrixAutoUpdate = false;
+                standardMat.map.updateMatrix();
+            }
+            if (standardMat.bumpMap) {
+                standardMat.bumpMap = standardMat.bumpMap.clone();
+                standardMat.bumpMap.wrapS = THREE.RepeatWrapping;
+                standardMat.bumpMap.wrapT = THREE.RepeatWrapping;
+                standardMat.bumpMap.repeat.set(200, 200);
+                standardMat.bumpMap.matrixAutoUpdate = false;
+                standardMat.bumpMap.updateMatrix();
+            }
+            this.groundVisualMaterials.set(uuid, tiled);
+        }
+        return tiled;
+    }
+
+    /**
      * Syncs ground material and color blending.
      */
     public sync(type: GroundType, fogColor: THREE.Color): void {
-        // FIXED: Using correct material names from MATERIALS registry
+        // FIXED: Using correct material names from MATERIALS registry and tiling them for the infinite ground plane.
         if (type === GroundType.SNOW) {
-            this.groundPlane.material = MATERIALS.snow;
+            this.groundPlane.material = this.getTiledGroundMaterial(MATERIALS.snow);
             this.defaultMaterial = MaterialType.SNOW;
         } else if (type === GroundType.DIRT) {
-            this.groundPlane.material = MATERIALS.dirt;
+            this.groundPlane.material = this.getTiledGroundMaterial(MATERIALS.dirt);
             this.defaultMaterial = MaterialType.DIRT;
         } else if (type === GroundType.GRAVEL) {
-            this.groundPlane.material = MATERIALS.gravel;
+            this.groundPlane.material = this.getTiledGroundMaterial(MATERIALS.gravel);
             this.defaultMaterial = MaterialType.GRAVEL;
         } else if (type === GroundType.ASPHALT) {
-            this.groundPlane.material = MATERIALS.asphalt;
+            this.groundPlane.material = this.getTiledGroundMaterial(MATERIALS.asphalt);
             this.defaultMaterial = MaterialType.ASPHALT;
         }
 

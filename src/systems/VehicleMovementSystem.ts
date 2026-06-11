@@ -251,10 +251,10 @@ export class VehicleMovementSystem implements System {
         const obs = vehicle.userData.obstacleRef;
         if (speedSq > 0 || angVel.lengthSq() > 0.01) {
             if (obs) {
-                session.worldStreamer?.updateObstacle(obs);
+                session.systems.worldStreamer?.updateObstacle(obs);
             }
             // Update the vehicle's interactable logic cell in the spatial grid so it remains interactable at its new position!
-            session.worldStreamer?.updateInteractable(vehicle);
+            session.systems.worldStreamer?.updateInteractable(vehicle);
         }
 
         // --- LIGHTING SYSTEM ---
@@ -315,7 +315,7 @@ export class VehicleMovementSystem implements System {
                         const groundZ = vehicle.position.z + _v1.z;
                         
                         const groundY = session.engine.ground?.getGroundHeight(groundX, groundZ, session, vehicle.position.y) || 0.1;
-                        const groundMat = session.worldStreamer?.getGroundMaterial(groundX, groundZ) || 0;
+                        const groundMat = session.systems.worldStreamer?.getGroundMaterial(groundX, groundZ) || 0;
                         
                         let pType = FXParticleType.SMOKE;
                         let pColor = 0xaaaaaa;

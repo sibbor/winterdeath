@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { CareerStats, StatID } from '../../../types/CareerStats';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 import { t } from '../../../utils/i18n';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { LEVEL_CAP, PLAYER } from '../../../content/constants';
 import { useOrientation } from '../../../hooks/useOrientation';
 import { COLORS } from '../../../utils/ui/ColorUtils';
@@ -27,11 +27,11 @@ const ScreenSkills: React.FC<ScreenSkillsProps> = React.memo(({ stats, onSave, o
 
     // Upgrade Skill
     const handleUpgradeSkill = useCallback((statId: StatID, cost: number, value: number) => {
-        UiSounds.playUpgrade();
-
         setTempStats(prevStats => {
-            // Transactional boundary: Check and consume SP (Zero-GC)
+            // Success: Transactional boundary: Check and consume SP (Zero-GC)
             if (StatsBridge.consumeSkillPoints(prevStats, cost)) {
+                // Player upgrade sound effect
+                UISounds.playUpgrade();
 
                 // Fast modulo check to route to the correct V8-optimized mutator
                 if (value % 1 === 0) {

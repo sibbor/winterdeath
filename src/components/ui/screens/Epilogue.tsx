@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { t, getLocale, setLocale as setGlobalLocale } from '../../../utils/i18n';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { audioEngine } from '../../../utils/audio/AudioEngine';
 import { MusicID } from '../../../utils/audio/AudioTypes';
 
@@ -26,7 +26,7 @@ const Epilogue: React.FC<EpilogueProps> = ({ onComplete, isMobileDevice }) => {
         const next = current === 'en' ? 'sv' : 'en';
 
         setGlobalLocale(next);
-        UiSounds.playClick();
+        UISounds.playClick();
     };
 
     const epilogueData = t('story.epilogue') as any[];
@@ -45,14 +45,14 @@ const Epilogue: React.FC<EpilogueProps> = ({ onComplete, isMobileDevice }) => {
     const handleNext = () => {
         if (currentPage < epilogueData.length - 1) {
             setCurrentIndex(prev => prev + 1);
-            UiSounds.playConfirm();
+            UISounds.playConfirm();
         } else {
             handleFinish();
         }
     };
 
     const handleFinish = () => {
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
         onComplete();
     };
 
@@ -140,7 +140,7 @@ const Epilogue: React.FC<EpilogueProps> = ({ onComplete, isMobileDevice }) => {
                         <button
                             key={i}
                             onClick={() => {
-                                UiSounds.playConfirm();
+                                UISounds.playConfirm();
                                 setCurrentIndex(i);
                             }}
                             className={`h-2 transition-all duration-700 rounded-full cursor-pointer hover:bg-gray-400 ${i === currentPage ? 'w-12 bg-white' : 'w-4 bg-gray-800'}`}

@@ -2,7 +2,7 @@ import React, { useCallback, memo } from 'react';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { GameSessionUiState } from './useGameSessionState';
 import TouchController from '../../components/ui/hud/TouchController';
-import CinematicDialogue from '../../components/ui/hud/CinematicDialogue';
+import DialogueUI from '../../components/ui/hud/DialogueUI';
 import GameUI from '../../components/ui/hud/GameUI';
 
 // Zero-GC: Static empty function to prevent allocation and VDOM thrashing on every render
@@ -41,7 +41,7 @@ interface GameSessionUIProps {
         requestPointerLock: () => void;
         triggerCinematicNext: () => void;
         openMap: () => void;
-        onPauseToggle: (val: boolean) => void;
+        onPauseToggle: (pause: boolean) => void;
         saveArmory: (newLoadout: any, newLevels: any, newSectorState: any) => void;
         spawnEnemies: (newEnemies: any[]) => void;
         saveSkills: (newStats: any, newSectorState: any) => void;
@@ -97,7 +97,7 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
                 Also ensured inputState is safely derived from either the store or the engine ref. */}
             {/* Mobile Controls Overlay */}
             {gameProps.isMobileDevice && gameProps.isGameRunning && !gameProps.isPaused && !uiState.bossIntroActive && (
-                <div className="absolute inset-0 pointer-events-none z-30">
+                <div className="absolute inset-0 pointer-events-none z-10">
                     <TouchController
                         inputState={refs.engineRef.current?.input.state}
                         onPause={() => callbacks.onPauseToggle(true)}
@@ -115,8 +115,8 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
                 style={{ height: uiState.cinematicActive ? '12%' : '0%' }}
             />
 
-            <CinematicDialogue
-                ref={refs.bubbleRef}
+            <DialogueUI
+                ref={refs.dialogueRef}
                 isMobileDevice={gameProps.isMobileDevice}
                 onComplete={callbacks.triggerCinematicNext}
             />

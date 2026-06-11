@@ -4,7 +4,7 @@ import { t } from '../../../utils/i18n';
 import ModalLayout, { TacticalButton } from './ModalLayout';
 import { EnemyManager } from '../../../entities/enemies/EnemyManager';
 import { WinterEngine } from '../../../core/engine/WinterEngine';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { HudStore } from '../../../store/HudStore';
 import { EnemyType } from '../../../entities/enemies/EnemyTypes';
 import { DataResolver } from '../../../core/data/DataResolver';
@@ -68,10 +68,10 @@ export const ScreenTerminalSpawner: React.FC<SpawnerTerminalProps> = ({ onClose,
         _playerPosRef.set(playerPos.x, 0, playerPos.z);
         _centerPos.copy(_playerPosRef);
 
-        if (biome === 'FOREST') _centerPos.set(30, 0, -30);
-        if (biome === 'FARM') _centerPos.set(-30, 0, -30);
-        if (biome === 'VILLAGE') _centerPos.set(0, 0, -100);
-        if (biome === 'NEAR') _centerPos.z -= 20;
+        if (biome === 'FOREST')  _centerPos.set(0, 0, -350);    // ENVIRONMENTAL_ZONES[0]: Forest of Shadows center
+        if (biome === 'FARM')    _centerPos.set(342, 0, 111);   // ENVIRONMENTAL_ZONES[1]: Abandoned Farm
+        if (biome === 'VILLAGE') _centerPos.set(211, 0, -291);  // ENVIRONMENTAL_ZONES[2]: The Village
+        if (biome === 'NEAR')    _centerPos.z -= 20;
 
         const spawned: any[] = [];
 
@@ -93,6 +93,11 @@ export const ScreenTerminalSpawner: React.FC<SpawnerTerminalProps> = ({ onClose,
             }
         }
 
+        // Spawn selected boss (if any) — included in the same spawned[] collection
+        if (selectedBoss !== null) {
+            handleSpawnBoss(selectedBoss, spawned);
+        }
+
         if (onSpawnEnemies) onSpawnEnemies(spawned);
 
         onClose();
@@ -103,7 +108,7 @@ export const ScreenTerminalSpawner: React.FC<SpawnerTerminalProps> = ({ onClose,
     };
 
     const handleRandomize = () => {
-        UiSounds.playClick();
+        UISounds.playClick();
         const newCounts: Record<number, number> = {};
         for (let idx = 0; idx < ZOMBIE_TYPES.length; idx++) {
             newCounts[ZOMBIE_TYPES[idx]] = Math.floor(Math.random() * 60); // Random up to 60 for stress test
@@ -112,7 +117,7 @@ export const ScreenTerminalSpawner: React.FC<SpawnerTerminalProps> = ({ onClose,
     };
 
     const handleClear = () => {
-        UiSounds.playClick();
+        UISounds.playClick();
         const newCounts: Record<number, number> = {};
         for (let idx = 0; idx < ZOMBIE_TYPES.length; idx++) {
             newCounts[ZOMBIE_TYPES[idx]] = 0;
@@ -180,7 +185,7 @@ export const ScreenTerminalSpawner: React.FC<SpawnerTerminalProps> = ({ onClose,
                         {BOSS_IDS.map(id => (
                             <TacticalButton
                                 key={id}
-                                onClick={() => { UiSounds.playClick(); setSelectedBoss(selectedBoss === id ? null : id); }}
+                                onClick={() => { UISounds.playClick(); setSelectedBoss(selectedBoss === id ? null : id); }}
                                 variant={selectedBoss === id ? 'primary' : 'secondary'}
                                 className="px-2 py-3 text-[13px]"
                             >
@@ -211,7 +216,7 @@ export const ScreenTerminalSpawner: React.FC<SpawnerTerminalProps> = ({ onClose,
                                 {SPAWN_LOCATIONS.map(b => (
                                     <TacticalButton
                                         key={b}
-                                        onClick={() => { UiSounds.playClick(); setBiome(b as any); }}
+                                        onClick={() => { UISounds.playClick(); setBiome(b as any); }}
                                         variant={biome === b ? 'primary' : 'secondary'}
                                         className="px-3 py-2 text-[11px]"
                                     >

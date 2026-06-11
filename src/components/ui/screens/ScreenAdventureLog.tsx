@@ -4,11 +4,11 @@ import { t } from '../../../utils/i18n';
 import { useOrientation } from '../../../hooks/useOrientation';
 import ModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalTab } from './ModalLayout';
 import CollectiblePreview from '../core/CollectiblePreview';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { DiscoveryType } from '../hud/HudTypes';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { SectorID } from '../../../game/session/SectorTypes';
-import { CHALLENGES, ChallengeCategory, ChallengeDef } from '../../../content/ChallengeTypes';
+import { CHALLENGES, ChallengeCategory, ChallengeDef } from '../../../content/challenges';
 import { InputAction, INPUT_KEY_MAP } from '../../../core/engine/InputManager';
 import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
 import { StatsBridge } from '../../../core/data/StatsBridge';
@@ -82,7 +82,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
     }, [onClose]);
 
     const handleTabChange = useCallback((tab: DiscoveryType) => {
-        UiSounds.playClick();
+        UISounds.playClick();
         setActiveTab(tab);
     }, []);
 
@@ -99,7 +99,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
             extraHeaderContent={isDebugMode ? (
                 <div className="flex items-center gap-3 bg-zinc-900/20 border border-zinc-800/50 px-4 py-2 rounded-sm cursor-pointer group/toggle hover:bg-zinc-800/40 transition-all"
                     onClick={() => {
-                        UiSounds.playClick();
+                        UISounds.playClick();
                         setShowAllData(!showAllData);
                     }}
                 >
@@ -150,7 +150,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                     {activeTab === DiscoveryType.BOSS && <BossesTab stats={stats} isMobileDevice={isMobileDevice} isDebug={showAllData} />}
                     {activeTab === DiscoveryType.COLLECTIBLE && <CollectiblesTab stats={stats} isMobileDevice={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={showAllData} />}
                     {activeTab === DiscoveryType.CLUE && <CluesTab stats={stats} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={showAllData} />}
-                    {activeTab === DiscoveryType.POI && <PoiTab stats={stats} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={showAllData} />}
+                    {activeTab === DiscoveryType.POI && <PoisTab stats={stats} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={showAllData} />}
                 </div>
             </div>
 
@@ -189,7 +189,7 @@ const ChallengesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, is
 
     const toggleCategory = useCallback((id: string) => {
         setCollapsed(prev => ({ ...prev, [id]: !prev[id] }));
-        UiSounds.playClick();
+        UISounds.playClick();
     }, []);
 
     const trackedIds = StatsBridge.getTrackedChallengeIds(stats);
@@ -888,14 +888,12 @@ const CluesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effecti
                                         const isThought = clue.type === 'THOUGHT';
                                         const typeColor = isThought ? COLORS.BLUE : COLORS.YELLOW;
                                         return (
-                                            <TacticalCard key={clue.id} id={`log-item-${clue.id}`} isLocked={!isFound} color={typeColor} showHover={isFound} className={`flex flex-col ${isMobileDevice ? 'p-4' : 'p-6'}`}>
-                                                <div className="flex flex-col gap-4 relative z-10 w-full">
-                                                    <div className="flex justify-between items-center border-b border-zinc-800/50 pb-2">
-                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest" style={{ backgroundColor: isFound ? typeColor.str : '#333' }}>
-                                                            {isFound ? clue.type : '???'}
-                                                        </span>
-                                                    </div>
-                                                    <p className={`text-lg italic leading-relaxed border-l-4 pl-4 py-1 ${isFound ? 'text-gray-200' : 'text-zinc-800'}`} style={{ borderColor: isFound ? typeColor.str : '#333' }}>
+                                            <TacticalCard key={clue.id} id={`log-item-${clue.id}`} isLocked={!isFound} color={typeColor} showHover={isFound} className={`transition-all duration-300 relative overflow-hidden bg-zinc-900/50 border-white/5 ${isMobileDevice ? 'p-4' : 'p-6'}`}>
+                                                <div className="flex flex-col relative z-10">
+                                                    <h3 className={`text-lg font-bold uppercase tracking-tight ${isFound ? 'text-white' : 'text-zinc-800'}`}>
+                                                        {isFound ? t(DataResolver.getClueTitle(clue.id)) : '???'}
+                                                    </h3>
+                                                    <p className={`text-[11px] italic mt-1 leading-tight max-w-[80%] ${isFound ? 'text-zinc-500' : 'text-zinc-800'}`}>
                                                         {isFound ? `"${t(DataResolver.getClueReaction(clue.id))}"` : '???'}
                                                     </p>
                                                 </div>
@@ -918,7 +916,7 @@ const CluesTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effecti
     );
 });
 
-const PoiTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
+const PoisTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
     const visitedList = StatsBridge.getDiscoveredPois(stats);
     const items = useMemo(() => DataResolver.getDiscoveryList(DiscoveryType.POI), []);
     const themes = useMemo(() => DataResolver.getSectorThemes(), []);
@@ -1005,23 +1003,19 @@ const PoiTab: React.FC<{ stats: CareerStats, isMobileDevice?: boolean, effective
                                         const poiId = poi.id;
                                         const isFound = isDebug || resolvedFoundSet.has(poiId);
                                         return (
-                                            <TacticalCard key={poiId} id={`log-item-${poiId}`} isLocked={!isFound} color={COLORS.YELLOW} showHover={isFound} className={isMobileDevice ? 'p-4' : 'p-6'}>
-                                                <div className="flex flex-col gap-4 relative z-10 w-full">
-                                                    <div className="flex justify-between items-start border-b border-zinc-800/50 pb-3">
-                                                        <h3 className={`text-2xl font-semibold uppercase tracking-tighter ${isFound ? 'text-white' : 'text-zinc-800'}`}>
-                                                            {isFound ? t(DataResolver.getPoiName(poiId)) : '???'}
-                                                        </h3>
-                                                    </div>
-                                                    <div className="space-y-3">
-                                                        <p className={`text-sm leading-relaxed ${isFound ? 'text-zinc-400' : 'text-zinc-800'}`}>
-                                                            {isFound ? t(DataResolver.getPoiDescription(poiId)) : '???'}
+                                            <TacticalCard key={poiId} id={`log-item-${poiId}`} isLocked={!isFound} color={COLORS.YELLOW} showHover={isFound} className={`transition-all duration-300 relative overflow-hidden bg-zinc-900/50 border-white/5 ${isMobileDevice ? 'p-4' : 'p-6'}`}>
+                                                <div className="flex flex-col relative z-10">
+                                                    <h3 className={`text-lg font-bold uppercase tracking-tight ${isFound ? 'text-white' : 'text-zinc-800'}`}>
+                                                        {isFound ? t(DataResolver.getPoiName(poiId)) : '???'}
+                                                    </h3>
+                                                    <p className={`text-[11px] italic mt-1 leading-tight max-w-[80%] ${isFound ? 'text-zinc-500' : 'text-zinc-800'}`}>
+                                                        {isFound ? t(DataResolver.getPoiDescription(poiId)) : '???'}
+                                                    </p>
+                                                    {isFound && DataResolver.getPoiReaction(poiId) && (
+                                                        <p className={`text-[11px] italic mt-2 leading-tight max-w-[80%] text-zinc-600`}>
+                                                            "{t(DataResolver.getPoiReaction(poiId))}"
                                                         </p>
-                                                        {isFound && DataResolver.getPoiReaction(poiId) && (
-                                                            <p className="text-lg italic leading-relaxed border-l-4 pl-4 py-1 border-blue-500 text-gray-200">
-                                                                "{t(DataResolver.getPoiReaction(poiId))}"
-                                                            </p>
-                                                        )}
-                                                    </div>
+                                                    )}
                                                 </div>
                                             </TacticalCard>
                                         );

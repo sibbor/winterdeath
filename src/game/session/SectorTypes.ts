@@ -139,11 +139,11 @@ export interface SectorBuildContext {
     setCameraOverride?: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
     shakeCamera?: (amount: number, type?: CameraShakeType) => void;
     makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
-    applyDamage?: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
+    handleEnemyHit?: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
 
     // Required action bridge for triggers
     onAction: (action: TriggerAction | string | any[]) => void;
-    onPlayerHit?: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
+    handlePlayerHit?: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean;
     spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D | null, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
     spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
 }
@@ -220,11 +220,11 @@ export interface SectorUpdateContext {
     t: (key: string) => string;
     spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D | null, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
     spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
-    onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
+    handlePlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean;
     startCinematic: (target?: THREE.Object3D | null, sectorId?: number, dialogueId?: number, params?: any) => void;
     setCameraOverride: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
     makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
-    applyDamage?: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
+    handleEnemyHit?: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
     rewardXP: (amount: number) => void;
     rewardSP: (amount: number) => void;
     rewardScrap: (amount: number) => void;

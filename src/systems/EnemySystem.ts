@@ -5,14 +5,14 @@ import { PlayerStatusFlags } from '../types/CareerStats';
 import { INITIAL_ENEMY_POOL } from '../content/constants';
 import { DamageID, DamageType, EnemyAttackType } from '../entities/player/CombatTypes';
 import { StatusEffectID } from '../types/StatusEffects';
-import { EnemyPoolState } from '../core/state/EnemyPool';
+import { EnemyPoolState } from '../core/pools/EnemyPool';
 import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
 
 // --- TYPE DEFINITIONS ---
 interface Callbacks {
     rewardXP: (amount: number) => void;
     onBossKilled: (id: number) => void;
-    onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
+    handlePlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean;
 }
 
 /**

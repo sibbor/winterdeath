@@ -3,7 +3,7 @@ import { t } from '../../../utils/i18n';
 import ModalLayout, { TacticalButton, HORIZONTAL_HATCHING_STYLE } from './ModalLayout';
 import { CareerStats } from '../../../types/CareerStats';
 import { PERKS, PerkColors } from '../../../content/perks';
-import { CHALLENGES, ChallengeDef } from '../../../content/ChallengeTypes';
+import { CHALLENGES, ChallengeDef } from '../../../content/challenges';
 import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
 import { StatsBridge } from '../../../core/data/StatsBridge';
 
@@ -213,4 +213,3 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
 };
 
 export default ScreenPause;
-

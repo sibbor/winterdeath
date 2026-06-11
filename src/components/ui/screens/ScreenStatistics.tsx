@@ -3,7 +3,7 @@ import { CareerStats, StatID, StatEnemyIndex, StatWeaponIndex } from '../../../t
 import { t } from '../../../utils/i18n';
 import { useOrientation } from '../../../hooks/useOrientation';
 import ModalLayout, { TacticalCard, TacticalTab, } from './ModalLayout';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { MAX_ENTITIES } from '../../../content/constants';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { COLORS } from '../../../utils/ui/ColorUtils';
@@ -107,7 +107,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, onO
     }, [onClose]);
 
     const handleTabChange = useCallback((tab: Tab) => {
-        UiSounds.playClick();
+        UISounds.playClick();
         setActiveTab(tab);
     }, []);
 

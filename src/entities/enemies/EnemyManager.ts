@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { SystemID } from '../../systems/System';
 import { MATERIALS } from '../../utils/assets';
 import { KMH_TO_MS, AI_LOD } from '../../content/constants';
-import { EnemyPoolState, ENEMY_POOL_SIZE } from '../../core/state/EnemyPool';
+import { EnemyPoolState, ENEMY_POOL_SIZE } from '../../core/pools/EnemyPool';
 import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_XP, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType, EnemyDeathDecal, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { COLORS, ENEMY_COLORS } from '../../utils/ui/ColorUtils';
 import { AbilityID, DamageID, DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
@@ -22,6 +22,7 @@ import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { FXSystem } from '../../systems/FXSystem';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { GameSessionLogic } from '../../game/session/GameSessionLogic';
+import { CareerStatsSystem } from '../../systems/CareerStatsSystem';
 import { GameSessionState } from '../../game/session/GameSessionState';
 import { PlayerStatusFlags } from '../../types/CareerStats';
 import { WorldStreamer } from '../../core/world/WorldStreamer';
@@ -43,8 +44,9 @@ const _v4 = new THREE.Vector3();
 const _camDir = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 5, 0);
 
-const _white = new THREE.Color(COLORS.WHITE.num);
-const _cyan = new THREE.Color(COLORS.ELECTRIC_FLASH.num);
+const _whiteColor = new THREE.Color(COLORS.WHITE.num);
+const _blackColor = new THREE.Color(0x111111);
+const _cyanColor = new THREE.Color(COLORS.ELECTRIC_FLASH.num);
 const _flashColor = new THREE.Color();
 const _color = new THREE.Color();
 
@@ -143,30 +145,31 @@ function setBaseColor(root: any, colorObj: THREE.Color) {
 export interface AIContext {
     spawnParticle: ((x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) => void) | null;
     spawnDecal: ((x: number, z: number, s: number, mat: THREE.Material, type?: FXDecalType) => void) | null;
-    applyDamage: ((enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean) | null;
-    onEffectTick: ((e: Enemy, type: EnemyEffectType) => void) | null;
+    handleEnemyHit: ((enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean) | null;
+    onEffectTick: ((enemy: Enemy, type: EnemyEffectType) => void) | null;
     playSound: (id: SoundID) => void;
     setBubble: ((text: string, duration: number) => void) | null;
     queryEnemies: ((pos: THREE.Vector3, radius: number, outPoolIdx: number) => void) | null;
-    onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
-    _realOnPlayerHit: ((damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void) | null;
+    handlePlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean;
+    _realHandlePlayerHit: ((damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean) | null;
 }
 
 const _aiContext: AIContext = {
     spawnParticle: null,
     spawnDecal: null,
-    applyDamage: null,
+    handleEnemyHit: null,
     onEffectTick: null,
     playSound: (id: SoundID) => audioEngine.playSound(id),
     setBubble: null,
     queryEnemies: _queryEnemies,
 
-    onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
-        if (_aiContext._realOnPlayerHit) {
-            _aiContext._realOnPlayerHit(damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
+    handlePlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
+        if (_aiContext._realHandlePlayerHit) {
+            return _aiContext._realHandlePlayerHit(damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
         }
+        return false;
     },
-    _realOnPlayerHit: null
+    _realHandlePlayerHit: null
 };
 
 export const EnemyManager = {
@@ -217,9 +220,9 @@ export const EnemyManager = {
         // VINTERDÖD FIX: Ensure all active enemies' visual meshes are migrated to the new scene
         // Prevents "invisible enemies" hits when transitioning sectors without recycling.
         for (let i = 0; i < activeCount; i++) {
-            const e = activeEnemies[i];
-            if (e && e.mesh && e.mesh.parent !== scene) {
-                scene.add(e.mesh);
+            const enemy = activeEnemies[i];
+            if (enemy && enemy.mesh && enemy.mesh.parent !== scene) {
+                scene.add(enemy.mesh);
             }
         }
     },
@@ -231,7 +234,7 @@ export const EnemyManager = {
         renderTime: number
     ) => {
         // Lifecycle Guard - Prevent AI updates during sector transitions or in the Camp
-        const streamer = session.worldStreamer;
+        const streamer = session.systems.worldStreamer;
         if (!session || !session.state || !streamer) return;
 
         // VINTERDÖD HARDENING: Prevent invisible enemies if the renderer was cleared but not re-inited
@@ -250,19 +253,19 @@ export const EnemyManager = {
         const playerStatusFlags = state.combat.statusFlags;
         const water = session.engine.water;
         const ground = session.engine.ground;
-        const callbacks = session.sectorCtx as any;
-        const onPlayerHit = callbacks?.onPlayerHit;
-        const spawnParticle = callbacks?.spawnParticle;
-        const spawnDecal = callbacks?.spawnDecal;
-        const applyDamage = callbacks?.applyDamage;
+        const enemySystem = session.systems.enemySystem as any;
+        const handlePlayerHit = enemySystem?.callbacks?.handlePlayerHit || state.callbacks?.handlePlayerHit;
+        const spawnParticle = enemySystem?.callbacks?.spawnParticle || state.callbacks?.spawnParticle;
+        const spawnDecal = enemySystem?.callbacks?.spawnDecal || state.callbacks?.spawnDecal;
+        const handleEnemyHit = state.handleEnemyHit;
 
         _frameCount++;
         _syncList.length = 0;
 
-        _aiContext._realOnPlayerHit = onPlayerHit;
+        _aiContext._realHandlePlayerHit = handlePlayerHit;
         _aiContext.spawnParticle = spawnParticle;
         _aiContext.spawnDecal = spawnDecal;
-        _aiContext.applyDamage = applyDamage;
+        _aiContext.handleEnemyHit = handleEnemyHit;
         _currentStreamer = streamer;
 
         const globalTimeScale = state?.metrics?.globalTimeScale ?? 1.0;
@@ -274,15 +277,15 @@ export const EnemyManager = {
 
         // --- CONTIGUOUS POOL UPDATE ---
         for (let i = 0; i < activeCount; i++) {
-            const e = activeEnemies[i];
-            if (!e) continue;
+            const enemy = activeEnemies[i];
+            if (!enemy) continue;
 
             // --- 1. SPATIAL GATING (Zero-GC) ---
-            const dx = e.mesh.position.x - pX;
-            const dz = e.mesh.position.z - pZ;
+            const dx = enemy.mesh.position.x - pX;
+            const dz = enemy.mesh.position.z - pZ;
             const distSq = dx * dx + dz * dz;
 
-            const isDying = e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD;
+            const isDying = enemy.deathState !== EnemyDeathState.ALIVE && enemy.deathState !== EnemyDeathState.DEAD;
 
             let updateFrequency = 0;
             const AI_CORE_RADIUS_SQ = AI_LOD.CORE_RADIUS_SQ;
@@ -299,53 +302,53 @@ export const EnemyManager = {
             if (shouldUpdate) {
                 // --- VINTERDÖD STABILIZATION: Sync SoA -> Object ---
                 // This allows TriggerSystem/ProjectileSystem to inject flags/damage directly into SoA
-                e.statusFlags |= EnemyPoolState.statusFlags[i];
-                if (EnemyPoolState.hp[i] < e.hp) e.hp = EnemyPoolState.hp[i];
+                enemy.statusFlags |= EnemyPoolState.statusFlags[i];
+                if (EnemyPoolState.hp[i] < enemy.hp) enemy.hp = EnemyPoolState.hp[i];
 
                 // --- 2. LOGIC UPDATE ---
-                if (e.deathState === EnemyDeathState.ALIVE) {
-                    EnemyAI.updateEnemy(e, playerPos, playerStatusFlags, streamer as any, isDead, _aiContext, water, ground, session, scaledDelta * updateFrequency, simTime, renderTime);
+                if (enemy.deathState === EnemyDeathState.ALIVE) {
+                    EnemyAI.updateEnemy(enemy, playerPos, playerStatusFlags, streamer as any, isDead, _aiContext, water, ground, session, scaledDelta * updateFrequency, simTime, renderTime);
 
                     // --- STRESS HARNESS: MONITOR PHASING ---
-                    RuntimeStressHarness.assertPhasing("Enemy", e.mesh.position.x, e.mesh.position.z, e.prevP.x, e.prevP.z);
-                    e.prevP.copy(e.mesh.position);
+                    RuntimeStressHarness.assertPhasing("Enemy", enemy.mesh.position.x, enemy.mesh.position.z, enemy.prevP.x, enemy.prevP.z);
+                    enemy.prevP.copy(enemy.mesh.position);
                 } else if (isDying) {
-                    EnemyManager.processDeathAnimation(e, _aiContext, session, scaledDelta, simTime, renderTime, ground, water);
+                    EnemyManager.processDeathAnimation(enemy, _aiContext, session, scaledDelta, simTime, renderTime, ground, water);
                 }
 
                 // --- 2b. SPATIAL RE-BUCKETING (Zero-GC Migration) ---
-                EnemyManager.updateSpatialPosition(e, streamer);
+                EnemyManager.updateSpatialPosition(enemy, streamer);
 
                 // SYNC TO TypedArray SoA (Source of Truth for other systems)
-                EnemyPoolState.posX[i] = e.mesh.position.x;
-                EnemyPoolState.posY[i] = e.mesh.position.y;
-                EnemyPoolState.posZ[i] = e.mesh.position.z;
-                EnemyPoolState.rotY[i] = e.mesh.rotation.y;
-                EnemyPoolState.hp[i] = e.hp;
-                EnemyPoolState.deathState[i] = e.deathState;
-                EnemyPoolState.statusFlags[i] = e.statusFlags;
-                EnemyPoolState.aiState[i] = e.state;
-                EnemyPoolState.velX[i] = e.velocity.x;
-                EnemyPoolState.velY[i] = e.velocity.y;
-                EnemyPoolState.velZ[i] = e.velocity.z;
+                EnemyPoolState.posX[i] = enemy.mesh.position.x;
+                EnemyPoolState.posY[i] = enemy.mesh.position.y;
+                EnemyPoolState.posZ[i] = enemy.mesh.position.z;
+                EnemyPoolState.rotY[i] = enemy.mesh.rotation.y;
+                EnemyPoolState.hp[i] = enemy.hp;
+                EnemyPoolState.deathState[i] = enemy.deathState;
+                EnemyPoolState.statusFlags[i] = enemy.statusFlags;
+                EnemyPoolState.aiState[i] = enemy.state;
+                EnemyPoolState.velX[i] = enemy.velocity.x;
+                EnemyPoolState.velY[i] = enemy.velocity.y;
+                EnemyPoolState.velZ[i] = enemy.velocity.z;
 
-                e.mesh.updateMatrix();
+                enemy.mesh.updateMatrix();
             }
 
             // --- 3. RENDER SYNC ---
             if (updateFrequency > 0 || isDying) {
-                _syncList.push(e);
+                _syncList.push(enemy);
 
-                const deathState = e.deathState;
+                const deathState = enemy.deathState;
                 switch (deathState) {
                     case EnemyDeathState.BURNED:
                     case EnemyDeathState.ELECTROCUTED:
                     case EnemyDeathState.DROWNED:
-                        e.mesh.visible = true;
-                        e.mesh.matrixAutoUpdate = true;
+                        enemy.mesh.visible = true;
+                        enemy.mesh.matrixAutoUpdate = true;
 
                         // Ensure the standalone body mesh is temporarily visible for dying animations
-                        const dBody = e.bodyMesh;
+                        const dBody = enemy.bodyMesh;
                         if (dBody) dBody.visible = true;
                         break;
                     case EnemyDeathState.DEAD:
@@ -353,61 +356,61 @@ export const EnemyManager = {
                     default:
                         const isDying = deathState !== EnemyDeathState.ALIVE;
                         if (isDying) {
-                            e.mesh.visible = false;
-                            e.mesh.matrixAutoUpdate = true;
-                        } else if ((e.statusFlags & EnemyFlags.BOSS) === 0 && !(e.statusFlags & EnemyFlags.EXPLODED)) {
+                            enemy.mesh.visible = false;
+                            enemy.mesh.matrixAutoUpdate = true;
+                        } else if ((enemy.statusFlags & EnemyFlags.BOSS) === 0 && !(enemy.statusFlags & EnemyFlags.EXPLODED)) {
                             let isVisible = true;
                             if (cameraPos && cameraDir) {
-                                _v2.subVectors(e.mesh.position, cameraPos);
+                                _v2.subVectors(enemy.mesh.position, cameraPos);
                                 const dot = cameraDir.dot(_v2);
                                 const dSq = _v2.lengthSq();
                                 if (dot < AI_LOD.CULL_DOT_THRESHOLD && dSq > AI_LOD.THROTTLED_RADIUS_SQ) isVisible = false;
                             }
-                            const isTelegraphing = e.indicatorRing && e.indicatorRing.visible;
+                            const isTelegraphing = enemy.indicatorRing && enemy.indicatorRing.visible;
                             if (!isVisible && !isTelegraphing) {
-                                e.mesh.visible = false;
-                                e.mesh.matrixAutoUpdate = false;
+                                enemy.mesh.visible = false;
+                                enemy.mesh.matrixAutoUpdate = false;
                             } else if (isVisible && !isTelegraphing) {
-                                e.mesh.visible = false;
-                                e.mesh.matrixAutoUpdate = false;
-                                e.mesh.updateMatrix();
+                                enemy.mesh.visible = false;
+                                enemy.mesh.matrixAutoUpdate = false;
+                                enemy.mesh.updateMatrix();
                             } else {
-                                e.mesh.visible = isVisible;
-                                e.mesh.matrixAutoUpdate = true;
+                                enemy.mesh.visible = isVisible;
+                                enemy.mesh.matrixAutoUpdate = true;
                             }
                         } else {
-                            e.mesh.visible = true;
-                            e.mesh.matrixAutoUpdate = true;
+                            enemy.mesh.visible = true;
+                            enemy.mesh.matrixAutoUpdate = true;
                         }
                         break;
                 }
 
                 // Flash feedback
-                if (deathState === EnemyDeathState.ALIVE && e.color !== undefined) {
-                    const isBoss = (e.statusFlags & EnemyFlags.BOSS) !== 0;
-                    const timeSinceHit = simTime - e.hitTime;
+                if (deathState === EnemyDeathState.ALIVE && enemy.color !== undefined) {
+                    const isBoss = (enemy.statusFlags & EnemyFlags.BOSS) !== 0;
+                    const timeSinceHit = simTime - enemy.hitTime;
                     if (timeSinceHit < 100) {
-                        if (!(e.statusFlags & EnemyFlags.FLASH_ACTIVE)) {
-                            e.statusFlags |= EnemyFlags.FLASH_ACTIVE;
-                            e.originalColor = e.color;
-                            const isArc = e.lastDamageType === DamageID.ARC_CANNON;
+                        if (!(enemy.statusFlags & EnemyFlags.FLASH_ACTIVE)) {
+                            enemy.statusFlags |= EnemyFlags.FLASH_ACTIVE;
+                            enemy.originalColor = enemy.color;
+                            const isArc = enemy.lastDamageType === DamageID.ARC_CANNON;
                             if (isArc) {
-                                e.color = ENEMY_COLORS.ELECTRIC_ARC_FLASH.num;
-                                if (isBoss) applyElectrifiedGlow(e.mesh, _cyan, 2.0); // Using scratchpad _cyan
+                                enemy.color = ENEMY_COLORS.ELECTRIC_ARC_FLASH.num;
+                                if (isBoss) applyElectrifiedGlow(enemy.mesh, _cyanColor, 2.0); // Using scratchpad _cyan
                             } else {
-                                e.color = ENEMY_COLORS.HIT_FLASH.num;
-                                if (isBoss) applyElectrifiedGlow(e.mesh, _white, 1.0); // Using scratchpad _white
+                                enemy.color = ENEMY_COLORS.HIT_FLASH.num;
+                                if (isBoss) applyElectrifiedGlow(enemy.mesh, _whiteColor, 1.0); // Using scratchpad _white
                             }
                         }
-                    } else if (e.statusFlags & EnemyFlags.FLASH_ACTIVE) {
-                        e.statusFlags &= ~EnemyFlags.FLASH_ACTIVE;
-                        if (isBoss) resetMaterialEmissive(e.mesh);
-                        else e.color = e.originalColor;
+                    } else if (enemy.statusFlags & EnemyFlags.FLASH_ACTIVE) {
+                        enemy.statusFlags &= ~EnemyFlags.FLASH_ACTIVE;
+                        if (isBoss) resetMaterialEmissive(enemy.mesh);
+                        else enemy.color = enemy.originalColor;
                     }
                 }
             } else {
-                e.mesh.visible = false;
-                e.mesh.matrixAutoUpdate = false;
+                enemy.mesh.visible = false;
+                enemy.mesh.matrixAutoUpdate = false;
             }
         }
 
@@ -492,9 +495,15 @@ export const EnemyManager = {
             activeCount++;
             EnemyPoolState.activeCount = activeCount;
 
+            // Sync state.enemies.pool so HudSystem, OcclusionSystem, and EnemyWaveSystem see this entity.
+            // This is the single authoritative push point — all other spawn paths converge here.
+            if (_currentSession?.state) {
+                _currentSession.state.enemies.pool.push(enemy);
+            }
+
             // Initial Spatial Positioning
             if (_currentSession) {
-                EnemyManager.updateSpatialPosition(enemy, _currentSession.worldStreamer);
+                EnemyManager.updateSpatialPosition(enemy, _currentSession.systems.worldStreamer);
             }
         }
 
@@ -505,9 +514,9 @@ export const EnemyManager = {
      * Updates an enemy's position in the unified WorldStreamer grid.
      * Uses strict O(1) Swap-and-Pop for bucket migration to ensure Zero-GC.
      */
-    updateSpatialPosition: (e: Enemy, streamer: WorldStreamer) => {
-        const posX = e.mesh.position.x;
-        const posZ = e.mesh.position.z;
+    updateSpatialPosition: (enemy: Enemy, streamer: WorldStreamer) => {
+        const posX = enemy.mesh.position.x;
+        const posZ = enemy.mesh.position.z;
 
         const newKey = streamer.getSmiKeyFromWorld(posX, posZ);
         const newBucketIdx = streamer.getBucketIndex(posX, posZ);
@@ -515,14 +524,14 @@ export const EnemyManager = {
         const iz = ChunkManager.getCoordIndex(posZ);
 
         // If chunk or bucket changed, migrate
-        if (newKey !== e.currentChunkKey || newBucketIdx !== e.bucketIndex) {
+        if (newKey !== enemy.currentChunkKey || newBucketIdx !== enemy.bucketIndex) {
             // 1. Remove from old bucket (Swap-and-Pop)
-            if (e.currentChunkKey !== -1) {
-                const oldGrid = streamer.getGridByKey(e.currentChunkKey);
+            if (enemy.currentChunkKey !== -1) {
+                const oldGrid = streamer.getGridByKey(enemy.currentChunkKey);
                 if (oldGrid) {
-                    const oldBucket = oldGrid.enemyBuckets[e.bucketIndex];
-                    const oldCount = oldGrid.enemyCounts[e.bucketIndex];
-                    const localIdx = e._internalBucketIdx; // Need to track internal index for O(1) removal
+                    const oldBucket = oldGrid.enemyBuckets[enemy.bucketIndex];
+                    const oldCount = oldGrid.enemyCounts[enemy.bucketIndex];
+                    const localIdx = enemy._internalBucketIdx; // Need to track internal index for O(1) removal
 
                     if (localIdx !== -1 && localIdx < oldCount) {
                         // Swap with last
@@ -531,7 +540,7 @@ export const EnemyManager = {
                         if (lastEnemy) lastEnemy._internalBucketIdx = localIdx;
 
                         oldBucket[oldCount - 1] = null;
-                        oldGrid.enemyCounts[e.bucketIndex]--;
+                        oldGrid.enemyCounts[enemy.bucketIndex]--;
                     }
                 }
             }
@@ -541,20 +550,20 @@ export const EnemyManager = {
             if (newGrid) {
                 const count = newGrid.enemyCounts[newBucketIdx];
                 if (count < 16) { // BUCKET_CAPACITY
-                    newGrid.enemyBuckets[newBucketIdx][count] = e;
-                    e._internalBucketIdx = count;
+                    newGrid.enemyBuckets[newBucketIdx][count] = enemy;
+                    enemy._internalBucketIdx = count;
                     newGrid.enemyCounts[newBucketIdx]++;
-                    e.currentChunkKey = newKey;
-                    e.bucketIndex = newBucketIdx;
+                    enemy.currentChunkKey = newKey;
+                    enemy.bucketIndex = newBucketIdx;
                 } else {
                     // Overflow handling: Force to -1 to retry next frame or skip
-                    e.currentChunkKey = -1;
-                    e._internalBucketIdx = -1;
+                    enemy.currentChunkKey = -1;
+                    enemy._internalBucketIdx = -1;
                 }
             } else {
                 // Out of streamed bounds
-                e.currentChunkKey = -1;
-                e._internalBucketIdx = -1;
+                enemy.currentChunkKey = -1;
+                enemy._internalBucketIdx = -1;
             }
         }
     },
@@ -572,8 +581,8 @@ export const EnemyManager = {
 
         // Remove from spatial grid
         if (enemy.currentChunkKey !== -1) {
-            if (_currentSession && _currentSession.worldStreamer) {
-                const grid = _currentSession.worldStreamer.getGridByKey(enemy.currentChunkKey);
+            if (_currentSession && _currentSession.systems.worldStreamer) {
+                const grid = _currentSession.systems.worldStreamer.getGridByKey(enemy.currentChunkKey);
                 if (grid) {
                     const bIdx = enemy.bucketIndex;
                     const count = grid.enemyCounts[bIdx];
@@ -590,6 +599,17 @@ export const EnemyManager = {
         }
 
         inactiveEnemies.push(enemy);
+
+        // Swap-pop from state.enemies.pool to mirror the activeEnemies[] swap below.
+        // indexOf is O(n) but only runs on death (not 60fps) — pool cap is 100.
+        if (_currentSession?.state) {
+            const statePool = _currentSession.state.enemies.pool;
+            const stateIdx = statePool.indexOf(enemy);
+            if (stateIdx !== -1) {
+                statePool[stateIdx] = statePool[statePool.length - 1];
+                statePool.pop();
+            }
+        }
 
         // SWAP-AND-GO: Move last active enemy to current slot
         if (index < activeCount - 1) {
@@ -620,131 +640,131 @@ export const EnemyManager = {
         EnemyPoolState.activeCount = activeCount;
     },
 
-    resetEnemy: (e: Enemy, newType: EnemyType, playerPos: THREE.Vector3, forcedPos?: THREE.Vector3) => {
-        e.type = newType;
+    resetEnemy: (enemy: Enemy, newType: EnemyType, playerPos: THREE.Vector3, forcedPos?: THREE.Vector3) => {
+        enemy.type = newType;
 
         // DOD: Base Stat Initialization
-        e.maxHp = ENEMY_MAX_HP[newType];
-        e.hp = e.maxHp;
-        e.speed = ENEMY_BASE_SPEED[newType] * KMH_TO_MS;
-        e.xp = ENEMY_XP[newType];
-        e.color = ENEMY_COLOR[newType];
-        e.originalScale = ENEMY_SCALE[newType];
-        e.widthScale = ENEMY_WIDTH_SCALE[newType];
+        enemy.maxHp = ENEMY_MAX_HP[newType];
+        enemy.hp = enemy.maxHp;
+        enemy.speed = ENEMY_BASE_SPEED[newType] * KMH_TO_MS;
+        enemy.xp = ENEMY_XP[newType];
+        enemy.color = ENEMY_COLOR[newType];
+        enemy.originalScale = ENEMY_SCALE[newType];
+        enemy.widthScale = ENEMY_WIDTH_SCALE[newType];
 
         // Attack list initialization (Zero-GC pooling)
         const typeData = (newType === EnemyType.BOSS) ? BOSSES[0] : ((ZOMBIE_TYPES as any)[newType] || ZOMBIE_TYPES.WALKER);
-        e.attacks = typeData.attacks || EMPTY_ATTACKS;
+        enemy.attacks = typeData.attacks || EMPTY_ATTACKS;
 
-        if (e.attackCooldowns) e.attackCooldowns.fill(0);
+        if (enemy.attackCooldowns) enemy.attackCooldowns.fill(0);
 
         // Initialize collision radii
-        e.hitRadius = e.originalScale * 0.5 * Math.max(0.7, e.widthScale);
-        e.combatRadius = e.originalScale * 1.5;
-        e.attackOffset = 0.5 + e.hitRadius;
+        enemy.hitRadius = enemy.originalScale * 0.5 * Math.max(0.7, enemy.widthScale);
+        enemy.combatRadius = enemy.originalScale * 1.5;
+        enemy.attackOffset = 0.5 + enemy.hitRadius;
 
         // Zero-out all status flags and timers
-        e.statusFlags = 0;
-        if (newType === EnemyType.BOSS) e.statusFlags |= EnemyFlags.BOSS;
+        enemy.statusFlags = 0;
+        if (newType === EnemyType.BOSS) enemy.statusFlags |= EnemyFlags.BOSS;
 
         if (forcedPos) {
             _v2.set((Math.random() - 0.5) * 4, 0, (Math.random() - 0.5) * 4);
-            e.mesh.position.copy(forcedPos).add(_v2);
+            enemy.mesh.position.copy(forcedPos).add(_v2);
         } else {
             const angle = Math.random() * Math.PI * 2;
             const dist = 45 + Math.random() * 30;
-            e.mesh.position.set(playerPos.x + Math.cos(angle) * dist, 0, playerPos.z + Math.sin(angle) * dist);
+            enemy.mesh.position.set(playerPos.x + Math.cos(angle) * dist, 0, playerPos.z + Math.sin(angle) * dist);
         }
 
-        e.spawnPos.copy(e.mesh.position);
-        e.lastKnownPosition.copy(e.mesh.position);
-        e.deathState = EnemyDeathState.ALIVE;
-        e.velocity.set(0, 0, 0);
-        e.knockbackVel.set(0, 0, 0);
-        e.lastKnockback = 0;
-        e.deathVel.set(0, 0, 0);
-        e.deathTimer = 0;
-        e.bloodSpawned = false;
-        e.hitRenderTime = 0;
-        e.lastDamageType = DamageID.NONE;
-        e._accumulatedDamage = 0;
-        e._lastDamageTextTime = 0;
-        e.lastSeenTime = 0;
-        e.awareness = 0;
-        e.lastHeardNoiseType = NoiseType.NONE;
-        e.bossId = BossID.NONE;
+        enemy.spawnPos.copy(enemy.mesh.position);
+        enemy.lastKnownPosition.copy(enemy.mesh.position);
+        enemy.deathState = EnemyDeathState.ALIVE;
+        enemy.velocity.set(0, 0, 0);
+        enemy.knockbackVel.set(0, 0, 0);
+        enemy.lastKnockback = 0;
+        enemy.deathVel.set(0, 0, 0);
+        enemy.deathTimer = 0;
+        enemy.bloodSpawned = false;
+        enemy.hitRenderTime = 0;
+        enemy.lastDamageType = DamageID.NONE;
+        enemy._accumulatedDamage = 0;
+        enemy._lastDamageTextTime = 0;
+        enemy.lastSeenTime = 0;
+        enemy.awareness = 0;
+        enemy.lastHeardNoiseType = NoiseType.NONE;
+        enemy.bossId = BossID.NONE;
 
         // --- ZERO-GC VECTOR ALLOCATION (Pool warmup phase) ---
-        if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3();
-        e.targetPos.set(0, 0, 0);
+        if (!enemy.lastKnownPosition) enemy.lastKnownPosition = new THREE.Vector3();
+        enemy.targetPos.set(0, 0, 0);
 
         // Advanced Physics Warmup
-        e.swingX = 0;
-        e.swingZ = 0;
-        e.swingVelX = 0;
-        e.swingVelZ = 0;
+        enemy.swingX = 0;
+        enemy.swingZ = 0;
+        enemy.swingVelX = 0;
+        enemy.swingVelZ = 0;
 
-        e.prevP.set(Infinity, Infinity, Infinity);
+        enemy.prevP.set(Infinity, Infinity, Infinity);
 
-        if (!e.lastObsQueryPos) e.lastObsQueryPos = new THREE.Vector3(0, -1000, 0);
-        else e.lastObsQueryPos.set(0, -1000, 0);
+        if (!enemy.lastObsQueryPos) enemy.lastObsQueryPos = new THREE.Vector3(0, -1000, 0);
+        else enemy.lastObsQueryPos.set(0, -1000, 0);
 
-        if (!e.cachedObstacles) e.cachedObstacles = new Array(16);
-        else e.cachedObstacles.fill(null);
+        if (!enemy.cachedObstacles) enemy.cachedObstacles = new Array(16);
+        else enemy.cachedObstacles.fill(null);
 
-        e.cachedObstacleCount = 0;
+        enemy.cachedObstacleCount = 0;
 
-        e.lastTrailPos.set(0, 0, 0);
-        e.hasLastTrailPos = false;
+        enemy.lastTrailPos.set(0, 0, 0);
+        enemy.hasLastTrailPos = false;
 
         // FIX: Ensure tackle time is reset to prevent NaN physics failures
-        e.lastTackleTime = 0;
+        enemy.lastTackleTime = 0;
 
-        const s = e.originalScale;
-        const w = e.widthScale;
-        e.mesh.scale.set(s * w, s, s * w);
+        const s = enemy.originalScale;
+        const w = enemy.widthScale;
+        enemy.mesh.scale.set(s * w, s, s * w);
 
         // Reset the body visibility based on whether it is a Boss (regular zombies are instanced and hidden)
-        const body = e.bodyMesh;
+        const body = enemy.bodyMesh;
         if (body) {
-            body.visible = (e.statusFlags & EnemyFlags.BOSS) !== 0;
+            body.visible = (enemy.statusFlags & EnemyFlags.BOSS) !== 0;
         }
 
-        _color.setHex(e.color);
-        setBaseColor(e.mesh, _color);
-        resetMaterialEmissive(e.mesh);
+        _color.setHex(enemy.color);
+        setBaseColor(enemy.mesh, _color);
+        resetMaterialEmissive(enemy.mesh);
 
-        e.stunDuration = 0;
-        e.slowDuration = 0;
-        e.blindDuration = 0;
-        e.burnDuration = 0;
-        e.grappleDuration = 0; // Reset grapple
-        e.burnTickTimer = 0;
-        e.lastBurnTick = 0;
+        enemy.stunDuration = 0;
+        enemy.slowDuration = 0;
+        enemy.blindDuration = 0;
+        enemy.burnDuration = 0;
+        enemy.grappleDuration = 0; // Reset grapple
+        enemy.burnTickTimer = 0;
+        enemy.lastBurnTick = 0;
 
-        e.drownTimer = 0;
-        e.drownDmgTimer = 0;
-        e.fallStartY = 0;
+        enemy.drownTimer = 0;
+        enemy.drownDmgTimer = 0;
+        enemy.fallStartY = 0;
 
-        e.spinVel.set(0, 0, 0);
-        e.hitDir.set(0, 0, 0);
-        e.baseY = 0;
-        e.animRotX = 0;
-        e.animRotZ = 0;
-        e.lastAIState = AIState.IDLE;
-        e.ashPile = null;
+        enemy.spinVel.set(0, 0, 0);
+        enemy.hitDir.set(0, 0, 0);
+        enemy.baseY = 0;
+        enemy.animRotX = 0;
+        enemy.animRotZ = 0;
+        enemy.lastAIState = AIState.IDLE;
+        enemy.ashPile = null;
 
-        if (e.indicatorRing) {
-            e.indicatorRing.visible = false;
-            e.indicatorRing.matrixAutoUpdate = false;
+        if (enemy.indicatorRing) {
+            enemy.indicatorRing.visible = false;
+            enemy.indicatorRing.matrixAutoUpdate = false;
         }
 
-        e.currentChunkKey = -1;
-        e.bucketIndex = -1;
-        e._internalBucketIdx = -1;
-        e._sqf = 0;
+        enemy.currentChunkKey = -1;
+        enemy.bucketIndex = -1;
+        enemy._internalBucketIdx = -1;
+        enemy._sqf = 0;
 
-        e.mesh.updateMatrix();
+        enemy.mesh.updateMatrix();
     },
 
     spawnBoss: (scene: THREE.Scene, pos: { x: number, z: number }, bossData: any, isForced: boolean = false) => {
@@ -777,6 +797,11 @@ export const EnemyManager = {
             activeCount++;
             EnemyPoolState.activeCount = activeCount;
 
+            // Sync state.enemies.pool for boss entity (same as regular spawn)
+            if (_currentSession?.state) {
+                _currentSession.state.enemies.pool.push(boss);
+            }
+
             if (_currentSession && _currentSession.state) {
                 _currentSession.state.enemies.activeBoss = boss;
             }
@@ -784,7 +809,8 @@ export const EnemyManager = {
         return boss;
     },
 
-    spawnHorde: (scene: THREE.Scene, startPos: THREE.Vector3, count: number, bossSpawned: boolean, currentCount: number, forcedType?: EnemyType, isForced: boolean = false, onSpawn?: (e: Enemy) => void): void => {
+    spawnHorde: (scene: THREE.Scene, startPos: THREE.Vector3, count: number, bossSpawned: boolean, currentCount: number, forcedType?: EnemyType, isForced: boolean = false,
+        onSpawn?: (enemy: Enemy) => void): void => {
         const goldenAngle = 137.5 * (Math.PI / 180);
         const spacing = 1.5;
 
@@ -818,217 +844,85 @@ export const EnemyManager = {
         }
     },
 
-    explodeEnemy: (enemy: Enemy, callbacks: any, velocity?: THREE.Vector3, isGibbed: boolean = false) => {
-        if (enemy.statusFlags & EnemyFlags.EXPLODED) return;
-        enemy.statusFlags |= EnemyFlags.EXPLODED;
-        if (isGibbed) {
+    gibEnemy: (enemy: Enemy, callbacks: any, forceDir?: THREE.Vector3) => {
+        EnemyManager.explodeEnemy(enemy, callbacks, forceDir);
+    },
+
+    explodeEnemy: (enemy: Enemy, callbacks: any, forceDir?: THREE.Vector3) => {
+        //if (enemy.statusFlags & EnemyFlags.EXPLODED) return;
+        if (enemy.deathState === EnemyDeathState.GIBBED) {
             enemy.statusFlags |= EnemyFlags.GIBBED;
-            if (callbacks.session) {
-                const tracker = (callbacks.session as GameSessionLogic).getSystem<any>(SystemID.DAMAGE_TRACKER);
-                if (tracker) tracker.recordGib(callbacks.session, enemy.lastDamageType);
-            }
+            CareerStatsSystem.recordGib(callbacks.session, enemy.lastDamageType);
+        } else {
+            enemy.statusFlags |= EnemyFlags.EXPLODED;
         }
 
+        // Enemy position, scale and head
+        const enemyPos = enemy.mesh.position;
         const enemyScale = enemy.originalScale * enemy.widthScale;
-        const pos = enemy.mesh.position;
+        const enemyHead = enemyPos.y + enemy.originalScale * 1.8;
 
         if (enemy.mesh.parent) enemy.mesh.parent.remove(enemy.mesh);
 
-        let burstScale = 1.0;
+        // 1. Blood decal:
         const dmgType = enemy.lastDamageType;
+        let burstScale = 1.0;
         if (dmgType === DamageID.GRENADE) burstScale = 3.0;
         else if (dmgType === DamageID.SHOTGUN || dmgType === DamageID.REVOLVER) burstScale = 2.0;
-
         const decalScale = ((enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 6.0 : enemyScale * burstScale);
-
-        // null-safety check for callbacks since _aiContext can be cleared/nullified
         if (callbacks.spawnDecal) {
-            callbacks.spawnDecal(pos.x, pos.z, decalScale, MATERIALS.bloodDecal, FXDecalType.SPLATTER);
+            callbacks.spawnDecal(enemyPos.x, enemyPos.z, decalScale, MATERIALS.bloodDecal, FXDecalType.SPLATTER);
         }
 
-        const bloodCount = (enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 12 : 5;
-        const goreCount = (enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 12 : 5;
-        const enemyTopY = pos.y + enemy.originalScale * 1.8;
-
+        // 2. Blood splatter:
+        const bloodCount = (enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 12 : 6;
         if (callbacks.spawnParticle) {
-            callbacks.spawnParticle(pos.x, 1.5, pos.z, FXParticleType.BLOOD_SPLATTER, 6);
+            callbacks.spawnParticle(enemyPos.x, enemyHead, enemyPos.z, FXParticleType.BLOOD_SPLATTER, bloodCount);
         }
+
+        // 3. Gore:
+        const goreCount = (enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 12 : 6;
+        const massScale = enemy.originalScale * enemy.originalScale;
+        const goreScale = (enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? (massScale / 12) : (massScale / 6);
 
         _v1.set(0, 0, 0);
-        if (velocity) {
-            _v1.copy(velocity);
+        if (forceDir) {
+            _v1.copy(forceDir);
         } else if (enemy.deathVel.x !== 0 || enemy.deathVel.z !== 0) {
             _v1.copy(enemy.deathVel);
         } else {
             _v1.copy(enemy.velocity).multiplyScalar(0.5).add(_up);
         }
 
-        const massScale = enemy.originalScale * enemy.originalScale;
-        const goreScale = (enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? Math.min(massScale * 1.5, 4.5) : massScale * 2.2;
-
         if (callbacks.spawnParticle) {
             for (let i = 0; i < goreCount; i++) {
-                _v2.set(_v1.x + (Math.random() - 0.5) * 12, _v1.y + Math.random() * 6, _v1.z + (Math.random() - 0.5) * 10);
-                callbacks.spawnParticle(pos.x, pos.y + 1, pos.z, FXParticleType.GORE, 1, undefined, _v2, enemy.color, goreScale);
+                // FIXED: Isolated physics vector calculation completely free of stale scratchpad garbage
+                _v2.set(
+                    (Math.random() - 0.5) * 10,
+                    3.0 + Math.random() * 6,
+                    (Math.random() - 0.5) * 10
+                );
+
+                // Signature mapping: (x, y, z, type, count, customMesh, customVel, color, scale)
+                callbacks.spawnParticle(
+                    enemyPos.x,
+                    enemyHead,
+                    enemyPos.z,
+                    FXParticleType.GORE,
+                    1,
+                    undefined,
+                    _v2,
+                    enemy.color,
+                    goreScale // Triggers proportional size inside FXSystem!
+                );
             }
-        }
-    },
-
-    processDeathAnimation: (e: Enemy, callbacks: any, session: any, delta: number, simTime: number, renderTime: number, ground: any, water: any) => {
-        const age = simTime - e.deathTimer;
-
-        switch (e.deathState) {
-            case EnemyDeathState.EXPLODED:
-                EnemyManager.explodeEnemy(e, callbacks, e.deathVel);
-                e.deathState = EnemyDeathState.DEAD;
-                break;
-
-            case EnemyDeathState.GIBBED:
-                EnemyManager.explodeEnemy(e, callbacks, e.deathVel, true);
-                e.deathState = EnemyDeathState.DEAD;
-                break;
-
-            case EnemyDeathState.DROWNED:
-                if (water) {
-                    water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, renderTime);
-                    const targetY = _buoyancyResult.waterLevel - 0.2 + Math.sin(renderTime * 0.002) * 0.05;
-                    e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, targetY, 2 * delta);
-
-                    // Fade out rotation to float face down
-                    e.mesh.rotation.x = THREE.MathUtils.lerp(e.mesh.rotation.x, -Math.PI / 1.1, delta);
-                    e.mesh.rotation.z = THREE.MathUtils.lerp(e.mesh.rotation.z, (Math.random() - 0.5) * 0.2, delta);
-                }
-                if (age > 2000) e.deathState = EnemyDeathState.DEAD;
-                break;
-
-            case EnemyDeathState.BURNED:
-                const duration = 1500;
-                const progress = Math.min(1.0, age / duration);
-
-                if (!(e.statusFlags & EnemyFlags.ASH_SPAWNED)) {
-                    e.statusFlags |= EnemyFlags.ASH_SPAWNED;
-                    if (ashRenderer) {
-                        ashRenderer.addAsh(e.mesh.position, e.mesh.rotation, e.originalScale, e.widthScale, e.color, simTime, 1500);
-                    }
-                }
-
-                const s = e.originalScale;
-                const w = e.widthScale;
-                const shrink = 1.0 - progress;
-
-                e.mesh.scale.set(s * w * shrink, s * shrink, s * w * shrink);
-
-                _color.setHex(e.color).lerp(_white, progress);
-                setBaseColor(e.mesh, _color);
-
-                if (progress >= 1.0) {
-                    if (!(e.statusFlags & EnemyFlags.ASH_PERMANENT)) {
-                        e.statusFlags |= EnemyFlags.ASH_PERMANENT;
-                        if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
-                    }
-                    e.deathState = EnemyDeathState.DEAD;
-                }
-                break;
-
-            case EnemyDeathState.ELECTROCUTED:
-                if (!(e.statusFlags & EnemyFlags.ELECTROCUTED)) {
-                    e.statusFlags |= EnemyFlags.ELECTROCUTED;
-                    e.targetPos.copy(e.mesh.position); // Reusing as deathPos
-                    e.baseY = e.mesh.position.y; // Reusing as deathPosY
-
-                    e.stunDuration = 400 + Math.random() * 200; // Reusing for fallDuration
-                    e.slowDuration = 1800 + Math.random() * 500; // Reusing for twitchDuration
-
-                    e.swingX = -Math.PI / 2.1; // Reusing for targetRotX
-                    e.swingZ = (Math.random() - 0.5) * 0.5; // Reusing for targetRotZ
-                }
-
-                const fallDur = e.stunDuration;
-                const twitchDur = e.slowDuration;
-
-                if (age < twitchDur) {
-                    const fallProgress = Math.min(1.0, age / fallDur);
-
-                    e.mesh.rotation.x = THREE.MathUtils.lerp(0, e.swingX, fallProgress);
-                    e.mesh.rotation.z = THREE.MathUtils.lerp(0, e.swingZ, fallProgress);
-                    e.mesh.position.y = THREE.MathUtils.lerp(e.baseY, 0.2, fallProgress);
-
-                    const pulse = Math.sin(renderTime * 0.05) * 0.5 + 0.5;
-                    _color.setHex(ENEMY_COLORS.ELECTRIC_ARC_FLASH.num);
-                    applyElectrifiedGlow(e.mesh, _color, 1.0 + pulse * 4.0);
-
-                    const jitter = (1.0 - fallProgress * 0.5) * 0.2;
-                    e.mesh.rotation.y += (Math.random() - 0.5) * jitter;
-
-                    if (Math.random() > 0.85) {
-                        _v1.set(
-                            e.targetPos.x + (Math.random() - 0.5),
-                            e.mesh.position.y + 0.5,
-                            e.targetPos.z + (Math.random() - 0.5)
-                        );
-                        if (callbacks.spawnParticle) {
-                            callbacks.spawnParticle(_v1.x, _v1.y, _v1.z, FXParticleType.SPARK, 1);
-                        }
-                    }
-                } else {
-                    _color.setHex(e.color || 0xffffff).multiplyScalar(0.3);
-                    resetMaterialEmissive(e.mesh);
-                    setBaseColor(e.mesh, _color);
-
-                    const floorY = ground.getGroundHeight(e.targetPos.x, e.targetPos.z, session);
-                    e.mesh.position.x = e.targetPos.x;
-                    e.mesh.position.y = floorY + 0.1;
-                    e.mesh.position.z = e.targetPos.z;
-
-                    e.deathState = EnemyDeathState.DEAD;
-                }
-                break;
-
-            case EnemyDeathState.SHOT:
-            case EnemyDeathState.GENERIC:
-            case EnemyDeathState.FALL:
-            default:
-                e.deathVel.y -= 35 * delta;
-                e.mesh.position.addScaledVector(e.deathVel, delta);
-
-                const floorY = ground.getGroundHeight(e.mesh.position.x, e.mesh.position.z, session);
-                if (e.mesh.position.y <= floorY) {
-                    e.mesh.position.y = floorY;
-
-                    if (e.deathVel.y < -5.0 && water) {
-                        water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, renderTime);
-                        if (_buoyancyResult.inWater) {
-                            water.spawnRipple(e.mesh.position.x, e.mesh.position.z, 0.8, 1.2);
-                            if (callbacks.spawnParticle) callbacks.spawnParticle(e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z, FXParticleType.SPLASH, 4);
-                        }
-                    }
-
-                    e.deathVel.set(0, 0, 0);
-                }
-
-                // --- PROCEDURAL PHYSICS DEATH FALL (VINTERDÖD STABILIZATION) ---
-                // Rotate the zombie so it actually tips over and drops to the ground
-                const fallProgress = Math.min(1.0, age / 400.0); // Tip over completely in 400ms
-                const targetRotX = e.fallForward ? -Math.PI / 2 : Math.PI / 2;
-                e.mesh.rotation.x = THREE.MathUtils.lerp(0, targetRotX, fallProgress);
-
-                // Spin slowly while falling for extra gritty realism
-                if (age < 400) {
-                    e.mesh.rotation.y += (e.fallForward ? 1 : -1) * 2.0 * delta * (1.0 - fallProgress);
-                }
-
-                e.mesh.quaternion.setFromEuler(e.mesh.rotation);
-
-                if (age > 1000) {
-                    e.deathState = EnemyDeathState.DEAD;
-                }
-                break;
         }
     },
 
     /**
      * UNIFIED PERFORMANCE PHYSICS: The single source of truth for sending zombies flying.
-     * Handles horizontal knockback, vertical lift, ragdoll state initialization, and spin.
+     * Handles horizontal knockback, vertical lift, ragdoll state initialization and spinning.
+     * Works for RUSH, DODGE, VEHICLE & applies PHYSICAL damage
      */
     applyImpactForce: (
         enemy: Enemy,
@@ -1055,6 +949,9 @@ export const EnemyManager = {
 
         // --- 2. APPLY VELOCITY ---
         enemy.knockbackVel.set(_v1.x * force, lift, _v1.z * force);
+
+        // --- Initialize fall height tracking for fall damage ---
+        enemy.fallStartY = enemy.mesh.position.y;
 
         // --- 3. STATE & INTERRUPTION ---
         enemy.stunDuration = stunDuration;
@@ -1111,19 +1008,19 @@ export const EnemyManager = {
         streamer.getNearbyEnemies(center.x, center.z, radius, enPoolIdx);
 
         const enemies = enPool.getPool(enPoolIdx);
-        const len = enPool.getCount(enPoolIdx);
+        const numEnemies = enPool.getCount(enPoolIdx);
         const radiusSq = radius * radius;
 
-        for (let i = 0; i < len; i++) {
-            const e = enemies[i];
-            if (e.deathState !== EnemyDeathState.ALIVE) continue;
+        for (let i = 0; i < numEnemies; i++) {
+            const enemy = enemies[i];
+            if (enemy.deathState !== EnemyDeathState.ALIVE) continue;
 
-            _v1.subVectors(e.mesh.position, center);
+            _v1.subVectors(enemy.mesh.position, center);
             _v1.y = 0;
             const distSq = _v1.lengthSq();
 
             if (distSq < radiusSq) {
-                const isGrappling = e.state === AIState.GRAPPLE;
+                const isGrappling = enemy.state === AIState.GRAPPLE;
                 if (!isGrappling && hasDir) {
                     if (_v1.dot(_v2) < 0) continue;
                 }
@@ -1134,28 +1031,30 @@ export const EnemyManager = {
                 const abilityDodge = ABILITIES[AbilityID.DODGE];
                 const isRush = damageSource === DamageID.RUSH;
                 const isDodge = damageSource === DamageID.DODGE;
-                const baseDamage = isRush ? (abilityRush?.damage ?? 10) : (isDodge ? (abilityDodge?.damage ?? 0) : 0);
+                const baseDamage = isRush ? (abilityRush?.damage ?? 10) : (isDodge ? (abilityDodge?.damage ?? 5) : 5);
                 const damage = (isRush || isDodge) ? baseDamage : Math.ceil(maxDamage * falloff);
 
+                // TODO: VALIDATE THIS!
+                // This is immediatley applied when the enemies are hit, but
+                // we're also applying fall damage once the enemies hit the ground:
                 if (damage > 0 || (isRush || isDodge)) {
-                    const finalDamageSource = damageSource;
-                    if (ctx.applyDamage) ctx.applyDamage(e, damage, damageType, finalDamageSource, maxForce >= 20);
-                    else e.hp -= damage;
+                    if (ctx.handleEnemyHit) ctx.handleEnemyHit(enemy, damage, damageType, damageSource, maxForce >= 20);
+                    else enemy.hp -= damage;
                 }
 
                 // --- PHYSICS (Using Unified Pipeline) ---
-                // Dramatically increase RUSH lift and decrease DODGE lift for requested feedback
+                // RUSH lift is higher than DODGE lift
                 const liftRatio = isDodge ? 0.05 : (isRush ? 1.6 : 0.45);
                 const spinScale = isRush ? 2.5 : 0.8;
                 const force = maxForce * falloff;
                 const stunDur = (isRush ? 2.0 : 1.2) * falloff;
 
                 // Add slight horizontal "Spread" variance
-                _v1.x += (Math.random() - 0.5) * (force * 0.1);
-                _v1.z += (Math.random() - 0.5) * (force * 0.1);
+                _v1.x += (Math.random() - 0.7) * (force * 0.2);
+                _v1.z += (Math.random() - 0.7) * (force * 0.2);
 
                 EnemyManager.applyImpactForce(
-                    e,
+                    enemy,
                     center,
                     force,
                     liftRatio,
@@ -1165,7 +1064,7 @@ export const EnemyManager = {
                 );
 
                 // --- VISUALS ---
-                ctx.spawnParticle(e.mesh.position.x, 1.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 6);
+                ctx.spawnParticle(enemy.mesh.position.x, 1.5, enemy.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 6);
             }
         }
 
@@ -1176,7 +1075,7 @@ export const EnemyManager = {
      * Handles the physics and logic for a single enemy being hit by a vehicle.
       */
     ramEnemies: (
-        e: Enemy,
+        enemy: Enemy,
         knockDir: THREE.Vector3,
         speedMS: number,
         vehicleDef: any,
@@ -1187,51 +1086,50 @@ export const EnemyManager = {
         renderTime: number
     ): boolean => {
         const speedKmh = speedMS * 3.6;
-        const mass = e.originalScale * e.widthScale;
+        const mass = enemy.originalScale * enemy.widthScale;
         const massRatio = (vehicleDef.mass * 0.001) / (mass || 1.0);
 
         const baseDamage = speedKmh * massRatio * vehicleDef.collisionDamageMultiplier * 2.0;
 
-        e.hitTime = simTime;
-        e.hitRenderTime = renderTime;
+        enemy.hitTime = simTime;
+        enemy.hitRenderTime = renderTime;
 
         const scene = session.engine.scene;
 
-        // Call applyDamage instead of direct HP mutation to trigger centralized onEnemyKilled and telemetry
-        const applyDamage = session.state.applyDamage;
-        if (applyDamage) {
-            applyDamage(e, baseDamage, vehicleDef.defaultDamageType as DamageType, vehicleDef.defaultDamageID as DamageID);
+        // Call handleEnemyHit instead of direct HP mutation to trigger centralized onEnemyKilled and telemetry
+        const handleEnemyHit = session.state.handleEnemyHit;
+        if (handleEnemyHit) {
+            handleEnemyHit(enemy, baseDamage, vehicleDef.defaultDamageType as DamageType, vehicleDef.defaultDamageID as DamageID);
         } else {
-            session.damageTracker.recordOutgoingDamage(session, baseDamage, DamageID.VEHICLE_SPLATTER, (e.statusFlags & EnemyFlags.BOSS) !== 0);
-            e.hp -= baseDamage;
+            enemy.hp -= baseDamage;
         }
 
-        if (e.hp <= 0) {
-            e.statusFlags |= EnemyFlags.DEAD;
+        if (enemy.hp <= 0) {
+            enemy.statusFlags |= EnemyFlags.DEAD;
 
             if (speedKmh >= 80) {
-                e.deathState = EnemyDeathState.GIBBED;
-                e.lastDamageType = DamageID.VEHICLE_SPLATTER;
+                enemy.deathState = EnemyDeathState.GIBBED;
+                enemy.lastDamageType = DamageID.VEHICLE_SPLATTER;
 
                 const forceDir = _v3.copy(knockDir).multiplyScalar(speedMS * 1.5).setY(3.0);
-                EnemyManager.explodeEnemy(e, _aiContext, forceDir, true);
+                EnemyManager.gibEnemy(enemy, _aiContext, forceDir);
 
                 session.engine.camera.shake(0.4);
                 GamePlaySounds.playImpact(MaterialType.FLESH);
 
                 return true;
             } else if (speedKmh >= 20) {
-                e.deathState = EnemyDeathState.FALL;
-                e.lastDamageType = DamageID.VEHICLE_RAM;
+                enemy.deathState = EnemyDeathState.FALL;
+                enemy.lastDamageType = DamageID.VEHICLE_RAM;
 
                 const pushForce = speedMS * 0.8 * massRatio;
                 const upForce = speedMS * 0.6 * massRatio;
 
-                e.deathVel.copy(knockDir).multiplyScalar(pushForce);
-                e.deathVel.y = Math.max(4.0, upForce);
+                enemy.deathVel.copy(knockDir).multiplyScalar(pushForce);
+                enemy.deathVel.y = Math.max(4.0, upForce);
 
-                FXSystem.spawnParticle(scene, state.combat.particles, e.mesh.position.x, 1.5, e.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 6);
-                FXSystem.spawnDecal(scene, state.world.bloodDecals, e.mesh.position.x, e.mesh.position.z,
+                FXSystem.spawnParticle(scene, state.combat.particles, enemy.mesh.position.x, 1.5, enemy.mesh.position.z, FXParticleType.BLOOD_SPLATTER, 6);
+                FXSystem.spawnDecal(scene, state.world.bloodDecals, enemy.mesh.position.x, enemy.mesh.position.z,
                     1.0 + Math.random() * 1.5, MATERIALS.bloodDecal);
 
                 session.engine.camera.shake(0.2);
@@ -1239,28 +1137,190 @@ export const EnemyManager = {
 
                 return true;
             } else {
-                e.deathState = EnemyDeathState.GENERIC;
-                e.lastDamageType = DamageID.VEHICLE_PUSH;
+                enemy.deathState = EnemyDeathState.GENERIC;
+                enemy.lastDamageType = DamageID.VEHICLE_PUSH;
 
-                e.deathVel.copy(knockDir).multiplyScalar(speedMS * massRatio * 0.2);
-                e.deathVel.y = 2.0;
+                enemy.deathVel.copy(knockDir).multiplyScalar(speedMS * massRatio * 0.2);
+                enemy.deathVel.y = 2.0;
 
                 return false;
             }
         } else {
-            e.lastDamageType = DamageID.VEHICLE_PUSH;
+            enemy.lastDamageType = DamageID.VEHICLE_PUSH;
 
             // Use dedicated V3 and V4 to avoid aliasing with V1 and V2 inside applyKnockback
             _v3.copy(knockDir).multiplyScalar(speedMS);
-            _v4.copy(e.mesh.position).addScaledVector(knockDir, -1.0);
+            _v4.copy(enemy.mesh.position).addScaledVector(knockDir, -1.0);
 
             // Unified Physics Impact for vehicles
             const liftRatio = 0.4 + (speedMS * 0.02); // Faster = more lift
             // [VINTERDÖD FIX] Attribution to the unified VEHICLE category
-            EnemyManager.applyImpactForce(e, _v4, speedMS * 15, liftRatio, 1.5, speedMS * 2.0, DamageID.VEHICLE);
+            EnemyManager.applyImpactForce(enemy, _v4, speedMS * 15, liftRatio, 1.5, speedMS * 2.0, DamageID.VEHICLE);
 
-            e.slowDuration = 0.5;
+            enemy.slowDuration = 0.5;
             return false;
+        }
+    },
+
+    processDeathAnimation: (enemy: Enemy, callbacks: any, session: any, delta: number, simTime: number, renderTime: number, ground: any, water: any) => {
+        const age = simTime - enemy.deathTimer;
+
+        switch (enemy.deathState) {
+            case EnemyDeathState.EXPLODED:
+                EnemyManager.explodeEnemy(enemy, callbacks);
+                enemy.deathState = EnemyDeathState.DEAD;
+                break;
+
+            case EnemyDeathState.GIBBED:
+                EnemyManager.gibEnemy(enemy, callbacks);
+                enemy.deathState = EnemyDeathState.DEAD;
+                break;
+
+            case EnemyDeathState.DROWNED:
+                if (water) {
+                    water.checkBuoyancy(enemy.mesh.position.x, enemy.mesh.position.y, enemy.mesh.position.z, renderTime);
+                    const targetY = _buoyancyResult.waterLevel - 0.2 + Math.sin(renderTime * 0.002) * 0.05;
+                    enemy.mesh.position.y = THREE.MathUtils.lerp(enemy.mesh.position.y, targetY, 2 * delta);
+
+                    // Fade out rotation to float face down on the water surface
+                    enemy.mesh.rotation.x = THREE.MathUtils.lerp(enemy.mesh.rotation.x, -Math.PI / 1.1, delta);
+                    enemy.mesh.rotation.z = THREE.MathUtils.lerp(enemy.mesh.rotation.z, (Math.random() - 0.5) * 0.2, delta);
+                }
+                if (age > 2000) enemy.deathState = EnemyDeathState.DEAD;
+                break;
+
+            case EnemyDeathState.BURNED:
+                const duration = 1500;
+                const progress = Math.min(1.0, age / duration);
+
+                if (!(enemy.statusFlags & EnemyFlags.ASH_SPAWNED)) {
+                    enemy.statusFlags |= EnemyFlags.ASH_SPAWNED;
+                    if (ashRenderer) {
+                        ashRenderer.addAsh(enemy.mesh.position, enemy.mesh.rotation, enemy.originalScale, enemy.widthScale, enemy.color, simTime, 1500);
+                    }
+                }
+
+                const s = enemy.originalScale;
+                const w = enemy.widthScale;
+                const shrink = 1.0 - progress;
+
+                enemy.mesh.scale.set(s * w * shrink, s * shrink, s * w * shrink);
+
+                // FIXED: Lerp base color to charcoal black instead of white for carbonization feel
+                _color.setHex(enemy.color).lerp(_blackColor, progress);
+                setBaseColor(enemy.mesh, _color);
+
+                // Zero-GC: Continuously spawn residual flame particles while crisping up
+                if (progress < 0.85 && Math.random() > 0.4 && callbacks.spawnParticle) {
+                    _v1.set(enemy.mesh.position.x + (Math.random() - 0.5) * 0.4, enemy.mesh.position.y + 0.4 * shrink, enemy.mesh.position.z + (Math.random() - 0.5) * 0.4);
+                    callbacks.spawnParticle(_v1.x, _v1.y, _v1.z, FXParticleType.ENEMY_EFFECT_FLAME, 1);
+                }
+
+                if (progress >= 1.0) {
+                    if (!(enemy.statusFlags & EnemyFlags.ASH_PERMANENT)) {
+                        enemy.statusFlags |= EnemyFlags.ASH_PERMANENT;
+                        if (enemy.mesh.parent) enemy.mesh.parent.remove(enemy.mesh);
+
+                        // Zero-GC: Trigger a final smoke puff when the body is completely consumed
+                        if (callbacks.spawnParticle) {
+                            callbacks.spawnParticle(enemy.mesh.position.x, enemy.mesh.position.y + 0.1, enemy.mesh.position.z, FXParticleType.SMOKE, 4);
+                        }
+                    }
+                    enemy.deathState = EnemyDeathState.DEAD;
+                }
+                break;
+
+            case EnemyDeathState.ELECTROCUTED:
+                if (!(enemy.statusFlags & EnemyFlags.ELECTROCUTED)) {
+                    enemy.statusFlags |= EnemyFlags.ELECTROCUTED;
+                    enemy.targetPos.copy(enemy.mesh.position); // Reusing as deathPos
+                    enemy.baseY = enemy.mesh.position.y; // Reusing as deathPosY
+
+                    enemy.stunDuration = 400 + Math.random() * 200; // Reusing for fallDuration
+                    enemy.slowDuration = 1800 + Math.random() * 500; // Reusing for twitchDuration
+
+                    enemy.swingX = -Math.PI / 2.1; // Reusing for targetRotX
+                    enemy.swingZ = (Math.random() - 0.5) * 0.5; // Reusing for targetRotZ
+                }
+
+                const fallDur = enemy.stunDuration;
+                const twitchDur = enemy.slowDuration;
+
+                if (age < twitchDur) {
+                    const fallProgress = Math.min(1.0, age / fallDur);
+
+                    enemy.mesh.rotation.x = THREE.MathUtils.lerp(0, enemy.swingX, fallProgress);
+                    enemy.mesh.rotation.z = THREE.MathUtils.lerp(0, enemy.swingZ, fallProgress);
+                    enemy.mesh.position.y = THREE.MathUtils.lerp(enemy.mesh.position.y, 0.2, fallProgress);
+
+                    const pulse = Math.sin(renderTime * 0.05) * 0.5 + 0.5;
+                    _color.setHex(ENEMY_COLORS.ELECTRIC_ARC_FLASH.num);
+                    applyElectrifiedGlow(enemy.mesh, _color, 1.0 + pulse * 4.0);
+
+                    const jitter = (1.0 - fallProgress * 0.5) * 0.2;
+                    enemy.mesh.rotation.y += (Math.random() - 0.5) * jitter;
+
+                    if (Math.random() > 0.85) {
+                        _v1.set(
+                            enemy.targetPos.x + (Math.random() - 0.5),
+                            enemy.mesh.position.y + 0.5,
+                            enemy.targetPos.z + (Math.random() - 0.5)
+                        );
+                        if (callbacks.spawnParticle) {
+                            callbacks.spawnParticle(_v1.x, _v1.y, _v1.z, FXParticleType.SPARK, 1);
+                        }
+                    }
+                } else {
+                    _color.setHex(enemy.color || 0xffffff).multiplyScalar(0.3);
+                    resetMaterialEmissive(enemy.mesh);
+                    setBaseColor(enemy.mesh, _color);
+
+                    const floorY = ground.getGroundHeight(enemy.targetPos.x, enemy.targetPos.z, session);
+                    enemy.mesh.position.x = enemy.targetPos.x;
+                    enemy.mesh.position.y = floorY + 0.1;
+                    enemy.mesh.position.z = enemy.targetPos.z;
+
+                    enemy.deathState = EnemyDeathState.DEAD;
+                }
+                break;
+
+            case EnemyDeathState.SHOT:
+            case EnemyDeathState.GENERIC:
+            case EnemyDeathState.FALL:
+            default:
+                enemy.deathVel.y -= 35 * delta;
+                enemy.mesh.position.addScaledVector(enemy.deathVel, delta);
+
+                const floorY = ground.getGroundHeight(enemy.mesh.position.x, enemy.mesh.position.z, session);
+                if (enemy.mesh.position.y <= floorY) {
+                    enemy.mesh.position.y = floorY;
+
+                    if (enemy.deathVel.y < -5.0 && water) {
+                        water.checkBuoyancy(enemy.mesh.position.x, enemy.mesh.position.y, enemy.mesh.position.z, renderTime);
+                        if (_buoyancyResult.inWater) {
+                            water.spawnRipple(enemy.mesh.position.x, enemy.mesh.position.z, 0.8, 1.2);
+                            if (callbacks.spawnParticle) callbacks.spawnParticle(enemy.mesh.position.x, _buoyancyResult.waterLevel, enemy.mesh.position.z, FXParticleType.SPLASH, 4);
+                        }
+                    }
+
+                    enemy.deathVel.set(0, 0, 0);
+                }
+
+                // --- PROCEDURAL PHYSICS DEATH FALL (VINTERDÖD STABILIZATION) ---
+                const fallProgress = Math.min(1.0, age / 400.0);
+                const targetRotX = enemy.fallForward ? -Math.PI / 2 : Math.PI / 2;
+                enemy.mesh.rotation.x = THREE.MathUtils.lerp(0, targetRotX, fallProgress);
+
+                if (age < 400) {
+                    enemy.mesh.rotation.y += (enemy.fallForward ? 1 : -1) * 2.0 * delta * (1.0 - fallProgress);
+                }
+
+                enemy.mesh.quaternion.setFromEuler(enemy.mesh.rotation);
+
+                if (age > 1000) {
+                    enemy.deathState = EnemyDeathState.DEAD;
+                }
+                break;
         }
     },
 
@@ -1271,25 +1331,26 @@ export const EnemyManager = {
     ) => {
         const scene = session.engine.scene;
         const state = session.state;
-        const callbacks = session.sectorCtx as any;
+        const enemySystem = session.systems.enemySystem as any;
+        const rewardXP = enemySystem?.callbacks?.rewardXP || state.callbacks?.rewardXP;
+        const onBossKilled = enemySystem?.callbacks?.onBossKilled || state.callbacks?.onBossKilled;
 
         // --- CONTIGUOUS CLEANUP ---
         let i = 0;
         while (i < activeCount) {
-            const e = activeEnemies[i];
+            const enemy = activeEnemies[i];
 
-            if (e.deathState === EnemyDeathState.ALIVE) {
+            if (enemy.deathState === EnemyDeathState.ALIVE) {
                 // Out-of-bounds check (Zero-GC ambient hibernation recycling)
                 const playerPos = state.player.position;
-                if (playerPos && (e.statusFlags & EnemyFlags.BOSS) === 0) {
-                    const dx = e.mesh.position.x - playerPos.x;
-                    const dz = e.mesh.position.z - playerPos.z;
+                if (playerPos && (enemy.statusFlags & EnemyFlags.BOSS) === 0) {
+                    const dx = enemy.mesh.position.x - playerPos.x;
+                    const dz = enemy.mesh.position.z - playerPos.z;
                     const distSq = dx * dx + dz * dz;
 
                     // If beyond simulation/hibernation range, recycle immediately
                     if (distSq > SPATIAL_CONFIG.AI_HIBERNATION_RADIUS_SQ) {
                         EnemyManager.recycleEnemy(i);
-                        // Swap-and-Go: Do not increment i, check new occupant in this slot
                         continue;
                     }
                 }
@@ -1297,49 +1358,50 @@ export const EnemyManager = {
                 continue;
             }
 
-            if (!e.deathTimer) {
-                e.deathTimer = simTime;
-                e.targetPos.copy(e.mesh.position);
-                e.baseY = e.mesh.position.y;
-                if (!(e.statusFlags & EnemyFlags.EXPLODED)) {
+            if (!enemy.deathTimer) {
+                enemy.deathTimer = simTime;
+                enemy.targetPos.copy(enemy.mesh.position);
+                enemy.baseY = enemy.mesh.position.y;
+                if (!(enemy.statusFlags & EnemyFlags.EXPLODED)) {
                     let growlType = EnemyGrowlType.WALKER;
-                    if (e.type === EnemyType.RUNNER) growlType = EnemyGrowlType.RUNNER;
-                    else if (e.type === EnemyType.TANK) growlType = EnemyGrowlType.TANK;
-                    EnemySounds.playGrowl(growlType, e.mesh.position);
+                    if (enemy.type === EnemyType.RUNNER) growlType = EnemyGrowlType.RUNNER;
+                    else if (enemy.type === EnemyType.TANK) growlType = EnemyGrowlType.TANK;
+                    EnemySounds.playGrowl(growlType, enemy.mesh.position);
                 }
             }
 
-            const shouldCleanup = (e.deathState === EnemyDeathState.DEAD) || (e.statusFlags & (EnemyFlags.EXPLODED | EnemyFlags.GIBBED)) !== 0;
+            const shouldCleanup = (enemy.deathState === EnemyDeathState.DEAD) || (enemy.statusFlags & (EnemyFlags.EXPLODED | EnemyFlags.GIBBED)) !== 0;
 
             if (shouldCleanup) {
-                // [VINTERDÖD FIX] Telemetry is now handled centrally by GameSessionLogic/PlayerStatsSystem 
-                // during the applyDamage tick. recordKill here was causing double-counting.
-                if (callbacks?.rewardXP) callbacks.rewardXP(e.xp || 10);
+                if (rewardXP) rewardXP(enemy.xp || 10);
 
-                if ((e.statusFlags & EnemyFlags.BOSS) !== 0 && e.bossId !== undefined && e.bossId !== -1) {
-                    if (callbacks?.onBossKilled) callbacks.onBossKilled(e.bossId);
-                    LootSystem.spawnScrapExplosion(scene, e.mesh.position.x, e.mesh.position.z, 500);
+                if ((enemy.statusFlags & EnemyFlags.BOSS) !== 0 && enemy.bossId !== undefined && enemy.bossId !== -1) {
+                    if (onBossKilled) onBossKilled(enemy.bossId);
+                    LootSystem.spawnScrapExplosion(scene, enemy.mesh.position.x, enemy.mesh.position.z, 500);
                 } else if (Math.random() < 0.15) {
-                    LootSystem.spawnScrapExplosion(scene, e.mesh.position.x, e.mesh.position.z, 1 + Math.floor(Math.random() * 5));
+                    LootSystem.spawnScrapExplosion(scene, enemy.mesh.position.x, enemy.mesh.position.z, 1 + Math.floor(Math.random() * 5));
                 }
 
-                if (e.indicatorRing?.parent) e.indicatorRing.parent.remove(e.indicatorRing);
+                if (enemy.indicatorRing?.parent) enemy.indicatorRing.parent.remove(enemy.indicatorRing);
 
                 // --- CORPSE HANDLING ---
-                const isExploded = (e.statusFlags & EnemyFlags.EXPLODED) !== 0;
-                const isAsh = (e.statusFlags & EnemyFlags.ASH_PERMANENT) !== 0;
-                if (!isExploded && !isAsh) {
-                    EnemyManager.createCorpse(e);
+                // Do not show corpse if the enemy was exploded, gibbed, or turned to ash:
+                const isExploded = (enemy.statusFlags & EnemyFlags.EXPLODED) !== 0;
+                const isAsh = (enemy.statusFlags & EnemyFlags.ASH_PERMANENT) !== 0;
+                const isGibbed = (enemy.statusFlags & EnemyFlags.GIBBED) !== 0;
+
+                if (!isExploded && !isAsh && !isGibbed) {
+                    EnemyManager.createCorpse(enemy);
                 }
 
                 // --- RECYCLE (Swap-and-Go) ---
                 EnemyManager.recycleEnemy(i);
-                // DO NOT increment i, check new occupant
             } else {
                 i++;
             }
         }
     }
+
 };
 
 // --- INITIALIZE AI CALLBACKS ---

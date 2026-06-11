@@ -1,17 +1,13 @@
 import * as THREE from 'three';
-import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { CameraShakeType } from '../../systems/CameraSystem';
 import { GameSessionState } from './GameSessionState';
-import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { HudSystem } from '../../systems/HudSystem';
-import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { FootprintSystem } from '../../systems/FootprintSystem';
 import { FXSystem } from '../../systems/FXSystem';
-import { CAMERA_HEIGHT, HEALTH_CRITICAL_THRESHOLD } from '../../content/constants';
+import { CAMERA_HEIGHT } from '../../content/constants';
 import { audioEngine } from '../../utils/audio/AudioEngine';
-import { WEAPONS, WeaponBehavior } from '../../content/weapons';
 import { Enemy, EnemyFlags, EnemyDeathState, NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
 import { StatusEffectID } from '../../types/StatusEffects';
 import { DeathPhase } from '../../types/SessionTypes';
@@ -19,17 +15,16 @@ import { StatID, PlayerStatusFlags } from '../../types/CareerStats';
 import { DamageID, DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
 import { DiscoveryType } from '../../components/ui/hud/HudTypes';
-import { VehicleManager } from '../../systems/VehicleManager';
 import { InteractionType } from '../../systems/ui/UIEventBridge';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { NavigationSystem } from '../../systems/NavigationSystem';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
 import { EffectPool, SubEffectType } from '../../systems/EffectManager';
-import { SystemID } from '../../systems/System';
 import { WeaponFX } from '../../systems/WeaponFX';
 import { PerkFX } from '../../systems/PerkFX';
 import { SectorUpdateContext } from './SectorTypes';
 import { ChunkManager } from '../../core/world/ChunkManager';
+import { CombatEngine } from './CombatEngine';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -46,7 +41,7 @@ interface LoopContext {
         onAction: (action: any) => void;
         onDiscovery?: (type: DiscoveryType, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
         onDeathStateChange?: (val: boolean) => void;
-        onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => void;
+        handlePlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean;
         spawnZombie: (type: EnemyType, pos?: THREE.Vector3) => void;
         spawnHorde: (count: number, type: EnemyType, pos?: THREE.Vector3) => void;
         setBubble: (n: any) => void;
@@ -73,7 +68,6 @@ const _v1 = new THREE.Vector3();
 const _vCamera = new THREE.Vector3();
 const _vInteraction = new THREE.Vector3();
 const _interactionScreenPosScratch = { x: 0, y: 0 };
-const _animStateScratch: any = {};
 const _traverseStack: THREE.Object3D[] = []; // Used for Zero-GC scene traversal
 
 // --- INTERACTIVE VEGETATION BENDING ---
@@ -82,8 +76,9 @@ const _bendDistSq = new Float32Array(8);
 
 // Pre-define ALL properties to lock V8 Hidden Classes (Shapes)
 const _fxCallbacks = {
-    onPlayerHit: null as any,
-    spawnDecal: null as any
+    handlePlayerHit: null as any,
+    spawnDecal: null as any,
+    spawnParticle: null as any
 };
 
 // Pre-define ALL properties to lock V8 Hidden Classes (Shapes)
@@ -133,7 +128,7 @@ const _sectorUpdateContext: SectorUpdateContext = {
     t: null as any,
     spawnParticle: null as any,
     spawnDecal: null as any,
-    onPlayerHit: null,
+    handlePlayerHit: null,
     startCinematic: null,
     setCameraOverride: null,
     makeNoise: null,
@@ -160,16 +155,15 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
     ChunkManager.clear();
 
     // Cache system references to avoid Map/registry lookup overhead
-    let damageTracker: any = null;
-    let playerStats: any = null;
     let discoverySystem: any = null;
     let windSystem: any = null;
 
     const getActiveCallbacks = () => state.callbacks || callbacks || EMPTY_OBJECT;
 
     // Initial binding for FX (will be updated in loop if needed)
-    _fxCallbacks.onPlayerHit = callbacks.onPlayerHit;
+    _fxCallbacks.handlePlayerHit = callbacks.handlePlayerHit;
     _fxCallbacks.spawnDecal = callbacks.spawnDecal;
+    _fxCallbacks.spawnParticle = callbacks.spawnParticle;
 
     // --- BIND STABLE CALLBACKS TO SECTOR CONTEXT ---
     _sectorUpdateContext.onAction = callbacks.onAction;
@@ -250,71 +244,15 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         session: null,
         fireZones: null,
         makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
-        onPlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT: boolean = false, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
-            if (callbacks.onPlayerHit) callbacks.onPlayerHit(damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
+        handlePlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT: boolean = false, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => {
+            return CombatEngine.handlePlayerHit(session, damage, attacker, damageType, damageSource, isDoT, effectType, duration, intensity, specificAttackType);
         },
-        applyDamage: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact: boolean = false) => {
-            if (enemy.deathState !== EnemyDeathState.ALIVE || amount <= 0) return false;
-
-            const isBoss = (enemy.statusFlags & EnemyFlags.BOSS) !== 0;
-            const weaponId = damageSource;
-
-            // Set the visual hit timestamp so EnemyAnimator knows to shake the mesh
-            enemy.hitRenderTime = state.renderTime;
-
-            const actualDmg = Math.max(0, Math.min(enemy.hp, amount));
-            enemy.hp -= actualDmg;
-            enemy.lastDamageType = weaponId;
-            enemy.hitTime = _gameContext.simTime;
-            enemy.lastHitWasHighImpact = isHighImpact;
-            enemy._accumulatedDamage += amount;
-
-            if (actualDmg > 0) {
-                if (!damageTracker) damageTracker = session.getSystem<any>(SystemID.DAMAGE_TRACKER);
-                if (damageTracker) {
-                    damageTracker.recordOutgoingDamage(session, actualDmg, weaponId, isBoss);
-                }
-            }
-
-            const isDeadNow = enemy.hp <= 0;
-
-            if (isDeadNow) {
-                if (!playerStats) playerStats = session.getSystem<any>(SystemID.PLAYER_STATS);
-                if (playerStats) {
-                    const playerPos = state.player.position;
-                    const dx = enemy.mesh.position.x - playerPos.x;
-                    const dz = enemy.mesh.position.z - playerPos.z;
-                    const distSq = dx * dx + dz * dz;
-                    playerStats.onEnemyKilled(session, enemy, _gameContext.simTime, damageSource, distSq);
-                }
-            }
-
-            const weaponData = (WEAPONS as any)[damageSource];
-            const color = DamageNumberSystem.getColorForType(damageSource, !!isHighImpact);
-            const isContinuous = weaponData?.behavior === WeaponBehavior.CONTINUOUS || damageSource === DamageID.BURN || damageSource === DamageID.DROWNING;
-            const textThrottle = isContinuous ? 250 : 0;
-
-            if (isDeadNow || (_gameContext.simTime - enemy._lastDamageTextTime > textThrottle)) {
-                if (_gameContext.showDamageText && enemy._accumulatedDamage >= 1) {
-                    const textX = enemy.mesh.position.x;
-                    const textY = enemy.originalScale * 1.8 + 1.2;
-                    const textZ = enemy.mesh.position.z;
-
-                    _gameContext.showDamageText(
-                        textX, textY, textZ,
-                        getCachedNumberString(enemy._accumulatedDamage),
-                        color
-                    );
-                    enemy._accumulatedDamage = 0;
-                    enemy._lastDamageTextTime = _gameContext.simTime;
-                }
-            }
-
-            return isDeadNow;
+        handleEnemyHit: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact: boolean = false) => {
+            return CombatEngine.handleEnemyHit(session, enemy, amount, damageType, damageSource, isHighImpact);
         },
     };
 
-    state.applyDamage = _gameContext.applyDamage;
+    state.handleEnemyHit = _gameContext.handleEnemyHit;
 
     _triggerOptionsScratch.resolveDynamicPos = (familyId?: number, ownerId?: string) => {
         if (familyId !== undefined) {
@@ -388,11 +326,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         const sf = state.combat.statusFlags;
         const isDead = (sf & PlayerStatusFlags.DEAD) !== 0;
 
-        if (isDead && refs.deathPhaseRef.current === DeathPhase.NONE) {
-            callbacks.onDeathStateChange?.(true);
-        }
-
-        const monitor = PerformanceMonitor.getInstance();
+        const monitor = engine.systems.performanceMonitor!;
         frame++;
 
         if (isInteractionPaused) {
@@ -426,29 +360,13 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 bossMesh.rotation.y += (Math.random() - 0.5) * 0.2;
                 bossMesh.scale.setScalar(3.0 + Math.sin(now * 0.02) * 0.1);
             }
-            if (refs.playerMeshRef.current) {
-                _animStateScratch.isMoving = false;
-                _animStateScratch.isRushing = false;
-                _animStateScratch.isDodging = false;
-                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, delta);
-            }
             refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
             return;
         }
 
-        // 4. Throttled logic (Health warnings, burning effects) - runs at 10Hz (every 100ms)
+        // 4. Throttled logic (Burning effects) - runs at 10Hz (every 100ms)
         if (now - lastThrottledTime >= 100) {
             lastThrottledTime = now;
-            const sb = state.player.statsBuffer;
-            const hp = sb[StatID.HP];
-            const maxHp = sb[StatID.MAX_HP];
-
-            if (hp < maxHp * HEALTH_CRITICAL_THRESHOLD && !isDead) {
-                if (simTime - state.combat.lastHeartbeat > 800) {
-                    state.combat.lastHeartbeat = simTime;
-                    audioEngine.playSound(SoundID.HEARTBEAT, 0.5);
-                }
-            }
 
             monitor.begin('burning_effects');
             const effectCount = EffectPool.activeCount;
@@ -491,17 +409,21 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 }
             }
 
-            if (state.combat.statusFlags & PlayerStatusFlags.BURNING) {
-                if (Math.random() > 0.5) {
-                    callbacks.spawnParticle(
-                        playerGroup.position.x + (Math.random() - 0.5) * 0.5,
-                        playerGroup.position.y + 1.8,
-                        playerGroup.position.z + (Math.random() - 0.5) * 0.5,
-                        FXParticleType.ENEMY_EFFECT_FLAME, 1
-                    );
-                }
-            }
             monitor.end('burning_effects');
+        }
+
+        // Run burning particle spawn outside the throttled 100ms check for high-frequency rendering fluidity
+        if (!isDead && (state.combat.statusFlags & PlayerStatusFlags.BURNING) !== 0) {
+            if (Math.random() < 0.25) {
+                FXSystem.spawnParticle(
+                    engine.scene,
+                    state.combat.particles,
+                    playerGroup.position.x + (Math.random() - 0.5) * 0.5,
+                    playerGroup.position.y + 0.5 + Math.random() * 1.3,
+                    playerGroup.position.z + (Math.random() - 0.5) * 0.5,
+                    FXParticleType.ENEMY_EFFECT_FLAME, 1
+                );
+            }
         }
 
         // 5. Sector Flow
@@ -527,37 +449,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             return;
         }
 
-        // 6. Teleport Logic
-        if (propsRef.current.teleportTarget
-            && propsRef.current.teleportTarget.timestamp > refs.lastTeleportRef.current
-            && !isCinematic && !isBossIntro) {
-            const tgt = propsRef.current.teleportTarget;
-
-            if (state.vehicle.active && state.vehicle.mesh) {
-                const vehicleMesh = state.vehicle.mesh;
-                const def = vehicleMesh.userData.vehicleDef;
-                VehicleManager.exitVehicle(playerGroup, vehicleMesh, state, def);
-            }
-
-            playerGroup.position.set(tgt.x, 0, tgt.z);
-            callbacks.spawnParticle(tgt.x, 1, tgt.z, FXParticleType.FLASH, 1, undefined, undefined, undefined, 2);
-            audioEngine.playSound(SoundID.UI_CHIME);
-
-            for (let i = 0; i < refs.activeFamilyMembers.current.length; i++) {
-                const fm = refs.activeFamilyMembers.current[i];
-                if (fm.mesh && fm.following) {
-                    const offX = (Math.random() - 0.5) * 3;
-                    const offZ = (Math.random() - 0.5) * 3;
-                    fm.mesh.position.set(tgt.x + offX, 0, tgt.z + offZ);
-                    callbacks.spawnParticle(tgt.x + offX, 1, tgt.z + offZ, FXParticleType.SMOKE, 10);
-                }
-            }
-
-            refs.lastTeleportRef.current = tgt.timestamp;
-            engine.camera.setPosition(tgt.x, 50, tgt.z + (propsRef.current.currentSectorData?.environment.cameraOffsetZ || 0), true);
-            engine.camera.lookAt(playerGroup.position, true);
-            refs.prevPosRef.current.copy(playerGroup.position);
-        }
+        // 6. Teleport Logic delegated to PlayerManager
 
         // 7. Session updates
         if (isCinematic || isBossIntro) {
@@ -589,19 +481,19 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         _sectorUpdateContext.state = state;
         _sectorUpdateContext.gameState = state;
         _sectorUpdateContext.playerPos = state.player.position;
-        _sectorUpdateContext.triggerSystem = session.triggerSystem;
+        _sectorUpdateContext.triggerSystem = session.systems.triggerSystem;
         _sectorUpdateContext.handleDiscovery = (type: any, id: any, smi?: number, title?: string, details?: string, payload?: any) => {
-            if (!discoverySystem) discoverySystem = session.getSystem<any>(SystemID.DISCOVERY_SYSTEM);
+            if (!discoverySystem) discoverySystem = session.systems.discovery;
             return discoverySystem ? discoverySystem.handleDiscovery(session, type, id, smi, title, details, payload) : false;
         };
 
-        _sectorUpdateContext.applyDamage = state.applyDamage;
+        _sectorUpdateContext.handleEnemyHit = state.handleEnemyHit;
+        _sectorUpdateContext.handlePlayerHit = callbacks.handlePlayerHit;
         _sectorUpdateContext.playSound = (id: any) => audioEngine.playSound(id);
         _sectorUpdateContext.playTone = callbacks.playTone;
         _sectorUpdateContext.cameraShake = callbacks.cameraShake;
         _sectorUpdateContext.t = callbacks.t;
         _sectorUpdateContext.spawnParticle = callbacks.spawnParticle;
-        _sectorUpdateContext.onPlayerHit = callbacks.onPlayerHit;
         _sectorUpdateContext.startCinematic = (target?: any, sectorId?: number, dialogueId?: number, params?: any) => {
             session.startCinematic(target, sectorId, dialogueId, params);
         };
@@ -614,55 +506,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         _sectorUpdateContext.setWindStrength = (strength: number) => engine.wind.sync(strength * 0.5, strength);
         _sectorUpdateContext.setFOV = (fov: number) => engine.camera.set('fov', fov);
 
-        monitor.end('sector_update');
-
-        // 8. Standard Gameplay State Updates (Physics/Stats)
-        if (!isCinematic && !isBossIntro) {
-            if (refs.hasSetPrevPosRef.current && playerGroup) {
-                const dx = playerGroup.position.x - refs.prevPosRef.current.x;
-                const dy = playerGroup.position.y - refs.prevPosRef.current.y;
-                const dz = playerGroup.position.z - refs.prevPosRef.current.z;
-                const distSq = dx * dx + dy * dy + dz * dz;
-                if (distSq > 0.0001) {
-                    refs.distanceTraveledRef.current += Math.sqrt(distSq);
-                }
-            }
-
-            if (playerGroup) {
-                refs.prevPosRef.current.copy(playerGroup.position);
-                refs.hasSetPrevPosRef.current = true;
-            }
-        }
-
-        // 8.5 Player Animation (Always update to keep world 'alive' during cinematics)
-        if (refs.playerMeshRef.current) {
-            const sb = state.player.statsBuffer;
-            const sf = state.combat.statusFlags;
-            _animStateScratch.staminaRatio = sb[StatID.STAMINA] / sb[StatID.MAX_STAMINA];
-            _animStateScratch.isMoving = state.player.isMoving;
-            _animStateScratch.isRushing = (sf & PlayerStatusFlags.RUSHING) !== 0;
-            _animStateScratch.isDodging = (sf & PlayerStatusFlags.DODGING) !== 0;
-            _animStateScratch.dodgeStartTime = state.player.dodgeStartTime;
-            _animStateScratch.isSpeaking = state.player.speakBounce > 0 || simTime < state.player.speakingUntil;
-            _animStateScratch.isThinking = simTime < state.player.thinkingUntil;
-            _animStateScratch.isIdleLong = (simTime - state.player.lastActionTime > 20000);
-            _animStateScratch.isWading = state.player.isWading;
-            _animStateScratch.isSwimming = state.player.isSwimming;
-            _animStateScratch.isDead = (sf & PlayerStatusFlags.DEAD) !== 0;
-            _animStateScratch.deathStartTime = state.player.deathStartTime;
-            _animStateScratch.isBurning = state.combat.effectDurations[StatusEffectID.BURNING] > 0;
-            _animStateScratch.renderTime = state.renderTime;
-            _animStateScratch.simTime = state.simTime;
-            _animStateScratch.currentSpeedRatio = state.player.currentSpeedRatio;
-            _animStateScratch.seed = 0;
-            _animStateScratch.nodes = state.player.nodes;
-            _animStateScratch.baseScale = state.player.baseScale;
-            _animStateScratch.baseY = state.player.baseY;
-
-            monitor.begin('player_animation');
-            PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, renderTime, delta);
-            monitor.end('player_animation');
-        }
+        monitor.end('sector_update');        // 8. Standard Gameplay State Updates and Animation delegated to PlayerManager and PlayerStatsSystem  }
 
         // 9. Footprints
         monitor.begin('footprints');
@@ -794,7 +638,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         _gameContext.scene = engine.scene;
         _gameContext.enemies = state.enemies.pool;
         _gameContext.obstacles = state.world.obstacles;
-        _gameContext.worldStreamer = session.worldStreamer;
+        _gameContext.worldStreamer = session.systems.worldStreamer;
         _gameContext.spawnParticle = activeCallbacks.spawnParticle || callbacks.spawnParticle;
         _gameContext.spawnDecal = activeCallbacks.spawnDecal || callbacks.spawnDecal;
         _gameContext.showDamageText = activeCallbacks.showDamageText || callbacks.showDamageText;
@@ -875,7 +719,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         );
 
         // 20. VEGETATION INTERACTION (Optimerad för platta och strikta Array/LOD-kontroller)
-        if (!windSystem) windSystem = session.getSystem<any>(SystemID.WIND);
+        if (!windSystem) windSystem = session.systems.wind;
         if (windSystem && windSystem.enabled) {
             for (let i = 0; i < 8; i++) {
                 _bendInteractors[i].w = 0.0;
@@ -912,7 +756,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 }
             }
 
-            const grid = session.worldStreamer;
+            const grid = session.systems.worldStreamer;
             if (grid && count < 8 && pPos) {
                 const enPool = grid.getEnemyPool();
                 const enPoolIdx = enPool.nextIndex();
@@ -943,7 +787,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             lastHudSyncTime = now;
             monitor.begin('hud_sync');
             const hudMesh = refs.playerMeshRef.current;
-            const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, refs.distanceTraveledRef.current, engine.camera.threeCamera, playerGroup.rotation.y);
+            const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, state.player.statsBuffer[StatID.TOTAL_DISTANCE_TRAVELED], engine.camera.threeCamera, playerGroup.rotation.y);
             monitor.end('hud_sync');
 
             hudData.debugInfo.drawCalls = refs.lastDrawCallsRef.current;
@@ -951,7 +795,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             state.metrics.drawCalls = engine.renderer.info.render.calls;
             state.metrics.triangles = engine.renderer.info.render.triangles;
 
-            (hudData as any).debugMode = propsRef.current.debugMode;
+            (hudData as any).debugMode = propsRef.current.gameState.settings.debugMode;
             (hudData as any).systems = session.getSystems();
             (hudData as any).interactionActive = HudStore.getState().interactionActive;
 
@@ -959,6 +803,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         }
 
         // 21. High-frequency HUD update
-        HudSystem.emitFastUpdate(state, engine.input.state, simTime, propsRef.current);
+        HudSystem.emitFastUpdate(state, engine.input.state, simTime, propsRef.current, playerGroup.position, engine.camera.threeCamera);
     };
 }

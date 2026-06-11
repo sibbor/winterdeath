@@ -5,7 +5,7 @@ import { WeaponCategory, WeaponCategoryColors, WeaponStats } from '../../../cont
 import { WeaponID } from '../../../entities/player/CombatTypes';
 import { t } from '../../../utils/i18n';
 import { SCRAP_COST_BASE } from '../../../content/constants';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { ColorPair, COLORS } from '../../../utils/ui/ColorUtils';
 import { useOrientation } from '../../../hooks/useOrientation';
@@ -44,12 +44,12 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
         const cost = SCRAP_COST_BASE * level;
 
         setTempStats(prevStats => {
-            // Transactional boundary: Check and consume Scrap (Zero-GC check)
+            // Success: Transactional boundary: Check and consume Scrap (Zero-GC check)
             if (StatsBridge.consumeScrap(prevStats, cost)) {
-                // Success: Play audio feedback
-                UiSounds.playUpgrade();
+                // Play upgrade sound effect
+                UISounds.playUpgrade();
 
-                // Success: Safely increment the weapon level since the transaction cleared
+                // Safely increment the weapon level since the transaction cleared
                 setTempWeaponLevels(prevLevels => ({
                     ...prevLevels,
                     [weapon]: (prevLevels[weapon] || 1) + 1
@@ -68,13 +68,14 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
     const handleEquip = useCallback((weapon: WeaponID, category: WeaponCategory) => {
         // All categories in this screen are now holdable/throwable
 
-        UiSounds.playConfirm();
+        UISounds.playConfirm();
         setTempLoadout(prev => {
-            if (category === WeaponCategory.PRIMARY) return { ...prev, primary: weapon };
-            if (category === WeaponCategory.SECONDARY) return { ...prev, secondary: weapon };
-            if (category === WeaponCategory.THROWABLE) return { ...prev, throwable: weapon };
-            if (category === WeaponCategory.SPECIAL) return { ...prev, special: weapon };
-            return prev;
+            switch (category) {
+                case WeaponCategory.PRIMARY: return { ...prev, primary: weapon }; break;
+                case WeaponCategory.SECONDARY: return { ...prev, secondary: weapon }; break;
+                case WeaponCategory.THROWABLE: return { ...prev, throwable: weapon }; break;
+                case WeaponCategory.SPECIAL: return { ...prev, special: weapon }; break;
+            }
         });
     }, []);
 
@@ -87,8 +88,8 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
 
         const weapons = DataResolver.getWeapons();
         for (let i = 0; i < weapons.length; i++) {
-            if (!weapons || !weapons[i] || weapons[i].name === undefined) continue;
-            const name = weapons[i].name;
+            if (!weapons || !weapons[i] || weapons[i].id === undefined) continue;
+            const name = weapons[i].id;
             if ((tempWeaponLevels[name] || 1) !== (weaponLevels[name] || 1)) return true;
         }
         return false;
@@ -127,7 +128,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
             titleColorClass="text-yellow-600"
             tabs={TABS}
             activeTab={activeTab}
-            onTabChange={(cat) => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
+            onTabChange={(cat) => { setActiveTab(cat as WeaponCategory); UISounds.playClick(); }}
             tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
         >
             <div className={`flex ${effectiveLandscape ? 'h-full flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
@@ -142,7 +143,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = React.memo(({ stats, currentLo
                                     key={cat}
                                     label={t(catName)}
                                     isActive={activeTab === cat}
-                                    onClick={() => { setActiveTab(cat as WeaponCategory); UiSounds.playClick(); }}
+                                    onClick={() => { setActiveTab(cat as WeaponCategory); UISounds.playClick(); }}
                                     color={catColor}
                                     orientation={effectiveLandscape ? 'vertical' : 'horizontal'}
                                 />
@@ -190,9 +191,9 @@ const WeaponList: React.FC<WeaponListProps> = React.memo(({ activeTab, tempWeapo
     return (
         <div className={`flex-1 min-h-0 ${isMobileDevice && !isLandscapeMode ? 'flex flex-col gap-10' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'} overflow-y-auto pb-8 pr-1 custom-scrollbar`}>
             {filteredWeapons.map((weapon) => {
-                const level = tempWeaponLevels[weapon.name] || 1;
+                const level = tempWeaponLevels[weapon.id] || 1;
                 const cost = SCRAP_COST_BASE * level;
-                const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;
+                const isEquipped = tempLoadout.primary === weapon.id || tempLoadout.secondary === weapon.id || tempLoadout.throwable === weapon.id || tempLoadout.special === weapon.id;
                 const canAfford = scrapAmount >= cost;
                 const categoryColor = WeaponCategoryColors[weapon.category] || COLORS.YELLOW;
                 const isEquippable = true;
@@ -200,7 +201,7 @@ const WeaponList: React.FC<WeaponListProps> = React.memo(({ activeTab, tempWeapo
 
                 return (
                     <WeaponCard
-                        key={weapon.name}
+                        key={weapon.id}
                         weapon={weapon}
                         level={level}
                         cost={cost}
@@ -239,7 +240,7 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
 }) => {
     return (
         <TacticalCard
-            onClick={() => !isEquipped && isEquippable && onEquip(weapon.name, weapon.category)}
+            onClick={() => !isEquipped && isEquippable && onEquip(weapon.id, weapon.category)}
             isLocked={!isEquipped && !isEquippable}
             color={categoryColor}
             showHover={!isEquipped}

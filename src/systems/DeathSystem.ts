@@ -117,6 +117,12 @@ export class DeathSystem implements System {
         // Extract position once to save performance and clean up code
         const pgPos = playerGroup ? playerGroup.position : _zeroV;
 
+        const isExploded = state.player.deathState === PlayerDeathState.GIBBED;
+        const isBurning = state.player.deathState === PlayerDeathState.BURNED;
+        const isDrowning = state.player.deathState === PlayerDeathState.DROWNED;
+        const isElectrocuted = state.player.deathState === PlayerDeathState.ELECTROCUTED;
+        const isBiting = state.player.killerSource === DamageID.BITE;
+
         // --- 1. Phase Management ---
         switch (this.deathPhaseRef.current) {
             case DeathPhase.NONE:
@@ -149,12 +155,6 @@ export class DeathSystem implements System {
         if (playerGroup) {
             state.player.deathVel.y -= 30 * delta;
             pgPos.addScaledVector(state.player.deathVel, delta);
-
-            const isExploded = state.player.deathState === PlayerDeathState.GIBBED;
-            const isBurning = state.player.deathState === PlayerDeathState.BURNED;
-            const isDrowning = state.player.deathState === PlayerDeathState.DROWNED;
-            const isElectrocuted = state.player.deathState === PlayerDeathState.ELECTROCUTED;
-            const isBiting = state.player.killerSource === DamageID.BITE;
 
             if (pgPos.y <= 0.0) {
                 pgPos.y = 0.0;
@@ -192,10 +192,11 @@ export class DeathSystem implements System {
                 this.fxCallbacks.spawnParticle(pgPos.x, 0.5, pgPos.z, FXParticleType.SPARK, 1);
             }
 
-            if (isBiting && this.deathPhaseRef.current === DeathPhase.ANIMATION) {
-                playerMesh.position.x = Math.sin(renderTime * 0.05) * 0.1;
-                playerMesh.position.z = Math.cos(renderTime * 0.05) * 0.1;
+            if (isElectrocuted && renderTime % 100 < 20) {
+                this.fxCallbacks.spawnParticle(pgPos.x + (Math.random() - 0.5) * 0.5, pgPos.y + 0.5 + Math.random(), pgPos.z + (Math.random() - 0.5) * 0.5, FXParticleType.SPARK, 2);
+            }
 
+            if (isBiting && this.deathPhaseRef.current === DeathPhase.ANIMATION) {
                 if (renderTime % 300 < 30) {
                     this.fxCallbacks.spawnParticle(pgPos.x, 1.5, pgPos.z, FXParticleType.BLOOD_SPLATTER, 6);
                 }
@@ -235,10 +236,6 @@ export class DeathSystem implements System {
                         this.fxCallbacks.spawnParticle(pgPos.x, pgPos.y + 1.8, pgPos.z, FXParticleType.ENEMY_EFFECT_FLAME, 1);
                     }
 
-                    // Shrink and Char
-                    const shrink = 1.0 - progress;
-                    playerMesh.scale.setScalar(shrink);
-
                     // Zero-GC iterative traversal for material updates
                     _traverseStack.length = 0;
                     _traverseStack.push(playerMesh);
@@ -265,21 +262,31 @@ export class DeathSystem implements System {
         }
 
         // --- 3. Player Animation & Gibbing ---
+        // --- 3. Player Animation & Gibbing ---
         if (state.player.deathState === PlayerDeathState.GIBBED) {
             if (playerMesh) playerMesh.visible = false;
 
             if (!state.player.playerBloodSpawned) {
                 state.player.playerBloodSpawned = true;
-                const baseScale = (playerMesh as any).userData.baseScale;
+                const baseScale = (playerMesh as any).userData.baseScale || 1.0;
 
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 4.5 * baseScale, MATERIALS.bloodDecal);
                 this.fxCallbacks.spawnParticle(pgPos.x, 1.0, pgPos.z, FXParticleType.BLOOD_SPLATTER, 20);
-                this.fxCallbacks.spawnParticle(pgPos.x, 1.5, pgPos.z, FXParticleType.MEAT, 12);
+                this.fxCallbacks.spawnParticle(
+                    pgPos.x, 1.5, pgPos.z,
+                    FXParticleType.GORE, 12,
+                    undefined, undefined,
+                    0x990000,          // Explicit blood red for the player loop
+                    baseScale * 2.0    // Proportional to player's geometric mass
+                );
             }
         } else if (playerMesh) {
             _deathAnimState.deathStartTime = state.player.deathStartTime;
             _deathAnimState.renderTime = state.renderTime;
             _deathAnimState.simTime = state.simTime;
+            (_deathAnimState as any).isBurningDead = isBurning;
+            (_deathAnimState as any).isElectrocuted = isElectrocuted;
+            (_deathAnimState as any).isBiting = isBiting;
             PlayerAnimator.update(playerMesh as any, _deathAnimState, renderTime, delta);
         }
 

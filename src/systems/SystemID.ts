@@ -53,7 +53,7 @@ export enum SystemID {
     PROJECTILE = 35,
     CHALLENGE_TRACKER = 36,
     DAMAGE_NUMBER = 37,
-    DAMAGE_TRACKER = 38,
+    CAREER_STATS = 38,
 
     // Enemies (Threats & AI Behavior)
     ENEMY_MANAGER = 39,
@@ -69,8 +69,9 @@ export enum SystemID {
     CAMP_FAMILY_ANIMATION = 47,
 
     DISCOVERY_SYSTEM = 48,
+    PLAYER_MANAGER = 49,
 
-    COUNT = 49
+    COUNT = 50
 }
 
 export const getSystemName = (id: SystemID): string => {

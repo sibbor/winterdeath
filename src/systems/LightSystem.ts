@@ -189,14 +189,24 @@ export class LightSystem implements System {
             const dz = tz - cullingCenter.z;
             const distSq = dx * dx + dz * dz;
 
-            if (distSq > 3600) continue;
+            const lightDist = EffectPool.distance[i];
+            // Base culling: 60m (3600). Extend by the light's own range (so a 25m range fire
+            // remains visible up to 85m from camera, a 50m range fire up to 110m from camera).
+            const cullThreshold = (60 + lightDist) * (60 + lightDist);
+            if (distSq > cullThreshold) continue;
 
             const proxy = this.proxyPool[proxyIdx];
             proxy.position.set(tx, ty, tz);
             proxy.color.setHex(EffectPool.color[i]);
-            proxy.distance = EffectPool.distance[i];
+            proxy.distance = lightDist;
 
             let intensity = EffectPool.intensity[i];
+
+            // Soft fade in the outer band (last 25% of range) to prevent hard pop-off
+            const fadeStart = cullThreshold * 0.75;
+            if (distSq > fadeStart) {
+                intensity *= 1.0 - (distSq - fadeStart) / (cullThreshold - fadeStart);
+            }
 
             // EffectPool Flicker Logic (Simplified for fire/muzzle flashes)
             if (EffectPool.flicker[i] > 0) {

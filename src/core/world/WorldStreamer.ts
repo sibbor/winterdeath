@@ -13,9 +13,9 @@ import { RuntimeStressHarness } from '../../utils/debug/RuntimeStressHarness';
 const LOGIC_CELLS_PER_CHUNK = 25;
 const LOGIC_CELL_SIZE = 10;
 const BUCKET_CAPACITY = 16;
-const QUERY_BUDGET_PER_FRAME = 30000;
 const CHUNK_POOL_SIZE = 256;
 const QUERY_POOL_CAPACITY = 32; // handle deep nesting during init
+const GRID_DIM = ChunkManager.GRID_DIM;
 
 // Ground resolution 1m = 256x256 (overscan for 250m to avoid edge artifacts)
 const GROUND_RES = 256;
@@ -24,9 +24,6 @@ const SECTOR_SIZE = 2000;
 const HALF_SECTOR = SECTOR_SIZE / 2;
 
 // --- ZERO-GC MODULE-LEVEL SCRATCHPADS ---
-const _hibernateKeyScratch = new Uint32Array(CHUNK_POOL_SIZE);
-let _hibernateKeyCount = 0;
-
 const _zoneQueryStamp = new Uint32Array(2000);
 let _zoneQueryFrame = 0;
 
@@ -117,6 +114,7 @@ export class WorldStreamer implements System {
 
     // Active simulation grids indexed by Chunk Key
     private chunks = new Map<number, ChunkLocalGrid>();
+    private chunkArray = new Array<ChunkLocalGrid | null>(GRID_DIM * GRID_DIM).fill(null);
     private _chunkPool: ChunkLocalGrid[];
     private _poolPtr: number = 0;
 
@@ -164,6 +162,7 @@ export class WorldStreamer implements System {
             }
         }
         this.chunks.clear();
+        this.chunkArray.fill(null);
         this._activeChunkCount = 0;
         this._queryFrame = 0;
         this.resetQueryPools();
@@ -297,6 +296,9 @@ export class WorldStreamer implements System {
 
         // 3. Detach and recycle using pointer assignment (No .push())
         this.chunks.delete(key);
+        const ix = ChunkManager.getIxFromKey(key);
+        const iz = ChunkManager.getIzFromKey(key);
+        this.chunkArray[(iz * GRID_DIM) + ix] = null;
 
         // Tracking Sync: O(1) Swap-and-Pop to avoid MapIterator/GC
         for (let i = 0; i < this._activeChunkCount; i++) {
@@ -332,7 +334,7 @@ export class WorldStreamer implements System {
     public getGroundMaterial(x: number, z: number): number {
         const ix = ChunkManager.getCoordIndex(x);
         const iz = ChunkManager.getCoordIndex(z);
-        const grid = this.chunks.get(ChunkManager.getSmiKey(ix, iz));
+        const grid = this.chunkArray[(iz * GRID_DIM) + ix];
         if (!grid) return 0;
 
         const chunkX = ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
@@ -365,7 +367,9 @@ export class WorldStreamer implements System {
     }
 
     public getGridByKey(key: number): ChunkLocalGrid | null {
-        return this.chunks.get(key) || null;
+        const ix = ChunkManager.getIxFromKey(key);
+        const iz = ChunkManager.getIzFromKey(key);
+        return this.chunkArray[(iz * GRID_DIM) + ix];
     }
 
     /**
@@ -374,7 +378,7 @@ export class WorldStreamer implements System {
     public getVegetationAt(x: number, z: number): number {
         const ix = ChunkManager.getCoordIndex(x);
         const iz = ChunkManager.getCoordIndex(z);
-        const grid = this.chunks.get(ChunkManager.getSmiKey(ix, iz));
+        const grid = this.chunkArray[(iz * GRID_DIM) + ix];
         if (!grid) return 0;
 
         const chunkX = ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
@@ -391,8 +395,8 @@ export class WorldStreamer implements System {
      * Returns a grid for the specified chunk indices, creating it if necessary.
      */
     public getOrCreateGrid(ix: number, iz: number): ChunkLocalGrid {
-        const key = ChunkManager.getSmiKey(ix, iz);
-        let grid = this.chunks.get(key);
+        const idx = (iz * GRID_DIM) + ix;
+        let grid = this.chunkArray[idx];
         if (!grid) {
             // Pop from pre-allocated pool using pointer tracking (No .pop())
             if (this._poolPtr > 0) {
@@ -406,6 +410,8 @@ export class WorldStreamer implements System {
             RuntimeStressHarness.checkPoolCapacity("ChunkGridPool", CHUNK_POOL_SIZE - this._poolPtr, CHUNK_POOL_SIZE);
 
             grid.clear();
+            this.chunkArray[idx] = grid;
+            const key = ChunkManager.getSmiKey(ix, iz);
             this.chunks.set(key, grid);
 
             // Tracking Sync: Ensure we can iterate keys without MapIterator GC
@@ -500,7 +506,7 @@ export class WorldStreamer implements System {
     public registerObstacle(obstacle: Obstacle) {
         const x = obstacle.position.x;
         const z = obstacle.position.z;
-        
+
         // Calculate correct bounding radius based on collider type if not pre-defined (VINTERDÖD FIX)
         if (obstacle.radius === undefined) {
             const col = obstacle.collider;
@@ -559,7 +565,7 @@ export class WorldStreamer implements System {
         if (newKey !== obstacle._currentChunkKey || newBucketIdx !== obstacle._bucketIndex) {
             // Remove from old
             if (obstacle._currentChunkKey !== undefined && obstacle._currentChunkKey !== -1) {
-                const oldGrid = this.chunks.get(obstacle._currentChunkKey);
+                const oldGrid = this.getGridByKey(obstacle._currentChunkKey);
                 if (oldGrid) {
                     const bIdx = obstacle._bucketIndex!;
                     const count = oldGrid.obstacleCounts[bIdx];
@@ -604,7 +610,7 @@ export class WorldStreamer implements System {
         if (newKey !== interactable._currentChunkKey || newBucketIdx !== interactable._bucketIndex) {
             // Remove from old
             if (interactable._currentChunkKey !== undefined && interactable._currentChunkKey !== -1) {
-                const oldGrid = this.chunks.get(interactable._currentChunkKey);
+                const oldGrid = this.getGridByKey(interactable._currentChunkKey);
                 if (oldGrid) {
                     const bIdx = interactable._bucketIndex!;
                     const count = oldGrid.interactableCounts[bIdx];
@@ -772,7 +778,7 @@ export class WorldStreamer implements System {
 
         for (let ix = ixStart; ix <= ixEnd; ix++) {
             for (let iz = izStart; iz <= izEnd; iz++) {
-                const grid = this.chunks.get(ChunkManager.getSmiKey(ix, iz));
+                const grid = this.chunkArray[(iz * GRID_DIM) + ix];
                 if (!grid) continue;
 
                 const chunkX = ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
@@ -831,7 +837,7 @@ export class WorldStreamer implements System {
 
         for (let ix = ixStart; ix <= ixEnd; ix++) {
             for (let iz = izStart; iz <= izEnd; iz++) {
-                const grid = this.chunks.get(ChunkManager.getSmiKey(ix, iz));
+                const grid = this.chunkArray[(iz * GRID_DIM) + ix];
                 if (!grid) continue;
 
                 const chunkX = ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
@@ -886,7 +892,7 @@ export class WorldStreamer implements System {
 
         for (let ix = ixStart; ix <= ixEnd; ix++) {
             for (let iz = izStart; iz <= izEnd; iz++) {
-                const grid = this.chunks.get(ChunkManager.getSmiKey(ix, iz));
+                const grid = this.chunkArray[(iz * GRID_DIM) + ix];
                 if (!grid) continue;
 
                 const chunkX = ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
@@ -974,7 +980,7 @@ export class WorldStreamer implements System {
 
         for (let ix = ixStart; ix <= ixEnd; ix++) {
             for (let iz = izStart; iz <= izEnd; iz++) {
-                const grid = this.chunks.get(ChunkManager.getSmiKey(ix, iz));
+                const grid = this.chunkArray[(iz * GRID_DIM) + ix];
                 if (!grid) continue;
 
                 const lxStart = Math.max(0, Math.floor((startX - (ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR)) / LOGIC_CELL_SIZE));
@@ -1019,7 +1025,7 @@ export class WorldStreamer implements System {
 
         for (let ix = ixStart; ix <= ixEnd; ix++) {
             for (let iz = izStart; iz <= izEnd; iz++) {
-                const grid = this.chunks.get(ChunkManager.getSmiKey(ix, iz));
+                const grid = this.chunkArray[(iz * GRID_DIM) + ix];
                 if (!grid) continue;
 
                 const chunkX = ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
@@ -1075,7 +1081,7 @@ export class WorldStreamer implements System {
 
         for (let ix = ixStart; ix <= ixEnd; ix++) {
             for (let iz = izStart; iz <= izEnd; iz++) {
-                const grid = this.chunks.get(ChunkManager.getSmiKey(ix, iz));
+                const grid = this.chunkArray[(iz * GRID_DIM) + ix];
                 if (!grid) continue;
 
                 const chunkX = ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;

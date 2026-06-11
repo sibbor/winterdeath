@@ -11,9 +11,8 @@ import { audioEngine } from '../utils/audio/AudioEngine';
 import { SoundID } from '../utils/audio/AudioTypes';
 import { DiscoveryType } from '../components/ui/hud/HudTypes';
 import { KMH_TO_MS, MAX_ENTITIES, COMBAT } from '../content/constants';
-import { DiscoverySystem } from './DiscoverySystem';
-import type { DamageTrackerSystem } from './DamageTrackerSystem';
-import type { PlayerStatsSystem } from './PlayerStatsSystem';
+import { CombatEngine } from '../game/session/CombatEngine';
+import { CareerStatsSystem } from './CareerStatsSystem';
 
 /**
  * PerkSystem
@@ -31,10 +30,7 @@ export class PerkSystem implements System {
     private _v1 = new THREE.Vector3();
     private _effectNextTicks = new Float32Array(MAX_ENTITIES.PERKS);
 
-    // System references
-    private discoverySystem!: DiscoverySystem;
-    private damageTracker!: DamageTrackerSystem;
-    private playerStats!: PlayerStatsSystem;
+
 
     constructor(
         private playerGroup: THREE.Group,
@@ -42,11 +38,8 @@ export class PerkSystem implements System {
     ) { }
 
     init(session: GameSessionLogic) {
-        this.discoverySystem = session.getSystem<DiscoverySystem>(SystemID.DISCOVERY_SYSTEM)!;
-        this.damageTracker = session.getSystem<DamageTrackerSystem>(SystemID.DAMAGE_TRACKER)!;
-        this.playerStats = session.getSystem<PlayerStatsSystem>(SystemID.PLAYER_STATS)!;
+        this._effectNextTicks.fill(0);
         this.refreshBaseStats(session);
-
         this.processEffects(session, 0);
     }
 
@@ -75,7 +68,7 @@ export class PerkSystem implements System {
 
         // 2. Telemetry & Discovery Signal
         if (state.combat.perkTimesGained[id] === 0) {
-            this.discoverySystem.handleDiscovery(session, DiscoveryType.PERK, id, id, perk.displayName, perk.description);
+            session.systems.discovery!.handleDiscovery(session, DiscoveryType.PERK, id, id, perk.displayName, perk.description);
         }
 
         if (!isAlreadyActive) {
@@ -127,7 +120,7 @@ export class PerkSystem implements System {
 
         if (cleansedCount > 0) {
             state.combat.perkDebuffsCleansed[perkID] += cleansedCount;
-            this.damageTracker.recordDebuffsResisted(session, cleansedCount);
+            CareerStatsSystem.recordDebuffsResisted(session, cleansedCount);
         }
 
         audioEngine.playSound(SoundID.UI_CHIME);
@@ -149,7 +142,7 @@ export class PerkSystem implements System {
 
         if (cleansedCount > 0) {
             state.combat.perkDebuffsCleansed[perkID] += cleansedCount;
-            this.damageTracker.recordDebuffsResisted(session, cleansedCount);
+            CareerStatsSystem.recordDebuffsResisted(session, cleansedCount);
         }
 
         audioEngine.playSound(SoundID.UI_CHIME);
@@ -189,7 +182,7 @@ export class PerkSystem implements System {
 
                 this.applyPerk(session, perkID);
 
-                this.damageTracker.recordCrisisSave(session);
+                CareerStatsSystem.recordCrisisSave(session);
             }
         }
     }
@@ -326,7 +319,7 @@ export class PerkSystem implements System {
 
         // Track Buff Uptime for Statistics
         if (state.combat.activeBuffsCount > 0) {
-            this.damageTracker.recordBuffTime(session, delta);
+            CareerStatsSystem.recordBuffTime(session, delta);
         }
     }
 
@@ -390,9 +383,7 @@ export class PerkSystem implements System {
         const dmgID = this.getDebuffDamageID(i);
         const dmgType = this.getDebuffDamageType(i);
 
-        if (this.playerStats) {
-            this.playerStats.handlePlayerHit(session, totalDamage, null, dmgType, dmgID, true, i);
-        }
+        CombatEngine.handlePlayerHit(session, totalDamage, null, dmgType, dmgID, true, i);
 
         state.combat.perkDamageDealt[i] += totalDamage;
         this.spawnTickFX(session, perk.id);

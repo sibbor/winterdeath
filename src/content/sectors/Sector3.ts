@@ -235,7 +235,6 @@ export const Sector3: SectorDef = {
                 position: LOCATIONS.TRIGGERS.DIALOGUE_1,
                 radius: 15,
                 type: TriggerType.EVENT,
-                content: '',
                 statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
                 actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 3, dialogueId: 0 } }]
             },
@@ -245,7 +244,6 @@ export const Sector3: SectorDef = {
                 position: LOCATIONS.TRIGGERS.DIALOGUE_2,
                 radius: 15,
                 type: TriggerType.EVENT,
-                content: '',
                 statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
                 actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 3, dialogueId: 1 } }]
             },
@@ -258,7 +256,6 @@ export const Sector3: SectorDef = {
                 familyId: FamilyMemberID.NATHALIE,
                 radius: 18,
                 type: TriggerType.EVENT,
-                content: '',
                 statusFlags: TriggerStatus.ONCE, // INACTIVE — activated after Part 2
                 actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.NATHALIE, sectorId: 3, dialogueId: 2 } }]
             },
@@ -418,7 +415,7 @@ export const Sector3: SectorDef = {
                     sectorState.epilogueState = EP.AWAIT_INSIDE;
                     sectorState.epilogueTimer = simTime;
                     if (events.setCameraOverride) events.setCameraOverride(null);
-                    UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 1, 0, simTime); // 1 = SHOW
+                    UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 1, 0, simTime); // 1 = SHOW
                 }
             }
         }
@@ -444,7 +441,7 @@ export const Sector3: SectorDef = {
                     lookAtPos: _camLookBuilding,
                     endTime: renderTime + 60000
                 });
-                UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 0, 0, simTime); // 0 = HIDE
+                UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 0, 0, simTime); // 0 = HIDE
             }
 
             updateFamilyMembers();
@@ -685,7 +682,7 @@ export const Sector3: SectorDef = {
                 // Return camera control to player and show HUD
                 if (events.setCameraOverride) events.setCameraOverride(null);
 
-                UIEventRingBuffer.push(UIEventType.HUD_COMMAND, 1, 0, simTime); // 1 = SHOW
+                UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 1, 0, simTime); // 1 = SHOW
             }
         }
 
@@ -697,7 +694,7 @@ export const Sector3: SectorDef = {
                 sectorState.epilogueState = EP.DONE;
                 // Drive into the sunset — trigger ScreenSectorReport (final epilogue screen)
                 events.onAction([
-                    { type: TriggerActionType.END_SECTOR, payload: { isExtraction: true } }
+                    { type: TriggerActionType.END_SECTOR, payload: { isCompleted: true } }
                 ]);
             }
         }

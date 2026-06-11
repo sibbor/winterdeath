@@ -1,115 +1,126 @@
 /**
  * Centralized SMI (Small Integer) enums for the Audio and FX systems.
  * These are used to achieve O(1) contiguous array lookups and bypass string hashing.
+ * * Group allocation intervals:
+ * [1 - 39]   : UI Systems
+ * [40 - 59]  : General Gameplay & World Interactions
+ * [60 - 79]  : Explosions & Elemental Hazards
+ * [80 - 119] : Weapons, Fire Modes & Ammunition
+ * [120 - 159]: Footstep Materials
+ * [160 - 199]: Surface Impact Decal Responses
+ * [200 - 249]: Enemy Entities & AI Vocals
+ * [250 - 299]: Player System State Vocals
+ * [300 - 349]: Vehicles, Machinery & Mechanical Components
+ * [350 - 399]: Ambient Environments & Loops
  */
 export const MAX_SOUND_ID = 512;
 
 export enum SoundID {
     NONE = 0,
 
-    // --- UI ---
+    // --- INTERVAL [1 - 39]: SYSTEM USER INTERFACE ---
     UI_HOVER = 1,
     UI_CLICK = 2,
     UI_CONFIRM = 3,
     UI_PICKUP = 4,
-    UI_LEVEL_UP = 5,
-    UI_CHIME = 6,
-    UI_VICTORY = 7,
-    UI_DEFEAT = 8,
-    UI_DISCOVERY = 9,
+    LEVEL_UP = 5,
+    UI_UPGRADE = 6,
+    UI_OPEN_SCREEN = 7,
+    UI_CLOSE_SCREEN = 8,
+    UI_CHIME = 9,
+    UI_VICTORY = 10,
+    UI_DEFEAT = 11,
+    UI_DISCOVERY = 12,
+    UI_CHALLENGE = 13,
 
-    // --- GAMEPLAY / WORLD ---
-    FOOTSTEP_SNOW = 140,
-    FOOTSTEP_METAL = 141,
-    FOOTSTEP_WOOD = 142,
-    FOOTSTEP_WATER = 143,
-    FOOTSTEP_DIRT = 144,
-    FOOTSTEP_GRAVEL = 145,
-    FOOTSTEP_VEGETATION = 146,
-    IMPACT_FLESH = 12,
-    IMPACT_METAL = 13,
-    IMPACT_WOOD = 14,
-    IMPACT_CONCRETE = 15,
-    IMPACT_STONE = 16,
-    IMPACT_WATER = 105,
+    // --- INTERVAL [40 - 59]: GENERAL GAMEPLAY & WORLD ---
+    CHEST_OPEN = 40,
+    LOOT_SCRAP = 41,
+    DOOR_OPEN = 42,
+    DOOR_SHUT = 43,
+    DOOR_KNOCK = 44,
+    OWL_HOOT = 45,
+    BIRD_AMBIENCE = 46,
 
-    CHEST_OPEN = 17,
-    LOOT_SCRAP = 18,
-    DOOR_OPEN = 19,
-    DOOR_SHUT = 20,
-    DOOR_KNOCK = 21,
+    // --- INTERVAL [60 - 79]: EXPLOSIONS & ELEMENTAL HAZARDS ---
+    EXPLOSION = 60,
+    GRENADE_IMPACT = 61,
+    MOLOTOV_IMPACT = 62,
+    FLASHBANG_IMPACT = 63,
+    WATER_EXPLOSION = 64,
+    WATER_SPLASH = 65,
 
-    // --- EXPLOSIONS & THROWABLES ---
-    EXPLOSION = 22,
-    GRENADE_IMPACT = 23,
-    MOLOTOV_IMPACT = 24,
-    FLASHBANG_IMPACT = 25,
-    WATER_EXPLOSION = 26,
-    WATER_SPLASH = 27,
+    // --- INTERVAL [80 - 119]: WEAPONS, BALLISTICS & SYSTEMS ---
+    SHOT_PISTOL = 80,
+    SHOT_SMG = 81,
+    SHOT_RIFLE = 82,
+    SHOT_REVOLVER = 83,
+    SHOT_SHOTGUN = 84,
+    SHOT_MINIGUN = 85,
+    SHOT_ARC_CANNON = 86,
+    SHOT_FLAMETHROWER = 87,
+    WEAPON_EMPTY = 88,
+    WEAPON_RELOAD = 89,
+    WEAPON_SWITCH = 90,
+    PASSIVE_GAINED = 91,
+    BUFF_GAINED = 92,
+    DEBUFF_GAINED = 93,
+    STEAM_HISS = 94,
+    HEARTBEAT = 95,
+    DODGE = 96,
 
-    // --- WEAPONS & PROJECTILES ---
-    SHOT_PISTOL = 30,
-    SHOT_SMG = 31,
-    SHOT_RIFLE = 32,
-    SHOT_REVOLVER = 33,
-    SHOT_SHOTGUN = 34,
-    SHOT_MINIGUN = 35,
-    SHOT_ARC_CANNON = 36,
-    SHOT_FLAMETHROWER = 37,
+    // --- INTERVAL [120 - 159]: GAMEPLAY FOOTSTEPS ---
+    FOOTSTEP_SNOW = 120,
+    FOOTSTEP_METAL = 121,
+    FOOTSTEP_WOOD = 122,
+    FOOTSTEP_WATER = 123,
+    FOOTSTEP_DIRT = 124,
+    FOOTSTEP_GRAVEL = 125,
+    FOOTSTEP_VEGETATION = 126,
 
-    // --- WEAPONS ACTIONS & AMMO ---
-    WEAPON_EMPTY = 39,
-    WEAPON_RELOAD = 40,
-    WEAPON_SWITCH = 41,
+    // --- INTERVAL [160 - 199]: GAMEPLAY SURFACE IMPACTS ---
+    IMPACT_FLESH = 160,
+    IMPACT_METAL = 161,
+    IMPACT_WOOD = 162,
+    IMPACT_CONCRETE = 163,
+    IMPACT_STONE = 164,
+    IMPACT_WATER = 165,
 
-    // --- ENEMIES ---
-    ZOMBIE_GROWL_WALKER = 50,
-    ZOMBIE_GROWL_RUNNER = 51,
-    ZOMBIE_GROWL_TANK = 52,
-    ZOMBIE_GROWL_BLOATER = 53,
-    ZOMBIE_ATTACK_HIT = 54,
-    ZOMBIE_ATTACK_BITE = 55,
-    ZOMBIE_ATTACK_SMASH = 56,
-    ZOMBIE_ATTACK_SCREECH = 57,
-    ZOMBIE_DEATH_SHOT = 60,
-    ZOMBIE_DEATH_EXPLODE = 61,
-    ZOMBIE_DEATH_BURN = 62,
+    // --- INTERVAL [200 - 249]: ENEMY ENTITIES & AI VOCALS ---
+    ZOMBIE_GROWL_WALKER = 200,
+    ZOMBIE_GROWL_RUNNER = 201,
+    ZOMBIE_GROWL_TANK = 202,
+    ZOMBIE_GROWL_BLOATER = 203,
+    ZOMBIE_ATTACK_HIT = 204,
+    ZOMBIE_ATTACK_BITE = 205,
+    ZOMBIE_ATTACK_SMASH = 206,
+    ZOMBIE_ATTACK_SCREECH = 207,
+    ZOMBIE_DEATH_SHOT = 208,
+    ZOMBIE_DEATH_EXPLODE = 209,
+    ZOMBIE_DEATH_BURN = 210,
 
-    // --- VOICE ---
-    VO_PLAYER_HURT = 70,
-    VO_PLAYER_DEATH = 71,
-    VO_PLAYER_COUGH = 72,
-    VO_FAMILY_CRY = 73,
-    VO_FAMILY_CHEER = 74,  // Used in Sector 3 reunion: jumping & cheering
-    VO_FAMILY_KISS = 75,   // Used in Sector 3 reunion: kisses & hugs
+    // --- INTERVAL [250 - 299]: PLAYER & NPC STATE VOCALS ---
+    VO_PLAYER_HURT = 250,
+    VO_PLAYER_DEATH = 251,
+    VO_PLAYER_COUGH = 252,
+    VO_FAMILY_CRY = 253,
+    VO_FAMILY_CHEER = 254,
+    VO_FAMILY_KISS = 255,
 
-    // --- AMBIENTS
-    AMBIENT_WIND = 500,
-    AMBIENT_STORM = 501,
-    AMBIENT_CAVE = 502,
-    AMBIENT_METAL = 503,
-    AMBIENT_FIRE = 504,
-    AMBIENT_FOREST = 506,
+    // --- INTERVAL [300 - 349]: VEHICLES & MACHINERY ---
+    VEHICLE_ENGINE_BOAT = 300,
+    VEHICLE_ENGINE_CAR = 301,
+    VEHICLE_SKID = 302,
+    VEHICLE_IMPACT = 303,
 
-    RADIO = 505,
-    DASH = 83,
-
-    // --- VEHICLES ---
-    VEHICLE_ENGINE_BOAT = 90,
-    VEHICLE_ENGINE_CAR = 91,
-    VEHICLE_SKID = 92,
-    VEHICLE_IMPACT = 93,
-
-    // --- WILDLIFE ---
-    OWL_HOOT = 95,
-    BIRD_AMBIENCE = 96,
-
-    // --- MISC COMBAT ---
-    PASSIVE_GAINED = 98,
-    BUFF_GAINED = 100,
-    DEBUFF_GAINED = 101,
-    STEAM_HISS = 99,
-    HEARTBEAT = 115,
+    // --- INTERVAL [350 - 399]: ENVIRONMENTAL LOOP AMBIENTS ---
+    AMBIENT_WIND = 350,
+    AMBIENT_STORM = 351,
+    AMBIENT_CAVE = 352,
+    AMBIENT_METAL = 353,
+    AMBIENT_FIRE = 354,
+    RADIO = 355,
+    AMBIENT_FOREST = 356
 }
 
 export enum ToneType {
@@ -129,10 +140,9 @@ export enum FXID {
     MUZZLE_FLASH = 6,
     GROUND_IMPACT = 7,
     SHOCKWAVE = 8,
-    DASH_TRAIL = 9,
+    DASH_TRAIL = 9
 }
 
-// --- MUSIC SMI ENUMS ---
 export enum MusicID {
     NONE = 0,
     PROLOGUE = 1,

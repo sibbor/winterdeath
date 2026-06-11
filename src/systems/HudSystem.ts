@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SystemID } from './System';
-import { PerformanceMonitor } from './PerformanceMonitor';
+import { WinterEngine } from '../core/engine/WinterEngine';
 import { InteractionType, InteractionPromptId, MetaActionId } from './ui/UIEventBridge';
 import { HudStore, HudStateSoA } from '../store/HudStore';
 import { StatusStore } from '../store/StatusStore';
@@ -59,6 +59,8 @@ const _fastUpdateDetail = {
     waveProgress: 0,
     waveKills: 0,
     waveTarget: 0,
+    waveIndicatorActive: false,
+    waveIndicatorAngle: 0,
     vehicleSpeed: 0,
     throttleState: 0,
     isSkidding: false,
@@ -80,7 +82,7 @@ export const HudSystem = {
     id: 'hud_system',
     enabled: true,
     persistent: true,
-    emitFastUpdate: (state: any, input: any, now: number, props: any) => {
+    emitFastUpdate: (state: any, input: any, now: number, props: any, playerPos?: THREE.Vector3, camera?: THREE.Camera) => {
         const wep = DataResolver.getWeapons()[state.combat.activeWeapon];
         const stats = state.player.statsBuffer;
 
@@ -93,7 +95,7 @@ export const HudSystem = {
 
         // Boss logic
         let bossHp = -1;
-        const activeBoss = state.enemies.pool.activeBoss;
+        const activeBoss = state.enemies.activeBoss;
         if (activeBoss) {
             bossHp = activeBoss.hp / activeBoss.maxHp;
         }
@@ -122,6 +124,48 @@ export const HudSystem = {
             _fastUpdateDetail.waveProgress = 0;
             _fastUpdateDetail.waveKills = 0;
             _fastUpdateDetail.waveTarget = 0;
+        }
+
+        // VINTERDÖD: Nearest Wave Enemy Indicator (Offscreen)
+        if (playerPos && camera && _fastUpdateDetail.waveActive) {
+            let nearestDistSq = Infinity;
+            let nearestEnemy = null;
+            const enemies = state.enemies.pool;
+            for (let i = 0; i < enemies.length; i++) {
+                const ent = enemies[i];
+                if (ent && ent.isWaveEnemy && ent.deathState === 0) { // ALIVE
+                    const d = playerPos.distanceToSquared(ent.mesh.position);
+                    if (d < nearestDistSq) {
+                        nearestDistSq = d;
+                        nearestEnemy = ent;
+                    }
+                }
+            }
+
+            if (nearestEnemy) {
+                _v1.copy(nearestEnemy.mesh.position);
+                _v1.y += 1.0; // Aim at chest height
+                _v1.project(camera);
+                
+                const isBehind = _v1.z > 1.0;
+                const margin = 0.9; // Trigger arrow if outside central 90% of screen
+                if (isBehind || _v1.x < -margin || _v1.x > margin || _v1.y < -margin || _v1.y > margin) {
+                    _fastUpdateDetail.waveIndicatorActive = true;
+                    let dirX = _v1.x;
+                    let dirY = -_v1.y; // Invert WebGL Y for CSS screen space
+                    if (isBehind) {
+                        dirX *= -1;
+                        dirY *= -1;
+                    }
+                    _fastUpdateDetail.waveIndicatorAngle = Math.atan2(dirY, dirX);
+                } else {
+                    _fastUpdateDetail.waveIndicatorActive = false;
+                }
+            } else {
+                _fastUpdateDetail.waveIndicatorActive = false;
+            }
+        } else {
+            _fastUpdateDetail.waveIndicatorActive = false;
         }
 
         _fastUpdateDetail.vehicleSpeed = state.vehicle.active ? (state.vehicle.speed || 0) : 0;
@@ -191,7 +235,7 @@ export const HudSystem = {
         for (let i = 0; i < 256; i++) vecBuf[i] = -99999; // Sentinel value for "Inactive"
 
         const enemies = state.enemies.pool;
-        let activeBoss = state.enemies.pool.activeBoss;
+        let activeBoss = state.enemies.activeBoss;
         let entitiesWritten = 0;
 
         // Write enemies (Max 100 to leave space for loot/points)
@@ -344,7 +388,7 @@ export const HudSystem = {
         _current.level = state.player.statsBuffer[StatID.LEVEL] || 1;
         _current.currentXp = state.player.statsBuffer[StatID.CURRENT_XP] || 0;
         _current.nextLevelXp = state.player.statsBuffer[StatID.NEXT_LEVEL_XP] || 1000;
-        _current.throwableAmmo = state.combat.weaponAmmo[props.loadout?.throwable] || 0;
+        _current.throwableAmmo = state.combat.weaponAmmo[props.gameState?.loadout?.throwable] || 0;
         _current.distanceTraveled = Math.floor(distanceTraveled) || 0;
         _current.kills = state.sessionStats.kills || 0;
         _current.spEarned = state.sessionStats.spGained || 0;
@@ -414,7 +458,7 @@ export const HudSystem = {
             }
         }
         _current.mapItemsCount = mCount;
-        _current.fps = PerformanceMonitor.getInstance().getFps();
+        _current.fps = WinterEngine.getInstance().systems.performanceMonitor?.getFps() ?? 0;
         _current.hudVisible = state.ui.hudVisible ?? _current.hudVisible;
         _current.sectorName = state.world.sectorName || '';
         _current.currentSector = props.currentSector || 0;
@@ -515,13 +559,6 @@ export const HudSystem = {
         _bufferB.dialogueSpeaker = state.ui.cinematicLine.speaker !== undefined ? state.ui.cinematicLine.speaker : '';
         _bufferB.dialogueText = state.ui.cinematicLine.text || '';
 
-        // --- ZERO-GC NAVIGATION SIGNAL SYNC ---
-        const engineSignal = UIEventBridge.consumeEngineSignal();
-        _bufferA.lastMetaSignal = engineSignal;
-        _bufferA.metaSignalTimestamp = engineSignal !== MetaActionId.NONE ? now : 0;
-        _bufferB.lastMetaSignal = engineSignal;
-        _bufferB.metaSignalTimestamp = engineSignal !== MetaActionId.NONE ? now : 0;
-
         _current.discoveryActive = false;
 
         // Debug mapping
@@ -532,7 +569,7 @@ export const HudSystem = {
             _current.debugInfo.aim.x = 0; _current.debugInfo.aim.y = 0;
         }
 
-        const perfMon = PerformanceMonitor.getInstance();
+        const perfMon = WinterEngine.getInstance().systems.performanceMonitor!;
         const gcInfo = perfMon.getFormattedGcInfo();
         const dbgActs = input.actions;
 

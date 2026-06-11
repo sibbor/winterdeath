@@ -9,6 +9,12 @@ export const sv = {
         category_world: "Världen",
         category_combat: "Strid",
         category_weapons: "Vapen",
+        discovered_collectible: "SAMLAROBJEKT UPPTÄCKT",
+        discovered_clue: "LEDTRÅD UPPTÄCKT",
+        discovered_poi: "INTRESSEPUNKT UPPTÄCKT",
+        discovered_enemy: "FIENDE UPPTÄCKT",
+        discovered_boss: "BOSS UPPTÄCKT",
+        discovered_perk: "FÖRMÅGA UPPTÄCKT",
         category_tactics: "Taktik",
         category_player: "Överlevare",
         scrap: "SKROT",
@@ -64,12 +70,6 @@ export const sv = {
         failed: "MISSLYCKAD",
         summary: "ÖVERSIKT",
         details: "STRIDSDETALJER",
-        discovered_collectible: "SAMLINGSOBJEKT UPPTÄCKT",
-        discovered_clue: "LEDTRÅD UPPTÄCKT",
-        discovered_poi: "POI UPPTÄCKT",
-        discovered_enemy: "Fiend UPPTÄCKT",
-        discovered_boss: "BOSS UPPTÄCKT",
-        discovered_perk: "PERK UPPTÄCKT",
         settings: "INSTÄLLNINGAR",
         language: "SPRÅK",
         language_sub: "Engelska / Svenska",
@@ -850,26 +850,26 @@ export const sv = {
     },
     clues: {
         "0": {
-            "0": { reaction: "Skoavtryck! De gick åt det här hållet... vad menade Loke med 'D'?" },
-            "1": { reaction: "Blodfläckar! Är de skadade?!" },
-            "2": { reaction: "Det är kaos! De måste vara livrädda." },
-            "3": { reaction: "Spåren fortsätter i den här riktningen." },
-            "4": { reaction: "Spåren försvinner... de måste vara här någonstans." }
+            "0": { title: "Fotspår", reaction: "Skoavtryck! De gick åt det här hållet... vad menade Loke med 'D'?" },
+            "1": { title: "Blodfläckar", reaction: "Blodfläckar! Är de skadade?!" },
+            "2": { title: "Kaos", reaction: "Det är kaos! De måste vara livrädda." },
+            "3": { title: "Spåren fortsätter", reaction: "Spåren fortsätter i den här riktningen." },
+            "4": { title: "Spåren försvinner", reaction: "Spåren försvinner... de måste vara här någonstans." }
         },
         "1": {
-            "0": { reaction: "Loke sa att de andra följde dessa skenor. Låt oss se vart det leder oss..." },
-            "1": { reaction: "FAN! Zombier överallt. Fortsätt kämpa, Loke! Vi fixar det här." },
-            "2": { reaction: "Elektriskt ljus. Generatorn körs..." },
-            "3": { reaction: "Gamla militärförråd. Låt oss se vad vi kan hitta." },
-            "4": { reaction: "Mer förnödenheter. Det mesta är redan plundrat. Av vem?! Nathalie? Esmeralda? Jordan?" }
+            "0": { title: "Spårning", reaction: "Loke sa att de andra följde dessa skenor. Låt oss se vart det leder oss..." },
+            "1": { title: "Zombier i skogen", reaction: "FAN! Zombier överallt. Fortsätt kämpa, Loke! Vi fixar det här." },
+            "2": { title: "Generator", reaction: "Elektriskt ljus. Generatorn körs..." },
+            "3": { title: "Militärförråd", reaction: "Gamla militärförråd. Låt oss se vad vi kan hitta." },
+            "4": { title: "Plundrade förnödenheter", reaction: "Mer förnödenheter. Det mesta är redan plundrat. Av vem?! Nathalie? Esmeralda? Jordan?" }
         },
         "2": {
-            "0": { reaction: "Skogen är för högljudd. Varje kvist som bryts låter som en löpare..." },
-            "1": { reaction: "Stackars jävlar... Barn, titta bort!" },
-            "2": { reaction: "Nice traktor. Undrar om den fungerar?" }
+            "0": { title: "Ljud i skogen", reaction: "Skogen är för högljudd. Varje kvist som bryts låter som en löpare..." },
+            "1": { title: "Makabra syner", reaction: "Stackars jävlar... Barn, titta bort!" },
+            "2": { title: "Traktor", reaction: "Nice traktor. Undrar om den fungerar?" }
         },
         "3": {
-            "0": { reaction: "Metallen gnisslar i vinden. Eller är det 'Titanen' som Nathalie nämnde?" }
+            "0": { title: "Gnisslande metall", reaction: "Metallen gnisslar i vinden. Eller är det 'Titanen' som Nathalie nämnde?" }
         }
     },
     sector_events: {
@@ -881,8 +881,8 @@ export const sv = {
             "4": { reaction: "Helvete! Explosionen lockade till sig zombies!" }
         },
         "2": {
-            "1": { reaction: "Zombies i området..." },
-            "2": { reaction: "Området säkrat!" }
+            "1": { reaction: "SATAN! Zombies i området." },
+            "2": { reaction: "Området säkrat... Puh!" }
         }
     },
     pois: {

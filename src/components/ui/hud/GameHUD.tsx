@@ -7,13 +7,14 @@ import { useOrientation } from '../../../hooks/useOrientation';
 import { HudStore } from '../../../store/HudStore';
 import { PerkColor, PerkCategory } from '../../../content/perks';
 import { DataResolver } from '../../../core/data/DataResolver';
-import { UiSounds } from '../../../utils/audio/AudioLib';
+import { UISounds } from '../../../utils/audio/AudioLib';
 import ScreenEffect from './ScreenEffect';
 import DiscoveryPopup from './DiscoveryPopup';
 import InteractionPrompt from './InteractionPrompt';
 import ChallengePopup from './ChallengePopup';
 import ChatBubble from './ChatBubble';
 import NotificationText from './NotificationText';
+import LevelUpBanner from './LevelUpBanner';
 import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
 import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
 import { StatusEffectID } from '../../../types/StatusEffects';
@@ -136,6 +137,7 @@ const StatusEffectIconPooled = forwardRef(({ index, isMobileDevice, isLandscapeM
     const containerRef = useRef<HTMLDivElement>(null);
     const iconRef = useRef<HTMLSpanElement>(null);
     const barRef = useRef<HTMLDivElement>(null);
+    const currentPulse = useRef<string>(''); // Cache pulse state to prevent Layout Thrashing
 
     useImperativeHandle(ref, () => ({
         update: (type: StatusEffectID | null, progress: number, color: any, pulseClass: string) => {
@@ -148,8 +150,12 @@ const StatusEffectIconPooled = forwardRef(({ index, isMobileDevice, isLandscapeM
                 containerRef.current.style.display = 'flex';
                 containerRef.current.style.borderColor = colorStr;
 
-                containerRef.current.classList.remove('hud-buff-pulse', 'hud-debuff-pulse');
-                if (pulseClass && pulseClass.length > 0) containerRef.current.classList.add(pulseClass);
+                // ZERO-GC Check: Only modify class lists on layout modifications frames
+                if (currentPulse.current !== pulseClass) {
+                    if (currentPulse.current) containerRef.current.classList.remove(currentPulse.current);
+                    if (pulseClass && pulseClass.length > 0) containerRef.current.classList.add(pulseClass);
+                    currentPulse.current = pulseClass;
+                }
 
                 const icon = getStatusIcon(type);
                 if (iconRef.current.innerText !== icon) iconRef.current.innerText = icon;
@@ -292,21 +298,21 @@ const EnemyWavePanel = React.memo(({ isMobileDevice, wavePanelRef, waveNameRef, 
                     style={{ transform: 'scaleX(0)' }}
                 />
             </div>
-            <span ref={waveTextRef} className={`${isMobileDevice ? 'text-[10px] mt-1' : 'text-xs mt-1.5'} text-zinc-300 font-mono tracking-[0.15em] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]`}>
+            <span ref={waveTextRef} className={`${isMobileDevice ? 'text-[10px]' : 'text-xs'} mt-1 text-zinc-300 font-mono tracking-[0.15em] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]`}>
                 0 / 0
             </span>
         </div>
     );
 });
 
-const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, handleSelectWeaponInternal, ammoTextRef, reloadBarRef, speedTextRef, speedArcRef, gasPedalRef, skidPedalRef, brakePedalRef, handleActionEnter, handleActionLeave }: any) => {
+const ActionBarPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, handleSelectWeaponInternal, ammoTextRef, reloadBarRef, speedTextRef, speedArcRef, gasPedalRef, skidPedalRef, brakePedalRef, handleActionEnter, handleActionLeave }: any) => {
     const isDriving = useHudStore(s => s.isDriving);
     const activeWeapon = useHudStore(s => s.activeWeapon);
-    const throwableAmmo = useHudStore(s => s.throwableAmmo);
+    const numThrowableAmmo = useHudStore(s => s.throwableAmmo);
     const familyFound = useHudStore(s => s.familyFound);
     const unlimitedAmmo = useHudStore(s => s.unlimitedAmmo);
 
-    const wep = DataResolver.getWeapons()[activeWeapon];
+    const weapon = DataResolver.getWeapons()[activeWeapon];
 
     // PERFORMANCE: Cached JSX slots generation to completely bypass array allocations on fast re-renders
     const slots = useMemo(() => {
@@ -323,30 +329,29 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
             const isThrowable = wData.category === WeaponCategory.THROWABLE;
             const isRadio = type === ToolID.RADIO;
             const size = isMobileDevice ? "w-16 h-16" : "w-20 h-20";
-            const cColor = isThrowable ? COLORS.GREEN : (WeaponCategoryColors[wData.category] || COLORS.WHITE);
-            const inactiveBorderColor = isThrowable ? cColor.str : 'rgba(255, 255, 255, 0.2)';
+            const cColor = WeaponCategoryColors[wData.category] || COLORS.WHITE;
+            const inactiveBorderColor = 'rgba(255, 255, 255, 0.2)';
 
             const dots = [];
             if (isThrowable) {
                 const maxAmmo = wData.magSize || 0;
                 for (let j = 0; j < maxAmmo; j++) {
                     dots.push(
-                        <div key={j} className={`h-1 flex-1 ${j < throwableAmmo ? 'shadow-sm' : 'bg-zinc-800 border border-zinc-700'}`}
-                            style={{ backgroundColor: j < throwableAmmo ? cColor.str : undefined }} />
-                    );
+                        <div key={j}
+                            className={`h-1 flex-1 border border-zinc-700 ${j < numThrowableAmmo ? 'shadow-sm' : ''}`}
+                            style={{ backgroundColor: j < numThrowableAmmo ? cColor.str : 'transparent' }}
+                        />);
                 }
             }
 
             result.push(
                 <button key={slot} data-slot={slot}
-                    onClick={!isMobileDevice ? handleSelectWeaponInternal : undefined}
-                    onTouchStart={isMobileDevice ? handleSelectWeaponInternal : undefined}
+                    onClick={handleSelectWeaponInternal}
                     onMouseEnter={!isMobileDevice ? handleActionEnter : undefined}
                     onMouseLeave={!isMobileDevice ? handleActionLeave : undefined}
-                    data-tooltip={wData.displayName ? t(wData.displayName) : wData.name}
-                    className={`${SLOT_BASE} ${size} ${isActive ? 'scale-[1.15] z-20 border-[3px] hud-active-slot' : 'opacity-80 border border-white/20 hover:opacity-80'} 
-                                   ${(isRadio && familyFound) || (isThrowable && throwableAmmo <= 0) ? 'grayscale' : ''}`}
-                    style={isActive || isThrowable ? {
+                    data-tooltip={wData.displayName ? t(wData.displayName) : wData.id}
+                    className={`${SLOT_BASE} ${size} ${isActive ? 'scale-[1.15] z-20 border-[3px] hud-active-slot' : 'opacity-80 border border-white/20 hover:opacity-80'} `}
+                    style={isActive ? {
                         borderColor: cColor.str,
                         '--slot-color': cColor.str
                     } as any : {
@@ -376,18 +381,18 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
             );
         }
         return result;
-    }, [isDriving, weaponSlots, activeWeapon, throwableAmmo, familyFound, isMobileDevice, handleSelectWeaponInternal, reloadBarRef, handleActionEnter, handleActionLeave]);
+    }, [isDriving, weaponSlots, activeWeapon, numThrowableAmmo, familyFound, isMobileDevice, handleSelectWeaponInternal, reloadBarRef, handleActionEnter, handleActionLeave]);
 
     return (
         <div className={`absolute ${isMobileDevice ? 'bottom-2 pb-safe' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
 
-            {!isDriving && wep && wep.category !== WeaponCategory.THROWABLE && activeWeapon !== ToolID.RADIO && (
+            {!isDriving && weapon && weapon.category !== WeaponCategory.THROWABLE && activeWeapon !== ToolID.RADIO && (
                 <div className={`${isMobileDevice ? 'mb-2' : 'mb-4'} text-center animate-fadeIn flex items-baseline`}>
                     <span ref={ammoTextRef} className={`${isMobileDevice ? 'text-2xl' : 'text-4xl'} font-bold text-white tracking-tighter font-mono`}>
                         {unlimitedAmmo ? '∞' : '--'}
                     </span>
-                    {!wep.isEnergy && (
-                        <span className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-bold text-white/30 ml-1 font-mono`}>/ {wep.magSize || 0}</span>
+                    {!weapon.isEnergy && (
+                        <span className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-bold text-white/30 ml-1 font-mono`}>/ {weapon.magSize || 0}</span>
                     )}
                 </div>
             )}
@@ -509,6 +514,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const waveNameRef = useRef<HTMLHeadingElement>(null);
     const waveBarRef = useRef<HTMLDivElement>(null);
     const waveTextRef = useRef<HTMLSpanElement>(null);
+    const waveIndicatorRef = useRef<HTMLDivElement>(null);
     const killsTextRef = useRef<HTMLSpanElement>(null);
     const scrapTextRef = useRef<HTMLSpanElement>(null);
     const spTextRef = useRef<HTMLSpanElement>(null);
@@ -520,6 +526,10 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     // ZERO-GC Pooled Status Refs
     const passiveRefs = useRef<any[]>([]);
     const effectRefs = useRef<{ buffs: any[], debuffs: any[] }>({ buffs: [], debuffs: [] });
+
+    // ZERO-GC: Internal check cache to guard from structural prompt styles layout thrashing
+    const isInteractionPromptActive = useRef<boolean | null>(null);
+
     const prevTelemetry = useRef({
         hp: -999,
         maxHp: -999,
@@ -539,6 +549,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
         waveProgress: -999,
         waveKills: -999,
         waveTarget: -999,
+        waveIndicatorActive: false,
+        waveIndicatorAngle: 0,
         isDriving: false,
         vehicleSpeed: -999,
         throttleState: -999,
@@ -548,11 +560,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     // --- ASYNCHRONOUS UI EVENT BRIDGE (VINTERDÖD HARDENING) ---
     useUIEventBridge(useCallback((type, p1, p2) => {
         switch (type) {
-            case UIEventType.HUD_COMMAND:
+            case UIEventType.HUD_VISIBILITY:
                 HudStore.setHudVisible(p1 === 1);
                 break;
 
-            case UIEventType.RELOAD_START:
+            case UIEventType.RELOAD_WEAPON:
                 break;
 
             case UIEventType.AMMO_LOW:
@@ -720,6 +732,30 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 cache.waveCleared = false;
             }
 
+            // Wave Off-Screen Indicator
+            if (data.waveIndicatorActive !== cache.waveIndicatorActive || (data.waveIndicatorActive && data.waveIndicatorAngle !== cache.waveIndicatorAngle)) {
+                if (waveIndicatorRef.current) {
+                    if (data.waveIndicatorActive) {
+                        waveIndicatorRef.current.style.opacity = '1';
+                        
+                        // Distance from center
+                        const r = Math.min(window.innerWidth, window.innerHeight) * 0.45;
+                        const cx = window.innerWidth / 2;
+                        const cy = window.innerHeight / 2;
+                        
+                        const x = cx + Math.cos(data.waveIndicatorAngle) * r;
+                        const y = cy + Math.sin(data.waveIndicatorAngle) * r;
+                        const rot = data.waveIndicatorAngle * (180 / Math.PI);
+
+                        waveIndicatorRef.current.style.transform = `translate(${x}px, ${y}px) rotate(${rot}deg)`;
+                    } else {
+                        waveIndicatorRef.current.style.opacity = '0';
+                    }
+                }
+                cache.waveIndicatorActive = data.waveIndicatorActive;
+                cache.waveIndicatorAngle = data.waveIndicatorAngle;
+            }
+
             // 7. Vehicle Speed & Throttle (Bypassed if not driving!)
             if (data.isDriving) {
                 if (data.vehicleSpeed !== cache.vehicleSpeed) {
@@ -783,7 +819,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         scrapBoxRef.current.classList.remove('hud-bling-pulse');
                         void scrapBoxRef.current.offsetWidth;
                         scrapBoxRef.current.classList.add('hud-bling-pulse');
-                        UiSounds.playPickUp();
+                        UISounds.playPickUp();
                     }
                 }
                 cache.scrap = data.scrap;
@@ -798,7 +834,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         spBoxRef.current.classList.remove('hud-bling-pulse-purple');
                         void spBoxRef.current.offsetWidth;
                         spBoxRef.current.classList.add('hud-bling-pulse-purple');
-                        UiSounds.playPickUp();
+                        UISounds.playPickUp();
                     }
                 }
                 cache.sp = data.spEarned;
@@ -808,16 +844,23 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             if (interactionRef.current) {
                 const scaleStr = isMobileDevice ? 'scale(1.5)' : 'scale(1)';
                 if (data.interactionActive) {
-                    interactionRef.current.style.opacity = '1';
-                    interactionRef.current.style.transform = `translate(-50%, 0px) ${scaleStr}`;
-                    interactionRef.current.style.pointerEvents = 'auto';
+                    // ZERO-GC Latch checking protects context switches layouts from slamming
+                    if (isInteractionPromptActive.current !== true) {
+                        interactionRef.current.style.opacity = '1';
+                        interactionRef.current.style.transform = `translate(-50%, 0px) ${scaleStr}`;
+                        interactionRef.current.style.pointerEvents = 'auto';
+                        isInteractionPromptActive.current = true;
+                    }
                     if (interactionComponentRef.current) {
                         interactionComponentRef.current.update(data.interactionType, data.interactionLabel, data.interactionId);
                     }
                 } else {
-                    interactionRef.current.style.opacity = '0';
-                    interactionRef.current.style.transform = `translate(-50%, 10px) ${scaleStr}`;
-                    interactionRef.current.style.pointerEvents = 'none';
+                    if (isInteractionPromptActive.current !== false) {
+                        interactionRef.current.style.opacity = '0';
+                        interactionRef.current.style.transform = `translate(-50%, 10px) ${scaleStr}`;
+                        interactionRef.current.style.pointerEvents = 'none';
+                        isInteractionPromptActive.current = false;
+                    }
                 }
             }
 
@@ -832,9 +875,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 if (el) el.update(i < pCount ? pPassives[i] : null);
             }
 
-            // Buffs/Debuffs
+            // Buffs/Debuffs (Defensive case fallback checking integrated)
             const effCount = hudState.statusEffectsCount;
-            const effTypes = hudState.StatusEffectIDs;
+            const effTypes = hudState.StatusEffectIDs || (hudState as any).statusEffectIds;
             const effProgs = hudState.statusEffectProgress;
 
             let buffIdx = 0;
@@ -903,7 +946,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
         const slot = e.currentTarget.dataset.slot;
         if (slot && onSelectWeapon) {
             onSelectWeapon(slot);
-            UiSounds.playClick();
+            UISounds.playClick();
         }
     }, [onSelectWeapon]);
 
@@ -912,8 +955,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
         onTogglePause?.();
     }, [onTogglePause]);
 
-    const wep = DataResolver.getWeapons()[activeWeapon];
-    const catColor = wep ? (WeaponCategoryColors[wep.category] || COLORS.WHITE).str : COLORS.WHITE.str;
+    const catColor = COLORS.WHITE.str;
     const hudVisible = useHudStore(s => s.hudVisible);
 
     // ZERO-GC: Pre-allocated arrays to assign pooled ref storage stably in render
@@ -924,6 +966,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     return (
         <div ref={hudContainerRef} className="absolute inset-0 pointer-events-none">
             <ScreenEffect />
+
+            <LevelUpBanner />
 
             <DiscoveryPopup onOpenAdventureLog={(tab, itemId) => {
                 window.dispatchEvent(new CustomEvent('open-adventure-log', { detail: { tab, itemId } }));
@@ -1016,10 +1060,20 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 {/* UI RELOAD BAR OVER PLAYER HEAD */}
                 <FloatingReloadBar reloadBarRef={floatingReloadBarRef} catColor={catColor} containerRef={floatingReloadBarContainerRef} />
 
+                {/* VINTERDÖD: Offscreen Wave Enemy Indicator */}
+                <div 
+                    ref={waveIndicatorRef} 
+                    className="fixed top-0 left-0 w-8 h-8 pointer-events-none will-change-transform z-[150]"
+                    style={{ opacity: 0, transition: 'opacity 0.2s ease-out' }}
+                >
+                    {/* Blue Arrow head pointing right (default 0 deg) */}
+                    <div className="w-0 h-0 border-y-8 border-y-transparent border-l-[16px] border-l-blue-500 drop-shadow-[0_0_12px_rgba(59,130,246,1.0)] -translate-x-1/2 -translate-y-1/2" />
+                </div>
+
                 {/* FLOATING TEXT NOTIFICATIONS (XP, SP, SCRAP, CP, BUFFS, DEBUFFS) */}
                 <NotificationText />
 
-                <BottomActionPanel
+                <ActionBarPanel
                     isMobileDevice={isMobileDevice}
                     isBossIntro={isBossIntro}
                     weaponSlots={weaponSlots}
