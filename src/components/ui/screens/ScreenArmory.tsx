@@ -277,7 +277,7 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
 
                 {isUpgradeable && (
                     <TacticalButton
-                        onClick={(e) => onUpgrade(e, weapon.name)}
+                        onClick={(e) => onUpgrade(e, weapon.id)}
                         disabled={!canAfford}
                         variant={canAfford ? 'primary' : 'ghost'}
                         className="w-full h-10 text-[10px] border-none font-mono"
@@ -308,7 +308,7 @@ const WeaponCard: React.FC<WeaponCardProps> = React.memo(({
                     <div className="flex items-center gap-2 mb-2">
                         <h3 className={`${isMobileDevice ? 'text-lg leading-tight' : 'text-xl'} font-bold uppercase tracking-tight truncate`}
                             style={{ color: isEquipped ? 'white' : 'rgba(255,255,255,0.7)' }}>
-                            {t(DataResolver.getWeaponName(weapon.name))}
+                            {t(weapon.displayName)}
                         </h3>
                     </div>
 

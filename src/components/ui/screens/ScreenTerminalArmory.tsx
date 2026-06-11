@@ -185,16 +185,16 @@ const TerminalWeaponList: React.FC<TerminalWeaponListProps> = React.memo(({ acti
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6 overflow-y-auto pb-4 pr-1 custom-scrollbar">
             {filteredWeapons.map(weapon => {
-                const level = tempWeaponLevels[weapon.name] || 1;
+                const level = tempWeaponLevels[weapon.id] || 1;
                 const cost = SCRAP_COST_BASE * level;
-                const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;
+                const isEquipped = tempLoadout.primary === weapon.id || tempLoadout.secondary === weapon.id || tempLoadout.throwable === weapon.id || tempLoadout.special === weapon.id;
                 const categoryColor = WeaponCategoryColors[weapon.category as keyof typeof WeaponCategoryColors];
                 const canAfford = scrapAmount >= cost;
 
                 return (
                     <div
-                        key={weapon.name}
-                        onClick={() => !isEquipped && onEquip(weapon.name, weapon.category)}
+                        key={weapon.id}
+                        onClick={() => !isEquipped && onEquip(weapon.id, weapon.category)}
                         className={`relative border-2 transition-all group overflow-hidden flex flex-col ${isEquipped ? 'cursor-default' : 'hover:bg-gray-800/60 cursor-pointer'}`}
                         style={{
                             borderColor: isEquipped ? categoryColor : '#374151',
@@ -207,7 +207,7 @@ const TerminalWeaponList: React.FC<TerminalWeaponListProps> = React.memo(({ acti
                                 <img src={weapon.icon} alt="" className={`${isMobileDevice ? 'w-20 h-20' : 'w-24 h-24'} object-contain filter brightness-0 invert`} />
                             </div>
                             <button
-                                onClick={(e) => onUpgrade(e, weapon.name)}
+                                onClick={(e) => onUpgrade(e, weapon.id)}
                                 disabled={!canAfford}
                                 className={`w-full py-2.5 px-2 text-[10px] font-bold uppercase transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center transform ${canAfford ? 'bg-yellow-950/20 text-yellow-500 hover:bg-yellow-950/40' : 'bg-black text-gray-700 cursor-not-allowed'}`}
                             >

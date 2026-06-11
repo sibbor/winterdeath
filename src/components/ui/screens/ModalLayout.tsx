@@ -192,12 +192,16 @@ const ModalLayout: React.FC<ModalLayoutProps> = React.memo(({
 
     // --- ZERO-GC HANDLERS ---
     const handleCloseInternal = useCallback(() => {
-        UISounds.playClick();
+        //UISounds.playClick();
+        UISounds.playCloseScreen();
+
         onClose();
     }, [onClose]);
 
     const handleCancelInternal = useCallback(() => {
         UISounds.playClick();
+        UISounds.playCloseScreen();
+
         if (onCancel) onCancel();
         else onClose();
     }, [onCancel, onClose]);
@@ -211,7 +215,7 @@ const ModalLayout: React.FC<ModalLayoutProps> = React.memo(({
 
     const handleDebugInternal = useCallback(() => {
         if (debugAction) {
-            UISounds.playClick();
+            UISounds.playHover();
             debugAction.action();
         }
     }, [debugAction]);

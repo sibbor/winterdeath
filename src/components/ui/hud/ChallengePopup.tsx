@@ -89,54 +89,60 @@ const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog }) =
             onClick={handleChallengeInteraction}
             style={{ '--tier-color': currentTierColor.str } as any}
         >
-            <div className="bg-black/95 border-l-4 border-[var(--tier-color)] p-5 shadow-[0_15px_50px_rgba(0,0,0,0.9)] backdrop-blur-md hud-gritty-base min-w-[300px] overflow-hidden cursor-pointer hover:bg-zinc-900/40 transition-colors">
-                <div className="flex flex-col relative z-10">
-                    <span className="text-[11px] font-black uppercase tracking-[0.4em] leading-none mb-2 opacity-80" style={{ color: currentTierColor.str }}>
+            <div className="relative p-6 flex flex-col items-center justify-center min-w-[320px] max-w-[380px] cursor-pointer group text-center">
+                {/* SMOKY CINEMATIC BACKGROUND */}
+                <div
+                    className="absolute inset-0 pointer-events-none transition-opacity duration-300 group-hover:opacity-80"
+                    style={{
+                        background: 'radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 60%, transparent 100%)',
+                        filter: 'blur(16px)',
+                        transform: 'scaleX(1.3) scaleY(1.15)'
+                    }}
+                />
+
+                <div className="relative flex flex-col items-center z-10 w-full">
+                    <span className="text-[10px] font-mono font-bold tracking-[0.3em] uppercase leading-none mb-2" style={{ color: currentTierColor.str }}>
                         {t('ui.challenge_complete')}
                     </span>
 
-                    <div className="flex items-baseline gap-2">
-                        <h3 className="text-2xl font-black text-white uppercase tracking-tighter italic leading-none">
+                    <div className="flex flex-col items-center gap-1 mb-2">
+                        <h3 className="text-xl font-mono font-black text-white uppercase tracking-widest leading-tight">
                             {t(def.titleKey)}
                         </h3>
-                        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: currentTierColor.str }}>
-                            {t('ui.challenge_tier', { tier: tier })}
+                        <span className="text-[9px] font-mono font-bold uppercase tracking-widest opacity-80" style={{ color: currentTierColor.str }}>
+                            [{t('ui.challenge_tier', { tier: tier })}]
                         </span>
                     </div>
 
-                    <div className="h-[1px] w-full bg-white/10 my-3" />
-
-                    <p className="text-xs text-white/70 font-medium leading-relaxed italic mb-3">
+                    <p className="text-[11px] text-zinc-300 font-mono leading-relaxed mb-4">
                         {t(def.descriptionKey).replace('{target}', target.toString())}
                     </p>
 
-                    <div className="flex items-center justify-between mt-1">
-                        <div className="flex items-center gap-1.5 opacity-60">
-                            <div className="px-1.5 py-0.5 border border-white/30 rounded text-[10px] font-mono font-bold text-white uppercase">
-                                {isMobileDevice ? t('ui.tap') : 'ENTER'}
-                            </div>
-                            <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{t('ui.view_details')}</span>
+                    <div className="flex flex-col items-center gap-3 w-full">
+                        <div className="bg-[#ef4444]/10 border border-[#ef4444]/20 px-3 py-1 rounded-sm shadow-[0_0_10px_rgba(239,68,68,0.1)]">
+                            <span className="text-xs font-black text-[#ef4444] font-mono">+{cpReward} CP</span>
                         </div>
 
-                        <div className="bg-red-600/20 border border-red-500/50 px-2 py-1 rounded-sm shadow-[0_0_10px_rgba(239,68,68,0.2)]">
-                            <span className="text-sm font-black text-red-500 font-mono">+{cpReward} CP</span>
+                        {/* ACTION BADGE */}
+                        <div className="relative flex items-center justify-center min-w-[48px] h-8 border border-[#bfa979]/30 rounded bg-black/40 px-3 hover:bg-[#bfa979]/20 transition-all active:scale-95 shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+                            <span className="text-[9px] font-mono font-bold text-[#bfa979] tracking-widest uppercase">
+                                {isMobileDevice ? t('ui.tap') : 'ENTER'}
+                            </span>
                         </div>
                     </div>
                 </div>
 
-                <div className="absolute top-0 right-0 p-1 opacity-20 pointer-events-none">
-                    <span className="text-4xl">🏆</span>
+                <div className="absolute top-2 right-2 opacity-5 pointer-events-none">
+                    <span className="text-3xl">🏆</span>
                 </div>
-                <div className="absolute inset-0 hud-noise-overlay opacity-10 pointer-events-none" />
-                <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-transparent via-[var(--tier-color)] to-transparent w-full opacity-50" />
             </div>
 
             <style>{`
                 @keyframes challengePop {
-                    0% { opacity: 0; transform: translateX(50px) skewX(-10deg); }
-                    10% { opacity: 1; transform: translateX(0) skewX(0); }
-                    90% { opacity: 1; transform: translateX(0); }
-                    100% { opacity: 0; transform: translateX(20px) translateY(-10px); }
+                    0% { opacity: 0; transform: translateX(50px) scale(0.95); filter: blur(8px); }
+                    10% { opacity: 1; transform: translateX(0) scale(1); filter: blur(0px); }
+                    90% { opacity: 1; transform: translateX(0) scale(1); filter: blur(0px); }
+                    100% { opacity: 0; transform: translateX(25px) translateY(-10px) scale(0.95); filter: blur(4px); }
                 }
                 .animate-challengePop {
                     animation: challengePop 6000ms cubic-bezier(0.16, 1, 0.3, 1) forwards;

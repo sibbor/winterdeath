@@ -82,30 +82,30 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
     let icon = '✨';
     let titleStr = t('ui.discovered_perk');
     switch (dType) {
-      case DiscoveryType.CLUE: 
-        icon = '🔍'; 
-        titleStr = t('ui.discovered_clue'); 
+      case DiscoveryType.CLUE:
+        icon = '🔍';
+        titleStr = t('ui.discovered_clue');
         break;
-      case DiscoveryType.POI: 
-        icon = '📍'; 
-        titleStr = t('ui.discovered_poi'); 
+      case DiscoveryType.POI:
+        icon = '📍';
+        titleStr = t('ui.discovered_poi');
         break;
-      case DiscoveryType.COLLECTIBLE: 
-        icon = '📦'; 
-        titleStr = t('ui.discovered_collectible'); 
+      case DiscoveryType.COLLECTIBLE:
+        icon = '📦';
+        titleStr = t('ui.discovered_collectible');
         break;
-      case DiscoveryType.ZOMBIE: 
-        icon = '🧟'; 
-        titleStr = t('ui.discovered_enemy'); 
+      case DiscoveryType.ZOMBIE:
+        icon = '🧟';
+        titleStr = t('ui.discovered_enemy');
         break;
-      case DiscoveryType.BOSS: 
-        icon = '💀'; 
-        titleStr = t('ui.discovered_boss'); 
+      case DiscoveryType.BOSS:
+        icon = '💀';
+        titleStr = t('ui.discovered_boss');
         break;
-      case DiscoveryType.PERK: 
-        icon = DataResolver.getPerks()[numericId]?.icon || '✨'; 
+      case DiscoveryType.PERK:
+        icon = DataResolver.getPerks()[numericId]?.icon || '✨';
         break;
-      default: 
+      default:
         icon = DataResolver.getPerks()[numericId]?.icon || '✨';
     }
 
@@ -197,9 +197,9 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
     >
       <div className="relative p-8 flex flex-col items-center justify-center min-w-[450px] cursor-pointer group text-center">
         {/* SMOKY CINEMATIC BACKGROUND */}
-        <div 
-          className="absolute inset-0 pointer-events-none transition-opacity duration-300 group-hover:opacity-80" 
-          style={{ 
+        <div
+          className="absolute inset-0 pointer-events-none transition-opacity duration-300 group-hover:opacity-80"
+          style={{
             background: 'radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.6) 50%, transparent 100%)',
             filter: 'blur(16px)',
             transform: 'scaleX(1.3) scaleY(1.1)'
@@ -209,22 +209,21 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
         {/* CONTENT BLOCKS */}
         <div className="relative flex flex-col items-center z-10 w-full">
           <div className="flex items-center gap-3 mb-2">
-            <span ref={iconRef} className="text-xl drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]">✨</span>
+            <span ref={iconRef} className="text-xl drop-shadow-[0_0_8px_rgba(255,255,255,0.3)] grayscale">✨</span>
             <span ref={titleRef} className="text-[13px] font-mono font-bold text-[#bfa979] tracking-[0.3em] uppercase leading-none drop-shadow-md">
               -
             </span>
-            <span className="text-xl drop-shadow-[0_0_8px_rgba(255,255,255,0.3)] rotate-180" style={{ transform: 'scaleX(-1)' }}>✨</span>
           </div>
 
           <span ref={subtitleRef} className="text-3xl font-mono font-black text-white uppercase tracking-widest leading-tight drop-shadow-lg mb-4">
             -
           </span>
-          
+
           <div className="relative px-8 py-1.5 flex items-center justify-center">
-             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(0,0,0,0.6)_0%,_transparent_100%)] blur-sm"></div>
-             <span ref={counterRef} className="relative text-sm font-mono font-bold text-zinc-300 uppercase tracking-widest leading-tight drop-shadow-md">
-               -
-             </span>
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(0,0,0,0.6)_0%,_transparent_100%)] blur-sm"></div>
+            <span ref={counterRef} className="relative text-sm font-mono font-bold text-zinc-300 uppercase tracking-widest leading-tight drop-shadow-md">
+              -
+            </span>
           </div>
         </div>
 

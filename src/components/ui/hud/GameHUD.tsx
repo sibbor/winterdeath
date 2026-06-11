@@ -13,8 +13,9 @@ import DiscoveryPopup from './DiscoveryPopup';
 import InteractionPrompt from './InteractionPrompt';
 import ChallengePopup from './ChallengePopup';
 import ChatBubble from './ChatBubble';
-import NotificationText from './NotificationText';
+import CombatLog from './CombatLog';
 import LevelUpBanner from './LevelUpBanner';
+import SectorBanner from './SectorBanner';
 import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
 import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
 import { StatusEffectID } from '../../../types/StatusEffects';
@@ -31,6 +32,8 @@ interface GameHUDProps {
     onSelectWeapon?: (slot: string) => void;
     onRotateCamera?: (dir: number) => void;
     onOpenAdventureLog?: (tab?: any, itemId?: string) => void;
+    isSectorBannerActive?: boolean;
+    onSectorBannerComplete?: () => void;
 }
 
 // --- PERFORMANCE: Static CSS ---
@@ -97,28 +100,37 @@ const FloatingReloadBar = ({ reloadBarRef, catColor, containerRef }: { reloadBar
 
 const VitalsPanel = React.memo(({ isMobileDevice, isBossIntro, hpBarRef, hpTextRef, stBarRef, stTextRef, xpBarRef, xpTextRef }: any) => {
     return (
-        <div className={`flex flex-col gap-1.5 ${isMobileDevice ? 'w-40' : 'w-80'} transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-            <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-5' : 'h-10'} w-full border border-red-500/30 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)] bg-slate-950`}>
-                <div className="h-full bg-red-900/20 relative">
-                    {/* ZERO-GC: No CSS transition on vital bars. JS handles 60fps frame-perfect scaling. */}
-                    <div ref={hpBarRef} className="w-full h-full bg-red-600 origin-left will-change-transform hud-bar-glow" style={{ backgroundColor: COLORS.RED.str, transform: 'scaleX(0)' }} />
+        <div className={`relative flex flex-col gap-2 p-4 ${isMobileDevice ? 'w-40' : 'w-80'} transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+            {/* SMOKY CINEMATIC BACKGROUND */}
+            <div
+                className="absolute inset-0 pointer-events-none animate-fadeIn"
+                style={{
+                    background: 'radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 60%, transparent 100%)',
+                    filter: 'blur(16px)',
+                    transform: 'scaleX(1.4) scaleY(1.15)'
+                }}
+            />
+
+            {/* CONTENT wrapper */}
+            <div className="relative flex flex-col gap-2 z-10 w-full">
+                {/* HP BAR (No border) */}
+                <div className={`w-full overflow-hidden bg-black/45 rounded-sm relative ${isMobileDevice ? 'h-5' : 'h-8'}`}>
+                    <div ref={hpBarRef} className="w-full h-full origin-left will-change-transform" style={{ backgroundColor: COLORS.RED.str, transform: 'scaleX(0)' }} />
                     <div className="absolute inset-0 flex items-center justify-start px-3">
-                        <span ref={hpTextRef} className={`${isMobileDevice ? 'text-[10px]' : 'text-[13px]'} text-white font-mono font-bold tracking-tighter drop-shadow-md`}>
+                        <span ref={hpTextRef} className={`${isMobileDevice ? 'text-[10px]' : 'text-[12px]'} text-white font-mono font-bold tracking-widest drop-shadow-md`}>
                             0 / 100
                         </span>
                     </div>
                 </div>
-            </div>
 
-            <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-2' : 'h-4'} w-full border border-purple-500/30 bg-slate-950`}>
-                <div className="h-full bg-purple-900/20 relative">
-                    <div ref={stBarRef} className="w-full h-full bg-purple-500 origin-left will-change-transform hud-bar-glow" style={{ backgroundColor: COLORS.PURPLE.str, transform: 'scaleX(0)' }} />
+                {/* STAMINA BAR (No border) */}
+                <div className={`w-full overflow-hidden bg-black/45 rounded-sm relative ${isMobileDevice ? 'h-2' : 'h-3.5'}`}>
+                    <div ref={stBarRef} className="w-full h-full origin-left will-change-transform" style={{ backgroundColor: COLORS.PURPLE.str, transform: 'scaleX(0)' }} />
                 </div>
-            </div>
 
-            <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'h-1.5' : 'h-2.5'} w-full border border-cyan-500/30 bg-slate-950`}>
-                <div className="h-full bg-cyan-900/20 relative">
-                    <div ref={xpBarRef} className="w-full h-full bg-cyan-500 origin-left will-change-transform hud-bar-glow" style={{ backgroundColor: COLORS.CYAN.str, transform: 'scaleX(0)' }} />
+                {/* XP BAR (No border) */}
+                <div className={`w-full overflow-hidden bg-black/45 rounded-sm relative ${isMobileDevice ? 'h-1.5' : 'h-2.5'}`}>
+                    <div ref={xpBarRef} className="w-full h-full origin-left will-change-transform" style={{ backgroundColor: COLORS.CYAN.str, transform: 'scaleX(0)' }} />
                 </div>
             </div>
         </div>
@@ -268,17 +280,28 @@ const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
     if (!bossActive) return null;
 
     return (
-        <div className="w-full flex flex-col items-center animate-fadeIn pointer-events-none">
-            <h2 className={`${isMobileDevice ? 'text-sm mb-2 opacity-60' : 'text-5xl font-light mb-4 opacity-80'} text-white tracking-widest uppercase hud-text-glow`}>
-                {t(bossName)}
-            </h2>
-            <div className={`w-full bg-black/90 border border-red-900 shadow-2xl skew-x-[-10deg] ${isMobileDevice ? 'max-w-[250px] h-2' : 'max-w-[600px] h-4'}`}>
-                {/* HARDWARE ACCELERATED BOSS BAR */}
-                <div
-                    ref={bossHpBarRef}
-                    className="h-full origin-left will-change-transform"
-                    style={{ transform: 'scaleX(1)', backgroundColor: COLORS.RED.str }}
-                />
+        <div className="relative w-full flex flex-col items-center justify-center p-6 text-center animate-fadeIn pointer-events-none">
+            {/* SMOKY CINEMATIC BACKGROUND */}
+            <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                    background: 'radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 60%, transparent 100%)',
+                    filter: 'blur(16px)',
+                    transform: 'scaleX(1.6) scaleY(1.2)'
+                }}
+            />
+
+            <div className="relative flex flex-col items-center z-10 w-full">
+                <h2 className={`font-mono ${isMobileDevice ? 'text-sm mb-2' : 'text-3xl font-black mb-3'} text-white tracking-widest uppercase drop-shadow-lg`}>
+                    {t(bossName)}
+                </h2>
+                <div className={`w-full bg-black/40 border border-white/10 rounded-sm shadow-md ${isMobileDevice ? 'max-w-[250px] h-2.5' : 'max-w-[500px] h-4'} overflow-hidden relative`}>
+                    <div
+                        ref={bossHpBarRef}
+                        className="h-full origin-left will-change-transform"
+                        style={{ transform: 'scaleX(1)', backgroundColor: COLORS.RED.str }}
+                    />
+                </div>
             </div>
         </div>
     );
@@ -286,21 +309,33 @@ const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
 
 const EnemyWavePanel = React.memo(({ isMobileDevice, wavePanelRef, waveNameRef, waveBarRef, waveTextRef }: any) => {
     return (
-        <div ref={wavePanelRef} className="w-full flex flex-col items-center animate-fadeIn pointer-events-none" style={{ display: 'none' }}>
-            <h2 ref={waveNameRef} className={`hud-wave-title ${isMobileDevice ? 'text-sm mb-1.5' : 'text-2xl mb-2'} uppercase`}>
-                WAVE
-            </h2>
-            <div className={`w-full bg-black/95 border-2 border-blue-900/60 shadow-[0_4px_15px_rgba(0,0,0,0.8),inset_0_0_10px_rgba(0,0,0,0.9)] skew-x-[-12deg] ${isMobileDevice ? 'max-w-[220px] h-2.5' : 'max-w-[500px] h-4.5'} relative overflow-hidden`}>
-                {/* HARDWARE ACCELERATED WAVE BAR */}
-                <div
-                    ref={waveBarRef}
-                    className="h-full origin-left will-change-transform hud-wave-bar"
-                    style={{ transform: 'scaleX(0)' }}
-                />
+        <div ref={wavePanelRef} className="relative w-full flex flex-col items-center justify-center p-6 text-center animate-fadeIn pointer-events-none" style={{ display: 'none' }}>
+            {/* SMOKY CINEMATIC BACKGROUND */}
+            <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                    background: 'radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 60%, transparent 100%)',
+                    filter: 'blur(16px)',
+                    transform: 'scaleX(1.6) scaleY(1.2)'
+                }}
+            />
+
+            <div className="relative flex flex-col items-center z-10 w-full">
+                <h2 ref={waveNameRef} className={`hud-wave-title font-mono ${isMobileDevice ? 'text-sm mb-1.5' : 'text-2xl font-black mb-2'} text-white tracking-widest uppercase`}>
+                    WAVE
+                </h2>
+                <div className={`w-full bg-black/40 border border-white/10 rounded-sm shadow-md ${isMobileDevice ? 'max-w-[220px] h-2.5' : 'max-w-[500px] h-4'} relative overflow-hidden`}>
+                    {/* HARDWARE ACCELERATED WAVE BAR */}
+                    <div
+                        ref={waveBarRef}
+                        className="h-full origin-left will-change-transform hud-wave-bar"
+                        style={{ transform: 'scaleX(0)' }}
+                    />
+                </div>
+                <span ref={waveTextRef} className={`${isMobileDevice ? 'text-[10px]' : 'text-xs'} mt-2 text-zinc-300 font-mono tracking-[0.15em] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]`}>
+                    0 / 0
+                </span>
             </div>
-            <span ref={waveTextRef} className={`${isMobileDevice ? 'text-[10px]' : 'text-xs'} mt-1 text-zinc-300 font-mono tracking-[0.15em] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]`}>
-                0 / 0
-            </span>
         </div>
     );
 });
@@ -330,7 +365,6 @@ const ActionBarPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, h
             const isRadio = type === ToolID.RADIO;
             const size = isMobileDevice ? "w-16 h-16" : "w-20 h-20";
             const cColor = WeaponCategoryColors[wData.category] || COLORS.WHITE;
-            const inactiveBorderColor = 'rgba(255, 255, 255, 0.2)';
 
             const dots = [];
             if (isThrowable) {
@@ -338,7 +372,7 @@ const ActionBarPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, h
                 for (let j = 0; j < maxAmmo; j++) {
                     dots.push(
                         <div key={j}
-                            className={`h-1 flex-1 border border-zinc-700 ${j < numThrowableAmmo ? 'shadow-sm' : ''}`}
+                            className="h-1 flex-1 border border-zinc-950"
                             style={{ backgroundColor: j < numThrowableAmmo ? cColor.str : 'transparent' }}
                         />);
                 }
@@ -350,13 +384,12 @@ const ActionBarPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, h
                     onMouseEnter={!isMobileDevice ? handleActionEnter : undefined}
                     onMouseLeave={!isMobileDevice ? handleActionLeave : undefined}
                     data-tooltip={wData.displayName ? t(wData.displayName) : wData.id}
-                    className={`${SLOT_BASE} ${size} ${isActive ? 'scale-[1.15] z-20 border-[3px] hud-active-slot' : 'opacity-80 border border-white/20 hover:opacity-80'} `}
-                    style={isActive ? {
-                        borderColor: cColor.str,
+                    className={`flex items-center justify-center relative transition-transform duration-200 overflow-hidden pointer-events-auto rounded-sm ${size} ${isActive ? 'scale-[1.12] z-20 shadow-lg' : 'opacity-70 hover:opacity-95'}`}
+                    style={{
+                        borderBottom: isActive ? `5px solid ${cColor.str}` : `2px solid ${cColor.str}`,
+                        backgroundColor: isActive ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.25)',
                         '--slot-color': cColor.str
-                    } as any : {
-                        borderColor: inactiveBorderColor
-                    }}>
+                    } as any}>
                     <div className={`absolute inset-0 bg-gradient-to-t ${isActive ? 'from-white/10 to-transparent' : 'from-black/60 to-black/20'}`} />
 
                     {isActive && <ReloadGrittyFill reloadBarRef={reloadBarRef} catColor={cColor.str} />}
@@ -364,19 +397,19 @@ const ActionBarPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, h
                     <div className="absolute inset-0 hud-noise-overlay opacity-20 mix-blend-overlay z-0" />
 
                     <div className={`${isMobileDevice ? 'w-8 h-8' : 'w-10 h-10'} flex items-center justify-center mb-1 relative z-10`}
-                        style={{ filter: isActive ? 'drop-shadow(0_0_2px_rgba(255,255,255,1.0))' : 'opacity(0.8)' }}>
+                        style={{ filter: isActive ? 'drop-shadow(0_0_2px_rgba(255,255,255,0.8))' : 'opacity(0.8)' }}>
                         {wData.iconIsPng ? <img src={wData.icon} alt="" className="w-full h-full object-contain filter brightness-0 invert" /> : <div className="w-full h-full text-white" dangerouslySetInnerHTML={{ __html: wData.icon }} />}
                     </div>
 
                     {!isMobileDevice && <span className="absolute bottom-1 right-2 text-[10px] font-mono font-bold text-white/20 z-10">{slot}</span>}
 
                     {isThrowable && (
-                        <div className="absolute bottom-1 left-1 right-1 flex justify-center gap-0.5 z-10 px-1">
+                        <div className="absolute bottom-1.5 left-1 right-1 flex justify-center gap-0.5 z-10 px-1">
                             {dots}
                         </div>
                     )}
 
-                    {isRadio && familyFound && <span className="absolute bottom-1 w-full text-center text-[10px] font-black uppercase text-blue-300 drop-shadow-md z-10">{t('ui.located')}</span>}
+                    {isRadio && familyFound && <span className="absolute bottom-1 w-full text-center text-[10px] font-mono font-black uppercase text-blue-300 drop-shadow-md z-10">{t('ui.located')}</span>}
                 </button>
             );
         }
@@ -384,95 +417,106 @@ const ActionBarPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, h
     }, [isDriving, weaponSlots, activeWeapon, numThrowableAmmo, familyFound, isMobileDevice, handleSelectWeaponInternal, reloadBarRef, handleActionEnter, handleActionLeave]);
 
     return (
-        <div className={`absolute ${isMobileDevice ? 'bottom-2 pb-safe' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+        <div className={`absolute ${isMobileDevice ? 'bottom-2 pb-safe' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center justify-center p-6 min-w-[320px] transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+            {/* SMOKY CINEMATIC BACKGROUND */}
+            <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                    background: 'radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 60%, transparent 100%)',
+                    filter: 'blur(16px)',
+                    transform: 'scaleX(1.5) scaleY(1.15)'
+                }}
+            />
 
-            {!isDriving && weapon && weapon.category !== WeaponCategory.THROWABLE && activeWeapon !== ToolID.RADIO && (
-                <div className={`${isMobileDevice ? 'mb-2' : 'mb-4'} text-center animate-fadeIn flex items-baseline`}>
-                    <span ref={ammoTextRef} className={`${isMobileDevice ? 'text-2xl' : 'text-4xl'} font-bold text-white tracking-tighter font-mono`}>
-                        {unlimitedAmmo ? '∞' : '--'}
-                    </span>
-                    {!weapon.isEnergy && (
-                        <span className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-bold text-white/30 ml-1 font-mono`}>/ {weapon.magSize || 0}</span>
-                    )}
-                </div>
-            )}
-
-            {isDriving ? (
-                <div className="relative w-48 h-48 flex items-center justify-center bg-black/50 rounded-full border border-white/5 shadow-2xl p-2 animate-fadeIn">
-                    {/* SVG Speedometer Dial */}
-                    <svg className="w-full h-full overflow-visible" viewBox="0 0 200 200">
-                        <defs>
-                            <linearGradient id="speedGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" stopColor="#3b82f6" />    {/* Blue */}
-                                <stop offset="50%" stopColor="#22c55e" />   {/* Green */}
-                                <stop offset="100%" stopColor="#ef4444" />  {/* Reddish */}
-                            </linearGradient>
-                        </defs>
-
-                        {/* Outer Circular Track Background */}
-                        <path
-                            d="M 40,145 A 75,75 0 1,1 160,145"
-                            fill="none"
-                            stroke="rgba(255,255,255,0.06)"
-                            strokeWidth="8"
-                            strokeLinecap="round"
-                        />
-
-                        {/* Active Speed Arc */}
-                        <path
-                            ref={speedArcRef}
-                            d="M 40,145 A 75,75 0 1,1 160,145"
-                            fill="none"
-                            stroke="url(#speedGrad)"
-                            strokeWidth="8"
-                            strokeLinecap="round"
-                            strokeDasharray="340"
-                            strokeDashoffset="340"
-                        />
-
-                        {/* Inner thin dial border */}
-                        <circle cx="100" cy="100" r="58" fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="1.5" />
-                        <circle cx="100" cy="100" r="98" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1.5" />
-                    </svg>
-
-                    {/* Center Panel (Absolute overlay) */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pt-2">
-                        {/* Speed Number */}
-                        <span ref={speedTextRef} className="text-4xl font-black font-mono text-white tracking-tighter leading-none block drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
-                            0
+            <div className="relative flex flex-col items-center z-10 w-full">
+                {!isDriving && weapon && weapon.category !== WeaponCategory.THROWABLE && activeWeapon !== ToolID.RADIO && (
+                    <div className={`${isMobileDevice ? 'mb-2' : 'mb-3'} text-center animate-fadeIn flex items-baseline`}>
+                        <span ref={ammoTextRef} className={`${isMobileDevice ? 'text-2xl' : 'text-4xl'} font-bold text-white tracking-tighter font-mono`}>
+                            {unlimitedAmmo ? '∞' : '--'}
                         </span>
-                        <span className="text-[10px] font-bold tracking-widest text-white/40 uppercase block mt-1">
-                            {t('ui.speed_unit')}
-                        </span>
+                        {!weapon.isEnergy && (
+                            <span className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-bold text-white/30 ml-1 font-mono`}>/ {weapon.magSize || 0}</span>
+                        )}
+                    </div>
+                )}
 
-                        {/* Integrated Gas / Skid / Brake Dot Indicators */}
-                        <div className="flex items-center gap-1 mt-3 z-10">
-                            {/* GAS Dot (Blue) */}
-                            <div
-                                ref={gasPedalRef}
-                                className="w-2.5 h-2.5 rounded-full border border-white/10 bg-zinc-950/60 shadow-sm"
-                                title={t('ui.gas')}
+                {isDriving ? (
+                    <div className="relative w-48 h-48 flex items-center justify-center bg-black/50 rounded-full border border-white/5 shadow-2xl p-2 animate-fadeIn">
+                        {/* SVG Speedometer Dial */}
+                        <svg className="w-full h-full overflow-visible" viewBox="0 0 200 200">
+                            <defs>
+                                <linearGradient id="speedGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                    <stop offset="0%" stopColor="#3b82f6" />    {/* Blue */}
+                                    <stop offset="50%" stopColor="#22c55e" />   {/* Green */}
+                                    <stop offset="100%" stopColor="#ef4444" />  {/* Reddish */}
+                                </linearGradient>
+                            </defs>
+
+                            {/* Outer Circular Track Background */}
+                            <path
+                                d="M 40,145 A 75,75 0 1,1 160,145"
+                                fill="none"
+                                stroke="rgba(255,255,255,0.06)"
+                                strokeWidth="8"
+                                strokeLinecap="round"
                             />
-                            {/* SKID Dot (Orange) */}
-                            <div
-                                ref={skidPedalRef}
-                                className="w-2.5 h-2.5 rounded-full border border-white/10 bg-zinc-950/60 shadow-sm"
-                                title={t('ui.skid')}
+
+                            {/* Active Speed Arc */}
+                            <path
+                                ref={speedArcRef}
+                                d="M 40,145 A 75,75 0 1,1 160,145"
+                                fill="none"
+                                stroke="url(#speedGrad)"
+                                strokeWidth="8"
+                                strokeLinecap="round"
+                                strokeDasharray="340"
+                                strokeDashoffset="340"
                             />
-                            {/* BRAKE Dot (Red) */}
-                            <div
-                                ref={brakePedalRef}
-                                className="w-2.5 h-2.5 rounded-full border border-white/10 bg-zinc-950/60 shadow-sm"
-                                title={t('ui.brake')}
-                            />
+
+                            {/* Inner thin dial border */}
+                            <circle cx="100" cy="100" r="58" fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="1.5" />
+                            <circle cx="100" cy="100" r="98" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1.5" />
+                        </svg>
+
+                        {/* Center Panel (Absolute overlay) */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pt-2">
+                            {/* Speed Number */}
+                            <span ref={speedTextRef} className="text-4xl font-black font-mono text-white tracking-tighter leading-none block drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
+                                0
+                            </span>
+                            <span className="text-[10px] font-bold tracking-widest text-white/40 uppercase block mt-1">
+                                {t('ui.speed_unit')}
+                            </span>
+
+                            {/* Integrated Gas / Skid / Brake Dot Indicators */}
+                            <div className="flex items-center gap-1 mt-3 z-10">
+                                {/* GAS Dot (Blue) */}
+                                <div
+                                    ref={gasPedalRef}
+                                    className="w-2.5 h-2.5 rounded-full border border-white/10 bg-zinc-950/60 shadow-sm"
+                                    title={t('ui.gas')}
+                                />
+                                {/* SKID Dot (Orange) */}
+                                <div
+                                    ref={skidPedalRef}
+                                    className="w-2.5 h-2.5 rounded-full border border-white/10 bg-zinc-950/60 shadow-sm"
+                                    title={t('ui.skid')}
+                                />
+                                {/* BRAKE Dot (Red) */}
+                                <div
+                                    ref={brakePedalRef}
+                                    className="w-2.5 h-2.5 rounded-full border border-white/10 bg-zinc-950/60 shadow-sm"
+                                    title={t('ui.brake')}
+                                />
+                            </div>
                         </div>
                     </div>
-                </div>
-            ) : (
-                <div className={`flex ${isMobileDevice ? 'gap-1.5' : 'gap-3'} pointer-events-auto`}>
-                    {slots}
-                </div>
-            )}
+                ) : (
+                    <div className={`flex ${isMobileDevice ? 'gap-1.5' : 'gap-3'} pointer-events-auto`}>
+                        {slots}
+                    </div>
+                )}
+            </div>
         </div>
     );
 });
@@ -483,7 +527,8 @@ const ActionBarPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, h
 
 const GameHUD: React.FC<GameHUDProps> = React.memo(({
     loadout, isBossIntro = false, isMobileDevice = false,
-    onTogglePause, onToggleMap, onSelectWeapon, onOpenAdventureLog
+    onTogglePause, onToggleMap, onSelectWeapon, onOpenAdventureLog,
+    isSectorBannerActive = false, onSectorBannerComplete
 }) => {
     const isDead = useHudStore(s => s.isDead);
     const isDisoriented = useHudStore(s => s.isDisoriented);
@@ -737,12 +782,12 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 if (waveIndicatorRef.current) {
                     if (data.waveIndicatorActive) {
                         waveIndicatorRef.current.style.opacity = '1';
-                        
+
                         // Distance from center
                         const r = Math.min(window.innerWidth, window.innerHeight) * 0.45;
                         const cx = window.innerWidth / 2;
                         const cy = window.innerHeight / 2;
-                        
+
                         const x = cx + Math.cos(data.waveIndicatorAngle) * r;
                         const y = cy + Math.sin(data.waveIndicatorAngle) * r;
                         const rot = data.waveIndicatorAngle * (180 / Math.PI);
@@ -957,6 +1002,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
     const catColor = COLORS.WHITE.str;
     const hudVisible = useHudStore(s => s.hudVisible);
+    const showRestOfHUD = hudVisible && !isSectorBannerActive;
 
     // ZERO-GC: Pre-allocated arrays to assign pooled ref storage stably in render
     const passivePoolRefs = useMemo(() => getCachedArray(POOL_SIZE_PASSIVE).map(i => (el: any) => { if (el) passiveRefs.current[i] = el; }), []);
@@ -977,7 +1023,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
             <ChallengePopup onOpenAdventureLog={onOpenAdventureLog} />
 
-            <div className={`${HUD_WRAPPER} ${!hudVisible || isDead || isDisoriented ? 'opacity-0 -translate-y-4 blur-[5px]' : 'opacity-100 translate-y-0 blur-0 animate-hudFadeIn'}`}>
+            <SectorBanner active={isSectorBannerActive} onComplete={onSectorBannerComplete || (() => {})} />
+
+            <div className={`${HUD_WRAPPER} ${!showRestOfHUD || isDead || isDisoriented ? 'opacity-0 -translate-y-4 blur-[5px]' : 'opacity-100 translate-y-0 blur-0 animate-hudFadeIn'}`}>
 
                 {/* --- GRADIENTS OVERLAY (TOP & BOTTOM) --- */}
                 <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/80 to-transparent pointer-events-none z-0" />
@@ -1061,8 +1109,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 <FloatingReloadBar reloadBarRef={floatingReloadBarRef} catColor={catColor} containerRef={floatingReloadBarContainerRef} />
 
                 {/* VINTERDÖD: Offscreen Wave Enemy Indicator */}
-                <div 
-                    ref={waveIndicatorRef} 
+                <div
+                    ref={waveIndicatorRef}
                     className="fixed top-0 left-0 w-8 h-8 pointer-events-none will-change-transform z-[150]"
                     style={{ opacity: 0, transition: 'opacity 0.2s ease-out' }}
                 >
@@ -1071,7 +1119,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 </div>
 
                 {/* FLOATING TEXT NOTIFICATIONS (XP, SP, SCRAP, CP, BUFFS, DEBUFFS) */}
-                <NotificationText />
+                <CombatLog />
 
                 <ActionBarPanel
                     isMobileDevice={isMobileDevice}

@@ -20,10 +20,10 @@ const LevelUpBanner: React.FC = () => {
         }
 
         if (containerRef.current) {
-            containerRef.current.style.display = 'flex';
+            containerRef.current.style.display = 'block';
             containerRef.current.style.animation = 'none';
             void containerRef.current.offsetHeight; // Force DOM reflow
-            containerRef.current.style.animation = 'level-up-pop 4000ms cubic-bezier(0.16, 1, 0.3, 1) forwards';
+            containerRef.current.style.animation = 'level-pop 4000ms cubic-bezier(0.25, 1, 0.5, 1) forwards';
         }
 
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -39,29 +39,40 @@ const LevelUpBanner: React.FC = () => {
     return (
         <div
             ref={containerRef}
-            className="fixed inset-x-0 top-1/3 z-[11000] pointer-events-none flex flex-col items-center justify-center"
-            style={{ display: 'none' }}
+            className="fixed top-12 left-1/2 -translate-x-1/2 z-[10000] pointer-events-none"
+            style={{ display: 'none', willChange: 'transform, opacity' }}
         >
-            <div className="relative flex flex-col items-center px-12 py-6 bg-black/95 border-y-2 border-yellow-500/80 shadow-[0_0_50px_rgba(234,179,8,0.3)] backdrop-blur-md min-w-[320px] text-center overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-500/5 to-transparent pointer-events-none" />
-                <div className="absolute inset-0 hud-noise-overlay opacity-10 pointer-events-none" />
-                
-                <span className="text-sm font-black text-yellow-500 uppercase tracking-[0.5em] mb-1 animate-pulse">
-                    {t('ui.level_up')}
-                </span>
-                
-                <h1 className="text-4xl font-black text-white italic uppercase tracking-wider leading-none select-none drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
-                    <span ref={levelTextRef}>LEVEL --</span>
-                </h1>
+            <div className="relative p-8 flex flex-col items-center justify-center min-w-[450px] text-center">
+                {/* SMOKY CINEMATIC BACKGROUND */}
+                <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                        background: 'radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 50%, transparent 100%)',
+                        filter: 'blur(16px)',
+                        transform: 'scaleX(1.3) scaleY(1.1)'
+                    }}
+                />
+
+                <div className="relative flex flex-col items-center z-10 w-full">
+                    <div className="flex items-center gap-3 mb-2 animate-pulse">
+                        <span className="text-[13px] font-mono font-bold text-[#bfa979] tracking-[0.3em] uppercase leading-none drop-shadow-md">
+                            {t('ui.level_up')}
+                        </span>
+                    </div>
+
+                    <span ref={levelTextRef} className="text-3xl font-mono font-black text-white uppercase tracking-widest leading-tight drop-shadow-lg">
+                        LEVEL --
+                    </span>
+                </div>
             </div>
-            
+
             <style>{`
-                @keyframes level-up-pop {
-                    0% { opacity: 0; transform: scale(0.8) translateY(20px); filter: blur(10px); }
-                    10% { opacity: 1; transform: scale(1.05) translateY(0); filter: blur(0px); }
-                    13% { transform: scale(1); }
-                    87% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0px); }
-                    100% { opacity: 0; transform: scale(0.95) translateY(-20px); filter: blur(5px); }
+                @keyframes level-pop {
+                    0% { opacity: 0; transform: translateX(-50%) translateY(40px) scale(0.85); filter: blur(10px); }
+                    10% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.05); filter: blur(0px); }
+                    15% { transform: translateX(-50%) scale(1); filter: blur(0px); }
+                    85% { opacity: 1; transform: translateX(-50%) translateY(-5px) scale(1); filter: blur(0px); }
+                    100% { opacity: 0; transform: translateX(-50%) translateY(-25px) scale(0.95); }
                 }
             `}</style>
         </div>

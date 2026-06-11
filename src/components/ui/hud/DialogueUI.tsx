@@ -63,38 +63,19 @@ const DialogueUI = forwardRef<DialogueUIHandle, DialogueUIProps>(({ isMobileDevi
         textContainerRef.current.innerHTML = html;
     }, []);
 
-    const requestRef = useRef<number>();
-    const tickRef = useRef<number>(0);
+    const innerBoxRef = useRef<HTMLDivElement>(null);
 
     const startTyping = () => {
-        visibleCountRef.current = 0;
-        setIsFinished(false);
-        isFinishedRef.current = false;
-        updateDOMText(0);
+        visibleCountRef.current = totalCharsRef.current;
+        setIsFinished(true);
+        isFinishedRef.current = true;
+        updateDOMText(totalCharsRef.current);
 
-        // Cancel any previous pending animation
-        if (requestRef.current) cancelAnimationFrame(requestRef.current);
-
-        const animate = () => {
-            // Stop if component is unmounted or hidden
-            if (!isVisibleRef.current) return;
-
-            const now = performance.now();
-            // Throttle to roughly 30ms (approx 33fps)
-            if (now - tickRef.current > 30) {
-                if (visibleCountRef.current < totalCharsRef.current) {
-                    visibleCountRef.current += 1;
-                    updateDOMText(visibleCountRef.current);
-                    tickRef.current = now;
-                } else {
-                    setIsFinished(true);
-                    isFinishedRef.current = true;
-                    return; // Stop loop
-                }
-            }
-            requestRef.current = requestAnimationFrame(animate);
-        };
-        requestRef.current = requestAnimationFrame(animate);
+        if (innerBoxRef.current) {
+            innerBoxRef.current.style.animation = 'none';
+            void innerBoxRef.current.offsetHeight; // Forces synchronous layout engine reflow
+            innerBoxRef.current.style.animation = 'dialogue-box-appear 400ms cubic-bezier(0.25, 1, 0.5, 1) forwards';
+        }
     };
 
     useEffect(() => {
@@ -123,7 +104,6 @@ const DialogueUI = forwardRef<DialogueUIHandle, DialogueUIProps>(({ isMobileDevi
                     setSpeakerName(DataResolver.getFamilyMemberName(state.dialogueSpeaker));
                     setBgColor(DataResolver.getSpeakerColor(state.dialogueSpeaker));
 
-                    // Uppdatera både state och Ref synkront
                     setIsVisible(true);
                     isVisibleRef.current = true;
 
@@ -186,30 +166,56 @@ const DialogueUI = forwardRef<DialogueUIHandle, DialogueUIProps>(({ isMobileDevi
                 }
             }}
         >
-            <div className={`w-[90%] md:w-[60%] max-w-4xl relative ${isMobileDevice ? 'scale-90 origin-bottom' : ''}`}>
-                <div className="hud-bar-container bg-black/95 backdrop-blur-xl p-6 md:p-8 min-h-[100px] relative shadow-2xl">
-                    <div className="absolute top-0 left-0 w-2 h-full opacity-60" style={{ backgroundColor: bgColor }} />
-                    <p className="text-white/90 text-sm md:text-xl font-mono leading-relaxed ml-4 drop-shadow-md">
+            <div
+                ref={innerBoxRef}
+                className={`w-[90%] md:w-[60%] max-w-4xl relative ${isMobileDevice ? 'scale-90 origin-bottom' : ''}`}
+                style={{ willChange: 'transform, opacity, filter' }}
+            >
+                {/* SMOKY CINEMATIC BACKGROUND */}
+                <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                        background: 'radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 60%, transparent 100%)',
+                        filter: 'blur(16px)',
+                        transform: 'scaleX(1.4) scaleY(1.05)'
+                    }}
+                />
+
+                <div className="relative p-6 md:p-8 flex flex-col items-center justify-center text-center z-10 w-full">
+                    <p className="text-zinc-100 text-sm md:text-xl font-mono leading-relaxed drop-shadow-md">
                         {speakerName && (
-                            <span className="font-black mr-3 uppercase tracking-widest text-xs md:text-sm block mb-1" style={{ color: bgColor }}>
-                                {speakerName}
+                            <span className="font-bold font-mono mr-2 tracking-wider uppercase" style={{ color: bgColor }}>
+                                {speakerName}:
                             </span>
                         )}
-                        <span ref={textContainerRef} className="hud-text-glow"></span>
-                        {isVisible && !isFinished && (
-                            <span className="inline-block w-2 md:w-3 h-5 md:h-6 bg-white/50 animate-pulse ml-1 align-middle" />
-                        )}
+                        <span ref={textContainerRef} className="hud-text-glow font-mono"></span>
                     </p>
+
                     {isFinished && isVisible && (
-                        <div className="absolute bottom-4 right-6 flex items-center opacity-30 animate-pulse">
-                            <span className="text-white text-[10px] uppercase tracking-[0.3em] font-black mr-3">
+                        <div className="absolute bottom-[-24px] right-1/2 translate-x-1/2 flex items-center opacity-40 hover:opacity-75 transition-opacity">
+                            <span className="text-white text-[9px] uppercase tracking-[0.3em] font-mono font-bold mr-2">
                                 {isMobileDevice ? t('ui.tap') : t('ui.continue')}
                             </span>
-                            <div className="w-2 h-2 bg-white rotate-45" />
+                            <div className="w-1.5 h-1.5 bg-[#bfa979] rotate-45" />
                         </div>
                     )}
                 </div>
             </div>
+
+            <style>{`
+                @keyframes dialogue-box-appear {
+                    0% {
+                        opacity: 0;
+                        filter: blur(12px);
+                        transform: scale(0.97);
+                    }
+                    100% {
+                        opacity: 1;
+                        filter: blur(0px);
+                        transform: scale(1);
+                    }
+                }
+            `}</style>
         </div>
     );
 });

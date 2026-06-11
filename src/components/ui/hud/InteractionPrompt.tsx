@@ -16,8 +16,8 @@ interface PromptConfig {
 }
 
 // PERFORMANCE: Pre-allocated base strings to protect frame layout boundaries
-const CONTAINER_BASE_CLASS = "hud-prompt-grit px-5 py-2.5 flex items-center gap-3 relative overflow-hidden";
-const KEY_BASE_CLASS = "w-6 h-6 flex items-center justify-center text-xs font-mono font-black rounded-sm border";
+const CONTAINER_BASE_CLASS = "relative px-5 py-2 flex items-center gap-3 overflow-hidden font-mono font-bold tracking-widest uppercase z-10";
+const KEY_BASE_CLASS = "min-w-[24px] h-6 flex items-center justify-center text-[10px] font-mono font-bold rounded bg-black/50 border shadow-[0_0_10px_rgba(0,0,0,0.5)] px-1.5 transition-all";
 
 // ============================================================================
 // PERFORMANCE: SMI-to-Object Fixed Lookup Map
@@ -27,43 +27,43 @@ const KEY_BASE_CLASS = "w-6 h-6 flex items-center justify-center text-xs font-mo
 const PROMPT_CONFIG_MAP: Record<number, PromptConfig> = {
     [InteractionPromptId.NONE]: {
         key: 'ui.interact',
-        fullContainerClass: CONTAINER_BASE_CLASS + " border-white/20 text-white shadow-[0_0_15px_rgba(255,255,255,0.8)]",
-        fullKeyClass: KEY_BASE_CLASS + " bg-white/10 border-white/20 text-white shadow-[inset_0_0_4px_rgba(255,255,255,0.8)]"
+        fullContainerClass: CONTAINER_BASE_CLASS + " text-white",
+        fullKeyClass: KEY_BASE_CLASS + " border-white/30 text-white"
     },
     [InteractionPromptId.INTERACT]: {
         key: 'ui.interact',
-        fullContainerClass: CONTAINER_BASE_CLASS + " border-white/20 text-white shadow-[0_0_15px_rgba(255,255,255,0.8)]",
-        fullKeyClass: KEY_BASE_CLASS + " bg-white/10 border-white/20 text-white shadow-[inset_0_0_4px_rgba(255,255,255,0.8)]"
+        fullContainerClass: CONTAINER_BASE_CLASS + " text-white",
+        fullKeyClass: KEY_BASE_CLASS + " border-white/30 text-white"
     },
     [InteractionPromptId.ENTER_VEHICLE]: {
         key: 'ui.enter_vehicle',
-        fullContainerClass: CONTAINER_BASE_CLASS + " border-blue-500/40 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.8)]",
-        fullKeyClass: KEY_BASE_CLASS + " bg-blue-500/10 border-blue-500/30 text-blue-400 shadow-[inset_0_0_4px_rgba(59,130,246,0.8)]"
+        fullContainerClass: CONTAINER_BASE_CLASS + " text-blue-400",
+        fullKeyClass: KEY_BASE_CLASS + " border-blue-500/30 text-blue-400"
     },
     [InteractionPromptId.EXIT_VEHICLE]: {
         key: 'ui.exit_vehicle',
-        fullContainerClass: CONTAINER_BASE_CLASS + " border-blue-500/40 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.8)]",
-        fullKeyClass: KEY_BASE_CLASS + " bg-blue-500/10 border-blue-500/30 text-blue-400 shadow-[inset_0_0_4px_rgba(59,130,246,0.8)]"
+        fullContainerClass: CONTAINER_BASE_CLASS + " text-blue-400",
+        fullKeyClass: KEY_BASE_CLASS + " border-blue-500/30 text-blue-400"
     },
     [InteractionPromptId.PICKUP_COLLECTIBLE]: {
         key: 'ui.interact_pickup_collectible',
-        fullContainerClass: CONTAINER_BASE_CLASS + " border-yellow-500/40 text-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.8)]",
-        fullKeyClass: KEY_BASE_CLASS + " bg-yellow-500/10 border-yellow-500/30 text-yellow-400 shadow-[inset_0_0_4px_rgba(234,179,8,0.8)]"
+        fullContainerClass: CONTAINER_BASE_CLASS + " text-yellow-400",
+        fullKeyClass: KEY_BASE_CLASS + " border-yellow-500/30 text-yellow-400"
     },
     [InteractionPromptId.OPEN_CHEST]: {
         key: 'ui.interact_open_chest',
-        fullContainerClass: CONTAINER_BASE_CLASS + " border-orange-500/40 text-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.8)]",
-        fullKeyClass: KEY_BASE_CLASS + " bg-orange-500/10 border-orange-500/30 text-orange-400 shadow-[inset_0_0_4px_rgba(249,115,22,0.8)]"
+        fullContainerClass: CONTAINER_BASE_CLASS + " text-orange-400",
+        fullKeyClass: KEY_BASE_CLASS + " border-orange-500/30 text-orange-400"
     },
     [InteractionPromptId.PLANT_EXPLOSIVE]: {
         key: 'ui.plant_explosives',
-        fullContainerClass: CONTAINER_BASE_CLASS + " border-red-500/40 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.8)]",
-        fullKeyClass: KEY_BASE_CLASS + " bg-red-500/10 border-red-500/30 text-red-400 shadow-[inset_0_0_4px_rgba(239,68,68,0.8)]"
+        fullContainerClass: CONTAINER_BASE_CLASS + " text-red-500",
+        fullKeyClass: KEY_BASE_CLASS + " border-red-500/30 text-red-500"
     },
     [InteractionPromptId.KNOCK_ON_PORT]: {
         key: 'ui.interact_knock_on_port',
-        fullContainerClass: CONTAINER_BASE_CLASS + " border-white/20 text-white shadow-[0_0_15px_rgba(255,255,255,0.8)]",
-        fullKeyClass: KEY_BASE_CLASS + " bg-white/10 border-white/20 text-white shadow-[inset_0_0_4px_rgba(255,255,255,0.8)]"
+        fullContainerClass: CONTAINER_BASE_CLASS + " text-white",
+        fullKeyClass: KEY_BASE_CLASS + " border-white/30 text-white"
     }
 };
 
@@ -151,33 +151,24 @@ const InteractionPrompt = React.forwardRef<any, InteractionPromptProps>(({
         >
             <div className="absolute inset-[-20px] pointer-events-auto" />
 
+            {/* SMOKY CINEMATIC BACKGROUND */}
+            <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                    background: 'radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 50%, transparent 100%)',
+                    filter: 'blur(10px)',
+                    transform: 'scaleX(1.4) scaleY(1.1)'
+                }}
+            />
+
             <div ref={containerRef} className={DEFAULT_CONFIG.fullContainerClass}>
                 <span ref={keyRef} className={DEFAULT_CONFIG.fullKeyClass}>
                     {inputKey}
                 </span>
-                <span ref={labelRef} className="text-xs font-black tracking-widest uppercase hud-text-glow">
+                <span ref={labelRef} className="text-xs font-mono font-bold tracking-widest uppercase hud-text-glow">
                     {t(DEFAULT_CONFIG.key)}
                 </span>
             </div>
-
-            {/* STYLES MOVED TO STATIC SCALABLE SYSTEM - INLINE INJECTION INCLUDES NO TRANSLATION BLOCKS */}
-            <style>{`
-                .hud-prompt-grit {
-                    background: repeating-linear-gradient(
-                        0deg,
-                        transparent,
-                        transparent 2px,
-                        rgba(255, 255, 255, 0.08) 2px,
-                        rgba(255, 255, 255, 0.08) 4px
-                    ),
-                    linear-gradient(
-                        rgba(24, 24, 27, 0.95),
-                        rgba(24, 24, 27, 0.95)
-                    );
-                    border-style: solid;
-                    border-width: 1px;
-                }
-            `}</style>
         </div>
     );
 });

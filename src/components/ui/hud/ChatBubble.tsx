@@ -24,13 +24,13 @@ const ChatBubblePooled = forwardRef((_, ref) => {
             contentRef.current.innerText = text;
 
             if (subType === ChatBubbleSubtype.THOUGHT) {
-                containerRef.current.style.borderLeft = `4px dashed ${COLORS.CYAN.str}`;
+                contentRef.current.style.fontStyle = 'italic';
                 containerRef.current.style.color = COLORS.CYAN.str;
             } else if (subType === ChatBubbleSubtype.SPEAK) {
-                containerRef.current.style.borderLeft = `4px solid ${COLORS.WHITE.str}`;
+                contentRef.current.style.fontStyle = 'normal';
                 containerRef.current.style.color = COLORS.WHITE.str;
             } else {
-                containerRef.current.style.borderLeft = `4px solid ${COLORS.TEAL.str}`;
+                contentRef.current.style.fontStyle = 'normal';
                 containerRef.current.style.color = COLORS.TEAL.str;
             }
 
@@ -53,10 +53,23 @@ const ChatBubblePooled = forwardRef((_, ref) => {
     return (
         <div
             ref={containerRef}
-            className="mt-2 px-6 py-3 rounded-sm bg-black/90 font-black shadow-2xl text-center min-w-[250px] uppercase tracking-tighter"
-            style={{ display: 'none', willChange: 'transform, opacity', borderLeft: `4px solid ${COLORS.TEAL.str}`, color: COLORS.TEAL.str }}
+            className="relative mt-2 p-4 flex flex-col items-center justify-center min-w-[280px] text-center"
+            style={{ display: 'none', willChange: 'transform, opacity' }}
         >
-            <div ref={contentRef} />
+            {/* SMOKY CINEMATIC BACKGROUND */}
+            <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                    background: 'radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 50%, transparent 100%)',
+                    filter: 'blur(12px)',
+                    transform: 'scaleX(1.3) scaleY(1.1)'
+                }}
+            />
+
+            <div 
+                ref={contentRef} 
+                className="relative z-10 text-sm md:text-base font-mono font-bold tracking-wider leading-relaxed drop-shadow-md"
+            />
         </div>
     );
 });

@@ -19,7 +19,7 @@ interface ActiveNode {
     active: boolean;
 }
 
-const NotificationText: React.FC = () => {
+const CombatLog: React.FC = () => {
     const poolRefs = useRef<HTMLDivElement[]>([]);
     const nextIdx = useRef(0);
 
@@ -57,7 +57,7 @@ const NotificationText: React.FC = () => {
 
         el.style.setProperty('--jitter-x', `${jitterX}px`);
         el.style.display = 'block';
-        el.style.animation = 'notification-float 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards';
+        el.style.animation = 'combat-float 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards';
     };
 
     const spawnAccumulated = (type: UIEventType, amount: number, label: string, color: string) => {
@@ -83,7 +83,7 @@ const NotificationText: React.FC = () => {
                 el.innerText = `+${existing.amount} ${label}`;
                 el.style.animation = 'none';
                 void el.offsetHeight;
-                el.style.animation = 'notification-float 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards';
+                el.style.animation = 'combat-float 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards';
             }
             return;
         }
@@ -128,7 +128,7 @@ const NotificationText: React.FC = () => {
         void el.offsetHeight;
         el.style.setProperty('--jitter-x', `${jitterX}px`);
         el.style.display = 'block';
-        el.style.animation = 'notification-float 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards';
+        el.style.animation = 'combat-float 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards';
     };
 
     useUIEventBridge((type, p1) => {
@@ -181,7 +181,7 @@ const NotificationText: React.FC = () => {
             </div>
 
             <style>{`
-            @keyframes notification-float {
+            @keyframes combat-float {
                 0% {
                 opacity: 0;
                 transform: translate(calc(-50% + var(--jitter-x)), 20px) scale(0.6);
@@ -203,4 +203,4 @@ const NotificationText: React.FC = () => {
     );
 };
 
-export default NotificationText;
+export default CombatLog;

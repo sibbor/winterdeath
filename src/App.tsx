@@ -78,6 +78,7 @@ const App: React.FC = () => {
 
     const [isInitialBoot, setIsInitialBoot] = useState(true);
     const [isLoadingSector, setIsLoadingSector] = useState(false);
+    const [isSectorBannerActive, setIsSectorBannerActive] = useState(false);
     const [isLoadingCamp, setIsLoadingCamp] = useState(false);
     const [loadingTargetIsCamp, setLoadingTargetIsCamp] = useState(false);
     const [showLoadingOverlay, setShowLoadingOverlay] = useState(true);
@@ -191,8 +192,14 @@ const App: React.FC = () => {
         transitionTaskRef.current = true;
         sceneReadyRef.current = false;
 
-        if (type === 'CAMP') setIsLoadingCamp(true);
-        else setIsLoadingSector(true);
+        if (type === 'CAMP') {
+            setIsLoadingCamp(true);
+        } else {
+            setIsLoadingSector(true);
+            if (type === 'SECTOR') {
+                setIsSectorBannerActive(true);
+            }
+        }
 
         setLoadingTargetIsCamp(type === 'CAMP');
         setShowLoadingOverlay(true);
@@ -900,6 +907,8 @@ const App: React.FC = () => {
                                         onSelectWeapon={handleSelectWeaponAction}
                                         onRotateCamera={handleRotateCameraAction}
                                         onOpenAdventureLog={handleOpenAdventureLogAction}
+                                        isSectorBannerActive={isSectorBannerActive}
+                                        onSectorBannerComplete={() => setIsSectorBannerActive(false)}
                                     />
                                 )}
                             </>

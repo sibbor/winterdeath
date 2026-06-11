@@ -162,18 +162,24 @@ export class InputManager implements System {
     }
 
     public update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
-        // High-frequency synchronized pipeline bridge check
-        const engineSignal = UIEventBridge.consumeEngineSignal();
-        if (engineSignal !== MetaActionId.NONE) {
-            this.handleMetaAction(engineSignal);
+        if (!this.isEnabled) {
+            // Consume signals even if disabled to prevent backlog buildup
+            UIEventBridge.consumeEngineSignal();
+            UIEventBridge.consumeUiAction();
+            return;
         }
-
-        if (!this.isEnabled) return;
 
         this.state.actions.set(this.physicalActions);
 
         if (UIEventBridge.getInteractionTrigger()) {
             this.state.actions[InputAction.INTERACT] = 1;
+        }
+
+        // Process transient UI-to-Engine action signals after copying keyboard physical actions,
+        // so they persist for the simulation tick instead of being instantly overwritten.
+        const engineSignal = UIEventBridge.consumeEngineSignal();
+        if (engineSignal !== MetaActionId.NONE) {
+            this.handleMetaAction(engineSignal);
         }
 
         const uiAction = UIEventBridge.consumeUiAction();
