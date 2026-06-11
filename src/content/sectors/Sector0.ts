@@ -639,8 +639,9 @@ export const Sector0: SectorDef = {
         ], 1.5, 1.5);
         await yieldIfBudgetExceeded();
 
-        await SectorBuilder.createHedgePath(ctx, [new THREE.Vector3(141, 0, 188), new THREE.Vector3(146, 0, 230)]);
-        await SectorBuilder.createHedgePath(ctx, [new THREE.Vector3(139, 0, 195), new THREE.Vector3(136, 0, 231)]);
+        // Hedges near the town church
+        await SectorBuilder.createHedgePath(ctx, [new THREE.Vector3(130, 0, 199), new THREE.Vector3(136, 0, 231)]);
+        await SectorBuilder.createHedgePath(ctx, [new THREE.Vector3(141, 0, 196), new THREE.Vector3(146, 0, 230)]);
         await yieldIfBudgetExceeded();
 
         await SectorBuilder.spawnPoi(ctx, PoiType.CHURCH, LOCATIONS.POIS.CHURCH.x, LOCATIONS.POIS.CHURCH.z, 0);
