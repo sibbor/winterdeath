@@ -122,8 +122,8 @@ export class CinematicSystem implements System {
         cinematic.lastVoiceTime = 0;
         cinematic.lastSkipTime = 0;
 
-        cinematic.zoom = params.zoom || 0.4;
-        cinematic.rotationSpeed = params.rotationSpeed || 0.00015;
+        cinematic.zoom = params.zoom !== undefined ? params.zoom : 0.4;
+        cinematic.rotationSpeed = params.rotationSpeed !== undefined ? params.rotationSpeed : 0.00015;
         cinematic.customPath = params.customPath || null;
         cinematic.pathDuration = params.pathDuration || 0;
         cinematic.lookAtPos = params.lookAtPos ? new THREE.Vector3().copy(params.lookAtPos) : null;
@@ -197,10 +197,26 @@ export class CinematicSystem implements System {
         cinematic.lineStartTime = currentNow;
         cinematic.fadingOut = false;
 
-        // 4. Calculate durations (Zero-GC)
-        // Defaults to 2.5s typing and 4s total duration if not specified.
-        cinematic.typingDuration = line.typingDuration || 2500;
-        cinematic.lineDuration = line.duration || Math.max(4000, cinematic.typingDuration + 1500);
+        // 4. Calculate durations (Zero-GC word counting)
+        const text = line.text || '';
+        let wordCount = 0;
+        let inWord = false;
+        for (let idxChar = 0; idxChar < text.length; idxChar++) {
+            const char = text.charCodeAt(idxChar);
+            const isSp = char === 32 || char === 9 || char === 10 || char === 13; // Space, Tab, Newline
+            if (isSp) {
+                inWord = false;
+            } else if (!inWord) {
+                inWord = true;
+                wordCount++;
+            }
+        }
+        if (wordCount === 0) wordCount = 5;
+
+        // Proportional talking duration (audio beeps & mouth movements)
+        cinematic.typingDuration = line.typingDuration || Math.max(1000, wordCount * 200);
+        // Dynamic auto-proceed duration based on word count (approx. 450ms per word + 2s buffer, min 3s)
+        cinematic.lineDuration = line.duration || Math.max(3000, wordCount * 450 + 2000);
 
         // 5. Update Telemetry and UI Bridge (SMI-Safe)
         const resolvedId = DataResolver.resolveSpeaker(line.speaker);
@@ -338,36 +354,41 @@ export class CinematicSystem implements System {
                     }
                 }
             } else if (cinematic.hasTarget && cinematic.target) {
-                // Mesh orbit: smooth entry from player camera into midpoint orbit between
-                // the player and the target NPC.
-                cinematic.target.getWorldPosition(_v3);
+                if (cinematic.targetPos && cinematic.lookAtPos && cinematic.rotationSpeed === 0) {
+                    this.camera.setPosition(cinematic.targetPos.x, cinematic.targetPos.y, cinematic.targetPos.z);
+                    this.camera.lookAt(cinematic.lookAtPos);
+                } else {
+                    // Mesh orbit: smooth entry from player camera into midpoint orbit between
+                    // the player and the target NPC.
+                    cinematic.target.getWorldPosition(_v3);
 
-                _v1.set(
-                    (_v3.x + playerPos.x) * 0.5,
-                    (_v3.y + playerPos.y) * 0.5,
-                    (_v3.z + playerPos.z) * 0.5
-                );
+                    _v1.set(
+                        (_v3.x + playerPos.x) * 0.5,
+                        (_v3.y + playerPos.y) * 0.5,
+                        (_v3.z + playerPos.z) * 0.5
+                    );
 
-                const zoomFactor = 1.0 - (t * (cinematic.zoom || 0.4));
-                const angle = totalElapsed * (cinematic.rotationSpeed || 0.00015);
-                const focusPosX = _v1.x + Math.sin(angle) * (15 * zoomFactor);
-                const focusPosY = _v1.y + (12 * zoomFactor);
-                const focusPosZ = _v1.z + Math.cos(angle) * (15 * zoomFactor);
+                    const zoomFactor = 1.0 - (t * (cinematic.zoom || 0.4));
+                    const angle = totalElapsed * (cinematic.rotationSpeed || 0.00015);
+                    const focusPosX = _v1.x + Math.sin(angle) * (15 * zoomFactor);
+                    const focusPosY = _v1.y + (12 * zoomFactor);
+                    const focusPosZ = _v1.z + Math.cos(angle) * (15 * zoomFactor);
 
-                this.camera.setPosition(
-                    THREE.MathUtils.lerp(cinematic.startPos.x, focusPosX, t),
-                    THREE.MathUtils.lerp(cinematic.startPos.y, focusPosY, t),
-                    THREE.MathUtils.lerp(cinematic.startPos.z, focusPosZ, t)
-                );
+                    this.camera.setPosition(
+                        THREE.MathUtils.lerp(cinematic.startPos.x, focusPosX, t),
+                        THREE.MathUtils.lerp(cinematic.startPos.y, focusPosY, t),
+                        THREE.MathUtils.lerp(cinematic.startPos.z, focusPosZ, t)
+                    );
 
-                // Lerp lookAt from startLookAt — NOT from the lagged camera.lookAtTarget,
-                // which would compound drift further every frame.
-                _v1.y += 1.5;
-                this.camera.lookAt(
-                    THREE.MathUtils.lerp(cinematic.startLookAt.x, _v1.x, t),
-                    THREE.MathUtils.lerp(cinematic.startLookAt.y, _v1.y, t),
-                    THREE.MathUtils.lerp(cinematic.startLookAt.z, _v1.z, t)
-                );
+                    // Lerp lookAt from startLookAt — NOT from the lagged camera.lookAtTarget,
+                    // which would compound drift further every frame.
+                    _v1.y += 1.5;
+                    this.camera.lookAt(
+                        THREE.MathUtils.lerp(cinematic.startLookAt.x, _v1.x, t),
+                        THREE.MathUtils.lerp(cinematic.startLookAt.y, _v1.y, t),
+                        THREE.MathUtils.lerp(cinematic.startLookAt.z, _v1.z, t)
+                    );
+                }
             } else if (cinematic.hasTarget && cinematic.targetPos) {
                 // Mesh-less orbit: fixed world coordinate (Sector 3 path triggers).
                 _v1.copy(cinematic.targetPos);
@@ -405,14 +426,8 @@ export class CinematicSystem implements System {
                 cinematic.lastSkipTime = skipNow;
                 this.state.ui.cinematicLine.lastSkipTime = skipNow;
 
-                if (timeInLine < cinematic.typingDuration) {
-                    // Skip typing
-                    cinematic.lineStartTime = now - cinematic.typingDuration;
-                    this.dialogueRef.current?.finishTyping();
-                } else {
-                    // Advance to next line (This flushes triggers of the current line)
-                    this.playLine(cinematic.lineIndex + 1);
-                }
+                // Advance to next line (This flushes triggers of the current line)
+                this.playLine(cinematic.lineIndex + 1);
             }
         }
 

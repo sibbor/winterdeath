@@ -42,7 +42,8 @@ export enum TerminalType {
     ARMORY = 0,
     SPAWNER = 1,
     ENVIRONMENT = 2,
-    SKILLS = 3
+    SKILLS = 3,
+    UI = 4
 }
 
 export enum ChestType {

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SectorBuildContext, ChestType } from '../../game/session/SectorTypes';
-import { MATERIALS } from '../../utils/assets';
+import { MATERIALS, ModelFactory } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { ColliderType } from '@/src/core/world/CollisionResolution';
 
@@ -20,7 +20,7 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
 
     // Define Rooms
     const rooms: RoomData[] = [
-        { id: 1, x: 100, z: -100, w: 30, d: 30, type: 'Lobby', zombies: 0 },
+        { id: 1, x: 89, z: -88, w: 32, d: 32, type: 'Lobby', zombies: 0 },
         { id: 2, x: 150, z: -150, w: 50, d: 20, type: 'Material', chests: 2 },
         { id: 3, x: 150, z: -200, w: 30, d: 30, type: 'Mess', zombies: 5 },
         { id: 4, x: 100, z: -200, w: 30, d: 30, type: 'Food', chests: 3 },
@@ -32,8 +32,8 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
 
     // Define Explicit Corridors to Connect Rooms
     const corridors: Box[] = [
-        // Entrance Tunnel (From -80 to R1 -100)
-        { x: 100, z: -90, w: 14, d: 40 },
+        // Lobby R1 <-> R5 Social1 Connector (Vertical)
+        { x: 100, z: -110, w: 10, d: 14 },
 
         // R5 <-> R2 Connection (Diagonal) - Modified to be truly diagonal
         { x: 118, z: -138, w: 35, d: 12, rotation: -Math.PI / 4 },
@@ -45,10 +45,6 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
         // R3 <-> R4 (Horizontal)
         // R3 (150,-200) to R4 (100,-200)
         { x: 125, z: -200, w: 30, d: 10 },
-
-        // R5 <-> R1 (Vertical)
-        // R5 top -115. R1 bottom -115. (Touch)
-        { x: 100, z: -115, w: 10, d: 10 },
 
         // R5 <-> R6 (Horizontal)
         // R5 left 90. R6 right 75.
@@ -86,12 +82,12 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
         if (floorMat.map) {
             floorMat.map.wrapS = THREE.RepeatWrapping;
             floorMat.map.wrapT = THREE.RepeatWrapping;
-            floorMat.map.repeat.set((s.w + 6) / 4, (s.d + 6) / 4);
+            floorMat.map.repeat.set(s.w / 4, s.d / 4);
         }
         if (floorMat.bumpMap) {
             floorMat.bumpMap.wrapS = THREE.RepeatWrapping;
             floorMat.bumpMap.wrapT = THREE.RepeatWrapping;
-            floorMat.bumpMap.repeat.set((s.w + 6) / 4, (s.d + 6) / 4);
+            floorMat.bumpMap.repeat.set(s.w / 4, s.d / 4);
         }
 
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), floorMat);
@@ -269,8 +265,8 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
                 // Validity Check
                 let isValid = true;
 
-                // Entrance Gap - Widened to remove protruding walls
-                if (pz > -71 && Math.abs(px - 100) < 18.0) isValid = false;
+                // Entrance Gap - Widened to remove protruding walls at the new entrance (x = 105, z = -77, facing West)
+                if (px > 103 && pz > -85 && pz < -69) isValid = false;
 
                 // Bunker Door Gap (Manual punch-through on West wall)
                 if (Math.abs(px - 41) < 2.0 && Math.abs(pz - (-193)) < 12.0) isValid = false;
@@ -364,15 +360,56 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
                     flickerRate: 0.05
                 } as any);
             }
+
+            // Spawn Animated Humans
+            const humansData = [
+                { id: 'sh_1', name: 'Survivor 1', color: 0x5c4033, x: r.x - 3, z: r.z - 3, rot: Math.PI * 0.25 },
+                { id: 'sh_2', name: 'Survivor 2', color: 0x4a3c31, x: r.x + 3, z: r.z + 2, rot: Math.PI * 1.1 },
+                { id: 'sh_3', name: 'Survivor 3', color: 0x334455, x: r.x - 4, z: r.z + 4, rot: Math.PI * 0.75 },
+                { id: 'sh_4', name: 'Survivor 4', color: 0x223322, x: r.x + 2, z: r.z - 4, rot: Math.PI * 1.6 }
+            ];
+
+            for (const h of humansData) {
+                const dummyData = {
+                    id: h.id,
+                    name: h.name,
+                    race: 'human',
+                    gender: 'male',
+                    color: { num: h.color },
+                    scale: 0.9 + Math.random() * 0.2
+                };
+                const humanGroup = ModelFactory.createFamilyMember(dummyData);
+                humanGroup.position.set(h.x, 0.06, h.z);
+                humanGroup.rotation.y = h.rot;
+                humanGroup.userData.isShelterHuman = true;
+
+                // Remove gun mesh if present
+                const gun = humanGroup.getObjectByName('gun');
+                if (gun) {
+                    gun.parent?.remove(gun);
+                }
+
+                innerCave.add(humanGroup);
+            }
         } else {
             // Decorate normal rooms
             //decorateRoom(r);
+
+            // Spawn dead humans in blood pools inside cave rooms
+            if (r.type === 'Mess' || r.type === 'Social1' || r.type === 'Food') {
+                const numCorpses = Math.floor(Math.random() * 2) + 1;
+                for (let i = 0; i < numCorpses; i++) {
+                    const cx = r.x + (Math.random() - 0.5) * (r.w - 8);
+                    const cz = r.z + (Math.random() - 0.5) * (r.d - 8);
+                    SectorBuilder.spawnDeadBody(ctx, cx, cz, 'HUMAN', Math.random() * Math.PI * 2, true);
+                }
+            }
         }
 
         // Chest spawns
         if (r.chests) {
             for (let i = 0; i < r.chests; i++) {
-                await SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), ChestType.STANDARD, Math.random() * Math.PI);
+                await SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), ChestType.STANDARD, Math.random() * Math.PI, undefined, 0.06);
                 await yieldIfBudgetExceeded();
             }
         }
@@ -398,10 +435,12 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
     const rightPost = new THREE.Mesh(new THREE.BoxGeometry(2, 16, 4), frameMat);
     rightPost.position.x = 10;
     frameGroup.add(rightPost);
-    SectorBuilder.addObstacle(ctx, {
+    const frameObstacle = {
         mesh: frameGroup,
         collider: { type: ColliderType.BOX, size: new THREE.Vector3(22, 17, 4) }
-    });
+    };
+    SectorBuilder.addObstacle(ctx, frameObstacle);
+    (ctx as any).sectorState.doorObstacleFrame = frameObstacle;
 
     scene.add(frameGroup);
 

@@ -135,8 +135,8 @@ export const useInput = (
                         case OverlayType.PAUSE:
                         case OverlayType.MAP:
                         case OverlayType.ADVENTURE_LOG:
-                        case OverlayType.STATION_ARMORY:
-                        case OverlayType.STATION_STATISTICS: {
+                        case OverlayType.TERMINAL_ARMORY:
+                        case OverlayType.TERMINAL_STATISTICS: {
                             // Tell App.tsx to unpause WebGL tracking loops instantly
                             acts.onPauseToggle(false);
                             acts.setActiveOverlay(OverlayType.NONE);
@@ -226,15 +226,15 @@ export const useInput = (
             }
         };
 
-        const manager = (window as any).inputManager;
-        if (manager) {
-            manager.onMetaAction = handleSignal;
-        }
+        const handleSignalEvent = (e: Event) => {
+            const signal = (e as CustomEvent).detail?.actionId;
+            handleSignal(signal);
+        };
+
+        window.addEventListener('engine-meta-action', handleSignalEvent);
 
         return () => {
-            if (manager && manager.onMetaAction === handleSignal) {
-                manager.onMetaAction = undefined;
-            }
+            window.removeEventListener('engine-meta-action', handleSignalEvent);
         };
     }, [props.gameState.screen, p.activeOverlay, props.isPaused]);
 

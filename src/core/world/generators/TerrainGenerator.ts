@@ -140,7 +140,7 @@ export const TerrainGenerator = {
         return mesh;
     },
 
-    createMountain: (ctx: SectorBuildContext, points: THREE.Vector3[], depth: number = 20, height: number = 15, caveConfig?: { position: THREE.Vector3, rotation?: number }) => {
+    createMountain: (ctx: SectorBuildContext, points: THREE.Vector3[], depth: number = 20, height: number = 15, caveConfig?: { position: THREE.Vector3, rotation?: number, cutoutLength?: number }) => {
         if (!points || points.length < 2) return;
 
         const geometries: THREE.BufferGeometry[] = [];
@@ -155,7 +155,7 @@ export const TerrainGenerator = {
         const openingDir = new THREE.Vector3(0, 0, 1);
 
         if (caveConfig) {
-            const opening = TerrainGenerator.createMountainOpening(depth + 5);
+            const opening = TerrainGenerator.createMountainOpening(depth / 1.5);
             opening.position.copy(caveConfig.position);
             openingPos.copy(caveConfig.position);
 
@@ -177,15 +177,19 @@ export const TerrainGenerator = {
 
         const addRockBlock = (pos: THREE.Vector3, scale: THREE.Vector3, rot: THREE.Euler, type: 'dodeca' | 'icosa' = 'dodeca', isPortal: boolean = false) => {
             if (caveConfig && !isPortal) {
-                _v1.copy(openingPos);
-                _v2.copy(openingDir).multiplyScalar(depth * 0.4);
-                _v1.add(_v2); // tunnelCenter
+                // Project position relative to openingPos onto openingDir
+                _v1.subVectors(pos, openingPos);
+                const distAlong = _v1.dot(openingDir);
 
-                const distSq = pos.distanceToSquared(_v1);
+                // Get perpendicular component
+                _v2.copy(openingDir).multiplyScalar(distAlong);
+                _v1.sub(_v2); // perp vector
+                const distAcross = _v1.length();
+
                 const maxRadius = Math.max(scale.x, scale.z);
-                const safeDist = (depth * 0.4) + maxRadius + 5;
-
-                if (distSq < safeDist * safeDist) {
+                const tunnelHalfWidth = 6.5 + maxRadius * 0.5;
+                const cutoutLength = caveConfig.cutoutLength !== undefined ? caveConfig.cutoutLength : 40;
+                if (Math.abs(distAlong) <= cutoutLength && distAcross <= tunnelHalfWidth) {
                     return;
                 }
             }

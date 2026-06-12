@@ -69,6 +69,7 @@ const _fastUpdateDetail = {
     challengePoints: 0,
     spEarned: 0,
     hasCriticalHp: false,
+    statusFlags: 0,
     interactionActive: false,
     interactionId: 0,
     interactionType: 0,
@@ -207,6 +208,7 @@ export const HudSystem = {
             UIEventBridge.setInteractionPrompt(InteractionPromptId.NONE);
         }
 
+        _fastUpdateDetail.statusFlags = state.combat.statusFlags || 0;
         // Sync StatusStore flags with the main engine state (Zero-GC)
         StatusStore.setStatusFlags(state.combat.statusFlags || 0);
 

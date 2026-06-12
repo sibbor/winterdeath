@@ -276,7 +276,7 @@ export const MATERIALS = {
     windowLit: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 5 }),
     windowDark: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9, metalness: 0.1 }),
     upWindow: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 0.5 }),
-    caveLampBulb: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 20 }),
+    caveLampBulb: new THREE.MeshBasicMaterial({ color: 0xffddaa }),
     caveLampCage: new THREE.MeshStandardMaterial({ color: 0x333333, wireframe: true }),
     scarecrowPost: new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 }),
     scarecrowHead: new THREE.MeshStandardMaterial({ color: 0xeadbaf, roughness: 1.0 }),

@@ -212,7 +212,9 @@ export class ProjectileSystem implements System {
                     const poolIdx = streamer.getEnemyPool().nextIndex();
 
                     const approxPathDist = Math.abs(_v2.x) + Math.abs(_v2.y) + Math.abs(_v2.z);
-                    const queryRadius = Math.max(2.5, approxPathDist * 0.5 + 1.5);
+                    // Hitbox/Collision fix: Bosses have a huge hitRadius (up to 5.25m).
+                    // The spatial grid query radius must cover the boss's hit boundary.
+                    const queryRadius = Math.max(6.0, approxPathDist * 0.5 + 1.5);
                     const midX = pool.posX[i] - (_v2.x * 0.5);
                     const midZ = pool.posZ[i] - (_v2.z * 0.5);
 
@@ -350,12 +352,13 @@ export class ProjectileSystem implements System {
 
         const streamer = this.session.systems.worldStreamer;
         const poolIdx = streamer.getEnemyPool().nextIndex();
-        streamer.getNearbyEnemies(px, pz, radius, poolIdx);
+        // Hitbox/Collision fix: Pad the query radius by 5.5m (max enemy hitRadius) so that the boss and other large entities
+        // whose center lies slightly outside the blast radius but whose body overlaps the explosion are correctly queried.
+        streamer.getNearbyEnemies(px, pz, radius + 5.5, poolIdx);
 
         const nearby = streamer.getEnemyPool().getPool(poolIdx);
         const nearCount = streamer.getEnemyPool().getCount(poolIdx);
         const activeEnemies = EnemyManager.getActiveEnemies();
-        const radSq = radius * radius;
 
         for (let i = 0; i < nearCount; i++) {
             const enemy = nearby[i];
@@ -365,7 +368,10 @@ export class ProjectileSystem implements System {
             const dx = enemy.mesh.position.x - px;
             const dz = enemy.mesh.position.z - pz;
             const distSq = dx * dx + dz * dz;
-            if (distSq < radSq) {
+            
+            const enemyHitRad = enemy.hitRadius || 0.8;
+            const maxExplosionDist = radius + enemyHitRad;
+            if (distSq < maxExplosionDist * maxExplosionDist) {
                 const enemyObj = activeEnemies[eIdx];
                 if (enemyObj) {
                     const dist = Math.sqrt(distSq);
@@ -476,7 +482,8 @@ export class ProjectileSystem implements System {
                 if (ctx?.worldStreamer) {
                     const streamer = ctx.worldStreamer;
                     const poolIdx = streamer.getEnemyPool().nextIndex();
-                    streamer.getNearbyEnemies(fz.x, fz.z, fz.radius, poolIdx);
+                    // Hitbox/Collision fix: Pad query by 5.5m for bosses
+                    streamer.getNearbyEnemies(fz.x, fz.z, fz.radius + 5.5, poolIdx);
 
                     const nearby = streamer.getEnemyPool().getPool(poolIdx);
                     const nearCount = streamer.getEnemyPool().getCount(poolIdx);
@@ -489,7 +496,10 @@ export class ProjectileSystem implements System {
 
                         const dx = EnemyPoolState.posX[jIdx] - fz.x;
                         const dz = EnemyPoolState.posZ[jIdx] - fz.z;
-                        if (dx * dx + dz * dz <= radSq) {
+                        
+                        const enemyHitRad = enemy.hitRadius || 0.8;
+                        const maxFireDist = fz.radius + enemyHitRad;
+                        if (dx * dx + dz * dz <= maxFireDist * maxFireDist) {
                             EnemyPoolState.hp[jIdx] -= dmg;
                             EnemyPoolState.statusFlags[jIdx] = (EnemyPoolState.statusFlags[jIdx] | EnemyFlags.BURNING) | 0;
 

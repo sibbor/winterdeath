@@ -1,18 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { useHudStore } from '../../../hooks/useHudStore';
-import { DataResolver } from '../../../core/data/DataResolver';
-import { t } from '../../../utils/i18n';
 
-interface SectorBannerProps {
+interface SideBannerProps {
     active: boolean;
     onComplete: () => void;
 }
 
-const SectorBanner: React.FC<SectorBannerProps> = ({ active, onComplete }) => {
-    const sectorNameKey = useHudStore(s => s.sectorName);
-    const currentSector = useHudStore(s => s.currentSector);
+const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete }) => {
 
     const [animationState, setAnimationState] = useState<'idle' | 'in' | 'visible' | 'out'>('idle');
+    const [title, setTitle] = useState<string | null>(null);
+    const [subtitle, setSubtitle] = useState<string | null>(null);
+
+    useEffect(() => {
+        const handlePreview = (e: Event) => {
+            const customEvent = e as CustomEvent;
+            if (customEvent.detail) {
+                setTitle(customEvent.detail.title || null);
+                setSubtitle(customEvent.detail.subtitle || null);
+            }
+        };
+        window.addEventListener('trigger-side-banner-preview', handlePreview);
+        return () => window.removeEventListener('trigger-side-banner-preview', handlePreview);
+    }, []);
 
     const onCompleteRef = React.useRef(onComplete);
     useEffect(() => {
@@ -42,6 +51,9 @@ const SectorBanner: React.FC<SectorBannerProps> = ({ active, onComplete }) => {
 
         const t3 = setTimeout(() => {
             onCompleteRef.current();
+            // Reset custom title and subtitle after animation finishes
+            setTitle(null);
+            setSubtitle(null);
         }, 3250);
 
         return () => {
@@ -53,15 +65,11 @@ const SectorBanner: React.FC<SectorBannerProps> = ({ active, onComplete }) => {
 
     if (!active || animationState === 'idle') return null;
 
-    const name = sectorNameKey ? t(sectorNameKey) : t(DataResolver.getSectorName(currentSector));
-    const sectorIndexFormatted = String(currentSector).padStart(3, '0');
-    const indexText = `Sector ${sectorIndexFormatted}`;
-
     let animationClass = '';
     if (animationState === 'in') {
-        animationClass = 'animate-sector-banner-in';
+        animationClass = 'animate-side-banner-in';
     } else if (animationState === 'out') {
-        animationClass = 'animate-sector-banner-out';
+        animationClass = 'animate-side-banner-out';
     } else if (animationState === 'visible') {
         animationClass = 'opacity-100 filter-none transform-none';
     }
@@ -81,9 +89,9 @@ const SectorBanner: React.FC<SectorBannerProps> = ({ active, onComplete }) => {
 
                 {/* CONTENT */}
                 <div className="relative z-10 flex flex-col items-start">
-                    {/* SECTOR NAME (Gold/Yellow project color) */}
+                    {/* TITLE (Gold/Yellow project color) */}
                     <span className="text-4xl font-mono font-black text-[#bfa979] tracking-[0.25em] uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                        {name}
+                        {title}
                     </span>
 
                     {/* DIVIDER LINE (Gold fading out with decorative tick on left) */}
@@ -92,10 +100,10 @@ const SectorBanner: React.FC<SectorBannerProps> = ({ active, onComplete }) => {
                         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-[#bfa979] rotate-45" />
                     </div>
 
-                    {/* SECTOR INDEX (Teal/Cyan capsule indented) */}
+                    {/* SUBTITLE (Teal/Cyan capsule indented) */}
                     <div className="relative mt-1 ml-8 px-4 py-1 flex items-center justify-center rounded bg-[#132224]/90 border border-[#2dd4bf]/30 backdrop-blur-md shadow-[0_0_15px_rgba(45,212,212,0.15)]">
                         <span className="text-[11px] font-mono font-bold text-[#cccccc] tracking-[0.3em] uppercase">
-                            {indexText}
+                            {subtitle}
                         </span>
                     </div>
                 </div>
@@ -110,15 +118,17 @@ const SectorBanner: React.FC<SectorBannerProps> = ({ active, onComplete }) => {
                     0% { opacity: 1; filter: blur(0px); transform: translateX(0); }
                     100% { opacity: 0; filter: blur(10px); transform: translateX(-40px); }
                 }
-                .animate-sector-banner-in {
+                .animate-side-banner-in {
                     animation: sectorBannerIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                    will-change: transform, opacity;
                 }
-                .animate-sector-banner-out {
+                .animate-side-banner-out {
                     animation: sectorBannerOut 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                    will-change: transform, opacity;
                 }
             `}</style>
         </div>
     );
 };
 
-export default SectorBanner;
+export default SideBanner;

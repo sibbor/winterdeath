@@ -881,6 +881,7 @@ export class GameSessionSetup {
                 const currentFM = refs.familyMemberRef.current;
                 if (currentFM && !currentFM.rescued) {
                     currentFM.rescued = true;
+                    callbacks.rewardSP(1);
                     // Trigger immediate family rescue callback
                     if (props.onFamilyRescued) props.onFamilyRescued(currentFM.id);
                 }

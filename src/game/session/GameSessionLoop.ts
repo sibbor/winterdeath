@@ -67,6 +67,8 @@ const EMPTY_OBJECT: any = {};
 const _v1 = new THREE.Vector3();
 const _vCamera = new THREE.Vector3();
 const _vInteraction = new THREE.Vector3();
+const _vLerpPos = new THREE.Vector3();
+const _vLerpLookAt = new THREE.Vector3();
 const _interactionScreenPosScratch = { x: 0, y: 0 };
 const _traverseStack: THREE.Object3D[] = []; // Used for Zero-GC scene traversal
 
@@ -351,9 +353,26 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             const introTime = renderTime - refs.bossIntroRef.current.startTime;
 
             _vCamera.set(bossPos.x, 12, bossPos.z + 20);
-            engine.camera.setPosition(_vCamera);
             _vInteraction.set(bossPos.x, bossPos.y + 3, bossPos.z);
-            engine.camera.lookAt(_vInteraction);
+
+            // Smooth interpolation over 1500ms
+            const duration = 1500;
+            const tVal = Math.min(1.0, introTime / duration);
+            // Ease in-out quadratic
+            const easeT = tVal < 0.5 ? 2 * tVal * tVal : 1 - Math.pow(-2 * tVal + 2, 2) / 2;
+
+            const startPos = refs.bossIntroRef.current.startPos;
+            const startLookAt = refs.bossIntroRef.current.startLookAt;
+
+            if (startPos && startLookAt) {
+                _vLerpPos.lerpVectors(startPos, _vCamera, easeT);
+                _vLerpLookAt.lerpVectors(startLookAt, _vInteraction, easeT);
+                engine.camera.setPosition(_vLerpPos);
+                engine.camera.lookAt(_vLerpLookAt);
+            } else {
+                engine.camera.setPosition(_vCamera);
+                engine.camera.lookAt(_vInteraction);
+            }
 
             if (now - lastBossIntroShakeTime >= 83 && introTime < 3000) { // ~12Hz (every 83ms)
                 lastBossIntroShakeTime = now;

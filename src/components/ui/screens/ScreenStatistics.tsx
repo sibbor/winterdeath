@@ -732,48 +732,46 @@ const WeaponsTab: React.FC<{ stats: CareerStats, color: string, isMobileDevice?:
     );
 });
 
-const PerkItem: React.FC<{ perk: any, stats: CareerStats, t: (key: string) => string }> = React.memo(({ perk, stats, t }) => {
+const BuffEntry: React.FC<{ perk: any, stats: CareerStats, t: (key: string) => string }> = React.memo(({ perk, stats, t }) => {
+    const gained = StatsBridge.getPerkTimesGained(stats, perk.id);
+    const absorbed = StatsBridge.getPerkDamageAbsorbed(stats, perk.id);
+    const cleansed = StatsBridge.getPerkDebuffsCleansed(stats, perk.id);
+
     return (
-        <div key={perk.id} id={`log-item-${perk.id}`} className="bg-zinc-900/40 border border-zinc-800 p-6 relative group/hvr overflow-hidden">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-blue-500/5 rounded-full scale-0 group-hover/hvr:scale-[6] transition-transform duration-700 pointer-events-none" />
-            <div className="flex flex-col relative z-10">
-                <div className="flex justify-between items-start mb-4 border-b border-zinc-800 pb-2">
-                    <div className="flex flex-col">
-                        <span className="text-blue-500/80 text-lg font-black uppercase tracking-widest mb-1">{t(perk.displayName)}</span>
-                        <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">
-                            {t(perk.category === PerkCategory.PASSIVE ? 'ui.passive' : (perk.category === PerkCategory.BUFF ? 'ui.buff' : 'ui.debuff'))}
-                        </span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                        <span className="text-lg font-mono text-white">{StatsBridge.getPerkTimesGained(stats, perk.id)}</span>
-                        <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{t('ui.activations')}</span>
-                    </div>
-                </div>
-                <p className="text-sm text-zinc-400 mb-3 text-white">{t(perk.description)}</p>
-                {perk.prerequisite && <p className="text-sm text-zinc-400 italic mb-3">"{t(perk.prerequisite)}"</p>}
-                {(StatsBridge.getPerkDamageAbsorbed(stats, perk.id) > 0 || StatsBridge.getPerkDamageDealt(stats, perk.id) > 0 || StatsBridge.getPerkDebuffsCleansed(stats, perk.id) > 0) && (
-                    <div className="grid grid-cols-3 gap-4 border-t border-zinc-800 pt-4">
-                        {StatsBridge.getPerkDamageAbsorbed(stats, perk.id) > 0 && (
-                            <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-blue-500/70 uppercase tracking-wider">{t('ui.damage_absorbed')}</span>
-                                <span className="text-sm font-mono text-blue-400">{Math.floor(StatsBridge.getPerkDamageAbsorbed(stats, perk.id)).toLocaleString()}</span>
-                            </div>
-                        )}
-                        {StatsBridge.getPerkDamageDealt(stats, perk.id) > 0 && (
-                            <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-red-500/70 uppercase tracking-wider">{t('ui.damage_dealt')}</span>
-                                <span className="text-sm font-mono text-red-400">{Math.floor(StatsBridge.getPerkDamageDealt(stats, perk.id)).toLocaleString()}</span>
-                            </div>
-                        )}
-                        {StatsBridge.getPerkDebuffsCleansed(stats, perk.id) > 0 && (
-                            <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-green-500/70 uppercase tracking-wider">{t('ui.debuffs_cleansed')}</span>
-                                <span className="text-sm font-mono text-green-400">{StatsBridge.getPerkDebuffsCleansed(stats, perk.id)}</span>
-                            </div>
-                        )}
-                    </div>
-                )}
+        <div className="flex justify-between items-center px-4 py-3 bg-black/40 border border-zinc-800 hover:border-zinc-700 transition-colors group">
+            <div className="flex-1 flex flex-col justify-center">
+                <span className="text-sm font-bold text-zinc-200 uppercase tracking-tighter">{t(perk.displayName)}</span>
+                <span className="text-[10px] text-zinc-500 font-mono line-clamp-1 mt-0.5">{t(perk.description)}</span>
             </div>
+            <span className="w-24 text-right font-mono text-zinc-300 text-lg">{gained.toLocaleString()}</span>
+            <span className="w-32 text-right font-mono text-blue-400 font-bold text-lg">
+                {absorbed > 0 ? Math.floor(absorbed).toLocaleString() : '—'}
+            </span>
+            <span className="w-24 text-right font-mono text-green-400 font-bold text-lg">
+                {cleansed > 0 ? cleansed.toLocaleString() : '—'}
+            </span>
+        </div>
+    );
+});
+
+const DebuffEntry: React.FC<{ perk: any, stats: CareerStats, t: (key: string) => string }> = React.memo(({ perk, stats, t }) => {
+    const gained = StatsBridge.getPerkTimesGained(stats, perk.id);
+    const dealt = StatsBridge.getPerkDamageDealt(stats, perk.id); // Debuff damage dealt to player = damage taken
+    const avgDamage = gained > 0 ? Math.floor(dealt / gained) : 0;
+
+    return (
+        <div className="flex justify-between items-center px-4 py-3 bg-black/40 border border-zinc-800 hover:border-zinc-700 transition-colors group">
+            <div className="flex-1 flex flex-col justify-center">
+                <span className="text-sm font-bold text-zinc-200 uppercase tracking-tighter">{t(perk.displayName)}</span>
+                <span className="text-[10px] text-zinc-500 font-mono line-clamp-1 mt-0.5">{t(perk.description)}</span>
+            </div>
+            <span className="w-24 text-right font-mono text-zinc-300 text-lg">{gained.toLocaleString()}</span>
+            <span className="w-32 text-right font-mono text-red-400 font-bold text-lg">
+                {dealt > 0 ? Math.floor(dealt).toLocaleString() : '—'}
+            </span>
+            <span className="w-24 text-right font-mono text-amber-500 font-bold text-lg">
+                {avgDamage > 0 ? avgDamage.toLocaleString() : '—'}
+            </span>
         </div>
     );
 });
@@ -844,24 +842,7 @@ const PerksTab: React.FC<{ stats: CareerStats, t: (key: string) => string, effec
         return filtered;
     }, [stats]);
 
-    const passives = useMemo(() => {
-        const discovered = StatsBridge.getPerkDiscoveredMap(stats);
-        const gained = StatsBridge.getPerkTimesGainedMap(stats);
-        if (!discovered) return [];
-
-        const allPassives = DataResolver.getPerksByCategory(PerkCategory.PASSIVE);
-        const filtered: typeof allPassives = [];
-        for (let i = 0; i < allPassives.length; i++) {
-            const p = allPassives[i];
-            if (!p) continue;
-            if ((discovered[p.id] > 0) || (gained && gained[p.id] > 0)) {
-                filtered.push(p);
-            }
-        }
-        return filtered;
-    }, [stats]);
-
-    const hasData = buffs.length > 0 || debuffs.length > 0 || passives.length > 0;
+    const hasData = buffs.length > 0 || debuffs.length > 0;
 
     if (!hasData) {
         return (
@@ -896,6 +877,52 @@ const PerksTab: React.FC<{ stats: CareerStats, t: (key: string) => string, effec
                         <span className="text-[10px] text-red-400 uppercase font-black tracking-tighter">{t('ui.perk_damage_dealt_short')}: {roiDealt}</span>
                         <span className="text-[10px] text-blue-400 uppercase font-black tracking-tighter">{t('ui.perk_damage_absorbed_short')}: {roiAbsorb}</span>
                     </div>
+                </div>
+            </div>
+
+            <div className="bg-zinc-900/20 border border-zinc-800 p-8 w-full">
+                <h3 className="text-xl font-light text-white uppercase tracking-tighter mb-8 border-b-2 border-zinc-800 pb-4">{t('ui.augmentation_log')}</h3>
+
+                <div className="flex flex-col gap-12">
+                    {/* BUFFS SECTION */}
+                    {buffs.length > 0 && (
+                        <div>
+                            <h4 className="text-[10px] font-black text-green-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 bg-green-500" />
+                                {t('ui.buffs')}
+                            </h4>
+                            <div className="flex flex-col gap-2">
+                                {/* Table Header */}
+                                <div className="flex justify-between items-center px-4 py-2 border-b border-zinc-800 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                                    <span className="flex-1">{t('ui.perk')}</span>
+                                    <span className="w-24 text-right">{t('ui.activations')}</span>
+                                    <span className="w-32 text-right">{t('ui.damage_absorbed')}</span>
+                                    <span className="w-24 text-right">{t('ui.cleansed')}</span>
+                                </div>
+                                {buffs.map(perk => <BuffEntry key={perk.id} perk={perk} stats={stats} t={t} />)}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* DEBUFFS SECTION */}
+                    {debuffs.length > 0 && (
+                        <div>
+                            <h4 className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 bg-red-500" />
+                                {t('ui.debuffs')}
+                            </h4>
+                            <div className="flex flex-col gap-2">
+                                {/* Table Header */}
+                                <div className="flex justify-between items-center px-4 py-2 border-b border-zinc-800 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                                    <span className="flex-1">{t('ui.perk')}</span>
+                                    <span className="w-24 text-right">{t('ui.activations')}</span>
+                                    <span className="w-32 text-right">{t('ui.damage_taken')}</span>
+                                    <span className="w-24 text-right">{t('ui.avg_damage')}</span>
+                                </div>
+                                {debuffs.map(perk => <DebuffEntry key={perk.id} perk={perk} stats={stats} t={t} />)}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

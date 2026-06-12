@@ -12,6 +12,7 @@ export const en = {
         15: "Warlord", 16: "Apex Predator", 17: "Legend", 18: "Immortal", 19: "Mega Zombie Slayer"
     },
     ui: {
+        boss_encounter: "BOSS ENCOUNTER",
         category_world: "World",
         category_combat: "Combat",
         category_weapons: "Weapons",
@@ -407,7 +408,10 @@ export const en = {
         debuffs_cleansed: "DEBUFFS CLEANSED",
         continue_to_play_perks: "acquire perks in the field to log augmentation analytics",
         debuffs_neutralized: "DEBUFFS NEUTRALIZED",
-        // New for hardcoded strings
+        augmentation_log: "AUGMENTATION LOG",
+        cleansed: "CLEANSED",
+        avg_damage: "AVG. DAMAGE",
+        perk: "PERK",
         km: "KM",
         hrs: "HRS",
         h: "H",
@@ -562,7 +566,8 @@ export const en = {
         armory: "ARMORY",
         spawner: "ZOMBIE SPAWNER",
         skills: "SKILLS",
-        environmental: "ENVIRONMENTALS"
+        environmental: "ENVIRONMENTALS",
+        ui: "USER INTERFACE"
     },
     enemies: {
         zombies: {

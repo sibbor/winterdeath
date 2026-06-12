@@ -164,7 +164,7 @@ const CombatLog: React.FC = () => {
     });
 
     return (
-        <div className="fixed inset-0 pointer-events-none z-[1000] select-none font-black tracking-tighter uppercase text-center font-mono">
+        <div className="fixed inset-0 pointer-events-none z-[1000] select-none font-black tracking-tighter uppercase text-center font-mono" style={{ contain: 'layout paint' }}>
             <div className="absolute left-1/2 top-[55%] -translate-x-1/2">
                 {POOL_INDICES.map((i) => (
                     <div

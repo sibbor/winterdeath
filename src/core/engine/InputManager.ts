@@ -229,6 +229,8 @@ export class InputManager implements System {
         if (this.onMetaAction) {
             this.onMetaAction(actionId);
         }
+
+        window.dispatchEvent(new CustomEvent('engine-meta-action', { detail: { actionId } }));
     }
 
     private handleKeyDown(e: KeyboardEvent) {

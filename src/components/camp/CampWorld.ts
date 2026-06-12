@@ -598,10 +598,13 @@ export const CampWorld = {
 
         const fireData = setupCampfire(scene, textures, isWarmup);
 
+        const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+
         const flameCount = 40;
         const flames = new THREE.InstancedMesh(CONST_GEO.flame, MATERIALS.camp_flame, flameCount);
         flames.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         flames.userData.isEngineStatic = true;
+        for (let i = 0; i < flameCount; i++) flames.setMatrixAt(i, zeroMatrix);
         scene.add(flames);
         const flameData = new Float32Array(flameCount * FLAME_VARS);
 
@@ -609,6 +612,7 @@ export const CampWorld = {
         const sparkles = new THREE.InstancedMesh(CONST_GEO.spark, MATERIALS.camp_spark, sparkleCount);
         sparkles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         sparkles.userData.isEngineStatic = true;
+        for (let i = 0; i < sparkleCount; i++) sparkles.setMatrixAt(i, zeroMatrix);
         scene.add(sparkles);
         const sparkleData = new Float32Array(sparkleCount * SPARKLE_VARS);
 
@@ -616,6 +620,7 @@ export const CampWorld = {
         const smokes = new THREE.InstancedMesh(CONST_GEO.smoke, MATERIALS.camp_smoke, smokeCount);
         smokes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         smokes.userData.isEngineStatic = true;
+        for (let i = 0; i < smokeCount; i++) smokes.setMatrixAt(i, zeroMatrix);
 
         // Setup custom alpha attribute for smoke
         const smokeAlphas = new Float32Array(smokeCount);
@@ -659,9 +664,9 @@ export const CampWorld = {
                 const idx = i * FLAME_VARS;
                 if (flameData[idx] <= 0) {
                     flameData[idx] = 1.0;
-                    flameData[idx + 1] = (Math.random() - 0.5) * 1.5;
-                    flameData[idx + 2] = 0.2;
-                    flameData[idx + 3] = (Math.random() - 0.5) * 1.5;
+                    flameData[idx + 1] = (Math.random() - 0.5) * 0.6;
+                    flameData[idx + 2] = 0.45;
+                    flameData[idx + 3] = (Math.random() - 0.5) * 0.6;
                     flameData[idx + 4] = 0.03 + Math.random() * 0.04;
                     flameData[idx + 5] = Math.random() * Math.PI;
                     flameData[idx + 6] = Math.random() * Math.PI;

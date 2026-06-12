@@ -146,6 +146,7 @@ const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog }) =
                 }
                 .animate-challengePop {
                     animation: challengePop 6000ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                    will-change: transform, opacity;
                 }
             `}</style>
         </div>

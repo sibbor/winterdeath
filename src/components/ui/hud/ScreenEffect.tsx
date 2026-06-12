@@ -31,14 +31,13 @@ const ScreenEffect: React.FC = () => {
         return HudStore.subscribeFastUpdate((data: any) => {
             if (!containerRef.current || !gradientRef.current) return;
 
-            const state = HudStore.getState();
             const cache = styleCache.current;
 
             // HP Evaluation
-            const hasCriticalHp = state.hasCriticalHp;
+            const hasCriticalHp = data.hasCriticalHp;
 
             // Perks & Debuffs Evaluation via bitmask jump
-            const flags = StatusStore.getStatusFlags();
+            const flags = data.statusFlags || 0;
             const hasReflexShield = (flags & PlayerStatusFlags.REFLEX_SHIELD) !== 0;
             const hasAdrenalinePatch = (flags & PlayerStatusFlags.ADRENALINE_PATCH) !== 0;
             const hasGibMaster = (flags & PlayerStatusFlags.GIB_MASTER) !== 0;

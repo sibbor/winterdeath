@@ -6,6 +6,7 @@ export const sv = {
         15: "Krigsherre", 16: "Rovdjur", 17: "Legend", 18: "Odödlig", 19: "Megaslaktare"
     },
     ui: {
+        boss_encounter: "BOSSSTRID",
         category_world: "Världen",
         category_combat: "Strid",
         category_weapons: "Vapen",
@@ -385,9 +386,12 @@ export const sv = {
         nemesis_id: "NEMESIS ID",
         activations: "AKTIVERINGAR",
         damage_absorbed: "SKADA ABSORBERAD",
-        debuffs_cleansed: "DEBUFFS RENADE",
         continue_to_play_perks: "hitta perks i fält för att logga förstärkningsanalys",
         debuffs_neutralized: "DEBUFFS NEUTRALISERADE",
+        augmentation_log: "FÖRSTÄRKNINGSLOGG",
+        cleansed: "RENADE",
+        avg_damage: "MEDELSKADA",
+        perk: "FÖRMÅGA",
         km: "KM",
         hrs: "TIM",
         h: "T",
@@ -568,7 +572,8 @@ export const sv = {
         armory: "UTRUSTNING",
         spawner: "ZOMBIES",
         skills: "FÄRDIGHETER",
-        environment: "MILJÖ"
+        environment: "MILJÖ",
+        ui: "GRÄNSSNITT"
     },
     skills: {
         vitality: "VITALITET",

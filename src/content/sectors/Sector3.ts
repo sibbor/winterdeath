@@ -223,7 +223,7 @@ export const Sector3: SectorDef = {
         }
 
         // Nathalie - At the dealership, not following yet
-        await SectorBuilder.spawnFamily(ctx, FamilyMemberID.NATHALIE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, found: false });
+        await SectorBuilder.spawnFamily(ctx, FamilyMemberID.NATHALIE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, found: false, visible: true });
     },
 
     setupContent: async (ctx: SectorBuildContext) => {

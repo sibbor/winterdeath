@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { SectorDef, SectorBuildContext, EnvironmentalZone, TerminalType } from '../../game/session/SectorTypes';
-import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { MATERIALS } from '../../utils/assets';
 import { t } from '../../utils/i18n';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
@@ -50,7 +49,7 @@ const PERK_ZONES = [
     { x: -120, z: 0, radius: 10, effect: StatusEffectID.GIB_MASTER, type: 'buff', color: 0xaa55ff, particle: FXParticleType.GORE },
     { x: -145, z: 25, radius: 10, effect: StatusEffectID.QUICK_FINGER, type: 'buff', color: 0xffcc00, particle: FXParticleType.FLASH },
     { x: -145, z: -25, radius: 10, effect: StatusEffectID.REFLEX_SHIELD, type: 'buff', color: 0x4488ff, particle: FXParticleType.ELECTRIC_FLASH },
-    { x: -170, z: 0, radius: 10, effect: StatusEffectID.ADRENALINE_PATCH, type: 'buff', color: 0xffffff, particle: FXParticleType.SHOCKWAVE },
+    //{ x: -170, z: 0, radius: 10, effect: StatusEffectID.ADRENALINE_PATCH, type: 'buff', color: 0xffffff, particle: FXParticleType.SHOCKWAVE },
 
     // --- DEBUFFS ---
     { x: -120, z: 45, radius: 10, effect: StatusEffectID.BURNING, type: 'debuff', color: 0xff3300, particle: FXParticleType.FIRE },
@@ -266,6 +265,14 @@ export const Sector4: SectorDef = {
         skillLabel.position.set(0, 4.5, terminalDist);
         skillLabel.scale.set(10, 1.5, 1);
         scene.add(skillLabel);
+        await yieldIfBudgetExceeded();
+
+        // 5. User Interface Station (Southwest)
+        await SectorBuilder.spawnTerminal(ctx, -terminalDist, terminalDist, TerminalType.UI, terminalScale);
+        const uiLabel = ObjectGenerator.createTextSprite(t('terminals.ui'));
+        uiLabel.position.set(-terminalDist, 4.5, terminalDist);
+        uiLabel.scale.set(10, 1.5, 1);
+        scene.add(uiLabel);
         await yieldIfBudgetExceeded();
 
         // Helper for POI Markers
@@ -571,16 +578,19 @@ export const Sector4: SectorDef = {
 
         // STATIONS
         if (id === 'terminal_' + TerminalType.ARMORY) {
-            events.setOverlay(OverlayType.STATION_ARMORY);
+            events.setOverlay(OverlayType.TERMINAL_ARMORY);
         }
         else if (id === 'terminal_' + TerminalType.SPAWNER) {
-            events.setOverlay(OverlayType.STATION_SPAWNER);
+            events.setOverlay(OverlayType.TERMINAL_SPAWNER);
         }
         else if (id === 'terminal_' + TerminalType.ENVIRONMENT) {
-            events.setOverlay(OverlayType.STATION_ENVIRONMENT);
+            events.setOverlay(OverlayType.TERMINAL_ENVIRONMENT);
         }
         else if (id === 'terminal_' + TerminalType.SKILLS) {
-            events.setOverlay(OverlayType.STATION_SKILLS);
+            events.setOverlay(OverlayType.TERMINAL_SKILLS);
+        }
+        else if (id === 'terminal_' + TerminalType.UI) {
+            events.setOverlay(OverlayType.TERMINAL_UI);
         }
 
         // BUS EXPLOSION EVENT

@@ -380,9 +380,9 @@ export const SectorBuilder = {
         createWall(w / 2, 0, 2, d);
     },
 
-    spawnChest: (ctx: SectorBuildContext, x: number, z: number, type: ChestType = ChestType.STANDARD, rot: number = 0, logicId?: number) => {
+    spawnChest: (ctx: SectorBuildContext, x: number, z: number, type: ChestType = ChestType.STANDARD, rot: number = 0, logicId?: number, y: number = 0) => {
         const chest = ObjectGenerator.createChest(type);
-        chest.position.set(x, 0, z);
+        chest.position.set(x, y, z);
         chest.rotation.y = rot;
         chest.updateMatrixWorld();
         // Manual sync for frozen objects
@@ -447,6 +447,19 @@ export const SectorBuilder = {
             color: isBig ? '#ffd700' : '#8b4513',
             radius: null
         });
+    },
+
+    spawnRock: (ctx: SectorBuildContext, x: number, z: number, width: number = 25, height: number = 25, sharpness: number = 15) => {
+        const stone = NaturePropGenerator.createRock(width, height, sharpness);
+        stone.position.set(x, -2, z);
+        ctx.scene.add(stone);
+
+        SectorBuilder.addObstacle(ctx, {
+            mesh: stone,
+            position: stone.position,
+            collider: { type: ColliderType.SPHERE, radius: width * 0.5 }
+        });
+        return stone;
     },
 
     spawnCollectible: (ctx: SectorBuildContext, x: number, z: number, id: string, type: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy', respawnable: boolean = false) => {
@@ -1212,7 +1225,7 @@ export const SectorBuilder = {
         await NaturePropGenerator.fillArea(ctx, center, size, count, type, avoidCenterRadius);
     },
 
-    fillVegetation: async (ctx: SectorBuildContext, type: VEGETATION_TYPE | VEGETATION_TYPE[], region: THREE.Vector3[] | { x: number, z: number, w: number, d: number }, density: number = 1.0) => {
+    fillVegetation: async (ctx: SectorBuildContext, type: VEGETATION_TYPE | VEGETATION_TYPE[], region: THREE.Vector3[] | { x: number, z: number, w: number, d: number }, density: number = 1.0, excludeArea?: THREE.Vector3[]) => {
         if (Array.isArray(region) && region.length >= 3) {
             const isTree = [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.OAK, VEGETATION_TYPE.BIRCH, VEGETATION_TYPE.DEAD_TREE]
                 .includes(Array.isArray(type) ? type[0] : type);
@@ -1233,14 +1246,14 @@ export const SectorBuilder = {
                 });
             }
         }
-        await VegetationGenerator.fillArea(ctx, type, region, density);
+        await VegetationGenerator.fillArea(ctx, type, region, density, excludeArea);
     },
 
     createBoundry: (ctx: SectorBuildContext, polygon: THREE.Vector3[], name: string, isClosed: boolean = false) => {
         PathGenerator.createBoundry(ctx, polygon, name, isClosed);
     },
 
-    createMountain: (ctx: SectorBuildContext, points: THREE.Vector3[], depth: number = 20, height: number = 15, caveConfig?: { position: THREE.Vector3, rotation?: number }) => {
+    createMountain: (ctx: SectorBuildContext, points: THREE.Vector3[], depth: number = 20, height: number = 15, caveConfig?: { position: THREE.Vector3, rotation?: number, cutoutLength?: number }) => {
         const len = points.length;
         const pts = new Array(len);
         for (let i = 0; i < len; i++) pts[i] = { x: points[i].x, z: points[i].z };
@@ -1337,8 +1350,10 @@ export const SectorBuilder = {
 
         if (!poi) return new THREE.Group();
 
-        poi.position.set(x, 0, z);
-        poi.rotation.y = rotation;
+        if (type !== PoiType.TRAIN_TUNNEL) {
+            poi.position.set(x, 0, z);
+            poi.rotation.y = rotation;
+        }
         poi.updateMatrixWorld(true);
 
         const ud = poi.userData;

@@ -770,30 +770,83 @@ export const Generators = {
 
     ambient_fire: (ctx: AudioContext) => {
         const sr = ctx.sampleRate;
-        const dur = 4.0;
+        const dur = 30.0;
         const buf = ctx.createBuffer(1, sr * dur, sr);
         const d = buf.getChannelData(0);
-        let lp = 0, hp = 0;
+        let lp = 0;
+        let hissLp1 = 0;
+        let hissLp2 = 0;
+
+        // Very slow drifting walk variables for organic fire modulation (no periodic sines)
+        let lickLp = 0;
+        let hissModLp = 0;
 
         for (let i = 0; i < d.length; i++) {
             const t = i / sr;
             const noise = Math.random() * 2 - 1;
 
-            // 1. Deep Warm Rumble (30-60Hz) - Updated phase for seamless looping
-            lp = lp + 0.05 * (noise - lp);
-            const rumble = lp * 0.8 * (0.8 + 0.2 * Math.sin(2 * Math.PI * 2 * t));
+            // 1. Deep Warm Rumble (30-60Hz) - Filtered noise with low cutoff
+            lp = lp + 0.008 * (noise - lp);
 
-            // 2. Continuous Airy Hiss (Band-passed)
-            hp = noise - (hp * 0.92);
-            const hiss = hp * 0.15;
+            // Extremely slow random walk to modulate the fire licking/intensity
+            lickLp = lickLp + 0.0001 * (noise - lickLp);
+            // Map the random walk to a nice non-periodic modulation range [0.5, 1.0]
+            const rumbleMod = 0.75 + 0.25 * Math.sin(lickLp * 80.0);
+            const rumble = lp * 0.45 * rumbleMod;
 
-            // 3. Sparse, impactful crackles
-            let crackle = 0;
-            if (Math.random() > 0.9992) crackle = (Math.random() * 2 - 1) * 0.7;
+            // 2. Continuous Soft, Pillowy Hiss (Double Low-Pass for warmth, around 2-3kHz)
+            hissLp1 = hissLp1 + 0.06 * (noise - hissLp1);
+            hissLp2 = hissLp2 + 0.06 * (hissLp1 - hissLp2);
 
-            // Reduced harsh 100ms fade to 10ms to prevent noticeable pulsing in the loop
-            const fade = Math.min(1, Math.min(t / 0.01, (dur - t) / 0.01));
-            d[i] = (rumble + hiss + crackle) * fade * 0.5;
+            // Slow random walk for hiss modulation
+            hissModLp = hissModLp + 0.00008 * (noise - hissModLp);
+            const hissMod = 0.8 + 0.2 * Math.sin(hissModLp * 60.0);
+            const hiss = hissLp2 * 0.02 * hissMod;
+
+            // 3. Dry Wood snaps (spaced 10s apart, highly damped to avoid water-dripping tones)
+            let crackles = 0;
+
+            // Event 1: t = 4.2s (A main snap + micro-crackles)
+            if (t >= 4.2 && t < 4.4) {
+                const dt = t - 4.2;
+                const snap = noise * Math.exp(-dt * 900) * 0.4; // Fast noise decay (1.1ms)
+                const thump = Math.sin(2 * Math.PI * 650 * dt) * Math.exp(-dt * 450) * 0.25; // highly damped resonance
+                crackles += snap + thump;
+            }
+            if (t >= 4.23 && t < 4.4) {
+                const dt = t - 4.23;
+                crackles += noise * Math.exp(-dt * 1300) * 0.15;
+            }
+            if (t >= 4.26 && t < 4.4) {
+                const dt = t - 4.26;
+                crackles += noise * Math.exp(-dt * 1100) * 0.2;
+            }
+
+            // Event 2: t = 14.5s (A double wood snap)
+            if (t >= 14.5 && t < 14.7) {
+                const dt = t - 14.5;
+                const snap = noise * Math.exp(-dt * 800) * 0.35;
+                const thump = Math.sin(2 * Math.PI * 550 * dt) * Math.exp(-dt * 400) * 0.2;
+                crackles += snap + thump;
+            }
+            if (t >= 14.54 && t < 14.7) {
+                const dt = t - 14.54;
+                const snap = noise * Math.exp(-dt * 1000) * 0.25;
+                const thump = Math.sin(2 * Math.PI * 750 * dt) * Math.exp(-dt * 500) * 0.15;
+                crackles += snap + thump;
+            }
+
+            // Event 3: t = 23.1s (A single sharp wood snap)
+            if (t >= 23.1 && t < 23.3) {
+                const dt = t - 23.1;
+                const snap = noise * Math.exp(-dt * 950) * 0.38;
+                const thump = Math.sin(2 * Math.PI * 600 * dt) * Math.exp(-dt * 420) * 0.22;
+                crackles += snap + thump;
+            }
+
+            // Combine and apply cross-fade for seamless looping
+            const fade = Math.min(1, Math.min(t / 0.02, (dur - t) / 0.02));
+            d[i] = (rumble + hiss + crackles) * fade * 0.8;
         }
         return buf;
     },
@@ -947,22 +1000,25 @@ export const Generators = {
         return buffer;
     },
     door_knock: (ctx: AudioContext) => {
-        const length = ctx.sampleRate * 0.6;
-        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        const knockOffsets = [0.0, 0.18, 0.36];
-        for (let i = 0; i < length; i++) {
-            const t = i / ctx.sampleRate;
+        const sr = ctx.sampleRate;
+        const dur = 0.6;
+        const buf = ctx.createBuffer(1, sr * dur, sr);
+        const d = buf.getChannelData(0);
+        const knockIntervals = [0.0, 0.18, 0.36];
+        for (let i = 0; i < d.length; i++) {
+            const t = i / sr;
             let val = 0;
-            for (let k = 0; k < knockOffsets.length; k++) {
-                const dt = t - knockOffsets[k];
-                if (dt >= 0 && dt < 0.15) {
-                    val += Math.sin(2 * Math.PI * 180 * dt) * Math.exp(-35 * dt) * 0.4;
+            for (const startT of knockIntervals) {
+                if (t >= startT && t < startT + 0.15) {
+                    const localT = t - startT;
+                    const thud = Math.sin(2 * Math.PI * 130 * localT) * 0.5 * Math.exp(-25 * localT);
+                    const tap = Math.sin(2 * Math.PI * 350 * localT) * 0.25 * Math.exp(-40 * localT);
+                    val += thud + tap;
                 }
             }
-            data[i] = val;
+            d[i] = val;
         }
-        return buffer;
+        return buf;
     },
     bird_ambience: (ctx: AudioContext) => {
         const length = ctx.sampleRate * 2.0;
@@ -1008,7 +1064,7 @@ export const Generators = {
             data[i] = kiss * env * 0.15;
         }
         return buffer;
-    }
+    },
 };
 
 // --- API WRAPPERS ---
@@ -1224,6 +1280,7 @@ export function registerSoundGenerators() {
     map(SoundID.STEAM_HISS, Generators.steam_hiss);
 
     // Utils & Tools
+    map(SoundID.DOOR_KNOCK, Generators.door_knock);
     map(SoundID.RADIO, Generators.radio);
     map(SoundID.DODGE, Generators.dash);
 

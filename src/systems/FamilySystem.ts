@@ -85,7 +85,7 @@ export class FamilySystem implements System {
 
         for (let i = 0; i < members.length; i++) {
             const familyMember = members[i];
-            if (!familyMember.mesh) continue;
+            if (!familyMember.mesh || !familyMember.found) continue;
 
             const fm = familyMember.mesh;
             const userData = fm.userData;

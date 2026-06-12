@@ -340,10 +340,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 } else {
                     UISounds.playOpenScreen();
                     const typeMap: Record<string, OverlayType> = {
-                        'armory': OverlayType.STATION_ARMORY,
-                        'skills': OverlayType.STATION_SKILLS,
-                        'sectors': OverlayType.STATION_SECTORS,
-                        'stats': OverlayType.STATION_STATISTICS,
+                        'armory': OverlayType.TERMINAL_ARMORY,
+                        'skills': OverlayType.TERMINAL_SKILLS,
+                        'sectors': OverlayType.TERMINAL_SECTORS,
+                        'stats': OverlayType.TERMINAL_STATISTICS,
                         'adventure_log': OverlayType.ADVENTURE_LOG,
                         'settings': OverlayType.SETTINGS
                     };
@@ -603,9 +603,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 <CampHUD
                     stats={stats} hoveredStation={hoveredStation} currentSectorName={t(DataResolver.getSectorName(currentSector))} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
                     currentLoadoutNames={{ pri: t(weaponName(currentLoadout.primary)), sec: t(weaponName(currentLoadout.secondary)), thr: t(weaponName(currentLoadout.throwable)) }}
-                    onOpenStats={() => onInteractionStateChange(OverlayType.STATION_STATISTICS)}
-                    onOpenArmory={() => onInteractionStateChange(OverlayType.STATION_ARMORY)}
-                    onOpenSkills={() => onInteractionStateChange(OverlayType.STATION_SKILLS)}
+                    onOpenStats={() => onInteractionStateChange(OverlayType.TERMINAL_STATISTICS)}
+                    onOpenArmory={() => onInteractionStateChange(OverlayType.TERMINAL_ARMORY)}
+                    onOpenSkills={() => onInteractionStateChange(OverlayType.TERMINAL_SKILLS)}
                     onOpenAdventureLog={(tab) => { onInteractionStateChange(OverlayType.ADVENTURE_LOG); if (tab !== undefined) (window as any).dispatchEvent(new CustomEvent('open-adventure-log', { detail: { tab } })); }}
                     onOpenSettings={() => setActiveOverlay(OverlayType.SETTINGS)}
                     onStartSector={() => { }}

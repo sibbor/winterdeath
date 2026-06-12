@@ -403,7 +403,7 @@ const LivePlayerCoordinates = React.memo(() => {
     }, []);
 
     return (
-        <span ref={textRef} className="text-sm font-mono text-white font-bold">
+        <span ref={textRef} className="text-sm font-mono text-white px-3 font-bold">
             0, 0
         </span>
     );
@@ -532,15 +532,15 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
                 </div>
             </div>
             <div className="flex gap-4 justify-center">
-                <TacticalCard color={0x3b82f6} className="px-3 py-1 flex items-center gap-2">
+                <TacticalCard color={0x3b82f6} style={{ borderColor: '#999999' }} className="px-3 py-1 flex items-center gap-2">
                     <span className="text-[10px] text-blue-400 font-bold uppercase">{t('ui.player')}</span>
                     <LivePlayerCoordinates />
                 </TacticalCard>
                 {!isMobileDevice && (
                     <div ref={mouseCoordsCardRef} style={{ display: 'none' }} className="flex items-center">
-                        <TacticalCard color={0x94a3b8} className="px-3 py-1 flex items-center gap-2">
+                        <TacticalCard color={0x94a3b8} style={{ borderColor: '#999999' }} className="px-3 py-1 flex items-center gap-2">
                             <span className="text-[10px] text-gray-400 font-bold uppercase">{t('ui.coordinates')}</span>
-                            <span ref={mouseCoordsTextRef} className="text-sm font-mono text-white font-bold">
+                            <span ref={mouseCoordsTextRef} className="text-sm font-mono px-3 text-white font-bold">
                                 0, 0
                             </span>
                         </TacticalCard>

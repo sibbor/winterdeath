@@ -20,6 +20,7 @@ export interface LogicalLight {
     shadowBias?: number;
     shadowNormalBias?: number;
     shadowMapSize?: number;
+    decay?: number;
 
     // Zero-GC data
     currentChunkKey?: number;
@@ -67,6 +68,7 @@ export class LightSystem implements System {
             proxy.userData.isProxy = true;
             proxy.userData.isEngineStatic = true;
             proxy.position.set(0, -1000, 0);
+            proxy.decay = 1.0;
 
             // Shadow settings locked for all future
             if (i < this.maxShadows) {
@@ -86,7 +88,7 @@ export class LightSystem implements System {
     public update(context: any, delta: number, simTime: number, renderTime: number): void {
         if (!context) return;
         const state = context.state;
-        const cullingCenter = context.engine?.camera?.threeCamera?.position;
+        const cullingCenter = context.engine?.camera?.lookAtTarget;
         const logicalLights = state?.world?.lights as any[];
 
         if (!logicalLights || logicalLights.length === 0 || !cullingCenter) {
@@ -264,6 +266,7 @@ export class LightSystem implements System {
         proxy.position.copy(logicLight._worldPos);
         proxy.color.setHex(logicLight.color);
         proxy.distance = logicLight.distance;
+        proxy.decay = logicLight.decay !== undefined ? logicLight.decay : 1.0;
 
         let currentIntensity = logicLight.intensity;
 

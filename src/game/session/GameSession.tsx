@@ -788,16 +788,33 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
                 const boss = refs.SectorBuildContextRef.current?.spawnBoss(bossType, pos);
                 if (boss) {
+                    const engineInst = WinterEngine.getInstance();
                     refs.bossIntroRef.current = {
                         active: true,
                         bossMesh: boss.mesh,
-                        startTime: WinterEngine.getInstance().renderTime
+                        startTime: engineInst.renderTime,
+                        startPos: new THREE.Vector3().copy(engineInst.camera.position),
+                        startLookAt: new THREE.Vector3().copy(engineInst.camera.lookAtTarget)
                     };
 
+                    if (refs.engineRef.current) {
+                        refs.engineRef.current.camera.setCinematic(true);
+                    }
+
                     const bossNameKey = boss.bossId !== undefined && boss.bossId !== BossID.NONE ? DataResolver.getBossName(boss.bossId) : 'ui.boss';
+                    const bossName = t(bossNameKey);
                     updateUiState({
-                        bossName: t(bossNameKey)
+                        bossName: bossName
                     });
+
+                    // Dispatch custom event to configure the SideBanner for the boss intro
+                    const bannerEvent = new CustomEvent('trigger-side-banner-preview', {
+                        detail: {
+                            title: bossName,
+                            subtitle: t('ui.boss_encounter')
+                        }
+                    });
+                    window.dispatchEvent(bannerEvent);
 
                     // Trigger UI state change via context callback to alert App.tsx
                     setupContextRef.current?.ui.setBossIntroActive(true);
@@ -809,6 +826,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     refs.bossIntroTimerRef.current = setTimeout(() => {
                         refs.bossIntroRef.current.active = false;
                         setupContextRef.current?.ui.setBossIntroActive(false);
+
+                        if (refs.engineRef.current) {
+                            refs.engineRef.current.camera.setCinematic(false);
+                        }
 
                         // Boss Music
                         audioEngine.stopMusic();
@@ -1192,16 +1213,25 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         }
                     },
                     onBossKilled: (id: number) => {
-                        audioEngine.stopMusic();
                         const pProps = latestStateRef.current.props;
                         const sectorData = pProps.currentSectorData || SectorSystem.getSector(pProps.currentSector || 0);
+
+                        // Stop boss music, play victory sound & resume ambient music:
+                        audioEngine.stopMusic();
+                        audioEngine.playSound(SoundID.UI_VICTORY);
                         if (sectorData?.ambientLoop) audioEngine.playMusic(sectorData.ambientLoop);
+
+                        // Reward SP
                         rewardSP(2);
 
                         // Current family member set to rescued
                         const currentFamilyMember = refs.familyMemberRef.current;
                         if (currentFamilyMember && !currentFamilyMember.rescued) {
                             currentFamilyMember.rescued = true;
+                        }
+
+                        if (pProps.onBossKilled) {
+                            pProps.onBossKilled(id);
                         }
                     }
                 }
@@ -1294,7 +1324,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
             }
         };
-    }, [props.currentSector]);
+    }, [props.gameState.currentSector]);
 
     // Environmental Sync 
     useEffect(() => {

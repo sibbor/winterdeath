@@ -329,18 +329,9 @@ export const Sector2: SectorDef = {
         const lakeCoords = { x: 255, z: -117 };
         const lake = SectorBuilder.addLake(ctx, lakeCoords.x, lakeCoords.z, 25, 7.0);
 
-        const stone = NaturePropGenerator.createRock(25, 25, 15);
-        stone.position.set(lakeCoords.x - 20, -2, lakeCoords.z + 10);
-        scene.add(stone);
-
-        SectorBuilder.addObstacle(ctx, {
-            mesh: stone,
-            position: stone.position,
-            collider: { type: ColliderType.SPHERE, radius: 12.5 }
-        });
+        const stone = SectorBuilder.spawnRock(ctx, lakeCoords.x - 20, lakeCoords.z + 10, 25, 25, 15);
+        if (lake && stone) lake.registerSplashSource(stone);
         await yieldIfBudgetExceeded();
-
-        if (lake) lake.registerSplashSource(stone);
 
         const boatGroup = await SectorBuilder.spawnFloatableVehicle(ctx, lakeCoords.x - 12.5, lakeCoords.z, Math.random() * Math.PI);
         if (lake && boatGroup) {
@@ -406,7 +397,7 @@ export const Sector2: SectorDef = {
         await yieldIfBudgetExceeded();
 
         // Esmeralda - Inside the building, not following yet
-        await SectorBuilder.spawnFamily(ctx, FamilyMemberID.ESMERALDA, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, visible: false });
+        await SectorBuilder.spawnFamily(ctx, FamilyMemberID.ESMERALDA, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, found: false, visible: true });
     },
 
     setupContent: async (ctx: SectorBuildContext) => {

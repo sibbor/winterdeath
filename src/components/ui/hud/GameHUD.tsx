@@ -15,7 +15,7 @@ import ChallengePopup from './ChallengePopup';
 import ChatBubble from './ChatBubble';
 import CombatLog from './CombatLog';
 import LevelUpBanner from './LevelUpBanner';
-import SectorBanner from './SectorBanner';
+import SideBanner from './SideBanner';
 import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
 import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
 import { StatusEffectID } from '../../../types/StatusEffects';
@@ -273,12 +273,12 @@ const CurrencyPanel = React.memo(({ isMobileDevice, isLandscapeMode, isBossIntro
     );
 });
 
-const BossPanel = React.memo(({ isMobileDevice, bossHpBarRef, bossHpTrailBarRef }: any) => {
+const BossPanel = React.memo(({ isMobileDevice, isBossIntro, bossHpBarRef, bossHpTrailBarRef }: any) => {
     const bossActive = useHudStore(s => s.bossActive);
     const bossDefeated = useHudStore(s => s.bossDefeated);
     const bossName = useHudStore(s => s.bossActive ? s.bossName : '');
 
-    const isVisible = bossActive;
+    const isVisible = bossActive && !isBossIntro;
     const isKilled = bossDefeated;
 
     return (
@@ -1048,6 +1048,15 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
     useEffect(() => {
         HudStore.setHudVisible(!isSectorBannerActive);
+        if (isSectorBannerActive) {
+            const currentSector = HudStore.getState().currentSector;
+            const sectorNameKey = HudStore.getState().sectorName;
+            const title = sectorNameKey ? t(sectorNameKey) : t(DataResolver.getSectorName(currentSector));
+            const subtitle = `Sector ${String(currentSector).padStart(3, '0')}`;
+            window.dispatchEvent(new CustomEvent('trigger-side-banner-preview', {
+                detail: { title, subtitle }
+            }));
+        }
     }, [isSectorBannerActive]);
 
     // ZERO-GC: Pre-allocated arrays to assign pooled ref storage stably in render
@@ -1069,7 +1078,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
             <ChallengePopup onOpenAdventureLog={onOpenAdventureLog} />
 
-            <SectorBanner active={isSectorBannerActive} onComplete={onSectorBannerComplete || (() => { })} />
+            <SideBanner active={isSectorBannerActive || isBossIntro} onComplete={isBossIntro ? (() => { }) : (onSectorBannerComplete || (() => { }))} />
 
             <div className={`${HUD_WRAPPER} ${!showRestOfHUD || isDead || isDisoriented || isBossIntro ? 'opacity-0 -translate-y-4 blur-[5px]' : 'opacity-100 translate-y-0 blur-0 animate-hudFadeIn'}`}>
 
@@ -1144,6 +1153,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
                     <BossPanel
                         isMobileDevice={isMobileDevice}
+                        isBossIntro={isBossIntro}
                         bossHpBarRef={bossHpBarRef}
                         bossHpTrailBarRef={bossHpTrailBarRef}
                     />

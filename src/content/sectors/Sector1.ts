@@ -7,7 +7,9 @@ import { InteractionType, InteractionSubType, InteractionShape } from '../../sys
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
-import { VEGETATION_TYPE } from '../../content/environment';
+import { GeneratorUtils } from '../../core/world/generators/GeneratorUtils';
+import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
+import { VEGETATION_TYPE, MaterialType } from '../../content/environment';
 import { PoiType, PoiID } from '../../content/pois';
 import { ClueID } from '../../content/clues';
 import { CollectibleID } from '../../content/collectibles';
@@ -22,6 +24,7 @@ import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/Trigg
 import { WeatherType } from '../../core/engine/EnvironmentalTypes';
 import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
 import { isPointInPolygon } from '../../utils/math/GeometryUtils';
+import { NavigationSystem } from '../../systems/NavigationSystem';
 
 // ============================================================================
 // SECTOR CONSTANTS & ENVIRONMENTAL POLYGON
@@ -38,21 +41,23 @@ const DEFAULT_WIND_VARIANCE = Math.PI / 4;
  * the player enters the cave or goes deep into the mountain shadows.
  */
 const CAVE_ENVIRONMENTAL_POLY = [
+
+    { x: -100, z: -68 },
+    { x: 94, z: -70 },
+    { x: 116, z: -71 },
+    { x: 116, z: -83 },
+    { x: 135, z: -90 },
+    { x: 158, z: -90 },
+    { x: 158, z: -25 },
+    { x: 250, z: -14 },
+    { x: 250, z: -300 },
+    { x: -100, z: -300 }
     /*
-        { x: -100, z: -68 },
-        { x: 94, z: -70 },
-        { x: 107, z: -70 },
-        { x: 118, z: -85 },
-        { x: 158, z: -90 },
-        { x: 158, z: -25 },
-        { x: 250, z: -14 },
-        { x: 250, z: -300 },
-        { x: -100, z: -300 }
-    */
     { x: -250, z: -50 },    // West Edge Entrance
     { x: 350, z: -50 },     // East Edge Entrance
     { x: 350, z: -500 },    // Deep North-East
     { x: -250, z: -500 }    // Deep North-West
+    */
 ];
 
 // ============================================================================
@@ -85,7 +90,7 @@ export const ENVIRONMENTAL_ZONES: EnvironmentalZone[] = [
 
 // Hoisted to prevent allocating 1 array + 4 objects every frame
 const ROOM_CENTERS = [
-    { id: 1, x: 100, z: -100, zombies: 0 },
+    { id: 1, x: 89, z: -88, zombies: 0 },
     { id: 3, x: 150, z: -200, zombies: 3 },
     { id: 5, x: 100, z: -125, zombies: 5 },
     { id: 6, x: 60, z: -125, zombies: 5 },
@@ -93,7 +98,8 @@ const ROOM_CENTERS = [
 
 const LOCATIONS = {
     SPAWN: {
-        PLAYER: { x: 0, z: 200, rot: Math.PI },
+        //PLAYER: { x: 0, z: 200, rot: Math.PI },
+        PLAYER: { x: 145, z: -80, rot: Math.PI },
         FAMILY: { x: 25, z: -193, y: 0 },
         BOSS: { x: 74, z: -210 }
     },
@@ -103,10 +109,10 @@ const LOCATIONS = {
         ZOOM: 0.2
     },
     POIS: {
-        CAVE_ENTRANCE: { x: 100, z: -70 },
+        CAVE_ENTRANCE: { x: 105, z: -77 },
         TUNNEL: { x: 165, z: -54 },
         CAMPFIRE: { x: 0, z: 12 },
-        TRAIN_TUNNEL: { x: 150, z: -50 },
+        TRAIN_TUNNEL: { x: 165, z: -55 },
         BOSS_ROOM: { x: 61, z: -193 }
     },
     COLLECTIBLES: {
@@ -116,8 +122,8 @@ const LOCATIONS = {
     TRIGGERS: {
         START: { x: -1, z: 178 },
         COMBAT: { x: 10, z: 64 },
-        CAVE_LIGHTS: { x: 100, z: -126 },
-        CAVE_WATCH: { x: 100, z: -80 },
+        CAVE_LIGHTS: { x: 89, z: -89 },
+        CAVE_WATCH: { x: 116, z: -80 },
         CAVE_LOOT_1: { x: 150, z: -150 },
         CAVE_LOOT_2: { x: 100, z: -200 }
     }
@@ -129,10 +135,10 @@ async function addProps(ctx: SectorBuildContext) {
     await SectorBuilder.spawnBarrel(ctx, 106, -65);
     await SectorBuilder.spawnBarrel(ctx, 108, -67);
 
-    await SectorBuilder.spawnTimberPile(ctx, 92, -60, Math.PI * 0.25, 2);
-    await SectorBuilder.spawnTimberPile(ctx, 88, -55, Math.PI * 0.20, 1.5);
+    await SectorBuilder.spawnTimberPile(ctx, 80, -60, Math.PI * 0.25, 2);
+    await SectorBuilder.spawnTimberPile(ctx, 77, -51, Math.PI * 0.20, 1.5);
 
-    await SectorBuilder.spawnVehicle(ctx, 111, -64, Math.PI * 1.25, VehicleID.TIMBER_TRUCK, undefined, true);
+    await SectorBuilder.spawnVehicle(ctx, 113, -43, Math.PI * 2.15, VehicleID.TIMBER_TRUCK, undefined, true);
 
     await VegetationGenerator.createDeforestation(ctx, 135, -75, 50, 30, 25);
 }
@@ -178,11 +184,12 @@ async function createBoundries(ctx: SectorBuildContext, curve: THREE.Curve<THREE
     await SectorBuilder.createBoundry(ctx, [
         new THREE.Vector3(55, 0, -65),
         new THREE.Vector3(94, 0, -70),
+        new THREE.Vector3(116, 0, -71),
     ], 'BoundryWall_LeftOfCave');
 
     await SectorBuilder.createBoundry(ctx, [
-        new THREE.Vector3(107, 0, -70),
-        new THREE.Vector3(118, 0, -85),
+        new THREE.Vector3(116, 0, -83),
+        new THREE.Vector3(124, 0, -87),
         new THREE.Vector3(135, 0, -90),
     ], 'BoundryWall_RightOfCave');
 }
@@ -205,7 +212,7 @@ export const Sector1: SectorDef = {
             celestial: {
                 radius: 20,
                 color: 0xaaccff,
-                position: { x: 50, y: 35, z: 50 }
+                position: { x: 170, y: 100, z: -190 }
             },
             light: {
                 visible: true,
@@ -254,7 +261,7 @@ export const Sector1: SectorDef = {
             }
         };
 
-        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, ChestType.BIG);
+        await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, ChestType.BIG, 0, undefined, 0.06);
         await yieldIfBudgetExceeded();
 
         // --- RAILWAY ---
@@ -269,12 +276,66 @@ export const Sector1: SectorDef = {
         const railTrackCurve = await PathGenerator.createRailTrack(ctx, railRoadPath);
         await yieldIfBudgetExceeded();
 
-        const polyline = railTrackCurve.getSpacedPoints(15);
-        for (let i = 0; i < polyline.length; i++) {
-            if (i % 3 === 0) {
-                await SectorBuilder.spawnElectricPole(ctx, polyline[i].x + 8, polyline[i].z, 0);
-                await yieldIfBudgetExceeded();
+        // Poles
+        const numPoles = 18;
+        const poleWorldPositions: THREE.Vector3[][] = [];
+        const xs = [-1.2, 0, 1.2];
+
+        for (let i = 0; i <= numPoles; i++) {
+            const t = i / numPoles;
+            const pos = railTrackCurve.getPointAt(t);
+            const tangent = railTrackCurve.getTangentAt(t);
+
+            // Get normal vector to the right side of the track
+            const normX = -tangent.z;
+            const normZ = tangent.x;
+            const len = Math.sqrt(normX * normX + normZ * normZ);
+            const offsetDist = 8;
+
+            const px = pos.x + (normX / len) * offsetDist;
+            const pz = pos.z + (normZ / len) * offsetDist;
+            const py = pos.y;
+
+            const angle = Math.atan2(tangent.x, tangent.z);
+
+            const pole = await SectorBuilder.spawnElectricPole(ctx, px, pz, angle);
+
+            // Calculate insulator world positions for this pole
+            const insulators: THREE.Vector3[] = [];
+            for (let k = 0; k < xs.length; k++) {
+                const xLocal = xs[k];
+                const worldX = px + xLocal * Math.cos(angle);
+                const worldZ = pz - xLocal * Math.sin(angle);
+                const worldY = py + 9.2;
+                insulators.push(new THREE.Vector3(worldX, worldY, worldZ));
             }
+            poleWorldPositions.push(insulators);
+
+            await yieldIfBudgetExceeded();
+        }
+
+        // Connect poles with wires
+        const wireMaterial = new THREE.LineBasicMaterial({ color: 0x222222 });
+        for (let i = 0; i < poleWorldPositions.length - 1; i++) {
+            const insA = poleWorldPositions[i];
+            const insB = poleWorldPositions[i + 1];
+
+            for (let k = 0; k < xs.length; k++) {
+                const pA = insA[k];
+                const pB = insB[k];
+
+                const pMid = new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5);
+                pMid.y -= 1.0; // Sag
+
+                const bezier = new THREE.QuadraticBezierCurve3(pA, pMid, pB);
+                const points = bezier.getPoints(12);
+                const geom = new THREE.BufferGeometry().setFromPoints(points);
+                const wireLine = new THREE.Line(geom, wireMaterial);
+
+                GeneratorUtils.freezeStatic(wireLine);
+                ctx.scene.add(wireLine);
+            }
+            await yieldIfBudgetExceeded();
         }
 
         // --- FOREST ---
@@ -299,38 +360,126 @@ export const Sector1: SectorDef = {
         for (let i = 0; i < forestLeft.length; i++) forestLeft[i].y = 0;
         for (let i = 0; i < forestRight.length; i++) forestRight[i].y = 0;
 
-        await SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE], forestLeft, 12);
+        // Campfire area exclusion (Campfire at 0,0)
+        const campfireExclude = [
+            new THREE.Vector3(-10, 0, 2),
+            new THREE.Vector3(10, 0, 2),
+            new THREE.Vector3(10, 0, 22),
+            new THREE.Vector3(-10, 0, 22)
+        ];
+
+        await SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE], forestLeft, 12, campfireExclude);
         await yieldIfBudgetExceeded();
-        await SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE], forestRight, 12);
+        await SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE], forestRight, 12, campfireExclude);
         await yieldIfBudgetExceeded();
 
         // --- BOUNDARIES ---
         await createBoundries(ctx, railTrackCurve);
         await yieldIfBudgetExceeded();
 
-        // --- MOUNTAIN & CAVE OPENING ---
+        // --- MOUNTAIN ---
         const mountainPoints = [
             new THREE.Vector3(-19, 0, -68),
             new THREE.Vector3(94, 0, -70),
-            new THREE.Vector3(107, 0, -70),
-            new THREE.Vector3(118, 0, -85),
+            new THREE.Vector3(116, 0, -71),
+            new THREE.Vector3(116, 0, -83),
+            new THREE.Vector3(135, 0, -90),
             new THREE.Vector3(158, 0, -90),
             new THREE.Vector3(158, 0, -25),
             new THREE.Vector3(200, 0, -14)
         ];
 
         await SectorBuilder.createMountain(ctx, mountainPoints, 20, 20, {
-            position: new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0, LOCATIONS.POIS.CAVE_ENTRANCE.z - 2),
-            rotation: 0
+            position: new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0, LOCATIONS.POIS.CAVE_ENTRANCE.z),
+            rotation: Math.PI / 2,
+            cutoutLength: 50
         });
         await yieldIfBudgetExceeded();
 
+        // --- GRAVEL GROUND AREA ---
+        /* //TODO: Fix z fighting between gravel and snow ground; use GroundSystem?!
+        const gravelShape = new THREE.Shape();
+        gravelShape.moveTo(90, -70);
+        gravelShape.lineTo(158, -75);
+        gravelShape.lineTo(168, -45);
+        gravelShape.lineTo(110, -42);
+        gravelShape.closePath();
+
+        const gravelGeo = new THREE.ShapeGeometry(gravelShape);
+        gravelGeo.computeVertexNormals();
+        const gravelMat = MATERIALS.gravel.clone();
+        if (gravelMat.map) {
+            gravelMat.map = gravelMat.map.clone();
+            gravelMat.map.wrapS = THREE.RepeatWrapping;
+            gravelMat.map.wrapT = THREE.RepeatWrapping;
+            gravelMat.map.repeat.set(20, 20);
+        }
+        const gravelMesh = new THREE.Mesh(gravelGeo, gravelMat);
+        gravelMesh.rotation.x = -Math.PI / 2;
+        gravelMesh.position.y = 0.08;
+        gravelMesh.receiveShadow = true;
+        GeneratorUtils.freezeStatic(gravelMesh);
+        ctx.scene.add(gravelMesh);
+
+
+        // Register gravel footsteps in worldStreamer
+        for (let x = 95; x <= 165; x += 10) {
+            for (let z = -75; z <= -45; z += 10) {
+                ctx.worldStreamer.registerGroundMaterial(x, z, 8.0, MaterialType.GRAVEL);
+            }
+        }
+        */
+
+        // --- VISUAL MOUNTAIN BLOCKS TO COVER THE VOID BEHIND THE MOUNTAIN (x > 158) ---
+        /*
+        const rock1 = NaturePropGenerator.createRock(40, 45, 25);
+        rock1.position.set(185, -2, -80);
+        GeneratorUtils.freezeStatic(rock1);
+        ctx.scene.add(rock1);
+
+        const rock2 = NaturePropGenerator.createRock(50, 50, 30);
+        rock2.position.set(195, -2, -40);
+        GeneratorUtils.freezeStatic(rock2);
+        ctx.scene.add(rock2);
+
+        const rock3 = NaturePropGenerator.createRock(45, 45, 25);
+        rock3.position.set(175, -2, -10);
+        GeneratorUtils.freezeStatic(rock3);
+        ctx.scene.add(rock3);
+
+        await yieldIfBudgetExceeded();
+        */
+
+        // --- POI: BLOCKED TRAIN TUNNEL ---
         await SectorBuilder.spawnPoi(ctx, PoiType.TRAIN_TUNNEL, LOCATIONS.POIS.TRAIN_TUNNEL.x, LOCATIONS.POIS.TRAIN_TUNNEL.z, 0, {
             points: [
                 new THREE.Vector3(LOCATIONS.POIS.TRAIN_TUNNEL.x, 0, LOCATIONS.POIS.TRAIN_TUNNEL.z),
                 new THREE.Vector3(LOCATIONS.POIS.TRAIN_TUNNEL.x + 10, 0, LOCATIONS.POIS.TRAIN_TUNNEL.z)
             ]
         });
+
+        // Add rocks block the train tunnel:
+        SectorBuilder.spawnRock(
+            ctx,
+            LOCATIONS.POIS.TRAIN_TUNNEL.x + 4,
+            LOCATIONS.POIS.TRAIN_TUNNEL.z + 4,
+            5, 20, 15);
+        SectorBuilder.spawnRock(
+            ctx,
+            LOCATIONS.POIS.TRAIN_TUNNEL.x,
+            LOCATIONS.POIS.TRAIN_TUNNEL.z - 5,
+            15, 20, 15);
+        SectorBuilder.spawnRock(
+            ctx,
+            LOCATIONS.POIS.TRAIN_TUNNEL.x,
+            LOCATIONS.POIS.TRAIN_TUNNEL.z,
+            10, 20, 15);
+        SectorBuilder.spawnRock(
+            ctx,
+            LOCATIONS.POIS.TRAIN_TUNNEL.x + 10,
+            LOCATIONS.POIS.TRAIN_TUNNEL.z + 2,
+            10, 20, 15);
+
         await yieldIfBudgetExceeded();
 
         await addProps(ctx);
@@ -351,11 +500,26 @@ export const Sector1: SectorDef = {
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
         await yieldIfBudgetExceeded();
 
-        await SectorBuilder.spawnFamily(ctx, FamilyMemberID.JORDAN, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, visible: false });
+        await SectorBuilder.spawnFamily(ctx, FamilyMemberID.JORDAN, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, found: false, visible: true });
     },
 
     setupContent: async (ctx: SectorBuildContext) => {
         const { scene } = ctx;
+
+        // Reset Sector 1 narrative/event states on start/restart
+        const sState = (ctx as any).sectorState;
+        if (sState) {
+            sState.jordanEventState = 0;
+            sState.jordanEventTimer = 0;
+            sState.walkTarget = null;
+            sState.jordanMesh = null;
+            sState.doorL = null;
+            sState.doorR = null;
+            sState.doorFrame = null;
+            sState.wasInsideCave = false;
+            sState.pendingTrigger = null;
+            sState.doorObstacleFrame = null;
+        }
 
         if (!ctx.isWarmup) {
             SectorBuilder.addTriggers(ctx, [
@@ -402,7 +566,7 @@ export const Sector1: SectorDef = {
         }
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
         // --- OPTIMIZATION: CACHED REVERB CHECK ---
         // Avoids continuous WebAudio node adjustments every frame
         // Atmosphere/Weather is now handled by SectorSystem via SECTOR1_ZONES
@@ -412,10 +576,33 @@ export const Sector1: SectorDef = {
             if (audioEngine.audioContext) {
                 audioEngine.setReverb(insideCave ? 0.35 : 0);
             }
+
+            // Toggle visibility of outside terrain to render cave cleanly from inside
+            const sceneHost = (events as any).scene || (gameState as any).scene;
+            const scene = sceneHost as THREE.Scene;
+            if (scene) {
+                const mountain = scene.getObjectByName("Mountain");
+                if (mountain) mountain.visible = !insideCave;
+
+                const ground = scene.getObjectByName("GROUND");
+                if (ground) ground.visible = !insideCave;
+            }
         }
 
         if (!sectorState.jordanEventState) sectorState.jordanEventState = 0;
         const jcState = sectorState.jordanEventState;
+
+        if (jcState >= 1 && jcState < 7) {
+            gameState.ui.cinematicActive = true;
+            if (events.setCameraOverride) {
+                events.setCameraOverride({
+                    active: true,
+                    targetPos: _fixedCamTarget,
+                    lookAtPos: _fixedCamLookAt,
+                    endTime: renderTime + 1000
+                });
+            }
+        }
         const jcTimer = sectorState.jordanEventTimer || 0;
         const elapsed = simTime - jcTimer;
 
@@ -436,8 +623,30 @@ export const Sector1: SectorDef = {
         const doorFrame = sectorState.doorFrame;
 
         if (scene) {
-            //const voidRoof = scene.getObjectByName("Sector1_VoidRoof");
-            //if (voidRoof) voidRoof.visible = true;
+            // Animate survivors in the shelter
+            const innerCave = scene.getObjectByName("Sector1_InnerCave");
+            if (innerCave) {
+                innerCave.traverse((child) => {
+                    if (child.userData.isShelterHuman) {
+                        const body = child.userData.cachedBody || child.children.find((c: any) => c.userData.isBody);
+                        if (body) {
+                            if (!child.userData.animState) {
+                                child.userData.animState = {
+                                    isMoving: false, isRushing: false, isDodging: false, dodgeStartTime: 0,
+                                    staminaRatio: 1.0, isSpeaking: false, isThinking: false,
+                                    isIdleLong: Math.random() > 0.5,
+                                    isSwimming: false, isWading: false, seed: Math.random() * 1000,
+                                    renderTime: 0, simTime: 0
+                                };
+                            }
+                            const animState = child.userData.animState;
+                            animState.renderTime = renderTime;
+                            animState.simTime = simTime;
+                            PlayerAnimator.update(body, animState, renderTime, delta);
+                        }
+                    }
+                });
+            }
 
             if (sectorState.pendingTrigger === 'SPAWN_JORDAN') {
                 console.log("[Sector1] Processing SPAWN_JORDAN trigger");
@@ -468,7 +677,7 @@ export const Sector1: SectorDef = {
             if (jcState === 1) {
                 if (elapsed > 1500) {
                     if (doorFrame && (events as any).startCinematic) {
-                        (events as any).startCinematic(doorFrame, 1, 0, { targetPos: _fixedCamTarget, lookAtPos: _fixedCamLookAt });
+                        (events as any).startCinematic(doorFrame, 1, 0, { targetPos: _fixedCamTarget, lookAtPos: _fixedCamLookAt, rotationSpeed: 0 });
                         sectorState.jordanEventState = 2;
                         sectorState.jordanEventTimer = simTime;
                     }
@@ -479,12 +688,21 @@ export const Sector1: SectorDef = {
                 if (doorL) { doorL.position.x = -5 - openDist; doorL.matrixAutoUpdate = true; }
                 if (doorR) { doorR.position.x = 5 + openDist; doorR.matrixAutoUpdate = true; }
 
-                if (sectorState.doorObstacleL?.collider) sectorState.doorObstacleL.collider.size.set(0, 0, 0);
-                if (sectorState.doorObstacleR?.collider) sectorState.doorObstacleR.collider.size.set(0, 0, 0);
+                if (sectorState.doorObstacleL) sectorState.doorObstacleL.isMutated = true;
+                if (sectorState.doorObstacleR) sectorState.doorObstacleR.isMutated = true;
+                if (sectorState.doorObstacleFrame) {
+                    sectorState.doorObstacleFrame.isMutated = true;
+                    if (sectorState.doorObstacleFrame.collider.size) {
+                        sectorState.doorObstacleFrame.collider.size.set(0, 0, 0);
+                    }
+                }
 
                 if (elapsed > 2000) {
                     sectorState.jordanEventState = 4;
                     sectorState.jordanEventTimer = simTime;
+
+                    // Re-bake navigation cost map to clear pathfinding blocks
+                    NavigationSystem.init(ctx);
 
                     // --- OPTIMIZATION: ZERO-GC VECTOR MATH ---
                     if (!sectorState.walkTarget) sectorState.walkTarget = new THREE.Vector3();
@@ -502,7 +720,19 @@ export const Sector1: SectorDef = {
             }
             else if (jcState === 4) {
                 if (jordan) {
+                    if (playerPos) {
+                        if (!sectorState.walkTarget) sectorState.walkTarget = new THREE.Vector3();
+                        sectorState.walkTarget.set(playerPos.x, 0.06, playerPos.z);
+                        const jPos = jordan.position;
+                        _vS1.subVectors(playerPos, jPos);
+                        _vS1.y = 0;
+                        _vS1.normalize();
+                        sectorState.walkTarget.sub(_vS1.multiplyScalar(2.0));
+                    }
                     const target = sectorState.walkTarget || _fallbackWalkTarget;
+                    const distToTarget = jordan.position.distanceTo(target);
+                    const distToPlayer = playerPos ? jordan.position.distanceTo(playerPos) : Infinity;
+
                     jordan.position.lerp(target, 0.05);
 
                     const body = jordan.userData.cachedBody || jordan.children.find((c: any) => c.userData.isBody);
@@ -524,11 +754,15 @@ export const Sector1: SectorDef = {
                         PlayerAnimator.update(body, _animState, renderTime, delta);
                     }
 
-                    if (jordan.position.distanceTo(target) < 1.5) {
+                    if (distToTarget < 1.5 || jordan.position.x > 28.0 || distToPlayer < 4.0) {
                         sectorState.jordanEventState = 5;
                         sectorState.jordanEventTimer = simTime;
+                        if (events.onAction) {
+                            events.onAction({ type: TriggerActionType.FAMILY_MEMBER_FOUND, payload: { id: FamilyMemberID.JORDAN } });
+                            events.onAction({ type: TriggerActionType.FAMILY_MEMBER_FOLLOW });
+                        }
                         if (events.startCinematic) {
-                            events.startCinematic(jordan, 1, 1, { targetPos: _fixedCamTarget, lookAtPos: _fixedCamLookAt });
+                            events.startCinematic(jordan, 1, 1, { targetPos: _fixedCamTarget, lookAtPos: _fixedCamLookAt, rotationSpeed: 0 });
                         }
                     }
                 }
@@ -551,8 +785,6 @@ export const Sector1: SectorDef = {
 
                     // --- OPTIMIZATION: SEQUENTIAL CALLS AVOIDING ARRAY ALLOCATIONS ---
                     if (events.onAction) {
-                        events.onAction({ type: TriggerActionType.FAMILY_MEMBER_FOUND, payload: { id: FamilyMemberID.JORDAN } });
-                        events.onAction({ type: TriggerActionType.FAMILY_MEMBER_FOLLOW });
                         events.onAction({ type: TriggerActionType.SPAWN_BOSS, payload: { pos: LOCATIONS.SPAWN.BOSS } });
                     }
                 }

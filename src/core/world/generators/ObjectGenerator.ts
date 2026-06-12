@@ -559,9 +559,10 @@ export const ObjectGenerator = {
         group.userData.logicalLights = [{
             offset: new THREE.Vector3(0, -0.5, 0),
             color: 0xffddaa,
-            intensity: 50,
-            distance: 20.0,
-            flickerRate: 0.1
+            intensity: 15,
+            distance: 60.0,
+            decay: 1.0,
+            flickerRate: 0.5
         }];
 
         return GeneratorUtils.freezeStatic(group);
@@ -899,7 +900,8 @@ export const ObjectGenerator = {
         const color = type === TerminalType.ARMORY ? 0xffaa00 :
             type === TerminalType.SPAWNER ? 0xff0000 :
                 type === TerminalType.SKILLS ? 0x00ff00 :
-                    0x00ffff;
+                    type === TerminalType.ENVIRONMENT ? 0x00ffff :
+                        0xff00ff; // TerminalType.UI
 
         const screenCacheKey = `screen_${color}`;
         if (!terminalMaterialCache[screenCacheKey]) {

@@ -189,9 +189,12 @@ export const patchGrassWindMaterial = <T extends THREE.Material>(material: T): T
             float windStrength = length(uWind);
             vec2 windDir = windStrength > 0.001 ? normalize(uWind) : vec2(0.0, 1.0);
 
-            vec3 vWind = vec3(uWind.x, 0.0, uWind.y) * 2.2; 
-            vWind += vec3(windDir.x * sway, 0.0, windDir.y * sway) * (1.0 + bendFactor);
-            vWind += vec3(flutter, 0.0, -flutter) * (0.3 + bendFactor);
+            // Scale wind displacement dynamically. If wind is stormy (large windStrength),
+            // allow stronger bending, but keep it very low during calm/moderate weather.
+            float windScale = 0.3 + pow(windStrength, 2.0) * 1.5;
+            vec3 vWind = vec3(uWind.x, 0.0, uWind.y) * windScale; 
+            vWind += vec3(windDir.x * sway, 0.0, windDir.y * sway) * (0.2 + bendFactor * 0.3);
+            vWind += vec3(flutter, 0.0, -flutter) * (0.1 + bendFactor * 0.1);
             
             vec3 vBend = vec3(bendVec.x, 0.0, bendVec.y);
 

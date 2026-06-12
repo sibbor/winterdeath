@@ -70,6 +70,7 @@ export const NavigationSystem = {
 
         for (let i = 0; i < obsLen; i++) {
             const obs = obstacles[i];
+            if (obs.isMutated) continue;
 
             // Derive half-extents for footprint projection
             let hW = 0;

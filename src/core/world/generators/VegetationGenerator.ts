@@ -408,7 +408,7 @@ const _getBounds = (region: Region) => {
     return region;
 };
 
-const _placeTrees = async (ctx: SectorBuildContext, region: Region, spacing: number, types: VEGETATION_TYPE[]) => {
+const _placeTrees = async (ctx: SectorBuildContext, region: Region, spacing: number, types: VEGETATION_TYPE[], excludeArea?: THREE.Vector3[]) => {
     const bounds = _getBounds(region);
     const count = Math.floor((bounds.w * bounds.d) / (spacing * spacing));
     const matrixBuckets: Record<string, THREE.Matrix4[]> = {};
@@ -427,6 +427,7 @@ const _placeTrees = async (ctx: SectorBuildContext, region: Region, spacing: num
         const z = bounds.z + rand() * bounds.d;
 
         if (isPolygon && !GeneratorUtils.isPointInPolygon(x, z, region as THREE.Vector3[])) continue;
+        if (excludeArea && GeneratorUtils.isPointInPolygon(x, z, excludeArea)) continue;
 
         const scale = 0.8 + rand() * 0.6;
         const leanX = (rand() - 0.5) * 0.1, leanZ = (rand() - 0.5) * 0.1;
@@ -470,7 +471,8 @@ const _placeGroundCover = async (
     density: number,
     geo: THREE.BufferGeometry,
     mat: THREE.Material,
-    tallScale: boolean
+    tallScale: boolean,
+    excludeArea?: THREE.Vector3[]
 ) => {
     const bounds = _getBounds(region);
     const count = Math.floor(bounds.w * bounds.d * density);
@@ -490,6 +492,7 @@ const _placeGroundCover = async (
         const x = bounds.x + rand() * bounds.w;
         const z = bounds.z + rand() * bounds.d;
         if (isPolygon && !GeneratorUtils.isPointInPolygon(x, z, region as THREE.Vector3[])) continue;
+        if (excludeArea && GeneratorUtils.isPointInPolygon(x, z, excludeArea)) continue;
 
         const p = new THREE.Vector3(x, 0, z);
         _pos.copy(p);
@@ -535,7 +538,7 @@ const _placeGroundCover = async (
     }
 };
 
-const _placeSunflowers = async (ctx: SectorBuildContext, region: Region, density: number) => {
+const _placeSunflowers = async (ctx: SectorBuildContext, region: Region, density: number, excludeArea?: THREE.Vector3[]) => {
     const bounds = _getBounds(region);
     const count = Math.floor(bounds.w * bounds.d * density);
     if (count <= 0) return;
@@ -554,6 +557,7 @@ const _placeSunflowers = async (ctx: SectorBuildContext, region: Region, density
         const x = bounds.x + rand() * bounds.w;
         const z = bounds.z + rand() * bounds.d;
         if (isPolygon && !GeneratorUtils.isPointInPolygon(x, z, region as THREE.Vector3[])) continue;
+        if (excludeArea && GeneratorUtils.isPointInPolygon(x, z, excludeArea)) continue;
 
         _pos.set(x, 0, z);
         _euler.set(0, rand() * PI2, 0);
@@ -947,7 +951,8 @@ export const VegetationGenerator = {
         ctx: SectorBuildContext,
         type: VEGETATION_TYPE | VEGETATION_TYPE[],
         region: THREE.Vector3[] | { x: number, z: number, w: number, d: number },
-        density: number = 1.0
+        density: number = 1.0,
+        excludeArea?: THREE.Vector3[]
     ) => {
         const types = Array.isArray(type) ? type : [type];
         const firstType = types[0];
@@ -959,16 +964,16 @@ export const VegetationGenerator = {
             || firstType === VEGETATION_TYPE.DEAD_TREE;
 
         if (isTree) {
-            await _placeTrees(ctx, region, density, types);
+            await _placeTrees(ctx, region, density, types, excludeArea);
             return;
         }
 
         switch (firstType) {
-            case VEGETATION_TYPE.WHEAT: await _placeGroundCover(ctx, region, density, SHARED_GEO.grass, MATERIALS.wheat, true); break;
-            case VEGETATION_TYPE.GRASS: await _placeGroundCover(ctx, region, density, SHARED_GEO.grassTuft, MATERIALS.grassTuft, false); break;
-            case VEGETATION_TYPE.FLOWER: await _placeGroundCover(ctx, region, density, SHARED_GEO.grass, MATERIALS.flower, false); break;
-            case VEGETATION_TYPE.SUNFLOWER: await _placeSunflowers(ctx, region, density); break;
-            case VEGETATION_TYPE.BUSH: await _placeGroundCover(ctx, region, density, SHARED_GEO.hedgeBox, MATERIALS.hedge, false); break;
+            case VEGETATION_TYPE.WHEAT: await _placeGroundCover(ctx, region, density, SHARED_GEO.grass, MATERIALS.wheat, true, excludeArea); break;
+            case VEGETATION_TYPE.GRASS: await _placeGroundCover(ctx, region, density, SHARED_GEO.grassTuft, MATERIALS.grassTuft, false, excludeArea); break;
+            case VEGETATION_TYPE.FLOWER: await _placeGroundCover(ctx, region, density, SHARED_GEO.grass, MATERIALS.flower, false, excludeArea); break;
+            case VEGETATION_TYPE.SUNFLOWER: await _placeSunflowers(ctx, region, density, excludeArea); break;
+            case VEGETATION_TYPE.BUSH: await _placeGroundCover(ctx, region, density, SHARED_GEO.hedgeBox, MATERIALS.hedge, false, excludeArea); break;
         }
     },
 

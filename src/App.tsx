@@ -26,6 +26,7 @@ import ScreenTerminalArmory from './components/ui/screens/ScreenTerminalArmory';
 import { ScreenTerminalSpawner } from './components/ui/screens/ScreenTerminalSpawner';
 import ScreenTerminalSkill from './components/ui/screens/ScreenTerminalSkill';
 import { ScreenTerminalEnvironment } from './components/ui/screens/ScreenTerminalEnvironment';
+import { ScreenTerminalUI } from './components/ui/screens/ScreenTerminalUI';
 import ScreenPlayerDied from './components/ui/screens/ScreenPlayerDied';
 import ScreenArmory from './components/ui/screens/ScreenArmory';
 import ScreenSkills from './components/ui/screens/ScreenSkills';
@@ -82,6 +83,7 @@ const App: React.FC = () => {
     const [isLoadingCamp, setIsLoadingCamp] = useState(false);
     const [loadingTargetIsCamp, setLoadingTargetIsCamp] = useState(false);
     const [showLoadingOverlay, setShowLoadingOverlay] = useState(true);
+    const [loadingSectorIndex, setLoadingSectorIndex] = useState<number | null>(null);
 
     const [activeOverlay, setActiveOverlay] = useState<OverlayType>(OverlayType.NONE);
     const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
@@ -128,10 +130,15 @@ const App: React.FC = () => {
             handleOpenStatisticsAction(tab, itemId);
         };
 
+        const handleSectorBannerPreviewEvent = () => {
+            setIsSectorBannerActive(true);
+        };
+
         window.addEventListener('resize', checkMobile);
         document.addEventListener('pointerlockchange', handleLockChange);
         window.addEventListener('open-adventure-log', handleOpenAdventureLogEvent);
         window.addEventListener('open-statistics', handleOpenStatisticsEvent);
+        window.addEventListener('trigger-side-banner-preview', handleSectorBannerPreviewEvent);
 
         // --- IMMERSIVE PC: Disable Context Menu ---
         const handleContextMenu = (e: MouseEvent) => e.preventDefault();
@@ -148,6 +155,7 @@ const App: React.FC = () => {
             document.removeEventListener('pointerlockchange', handleLockChange);
             window.removeEventListener('open-adventure-log', handleOpenAdventureLogEvent);
             window.removeEventListener('open-statistics', handleOpenStatisticsEvent);
+            window.removeEventListener('trigger-side-banner-preview', handleSectorBannerPreviewEvent);
             window.removeEventListener('contextmenu', handleContextMenu);
         };
     }, []);
@@ -173,6 +181,7 @@ const App: React.FC = () => {
             requestAnimationFrame(() => {
                 setTimeout(() => {
                     setShowLoadingOverlay(false);
+                    setLoadingSectorIndex(null);
                 }, 100);
 
                 setTimeout(() => {
@@ -187,17 +196,24 @@ const App: React.FC = () => {
 
     const triggerLoadingTransition = useCallback(async (
         type: 'CAMP' | 'SECTOR' | 'PROLOGUE',
-        task: () => Promise<void> | void
+        task: () => Promise<void> | void,
+        targetSector?: number
     ) => {
         transitionTaskRef.current = true;
         sceneReadyRef.current = false;
 
         if (type === 'CAMP') {
             setIsLoadingCamp(true);
+            setLoadingSectorIndex(null);
         } else {
             setIsLoadingSector(true);
             if (type === 'SECTOR') {
                 setIsSectorBannerActive(true);
+            }
+            if (targetSector !== undefined) {
+                setLoadingSectorIndex(targetSector);
+            } else {
+                setLoadingSectorIndex(null);
             }
         }
 
@@ -238,8 +254,8 @@ const App: React.FC = () => {
                 });
             });
 
+            const sectorIndex = gameState.currentSector !== undefined ? gameState.currentSector : 0;
             await triggerLoadingTransition(isCamp ? 'CAMP' : 'SECTOR', async () => {
-                const sectorIndex = gameState.currentSector !== undefined ? gameState.currentSector : 0;
                 try {
                     // Safety check for undefined settings on initial boot
                     const defaultSettings = { shadowQuality: 1, antialias: true, resolutionScale: 1.0, postProcessing: true, renderDistance: 1.0 };
@@ -256,7 +272,7 @@ const App: React.FC = () => {
                 }
 
                 setIsInitialBoot(false);
-            });
+            }, isCamp ? undefined : sectorIndex);
         };
 
         if (isInitialBoot && hasInteracted) warmup();
@@ -297,7 +313,7 @@ const App: React.FC = () => {
     const handleBossIntroStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? OverlayType.INTRO : OverlayType.NONE), []);
 
     const handleBossDefeatedAction = useCallback((bossId: BossID) => {
-        // FIX 1: Capture sectorStats immediately so progress is persisted even if the app closes.
+        // FIX 1: Capture sectorStats immediately so progress is persisted even if the game closes.
         if (gameCanvasRef.current) {
             const stats = gameCanvasRef.current.getSectorStats(true, false);
             setSectorStats(stats);
@@ -308,29 +324,17 @@ const App: React.FC = () => {
             if (StatsBridge.getDeadBossIndices(prev.stats).includes(prev.currentSector)) return prev;
 
             const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
-            newStatsBuffer[StatID.SKILL_POINTS] += 1;
 
             return {
                 ...prev,
                 stats: {
                     ...prev.stats,
                     statsBuffer: newStatsBuffer,
-                    totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1,
+                    totalSkillPointsEarned: newStatsBuffer[StatID.SKILL_POINTS],
                     deadBossIndices: [...StatsBridge.getDeadBossIndices(prev.stats), prev.currentSector]
                 }
             };
         });
-
-        // FIX 3: Delay screen transition so the boss death animation has time to play (~3.5s).
-        // The game loop already grants player invulnerability and fires endSector after 4s,
-        // so this window is safe and consistent.
-        setTimeout(() => {
-            setGameState(prev => {
-                // Guard: only switch screen if still in-sector (player hasn't navigated away).
-                if (prev.screen !== GameScreen.SECTOR && prev.screen !== GameScreen.BOSS_KILLED) return prev;
-                return { ...prev, screen: GameScreen.BOSS_KILLED };
-            });
-        }, 3500);
     }, []);
 
     const handleFamilyRescuedAction = useCallback((familyId: number) => {
@@ -338,14 +342,13 @@ const App: React.FC = () => {
             if (StatsBridge.getRescuedFamilyIndices(prev.stats).includes(prev.currentSector)) return prev;
 
             const newStatsBuffer = new Float32Array(StatsBridge.getStatsBuffer(prev.stats));
-            newStatsBuffer[StatID.SKILL_POINTS] += 1;
 
             return {
                 ...prev,
                 stats: {
                     ...prev.stats,
                     statsBuffer: newStatsBuffer,
-                    totalSkillPointsEarned: StatsBridge.getTotalSkillPointsEarned(prev.stats) + 1,
+                    totalSkillPointsEarned: newStatsBuffer[StatID.SKILL_POINTS],
                     rescuedFamilyIndices: [...StatsBridge.getRescuedFamilyIndices(prev.stats), prev.currentSector]
                 }
             };
@@ -413,7 +416,7 @@ const App: React.FC = () => {
         const resolvedTab = (tab && typeof tab === 'string') ? tab : 'overview';
         setInitialStatisticsTab(resolvedTab);
         setInitialStatisticsItem(itemId || null);
-        setActiveOverlay(OverlayType.STATION_STATISTICS);
+        setActiveOverlay(OverlayType.TERMINAL_STATISTICS);
         UISounds.playConfirm();
     }, []);
 
@@ -636,19 +639,19 @@ const App: React.FC = () => {
         });
     }, []);
 
-    const handleNextSector = useCallback(() => {
+    const handleNextSector = useCallback(async () => {
         UISounds.playConfirm();
-        aggregatePendingStats();
+        await aggregatePendingStats();
+
+        const nextSector = latestStateRef.current.gameState.currentSector + 1;
+
+        // If it's the last sector, stay at the last story sector.
+        if (nextSector > SectorID.SCRAPYARD) {
+            setGameState(prev => ({ ...prev, screen: GameScreen.CAMP, currentSector: SectorID.SCRAPYARD, weather: WeatherType.SNOW }));
+            return;
+        }
 
         triggerLoadingTransition('SECTOR', async () => {
-            const nextSector = latestStateRef.current.gameState.currentSector + 1;
-
-            // If it's the last sector, stay at the last story sector.
-            if (nextSector > SectorID.SCRAPYARD) {
-                setGameState(prev => ({ ...prev, screen: GameScreen.CAMP, currentSector: SectorID.SCRAPYARD, weather: WeatherType.SNOW }));
-                return;
-            }
-
             const yieldToMain = () => new Promise<void>(resolve => {
                 requestAnimationFrame(() => setTimeout(resolve, 0));
             });
@@ -665,7 +668,7 @@ const App: React.FC = () => {
                 sectorState: nextSector === SectorID.PLAYGROUND ? prev.sectorState : undefined // Only persist for playground
             }));
             HudStore.update({ ...HudStore.getState(), hudVisible: false });
-        });
+        }, nextSector);
     }, [triggerLoadingTransition, aggregatePendingStats]);
 
     const handleStartSector = useCallback(async () => {
@@ -691,7 +694,7 @@ const App: React.FC = () => {
                     ? prev.sectorState : undefined // Clear if not playground
             }));
             HudStore.update({ ...HudStore.getState(), hudVisible: false });
-        });
+        }, sectorIndex);
     }, [triggerLoadingTransition]);
 
     const handleRespawnSector = useCallback(() => {
@@ -731,7 +734,9 @@ const App: React.FC = () => {
     const handleAbortSector = useCallback(() => {
         if (!gameCanvasRef.current) return;
         setActiveOverlay(OverlayType.NONE);
-        const stats = gameCanvasRef.current.getSectorStats(false, true);
+        const rawStats = gameCanvasRef.current.getSectorStats(false, false);
+        const bossDefeated = StatsBridge.isSectorBossDefeated(rawStats);
+        const stats = gameCanvasRef.current.getSectorStats(bossDefeated, !bossDefeated);
         handleSectorEnded(stats);
         UISounds.playClick();
     }, [handleSectorEnded]);
@@ -808,7 +813,7 @@ const App: React.FC = () => {
     );
 
     const cursorHidden = isMobileDevice || isPointerLocked || (hasInteracted && gameState.screen === GameScreen.SECTOR && activeOverlay === OverlayType.NONE);
-    const showHUD = hasInteracted && (activeOverlay === OverlayType.NONE || activeOverlay === OverlayType.INTRO) && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && gameState.screen !== GameScreen.PROLOGUE;
+    const showHUD = hasInteracted && (activeOverlay === OverlayType.NONE || activeOverlay === OverlayType.INTRO) && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && gameState.screen === GameScreen.SECTOR;
 
     // Boolean to check if we should mount/keep GameSession alive
     const shouldKeepSessionAlive =
@@ -864,12 +869,13 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {/* VINTERDÖD FIX: GameSession is wrapped in a hidden div if it's not the active screen but needs to live */}
+                    {/* GameSession is wrapped in a hidden div if it's not the active screen but needs to live */}
                     <div
                         className={`absolute inset-0 ${gameState.screen === GameScreen.SECTOR ||
                             gameState.screen === GameScreen.PROLOGUE ||
                             gameState.screen === GameScreen.BOSS_KILLED ||
-                            gameState.screen === GameScreen.DEATH ? 'block' : 'hidden'
+                            gameState.screen === GameScreen.DEATH ||
+                            gameState.screen === GameScreen.RECAP ? 'block' : 'hidden'
                             }`}
                     >
                         {shouldKeepSessionAlive && (
@@ -977,7 +983,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {activeOverlay === OverlayType.STATION_STATISTICS && (
+                    {activeOverlay === OverlayType.TERMINAL_STATISTICS && (
                         <ScreenStatistics
                             stats={gameState.screen === GameScreen.SECTOR ? (gameCanvasRef.current?.getMergedSessionStats() || gameState.stats) : gameState.stats}
                             onClose={handleCloseAction}
@@ -989,7 +995,7 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {activeOverlay === OverlayType.STATION_ARMORY && (
+                    {activeOverlay === OverlayType.TERMINAL_ARMORY && (
                         gameState.screen === GameScreen.CAMP ? (
                             <ScreenArmory
                                 stats={gameState.stats}
@@ -1012,7 +1018,7 @@ const App: React.FC = () => {
                         )
                     )}
 
-                    {activeOverlay === OverlayType.STATION_SKILLS && (
+                    {activeOverlay === OverlayType.TERMINAL_SKILLS && (
                         gameState.screen === GameScreen.CAMP ? (
                             <ScreenSkills
                                 stats={gameState.stats}
@@ -1031,7 +1037,7 @@ const App: React.FC = () => {
                         )
                     )}
 
-                    {activeOverlay === OverlayType.STATION_ENVIRONMENT && (
+                    {activeOverlay === OverlayType.TERMINAL_ENVIRONMENT && (
                         <ScreenTerminalEnvironment
                             onClose={handleCloseAction}
                             isMobileDevice={isMobileDevice}
@@ -1043,11 +1049,18 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {activeOverlay === OverlayType.STATION_SPAWNER && (
+                    {activeOverlay === OverlayType.TERMINAL_SPAWNER && (
                         <ScreenTerminalSpawner
                             onClose={handleCloseAction}
                             isMobileDevice={isMobileDevice}
                             onSpawnEnemies={handleSpawnEnemiesAction}
+                        />
+                    )}
+
+                    {activeOverlay === OverlayType.TERMINAL_UI && (
+                        <ScreenTerminalUI
+                            onClose={handleCloseAction}
+                            isMobileDevice={isMobileDevice}
                         />
                     )}
 
@@ -1105,7 +1118,7 @@ const App: React.FC = () => {
                         <Prologue onComplete={handlePrologueCompleteAction} isMobileDevice={isMobileDevice} />
                     )}
 
-                    {activeOverlay === OverlayType.STATION_SECTORS && (
+                    {activeOverlay === OverlayType.TERMINAL_SECTORS && (
                         <ScreenSectorOverview
                             currentSector={gameState.currentSector}
                             rescuedFamilyIndices={StatsBridge.getRescuedFamilyIndices(gameState.stats)}
@@ -1132,7 +1145,7 @@ const App: React.FC = () => {
 
                     <ScreenLoading
                         isDone={!showLoadingOverlay}
-                        sectorIndex={gameState.screen === GameScreen.PROLOGUE ? 0 : (gameState.currentSector || 0)}
+                        sectorIndex={gameState.screen === GameScreen.PROLOGUE ? 0 : (loadingSectorIndex !== null ? loadingSectorIndex : (gameState.currentSector || 0))}
                         isPrologue={gameState.screen === GameScreen.PROLOGUE}
                         isCamp={loadingTargetIsCamp}
                         isInitialBoot={isInitialBoot}

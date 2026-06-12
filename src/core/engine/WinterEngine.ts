@@ -203,7 +203,7 @@ export class WinterEngine {
         this.maxSafeShadows = 1; //Math.min(LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS, safeShadowLimit);
 
         // We trust the user's UI settings for performance scaling, but we establish the absolute engine bounds here.
-        this.maxVisibleLights = 3;//LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS;
+        this.maxVisibleLights = 5;//LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS;
 
         console.log(`[WinterEngine] GPU MaxTextures: ${maxTextures}. Max Visible Lights: ${this.maxVisibleLights}. Max Allowed Shadows: ${this.maxSafeShadows}`);
     }

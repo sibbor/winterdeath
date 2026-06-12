@@ -963,7 +963,7 @@ export const Sector0: SectorDef = {
         SectorBuilder.spawnChest(ctx, 110, 80, ChestType.STANDARD);
         SectorBuilder.spawnChest(ctx, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z + 5, ChestType.STANDARD);
 
-        SectorBuilder.spawnFamily(ctx, FamilyMemberID.LOKE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI);
+        SectorBuilder.spawnFamily(ctx, FamilyMemberID.LOKE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, found: false, visible: true });
     },
 
     setupContent: async (ctx: SectorBuildContext) => {
