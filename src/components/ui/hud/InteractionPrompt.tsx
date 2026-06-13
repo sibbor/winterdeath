@@ -116,24 +116,33 @@ const InteractionPrompt = React.forwardRef<any, InteractionPromptProps>(({
 
     const inputKey = isMobileDevice ? t('ui.tap') : "E";
 
-    const handleTouchStart = useCallback((e: React.TouchEvent) => {
-        e.stopPropagation();
-        if (onInteract) onInteract(true);
-    }, [onInteract]);
-
-    const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-        e.stopPropagation();
-        if (onInteract) onInteract(false);
-    }, [onInteract]);
-
     // ZERO-GC: Recycled release executor to protect the heap loop
     const executeClickRelease = useCallback(() => {
         if (onInteract) onInteract(false);
         clickTimeoutRef.current = null;
     }, [onInteract]);
 
+    const isTouchInteraction = React.useRef(false);
+
+    const handleTouchStart = useCallback((e: React.TouchEvent) => {
+        e.stopPropagation();
+        isTouchInteraction.current = true;
+        if (onInteract) onInteract(true);
+    }, [onInteract]);
+
+    const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+        e.stopPropagation();
+        if (e.cancelable) e.preventDefault(); // Prevent synthetic click
+        if (onInteract) onInteract(false);
+        
+        // Reset touch flag after a short delay
+        setTimeout(() => { isTouchInteraction.current = false; }, 300);
+    }, [onInteract]);
+
     const handleClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
+        if (isTouchInteraction.current) return; // Prevent double-trigger from synthetic click
+        
         if (onInteract) {
             onInteract(true);
             if (clickTimeoutRef.current !== null) clearTimeout(clickTimeoutRef.current);
