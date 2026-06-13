@@ -71,7 +71,7 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: FamilyMemberID.JORDAN, text: "dialogue.1_17" },
             { speaker: FamilyMemberID.LOKE, text: "dialogue.1_18" },
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.1_19" },
-            { speaker: FamilyMemberID.JORDAN, text: "dialogue.1_20" },
+            { speaker: FamilyMemberID.LOKE, text: "dialogue.1_20" },
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.1_21" },
             { speaker: FamilyMemberID.UNKNOWN, text: "dialogue.1_22" },
             {

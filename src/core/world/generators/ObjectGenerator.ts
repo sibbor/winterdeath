@@ -557,11 +557,11 @@ export const ObjectGenerator = {
         group.userData.material = MaterialType.METAL;
 
         group.userData.logicalLights = [{
-            offset: new THREE.Vector3(0, -0.5, 0),
+            offset: new THREE.Vector3(0, -1.0, 0),
             color: 0xffddaa,
-            intensity: 15,
-            distance: 60.0,
-            decay: 1.0,
+            intensity: 45,
+            distance: 100.0,
+            decay: 0.8,
             flickerRate: 0.5
         }];
 

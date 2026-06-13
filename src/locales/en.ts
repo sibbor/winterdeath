@@ -12,6 +12,9 @@ export const en = {
         15: "Warlord", 16: "Apex Predator", 17: "Legend", 18: "Immortal", 19: "Mega Zombie Slayer"
     },
     ui: {
+        respawn_at_boss: "RESPAWN AT BOSS",
+        respawn: "RESPAWN",
+        continue: "CONTINUE",
         boss_encounter: "BOSS ENCOUNTER",
         category_world: "World",
         category_combat: "Combat",
@@ -154,7 +157,6 @@ export const en = {
         paused: "PAUSED",
         discovered: "DISCOVERED",
         collected: "COLLECTED",
-        continue: "CONTINUE",
         explore_more: "EXPLORE MORE",
         teleport: "TELEPORT",
         chest: "CHEST",
@@ -202,7 +204,6 @@ export const en = {
             untouchable: { title: "Untouchable", desc: "Complete a sector taking less than {target} damage." }
         },
         return_camp: "RETURN TO CAMP",
-        respawn: "RESPAWN",
         player_died: "{name} died",
         killed_by: "killed by",
         died_from: "died from",

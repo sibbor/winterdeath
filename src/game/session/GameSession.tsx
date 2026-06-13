@@ -47,7 +47,7 @@ export interface GameSessionHandle {
     getMergedSessionStats: () => any;
     spawnBoss: (type: number, pos?: THREE.Vector3) => any;
     spawnEnemies: (newEnemies: any[]) => void;
-    respawnPlayer: () => void;
+    respawnPlayer: (atBoss?: boolean) => void;
     restartSector: () => Promise<void>;
 }
 
@@ -1023,11 +1023,26 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 enemies.push(newEnemies[i]);
             }
         },
-        respawnPlayer: () => {
+        respawnPlayer: (atBoss?: boolean) => {
             const engine = WinterEngine.getInstance();
             const state = refs.stateRef.current;
             const session = refs.gameSessionRef.current;
             if (session) {
+                if (atBoss !== undefined) {
+                    if (!atBoss && state.checkpoint) {
+                        state.checkpoint.active = false;
+                    } else if (atBoss) {
+                        if (!state.checkpoint) state.checkpoint = { active: true, x: 0, y: 0, z: 0 };
+                        state.checkpoint.active = true;
+                        
+                        const sectorData = (props as any).currentSectorData || SectorSystem.getSector(props.gameState.currentSector || 0);
+                        if (sectorData && sectorData.bossSpawn) {
+                            state.checkpoint.x = sectorData.bossSpawn.x;
+                            state.checkpoint.y = sectorData.bossSpawn.y || 0;
+                            state.checkpoint.z = sectorData.bossSpawn.z;
+                        }
+                    }
+                }
                 GameSessionSetup.respawnPlayer(session, engine, state, refs, props, (phase) => updateUiState({ deathPhase: phase }));
             }
         },

@@ -1094,7 +1094,26 @@ const App: React.FC = () => {
                     {/* VINTERDÖD FIX: Unify Death Screen logic (Overlay or Screen State) */}
                     {(gameState.screen === GameScreen.DEATH || activeOverlay === OverlayType.DEATH) && (
                         <ScreenPlayerDied
-                            onRespawn={handleRespawnSector}
+                            onRespawn={() => {
+                                UISounds.playConfirm();
+                                gameCanvasRef.current?.respawnPlayer(false);
+                                setActiveOverlay(OverlayType.NONE);
+                                setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+                                setSectorStats(null);
+                                setDeathDetails(null);
+                                setActiveCollectible(null);
+                                HudStore.update({ ...HudStore.getState(), hudVisible: true, isDead: false });
+                            }}
+                            onRespawnAtBoss={() => {
+                                UISounds.playConfirm();
+                                gameCanvasRef.current?.respawnPlayer(true);
+                                setActiveOverlay(OverlayType.NONE);
+                                setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+                                setSectorStats(null);
+                                setDeathDetails(null);
+                                setActiveCollectible(null);
+                                HudStore.update({ ...HudStore.getState(), hudVisible: true, isDead: false });
+                            }}
                             onContinue={handleContinueFromDeath}
                             isMobileDevice={isMobileDevice}
                         />

@@ -857,34 +857,37 @@ export const EnemyManager = {
             enemy.statusFlags |= EnemyFlags.EXPLODED;
         }
 
-        // Enemy position, scale and head
+        // Enemy position, body mass and head position
         const enemyPos = enemy.mesh.position;
-        const enemyScale = enemy.originalScale * enemy.widthScale;
-        const enemyHead = enemyPos.y + enemy.originalScale * 1.8;
+        const enemyBodyMass = enemy.originalScale * enemy.widthScale;
+        const enemyHeadPos = enemyPos.y + enemy.originalScale * 1.8;
+        const isBoss = (enemy.statusFlags & EnemyFlags.BOSS) !== 0;
 
         if (enemy.mesh.parent) enemy.mesh.parent.remove(enemy.mesh);
 
-        // 1. Blood decal:
+        // --- 1. BLOOD DECAL ---
+        // Scaled based on weapon type & enemy type:
         const dmgType = enemy.lastDamageType;
-        let burstScale = 1.0;
-        if (dmgType === DamageID.GRENADE) burstScale = 3.0;
-        else if (dmgType === DamageID.SHOTGUN || dmgType === DamageID.REVOLVER) burstScale = 2.0;
-        const decalScale = ((enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 6.0 : enemyScale * burstScale);
+        let weaponBurstScale = 1.0;
+        if (dmgType === DamageID.GRENADE) weaponBurstScale = 3.0;
+        else if (dmgType === DamageID.SHOTGUN || dmgType === DamageID.REVOLVER) weaponBurstScale = 2.0;
+
+        const decalScale = (isBoss ? 6.0 : enemyBodyMass * weaponBurstScale);
         if (callbacks.spawnDecal) {
             callbacks.spawnDecal(enemyPos.x, enemyPos.z, decalScale, MATERIALS.bloodDecal, FXDecalType.SPLATTER);
         }
 
-        // 2. Blood splatter:
-        const bloodCount = (enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 12 : 6;
+        // --- 2. BLOOD SPLATTER ---
+        // Based on enemy type
+        const bloodCount = (isBoss ? 12 : 6);
         if (callbacks.spawnParticle) {
-            callbacks.spawnParticle(enemyPos.x, enemyHead, enemyPos.z, FXParticleType.BLOOD_SPLATTER, bloodCount);
+            callbacks.spawnParticle(enemyPos.x, enemyHeadPos, enemyPos.z, FXParticleType.BLOOD_SPLATTER, bloodCount);
         }
 
-        // 3. Gore:
-        const goreCount = (enemy.statusFlags & EnemyFlags.BOSS) !== 0 ? 12 : 6;
-        const enemyBodyMass = enemy.originalScale * enemy.widthScale;
-        const isBoss = (enemy.statusFlags & EnemyFlags.BOSS) !== 0;
-        const goreScale = isBoss ? (enemyBodyMass * 1.2) : (enemyBodyMass * 1.0) / goreCount;
+        // --- 3. GORE ---
+        // Based on enemy type & body mass
+        const goreCount = (isBoss ? 12 : 6);
+        const goreScale = isBoss ? (enemyBodyMass * 1.2) : (enemyBodyMass * 0.8);
 
         _v1.set(0, 0, 0);
         if (forceDir) {
@@ -897,17 +900,20 @@ export const EnemyManager = {
 
         if (callbacks.spawnParticle) {
             for (let i = 0; i < goreCount; i++) {
-                // FIXED: Isolated physics vector calculation completely free of stale scratchpad garbage
+                // Isolated physics vector calculation completely free of stale scratchpad garbage
                 _v2.set(
                     (Math.random() - 0.5) * 10,
                     3.0 + Math.random() * 6,
                     (Math.random() - 0.5) * 10
                 );
 
+                // Add the death/impact vector to the random burst
+                _v2.addScaledVector(_v1, 0.6);
+
                 // Signature mapping: (x, y, z, type, count, customMesh, customVel, color, scale)
                 callbacks.spawnParticle(
                     enemyPos.x,
-                    enemyHead,
+                    enemyHeadPos,
                     enemyPos.z,
                     FXParticleType.GORE,
                     1,

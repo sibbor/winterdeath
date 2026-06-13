@@ -6,6 +6,9 @@ export const sv = {
         15: "Krigsherre", 16: "Rovdjur", 17: "Legend", 18: "Odödlig", 19: "Megaslaktare"
     },
     ui: {
+        respawn_at_boss: "ÅTERUPPSTÅ VID BOSS",
+        respawn: "ÅTERUPPSTÅ",
+        continue: "FORTSÄTT",
         boss_encounter: "BOSSSTRID",
         category_world: "Världen",
         category_combat: "Strid",
@@ -109,7 +112,6 @@ export const sv = {
         cancel: "AVBRYT",
         skip: "HOPPA ÖVER",
         paused: "PAUSAD",
-        continue: "FORTSÄTT",
         saved: "SPARAD",
         wave_start: "VÅG STARTAD",
         teleport: "TELEPORTERA",
@@ -157,7 +159,6 @@ export const sv = {
             untouchable: { title: "Oåtkomlig", desc: "Slutför en sektor genom att ta mindre än {target} skada." }
         },
         return_camp: "ÅTERVÄND TILL LÄGRET",
-        respawn: "RESPAWN",
         player_died: "{name} dog",
         killed_by: "dödad av",
         died_from: "dog av",
@@ -1060,7 +1061,7 @@ export const sv = {
         "1_13": "Okej. Öppna porten nu.",
         "1_14": "/Gör oss inte illa, okej? Vi är så ledsna!!/",
         "1_15": "ÖPPNA PORTEN.",
-        "1_16": "(Öppnar stålporten som leder in till skyddsrummet)",
+        "1_16": "(Stålporten in till skyddsrummet öppnas",
 
         // Dialogue: Sector 2 (part 2) 
         "1_17": "PAPPA! LOKE!",

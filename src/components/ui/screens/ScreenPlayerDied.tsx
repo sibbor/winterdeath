@@ -11,10 +11,11 @@ import { MetaActionId } from '../../../systems/ui/UIEventBridge';
 interface ScreenPlayerDiedProps {
     onContinue: () => void;
     onRespawn: () => void;
+    onRespawnAtBoss?: () => void;
     isMobileDevice?: boolean;
 }
 
-const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespawn, isMobileDevice }) => {
+const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespawn, onRespawnAtBoss, isMobileDevice }) => {
     const [isVisible, setIsVisible] = useState(false);
 
     // Fetch data using optimized selectors
@@ -23,6 +24,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
     const killedByEnemy = useHudStore(s => s.killedByEnemy || false);
     const lethalSourceId = useHudStore(s => s.lethalSourceId ?? StatusEffectID.NONE);
     const lethalStatusEffect = useHudStore(s => s.lethalStatusEffect ?? StatusEffectID.NONE);
+    const bossSpawned = useHudStore(s => s.bossSpawned || s.bossActive);
 
     useEffect(() => {
         UISounds.playDefeat();
@@ -120,25 +122,38 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
                 </div>
 
                 {/* Action Buttons */}
-                <div className={`relative flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-8 ${isMobileDevice ? 'mt-6' : 'mt-12'} w-full z-10 animate-deathFadeIn`}>
+                <div className={`relative flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 ${isMobileDevice ? 'mt-6' : 'mt-12'} w-full z-10 animate-deathFadeIn`}>
 
-                    {/* 1. Respawn Button (Instant) */}
+                    {/* 1. Respawn at Boss Button (Only if boss was active) */}
+                    {bossSpawned && onRespawnAtBoss && (
+                        <button
+                            onClick={onRespawnAtBoss}
+                            className={`group relative ${isMobileDevice ? 'px-8 py-3' : 'px-10 py-4'} bg-orange-600 text-white border-4 border-black shadow-[0_0_40px_rgba(255,165,0,0.2)] transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[200px] pointer-events-auto`}>
+                            <div className="absolute inset-0 opacity-10 group-hover:opacity-30 transition-opacity" style={HORIZONTAL_HATCHING_STYLE_DARK} />
+                            <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
+                            <span className={`relative z-10 ${isMobileDevice ? 'text-base' : 'text-lg'} font-black tracking-[0.2em] uppercase`}>
+                                {t('ui.respawn_at_boss')}
+                            </span>
+                        </button>
+                    )}
+
+                    {/* 2. Respawn Button (Instant - Start of sector) */}
                     <button
                         onClick={onRespawn}
-                        className={`group relative ${isMobileDevice ? 'px-10 py-4' : 'px-14 py-5'} bg-red-600 text-white border-4 border-black shadow-[0_0_40px_rgba(255,0,0,0.2)] transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[240px] pointer-events-auto`}>
+                        className={`group relative ${isMobileDevice ? 'px-8 py-3' : 'px-10 py-4'} bg-red-600 text-white border-4 border-black shadow-[0_0_40px_rgba(255,0,0,0.2)] transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[200px] pointer-events-auto`}>
                         <div className="absolute inset-0 opacity-10 group-hover:opacity-30 transition-opacity" style={HORIZONTAL_HATCHING_STYLE_DARK} />
                         <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
-                        <span className={`relative z-10 ${isMobileDevice ? 'text-lg' : 'text-xl'} font-black tracking-[0.2em] uppercase`}>
+                        <span className={`relative z-10 ${isMobileDevice ? 'text-base' : 'text-lg'} font-black tracking-[0.2em] uppercase`}>
                             {t('ui.respawn')}
                         </span>
                     </button>
 
-                    {/* 2. Continue Button (To Report) */}
+                    {/* 3. Continue Button (To Report) */}
                     <button
                         onClick={onContinue}
-                        className={`group relative ${isMobileDevice ? 'px-10 py-4' : 'px-14 py-5'} bg-white text-black border-4 border-black hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[240px] shadow-[0_0_30px_rgba(255,255,255,0.1)] pointer-events-auto`}>
+                        className={`group relative ${isMobileDevice ? 'px-8 py-3' : 'px-10 py-4'} bg-white text-black border-4 border-black hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[200px] shadow-[0_0_30px_rgba(255,255,255,0.1)] pointer-events-auto`}>
                         <div className="absolute inset-0 opacity-10 group-hover:opacity-20 transition-opacity" style={HORIZONTAL_HATCHING_STYLE_DARK} />
-                        <span className={`relative z-10 ${isMobileDevice ? 'text-lg' : 'text-xl'} font-black tracking-[0.2em] uppercase`}>
+                        <span className={`relative z-10 ${isMobileDevice ? 'text-base' : 'text-lg'} font-black tracking-[0.2em] uppercase`}>
                             {t('ui.continue')}
                         </span>
                     </button>
