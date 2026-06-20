@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { TriggerSystem } from '../../systems/TriggerSystem';
 import { GameCanvasProps } from '../../types/CanvasTypes';
-import { MapItem, DiscoveryType } from '../../components/ui/hud/HudTypes';
+import { MapItem, DiscoveryType } from '../../components/ui/hud/game/HudTypes';
 import { DeathPhase } from '../../types/SessionTypes';
-import { SectorBuildContext, BossID, SectorID } from '../../game/session/SectorTypes';
+import { SectorBuildContext, BossID, SectorID, MAX_SECTOR_EVENTS } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
@@ -314,6 +314,58 @@ export class GameSessionSetup {
         // Final block - initialize the Navigation FlowField grid
         const { NavigationSystem } = await import('../../systems/NavigationSystem');
         NavigationSystem.init(ctx);
+
+        // --- PRODUCTION GENERIC EVENTS INITIALIZATION (Warmup/Load Phase) ---
+        if (def.events) {
+            if (def.events.length > MAX_SECTOR_EVENTS) {
+                throw new Error(`[SectorSystem] Sector ${ctx.sectorId} has ${def.events.length} events, exceeding MAX_SECTOR_EVENTS limit of ${MAX_SECTOR_EVENTS}.`);
+            }
+
+            if (ctx.state.sectorState?.eventStates) {
+                const startCtx = {
+                    delta: 0,
+                    simTime: 0,
+                    renderTime: 0,
+                    playerPos: ctx.state.player.position,
+                    triggerSystem: ctx.engine.systems.triggerSystem,
+                    state: ctx.state,
+                    gameState: ctx.state,
+                    sectorState: ctx.state.sectorState,
+                    ctx: ctx,
+                    engine: ctx.engine,
+                    worldStreamer: ctx.worldStreamer,
+                    scene: ctx.scene,
+                    onAction: ctx.onAction,
+                    spawnZombie: ctx.spawnZombie,
+                    spawnHorde: ctx.spawnHorde,
+                    setBubble: () => { },
+                    setInteraction: () => { },
+                    setOverlay: () => { },
+                    playSound: () => { },
+                    playTone: () => { },
+                    cameraShake: () => { },
+                    t: (key: string) => key,
+                    spawnParticle: ctx.spawnParticle,
+                    spawnDecal: ctx.spawnDecal,
+                    handlePlayerHit: ctx.handlePlayerHit,
+                    startCinematic: () => { },
+                    setCameraOverride: () => { },
+                    makeNoise: ctx.makeNoise,
+                    handleDiscovery: () => false,
+                    rewardXP: () => { },
+                    rewardSP: () => { },
+                    rewardScrap: () => { }
+                } as any;
+
+                for (let i = 0; i < def.events.length; i++) {
+                    const event = def.events[i];
+                    const eventState = ctx.state.sectorState.eventStates[i];
+                    if (event.onStart) {
+                        event.onStart(startCtx, eventState);
+                    }
+                }
+            }
+        }
 
         console.info(`[SectorBuilder] ✅ ACTIVATION complete in ${(performance.now() - setupStart).toFixed(1)}ms`);
 
@@ -663,11 +715,11 @@ export class GameSessionSetup {
         state.world.mapItems = mapItems;
 
         const sb = state.player.statsBuffer;
-        sb[StatID.MAX_HP] = (sb[StatID.MAX_HP] <= 0) ? 100 : Math.max(100, sb[StatID.MAX_HP]);
+        sb[StatID.MAX_HP] = (sb[StatID.MAX_HP] <= 0) ? PLAYER.BASE_HP : Math.max(PLAYER.BASE_HP, sb[StatID.MAX_HP]);
         sb[StatID.HP] = sb[StatID.MAX_HP];
-        sb[StatID.MAX_STAMINA] = (sb[StatID.MAX_STAMINA] <= 0) ? 100 : Math.max(100, sb[StatID.MAX_STAMINA]);
+        sb[StatID.MAX_STAMINA] = (sb[StatID.MAX_STAMINA] <= 0) ? PLAYER.BASE_STAMINA : Math.max(PLAYER.BASE_STAMINA, sb[StatID.MAX_STAMINA]);
         sb[StatID.STAMINA] = sb[StatID.MAX_STAMINA];
-        sb[StatID.SPEED] = (sb[StatID.SPEED] <= 0) ? PLAYER.BASE_SPEED : Math.max(10.0, sb[StatID.SPEED]);
+        sb[StatID.SPEED] = (sb[StatID.SPEED] <= 0) ? PLAYER.BASE_SPEED : Math.max(PLAYER.BASE_SPEED, sb[StatID.SPEED]);
 
         const activeEffects: any[] = [];
         scene.traverse((child) => {
@@ -1131,25 +1183,15 @@ export class GameSessionSetup {
             }
             state.sectorState.zombiesKilled = 0;
             state.sectorState.zombiesKillTarget = 0;
-            state.sectorState.busEventState = 0; // Reset Sector 1 pincer
         }
 
-        // --- 3. PASSIVES, BUFFS & DEBUFFS ---
-        const perkSystem = engine.systems.perkSystem;
-        if (perkSystem) {
-            // Corrected method name to match PerkSystem.ts implementation (refreshBaseStats)
-            if (perkSystem.refreshBaseStats) {
-                perkSystem.refreshBaseStats(session);
-            }
-        }
-
-        // --- 4. SYSTEM CLEARING ---
+        // --- 3. SYSTEM CLEARING ---
         ProjectileSystem.clear(scene, state.combat.projectiles, state.combat.fireZones);
         FXSystem.reset();
         session.systems.triggerSystem.resetTriggerStates();
         EnemyManager.clear();
 
-        // --- 4.1 BOSS TEARDOWN ---
+        // --- 3.1 BOSS TEARDOWN ---
         // EnemyManager.clear() removes boss mesh from scene but does NOT reset
         // bossSpawned or the HUD. Do a full state wipe so the sector can re-spawn
         // the boss on respawn as if it was never triggered.
@@ -1169,114 +1211,114 @@ export class GameSessionSetup {
             HudStore.patch({ bossSpawned: false });
         }
 
-        // --- 5. CLEAR DYNAMIC OBJECTS ---
+        // --- 4. CLEAR DYNAMIC OBJECTS ---
         this.clearDynamicNodes(scene);
 
-        // --- 6. SECTOR DATA ---
+        // --- 5. SECTOR DATA ---
         const currentSectorData = (props as any).currentSectorData || SectorSystem.getSector(props.gameState.currentSector || 0);
-        const currentSectorId = props.gameState.currentSector || 0;
-        const currentFMId = DataResolver.getSectorFamilyMemberId(currentSectorId);
+        const sCtx = refs.SectorBuildContextRef.current;
 
-        // --- 6.1 RESET FAMILY MEMBERS (VINTERDÖD FIX) ---
-        // Ensure unrescued members don't follow and previously rescued members are positioned correctly.
+        // --- 6. PLAYER RESPAWN - SECTOR-SPECIFIC RESPAWN HOOK ---
+        if (sCtx && currentSectorData.onPlayerRespawn) {
+            currentSectorData.onPlayerRespawn(sCtx, state, engine);
+        }
+        // 6.1 Generic event player respawn (without re-triggering onStart)
+        if (sCtx && currentSectorData.events && state.sectorState?.eventStates) {
+            for (let i = 0; i < currentSectorData.events.length; i++) {
+                const event = currentSectorData.events[i];
+                const eventState = state.sectorState.eventStates[i];
+                if (event.onPlayerRespawn) {
+                    event.onPlayerRespawn(sCtx, state, engine, eventState);
+                }
+            }
+        }
+
+        // --- 7. PLAYER POSITIONING ---
+        // Use checkpoint or sector spawn
+        const checkpoint = state.checkpoint;
+        const hasCheckpoint = checkpoint?.active;
+        const playerSpawn = currentSectorData.playerSpawn;
+        const spawnX = hasCheckpoint ? checkpoint!.x : (playerSpawn?.x || 0);
+        const spawnY = hasCheckpoint ? checkpoint!.y : (playerSpawn?.y || 0);
+        const spawnZ = hasCheckpoint ? checkpoint!.z : (playerSpawn?.z || 0);
+
+        if (refs.playerGroupRef.current) {
+            refs.playerGroupRef.current.position.set(spawnX, spawnY, spawnZ);
+            engine.camera.snapToTarget();
+        }
+
+        // --- 8. FAMILY MEMBERS ---
+        // Status & positioning (player or world position)
+        const currentSectorId = props.gameState.currentSector || 0;
+        const currentFamilyMemberId = DataResolver.getSectorFamilyMemberId(currentSectorId);
         const fmArr = refs.activeFamilyMembers.current;
+        const fSpawn = currentSectorData.familySpawn;
+        const checkpointFamilyMember = hasCheckpoint && checkpoint!.familyMemberId === currentFamilyMemberId;
+
         for (let i = 0; i < fmArr.length; i++) {
             const fm = fmArr[i];
-            if (fm.id === currentFMId) {
-                if (state.checkpoint && state.checkpoint.active && state.checkpoint.familyMemberId === currentFMId) {
-                    // Checkpoint is active: keep them rescued and following!
+
+            if (fm.id === currentFamilyMemberId) {
+                if (checkpointFamilyMember) {
+                    // Checkpoint active: keep rescued and following, position near player spawn
                     fm.following = true;
                     fm.rescued = true;
                     fm.found = true;
                     if (fm.mesh) {
                         fm.mesh.visible = true;
+                        fm.mesh.position.set(
+                            spawnX + (Math.random() - 0.5) * 5,
+                            spawnY,
+                            spawnZ + 5 + Math.random() * 5
+                        );
                     }
                 } else {
-                    // Current sector's member MUST be reset to un-rescued state
+                    // Reset to un-rescued state, place at their world spawn position
                     fm.following = false;
                     fm.rescued = false;
                     fm.found = false;
                     if (fm.mesh) {
-                        fm.mesh.visible = (fm.spawnPos && fm.spawnPos.y > -500);
-                        if (fm.spawnPos) fm.mesh.position.copy(fm.spawnPos);
-                        else fm.mesh.position.set(0, -1000, 0);
+                        if (fm.spawnPos) {
+                            fm.mesh.visible = fm.spawnPos.y > -500;
+                            fm.mesh.position.copy(fm.spawnPos);
+                        } else if (fSpawn) {
+                            fm.mesh.visible = true;
+                            fm.mesh.position.set(fSpawn.x, fSpawn.y || 0, fSpawn.z);
+                        } else {
+                            fm.mesh.visible = false;
+                            fm.mesh.position.set(0, -1000, 0);
+                        }
                     }
                 }
             } else {
-                // Previously rescued members keep following but reset position to player cluster
+                // Previously rescued: keep following, position near player spawn
                 fm.following = true;
                 fm.rescued = true;
+                fm.found = true;
                 if (fm.mesh) {
                     fm.mesh.visible = true;
-                    fm.mesh.position.copy(playerGroup.position);
-                    fm.mesh.position.x += (Math.random() - 0.5) * 4;
-                    fm.mesh.position.z += 5 + Math.random() * 2;
+                    fm.mesh.position.set(
+                        spawnX + (Math.random() - 0.5) * 5,
+                        spawnY,
+                        spawnZ + 5 + Math.random() * 5
+                    );
                 }
             }
         }
 
-        // 6.2 RESPAWN ZOMBIES
-        const sCtx = refs.SectorBuildContextRef.current;
+        // --- 9. RE-APPLY FAMILY PASSIVES ---
+        const perkSystem = engine.systems.perkSystem;
+        if (perkSystem?.refreshBaseStats) {
+            perkSystem.refreshBaseStats(session);
+        }
+
+        // --- 10. ZOMBIES RE-SPAWN ---
         if (sCtx && currentSectorData.setupZombies) {
             currentSectorData.setupZombies(sCtx);
         }
 
-        // 6.2.1 SECTOR-SPECIFIC PLAYER RESPAWN HOOK (VINTERDÖD HARDENING)
-        if (sCtx && currentSectorData.onPlayerRespawn) {
-            currentSectorData.onPlayerRespawn(sCtx, state, engine);
-        }
-
-        // 6.2 PLAYER & FAMILY MEMBER POSITIONING
-        if (refs.playerGroupRef.current) {
-            let spawnX = 0;
-            let spawnY = 0;
-            let spawnZ = 0;
-
-            if (state.checkpoint && state.checkpoint.active) {
-                spawnX = state.checkpoint.x;
-                spawnY = state.checkpoint.y;
-                spawnZ = state.checkpoint.z;
-            } else {
-                const spawn = currentSectorData.playerSpawn || { x: 0, y: 0, z: 0 };
-                spawnX = spawn.x || 0;
-                spawnY = spawn.y || 0;
-                spawnZ = spawn.z || 0;
-            }
-
-            refs.playerGroupRef.current.position.set(spawnX, spawnY, spawnZ);
-            engine.camera.snapToTarget();
-
-            // Family members:  
-            const members = refs.activeFamilyMembers.current || [];
-            const fSpawn = currentSectorData.familySpawn;
-
-            for (let i = 0; i < members.length; i++) {
-                const fm = members[i];
-                if (fm.mesh) {
-                    if (!fm.rescued && fm.following) {
-                        fm.following = false;
-                        fm.found = false;
-                    } else if (fm.rescued) {
-                        fm.following = true;
-                        fm.found = true;
-                    }
-
-                    if (fm.rescued || fm.following) {
-                        fm.mesh.position.set(
-                            spawnX + (Math.random() - 0.5) * 5,
-                            spawnY || 0,
-                            spawnZ + 5 + Math.random() * 5
-                        );
-                    } else if (fm.spawnPos) {
-                        fm.mesh.position.copy(fm.spawnPos);
-                    } else if (fSpawn) {
-                        fm.mesh.position.set(fSpawn.x, fSpawn.y || 0, fSpawn.z);
-                    }
-                }
-            }
-        }
-
-        // Spawn boss if respawning at checkpoint
+        // --- 11. BOSS RE-SPAWN ---
+        // Only respawn boss if respawning at a checkpoint
         if (state.checkpoint && state.checkpoint.active) {
             const bossPos = currentSectorData.bossSpawn;
             if (bossPos) {
@@ -1284,7 +1326,7 @@ export class GameSessionSetup {
             }
         }
 
-        // --- 7. FIX THE UI ---
+        // --- 12. UI FIX ---
         HudStore.patch({ isDead: false, hp: state.player.statsBuffer[StatID.MAX_HP] });
 
         setDeathPhase(DeathPhase.NONE);

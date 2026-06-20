@@ -80,7 +80,7 @@ export const PlayerAnimator = {
             const isBiting = (animState as any).isBiting;
             const deathDuration = isBurning ? 1500 : 350;
             const progress = Math.min(1.0, Math.max(0.0, (simTime - (animState.deathStartTime || simTime)) / deathDuration));
-            
+
             rotationX = -Math.PI / 2 * progress;
             positionY = -0.8 * progress;
             rotationZ = 0;
@@ -207,12 +207,12 @@ export const PlayerAnimator = {
             }
 
             // --- SMOOTH LERPING (ZERO-GC) ---
-            // Detta skapar den "fjädrande", mjuka Game Feel-övergången
-            animState.leanX = THREE.MathUtils.lerp(animState.leanX || 0, targetLeanX, 10 * delta);
-            animState.leanZ = THREE.MathUtils.lerp(animState.leanZ || 0, targetLeanZ, 10 * delta);
+            // This creates the "springy", soft game feel transition
+            animState.leanX = THREE.MathUtils.lerp(animState.leanX || 0, targetLeanX, Math.min(1.0, 10 * delta));
+            animState.leanZ = THREE.MathUtils.lerp(animState.leanZ || 0, targetLeanZ, Math.min(1.0, 10 * delta));
 
             rotationX = animState.leanX;
-            rotationZ = animState.leanZ + (cosWobble * 0.05); // Lägg animerings-wobble ovanpå baslutningen
+            rotationZ = animState.leanZ + (cosWobble * 0.05); // Add animation wobble on top of base slope
 
             // Vanka/Bounce beroende på riktning
             if (animState.isBacking) {
@@ -234,9 +234,9 @@ export const PlayerAnimator = {
 
         // Stationary behaviors
         else {
-            // --- Återgå mjukt till upprätt när man stannar ---
-            animState.leanX = THREE.MathUtils.lerp(animState.leanX || 0, 0, 10 * delta);
-            animState.leanZ = THREE.MathUtils.lerp(animState.leanZ || 0, 0, 10 * delta);
+            // When the player stops, return softly to standing position
+            animState.leanX = THREE.MathUtils.lerp(animState.leanX || 0, 0, Math.min(1.0, 10 * delta));
+            animState.leanZ = THREE.MathUtils.lerp(animState.leanZ || 0, 0, Math.min(1.0, 10 * delta));
 
             rotationX = animState.leanX;
             rotationZ = animState.leanZ + (Math.sin(t * 0.001 + seed) * 0.03);

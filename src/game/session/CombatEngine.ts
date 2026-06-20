@@ -44,6 +44,11 @@ export class CombatEngine {
             return false;
         }
 
+        const waveDisabled = target.isWaveEnemy && session.state?.sectorState?.waveDisabled;
+        if (waveDisabled) {
+            return false;
+        }
+
         const state = session.state;
         const isBoss = (target.statusFlags & EnemyFlags.BOSS) !== 0;
 

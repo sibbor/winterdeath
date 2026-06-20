@@ -1,12 +1,12 @@
 import React, { useEffect, useCallback, useRef } from 'react';
-import { HudStore } from '../../../store/HudStore';
-import { t } from '../../../utils/i18n';
-import { UISounds } from '../../../utils/audio/AudioLib';
+import { HudStore } from '../../../../store/HudStore';
+import { t } from '../../../../utils/i18n';
+import { UISounds } from '../../../../utils/audio/AudioLib';
 import { DiscoveryType } from './HudTypes';
-import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
-import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
-import { DataResolver } from '../../../core/data/DataResolver';
-import { MetaActionId } from '../../../systems/ui/UIEventBridge';
+import { useUIEventBridge } from '../../../../hooks/useUIEventBridge';
+import { UIEventType } from '../../../../systems/ui/UIEventRingBuffer';
+import { DataResolver } from '../../../../core/data/DataResolver';
+import { MetaActionId } from '../../../../systems/ui/UIEventBridge';
 
 interface DiscoveryPopupProps {
   onOpenAdventureLog: (tab?: DiscoveryType, itemId?: string) => void;

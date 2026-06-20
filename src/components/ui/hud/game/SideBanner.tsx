@@ -1,27 +1,38 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { useHudStore } from '../../../../hooks/useHudStore';
+import { DataResolver } from '../../../../core/data/DataResolver';
+import { t } from '../../../../utils/i18n';
 
 interface SideBannerProps {
     active: boolean;
     onComplete: () => void;
+    isBossIntro: boolean;
+    isMobileDevice: boolean;
 }
 
-const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete }) => {
-
+const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete, isBossIntro, isMobileDevice }) => {
     const [animationState, setAnimationState] = useState<'idle' | 'in' | 'visible' | 'out'>('idle');
-    const [title, setTitle] = useState<string | null>(null);
-    const [subtitle, setSubtitle] = useState<string | null>(null);
 
-    useEffect(() => {
-        const handlePreview = (e: Event) => {
-            const customEvent = e as CustomEvent;
-            if (customEvent.detail) {
-                setTitle(customEvent.detail.title || null);
-                setSubtitle(customEvent.detail.subtitle || null);
-            }
-        };
-        window.addEventListener('trigger-side-banner-preview', handlePreview);
-        return () => window.removeEventListener('trigger-side-banner-preview', handlePreview);
-    }, []);
+    // ============================================================================
+    // Banner content derived here — no longer delegated to GameHUD
+    // ============================================================================
+    const currentSector = useHudStore(s => s.currentSector);
+    const sectorName = useHudStore(s => s.sectorName);
+    const bossNameKey = useHudStore(s => s.bossName);
+
+    const isSectorBanner = active && !isBossIntro;
+
+    const title = useMemo(() => {
+        if (isSectorBanner) return sectorName ? t(sectorName) : t(DataResolver.getSectorName(currentSector));
+        if (isBossIntro) return bossNameKey ? t(bossNameKey) : t(DataResolver.getBossName(currentSector));
+        return '';
+    }, [isSectorBanner, isBossIntro, currentSector, sectorName, bossNameKey]);
+
+    const subtitle = useMemo(() => {
+        if (isSectorBanner) return `Sector ${String(currentSector).padStart(3, '0')}`;
+        if (isBossIntro) return t('ui.boss_encounter');
+        return '';
+    }, [isSectorBanner, isBossIntro, currentSector]);
 
     const onCompleteRef = React.useRef(onComplete);
     useEffect(() => {
@@ -51,9 +62,6 @@ const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete }) => {
 
         const t3 = setTimeout(() => {
             onCompleteRef.current();
-            // Reset custom title and subtitle after animation finishes
-            setTitle(null);
-            setSubtitle(null);
         }, 3250);
 
         return () => {
@@ -75,8 +83,8 @@ const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete }) => {
     }
 
     return (
-        <div className={`fixed bottom-24 left-0 z-[500] pointer-events-none ${animationClass}`}>
-            <div className="relative p-8 flex flex-col items-start min-w-[400px]">
+        <div className={`fixed ${isMobileDevice ? 'bottom-16' : 'bottom-24'} left-0 z-[500] pointer-events-none ${animationClass}`}>
+            <div className={`relative ${isMobileDevice ? 'p-4 min-w-[280px]' : 'p-8 min-w-[400px]'} flex flex-col items-start`}>
                 {/* SMOKY GRADIENT BACKGROUND (Cinematic, fading to the right) */}
                 <div
                     className="absolute inset-y-0 -left-16 right-0 pointer-events-none"
@@ -90,7 +98,7 @@ const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete }) => {
                 {/* CONTENT */}
                 <div className="relative z-10 flex flex-col items-start">
                     {/* TITLE (Gold/Yellow project color) */}
-                    <span className="text-4xl font-mono font-black text-[#bfa979] tracking-[0.25em] uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                    <span className={`font-mono ${isMobileDevice ? 'text-3xl' : 'text-4xl'} mb-3 font-black text-[#bfa979] tracking-widest uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]`}>
                         {title}
                     </span>
 
@@ -101,29 +109,31 @@ const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete }) => {
                     </div>
 
                     {/* SUBTITLE (Teal/Cyan capsule indented) */}
-                    <div className="relative mt-1 ml-8 px-4 py-1 flex items-center justify-center rounded bg-[#132224]/90 border border-[#2dd4bf]/30 backdrop-blur-md shadow-[0_0_15px_rgba(45,212,212,0.15)]">
-                        <span className="text-[11px] font-mono font-bold text-[#cccccc] tracking-[0.3em] uppercase">
-                            {subtitle}
-                        </span>
-                    </div>
+                    {subtitle && subtitle.trim() !== '' && (
+                        <div className="relative mt-1 ml-8 px-4 py-1 flex items-center justify-center rounded bg-[#132224]/90 border border-[#2dd4bf]/30 backdrop-blur-md shadow-[0_0_15px_rgba(45,212,212,0.15)]">
+                            <span className="text-[11px] font-mono font-bold text-[#cccccc] tracking-[0.3em] uppercase">
+                                {subtitle}
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
 
             <style>{`
-                @keyframes sectorBannerIn {
+                @keyframes sideBannerIn {
                     0% { opacity: 0; filter: blur(20px); transform: translateX(-80px); }
                     100% { opacity: 1; filter: blur(0px); transform: translateX(0); }
                 }
-                @keyframes sectorBannerOut {
+                @keyframes sideBannerOut {
                     0% { opacity: 1; filter: blur(0px); transform: translateX(0); }
                     100% { opacity: 0; filter: blur(10px); transform: translateX(-40px); }
                 }
                 .animate-side-banner-in {
-                    animation: sectorBannerIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                    animation: sideBannerIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
                     will-change: transform, opacity;
                 }
                 .animate-side-banner-out {
-                    animation: sectorBannerOut 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                    animation: sideBannerOut 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
                     will-change: transform, opacity;
                 }
             `}</style>

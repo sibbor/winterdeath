@@ -3,7 +3,7 @@ import { TriggerType, TriggerAction, TriggerStatus } from '../types/TriggerTypes
 import { System, SystemID } from './System';
 import { DataResolver } from '../core/data/DataResolver';
 import { UIEventRingBuffer, UIEventType, ChatBubbleSubtype, CHAT_BUBBLE_DURATIONS } from './ui/UIEventRingBuffer';
-import { DiscoveryType } from '../components/ui/hud/HudTypes';
+import { DiscoveryType } from '../components/ui/hud/game/HudTypes';
 import { InteractionPromptId } from './ui/UIEventBridge';
 import { WorldStreamer } from '../core/world/WorldStreamer';
 import { TriggerShape, MAX_ENTITIES } from '../content/constants';

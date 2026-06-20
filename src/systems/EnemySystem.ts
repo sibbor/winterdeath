@@ -43,9 +43,9 @@ export class EnemySystem implements System {
         const isDead = (state.combat.statusFlags & PlayerStatusFlags.DEAD) !== 0;
         const isCinematic = !!state.ui.cinematicActive;
         const isBossIntro = !!state.ui.bossIntroActive;
-        const isBusEvent = state.sectorState?.busEventState >= 1 && state.sectorState?.busEventState <= 3;
+        const isEnemyUpdateDisabled = state.sectorState?.isEnemyUpdateDisabled || false;
 
-        if (isDead || isCinematic || isBossIntro || isBusEvent) return;
+        if (isDead || isCinematic || isBossIntro || isEnemyUpdateDisabled) return;
 
         // --- DEFERRED CLEANUP (Zero-GC sweep) ---
         // We clean up at the START of the frame before logic updates

@@ -1,6 +1,6 @@
 import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { DiscoveryType } from '../components/ui/hud/HudTypes';
+import { DiscoveryType } from '../components/ui/hud/game/HudTypes';
 import { UIEventRingBuffer, UIEventType } from './ui/UIEventRingBuffer';
 import { DataResolver } from '../core/data/DataResolver';
 

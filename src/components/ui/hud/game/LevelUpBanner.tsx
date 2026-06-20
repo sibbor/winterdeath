@@ -1,7 +1,7 @@
 import React, { useRef, useCallback } from 'react';
-import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
-import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
-import { t } from '../../../utils/i18n';
+import { useUIEventBridge } from '../../../../hooks/useUIEventBridge';
+import { UIEventType } from '../../../../systems/ui/UIEventRingBuffer';
+import { t } from '../../../../utils/i18n';
 
 /**
  * LevelUpBanner - Zero-GC presentation overlay.

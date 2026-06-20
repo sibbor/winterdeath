@@ -710,6 +710,7 @@ export const sv = {
         "Att uppgradera 'Adrenalin' hjälper dig att springa under längre perioder.",
         "Att uppgradera 'Reflexer' hjälper dig att springa ifrån zombierna.",
         "Tryck på [F] för att använda ficklampan.",
+        "Håll nere [CTRL] för att släppa muspekaren och gå in i inspektionsläget",
     ],
     sectors: {
         camp_name: "Lägret",

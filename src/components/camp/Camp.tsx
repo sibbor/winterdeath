@@ -28,8 +28,8 @@ const _nextWildlifeTimeCtx: { val: number; set: (v: number) => void } = { val: 0
 const weaponName = (id: number): string => DataResolver.getDamageName(id);
 
 // Import UI Components
-import CampHUD from '../ui/hud/CampHUD';
-import { OverlayType } from '../ui/hud/HudTypes';
+import CampHUD from '../ui/hud/camp/CampHUD';
+import { OverlayType } from '../ui/hud/game/HudTypes';
 import { StatsBridge } from '../../core/data/StatsBridge';
 
 interface CampProps {

@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { SectorDef, SectorBuildContext, ChestType } from '../../game/session/SectorTypes';
+import { SectorDef, SectorBuildContext, ChestType, SectorEvent, SectorEventState, SectorEventConstraint } from '../../game/session/SectorTypes';
 import { GroundType } from '../../core/engine/EnvironmentalTypes';
+import { t } from '../../utils/i18n';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { VEGETATION_TYPE } from '../../content/environment';
-import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
@@ -16,12 +16,15 @@ import { SectorEventID } from '../../content/sector_events';
 import { CollectibleID } from '../../content/collectibles';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { WeatherType } from '../../core/engine/EnvironmentalTypes';
+import { MATERIALS } from '../../utils/assets';
 import { ColliderType } from '../../core/world/CollisionResolution';
+import { FXParticleType } from '../../types/FXTypes';
+import { EnemyWaveConfig } from '../../systems/EnemyWaveSystem';
 
 const LOCATIONS = {
     SPAWN: {
-        //PLAYER: { x: 0, z: 0 },
-        PLAYER: { x: 145, z: -70 },
+        PLAYER: { x: 0, z: 0 },
+        //PLAYER: { x: 145, z: -70 },
         FAMILY: { x: 215, z: -25 },
         BOSS: { x: 220, z: -10 }
     },
@@ -80,6 +83,197 @@ const _vS2 = new THREE.Vector3();
 
 // Mast light
 
+const KEYS = {
+    mastEventState: 'state',
+    mastEventTimer: 'timer',
+} as const;
+
+const esmeraldaMissionEvent: SectorEvent = {
+    id: 'esmeralda_mission',
+    onStart: (ctx, eventState) => {
+        eventState[KEYS.mastEventState] = 0;
+        eventState[KEYS.mastEventTimer] = 0;
+
+        const enemyWaveSystem = ctx.engine.systems.enemyWave;
+        if (enemyWaveSystem) {
+            const mastPos = LOCATIONS.POIS.MAST;
+            const spawns: Array<{ type: EnemyType; pos: { x: number; z: number } }> = [];
+            const mastZombieTypes = [
+                EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER,
+                EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER,
+                EnemyType.RUNNER, EnemyType.RUNNER, EnemyType.RUNNER, EnemyType.RUNNER, EnemyType.RUNNER,
+                EnemyType.RUNNER, EnemyType.RUNNER, EnemyType.RUNNER,
+                EnemyType.TANK, EnemyType.TANK
+            ];
+            for (let i = 0; i < mastZombieTypes.length; i++) {
+                const angle = (i / mastZombieTypes.length) * Math.PI * 2;
+                const radius = 8 + Math.random() * 18;
+                const offX = Math.cos(angle) * radius;
+                const offZ = Math.sin(angle) * radius;
+                spawns.push({
+                    type: mastZombieTypes[i],
+                    pos: { x: mastPos.x + offX, z: mastPos.z + offZ }
+                });
+            }
+            (ctx.sectorState as any).waveSpawns = spawns;
+
+            enemyWaveSystem.startWaveChain([{
+                name: 'Sector 2 Mast Compound',
+                disabled: true,
+                spawns: spawns,
+                attractorPos: { x: mastPos.x, z: mastPos.z }
+            }], {
+                onWaveComplete: () => {
+                    eventState[KEYS.mastEventState] = 2;
+                    eventState[KEYS.mastEventTimer] = ctx.simTime;
+                    if (ctx.setBubble) {
+                        ctx.setBubble(ctx.t?.('sector_events.2.2.reaction') || 'The area is clear...', 3000);
+                    }
+                }
+            });
+        }
+    },
+    onUpdate: (ctx, eventState) => {
+        const { delta, simTime, renderTime, playerPos, gameState, triggerSystem, engine } = ctx;
+        const sectorState = gameState.sectorState;
+        let mask = SectorEventConstraint.NONE;
+
+        if (!eventState[KEYS.mastEventState]) eventState[KEYS.mastEventState] = 0;
+        const mes = eventState[KEYS.mastEventState];
+        const mesTimer = eventState[KEYS.mastEventTimer] || 0;
+        const mesElapsed = simTime - mesTimer;
+
+        const mastX = LOCATIONS.POIS.MAST.x;
+        const mastZ = LOCATIONS.POIS.MAST.z;
+
+        const scene = ctx.scene;
+
+        if (mes === 0) {
+            // Transition to state 1 once the wave becomes enabled
+            if (sectorState && sectorState.waveActive && !sectorState.waveDisabled) {
+                eventState[KEYS.mastEventState] = 1;
+                eventState[KEYS.mastEventTimer] = simTime;
+                if (ctx.setBubble) {
+                    ctx.setBubble(ctx.t?.('sector_events.2.1.reaction') || 'Zombies inside the compound...', 3500);
+                }
+            }
+        }
+        else if (mes === 1) {
+            // Safety fallback: if wave is finished but callback didn't trigger, move on
+            if (sectorState && !sectorState.waveActive) {
+                eventState[KEYS.mastEventState] = 2;
+                eventState[KEYS.mastEventTimer] = simTime;
+                if (ctx.setBubble) {
+                    ctx.setBubble(ctx.t?.('sector_events.2.2.reaction') || 'The area is clear...', 3000);
+                }
+            }
+        }
+        else if (mes === 2) {
+            // Wait 1.5s, then walk Esmeralda out of the building toward the player
+            if (mesElapsed > 1500 && scene) {
+                // --- ZERO-GC SCENE CACHING ---
+                if (!sectorState.esmeraldaMesh) {
+                    sectorState.esmeraldaMesh = scene.children.find(
+                        (c: any) => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Esmeralda'
+                    );
+                }
+                const esmeralda = sectorState.esmeraldaMesh as any;
+
+                if (esmeralda) {
+                    if (!sectorState.esmeraldaWalkTarget) {
+                        // Reuse _vS2 for target calculation then store clone for persistence
+                        _vS2.set(mastX, 0, mastZ + 20);
+                        sectorState.esmeraldaWalkTarget = _vS2.clone();
+                    }
+
+                    esmeralda.position.lerp(sectorState.esmeraldaWalkTarget, 0.04);
+
+                    if (esmeralda.position.distanceTo(sectorState.esmeraldaWalkTarget) < 2.0) {
+                        // Esmeralda has reached her mark — start the cinematic
+                        eventState[KEYS.mastEventState] = 3;
+                        eventState[KEYS.mastEventTimer] = simTime;
+
+                        if (ctx.startCinematic) {
+                            ctx.startCinematic(esmeralda, 2, 0); // Sector 2, Dialogue 0
+                        }
+
+                        // Activate the proximity trigger as a fallback (player walked in late)
+                        const idx = triggerSystem.getTriggerById(FamilyMemberID.ESMERALDA, TriggerType.EVENT);
+                        if (idx !== -1) {
+                            triggerSystem.setStatusFlag(idx, TriggerStatus.ACTIVE, true);
+                            triggerSystem.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);
+                        }
+                    }
+                } else {
+                    // Esmeralda mesh not found — advance anyway after a timeout
+                    if (mesElapsed > 5000) {
+                        eventState[KEYS.mastEventState] = 3;
+                        eventState[KEYS.mastEventTimer] = simTime;
+                    }
+                }
+            }
+        }
+        else if (mes === 3) {
+            if (!gameState.ui.cinematicActive) {
+                eventState[KEYS.mastEventState] = 4;
+                eventState[KEYS.mastEventTimer] = simTime;
+            }
+        }
+
+        // Apply cinematic active constraint flags
+        if (mes === 3 || gameState.ui.cinematicActive) {
+            mask |= SectorEventConstraint.DISABLE_INPUT | SectorEventConstraint.DISABLE_TELEPORT | SectorEventConstraint.HIDE_HUD;
+        }
+
+        return mask;
+    },
+    onPlayerRespawn: (ctx, state, engine, eventState) => {
+        eventState[KEYS.mastEventState] = 0;
+        eventState[KEYS.mastEventTimer] = 0;
+        state.sectorState.waveActive = false;
+        state.sectorState.waveDisabled = false;
+        state.sectorState.esmeraldaWalkTarget = null;
+
+        // Reset the gate obstacle if it was destroyed
+        const gate = state.sectorState.gateObstacle;
+        if (gate) {
+            gate.durability = gate.maxDurability;
+            if (gate.isMutated) {
+                gate.isMutated = false;
+                if (gate.mesh) gate.mesh.visible = true;
+                const streamer = engine.systems.worldStreamer;
+                if (streamer) {
+                    streamer.registerObstacle(gate);
+                }
+            }
+        }
+
+        // Reset wave system and start dormant wave chain again
+        const enemyWaveSystem = engine.systems.enemyWave;
+        if (enemyWaveSystem) {
+            enemyWaveSystem.reset();
+            const spawns = state.sectorState.waveSpawns;
+            if (spawns) {
+                const mastPos = LOCATIONS.POIS.MAST;
+                enemyWaveSystem.startWaveChain([{
+                    name: 'Sector 2 Mast Compound',
+                    disabled: true,
+                    spawns: spawns,
+                    attractorPos: { x: mastPos.x, z: mastPos.z }
+                }], {
+                    onWaveComplete: (session?: any) => {
+                        eventState[KEYS.mastEventState] = 2;
+                        eventState[KEYS.mastEventTimer] = engine.simTime;
+                        if (session && session.callbacks && session.callbacks.setBubble) {
+                            session.callbacks.setBubble(t('sector_events.2.2.reaction') || 'The area is clear...', 3000);
+                        }
+                    }
+                });
+            }
+        }
+    }
+};
+
 export const Sector2: SectorDef = {
     id: 2,
     environment: {
@@ -95,6 +289,11 @@ export const Sector2: SectorDef = {
         sky: {
             time: 0.2,
             atmosphereColor: 0x051015,
+            hemi: {
+                skyColor: 0x1a2e3a,   // Cool rain-cloud teal — overcast night sky fill
+                groundColor: 0x1a1a12, // Muted wet earth tone
+                intensity: 0.6
+            },
             celestial: {
                 radius: 10,
                 color: 0xffffff,
@@ -103,7 +302,7 @@ export const Sector2: SectorDef = {
             light: {
                 visible: true,
                 color: 0x88ffaa,
-                intensity: 0.5,
+                intensity: 0.6,
                 castShadow: true
             }
         },
@@ -384,6 +583,70 @@ export const Sector2: SectorDef = {
         ], 'black', 2.5);
         await yieldIfBudgetExceeded();
 
+        // --- 6.1 DESTROYABLE COMPOUND GATE ---
+        const gateGroup = new THREE.Group();
+        gateGroup.position.set(mastPos.x, 0, mastPos.z - 30);
+        
+        const postGeo = new THREE.BoxGeometry(0.2, 2.5, 0.2);
+        const postMat = MATERIALS.blackMetal || new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8 });
+        const postLeft = new THREE.Mesh(postGeo, postMat);
+        postLeft.position.set(-5, 1.25, 0);
+        gateGroup.add(postLeft);
+
+        const postRight = new THREE.Mesh(postGeo, postMat);
+        postRight.position.set(5, 1.25, 0);
+        gateGroup.add(postRight);
+
+        const gateFrameGeo = new THREE.BoxGeometry(10, 0.15, 0.15);
+        const frameTop = new THREE.Mesh(gateFrameGeo, postMat);
+        frameTop.position.set(0, 2.3, 0);
+        gateGroup.add(frameTop);
+
+        const frameBottom = new THREE.Mesh(gateFrameGeo, postMat);
+        frameBottom.position.set(0, 0.2, 0);
+        gateGroup.add(frameBottom);
+
+        const frameMiddle = new THREE.Mesh(gateFrameGeo, postMat);
+        frameMiddle.position.set(0, 1.25, 0);
+        gateGroup.add(frameMiddle);
+
+        const barGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.1, 8);
+        for (let i = -4.5; i <= 4.5; i += 0.9) {
+            const bar = new THREE.Mesh(barGeo, postMat);
+            bar.position.set(i, 1.25, 0);
+            gateGroup.add(bar);
+        }
+        scene.add(gateGroup);
+
+        const gateObstacle = {
+            mesh: gateGroup,
+            position: gateGroup.position,
+            collider: { 
+                type: ColliderType.BOX, 
+                size: new THREE.Vector3(10, 2.5, 1.0),
+                center: new THREE.Vector3(0, 1.25, 0)
+            },
+            durability: 120,
+            maxDurability: 120,
+            excludedWeapons: [],
+            onDestroyObject: (session: any, obstacle: any) => {
+                const waveSystem = session.systems.enemyWave;
+                if (waveSystem) {
+                    waveSystem.enableActiveWave();
+                }
+                
+                // Spawn debris particles / sparks / sounds when gate is destroyed
+                if (session.systems.weaponFX) {
+                    const pos = obstacle.position;
+                    session.systems.weaponFX.spawnParticle(pos.x, 1.25, pos.z, FXParticleType.DEBRIS, 30);
+                    session.systems.weaponFX.spawnParticle(pos.x, 1.25, pos.z, FXParticleType.SPARK, 20);
+                }
+            }
+        };
+        SectorBuilder.addObstacle(ctx, gateObstacle);
+        (ctx.sectorState as any).gateObstacle = gateObstacle;
+        await yieldIfBudgetExceeded();
+
         await SectorBuilder.spawnBuilding(ctx, mastPos.x, mastPos.z, 15, 5, 12, Math.PI / 2, 0x555555, false);
         await yieldIfBudgetExceeded();
 
@@ -461,27 +724,6 @@ export const Sector2: SectorDef = {
             const count = 5 + Math.floor(ctx.rng() * 5);
             ctx.spawnHorde(count, undefined, hordeSpots[i]);
         }
-
-        // ~20 zombies pre-placed at the mast area for the Esmeralda kill-clear event.
-        // Mixed types for variety: walkers, runners, and one tank.
-        const mastPos = LOCATIONS.POIS.MAST;
-        const mastZombieTypes = [
-            EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER,
-            EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER, EnemyType.WALKER,
-            EnemyType.RUNNER, EnemyType.RUNNER, EnemyType.RUNNER, EnemyType.RUNNER, EnemyType.RUNNER,
-            EnemyType.RUNNER, EnemyType.RUNNER, EnemyType.RUNNER,
-            EnemyType.TANK, EnemyType.TANK
-        ];
-
-        for (let i = 0; i < mastZombieTypes.length; i++) {
-            // Spread across the fenced mast compound (~30x30 area), seeded for consistency
-            const angle = (i / mastZombieTypes.length) * Math.PI * 2;
-            const radius = 8 + ctx.rng() * 18;
-            const offX = Math.cos(angle) * radius;
-            const offZ = Math.sin(angle) * radius;
-            const spawnPos = new THREE.Vector3(mastPos.x + offX, 0, mastPos.z + offZ);
-            ctx.spawnHorde(1, mastZombieTypes[i], spawnPos);
-        }
     },
 
     onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, triggerSystem, ctx, ...events }) => {
@@ -491,112 +733,7 @@ export const Sector2: SectorDef = {
         if (mastLightHub) {
             mastLightHub.rotation.y += delta * 2.0;
         }
+    },
 
-        // =====================================================================
-        // MAST EVENT STATE MACHINE
-        // State 0: idle (player hasn't entered the mast area)
-        // State 1: mast_zone entered — watching for zombie clearance
-        // State 2: zombies cleared — Esmeralda walks out of building
-        // State 3: cinematic started (waiting for CinematicSystem to finish via dialogue triggers)
-        // =====================================================================
-        if (!sectorState.mastEventState) sectorState.mastEventState = 0;
-        const mes = sectorState.mastEventState;
-        const mesTimer = sectorState.mastEventTimer || 0;
-        const mesElapsed = simTime - mesTimer;
-
-        const mastX = LOCATIONS.POIS.MAST.x;
-        const mastZ = LOCATIONS.POIS.MAST.z;
-        const MAST_RADIUS_SQ = 40 * 40;
-
-        const sceneHost = (events as any).scene || (gameState as any).scene;
-        const scene = sceneHost as THREE.Scene;
-
-        if (mes === 0) {
-            // Check if mast_zone_enter trigger was consumed (pendingTrigger) OR player walked into zone
-            const dx = playerPos.x - mastX;
-            const dz = playerPos.z - mastZ;
-            if (dx * dx + dz * dz < MAST_RADIUS_SQ) {
-                sectorState.mastEventState = 1;
-                sectorState.mastEventTimer = simTime;
-                // Tell the player something is happening
-                events.setBubble((events as any).t?.('sector_events.2.1.reaction') || 'Zombies inside the compound...', 3500);
-            }
-        }
-
-        else if (mes === 1) {
-            // Count living enemies within the mast radius each tick (throttled to ~5fps)
-            if (mesElapsed > 200) {
-                sectorState.mastEventTimer = simTime; // Reset for throttle
-
-                const enemies = (gameState as any).enemies;
-                let aliveInZone = 0;
-                if (enemies) {
-                    for (let i = 0; i < enemies.length; i++) {
-                        const e = enemies[i];
-                        if (e.deathState !== EnemyDeathState.ALIVE) continue;
-                        const ex = e.mesh?.position.x ?? 0;
-                        const ez = e.mesh?.position.z ?? 0;
-                        const edx = ex - mastX;
-                        const edz = ez - mastZ;
-                        if (edx * edx + edz * edz < MAST_RADIUS_SQ) aliveInZone++;
-                    }
-                }
-
-                if (aliveInZone === 0 && (simTime - (sectorState.mastZombiesSpawnedAt || 0) > 2000)) {
-                    // All mast zombies dead — transition to Esmeralda exit
-                    sectorState.mastEventState = 2;
-                    sectorState.mastEventTimer = simTime;
-                    events.setBubble((events as any).t?.('sector_events.2.2.reaction') || 'The area is clear...', 3000);
-                }
-                sectorState.mastZombiesSpawnedAt = sectorState.mastZombiesSpawnedAt || simTime; // Set once
-            }
-        }
-
-        else if (mes === 2) {
-            // Wait 1.5s, then walk Esmeralda out of the building toward the player
-            if (mesElapsed > 1500 && scene) {
-                // --- ZERO-GC SCENE CACHING ---
-                if (!sectorState.esmeraldaMesh) {
-                    sectorState.esmeraldaMesh = scene.children.find(
-                        (c: any) => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Esmeralda'
-                    );
-                }
-                const esmeralda = sectorState.esmeraldaMesh as any;
-
-                if (esmeralda) {
-                    if (!sectorState.esmeraldaWalkTarget) {
-                        // Reuse _vS2 for target calculation then store clone for persistence
-                        _vS2.set(mastX, 0, mastZ + 20);
-                        sectorState.esmeraldaWalkTarget = _vS2.clone();
-                    }
-
-                    esmeralda.position.lerp(sectorState.esmeraldaWalkTarget, 0.04);
-
-                    if (esmeralda.position.distanceTo(sectorState.esmeraldaWalkTarget) < 2.0) {
-                        // Esmeralda has reached her mark — start the cinematic
-                        sectorState.mastEventState = 3;
-                        sectorState.mastEventTimer = simTime;
-
-                        if (events.startCinematic) {
-                            events.startCinematic(esmeralda, 2, 0); // Sector 2, Dialogue 0
-                        }
-
-                        // Activate the proximity trigger as a fallback (player walked in late)
-                        const idx = triggerSystem.getTriggerById(FamilyMemberID.ESMERALDA, TriggerType.EVENT);
-                        if (idx !== -1) {
-                            triggerSystem.setStatusFlag(idx, TriggerStatus.ACTIVE, true);
-                            triggerSystem.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);
-                        }
-                    }
-                } else {
-                    // Esmeralda mesh not found — advance anyway after a timeout
-                    if (mesElapsed > 5000) {
-                        sectorState.mastEventState = 3;
-                        sectorState.mastEventTimer = simTime;
-                    }
-                }
-            }
-        }
-        // State 3: cinematic running — FAMILY_MEMBER_FOUND + SPAWN_BOSS handled by dialogue trigger array
-    }
+    events: [esmeraldaMissionEvent]
 };

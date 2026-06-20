@@ -1,6 +1,6 @@
 import { useSyncExternalStore, useRef, useCallback, useEffect } from 'react';
 import { HudStore } from '../store/HudStore';
-import { HudState } from '../components/ui/hud/HudTypes';
+import { HudState } from '../components/ui/hud/game/HudTypes';
 
 /**
  * Optimized hook for accessing HudStore state with selector support.
@@ -44,7 +44,7 @@ export function useHudStore<T>(selector: (state: HudState) => T, shallow: boolea
 
     const getSnapshot = useCallback(() => {
         const state = HudStore.getState();
-        
+
         // Optimization: If state hasn't changed at all, avoid re-running selector
         if (state === lastStateRef.current) return lastResultRef.current as T;
 

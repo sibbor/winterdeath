@@ -1,9 +1,8 @@
 import React, { useCallback, memo } from 'react';
 import { GameCanvasProps } from '../../types/CanvasTypes';
 import { GameSessionUiState } from './useGameSessionState';
-import TouchController from '../../components/ui/hud/TouchController';
-import DialogueUI from '../../components/ui/hud/DialogueUI';
-import GameUI from '../../components/ui/hud/GameUI';
+import TouchController from '../../components/ui/hud/game/TouchController';
+import DialogueUI from '../../components/ui/hud/game/DialogueUI';
 
 // Zero-GC: Static empty function to prevent allocation and VDOM thrashing on every render
 const _NOOP = () => { };
@@ -120,14 +119,6 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
                 isMobileDevice={gameProps.isMobileDevice}
                 onComplete={callbacks.triggerCinematicNext}
             />
-
-            {!uiState.isSectorLoading && !uiState.cinematicActive && !uiState.forceHideHUD && (
-                <GameUI
-                    onCloseClue={_NOOP}
-                    isMobileDevice={gameProps.isMobileDevice}
-                    onInteract={callbacks.onInteract}
-                />
-            )}
         </div>
     );
 });

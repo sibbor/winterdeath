@@ -10,7 +10,7 @@ import {
     MapItem,
     HudVector2,
     DebugInfoData
-} from '../components/ui/hud/HudTypes';
+} from '../components/ui/hud/game/HudTypes';
 import { InteractionType, InteractionPromptId, UIEventBridge } from '../systems/ui/UIEventBridge';
 import { HoldableID, DamageID } from '../entities/player/CombatTypes';
 import { StatusEffectID } from '../types/StatusEffects';

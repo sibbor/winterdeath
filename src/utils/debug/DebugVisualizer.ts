@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { SectorBuildContext } from '../../game/session/SectorTypes';
 import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
-import { MapItemType } from '../../components/ui/hud/HudTypes';
+import { MapItemType } from '../../components/ui/hud/game/HudTypes';
 
 // --- ZERO-GC SCRATCHPADS ---
 const _pointsScratch: THREE.Vector3[] = [];

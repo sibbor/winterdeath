@@ -140,7 +140,7 @@ export class VehicleMovementSystem implements System {
                 if (vehicle.position.y > targetY + 0.1) {
                     vel.y -= 19.8 * dt; // Gravity
                 } else {
-                    vehicle.position.y = THREE.MathUtils.lerp(vehicle.position.y, targetY, 15 * dt);
+                    vehicle.position.y = THREE.MathUtils.lerp(vehicle.position.y, targetY, Math.min(1.0, 15 * dt));
                     vel.y = 0;
                 }
             }
@@ -236,8 +236,8 @@ export class VehicleMovementSystem implements System {
             chassis.position.y = vState.suspY;
             const fwdAccel = (forwardSpeed - vState.prevFwdSpeed) / dt;
             vState.prevFwdSpeed = forwardSpeed;
-            chassis.rotation.x = THREE.MathUtils.lerp(chassis.rotation.x, THREE.MathUtils.clamp(fwdAccel * 0.003, -0.04, 0.04), dt * 8);
-            chassis.rotation.z = THREE.MathUtils.lerp(chassis.rotation.z, THREE.MathUtils.clamp(-currentLatSpeed * 0.015, -0.06, 0.06), dt * 8);
+            chassis.rotation.x = THREE.MathUtils.lerp(chassis.rotation.x, THREE.MathUtils.clamp(fwdAccel * 0.003, -0.04, 0.04), Math.min(1.0, dt * 8));
+            chassis.rotation.z = THREE.MathUtils.lerp(chassis.rotation.z, THREE.MathUtils.clamp(-currentLatSpeed * 0.015, -0.06, 0.06), Math.min(1.0, dt * 8));
         }
 
         vehicle.position.addScaledVector(vel, dt);

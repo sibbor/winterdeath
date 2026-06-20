@@ -59,6 +59,7 @@ export class InputManager implements System {
     private prevActions: Uint8Array;
     private isEnabled: boolean = false;
     private virtualAimPos: THREE.Vector2 = new THREE.Vector2(0, -200);
+    private ctrlHeld: boolean = false;
 
     private screenWidth: number = window.innerWidth;
     private screenHeight: number = window.innerHeight;
@@ -279,6 +280,13 @@ export class InputManager implements System {
         if (e.repeat) return;
 
         this.physicalActions[action] = 1;
+
+        // Hold Ctrl to free the cursor for HUD inspection
+        if (action === InputAction.CTRL && document.pointerLockElement) {
+            this.ctrlHeld = true;
+            document.exitPointerLock();
+            window.dispatchEvent(new CustomEvent('ctrl-inspect-mode', { detail: { active: true } }));
+        }
     }
 
     private handleKeyUp(e: KeyboardEvent) {
@@ -294,6 +302,17 @@ export class InputManager implements System {
         if (!this.isEnabled) return;
         if (this.onKeyUp) this.onKeyUp(e.key);
         this.physicalActions[action] = 0;
+
+        // Release Ctrl: re-request pointer lock
+        if (action === InputAction.CTRL && !document.pointerLockElement) {
+            this.ctrlHeld = false;
+            window.dispatchEvent(new CustomEvent('ctrl-inspect-mode', { detail: { active: false } }));
+            const canvas = (document.querySelector('canvas') as HTMLElement);
+            if (canvas) {
+                const promise = canvas.requestPointerLock() as any;
+                if (promise?.catch) promise.catch(() => {});
+            }
+        }
     }
 
     private handleMouseMove(e: MouseEvent) {
@@ -314,9 +333,13 @@ export class InputManager implements System {
             this.state.mouse.y = this.virtualAimPos.y * INV_MAX_AIM_RADIUS;
         } else {
             this.state.cursorPos.x = e.clientX; this.state.cursorPos.y = e.clientY;
-            this.state.mouse.x = (e.clientX * this.invScreenWidth) * 2.0 - 1.0;
-            this.state.mouse.y = -(e.clientY * this.invScreenHeight) * 2.0 + 1.0;
-            this.state.aimVector.set(e.clientX - this.screenHalfWidth, e.clientY - this.screenHalfHeight);
+            // In Ctrl-inspect mode the cursor roams freely — do NOT update aimVector
+            // so the player's aim direction stays frozen while the cursor is visible.
+            if (!this.ctrlHeld) {
+                this.state.mouse.x = (e.clientX * this.invScreenWidth) * 2.0 - 1.0;
+                this.state.mouse.y = -(e.clientY * this.invScreenHeight) * 2.0 + 1.0;
+                this.state.aimVector.set(e.clientX - this.screenHalfWidth, e.clientY - this.screenHalfHeight);
+            }
         }
     }
 

@@ -111,9 +111,9 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
                 ]
             }
         ],
-        // mast_flyover intro
+        // TODO: remove this and swap it out for a ChatBubble 
         1: [
-            { speaker: FamilyMemberID.ROBERT, text: "pois.2.0.reaction" }
+            { speaker: FamilyMemberID.ROBERT, text: "pois.2.0.reaction", duration: 13000 }
         ]
     },
 

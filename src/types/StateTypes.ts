@@ -4,6 +4,7 @@ import { SessionStats } from './SessionStats';
 import { WeatherType, EnvironmentOverride, EnvironmentConfig } from '../core/engine/EnvironmentalTypes';
 import { GameScreen } from './SessionTypes';
 import { SETTINGS_DEFAULT } from '../content/constants';
+import { SectorEventState } from '../game/session/SectorTypes';
 
 export interface GameSettings {
     antialias: boolean;
@@ -31,6 +32,13 @@ export interface SectorState {
     // The Generic Bridge API
     pendingTrigger?: string | null;
     keepCamera?: boolean;
+
+    // Production-ready event constraint flags (preventing V8 hidden class shifts)
+    isInputDisabled: boolean;
+    isEnemyUpdateDisabled: boolean;
+    isTeleportDisabled: boolean;
+    isHudHidden: boolean;
+    eventStates: SectorEventState[];
 
     [key: string]: any;
 }
@@ -116,6 +124,11 @@ export const DEFAULT_STATE: GameState = {
         unlimitedAmmo: false,
         noReload: false,
         unlimitedThrowables: false,
-        isInvincible: false
+        isInvincible: false,
+        isInputDisabled: false,
+        isEnemyUpdateDisabled: false,
+        isTeleportDisabled: false,
+        isHudHidden: false,
+        eventStates: []
     }
 };

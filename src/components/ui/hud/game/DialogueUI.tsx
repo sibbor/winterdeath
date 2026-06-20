@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { t } from '../../../utils/i18n';
-import { HudStore } from '../../../store/HudStore';
-import { DataResolver } from '../../../core/data/DataResolver';
+import { t } from '../../../../utils/i18n';
+import { HudStore } from '../../../../store/HudStore';
+import { DataResolver } from '../../../../core/data/DataResolver';
 
 interface DialogueUIProps {
     isMobileDevice?: boolean;

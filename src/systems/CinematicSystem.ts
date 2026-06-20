@@ -10,8 +10,9 @@ import { System, SystemID } from './System';
 import { DialogueLineType } from '../game/session/SectorTypes';
 import { DataResolver } from '../core/data/DataResolver';
 import { InputAction } from '../core/engine/InputManager';
-import { DialogueUIHandle } from '../components/ui/hud/DialogueUI';
+import { DialogueUIHandle } from '../components/ui/hud/game/DialogueUI';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
+import { PlayerStatusFlags } from '../types/CareerStats';
 
 // Zero-GC Vectors for camera math (Allocated only at startup)
 const _v1 = new THREE.Vector3();
@@ -276,6 +277,13 @@ export class CinematicSystem implements System {
         const cinematic = this.cinematicRef.current;
         if (!cinematic.active && !cinematic.isClosing) return;
 
+        const state = session.state;
+        const isDead = (state.combat.statusFlags & PlayerStatusFlags.DEAD) !== 0;
+        if (isDead) {
+            this.stop();
+            return;
+        }
+
         const now = renderTime;
         const totalElapsed = now - cinematic.startTime;
 
@@ -338,7 +346,7 @@ export class CinematicSystem implements System {
                         THREE.MathUtils.lerp(targetPos.y, lookAtTop.y, smoothP),
                         THREE.MathUtils.lerp(targetPos.z, lookAtTop.z, smoothP)
                     );
-                } else {
+                } else if (totalElapsed < 9500) {
                     const circleElapsed = totalElapsed - 3500;
                     const angle = circleElapsed * 0.0005;
                     const radius = 15;
@@ -348,8 +356,30 @@ export class CinematicSystem implements System {
 
                     this.camera.setPosition(focusPosX, focusPosY, focusPosZ);
                     this.camera.lookAt(lookAtTop);
+                } else if (totalElapsed < 10000) {
+                    const panAngle = 6000 * 0.0005;
+                    const radius = 15;
+                    const panPosX = lookAtTop.x + Math.sin(panAngle) * radius;
+                    const panPosY = lookAtTop.y + 5;
+                    const panPosZ = lookAtTop.z + Math.cos(panAngle) * radius;
 
-                    if (totalElapsed > 5500 && (!cinematic.script || cinematic.script.length === 0)) {
+                    const p4 = (totalElapsed - 9500) / 500;
+                    const smoothP = THREE.MathUtils.smoothstep(p4, 0, 1);
+                    this.camera.setPosition(
+                        THREE.MathUtils.lerp(panPosX, basePos.x, smoothP),
+                        THREE.MathUtils.lerp(panPosY, basePos.y, smoothP),
+                        THREE.MathUtils.lerp(panPosZ, basePos.z, smoothP)
+                    );
+                    this.camera.lookAt(
+                        THREE.MathUtils.lerp(lookAtTop.x, targetPos.x, smoothP),
+                        THREE.MathUtils.lerp(lookAtTop.y, targetPos.y, smoothP),
+                        THREE.MathUtils.lerp(lookAtTop.z, targetPos.z, smoothP)
+                    );
+                } else if (totalElapsed < 13000) {
+                    this.camera.setPosition(basePos.x, basePos.y, basePos.z);
+                    this.camera.lookAt(targetPos);
+                } else {
+                    if (!cinematic.script || cinematic.script.length === 0) {
                         this.endCinematic();
                     }
                 }

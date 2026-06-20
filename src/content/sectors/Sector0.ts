@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { EnemyType, NoiseType } from '../../entities/enemies/EnemyTypes';
-import { SectorDef, SectorBuildContext, ChestType, SectorID } from '../../game/session/SectorTypes';
+import { SectorDef, SectorBuildContext, ChestType, SectorID, SectorEvent, SectorEventState, SectorEventConstraint } from '../../game/session/SectorTypes';
 import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
@@ -205,14 +205,27 @@ async function createExplodingBus(ctx: any) {
     (ctx as any).busRing = busExplosionRing;
 }
 
+const KEYS = {
+    busEventState: 'state',
+    busEventTimer: 'timer',
+    lastBeepTime: 'n1',
+    busExplosionTime: 'n2',
+    originalBusPos: 'v1',
+    busExploded: 'b1',
+    busPlanting: 'b2',
+    busInteractionTriggered: 'b3',
+    busExplosionHandled: 'b4'
+} as const;
+
 /**
- * Explodes the bus at the given position, creating rubble
+ * Explodes the bus blocking the tunnel
+ * Spawns multiple physical rubble pieces and tires with real physics
  * (debris & tires flying in random directions)
  */
-function explodeBus(delta: number, simTime: number, renderTime: number, gameState: any, sectorState: any, ctx: any, events: any) {
-    if (!sectorState.busExplosionHandled) {
-        sectorState.busExplosionHandled = true;
-        sectorState.busExplosionTime = renderTime;
+function explodeBus(delta: number, simTime: number, renderTime: number, gameState: any, eventState: SectorEventState, ctx: any, events: any) {
+    if (!eventState[KEYS.busExplosionHandled]) {
+        eventState[KEYS.busExplosionHandled] = true;
+        eventState[KEYS.busExplosionTime] = renderTime;
 
         if (events.playSound) events.playSound(SoundID.EXPLOSION);
         if (events.cameraShake) events.cameraShake(15);
@@ -238,7 +251,7 @@ function explodeBus(delta: number, simTime: number, renderTime: number, gameStat
             _busObj.updateMatrixWorld(true);
         }
 
-        // Remove the bus collider
+        // Disable collision obstacle
         const _obsArray = ctx.obstacles;
         if (_obsArray) {
             for (let i = 0; i < _obsArray.length; i++) {
@@ -249,9 +262,6 @@ function explodeBus(delta: number, simTime: number, renderTime: number, gameStat
                     if (o.mesh) {
                         o.mesh.position.set(99999, -1000, 99999);
                     }
-                    //if (gameState.worldStreamer && typeof gameState.worldStreamer.updateObstacle === 'function') {
-                    //    gameState.worldStreamer.updateObstacle(o);
-                    //}
                     _obsArray[i] = _obsArray[_obsArray.length - 1];
                     _obsArray.pop();
                     break;
@@ -259,16 +269,16 @@ function explodeBus(delta: number, simTime: number, renderTime: number, gameStat
             }
         }
 
-        // Activate bus rubble
+        // Bus rubble (actual explosion)
         const rMesh = (ctx as any).busRubble;
         if (rMesh) {
-            // Debris
             rMesh.position.set(0, 0, 0);
             rMesh.visible = true;
             rMesh.userData.active = true;
             if (rMesh.userData.hasLanded) rMesh.userData.hasLanded.fill(0);
 
             const debrisData = rMesh.userData;
+
             for (let i = 0; i < rMesh.count; i++) {
                 const ix = i * 3;
                 const arcAngle = Math.random() * Math.PI * 2;
@@ -323,109 +333,340 @@ function explodeBus(delta: number, simTime: number, renderTime: number, gameStat
             }
         }
     }
+}
 
-    // --- RUBBLE & TIRE PHYSICS ---
-    _activeMeshCount = 0;
-    const busRubble = (ctx as any).busRubble;
-    const busTires = (ctx as any).busTires;
+const busExplosionEvent: SectorEvent = {
+    id: 'bus_explosion',
+    onUpdate: (ctx, eventState) => {
+        const { delta, simTime, renderTime, playerPos, gameState, triggerSystem, engine } = ctx;
+        let mask = SectorEventConstraint.NONE;
 
-    if (busRubble && busRubble.userData.active) _activeMeshesScratch[_activeMeshCount++] = busRubble;
-    if (busTires && busTires.userData.active) _activeMeshesScratch[_activeMeshCount++] = busTires;
-
-    for (let mIdx = 0; mIdx < _activeMeshCount; mIdx++) {
-        const rubble = _activeMeshesScratch[mIdx];
-        const isTire = rubble === busTires;
-        const rubbleWeight = isTire ? 35.0 : 75.0;
-        const bouncy = isTire ? 0.5 : 0.2;
-        const data = rubble.userData;
-        let stillMoving = false;
-        const elapsed = renderTime - (sectorState.busExplosionTime || 0);
-
-        for (let i = 0; i < rubble.count; i++) {
-            const ix = i * 3;
-
-            // [VINTERDÖD FIX] Dynamic ground height lookup
-            const groundY = (gameState.worldStreamer && gameState.worldStreamer.getGroundHeight)
-                ? gameState.worldStreamer.getGroundHeight(data.positions[ix], data.positions[ix + 2])
-                : 0.1;
-            const minHeight = groundY + (isTire ? 0.8 : 0.2);
-
-            const isAboveGround = data.positions[ix + 1] > minHeight;
-            const hasVelY = Math.abs(data.velocities[ix + 1]) > 0.1;
-            const hasVelX = Math.abs(data.velocities[ix]) > 0.1;
-            const hasVelZ = Math.abs(data.velocities[ix + 2]) > 0.1;
-
-            if (isAboveGround || hasVelY || hasVelX || hasVelZ) {
-                stillMoving = true;
-                const safeDelta = Math.min(delta, 0.05);
-
-                data.velocities[ix + 1] -= rubbleWeight * safeDelta;
-                data.positions[ix] += data.velocities[ix] * safeDelta;
-                data.positions[ix + 1] += data.velocities[ix + 1] * safeDelta;
-                data.positions[ix + 2] += data.velocities[ix + 2] * safeDelta;
-
-                if (data.positions[ix + 1] <= minHeight) {
-                    data.positions[ix + 1] = minHeight;
-                    data.velocities[ix] *= 0.6;
-                    data.velocities[ix + 2] *= 0.6;
-                    data.velocities[ix + 1] *= -bouncy;
-
-                    if (data.spin) {
-                        data.spin[ix] *= 0.6;
-                        data.spin[ix + 1] *= 0.6;
-                        data.spin[ix + 2] *= 0.6;
-                    }
-
-                    if (Math.abs(data.velocities[ix + 1]) < 1.0) data.velocities[ix + 1] = 0;
-                    if (Math.abs(data.velocities[ix]) < 0.2) data.velocities[ix] = 0;
-                    if (Math.abs(data.velocities[ix + 2]) < 0.2) data.velocities[ix + 2] = 0;
-
-                    if (data.hasLanded && !data.hasLanded[i] && events.playSound && sectorState.busExplosionTime) {
-                        // Only play impact sounds during the active explosion window (first 10 seconds)
-                        if (simTime - sectorState.busExplosionTime < 10000) {
-                            if (!isTire || Math.abs(data.velocities[ix + 1]) > 2) {
-                                events.playSound(isTire ? SoundID.IMPACT_METAL : SoundID.IMPACT_METAL);
-                            }
-                        }
-                        if (Math.abs(data.velocities[ix + 1]) < 2) data.hasLanded[i] = 1;
-                    }
-                }
-
-                if (data.rotations && data.spin) {
-                    data.rotations[ix] += data.spin[ix] * safeDelta;
-                    data.rotations[ix + 1] += data.spin[ix + 1] * safeDelta;
-                    data.rotations[ix + 2] += data.spin[ix + 2] * safeDelta;
-                }
-
-                _position.set(data.positions[ix], data.positions[ix + 1], data.positions[ix + 2]);
-                if (data.rotations) {
-                    _rotation.set(data.rotations[ix], data.rotations[ix + 1], data.rotations[ix + 2]);
-                    _quat.setFromEuler(_rotation);
-                } else {
-                    _quat.set(0, 0, 0, 1);
-                }
-
-                if (isTire) {
-                    _scale.set(1, 1, 1);
-                } else {
-                    const s = data.scales ? data.scales[i] : 1.0;
-                    // [VINTERDÖD OPT] Varied bus-like shapes: Panels, Beams, Scrap
-                    const type = i % 3;
-                    if (type === 0) _scale.set(4.0 * s, 0.4 * s, 6.0 * s); // Huge Panels
-                    else if (type === 1) _scale.set(1.5 * s, 0.5 * s, 10.0 * s); // Long Beams
-                    else _scale.set(1.5 * s, 1.5 * s, 1.5 * s); // Scrap
-                }
-
-                _matrix.compose(_position, _quat, _scale);
-                rubble.setMatrixAt(i, _matrix);
+        if (!eventState[KEYS.busEventState]) {
+            const busTrigIdx = triggerSystem.getTriggerById(SectorEventID.S0_TUNNEL_BLOCKED, TriggerType.EVENT);
+            if (triggerSystem.isTriggered(busTrigIdx)) {
+                eventState[KEYS.busEventState] = 1;
+                eventState[KEYS.busEventTimer] = simTime;
+                ctx.setBubble(ctx.t("sector_events.0.0.reaction"));
             }
         }
-        rubble.instanceMatrix.needsUpdate = true;
-        if (!stillMoving || elapsed > 15000) {
-            data.active = false;
+        else if (eventState[KEYS.busEventState] === 1 && simTime - eventState[KEYS.busEventTimer] > 2000) {
+            eventState[KEYS.busEventState] = 2;
+            eventState[KEYS.busEventTimer] = simTime;
+
+            if (ctx.playSound) ctx.playSound(SoundID.EXPLOSION);
+            if (ctx.cameraShake) ctx.cameraShake(15);
+
+            ctx.setBubble(ctx.t("sector_events.0.1.reaction"));
+        }
+        else if (eventState[KEYS.busEventState] === 2 && simTime - eventState[KEYS.busEventTimer] > 2000) {
+            eventState[KEYS.busEventState] = 3;
+            eventState[KEYS.busEventTimer] = simTime;
+
+            if (ctx.setCameraOverride) {
+                _camOverrideTarget.copy(_trainYardPos).add(_offsetTrainYard);
+                _camOverrideLookAt.copy(_trainYardPos);
+                ctx.setCameraOverride({
+                    active: true,
+                    targetPos: _camOverrideTarget,
+                    lookAtPos: _camOverrideLookAt,
+                    endTime: renderTime + 4000
+                });
+            }
+        }
+        else if (eventState[KEYS.busEventState] === 3 && simTime - eventState[KEYS.busEventTimer] > 2000) {
+            eventState[KEYS.busEventState] = 4;
+            eventState[KEYS.busEventTimer] = simTime;
+
+            if (ctx.playSound) ctx.playSound(SoundID.EXPLOSION);
+            if (ctx.cameraShake) ctx.cameraShake(15.0);
+
+            if (ctx.makeNoise) {
+                ctx.makeNoise(_trainYardPos, NoiseType.OTHER, 100);
+            }
+        }
+        else if (eventState[KEYS.busEventState] === 4 && simTime - eventState[KEYS.busEventTimer] > 2000) {
+            eventState[KEYS.busEventState] = 5;
+            eventState[KEYS.busEventTimer] = simTime;
+
+            if (ctx.setCameraOverride) ctx.setCameraOverride(null);
+
+            ctx.setBubble(ctx.t("sector_events.0.4.reaction"));
+
+            const enemyWaveSystem = engine.systems.enemyWave as EnemyWaveSystem;
+            if (enemyWaveSystem) {
+                const spawns: Array<{ type: EnemyType; pos: { x: number; z: number } }> = [];
+                for (let i = 0; i < SPOTS_ARRAY.length; i++) {
+                    const spot = SPOTS_ARRAY[i];
+                    for (let j = 0; j < 6; j++) {
+                        spawns.push({
+                            type: EnemyType.WALKER,
+                            pos: { x: spot.x, z: spot.z }
+                        });
+                    }
+                }
+                const waveConfigs: EnemyWaveConfig[] = [{
+                    name: 'Wave 1: The Tunnel Horde',
+                    targetRatio: 0.8,
+                    spawns: spawns,
+                    attractorPos: { x: LOCATIONS.TRIGGERS.TUNNEL.x, z: LOCATIONS.TRIGGERS.TUNNEL.z }
+                }];
+                enemyWaveSystem.startWaveChain(waveConfigs);
+            }
+        }
+        else if (eventState[KEYS.busEventState] === 5) {
+            if (!ctx.sectorState.waveActive) {
+                eventState[KEYS.busEventState] = 6;
+                eventState[KEYS.busEventTimer] = simTime;
+                ctx.setBubble(ctx.t("sector_events.0.2.reaction"));
+
+                ctx.sectorState.busCanBeInteractedWith = true;
+
+                const busObj = (ctx.ctx as any).busObject;
+                if (busObj) {
+                    busObj.userData.isInteractable = true;
+                }
+            }
+        }
+        else if (eventState[KEYS.busEventState] === 6) {
+            if (eventState[KEYS.busPlanting] && simTime - eventState[KEYS.busEventTimer] > 3000) {
+                eventState[KEYS.busInteractionTriggered] = true;
+            }
+            if (eventState[KEYS.busInteractionTriggered]) {
+                eventState[KEYS.busEventState] = 7;
+                eventState[KEYS.busEventTimer] = simTime;
+                eventState[KEYS.lastBeepTime] = simTime;
+
+                const busObj = (ctx.ctx as any).busObject;
+                if (busObj) {
+                    eventState[KEYS.originalBusPos].copy(busObj.position);
+                    const busPos = busObj.position;
+
+                    if (ctx.setCameraOverride) {
+                        _camOverrideTarget.copy(busPos).add(_zoomOffsetTarget);
+                        _camOverrideLookAt.copy(busPos).add(_zoomOffsetLook);
+                        ctx.setCameraOverride({
+                            active: true,
+                            targetPos: _camOverrideTarget,
+                            lookAtPos: _camOverrideLookAt,
+                            endTime: renderTime + 4000
+                        });
+                    }
+
+                    const busRing = (ctx.ctx as any).busRing;
+                    if (busRing) {
+                        busRing.position.copy(busPos);
+                        busRing.position.y = 1.0;
+                        busRing.visible = true;
+                        busRing.material.opacity = 0;
+                    }
+                }
+
+                if (ctx.playTone) ctx.playTone(880, ToneType.SINE, 0.1, 0.2);
+                if (ctx.setInteraction) ctx.setInteraction(null);
+            }
+        }
+        else if (eventState[KEYS.busEventState] === 7) {
+            const elapsed = simTime - eventState[KEYS.busEventTimer];
+            const pos = eventState[KEYS.originalBusPos].lengthSq() > 0 ? eventState[KEYS.originalBusPos] : LOCATIONS.TRIGGERS.BUS;
+            _busOriginalPos.copy(pos);
+
+            if (elapsed < 3000) {
+                const beepInterval = elapsed > 2000 ? 250 : 500;
+                if (simTime - eventState[KEYS.lastBeepTime] > beepInterval) {
+                    eventState[KEYS.lastBeepTime] = simTime;
+                    if (ctx.playTone) ctx.playTone(880, ToneType.SINE, 0.1, 0.15);
+                }
+
+                const busRing = (ctx.ctx as any).busRing;
+                if (busRing) {
+                    const elapsedRender = renderTime - (eventState[KEYS.busEventTimer] || renderTime);
+                    const pulse = (Math.sin(elapsedRender * 0.01) + 1) * 0.5;
+                    busRing.material.opacity = 0.3 + (pulse * 0.5);
+                    busRing.scale.setScalar(1.0 + (pulse * 0.2));
+                    busRing.material.color.setRGB(1.0, pulse, 0.0);
+                }
+            } else {
+                eventState[KEYS.busEventState] = 8;
+                eventState[KEYS.busEventTimer] = simTime;
+
+                const busRing = (ctx.ctx as any).busRing;
+                if (busRing) {
+                    busRing.visible = false;
+                    busRing.position.y = -1000;
+                }
+
+                eventState[KEYS.busExploded] = true;
+            }
+        }
+        else if (eventState[KEYS.busEventState] === 8) {
+            const elapsed = simTime - eventState[KEYS.busEventTimer];
+
+            explodeBus(delta, simTime, renderTime, gameState, eventState, ctx.ctx, ctx);
+
+            if (elapsed > 10000 || (elapsed > 1000 && (!(ctx.ctx as any).busRubble?.userData.active))) {
+                eventState[KEYS.busEventState] = 9;
+                eventState[KEYS.busEventTimer] = simTime;
+
+                if (ctx.setCameraOverride) ctx.setCameraOverride(null);
+
+                ctx.setBubble(ctx.t("sector_events.0.3.reaction"));
+            }
+        }
+        else if (eventState[KEYS.busEventState] === 9 && !ctx.sectorState.lokeUnlocked) {
+            ctx.sectorState.lokeUnlocked = true;
+        }
+        else if (ctx.sectorState.lokeUnlocked && !ctx.sectorState.lokeCinematicTriggered) {
+            _v1.set(LOCATIONS.SPAWN.FAMILY.x, 0, LOCATIONS.SPAWN.FAMILY.z);
+            if (playerPos.distanceToSquared(_v1) < 4) {
+                ctx.sectorState.lokeCinematicTriggered = true;
+                if (ctx.startCinematic) {
+                    const lokeMesh = ctx.ctx.activeFamilyMembers?.find((fm: any) => fm.id === FamilyMemberID.LOKE)?.mesh || null;
+                    ctx.startCinematic(lokeMesh, 0, 0);
+                }
+            }
+        }
+
+        const s = eventState[KEYS.busEventState];
+        if (s >= 1 && s <= 3) {
+            mask |= SectorEventConstraint.DISABLE_INPUT | SectorEventConstraint.DISABLE_ENEMIES | SectorEventConstraint.DISABLE_TELEPORT | SectorEventConstraint.HIDE_HUD;
+        }
+
+        return mask;
+    },
+
+    onInteract: (id, object, ctx, eventState) => {
+        const subType = object.userData.interactionSubType;
+        if (id === 'tunnel_bus_explode' || subType === InteractionSubType.PLANT_EXPLOSIVE) {
+            if (eventState[KEYS.busExploded] || eventState[KEYS.busPlanting]) return true;
+
+            eventState[KEYS.busPlanting] = true;
+            eventState[KEYS.busEventTimer] = ctx.simTime;
+            object.userData.isInteractable = false;
+
+            if (ctx.setBubble) ctx.setBubble(ctx.t("ui.planting_explosives"), 3000);
+            if (ctx.playSound) ctx.playSound(SoundID.IMPACT_METAL);
+            return true;
+        }
+        return false;
+    },
+
+    onPlayerRespawn: (ctx, state, engine, eventState) => {
+        state.sectorState.waveActive = false;
+        state.sectorState.waveName = '';
+        state.sectorState.waveProgress = 0;
+        state.sectorState.waveKills = 0;
+        state.sectorState.waveTarget = 0;
+
+        if (state.checkpoint && state.checkpoint.active && state.checkpoint.familyMemberId === FamilyMemberID.LOKE) {
+            eventState[KEYS.busEventState] = 9;
+            state.sectorState.lokeUnlocked = true;
+            state.sectorState.lokeCinematicTriggered = true;
+            eventState[KEYS.busExploded] = true;
+            return;
+        }
+
+        eventState[KEYS.busEventState] = 0;
+        eventState[KEYS.busEventTimer] = 0;
+        eventState[KEYS.lastBeepTime] = 0;
+        eventState[KEYS.busExploded] = false;
+        eventState[KEYS.busPlanting] = false;
+        eventState[KEYS.busInteractionTriggered] = false;
+        eventState[KEYS.busExplosionHandled] = false;
+        eventState[KEYS.busExplosionTime] = 0;
+
+        const bus = (ctx as any).busObject;
+        if (bus) {
+            bus.position.set(LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.y, LOCATIONS.TRIGGERS.BUS.z);
+            bus.userData.isInteractable = false;
+        }
+
+        const rubble = (ctx as any).busRubble;
+        if (rubble) {
+            rubble.visible = false;
+            rubble.position.y = -1000;
+            if (rubble.userData) rubble.userData.active = false;
+        }
+
+        const tires = (ctx as any).busTires;
+        if (tires) {
+            tires.visible = false;
+            tires.position.y = -1000;
+            if (tires.userData) tires.userData.active = false;
+        }
+
+        const busRing = (ctx as any).busRing;
+        if (busRing) {
+            busRing.visible = false;
+            busRing.position.y = -1000;
+        }
+
+        const colMesh = (ctx as any).busColMesh;
+        const busSize = new THREE.Vector3();
+        if (bus) {
+            const busBox = new THREE.Box3().setFromObject(bus);
+            busBox.getSize(busSize);
+            const busCenter = new THREE.Vector3();
+            busBox.getCenter(busCenter);
+
+            if (colMesh) {
+                colMesh.position.copy(busCenter);
+                colMesh.visible = false;
+            }
+
+            const obstacle_bus = {
+                id: EXPLODING_BUS_ID,
+                mesh: colMesh,
+                position: busCenter,
+                collider: { type: ColliderType.BOX, size: busSize }
+            };
+
+            let exists = false;
+            for (let i = 0; i < ctx.obstacles.length; i++) {
+                if (ctx.obstacles[i] && ctx.obstacles[i].id === EXPLODING_BUS_ID) {
+                    ctx.obstacles[i] = obstacle_bus;
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                if (ctx.worldStreamer && typeof ctx.worldStreamer.registerObstacle === 'function') {
+                    ctx.worldStreamer.registerObstacle(obstacle_bus);
+                }
+            }
+        }
+
+        const triggerSystem = engine.systems.triggerSystem;
+        if (triggerSystem) {
+            const existingIdx = triggerSystem.getTriggerById(SectorEventID.S0_TUNNEL_BLOCKED, TriggerType.EVENT);
+            if (existingIdx === -1) {
+                triggerSystem.addTrigger({
+                    id: SectorEventID.S0_TUNNEL_BLOCKED,
+                    type: TriggerType.EVENT,
+                    x: LOCATIONS.TRIGGERS.BUS.x,
+                    y: 0,
+                    z: LOCATIONS.TRIGGERS.BUS.z,
+                    radius: 15,
+                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                    actions: []
+                });
+            }
+
+            const lokeIdx = triggerSystem.getTriggerById(FamilyMemberID.LOKE, TriggerType.EVENT);
+            if (lokeIdx === -1) {
+                triggerSystem.addTrigger({
+                    id: FamilyMemberID.LOKE,
+                    type: TriggerType.EVENT,
+                    x: LOCATIONS.SPAWN.FAMILY.x,
+                    y: 0,
+                    z: LOCATIONS.SPAWN.FAMILY.z,
+                    radius: 8,
+                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
+                    actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.LOKE, dialogueId: 0, sectorId: 0 } }]
+                });
+            }
         }
     }
-}
+};
 
 export const Sector0: SectorDef = {
     id: SectorID.VILLAGE,
@@ -999,15 +1240,6 @@ export const Sector0: SectorDef = {
         ]);
     },
 
-    onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {
-        const subType = object.userData.interactionSubType;
-        if (subType === InteractionSubType.PLANT_EXPLOSIVE) {
-            state.sectorState.busInteractionTriggered = true;
-            object.userData.isInteractable = false;
-            if (events.setInteraction) events.setInteraction(null);
-        }
-    },
-
     onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, triggerSystem, ctx, engine, ...events }) => {
         if (!sectorState.spawns) sectorState.spawns = {};
 
@@ -1083,323 +1315,106 @@ export const Sector0: SectorDef = {
             }
         }
 
-        if (!sectorState.busEventState) {
-            const busTrigIdx = triggerSystem.getTriggerById(SectorEventID.S0_TUNNEL_BLOCKED, TriggerType.EVENT);
-            if (triggerSystem.isTriggered(busTrigIdx)) {
-                sectorState.busEventState = 1;
-                sectorState.busEventTimer = simTime;
-                events.setBubble(events.t("sector_events.0.0.reaction"));
-            }
-        }
-        else if (sectorState.busEventState === 1 && simTime - sectorState.busEventTimer > 2000) {
-            // ZERO-GC FIX: Instantly push state to prevent multi-frame trigger duplication
-            sectorState.busEventState = 2;
-            sectorState.busEventTimer = simTime;
+        // Rubble / Tire physics update
+        const eventState = sectorState.eventStates?.[0];
+        if (eventState) {
+            _activeMeshCount = 0;
+            const busRubble = (ctx as any).busRubble;
+            const busTires = (ctx as any).busTires;
 
-            if (events.playSound) events.playSound(SoundID.EXPLOSION);
-            if (events.cameraShake) events.cameraShake(15);
+            if (busRubble && busRubble.userData.active) _activeMeshesScratch[_activeMeshCount++] = busRubble;
+            if (busTires && busTires.userData.active) _activeMeshesScratch[_activeMeshCount++] = busTires;
 
-            events.setBubble(events.t("sector_events.0.1.reaction"));
-        }
-        else if (sectorState.busEventState === 2 && simTime - sectorState.busEventTimer > 2000) {
-            sectorState.busEventState = 3;
-            sectorState.busEventTimer = simTime;
+            const explosionTime = eventState[KEYS.busExplosionTime] || 0;
+            const elapsed = renderTime - explosionTime;
 
-            if (events.setCameraOverride) {
-                _camOverrideTarget.copy(_trainYardPos).add(_offsetTrainYard);
-                _camOverrideLookAt.copy(_trainYardPos);
-                events.setCameraOverride({
-                    active: true,
-                    targetPos: _camOverrideTarget,
-                    lookAtPos: _camOverrideLookAt,
-                    endTime: renderTime + 4000
-                });
-            }
-        }
-        else if (sectorState.busEventState === 3 && simTime - sectorState.busEventTimer > 2000) {
-            sectorState.busEventState = 4;
-            sectorState.busEventTimer = simTime;
+            for (let mIdx = 0; mIdx < _activeMeshCount; mIdx++) {
+                const rubble = _activeMeshesScratch[mIdx];
+                const isTire = rubble === busTires;
+                const rubbleWeight = isTire ? 35.0 : 75.0;
+                const bouncy = isTire ? 0.5 : 0.2;
+                const data = rubble.userData;
+                let stillMoving = false;
 
-            if (events.playSound) events.playSound(SoundID.EXPLOSION);
-            if (events.cameraShake) events.cameraShake(15.0);
+                for (let i = 0; i < rubble.count; i++) {
+                    const ix = i * 3;
 
-            if (events.makeNoise) {
-                events.makeNoise(_trainYardPos, NoiseType.OTHER, 100);
-            }
-        }
-        else if (sectorState.busEventState === 4 && simTime - sectorState.busEventTimer > 2000) {
-            // ZERO-GC FIX: Instantly push state to prevent duplicate allocations
-            sectorState.busEventState = 5;
-            sectorState.busEventTimer = simTime;
+                    const groundY = (gameState.worldStreamer && gameState.worldStreamer.getGroundHeight)
+                        ? gameState.worldStreamer.getGroundHeight(data.positions[ix], data.positions[ix + 2])
+                        : 0.1;
+                    const minHeight = groundY + (isTire ? 0.8 : 0.2);
 
-            if (events.setCameraOverride) events.setCameraOverride(null);
+                    const isAboveGround = data.positions[ix + 1] > minHeight;
+                    const hasVelY = Math.abs(data.velocities[ix + 1]) > 0.1;
+                    const hasVelX = Math.abs(data.velocities[ix]) > 0.1;
+                    const hasVelZ = Math.abs(data.velocities[ix + 2]) > 0.1;
 
-            events.setBubble(events.t("sector_events.0.4.reaction"));
+                    if (isAboveGround || hasVelY || hasVelX || hasVelZ) {
+                        stillMoving = true;
+                        const safeDelta = Math.min(delta, 0.05);
 
-            // Start the wave using the EnemyWaveSystem
-            const enemyWaveSystem = engine.systems.enemyWave as EnemyWaveSystem;
-            if (enemyWaveSystem) {
-                const spawns: Array<{ type: EnemyType; pos: { x: number; z: number } }> = [];
-                for (let i = 0; i < SPOTS_ARRAY.length; i++) {
-                    const spot = SPOTS_ARRAY[i];
-                    for (let j = 0; j < 6; j++) {
-                        spawns.push({
-                            type: EnemyType.WALKER,
-                            pos: { x: spot.x, z: spot.z }
-                        });
+                        data.velocities[ix + 1] -= rubbleWeight * safeDelta;
+                        data.positions[ix] += data.velocities[ix] * safeDelta;
+                        data.positions[ix + 1] += data.velocities[ix + 1] * safeDelta;
+                        data.positions[ix + 2] += data.velocities[ix + 2] * safeDelta;
+
+                        if (data.positions[ix + 1] <= minHeight) {
+                            data.positions[ix + 1] = minHeight;
+                            data.velocities[ix] *= 0.6;
+                            data.velocities[ix + 2] *= 0.6;
+                            data.velocities[ix + 1] *= -bouncy;
+
+                            if (data.spin) {
+                                data.spin[ix] *= 0.6;
+                                data.spin[ix + 1] *= 0.6;
+                                data.spin[ix + 2] *= 0.6;
+                            }
+
+                            if (data.hasLanded && !data.hasLanded[i] && events.playSound && explosionTime) {
+                                if (simTime - explosionTime < 10000) {
+                                    if (!isTire || Math.abs(data.velocities[ix + 1]) > 2) {
+                                        events.playSound(isTire ? SoundID.IMPACT_METAL : SoundID.IMPACT_METAL);
+                                    }
+                                }
+                                if (Math.abs(data.velocities[ix + 1]) < 2) data.hasLanded[i] = 1;
+                            }
+                        }
+
+                        if (data.rotations && data.spin) {
+                            data.rotations[ix] += data.spin[ix] * safeDelta;
+                            data.rotations[ix + 1] += data.spin[ix + 1] * safeDelta;
+                            data.rotations[ix + 2] += data.spin[ix + 2] * safeDelta;
+                        }
+
+                        _position.set(data.positions[ix], data.positions[ix + 1], data.positions[ix + 2]);
+                        if (data.rotations) {
+                            _rotation.set(data.rotations[ix], data.rotations[ix + 1], data.rotations[ix + 2]);
+                            _quat.setFromEuler(_rotation);
+                        } else {
+                            _quat.set(0, 0, 0, 1);
+                        }
+
+                        if (isTire) {
+                            _scale.set(1, 1, 1);
+                        } else {
+                            const s = data.scales ? data.scales[i] : 1.0;
+                            const type = i % 3;
+                            if (type === 0) _scale.set(4.0 * s, 0.4 * s, 6.0 * s);
+                            else if (type === 1) _scale.set(1.5 * s, 0.5 * s, 10.0 * s);
+                            else _scale.set(1.5 * s, 1.5 * s, 1.5 * s);
+                        }
+
+                        _matrix.compose(_position, _quat, _scale);
+                        rubble.setMatrixAt(i, _matrix);
                     }
                 }
-                const waveConfigs: EnemyWaveConfig[] = [{
-                    name: 'Wave 1: The Tunnel Horde',
-                    targetRatio: 0.8, // 80%
-                    spawns: spawns,
-                    attractorPos: { x: LOCATIONS.TRIGGERS.TUNNEL.x, z: LOCATIONS.TRIGGERS.TUNNEL.z }
-                }];
-                enemyWaveSystem.startWaveChain(waveConfigs);
-            }
-        }
-        else if (sectorState.busEventState === 5) {
-            if (!sectorState.waveActive) {
-                sectorState.busEventState = 6;
-                sectorState.busEventTimer = simTime;
-                events.setBubble(events.t("sector_events.0.2.reaction"));
-
-                sectorState.busCanBeInteractedWith = true;
-
-                const busObj = (ctx as any).busObject;
-                if (busObj) {
-                    busObj.userData.isInteractable = true;
+                rubble.instanceMatrix.needsUpdate = true;
+                if (!stillMoving || elapsed > 15000) {
+                    data.active = false;
                 }
-            }
-        }
-        else if (sectorState.busEventState === 6 && sectorState.busInteractionTriggered) {
-            sectorState.busEventState = 7;
-            sectorState.busEventTimer = simTime;
-            sectorState.lastBeepTime = simTime;
-
-            const busObj = (ctx as any).busObject;
-            if (busObj) {
-                if (!sectorState.originalBusPos) sectorState.originalBusPos = new THREE.Vector3();
-                sectorState.originalBusPos.copy(busObj.position);
-                const busPos = busObj.position;
-
-                if (events.setCameraOverride) {
-                    _camOverrideTarget.copy(busPos).add(_zoomOffsetTarget);
-                    _camOverrideLookAt.copy(busPos).add(_zoomOffsetLook);
-                    events.setCameraOverride({
-                        active: true,
-                        targetPos: _camOverrideTarget,
-                        lookAtPos: _camOverrideLookAt,
-                        endTime: renderTime + 4000
-                    });
-                }
-
-                const busRing = (ctx as any).busRing;
-                if (busRing) {
-                    busRing.position.copy(busPos);
-                    busRing.position.y = 1.0;
-                    busRing.visible = true;
-                    busRing.material.opacity = 0;
-                }
-            }
-
-            if (events.playTone) events.playTone(880, ToneType.SINE, 0.1, 0.2);
-            if (events.setInteraction) events.setInteraction(null);
-        }
-        else if (sectorState.busEventState === 7) {
-            const elapsed = simTime - sectorState.busEventTimer;
-            const pos = (sectorState as any).originalBusPos || LOCATIONS.TRIGGERS.BUS;
-            _busOriginalPos.copy(pos);
-
-            if (elapsed < 3000) {
-                const beepInterval = elapsed > 2000 ? 250 : 500;
-                if (simTime - sectorState.lastBeepTime > beepInterval) {
-                    sectorState.lastBeepTime = simTime;
-                    if (events.playTone) events.playTone(880, ToneType.SINE, 0.1, 0.15);
-                }
-
-                const busRing = (ctx as any).busRing;
-                if (busRing) {
-                    const elapsedRender = renderTime - (sectorState.busEventTimer || renderTime);
-                    const pulse = (Math.sin(elapsedRender * 0.01) + 1) * 0.5;
-                    busRing.material.opacity = 0.3 + (pulse * 0.5);
-                    busRing.scale.setScalar(1.0 + (pulse * 0.2));
-                    busRing.material.color.setRGB(1.0, pulse, 0.0);
-                }
-            } else {
-                sectorState.busEventState = 8;
-                sectorState.busEventTimer = simTime;
-
-                const busRing = (ctx as any).busRing;
-                if (busRing) {
-                    busRing.visible = false;
-                    busRing.position.y = -1000;
-                }
-
-                sectorState.busExploded = true;
-            }
-        }
-        else if (sectorState.busEventState === 8) {
-            const elapsed = simTime - sectorState.busEventTimer;
-
-            explodeBus(delta, simTime, renderTime, gameState, sectorState, ctx, events);
-
-            if (elapsed > 10000 || (elapsed > 1000 && (!(ctx as any).busRubble?.userData.active))) {
-                sectorState.busEventState = 9;
-                sectorState.busEventTimer = simTime;
-
-                if (events.setCameraOverride) events.setCameraOverride(null);
-
-                events.setBubble(events.t("sector_events.0.3.reaction"));
-            }
-        }
-        else if (sectorState.busEventState === 9 && !sectorState.lokeUnlocked) {
-            sectorState.lokeUnlocked = true;
-        }
-        else if (sectorState.lokeUnlocked && !sectorState.lokeCinematicTriggered) {
-            _v1.set(LOCATIONS.SPAWN.FAMILY.x, 0, LOCATIONS.SPAWN.FAMILY.z);
-            if (playerPos.distanceToSquared(_v1) < 4) { // 2 units — matches setupContent trigger radius
-                sectorState.lokeCinematicTriggered = true;
-                if (events.startCinematic) {
-                    // Pass Loke's mesh so the camera pans to him correctly
-                    const lokeMesh = ctx.activeFamilyMembers?.find((fm: any) => fm.id === FamilyMemberID.LOKE)?.mesh || null;
-                    events.startCinematic(lokeMesh, 0, 0);
-                }
-            }
-        }
-
-        // Hide/show HUD based on bus event state
-        if (sectorState.busEventState >= 1 && sectorState.busEventState <= 3) {
-            gameState.ui.hudVisible = false;
-        } else if (sectorState.busEventState === 4) {
-            gameState.ui.hudVisible = true;
-        }
-    },
-
-    onPlayerRespawn: (ctx: SectorBuildContext, state: any, engine: any) => {
-        if (!state.sectorState) return;
-
-        // Reset wave variables
-        state.sectorState.waveActive = false;
-        state.sectorState.waveName = '';
-        state.sectorState.waveProgress = 0;
-        state.sectorState.waveKills = 0;
-        state.sectorState.waveTarget = 0;
-
-        if (state.checkpoint && state.checkpoint.active && state.checkpoint.familyMemberId === FamilyMemberID.LOKE) {
-            // Player is respawning at Loke checkpoint! Keep Loke unlocked and bus exploded.
-            state.sectorState.busEventState = 9;
-            state.sectorState.lokeUnlocked = true;
-            state.sectorState.lokeCinematicTriggered = true;
-            state.sectorState.busExploded = true;
-            return;
-        }
-
-        // Reset bus event data
-        state.sectorState.busEventState = 0;
-        state.sectorState.busEventTimer = 0;
-        state.sectorState.busExplosionHandled = false;
-        state.sectorState.busExplosionTime = 0;
-        state.sectorState.lastBeepTime = 0;
-        state.sectorState.busInteractionTriggered = false;
-        state.sectorState.busCanBeInteractedWith = false;
-        state.sectorState.busExploded = false;
-        state.sectorState.lokeUnlocked = false;
-
-        const bus = (ctx as any).busObject;
-        if (bus) {
-            bus.position.set(LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.y, LOCATIONS.TRIGGERS.BUS.z);
-            bus.userData.isInteractable = false;
-        }
-
-        const rubble = (ctx as any).busRubble;
-        if (rubble) {
-            rubble.visible = false;
-            rubble.position.y = -1000;
-            if (rubble.userData) rubble.userData.active = false;
-        }
-
-        const tires = (ctx as any).busTires;
-        if (tires) {
-            tires.visible = false;
-            tires.position.y = -1000;
-            if (tires.userData) tires.userData.active = false;
-        }
-
-        const busRing = (ctx as any).busRing;
-        if (busRing) {
-            busRing.visible = false;
-            busRing.position.y = -1000;
-        }
-
-        // Restore collision obstacle
-        const colMesh = (ctx as any).busColMesh;
-        const busSize = new THREE.Vector3();
-        if (bus) {
-            const busBox = new THREE.Box3().setFromObject(bus);
-            busBox.getSize(busSize);
-            const busCenter = new THREE.Vector3();
-            busBox.getCenter(busCenter);
-
-            if (colMesh) {
-                colMesh.position.copy(busCenter);
-                colMesh.visible = false;
-            }
-
-            const obstacle_bus = {
-                id: EXPLODING_BUS_ID,
-                mesh: colMesh,
-                position: busCenter,
-                collider: { type: ColliderType.BOX, size: busSize }
-            };
-
-            let exists = false;
-            for (let i = 0; i < ctx.obstacles.length; i++) {
-                if (ctx.obstacles[i] && ctx.obstacles[i].id === EXPLODING_BUS_ID) {
-                    ctx.obstacles[i] = obstacle_bus;
-                    exists = true;
-                    break;
-                }
-            }
-            if (!exists) {
-                //ctx.obstacles.push(obstacle_bus);
-                if (ctx.worldStreamer && typeof ctx.worldStreamer.registerObstacle === 'function') {
-                    ctx.worldStreamer.registerObstacle(obstacle_bus);
-                }
-            }
-        }
-
-        // Re-register the S0_TUNNEL_BLOCKED event trigger if it got deleted
-        const triggerSystem = ctx.engine.systems.triggerSystem;
-        if (triggerSystem) {
-            const existingIdx = triggerSystem.getTriggerById(SectorEventID.S0_TUNNEL_BLOCKED, TriggerType.EVENT);
-            if (existingIdx === -1) {
-                triggerSystem.addTrigger({
-                    id: SectorEventID.S0_TUNNEL_BLOCKED,
-                    type: TriggerType.EVENT,
-                    x: LOCATIONS.TRIGGERS.BUS.x,
-                    y: 0,
-                    z: LOCATIONS.TRIGGERS.BUS.z,
-                    radius: 15,
-                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                    actions: []
-                });
-            }
-
-            const lokeIdx = triggerSystem.getTriggerById(FamilyMemberID.LOKE, TriggerType.EVENT);
-            if (lokeIdx === -1) {
-                triggerSystem.addTrigger({
-                    id: FamilyMemberID.LOKE,
-                    type: TriggerType.EVENT,
-                    x: LOCATIONS.SPAWN.FAMILY.x,
-                    y: 0,
-                    z: LOCATIONS.SPAWN.FAMILY.z,
-                    radius: 8,
-                    statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                    actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { familyId: FamilyMemberID.LOKE, dialogueId: 0, sectorId: 0 } }]
-                });
             }
         }
     },
 
+    events: [busExplosionEvent]
 };

@@ -1,9 +1,9 @@
-import React, { useRef } from 'react';
-import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
-import { UIEventType } from '../../../systems/ui/UIEventRingBuffer';
-import { COLORS } from '../../../utils/ui/ColorUtils';
-import { PERKS } from '../../../content/perks';
-import { t } from '../../../utils/i18n';
+import React, { useRef, useMemo } from 'react';
+import { useUIEventBridge } from '../../../../hooks/useUIEventBridge';
+import { UIEventType } from '../../../../systems/ui/UIEventRingBuffer';
+import { COLORS } from '../../../../utils/ui/ColorUtils';
+import { PERKS } from '../../../../content/perks';
+import { t } from '../../../../utils/i18n';
 
 const POOL_SIZE = 8;
 
@@ -37,6 +37,12 @@ const CombatLog: React.FC = () => {
             { type: UIEventType.NONE, amount: 0, idx: -1, spawnTime: 0, active: false }
         ];
     }
+
+    // ZERO-GC: Stable ref callbacks — pre-allocated once at mount, never re-created in .map()
+    const poolRefCallbacks = useMemo(
+        () => POOL_INDICES.map(i => (el: HTMLDivElement | null) => { if (el) poolRefs.current[i] = el; }),
+        []
+    );
 
     const spawn = (text: string, color: string) => {
         const idx = nextIdx.current;
@@ -169,7 +175,7 @@ const CombatLog: React.FC = () => {
                 {POOL_INDICES.map((i) => (
                     <div
                         key={i}
-                        ref={(el) => { if (el) poolRefs.current[i] = el; }}
+                        ref={poolRefCallbacks[i]}
                         className="absolute left-1/2 top-0 whitespace-nowrap drop-shadow-[0_4px_12px_rgba(0,0,0,1)]"
                         style={{
                             display: 'none',

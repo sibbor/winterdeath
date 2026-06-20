@@ -1,10 +1,10 @@
-import React, { useRef, forwardRef, useImperativeHandle, useCallback, useEffect } from 'react';
-import { useUIEventBridge } from '../../../hooks/useUIEventBridge';
-import { UIEventType, ChatBubbleSubtype, CHAT_BUBBLE_DURATIONS } from '../../../systems/ui/UIEventRingBuffer';
-import { COLORS } from '../../../utils/ui/ColorUtils';
-import { t } from '../../../utils/i18n';
-import { VoiceSounds } from '../../../utils/audio/AudioLib';
-import { FamilyMemberID } from '../../../content/constants';
+import React, { useRef, forwardRef, useImperativeHandle, useCallback, useEffect, useMemo } from 'react';
+import { useUIEventBridge } from '../../../../hooks/useUIEventBridge';
+import { UIEventType, ChatBubbleSubtype, CHAT_BUBBLE_DURATIONS } from '../../../../systems/ui/UIEventRingBuffer';
+import { COLORS } from '../../../../utils/ui/ColorUtils';
+import { t } from '../../../../utils/i18n';
+import { VoiceSounds } from '../../../../utils/audio/AudioLib';
+import { FamilyMemberID } from '../../../../content/constants';
 
 const MAX_BUBBLES = 5;
 
@@ -66,8 +66,8 @@ const ChatBubblePooled = forwardRef((_, ref) => {
                 }}
             />
 
-            <div 
-                ref={contentRef} 
+            <div
+                ref={contentRef}
                 className="relative z-10 text-sm md:text-base font-mono font-bold tracking-wider leading-relaxed drop-shadow-md"
             />
         </div>
@@ -123,17 +123,19 @@ const ChatBubble: React.FC = () => {
 
     useUIEventBridge(handleSpawn);
 
-    const setBubbleRef = (index: number) => (el: any) => {
-        if (el) bubbleRefs.current[index] = el;
-    };
+    // ZERO-GC: Stable ref callbacks — created once at mount, never re-allocated
+    const bubbleRefCallbacks = useMemo(
+        () => Array.from({ length: MAX_BUBBLES }, (_, i) => (el: any) => { if (el) bubbleRefs.current[i] = el; }),
+        []
+    );
 
     return (
         <div className="absolute inset-0 pointer-events-none z-[60] flex flex-col items-center justify-center pb-[15%]">
-            <ChatBubblePooled ref={setBubbleRef(0)} />
-            <ChatBubblePooled ref={setBubbleRef(1)} />
-            <ChatBubblePooled ref={setBubbleRef(2)} />
-            <ChatBubblePooled ref={setBubbleRef(3)} />
-            <ChatBubblePooled ref={setBubbleRef(4)} />
+            <ChatBubblePooled ref={bubbleRefCallbacks[0]} />
+            <ChatBubblePooled ref={bubbleRefCallbacks[1]} />
+            <ChatBubblePooled ref={bubbleRefCallbacks[2]} />
+            <ChatBubblePooled ref={bubbleRefCallbacks[3]} />
+            <ChatBubblePooled ref={bubbleRefCallbacks[4]} />
 
             <style>{`
                 @keyframes chat-bubble-anim {

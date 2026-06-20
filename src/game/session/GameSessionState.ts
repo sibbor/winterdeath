@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { CareerStats, StatID, StatWeaponIndex, StatPerkIndex, StatEnemyIndex, TELEMETRY_BUFFER_SIZE, PlayerNodes } from '../../types/CareerStats';
+import { CareerStats, StatID, StatWeaponIndex, StatPerkIndex, StatEnemyIndex, PlayerNodes } from '../../types/CareerStats';
 import { SessionStats } from '../../types/SessionStats';
 import { SectorState, GameState } from '../../types/StateTypes';
-import { PlayerDeathState, DamageID, DamageType, WeaponID, ToolID, HoldableID } from '../../entities/player/CombatTypes';
+import { MAX_SECTOR_EVENTS } from './SectorTypes';
+import { PlayerDeathState, DamageID, DamageType, WeaponID, HoldableID } from '../../entities/player/CombatTypes';
 import { StatusEffectID } from '../../types/StatusEffects';
 import { MAX_ENTITIES } from '../../content/constants';
 import { Obstacle } from '../../core/world/CollisionResolution';
@@ -298,7 +299,21 @@ export function allocateGameSessionState(): GameSessionState {
         gameState: null as any,
         careerStats: null as any,
         sessionStats: null as any,
-        sectorState: { envOverride: undefined } as any,
+        sectorState: {
+            isInputDisabled: false,
+            isEnemyUpdateDisabled: false,
+            isTeleportDisabled: false,
+            isHudHidden: false,
+            eventStates: Array.from({ length: MAX_SECTOR_EVENTS }, () => ({
+                state: 0,
+                timer: 0,
+                n1: 0, n2: 0, n3: 0, n4: 0,
+                b1: false, b2: false, b3: false, b4: false,
+                v1: new THREE.Vector3(),
+                v2: new THREE.Vector3()
+            })),
+            envOverride: undefined
+        } as any,
         sessionCollectiblesDiscovered: [],
 
         sector: {
@@ -623,7 +638,28 @@ export function resetGameSessionState(state: GameSessionState, props: any): void
     state.enemies.activeBoss = null;
 
     // 7. World & Collision
-    state.sectorState = props.gameState.sectorState || { envOverride: undefined } as any;
+    if (props.gameState.sectorState) {
+        state.sectorState = props.gameState.sectorState;
+    } else {
+        state.sectorState.isInputDisabled = false;
+        state.sectorState.isEnemyUpdateDisabled = false;
+        state.sectorState.isTeleportDisabled = false;
+        state.sectorState.isHudHidden = false;
+        state.sectorState.envOverride = undefined;
+    }
+
+    const eStates = state.sectorState.eventStates;
+    if (eStates) {
+        for (let i = 0; i < eStates.length; i++) {
+            const es = eStates[i];
+            es.state = 0;
+            es.timer = 0;
+            es.n1 = 0; es.n2 = 0; es.n3 = 0; es.n4 = 0;
+            es.b1 = false; es.b2 = false; es.b3 = false; es.b4 = false;
+            es.v1.set(0, 0, 0);
+            es.v2.set(0, 0, 0);
+        }
+    }
     state.world.obstacles.length = 0;
     state.world.isPlayground = props.gameState.currentSector === 4; // playground indicator
     state.world.clueActive = false;

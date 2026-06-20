@@ -4,7 +4,7 @@ import { WorldStreamer } from '../core/world/WorldStreamer';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { System, SystemID } from './System';
 import { RuntimeStressHarness } from '../utils/debug/RuntimeStressHarness';
-import { DiscoveryType } from '../components/ui/hud/HudTypes';
+import { DiscoveryType } from '../components/ui/hud/game/HudTypes';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
 export interface NoiseEvent {
@@ -170,6 +170,16 @@ export class EnemyDetectionSystem implements System {
             const e = enemies[i];
 
             if ((e.statusFlags & EnemyFlags.DEAD) !== 0) continue;
+
+            const waveDisabled = e.isWaveEnemy && session.state?.sectorState?.waveDisabled;
+            if (waveDisabled) {
+                e.awareness = 0;
+                if (e.state !== AIState.IDLE && e.state !== AIState.WANDER) {
+                    e.state = AIState.IDLE;
+                    e.idleTimer = 1.0;
+                }
+                continue;
+            }
 
             // 2. VISUAL CHECK (Staggered)
             if ((i % 3) === frameIndex) {

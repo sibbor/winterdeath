@@ -1,10 +1,10 @@
 import React, { useMemo } from 'react';
-import { CareerStats } from '../../../types/CareerStats';
-import { t } from '../../../utils/i18n';
-import { UISounds } from '../../../utils/audio/AudioLib';
-import { DiscoveryType } from '../hud/HudTypes';
-import { StatsBridge } from '../../../core/data/StatsBridge';
-import { FormatUtils } from '../../../utils/ui/FormatUtils';
+import { CareerStats } from '../../../../types/CareerStats';
+import { t } from '../../../../utils/i18n';
+import { UISounds } from '../../../../utils/audio/AudioLib';
+import { DiscoveryType } from '../game/HudTypes';
+import { StatsBridge } from '../../../../core/data/StatsBridge';
+import { FormatUtils } from '../../../../utils/ui/FormatUtils';
 
 interface CampHUDProps {
     stats: CareerStats;
@@ -246,4 +246,3 @@ const CampHUD: React.FC<CampHUDProps> = React.memo(({
 }, areEqual);
 
 export default CampHUD;
-

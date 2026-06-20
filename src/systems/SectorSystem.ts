@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { SectorDef, SectorID } from '../game/session/SectorTypes';
+import { SectorDef, SectorID, SectorEventConstraint } from '../game/session/SectorTypes';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { EnemyType, NoiseType } from '../entities/enemies/EnemyTypes';
 import { SKY_SYSTEM } from '../content/constants';
@@ -113,7 +113,14 @@ export class SectorSystem implements System {
             handleEnemyHit: (enemy: any, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean) => boolean;
         }
     ) {
-        this.currentSector = SectorSystem.getSector(sectorId);
+        const id = (sectorId !== undefined && sectorId !== null) ? Number(sectorId) : 0;
+        this.currentSector = SectorSystem.getSector(id) || SectorSystem.getSector(0);
+        if (!this.currentSector) {
+            const keys = Object.keys(SECTOR_CACHE);
+            if (keys.length > 0) {
+                this.currentSector = SECTOR_CACHE[Number(keys[0])];
+            }
+        }
     }
 
     /**
@@ -290,7 +297,24 @@ export class SectorSystem implements System {
         // 3. Process Interaction Requests
         if (state.triggers.interactionRequest.active && state.triggers.interactionRequest.type === InteractionType.SECTOR_SPECIFIC) {
             const req = state.triggers.interactionRequest;
-            if (this.currentSector.onInteract) {
+            let handled = false;
+
+            const eventsList = this.currentSector.events;
+            if (eventsList && eventsList.length > 0 && state.sectorState.eventStates) {
+                const ctx = this._cachedUpdateContext;
+                for (let i = 0; i < eventsList.length; i++) {
+                    const event = eventsList[i];
+                    const eventState = state.sectorState.eventStates[i];
+                    if (event.onInteract) {
+                        if (event.onInteract(req.id, req.object as THREE.Object3D, ctx, eventState)) {
+                            handled = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!handled && this.currentSector.onInteract) {
                 this.currentSector.onInteract(req.id, req.object as THREE.Object3D, state, events);
             }
             req.active = false;
@@ -299,22 +323,48 @@ export class SectorSystem implements System {
         // 4. Centralized Environment Update
         this.updateEnvironment(session, pPos, dt);
 
-        // 5. Finalize Sector Logic (Authoritative Hook)
-        if (this.currentSector.onSectorUpdate) {
-            const ctx = this._cachedUpdateContext;
-            ctx.delta = dt;
-            ctx.simTime = simTime;
-            ctx.renderTime = renderTime;
-            ctx.playerPos = pPos;
-            ctx.gameState = session.state;
-            ctx.sectorState = session.state.sectorState;
-            ctx.triggerSystem = session.systems.triggerSystem;
-            ctx.ctx = session.sectorCtx;
-            ctx.state = session.state;
-            ctx.engine = session.engine;
-            ctx.worldStreamer = session.systems.worldStreamer;
-            ctx.scene = session.engine.scene;
+        // 5. Finalize Sector Logic and Event Constraints Aggregation
+        const ctx = this._cachedUpdateContext;
+        ctx.delta = dt;
+        ctx.simTime = simTime;
+        ctx.renderTime = renderTime;
+        ctx.playerPos = pPos;
+        ctx.gameState = session.state;
+        ctx.sectorState = session.state.sectorState;
+        ctx.triggerSystem = session.systems.triggerSystem;
+        ctx.ctx = session.sectorCtx;
+        ctx.state = session.state;
+        ctx.engine = session.engine;
+        ctx.worldStreamer = session.systems.worldStreamer;
+        ctx.scene = session.engine.scene;
 
+        const eventsList = this.currentSector.events;
+        if (eventsList && eventsList.length > 0) {
+            let combinedConstraints = 0;
+            for (let i = 0; i < eventsList.length; i++) {
+                const event = eventsList[i];
+                const eventState = state.sectorState.eventStates[i];
+                const mask = event.onUpdate(ctx, eventState);
+                combinedConstraints |= mask;
+            }
+
+            // Sync constraint flags
+            state.sectorState.isInputDisabled = (combinedConstraints & SectorEventConstraint.DISABLE_INPUT) !== 0;
+            state.sectorState.isEnemyUpdateDisabled = (combinedConstraints & SectorEventConstraint.DISABLE_ENEMIES) !== 0;
+            state.sectorState.isTeleportDisabled = (combinedConstraints & SectorEventConstraint.DISABLE_TELEPORT) !== 0;
+            state.sectorState.isHudHidden = (combinedConstraints & SectorEventConstraint.HIDE_HUD) !== 0;
+
+            // Sync HUD visibility
+            state.ui.hudVisible = (combinedConstraints & SectorEventConstraint.HIDE_HUD) === 0;
+        } else {
+            state.sectorState.isInputDisabled = false;
+            state.sectorState.isEnemyUpdateDisabled = false;
+            state.sectorState.isTeleportDisabled = false;
+            state.sectorState.isHudHidden = false;
+            state.ui.hudVisible = true; // Restore HUD visibility default on fallback branch
+        }
+
+        if (this.currentSector.onSectorUpdate) {
             this.currentSector.onSectorUpdate(ctx);
         }
     }

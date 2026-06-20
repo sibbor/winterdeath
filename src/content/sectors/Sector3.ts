@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorBuildContext, ChestType } from '../../game/session/SectorTypes';
+import { SectorDef, SectorBuildContext, ChestType, SectorEvent, SectorEventState, SectorEventConstraint } from '../../game/session/SectorTypes';
 import { GroundType } from '../../core/engine/EnvironmentalTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
@@ -88,6 +88,398 @@ const RING_OFFSETS: [number, number][] = [
     [0, -2.2],
     [0, 0], // Robert (centre of group, slightly behind)
 ];
+
+const KEYS = {
+    epilogueState: 'state',
+    epilogueTimer: 'timer',
+    cheerSoundPlayed: 'b1',
+    kissSoundPlayed: 'b2',
+    epilogueBossDefeated: 'b3',
+    epilogueDone: 'b4'
+} as const;
+
+const epilogueEvent: SectorEvent = {
+    id: 'epilogue_event',
+    onStart: (ctx, eventState) => {
+        eventState[KEYS.epilogueState] = EP.IDLE;
+        eventState[KEYS.epilogueTimer] = 0;
+        eventState[KEYS.cheerSoundPlayed] = false;
+        eventState[KEYS.kissSoundPlayed] = false;
+        eventState[KEYS.epilogueBossDefeated] = false;
+        eventState[KEYS.epilogueDone] = false;
+    },
+    onUpdate: (ctx, eventState) => {
+        const { delta, simTime, renderTime, playerPos, gameState, triggerSystem, engine } = ctx;
+        const sectorState = gameState.sectorState;
+        let mask = SectorEventConstraint.NONE;
+
+        if (!eventState[KEYS.epilogueState]) eventState[KEYS.epilogueState] = EP.IDLE;
+        const ep = eventState[KEYS.epilogueState];
+        const elapsed = simTime - (eventState[KEYS.epilogueTimer] || 0);
+
+        const scene = ctx.scene;
+
+        // Helper: gather all family members from scene (Zero-GC)
+        const updateFamilyMembers = () => {
+            _familyMembers.length = 0;
+            if (!scene) return;
+            const ch = scene.children;
+            for (let i = 0; i < ch.length; i++) {
+                if (ch[i].userData.isFamilyMember || ch[i].userData.type === 'family') _familyMembers.push(ch[i]);
+            }
+        };
+
+        _carPos.set(LOCATIONS.ESCAPE_CAR.x, 0, LOCATIONS.ESCAPE_CAR.z);
+
+        // ── RUSH_TO_NATHALIE signal from dialogue's last line ──
+        if (sectorState.pendingTrigger === 'RUSH_TO_NATHALIE') {
+            sectorState.pendingTrigger = null;
+            eventState[KEYS.epilogueState] = EP.RUSH_TO_NATHALIE;
+            eventState[KEYS.epilogueTimer] = simTime;
+        }
+
+        // ── Boss-defeat signal absorbed here before GameSessionLoop fires endSector ──
+        if (gameState.bossDefeatedTime > 0 && !eventState[KEYS.epilogueBossDefeated]) {
+            eventState[KEYS.epilogueBossDefeated] = true;
+            gameState.bossDefeatedTime = -1;
+            eventState[KEYS.epilogueState] = EP.FAMILY_EXIT;
+            eventState[KEYS.epilogueTimer] = simTime;
+        }
+
+        if (ep === EP.RUSH_TO_NATHALIE) {
+            if (elapsed < 100 && ctx.setCameraOverride) {
+                ctx.setCameraOverride({
+                    active: true,
+                    targetPos: _camOnBuilding,
+                    lookAtPos: _camLookBuilding,
+                    endTime: renderTime + 60000
+                });
+            }
+
+            updateFamilyMembers();
+            const family = _familyMembers;
+            const buildingPos = _vS3a.set(
+                LOCATIONS.POIS.SHED.x,
+                0,
+                LOCATIONS.POIS.SHED.z - 5
+            );
+            let allInside = true;
+            for (let i = 0; i < family.length; i++) {
+                const fm = family[i];
+                if (!fm.position) continue;
+                fm.userData.overrideFollowing = true;
+                _vS3b.subVectors(buildingPos, fm.position);
+                const dist = _vS3b.length();
+                if (dist > 1.0) {
+                    allInside = false;
+                    _vS3b.normalize();
+                    const rushSpeed = 6.0 * delta;
+                    fm.position.addScaledVector(_vS3b, Math.min(rushSpeed, dist));
+                    fm.lookAt(buildingPos);
+
+                    const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
+                    fm.userData.cachedBody = body;
+                    if (body) {
+                        _animState.isMoving = true;
+                        _animState.isRushing = true;
+                        _animState.isDodging = false;
+                        _animState.dodgeStartTime = 0;
+                        _animState.staminaRatio = 1.0;
+                        _animState.isSpeaking = false;
+                        _animState.isThinking = false;
+                        _animState.isCelebrating = false;
+                        _animState.isHugging = false;
+                        _animState.isIdleLong = false;
+                        _animState.isSwimming = false;
+                        _animState.isWading = false;
+                        _animState.seed = fm.userData.seed || 0;
+                        _animState.renderTime = renderTime;
+                        _animState.simTime = simTime;
+
+                        PlayerAnimator.update(body, _animState, renderTime, delta);
+                    }
+                } else {
+                    fm.visible = false;
+                }
+            }
+
+            if (allInside && elapsed > 500) {
+                if (elapsed > 1500) {
+                    eventState[KEYS.epilogueState] = EP.AWAIT_INSIDE;
+                    eventState[KEYS.epilogueTimer] = simTime;
+                    if (ctx.setCameraOverride) ctx.setCameraOverride(null);
+                    UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 1, 0, simTime);
+                }
+            }
+        }
+        else if (ep === EP.AWAIT_INSIDE) {
+            if (elapsed > 2000) {
+                eventState[KEYS.epilogueState] = EP.BOSS_FIGHT;
+                eventState[KEYS.epilogueTimer] = simTime;
+            }
+        }
+        else if (ep === EP.FAMILY_EXIT) {
+            if (elapsed < 100 && ctx.setCameraOverride) {
+                ctx.setCameraOverride({
+                    active: true,
+                    targetPos: _camOnBuilding,
+                    lookAtPos: _camLookBuilding,
+                    endTime: renderTime + 60000
+                });
+                UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 0, 0, simTime);
+            }
+
+            updateFamilyMembers();
+            const family = _familyMembers;
+
+            const exitTarget = _vS3a.set(LOCATIONS.REUNION_CENTER.x, 0, LOCATIONS.REUNION_CENTER.z + 5);
+            let allOut = true;
+            for (let i = 0; i < family.length; i++) {
+                const fm = family[i];
+                fm.visible = true;
+                fm.userData.overrideFollowing = true;
+                _vS3b.subVectors(exitTarget, fm.position);
+                const dist = _vS3b.length();
+                if (dist > 1.2) {
+                    allOut = false;
+                    _vS3b.normalize();
+                    fm.position.addScaledVector(_vS3b, Math.min(5.0 * delta, dist));
+                    fm.lookAt(exitTarget);
+                    const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
+                    fm.userData.cachedBody = body;
+                    if (body) {
+                        _animState.isMoving = true;
+                        _animState.isRushing = false;
+                        _animState.isDodging = false;
+                        _animState.dodgeStartTime = 0;
+                        _animState.staminaRatio = 1.0;
+                        _animState.isSpeaking = false;
+                        _animState.isThinking = false;
+                        _animState.isCelebrating = false;
+                        _animState.isHugging = false;
+                        _animState.isIdleLong = false;
+                        _animState.isSwimming = false;
+                        _animState.isWading = false;
+                        _animState.seed = fm.userData.seed || 0;
+                        _animState.renderTime = renderTime;
+                        _animState.simTime = simTime;
+
+                        PlayerAnimator.update(body, _animState, renderTime, delta);
+                    }
+                }
+            }
+
+            if (allOut && elapsed > 300) {
+                eventState[KEYS.epilogueState] = EP.PLAYER_WALK;
+                eventState[KEYS.epilogueTimer] = simTime;
+                sectorState.robertWalkStart = playerPos.clone();
+            }
+        }
+        else if (ep === EP.PLAYER_WALK) {
+            const center = _vS3a.set(LOCATIONS.REUNION_CENTER.x, 0, LOCATIONS.REUNION_CENTER.z);
+            _vS3b.subVectors(center, playerPos);
+            const dist = _vS3b.length();
+            if (dist < 4.0 || elapsed > 5000) {
+                eventState[KEYS.epilogueState] = EP.RING_FORM;
+                eventState[KEYS.epilogueTimer] = simTime;
+            }
+        }
+        else if (ep === EP.RING_FORM) {
+            const cx = LOCATIONS.REUNION_CENTER.x;
+            const cz = LOCATIONS.REUNION_CENTER.z;
+            updateFamilyMembers();
+            const family = _familyMembers;
+            let allFormed = true;
+
+            for (let i = 0; i < family.length; i++) {
+                const fm = family[i];
+                const off = RING_OFFSETS[i % RING_OFFSETS.length];
+                const tx = cx + off[0];
+                const tz = cz + off[1];
+                _vS3a.set(tx, 0, tz);
+                _vS3b.subVectors(_vS3a, fm.position);
+                const dist = _vS3b.length();
+                if (dist > 0.3) {
+                    allFormed = false;
+                    _vS3b.normalize();
+                    fm.position.addScaledVector(_vS3b, Math.min(4.0 * delta, dist));
+                }
+                fm.lookAt(cx, 0, cz);
+                const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
+                if (body) {
+                    _animState.isMoving = dist > 0.3;
+                    _animState.isRushing = false;
+                    _animState.isDodging = false;
+                    _animState.dodgeStartTime = 0;
+                    _animState.staminaRatio = 1.0;
+                    _animState.isSpeaking = false;
+                    _animState.isThinking = false;
+                    _animState.isCelebrating = false;
+                    _animState.isHugging = false;
+                    _animState.isIdleLong = false;
+                    _animState.isSwimming = false;
+                    _animState.isWading = false;
+                    _animState.seed = fm.userData.seed || 0;
+                    _animState.renderTime = renderTime;
+                    _animState.simTime = simTime;
+
+                    PlayerAnimator.update(body, _animState, renderTime, delta);
+                }
+            }
+
+            if ((allFormed || elapsed > 3000) && elapsed > 500) {
+                eventState[KEYS.epilogueState] = EP.CELEBRATE;
+                eventState[KEYS.epilogueTimer] = simTime;
+                eventState[KEYS.cheerSoundPlayed] = false;
+            }
+        }
+        else if (ep === EP.CELEBRATE) {
+            if (!eventState[KEYS.cheerSoundPlayed]) {
+                eventState[KEYS.cheerSoundPlayed] = true;
+                audioEngine.playSound(SoundID.VO_FAMILY_CHEER, 0.9);
+                audioEngine.playSound(SoundID.UI_VICTORY, 0.5);
+            }
+
+            updateFamilyMembers();
+            const family = _familyMembers;
+            for (let i = 0; i < family.length; i++) {
+                const fm = family[i];
+                const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
+                if (body) {
+                    _animState.isMoving = false;
+                    _animState.isRushing = false;
+                    _animState.isDodging = false;
+                    _animState.dodgeStartTime = 0;
+                    _animState.staminaRatio = 1.0;
+                    _animState.isSpeaking = true;
+                    _animState.isCelebrating = true;
+                    _animState.isThinking = false;
+                    _animState.isHugging = false;
+                    _animState.isIdleLong = false;
+                    _animState.isSwimming = false;
+                    _animState.isWading = false;
+                    _animState.seed = fm.userData.seed || 0;
+                    _animState.renderTime = renderTime;
+                    _animState.simTime = simTime;
+
+                    PlayerAnimator.update(body, _animState, renderTime, delta);
+                }
+            }
+
+            if (elapsed > 3000) {
+                eventState[KEYS.epilogueState] = EP.HUG;
+                eventState[KEYS.epilogueTimer] = simTime;
+                eventState[KEYS.kissSoundPlayed] = false;
+            }
+        }
+        else if (ep === EP.HUG) {
+            if (!eventState[KEYS.kissSoundPlayed]) {
+                eventState[KEYS.kissSoundPlayed] = true;
+                audioEngine.playSound(SoundID.VO_FAMILY_KISS, 0.85);
+            }
+
+            updateFamilyMembers();
+            const family = _familyMembers;
+            for (let i = 0; i < family.length; i++) {
+                const fm = family[i];
+                const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
+                if (body) {
+                    _animState.isMoving = false;
+                    _animState.isRushing = false;
+                    _animState.isDodging = false;
+                    _animState.dodgeStartTime = 0;
+                    _animState.staminaRatio = 1.0;
+                    _animState.isSpeaking = false;
+                    _animState.isHugging = true;
+                    _animState.isThinking = false;
+                    _animState.isCelebrating = false;
+                    _animState.isIdleLong = false;
+                    _animState.isSwimming = false;
+                    _animState.isWading = false;
+                    _animState.seed = fm.userData.seed || 0;
+                    _animState.renderTime = renderTime;
+                    _animState.simTime = simTime;
+
+                    PlayerAnimator.update(body, _animState, renderTime, delta);
+                }
+            }
+
+            if (elapsed > 3500) {
+                eventState[KEYS.epilogueState] = EP.CAR_ZOOM;
+                eventState[KEYS.epilogueTimer] = simTime;
+
+                if (scene) {
+                    const escapeCar = scene.getObjectByName('s3_escape_car');
+                    if (escapeCar) {
+                        escapeCar.userData.isInteractable = true;
+                        SectorBuilder.addInteractable(
+                            ctx.ctx,
+                            escapeCar,
+                            {
+                                id: 's3_escape_car',
+                                type: InteractionType.VEHICLE,
+                                label: 'ui.interact_enter_car',
+                                collider: { type: InteractionShape.SPHERE, radius: 4.0 }
+                            }
+                        );
+                    }
+                }
+            }
+        }
+        else if (ep === EP.CAR_ZOOM) {
+            if (elapsed < 100 && ctx.setCameraOverride) {
+                const carCamPos = _vS3a.copy(_carPos).add(_vS3b.set(0, 8, 10));
+                ctx.setCameraOverride({
+                    active: true,
+                    targetPos: carCamPos,
+                    lookAtPos: _carPos,
+                    endTime: renderTime + 1700
+                });
+            }
+
+            if (elapsed > 1500) {
+                eventState[KEYS.epilogueState] = EP.DRIVE;
+                eventState[KEYS.epilogueTimer] = simTime;
+
+                if (ctx.setCameraOverride) ctx.setCameraOverride(null);
+
+                UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 1, 0, simTime);
+            }
+        }
+        else if (ep === EP.DRIVE) {
+            if (elapsed > 5000 && !eventState[KEYS.epilogueDone]) {
+                eventState[KEYS.epilogueDone] = true;
+                eventState[KEYS.epilogueState] = EP.DONE;
+                if (ctx.onAction) {
+                    ctx.onAction([
+                        { type: TriggerActionType.END_SECTOR, payload: { isCompleted: true } }
+                    ]);
+                }
+            }
+        }
+
+        // Hide/disable rules during non-gameplay states of epilogue
+        if (ep !== EP.IDLE && ep !== EP.AWAIT_INSIDE && ep !== EP.BOSS_FIGHT && ep !== EP.DRIVE && ep !== EP.DONE) {
+            mask |= SectorEventConstraint.DISABLE_INPUT | SectorEventConstraint.DISABLE_TELEPORT | SectorEventConstraint.HIDE_HUD;
+        }
+
+        return mask;
+    },
+    onPlayerRespawn: (ctx, state, engine, eventState) => {
+        eventState[KEYS.epilogueState] = EP.IDLE;
+        eventState[KEYS.epilogueTimer] = 0;
+        eventState[KEYS.cheerSoundPlayed] = false;
+        eventState[KEYS.kissSoundPlayed] = false;
+        eventState[KEYS.epilogueBossDefeated] = false;
+        eventState[KEYS.epilogueDone] = false;
+        state.sectorState.part2Played = false;
+
+        const escapeCar = ctx.scene.getObjectByName('s3_escape_car');
+        if (escapeCar) {
+            escapeCar.userData.isInteractable = false;
+        }
+    }
+};
 
 export const Sector3: SectorDef = {
     id: 3,
@@ -304,401 +696,9 @@ export const Sector3: SectorDef = {
             const idx = triggerSystem.getTriggerById(SectorEventID.S3_DIALOGUE_2, TriggerType.EVENT);
             if (idx !== -1 && triggerSystem.isTriggered(idx)) sectorState.part2Played = true;
         }
+    },
 
-        // ── RUSH_TO_NATHALIE signal from dialogue's last line ──
-        if (sectorState.pendingTrigger === 'RUSH_TO_NATHALIE') {
-            sectorState.pendingTrigger = null;
-            sectorState.epilogueState = EP.RUSH_TO_NATHALIE;
-            sectorState.epilogueTimer = simTime;
-        }
-
-        // ── Boss-defeat signal absorbed here before GameSessionLoop fires endSector ──
-        // We do NOT want the automatic 4s→end flow. Instead we run the epilogue sequence.
-        if (gameState.bossDefeatedTime > 0 && !sectorState.epilogueBossDefeated) {
-            sectorState.epilogueBossDefeated = true;
-            // Prevent GameSessionLoop from triggering endSector by zeroing it immediately.
-            // We will call it ourselves after the full epilogue.
-            gameState.bossDefeatedTime = -1;
-            sectorState.epilogueState = EP.FAMILY_EXIT;
-            sectorState.epilogueTimer = simTime;
-        }
-
-        // ══════════════════════════════════════════════════════════════════════
-        // EPILOGUE STATE MACHINE
-        // ══════════════════════════════════════════════════════════════════════
-        if (!sectorState.epilogueState) sectorState.epilogueState = EP.IDLE;
-        const ep = sectorState.epilogueState;
-        const elapsed = simTime - (sectorState.epilogueTimer || 0);
-
-        const sceneHost = (events as any).scene || (gameState as any).scene;
-        const scene = sceneHost as THREE.Scene;
-
-        // Helper: gather all family members from scene (Zero-GC)
-        const updateFamilyMembers = () => {
-            _familyMembers.length = 0;
-            if (!scene) return;
-            const ch = scene.children;
-            for (let i = 0; i < ch.length; i++) {
-                if (ch[i].userData.isFamilyMember || ch[i].userData.type === 'family') _familyMembers.push(ch[i]);
-            }
-        };
-
-        // Static positions already hoisted as _camOnBuilding, _camLookBuilding
-        _carPos.set(LOCATIONS.ESCAPE_CAR.x, 0, LOCATIONS.ESCAPE_CAR.z);
-
-        // ── EP.RUSH_TO_NATHALIE ─────────────────────────────────────────────
-        if (ep === EP.RUSH_TO_NATHALIE) {
-            // Lock camera on wide shot showing player, family, and building
-            if (elapsed < 100 && events.setCameraOverride) {
-                events.setCameraOverride({
-                    active: true,
-                    targetPos: _camOnBuilding,
-                    lookAtPos: _camLookBuilding,
-                    endTime: renderTime + 60000
-                });
-            }
-
-            // Move all following family members toward the dealership entrance
-            updateFamilyMembers();
-            const family = _familyMembers;
-            const buildingPos = _vS3a.set(
-                LOCATIONS.POIS.SHED.x,
-                0,
-                LOCATIONS.POIS.SHED.z - 5  // just in front of the door
-            );
-            let allInside = true;
-            for (let i = 0; i < family.length; i++) {
-                const fm = family[i];
-                if (!fm.position) continue;
-                // Stop normal FamilySystem from controlling them
-                fm.userData.overrideFollowing = true;
-                _vS3b.subVectors(buildingPos, fm.position);
-                const dist = _vS3b.length();
-                if (dist > 1.0) {
-                    allInside = false;
-                    _vS3b.normalize();
-                    const rushSpeed = 6.0 * delta; // faster than walk
-                    fm.position.addScaledVector(_vS3b, Math.min(rushSpeed, dist));
-                    fm.lookAt(buildingPos);
-
-                    // Animate body
-                    const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
-                    fm.userData.cachedBody = body;
-                    if (body) {
-                        _animState.isMoving = true;
-                        _animState.isRushing = true;
-                        _animState.isDodging = false;
-                        _animState.dodgeStartTime = 0;
-                        _animState.staminaRatio = 1.0;
-                        _animState.isSpeaking = false;
-                        _animState.isThinking = false;
-                        _animState.isCelebrating = false;
-                        _animState.isHugging = false;
-                        _animState.isIdleLong = false;
-                        _animState.isSwimming = false;
-                        _animState.isWading = false;
-                        _animState.seed = fm.userData.seed || 0;
-                        _animState.renderTime = renderTime;
-                        _animState.simTime = simTime;
-
-                        PlayerAnimator.update(body, _animState, renderTime, delta);
-                    }
-                } else {
-                    // Hide them once at the door (they've "entered")
-                    fm.visible = false;
-                }
-            }
-
-            if (allInside && elapsed > 500) {
-                // All family inside — wait 1000 ms then reset camera & give control back
-                if (elapsed > 1500) {
-                    sectorState.epilogueState = EP.AWAIT_INSIDE;
-                    sectorState.epilogueTimer = simTime;
-                    if (events.setCameraOverride) events.setCameraOverride(null);
-                    UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 1, 0, simTime); // 1 = SHOW
-                }
-            }
-        }
-
-        // ── EP.AWAIT_INSIDE ─────────────────────────────────────────────────
-        else if (ep === EP.AWAIT_INSIDE) {
-            // Player has 2000 ms of free control — then SPAWN_BOSS is handled by dialogue system already
-            if (elapsed > 2000) {
-                sectorState.epilogueState = EP.BOSS_FIGHT;
-                sectorState.epilogueTimer = simTime;
-            }
-        }
-
-        // EP.BOSS_FIGHT — just wait for bossDefeatedTime signal (handled above)
-
-        // ── EP.FAMILY_EXIT ──────────────────────────────────────────────────
-        else if (ep === EP.FAMILY_EXIT) {
-            // Aim camera at the building exit
-            if (elapsed < 100 && events.setCameraOverride) {
-                events.setCameraOverride({
-                    active: true,
-                    targetPos: _camOnBuilding,
-                    lookAtPos: _camLookBuilding,
-                    endTime: renderTime + 60000
-                });
-                UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 0, 0, simTime); // 0 = HIDE
-            }
-
-            updateFamilyMembers();
-            const family = _familyMembers;
-
-            // Reveal all family members and walk them out of the building
-            const exitTarget = _vS3a.set(LOCATIONS.REUNION_CENTER.x, 0, LOCATIONS.REUNION_CENTER.z + 5);
-            let allOut = true;
-            for (let i = 0; i < family.length; i++) {
-                const fm = family[i];
-                fm.visible = true;
-                fm.userData.overrideFollowing = true;
-                _vS3b.subVectors(exitTarget, fm.position);
-                const dist = _vS3b.length();
-                if (dist > 1.2) {
-                    allOut = false;
-                    _vS3b.normalize();
-                    fm.position.addScaledVector(_vS3b, Math.min(5.0 * delta, dist));
-                    fm.lookAt(exitTarget);
-                    const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
-                    fm.userData.cachedBody = body;
-                    if (body) {
-                        _animState.isMoving = true;
-                        _animState.isRushing = false;
-                        _animState.isDodging = false;
-                        _animState.dodgeStartTime = 0;
-                        _animState.staminaRatio = 1.0;
-                        _animState.isSpeaking = false;
-                        _animState.isThinking = false;
-                        _animState.isCelebrating = false;
-                        _animState.isHugging = false;
-                        _animState.isIdleLong = false;
-                        _animState.isSwimming = false;
-                        _animState.isWading = false;
-                        _animState.seed = fm.userData.seed || 0;
-                        _animState.renderTime = renderTime;
-                        _animState.simTime = simTime;
-
-                        PlayerAnimator.update(body, _animState, renderTime, delta);
-                    }
-                }
-            }
-
-            if (allOut && elapsed > 300) {
-                sectorState.epilogueState = EP.PLAYER_WALK;
-                sectorState.epilogueTimer = simTime;
-                // Store player's boss-kill position so Robert walks FROM there
-                sectorState.robertWalkStart = playerPos.clone();
-            }
-        }
-
-        // ── EP.PLAYER_WALK ──────────────────────────────────────────────────
-        else if (ep === EP.PLAYER_WALK) {
-            // Robert's mesh is the playerGroup — move it toward the reunion centre
-            const center = _vS3a.set(LOCATIONS.REUNION_CENTER.x, 0, LOCATIONS.REUNION_CENTER.z);
-            _vS3b.subVectors(center, playerPos);
-            const dist = _vS3b.length();
-            if (dist > 1.5) {
-                _vS3b.normalize();
-                // We can't directly teleport playerPos (read-only snapshot), but we can
-                // signal the camera and let the FamilySystem form the ring early.
-                // The player retains control but we orient the camera.
-            }
-            // Wait for player to walk close enough OR timeout
-            if (dist < 4.0 || elapsed > 5000) {
-                sectorState.epilogueState = EP.RING_FORM;
-                sectorState.epilogueTimer = simTime;
-            }
-        }
-
-        // ── EP.RING_FORM ────────────────────────────────────────────────────
-        else if (ep === EP.RING_FORM) {
-            const cx = LOCATIONS.REUNION_CENTER.x;
-            const cz = LOCATIONS.REUNION_CENTER.z;
-            updateFamilyMembers();
-            const family = _familyMembers;
-            let allFormed = true;
-
-            for (let i = 0; i < family.length; i++) {
-                const fm = family[i];
-                const off = RING_OFFSETS[i % RING_OFFSETS.length];
-                const tx = cx + off[0];
-                const tz = cz + off[1];
-                _vS3a.set(tx, 0, tz);
-                _vS3b.subVectors(_vS3a, fm.position);
-                const dist = _vS3b.length();
-                if (dist > 0.3) {
-                    allFormed = false;
-                    _vS3b.normalize();
-                    fm.position.addScaledVector(_vS3b, Math.min(4.0 * delta, dist));
-                }
-                // Face the centre
-                fm.lookAt(cx, 0, cz);
-                const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
-                if (body) {
-                    _animState.isMoving = dist > 0.3;
-                    _animState.isRushing = false;
-                    _animState.isDodging = false;
-                    _animState.dodgeStartTime = 0;
-                    _animState.staminaRatio = 1.0;
-                    _animState.isSpeaking = false;
-                    _animState.isThinking = false;
-                    _animState.isCelebrating = false;
-                    _animState.isHugging = false;
-                    _animState.isIdleLong = false;
-                    _animState.isSwimming = false;
-                    _animState.isWading = false;
-                    _animState.seed = fm.userData.seed || 0;
-                    _animState.renderTime = renderTime;
-                    _animState.simTime = simTime;
-
-                    PlayerAnimator.update(body, _animState, renderTime, delta);
-                }
-            }
-
-            if ((allFormed || elapsed > 3000) && elapsed > 500) {
-                sectorState.epilogueState = EP.CELEBRATE;
-                sectorState.epilogueTimer = simTime;
-                sectorState.cheerSoundPlayed = false;
-            }
-        }
-
-        // ── EP.CELEBRATE (3000 ms) ──────────────────────────────────────────
-        else if (ep === EP.CELEBRATE) {
-            if (!sectorState.cheerSoundPlayed) {
-                sectorState.cheerSoundPlayed = true;
-                audioEngine.playSound(SoundID.VO_FAMILY_CHEER, 0.9);
-                audioEngine.playSound(SoundID.UI_VICTORY, 0.5);
-            }
-
-            const family = _familyMembers; // Already updated in RING_FORM
-            for (let i = 0; i < family.length; i++) {
-                const fm = family[i];
-                const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
-                if (body) {
-                    _animState.isMoving = false;
-                    _animState.isRushing = false;
-                    _animState.isDodging = false;
-                    _animState.dodgeStartTime = 0;
-                    _animState.staminaRatio = 1.0;
-                    _animState.isSpeaking = true;
-                    _animState.isCelebrating = true;
-                    _animState.isThinking = false;
-                    _animState.isHugging = false;
-                    _animState.isIdleLong = false;
-                    _animState.isSwimming = false;
-                    _animState.isWading = false;
-                    _animState.seed = fm.userData.seed || 0;
-                    _animState.renderTime = renderTime;
-                    _animState.simTime = simTime;
-
-                    PlayerAnimator.update(body, _animState, renderTime, delta);
-                }
-            }
-
-            if (elapsed > 3000) {
-                sectorState.epilogueState = EP.HUG;
-                sectorState.epilogueTimer = simTime;
-                sectorState.kissSoundPlayed = false;
-            }
-        }
-
-        // ── EP.HUG ──────────────────────────────────────────────────────────
-        else if (ep === EP.HUG) {
-            if (!sectorState.kissSoundPlayed) {
-                sectorState.kissSoundPlayed = true;
-                audioEngine.playSound(SoundID.VO_FAMILY_KISS, 0.85);
-            }
-
-            const family = _familyMembers;
-            for (let i = 0; i < family.length; i++) {
-                const fm = family[i];
-                const body = fm.userData.cachedBody || fm.children.find((c: any) => c.userData.isBody);
-                if (body) {
-                    _animState.isMoving = false;
-                    _animState.isRushing = false;
-                    _animState.isDodging = false;
-                    _animState.dodgeStartTime = 0;
-                    _animState.staminaRatio = 1.0;
-                    _animState.isSpeaking = false;
-                    _animState.isHugging = true;
-                    _animState.isThinking = false;
-                    _animState.isCelebrating = false;
-                    _animState.isIdleLong = false;
-                    _animState.isSwimming = false;
-                    _animState.isWading = false;
-                    _animState.seed = fm.userData.seed || 0;
-                    _animState.renderTime = renderTime;
-                    _animState.simTime = simTime;
-
-                    PlayerAnimator.update(body, _animState, renderTime, delta);
-                }
-            }
-
-            // After hug, zoom camera to the escape car
-            if (elapsed > 3500) {
-                sectorState.epilogueState = EP.CAR_ZOOM;
-                sectorState.epilogueTimer = simTime;
-
-                // Activate the escape car interaction
-                if (scene) {
-                    const escapeCar = scene.getObjectByName('s3_escape_car');
-                    if (escapeCar) {
-                        escapeCar.userData.isInteractable = true;
-                        // Re-register with collision grid
-                        SectorBuilder.addInteractable(
-                            ctx,
-                            escapeCar,
-                            {
-                                id: 's3_escape_car',
-                                type: InteractionType.VEHICLE,
-                                label: 'ui.interact_enter_car',
-                                collider: { type: InteractionShape.SPHERE, radius: 4.0 }
-                            }
-                        );
-                    }
-                }
-            }
-        }
-
-        // ── EP.CAR_ZOOM (1500 ms) ────────────────────────────────────────────
-        else if (ep === EP.CAR_ZOOM) {
-            if (elapsed < 100 && events.setCameraOverride) {
-                // Pan camera to frame the escape car
-                const carCamPos = _vS3a.copy(_carPos).add(_vS3b.set(0, 8, 10));
-                events.setCameraOverride({
-                    active: true,
-                    targetPos: carCamPos,
-                    lookAtPos: _carPos,
-                    endTime: renderTime + 1700
-                });
-            }
-
-            if (elapsed > 1500) {
-                sectorState.epilogueState = EP.DRIVE;
-                sectorState.epilogueTimer = simTime;
-
-                // Return camera control to player and show HUD
-                if (events.setCameraOverride) events.setCameraOverride(null);
-
-                UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 1, 0, simTime); // 1 = SHOW
-            }
-        }
-
-        // ── EP.DRIVE (5000 ms) ───────────────────────────────────────────────
-        else if (ep === EP.DRIVE) {
-            // After 5 seconds of driving, trigger the sector report
-            if (elapsed > 5000 && !sectorState.epilogueDone) {
-                sectorState.epilogueDone = true;
-                sectorState.epilogueState = EP.DONE;
-                // Drive into the sunset — trigger ScreenSectorReport (final epilogue screen)
-                events.onAction([
-                    { type: TriggerActionType.END_SECTOR, payload: { isCompleted: true } }
-                ]);
-            }
-        }
-    }
+    events: [epilogueEvent]
 };
 
 function spawnSectorHordes(ctx: SectorBuildContext) {

@@ -12,7 +12,7 @@ import ScreenStartGame from './components/ui/screens/ScreenStartGame';
 import ScreenLoading from './components/ui/screens/ScreenLoading';
 import Prologue from './components/ui/screens/Prologue';
 import Camp from './components/camp/Camp';
-import GameHUD from './components/ui/hud/GameHUD';
+import GameHUD from './components/ui/hud/game/GameHUD';
 import ScreenPause from './components/ui/screens/ScreenPause';
 import ScreenMap from './components/ui/screens/ScreenMap';
 import ScreenTeleport from './components/ui/screens/ScreenTeleport';
@@ -40,7 +40,7 @@ import { AssetPreloader } from './systems/AssetPreloader';
 import { WinterEngine, GameSettings } from './core/engine/WinterEngine';
 import { HudStore } from './store/HudStore';
 import { SectorSystem } from './systems/SectorSystem';
-import { OverlayType, DiscoveryType } from './components/ui/hud/HudTypes';
+import { OverlayType, DiscoveryType } from './components/ui/hud/game/HudTypes';
 import { StatsBridge } from './core/data/StatsBridge';
 import { MAX_ENTITIES } from './content/constants';
 import { useInput } from './game/session/useInput';
@@ -74,6 +74,7 @@ const App: React.FC = () => {
 
     const [isMobileDevice, setIsMobileDevice] = useState(checkIsMobileDevice());
     const [isPointerLocked, setIsPointerLocked] = useState(false);
+    const [isCtrlInspect, setIsCtrlInspect] = useState(false);
 
     const [hasInteracted, setHasInteracted] = useState(!isMobileDevice);
 
@@ -117,6 +118,7 @@ const App: React.FC = () => {
 
         const checkMobile = () => setIsMobileDevice(checkIsMobileDevice());
         const handleLockChange = () => setIsPointerLocked(!!document.pointerLockElement);
+        const handleCtrlInspect = (e: Event) => setIsCtrlInspect(!!(e as CustomEvent).detail?.active);
 
         const handleOpenAdventureLogEvent = (e: any) => {
             const tab = e.detail?.tab;
@@ -136,6 +138,7 @@ const App: React.FC = () => {
 
         window.addEventListener('resize', checkMobile);
         document.addEventListener('pointerlockchange', handleLockChange);
+        window.addEventListener('ctrl-inspect-mode', handleCtrlInspect);
         window.addEventListener('open-adventure-log', handleOpenAdventureLogEvent);
         window.addEventListener('open-statistics', handleOpenStatisticsEvent);
         window.addEventListener('trigger-side-banner-preview', handleSectorBannerPreviewEvent);
@@ -153,6 +156,7 @@ const App: React.FC = () => {
         return () => {
             window.removeEventListener('resize', checkMobile);
             document.removeEventListener('pointerlockchange', handleLockChange);
+            window.removeEventListener('ctrl-inspect-mode', handleCtrlInspect);
             window.removeEventListener('open-adventure-log', handleOpenAdventureLogEvent);
             window.removeEventListener('open-statistics', handleOpenStatisticsEvent);
             window.removeEventListener('trigger-side-banner-preview', handleSectorBannerPreviewEvent);
@@ -308,9 +312,19 @@ const App: React.FC = () => {
     const handleEnemyDiscoveredAction = useCallback((_type: number) => { }, []);
     const handleBossDiscoveredAction = useCallback((_id: number) => { }, []);
 
-    const handleDialogueStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? OverlayType.DIALOGUE : OverlayType.NONE), []);
+    const handleDialogueStateChangeAction = useCallback((active: boolean) => {
+        setActiveOverlay(current => {
+            if (current === OverlayType.DEATH) return current;
+            return active ? OverlayType.DIALOGUE : (current === OverlayType.DIALOGUE ? OverlayType.NONE : current);
+        });
+    }, []);
     const handleDeathStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? OverlayType.DEATH : OverlayType.NONE), []);
-    const handleBossIntroStateChangeAction = useCallback((active: boolean) => setActiveOverlay(active ? OverlayType.INTRO : OverlayType.NONE), []);
+    const handleBossIntroStateChangeAction = useCallback((active: boolean) => {
+        setActiveOverlay(current => {
+            if (current === OverlayType.DEATH) return current;
+            return active ? OverlayType.INTRO : (current === OverlayType.INTRO ? OverlayType.NONE : current);
+        });
+    }, []);
 
     const handleBossDefeatedAction = useCallback((bossId: BossID) => {
         // FIX 1: Capture sectorStats immediately so progress is persisted even if the game closes.
@@ -812,7 +826,7 @@ const App: React.FC = () => {
         }
     );
 
-    const cursorHidden = isMobileDevice || isPointerLocked || (hasInteracted && gameState.screen === GameScreen.SECTOR && activeOverlay === OverlayType.NONE);
+    const cursorHidden = !isCtrlInspect && (isMobileDevice || isPointerLocked || (hasInteracted && gameState.screen === GameScreen.SECTOR && activeOverlay === OverlayType.NONE));
     const showHUD = hasInteracted && (activeOverlay === OverlayType.NONE || activeOverlay === OverlayType.INTRO) && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && gameState.screen === GameScreen.SECTOR;
 
     // Boolean to check if we should mount/keep GameSession alive

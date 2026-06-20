@@ -303,7 +303,7 @@ export class FamilySystem implements System {
                     if (_buoyancyResult.inWater) {
                         const swimY = _buoyancyResult.waterLevel - 0.35;
                         const targetY = _animState.isSwimming ? swimY : _buoyancyResult.groundY;
-                        fm.position.y = THREE.MathUtils.lerp(fm.position.y, targetY, 4 * delta);
+                        fm.position.y = THREE.MathUtils.lerp(fm.position.y, targetY, Math.min(1.0, 4 * delta));
 
                         if (_animState.isSwimming || _animState.isWading) {
                             const rx = familyMember.lastRippleX ?? fm.position.x + 99;
@@ -321,7 +321,7 @@ export class FamilySystem implements System {
                         _animState.isSwimming = false;
                         _animState.isWading = false;
                         if (fm.position.y !== groundY) {
-                            fm.position.y = THREE.MathUtils.lerp(fm.position.y, groundY, 15 * delta);
+                            fm.position.y = THREE.MathUtils.lerp(fm.position.y, groundY, Math.min(1.0, 15 * delta));
                             if (Math.abs(fm.position.y - groundY) < 0.01) fm.position.y = groundY;
                         }
                     }

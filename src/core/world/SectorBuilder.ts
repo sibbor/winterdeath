@@ -28,7 +28,7 @@ import { worldStateRegistry } from './WorldStateRegistry';
 import { ChunkManager } from './ChunkManager';
 import { PoiGenerator } from './generators/PoiGenerator';
 import { InteractionType, InteractionSubType, InteractionShape } from '../../systems/ui/UIEventBridge';
-import { MapItemType } from '../../components/ui/hud/HudTypes';
+import { MapItemType } from '../../components/ui/hud/game/HudTypes';
 import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { PhysicsGroup, ColliderType } from './CollisionResolution';
 import { warmupProceduralTextures, isProceduralTexturesReady } from '../../utils/assets/procedural';

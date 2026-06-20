@@ -777,6 +777,7 @@ export const en = {
         "Upgrading 'Vitality' helps you survive longer.",
         "Upgrading 'Adrenaline' helps you run for longer periods of time.",
         "Upgrading 'Reflexes' helps you outrun the zombies.",
+        "Hold down [CTRL] to release the cursor and enter inspect mode",
     ],
     sectors: {
         camp_name: "The Camp",

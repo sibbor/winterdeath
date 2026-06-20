@@ -45,6 +45,15 @@ export interface Obstacle {
     // Mutation Persistence
     logicId?: number; // Unique ID within the chunk (0-511)
     isMutated?: boolean; // Flag for state serialization (e.g. destroyed)
+
+    // Destroyable Properties
+    durability?: number;        // Current HP / durability (e.g., 0-100)
+    maxDurability?: number;     // Maximum HP capacity
+    originalMaterials?: any;    // Cached materials to restore after white flash
+    excludedWeapons?: number[]; // WeaponIDs excluded from damaging this obstacle
+    lastHitTime?: number;       // Timestamp of last hit
+    flashTimer?: any;           // Timeout handle for restoring original material
+    onDestroyObject?: (session: any, obstacle: Obstacle) => void; // Event triggered on destruction
 }
 
 // --- PERFORMANCE SCRATCHPADS ---

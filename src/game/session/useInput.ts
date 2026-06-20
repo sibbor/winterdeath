@@ -3,7 +3,7 @@ import { GameCanvasProps } from '../../types/CanvasTypes';
 import { PlayerStatusFlags } from '../../types/CareerStats';
 import { InputAction, INPUT_KEY_MAP } from '../../core/engine/InputManager';
 import { MetaActionId } from '../../systems/ui/UIEventBridge';
-import { OverlayType } from '../../components/ui/hud/HudTypes';
+import { OverlayType } from '../../components/ui/hud/game/HudTypes';
 import { GameScreen } from '../../types/SessionTypes';
 import { HudStore } from '../../store/HudStore';
 import { UISounds } from '../../utils/audio/AudioLib';

@@ -449,7 +449,8 @@ export const EnemyAI = {
 
         // --- VINTERDÖD STABILIZATION: PERCEPTION UPDATE (Visual + Noise) ---
         // Staggered perception check (once every 15 frames) to minimize CPU overhead
-        if ((enemy.poolId + Math.floor(simTime * 60)) % 15 === 0 && enemy.hp > 0) {
+        const waveDisabled = enemy.isWaveEnemy && session.state?.sectorState?.waveDisabled;
+        if (!waveDisabled && (enemy.poolId + Math.floor(simTime * 60)) % 15 === 0 && enemy.hp > 0) {
             const dx = playerPos.x - enemy.mesh.position.x;
             const dz = playerPos.z - enemy.mesh.position.z;
             const distSq = dx * dx + dz * dz;
@@ -594,6 +595,13 @@ export const EnemyAI = {
         const isKnockedBackH = (enemy.knockbackVel.x * enemy.knockbackVel.x + enemy.knockbackVel.z * enemy.knockbackVel.z) > 0.05;
 
         // --- 9. STATE MACHINE ---
+        if (waveDisabled) {
+            enemy.awareness = 0;
+            if (enemy.state !== AIState.IDLE && enemy.state !== AIState.WANDER) {
+                enemy.state = AIState.IDLE;
+                enemy.idleTimer = 1.0;
+            }
+        }
         switch (enemy.state) {
             case AIState.IDLE:
                 enemy.idleTimer -= delta;

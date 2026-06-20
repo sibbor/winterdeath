@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ColliderType } from '../core/world/CollisionResolution';
+import { ColliderType, Obstacle } from '../core/world/CollisionResolution';
 import { ProjectilePoolState, MAX_PROJECTILES } from '../core/pools/ProjectilePool';
 import { DamageID, DamageType, WeaponID } from '../entities/player/CombatTypes';
 import { StatID, PlayerStatusFlags } from '../types/CareerStats';
@@ -17,6 +17,109 @@ import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { MaterialType } from '../content/environment';
 import { WEAPONS } from '../content/weapons';
 import { FXParticleType } from '../types/FXTypes';
+import { ChunkManager } from '../core/world/ChunkManager';
+import { worldStateRegistry } from '../core/world/WorldStateRegistry';
+
+// White material for flashing damaged destroyable objects
+const _whiteFlashMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+
+function applyWhiteFlash(mesh: THREE.Object3D, obs: Obstacle) {
+    if (!mesh) return;
+
+    if (!obs.originalMaterials) {
+        obs.originalMaterials = [];
+        mesh.traverse((child: any) => {
+            if (child.isMesh) {
+                obs.originalMaterials.push({ mesh: child, material: child.material });
+            }
+        });
+    }
+
+    mesh.traverse((child: any) => {
+        if (child.isMesh) {
+            child.material = _whiteFlashMaterial;
+        }
+    });
+
+    obs.lastHitTime = performance.now();
+
+    if (obs.flashTimer) {
+        clearTimeout(obs.flashTimer);
+    }
+
+    obs.flashTimer = setTimeout(() => {
+        if (obs.originalMaterials) {
+            for (let i = 0; i < obs.originalMaterials.length; i++) {
+                const entry = obs.originalMaterials[i];
+                if (entry.mesh) {
+                    entry.mesh.material = entry.material;
+                }
+            }
+        }
+        obs.flashTimer = null;
+    }, 70);
+}
+
+function damageObstacle(session: GameSessionLogic, obs: Obstacle, damage: number, weaponId: number) {
+    if (obs.isMutated || obs.durability === undefined || obs.durability <= 0) return;
+
+    if (obs.excludedWeapons && obs.excludedWeapons.indexOf(weaponId) !== -1) {
+        return;
+    }
+
+    obs.durability = Math.max(0, obs.durability - damage);
+
+    if (obs.durability <= 0) {
+        obs.isMutated = true;
+
+        const streamer = session.systems.worldStreamer;
+        if (streamer) {
+            if (obs._currentChunkKey !== undefined && obs._currentChunkKey !== -1) {
+                const oldGrid = streamer.getGridByKey(obs._currentChunkKey);
+                if (oldGrid) {
+                    const bIdx = obs._bucketIndex!;
+                    const count = oldGrid.obstacleCounts[bIdx];
+                    const localIdx = obs._internalBucketIdx!;
+                    if (localIdx !== undefined && localIdx !== -1 && localIdx < count) {
+                        const last = oldGrid.obstacleBuckets[bIdx][count - 1];
+                        oldGrid.obstacleBuckets[bIdx][localIdx] = last;
+                        if (last) last._internalBucketIdx = localIdx;
+                        oldGrid.obstacleBuckets[bIdx][count - 1] = null;
+                        oldGrid.obstacleCounts[bIdx]--;
+                    }
+                }
+            }
+        }
+
+        const x = obs.position.x;
+        const z = obs.position.z;
+        const ix = ChunkManager.getCoordIndex(x);
+        const iz = ChunkManager.getCoordIndex(z);
+        const key = ChunkManager.getSmiKey(ix, iz);
+        if (obs.logicId !== undefined) {
+            worldStateRegistry.setMutation(key, obs.logicId, true);
+        }
+
+        if (obs.mesh) {
+            obs.mesh.visible = false;
+        }
+
+        const matType = obs.materialId || 0;
+        const fxType = (matType === 2) ? FXParticleType.GLASS : FXParticleType.DEBRIS;
+        session.spawnParticle(x, obs.position.y + 0.5, z, fxType, 12);
+        session.spawnParticle(x, obs.position.y + 0.5, z, FXParticleType.SMOKE, 4);
+
+        GamePlaySounds.playImpact(matType);
+
+        if (obs.onDestroyObject) {
+            obs.onDestroyObject(session, obs);
+        }
+    } else {
+        if (obs.mesh) {
+            applyWhiteFlash(obs.mesh, obs);
+        }
+    }
+}
 
 // --- ZERO-GC SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
@@ -178,6 +281,10 @@ export class ProjectileSystem implements System {
                         } else {
                             GamePlaySounds.playImpact(obs.materialId || MaterialType.GENERIC);
                             session.makeNoise(_v5, NoiseType.BULLET_HIT, NOISE_RADIUS[NoiseType.BULLET_HIT]);
+
+                            if (obs.durability !== undefined && obs.durability > 0) {
+                                damageObstacle(this.session, obs, pool.damage[i], pool.weaponId[i]);
+                            }
                         }
                         break;
                     }
@@ -359,6 +466,30 @@ export class ProjectileSystem implements System {
         const nearby = streamer.getEnemyPool().getPool(poolIdx);
         const nearCount = streamer.getEnemyPool().getCount(poolIdx);
         const activeEnemies = EnemyManager.getActiveEnemies();
+
+        // AOE Explosive Damage to Destroyable Obstacles
+        if (streamer) {
+            const obsPoolIdx = streamer.getObstaclePool().nextIndex();
+            streamer.getNearbyObstacles(px, pz, radius + 2.0, obsPoolIdx);
+            const nearbyObs = streamer.getObstaclePool().getPool(obsPoolIdx);
+            const nearObsCount = streamer.getObstaclePool().getCount(obsPoolIdx);
+            const weaponId = pool.weaponId[idx];
+
+            for (let i = 0; i < nearObsCount; i++) {
+                const obs = nearbyObs[i];
+                if (obs && obs.durability !== undefined && obs.durability > 0 && !obs.isMutated) {
+                    const dx = obs.position.x - px;
+                    const dz = obs.position.z - pz;
+                    const distSq = dx * dx + dz * dz;
+                    const maxDist = radius + (obs.radius || 2.0);
+                    if (distSq < maxDist * maxDist) {
+                        const dist = Math.sqrt(distSq);
+                        const falloffDmg = damage * (1.0 - Math.min(1.0, dist / maxDist));
+                        damageObstacle(this.session, obs, falloffDmg, weaponId);
+                    }
+                }
+            }
+        }
 
         for (let i = 0; i < nearCount; i++) {
             const enemy = nearby[i];
@@ -588,6 +719,49 @@ export class ProjectileSystem implements System {
         const enemies = EnemyManager.getActiveEnemies();
         const activeCount = EnemyPoolState.activeCount;
         let anyHit = false;
+
+        // Damage Destroyable Obstacles from continuous fire
+        const streamer = this.session.systems.worldStreamer;
+        if (streamer) {
+            const obsPoolIdx = streamer.getObstaclePool().nextIndex();
+            streamer.getNearbyObstacles(px, pz, range + 2.0, obsPoolIdx);
+            const obstacles = streamer.getObstaclePool().getPool(obsPoolIdx);
+            const obsCount = streamer.getObstaclePool().getCount(obsPoolIdx);
+
+            for (let i = 0; i < obsCount; i++) {
+                const obs = obstacles[i];
+                if (obs && obs.durability !== undefined && obs.durability > 0 && !obs.isMutated) {
+                    const ex = obs.position.x - px;
+                    const ez = obs.position.z - pz;
+                    const dSq = ex * ex + ez * ez;
+                    const combinedRange = range + (obs.radius || 2.0);
+                    if (dSq > combinedRange * combinedRange) continue;
+
+                    const dot = ex * aimX + ez * aimZ;
+                    if (dot <= 0) continue;
+
+                    let hit = false;
+                    if (wepId === WeaponID.FLAMETHROWER) {
+                        const cosHalfAngle = COMBAT.FLAMETHROWER_CONE_COS;
+                        const invDist = 1.0 / Math.sqrt(dSq);
+                        if ((ex * invDist * aimX + ez * invDist * aimZ) > cosHalfAngle) {
+                            hit = true;
+                        }
+                    } else { // ARC_CANNON
+                        const beamWidth = 1.2;
+                        const cross = ex * aimZ - ez * aimX;
+                        if (Math.abs(cross) < beamWidth + (obs.radius || 2.0)) {
+                            hit = true;
+                        }
+                    }
+
+                    if (hit) {
+                        anyHit = true;
+                        damageObstacle(this.session, obs, damage, wepId);
+                    }
+                }
+            }
+        }
 
         // --- PIPELINE DISPATCHER JUMP TABLE (LOOP INVERSION) ---
         switch (wepId) {

@@ -6,7 +6,7 @@ import { SectorBuilder } from '../SectorBuilder';
 import { GeneratorUtils } from './GeneratorUtils';
 import { PhysicsGroup, ColliderType } from '../CollisionResolution';
 import { MaterialType } from '../../../content/environment';
-import { MapItemType } from '../../../components/ui/hud/HudTypes';
+import { MapItemType } from '../../../components/ui/hud/game/HudTypes';
 import { ChunkManager } from '../ChunkManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -125,7 +125,7 @@ export const PathGenerator = {
         if (!polygon || polygon.length < 2) return;
         const height = 50;
         const thickness = 4.0;
-        
+
         const segmentCount = isClosed ? polygon.length : polygon.length - 1;
 
         for (let i = 0; i < segmentCount; i++) {

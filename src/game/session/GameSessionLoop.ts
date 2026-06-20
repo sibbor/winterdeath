@@ -10,11 +10,10 @@ import { CAMERA_HEIGHT } from '../../content/constants';
 import { audioEngine } from '../../utils/audio/AudioEngine';
 import { Enemy, EnemyFlags, EnemyDeathState, NoiseType, EnemyType } from '../../entities/enemies/EnemyTypes';
 import { StatusEffectID } from '../../types/StatusEffects';
-import { DeathPhase } from '../../types/SessionTypes';
 import { StatID, PlayerStatusFlags } from '../../types/CareerStats';
 import { DamageID, DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
-import { DiscoveryType } from '../../components/ui/hud/HudTypes';
+import { DiscoveryType } from '../../components/ui/hud/game/HudTypes';
 import { InteractionType } from '../../systems/ui/UIEventBridge';
 import { SoundID } from '../../utils/audio/AudioTypes';
 import { NavigationSystem } from '../../systems/NavigationSystem';
@@ -469,9 +468,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         }
 
         // 6. Session updates
-        const isBusEvent = state.sectorState?.busEventState >= 1 && state.sectorState?.busEventState <= 3;
+        const isInputDisabled = state.sectorState?.isInputDisabled || false;
 
-        if (isCinematic || isBossIntro || isDead || isBusEvent) {
+        if (isCinematic || isBossIntro || isDead || isInputDisabled) {
             session.inputDisabled = true;
         } else {
             session.inputDisabled = !!propsRef.current.disableInput || (!!refs.cameraOverrideRef.current?.active);

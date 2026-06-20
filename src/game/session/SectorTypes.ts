@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TriggerSystem } from '../../systems/TriggerSystem';
-import { MapItem } from '../../components/ui/hud/HudTypes';
+import { MapItem } from '../../components/ui/hud/game/HudTypes';
 import { SoundID, ToneType } from '../../utils/audio/AudioTypes';
 import { WeatherType, GroundType, EnvironmentConfig, EnvironmentalZone } from '../../core/engine/EnvironmentalTypes';
 import { SectorState } from '../../types/StateTypes';
@@ -191,6 +191,40 @@ export interface SectorDef {
     onSectorUpdate: (ctx: SectorUpdateContext) => void;
     onInteract?: (id: string, object: THREE.Object3D, state: any, events: any) => void;
     onPlayerRespawn?: (ctx: SectorBuildContext, state: any, engine: any) => void;
+    events?: SectorEvent[];
+}
+
+export const MAX_SECTOR_EVENTS = 8;
+
+export enum SectorEventConstraint {
+    NONE = 0,
+    DISABLE_INPUT = 1 << 0,
+    DISABLE_ENEMIES = 1 << 1,
+    DISABLE_TELEPORT = 1 << 2,
+    HIDE_HUD = 1 << 3
+}
+
+export interface SectorEventState {
+    state: number;
+    timer: number;
+    n1: number;
+    n2: number;
+    n3: number;
+    n4: number;
+    b1: boolean;
+    b2: boolean;
+    b3: boolean;
+    b4: boolean;
+    v1: THREE.Vector3;
+    v2: THREE.Vector3;
+}
+
+export interface SectorEvent {
+    id: string;
+    onUpdate: (ctx: SectorUpdateContext, eventState: SectorEventState) => number;
+    onStart?: (ctx: SectorUpdateContext, eventState: SectorEventState) => void;
+    onInteract?: (id: string, object: THREE.Object3D, ctx: SectorUpdateContext, eventState: SectorEventState) => boolean;
+    onPlayerRespawn?: (ctx: SectorBuildContext, state: any, engine: any, eventState: SectorEventState) => void;
 }
 
 export interface SectorUpdateContext {

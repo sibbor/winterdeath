@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { StatusEffectID } from '../content/perks';
 import { DamageID } from '../entities/player/CombatTypes';
-import { MAX_ENTITIES } from '../content/constants';
+import { MAX_ENTITIES, PLAYER } from '../content/constants';
 
 /**
  * Player DOD & Zero-GC Refactor (Career Stats)
@@ -426,7 +426,7 @@ export const INITIAL_STATS: CareerStats = {
         buffer[StatID.NEXT_LEVEL_XP] = 1500;
         buffer[StatID.SKILL_POINTS] = 0;
         buffer[StatID.SCRAP] = 0;
-        buffer[StatID.SPEED] = 20.0; // PLAYER.BASE_SPEED (20.0)
+        buffer[StatID.SPEED] = PLAYER.BASE_SPEED;
 
         // --- TOTALS ---
         buffer[StatID.TOTAL_SCRAP_COLLECTED] = 0;

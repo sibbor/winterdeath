@@ -24,7 +24,7 @@ import { StatsBridge } from '../../core/data/StatsBridge';
 import { DataResolver } from '../../core/data/DataResolver';
 import { TriggerType, TriggerActionType } from '../../types/TriggerTypes';
 import { BossID } from './SectorTypes';
-import { OverlayType, DiscoveryType } from '../../components/ui/hud/HudTypes';
+import { OverlayType, DiscoveryType } from '../../components/ui/hud/game/HudTypes';
 import { PERKS, PerkCategory } from '../../content/perks';
 import { GameScreen, DeathPhase } from '../../types/SessionTypes';
 import { FXParticleType, FXDecalType } from '../../types/FXTypes';
@@ -466,6 +466,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
+                // Cinematic
                 const cinematic = refs.gameSessionRef.current?.systems.cinematic;
                 if (cinematic && refs.gameSessionRef.current) {
                     const sectorId = payload.sectorId !== undefined ? payload.sectorId : props.gameState.currentSector;
@@ -807,20 +808,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         bossName: bossName
                     });
 
-                    // Dispatch custom event to configure the SideBanner for the boss intro
-                    const bannerEvent = new CustomEvent('trigger-side-banner-preview', {
-                        detail: {
-                            title: bossName,
-                            subtitle: t('ui.boss_encounter')
-                        }
-                    });
-                    window.dispatchEvent(bannerEvent);
-
                     // Trigger UI state change via context callback to alert App.tsx
                     setupContextRef.current?.ui.setBossIntroActive(true);
 
                     // TODO: play boss fight music instead
-                    audioEngine.playSound(SoundID.ZOMBIE_GROWL_TANK);
+                    //audioEngine.playSound(SoundID.ZOMBIE_GROWL_TANK);
 
                     if (refs.bossIntroTimerRef.current) clearTimeout(refs.bossIntroTimerRef.current);
                     refs.bossIntroTimerRef.current = setTimeout(() => {
@@ -1034,7 +1026,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     } else if (atBoss) {
                         if (!state.checkpoint) state.checkpoint = { active: true, x: 0, y: 0, z: 0 };
                         state.checkpoint.active = true;
-                        
+
                         const sectorData = (props as any).currentSectorData || SectorSystem.getSector(props.gameState.currentSector || 0);
                         if (sectorData && sectorData.bossSpawn) {
                             state.checkpoint.x = sectorData.bossSpawn.x;

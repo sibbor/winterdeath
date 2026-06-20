@@ -387,7 +387,7 @@ export class WaterSystem implements System {
         // Apply water inertia (mass) - water reacts much slower than leaves
         // Significant mass increase (0.2 -> 0.05, 0.1 -> 0.02)
         this.waterStrength += (this.targetWaterStrength - this.waterStrength) * (delta * 0.05);
-        this.waterDirection.lerp(this.targetWaterDirection, delta * 0.02);
+        this.waterDirection.lerp(this.targetWaterDirection, Math.min(1.0, delta * 0.02));
 
         // Animate shared vegetation shaders directly with absolute zero-GC
         SHARED_WATER_VEG_UNIFORMS.uTime.value = renderTime * 0.001;
@@ -526,7 +526,7 @@ export class WaterSystem implements System {
 
                 // Waterlilies smoothly lerp to the surface to prevent "hysterical bouncing"
                 if (prop.userData.isBall) {
-                    prop.position.y += (targetY - prop.position.y) * 8.0 * dt;
+                    prop.position.y += (targetY - prop.position.y) * Math.min(1.0, 8.0 * dt);
                     vel.y = 0;
                     vel.x *= 0.85;
                     vel.z *= 0.85;
@@ -633,7 +633,7 @@ export class WaterSystem implements System {
                 // Waterlilies smoothly lerp to the surface
                 const targetY = _buoyancyResult.waterLevel - 0.05; // Stay flush
                 if (Math.abs(targetY - data.position.y) > 0.005) {
-                    data.position.y += (targetY - data.position.y) * 8.0 * dt;
+                    data.position.y += (targetY - data.position.y) * Math.min(1.0, 8.0 * dt);
                     elementNeedsUpdate = true;
                 }
                 data.velocity = 0;

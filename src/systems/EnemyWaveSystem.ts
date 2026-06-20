@@ -14,6 +14,7 @@ export interface EnemyWaveConfig {
         pos: { x: number; z: number };
     }>;
     attractorPos?: { x: number; z: number };
+    disabled?: boolean; // If true, wave starts dormant/passive without HUD showing
 }
 
 export class EnemyWaveSystem implements System {
@@ -28,7 +29,7 @@ export class EnemyWaveSystem implements System {
     // Wave chain state
     private waveQueue: EnemyWaveConfig[] = [];
     private currentWaveIndex: number = -1;
-    private chainCallback: (() => void) | null = null;
+    private chainCallback: ((session?: any) => void) | null = null;
     private isChainActive: boolean = false;
 
     // Temporary scratch position to avoid allocation
@@ -39,10 +40,16 @@ export class EnemyWaveSystem implements System {
         this.session = session;
     }
 
-    public startWaveChain(waves: EnemyWaveConfig[], onComplete?: () => void): void {
+    public startWaveChain(waves: EnemyWaveConfig[], options?: (() => void) | { onWaveComplete?: () => void }): void {
         this.waveQueue = waves;
         this.currentWaveIndex = 0;
-        this.chainCallback = onComplete || null;
+        if (typeof options === 'function') {
+            this.chainCallback = options;
+        } else if (options && typeof options.onWaveComplete === 'function') {
+            this.chainCallback = options.onWaveComplete;
+        } else {
+            this.chainCallback = null;
+        }
         this.isChainActive = true;
         this.startWave(0);
     }
@@ -57,6 +64,7 @@ export class EnemyWaveSystem implements System {
 
         const sState = this.session.state.sectorState;
         sState.waveActive = true;
+        sState.waveDisabled = wave.disabled || false;
         sState.waveName = wave.name;
         sState.waveKills = 0;
 
@@ -95,11 +103,47 @@ export class EnemyWaveSystem implements System {
                     enemy.isWaveEnemy = true;
                     // VINTERDÖD: Add a persistent blue glow to wave enemies to make them stand out
                     EffectManager.attachEffect(enemy.mesh, EffectType.WAVE_AURA);
-                    if (attractor) {
+                    if (attractor && !wave.disabled) {
                         enemy.state = AIState.CHASE;
                         enemy.awareness = 1.0;
                         enemy.lastHeardNoiseType = NoiseType.OTHER;
                         enemy.lastKnownPosition.copy(this._attractorScratch);
+                    } else {
+                        enemy.state = AIState.IDLE;
+                        enemy.awareness = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    public enableActiveWave(): void {
+        if (!this.session || !this.session.state) return;
+        const sState = this.session.state.sectorState;
+        if (sState.waveDisabled) {
+            sState.waveDisabled = false;
+
+            const pool = this.session.state.enemies.pool;
+            const len = pool.length;
+            const simTime = this.session.engine.simTime;
+            const playerPos = this.session.state.player.position;
+
+            const wave = this.waveQueue[this.currentWaveIndex];
+            const attractor = wave?.attractorPos;
+            if (attractor) {
+                this._attractorScratch.set(attractor.x, 0, attractor.z);
+            }
+
+            for (let i = 0; i < len; i++) {
+                const enemy = pool[i];
+                if (enemy && enemy.isWaveEnemy && enemy.deathState === 0) { // ALIVE
+                    enemy.state = AIState.CHASE;
+                    enemy.awareness = 1.0;
+                    enemy.lastHeardNoiseType = NoiseType.OTHER;
+                    if (attractor) {
+                        enemy.lastKnownPosition.copy(this._attractorScratch);
+                    } else {
+                        enemy.lastKnownPosition.copy(playerPos);
                     }
                 }
             }
@@ -114,6 +158,7 @@ export class EnemyWaveSystem implements System {
         if (this.session && this.session.state) {
             const sState = this.session.state.sectorState;
             sState.waveActive = false;
+            sState.waveDisabled = false;
             sState.waveName = '';
             sState.waveKills = 0;
             sState.waveTarget = 0;
@@ -121,8 +166,25 @@ export class EnemyWaveSystem implements System {
         }
 
         if (this.chainCallback) {
-            this.chainCallback();
+            this.chainCallback(this.session);
             this.chainCallback = null;
+        }
+    }
+
+    public reset(): void {
+        this.isChainActive = false;
+        this.waveQueue = [];
+        this.currentWaveIndex = -1;
+        this.chainCallback = null;
+
+        if (this.session && this.session.state) {
+            const sState = this.session.state.sectorState;
+            sState.waveActive = false;
+            sState.waveDisabled = false;
+            sState.waveName = '';
+            sState.waveKills = 0;
+            sState.waveTarget = 0;
+            sState.waveProgress = 0;
         }
     }
 

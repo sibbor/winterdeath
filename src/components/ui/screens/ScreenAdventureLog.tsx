@@ -5,7 +5,7 @@ import { useOrientation } from '../../../hooks/useOrientation';
 import ModalLayout, { HORIZONTAL_HATCHING_STYLE, TacticalCard, TacticalTab } from './ModalLayout';
 import CollectiblePreview from '../core/CollectiblePreview';
 import { UISounds } from '../../../utils/audio/AudioLib';
-import { DiscoveryType } from '../hud/HudTypes';
+import { DiscoveryType } from '../hud/game/HudTypes';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { SectorID } from '../../../game/session/SectorTypes';
 import { CHALLENGES, ChallengeCategory, ChallengeDef } from '../../../content/challenges';

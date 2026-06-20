@@ -9,7 +9,7 @@ import { DamageID, DamageType } from '../entities/player/CombatTypes';
 import { FamilyMemberID } from '../content/constants';
 import { audioEngine } from '../utils/audio/AudioEngine';
 import { SoundID } from '../utils/audio/AudioTypes';
-import { DiscoveryType } from '../components/ui/hud/HudTypes';
+import { DiscoveryType } from '../components/ui/hud/game/HudTypes';
 import { KMH_TO_MS, MAX_ENTITIES, COMBAT } from '../content/constants';
 import { CombatEngine } from '../game/session/CombatEngine';
 import { CareerStatsSystem } from './CareerStatsSystem';

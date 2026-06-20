@@ -24,6 +24,11 @@ export const EnemyAttackHandler = {
         queryEnemies?: (pos: THREE.Vector3, radius: number, outPoolIdx: number) => void,
         applyExternalForce?: (force: THREE.Vector3, factor: number) => void
     }, delta: number, simTime: number, renderTime: number): boolean => {
+        const session = WinterEngine.getInstance().onUpdateContext;
+        if (e.isWaveEnemy && session?.state?.sectorState?.waveDisabled) {
+            return false;
+        }
+
         if (WinterEngine.getInstance().systems.performanceMonitor?.aiLoggingEnabled ?? true) {
             const attackName = DataResolver.getAttackName(att.type, true);
             const enemyName = DataResolver.getEnemyName(e.type, e.bossId, true);

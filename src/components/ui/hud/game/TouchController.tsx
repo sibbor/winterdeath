@@ -1,7 +1,7 @@
-import React, { useRef, useCallback } from 'react';
-import { InputAction, InputState } from '../../../core/engine/InputManager';
-import { useOrientation } from '../../../hooks/useOrientation';
-import { useHudStore } from '../../../hooks/useHudStore';
+import React, { useRef, useCallback, useEffect } from 'react';
+import { InputAction, InputState } from '../../../../core/engine/InputManager';
+import { useOrientation } from '../../../../hooks/useOrientation';
+import { HudStore } from '../../../../store/HudStore';
 
 interface TouchControllerProps {
     inputState: InputState;
@@ -15,9 +15,13 @@ const HUD_GUTTER = '12%'; // Safe zone for Pause/HUD buttons
 
 const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState, onPause, onOpenMap }) => {
     const { isLandscapeMode } = useOrientation();
-    const hudVisible = useHudStore(s => s.hudVisible);
 
-    // --- REFS FÖR DIREKT DOM-MANIPULATION (Zero-GC) ---
+    // --- REFS FOR DIRECT DOM MANIPULATION (Zero-GC) ---
+    const rootRef = useRef<HTMLDivElement>(null);
+    const leftZoneRef = useRef<HTMLDivElement>(null);
+    const rightZoneRef = useRef<HTMLDivElement>(null);
+    const pauseZoneRef = useRef<HTMLDivElement>(null);
+    const actionZoneRef = useRef<HTMLDivElement>(null);
     const leftStickContainerRef = useRef<HTMLDivElement>(null);
     const leftStickKnobRef = useRef<HTMLDivElement>(null);
     const rightStickContainerRef = useRef<HTMLDivElement>(null);
@@ -44,24 +48,42 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
         return false;
     };
 
-    // Reset inputs when HUD becomes hidden
-    React.useEffect(() => {
-        if (!hudVisible) {
-            leftTouchId.current = null;
-            rightTouchId.current = null;
-            if (inputState?.joystickMove) inputState.joystickMove.set(0, 0);
-            if (inputState?.joystickAim) inputState.joystickAim.set(0, 0);
-            if (leftStickContainerRef.current) leftStickContainerRef.current.style.display = 'none';
-            if (rightStickContainerRef.current) rightStickContainerRef.current.style.display = 'none';
-            
-            const inputManager = (window as any).inputManager;
-            if (inputManager) {
-                inputManager.handleVirtualAction(InputAction.FIRE, false);
-            } else if (inputState?.actions) {
-                inputState.actions[InputAction.FIRE] = 0;
+    // HudStore.subscribe — drives hudVisible via direct DOM, zero React re-renders
+    useEffect(() => {
+        let prevVisible: boolean | null = null;
+
+        return HudStore.subscribe((state) => {
+            const visible = state.hudVisible;
+            if (visible === prevVisible) return;
+            prevVisible = visible;
+
+            // Opacity on root
+            if (rootRef.current) rootRef.current.style.opacity = visible ? '1' : '0';
+
+            // pointer-events on interactive zones
+            const pe = visible ? 'auto' : 'none';
+            if (leftZoneRef.current) leftZoneRef.current.style.pointerEvents = pe;
+            if (rightZoneRef.current) rightZoneRef.current.style.pointerEvents = pe;
+            if (pauseZoneRef.current) pauseZoneRef.current.style.pointerEvents = pe;
+            if (actionZoneRef.current) actionZoneRef.current.style.pointerEvents = pe;
+
+            // Reset inputs when HUD hides
+            if (!visible) {
+                leftTouchId.current = null;
+                rightTouchId.current = null;
+                if (inputState?.joystickMove) inputState.joystickMove.set(0, 0);
+                if (inputState?.joystickAim) inputState.joystickAim.set(0, 0);
+                if (leftStickContainerRef.current) leftStickContainerRef.current.style.display = 'none';
+                if (rightStickContainerRef.current) rightStickContainerRef.current.style.display = 'none';
+                const inputManager = (window as any).inputManager;
+                if (inputManager) {
+                    inputManager.handleVirtualAction(InputAction.FIRE, false);
+                } else if (inputState?.actions) {
+                    inputState.actions[InputAction.FIRE] = 0;
+                }
             }
-        }
-    }, [hudVisible, inputState]);
+        });
+    }, [inputState]);
 
     /**
      * SMI-Hardened action handler.
@@ -229,11 +251,16 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
     }, [inputState]);
 
     return (
-        <div className={`absolute inset-0 pointer-events-none z-[120] overflow-hidden select-none touch-none transition-opacity duration-1000 ${hudVisible ? 'opacity-100' : 'opacity-0'}`}>
+        <div
+            ref={rootRef}
+            className="absolute inset-0 pointer-events-none z-[120] overflow-hidden select-none touch-none transition-opacity duration-1000"
+            style={{ opacity: 0 }}
+        >
             {/* LEFT TOUCH ZONE (Movement) */}
             <div
-                className={`absolute left-0 ${isLandscapeMode ? 'w-[40%] h-[65%]' : 'w-[45%] h-[75%]'} ${hudVisible ? 'pointer-events-auto' : 'pointer-events-none'}`}
-                style={{ top: HUD_GUTTER, touchAction: 'none' }}
+                ref={leftZoneRef}
+                className={`absolute left-0 ${isLandscapeMode ? 'w-[40%] h-[65%]' : 'w-[45%] h-[75%]'}`}
+                style={{ top: HUD_GUTTER, touchAction: 'none', pointerEvents: 'none' }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
@@ -242,8 +269,9 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
 
             {/* RIGHT TOUCH ZONE (Aiming) */}
             <div
-                className={`absolute right-0 ${isLandscapeMode ? 'w-[40%] h-[65%]' : 'w-[45%] h-[75%]'} ${hudVisible ? 'pointer-events-auto' : 'pointer-events-none'}`}
-                style={{ top: HUD_GUTTER, touchAction: 'none' }}
+                ref={rightZoneRef}
+                className={`absolute right-0 ${isLandscapeMode ? 'w-[40%] h-[65%]' : 'w-[45%] h-[75%]'}`}
+                style={{ top: HUD_GUTTER, touchAction: 'none', pointerEvents: 'none' }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
@@ -286,8 +314,18 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 />
             </div>
 
+            {/* PAUSE BUTTON — top-right, always accessible */}
+            <div ref={pauseZoneRef} className="absolute top-3 right-4 z-40 pr-safe pt-safe" style={{ pointerEvents: 'none' }}>
+                <button
+                    className="w-12 h-12 rounded-full border border-white/20 bg-black/60 text-white font-bold backdrop-blur-sm flex items-center justify-center active:scale-95 transition-transform"
+                    onTouchStart={(e) => { e.stopPropagation(); onPause?.(); }}
+                >
+                    ||
+                </button>
+            </div>
+
             {/* Action Buttons */}
-            <div className={`absolute flex z-40 pr-safe pb-safe ${hudVisible ? 'pointer-events-auto' : 'pointer-events-none'} ${isLandscapeMode ? 'bottom-4 right-4 flex-col gap-3' : 'bottom-24 right-4 flex-col gap-3'}`}>
+            <div ref={actionZoneRef} className={`absolute flex z-40 pr-safe pb-safe ${isLandscapeMode ? 'bottom-4 right-4 flex-col gap-3' : 'bottom-24 right-4 flex-col gap-3'}`} style={{ pointerEvents: 'none' }}>
                 <div className="flex justify-end">
                     <button data-action={InputAction.FLASHLIGHT} className="w-14 h-14 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2.5 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd} onTouchCancel={handleActionTouchEnd}>
                         <img src="/assets/icons/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain pointer-events-none" />

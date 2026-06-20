@@ -887,8 +887,13 @@ export const EnemyManager = {
         // --- 3. GORE ---
         // Based on enemy type & body mass
         const goreCount = (isBoss ? 12 : 6);
-        const goreScale = isBoss ? (enemyBodyMass * 1.2) : (enemyBodyMass * 0.8);
+        // Gore scale: boss uses raw body mass for proportional giant chunks.
+        // Zombies use a minimum floor (1.4) so chunks are always visible on snow — sub-unit
+        // meshes (Runner at 0.37-0.69) are near-invisible against the ground plane.
+        const goreScale = isBoss ? (enemyBodyMass * 1.2) : Math.max(1.4, enemyBodyMass * 1.2);
 
+
+        // Gore physics
         _v1.set(0, 0, 0);
         if (forceDir) {
             _v1.copy(forceDir);
@@ -897,7 +902,6 @@ export const EnemyManager = {
         } else {
             _v1.copy(enemy.velocity).multiplyScalar(0.5).add(_up);
         }
-
         if (callbacks.spawnParticle) {
             for (let i = 0; i < goreCount; i++) {
                 // Isolated physics vector calculation completely free of stale scratchpad garbage

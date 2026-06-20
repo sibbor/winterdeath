@@ -1,7 +1,7 @@
 import { CareerStats, StatID, StatEnemyIndex, StatWeaponIndex, TELEMETRY_ATTACKS_PER_SOURCE } from '../../types/CareerStats';
 import { SessionStats } from '../../types/SessionStats';
 import { ChallengeID } from '../../content/challenges';
-import { DiscoveryType } from '../../components/ui/hud/HudTypes';
+import { DiscoveryType } from '../../components/ui/hud/game/HudTypes';
 import { DataResolver } from './DataResolver';
 
 export type AnyStatsEntity = CareerStats | SessionStats;

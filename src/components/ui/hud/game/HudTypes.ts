@@ -1,6 +1,6 @@
-import { InteractionType, InteractionPromptId, MetaActionId } from '../../../systems/ui/UIEventBridge';
-import { StatusEffectID } from '../../../content/perks';
-import { HoldableID } from '../../../entities/player/CombatTypes';
+import { InteractionType, InteractionPromptId, MetaActionId } from '../../../../systems/ui/UIEventBridge';
+import { StatusEffectID } from '../../../../content/perks';
+import { HoldableID } from '../../../../entities/player/CombatTypes';
 
 export const MAX_STATUS_EFFECTS = 16;
 export const MAX_PASSIVES = 16;

@@ -470,20 +470,24 @@ export const MATERIALS = {
     }),
 
     // ---- DECALS ----
-    bloodDecal: new THREE.MeshBasicMaterial({
-        color: 0x660000,
+    bloodDecal: new THREE.MeshStandardMaterial({
+        color: 0x880000,
+        roughness: 1.0,
+        metalness: 0.0,
         transparent: true,
-        opacity: 0.7,
+        opacity: 0.85,
         side: THREE.DoubleSide,
         depthWrite: false,
         depthTest: true,
         polygonOffset: true,
         polygonOffsetFactor: -4
     }),
-    bloodStainDecal: new THREE.MeshBasicMaterial({
-        color: 0x440000,
+    bloodStainDecal: new THREE.MeshStandardMaterial({
+        color: 0x550000,
+        roughness: 1.0,
+        metalness: 0.0,
         transparent: true,
-        opacity: 0.5,
+        opacity: 0.65,
         side: THREE.DoubleSide,
         depthWrite: false,
         depthTest: true,

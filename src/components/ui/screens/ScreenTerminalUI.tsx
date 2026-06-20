@@ -3,7 +3,7 @@ import { t } from '../../../utils/i18n';
 import ModalLayout, { TacticalButton, TacticalTab } from './ModalLayout';
 import { UIEventRingBuffer, UIEventType, ChatBubbleSubtype } from '../../../systems/ui/UIEventRingBuffer';
 import { InteractionPromptId, InteractionType } from '../../../systems/ui/UIEventBridge';
-import { DiscoveryType } from '../hud/HudTypes';
+import { DiscoveryType } from '../hud/game/HudTypes';
 import { HudStore } from '../../../store/HudStore';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { StatusEffectID } from '../../../types/StatusEffects';

@@ -4,7 +4,7 @@ import { WinterEngine } from '../core/engine/WinterEngine';
 import { InteractionType, InteractionPromptId, MetaActionId } from './ui/UIEventBridge';
 import { HudStore, HudStateSoA } from '../store/HudStore';
 import { StatusStore } from '../store/StatusStore';
-import { MAX_STATUS_EFFECTS, MAX_PASSIVES, MAX_BUFFS, MAX_DEBUFFS, MAX_MAP_ITEMS } from '../components/ui/hud/HudTypes';
+import { MAX_STATUS_EFFECTS, MAX_PASSIVES, MAX_BUFFS, MAX_DEBUFFS, MAX_MAP_ITEMS } from '../components/ui/hud/game/HudTypes';
 import { StatID, PlayerStatusFlags } from '../types/CareerStats';
 import { DataResolver } from '../core/data/DataResolver';
 import { ToolID } from '../entities/player/CombatTypes';
@@ -44,6 +44,12 @@ let _useBufferA = true;
 const truncate1 = (val: number) => Math.round(val * 10) / 10;
 const truncate2 = (val: number) => Math.round(val * 100) / 100;
 
+const MAX_DAMAGED_OBS_HUD = 8;
+const _damagedObsHudPool: any[] = [];
+for (let i = 0; i < MAX_DAMAGED_OBS_HUD; i++) {
+    _damagedObsHudPool.push({ id: '', x: 0, y: 0, progress: 0 });
+}
+
 const _fastUpdateDetail = {
     hp: 0,
     maxHp: 0,
@@ -75,7 +81,8 @@ const _fastUpdateDetail = {
     interactionType: 0,
     interactionLabel: '',
     interactionX: 0,
-    interactionY: 0
+    interactionY: 0,
+    damagedObstacles: [] as any[]
 };
 
 export const HudSystem = {
@@ -113,7 +120,7 @@ export const HudSystem = {
 
         // Wave logic
         const sState = state.sectorState;
-        if (sState && sState.waveActive) {
+        if (sState && sState.waveActive && !sState.waveDisabled) {
             _fastUpdateDetail.waveActive = true;
             _fastUpdateDetail.waveName = sState.waveName || '';
             _fastUpdateDetail.waveProgress = isFinite(sState.waveProgress) ? sState.waveProgress : 0;
@@ -147,21 +154,16 @@ export const HudSystem = {
                 _v1.copy(nearestEnemy.mesh.position);
                 _v1.y += 1.0; // Aim at chest height
                 _v1.project(camera);
-                
+
                 const isBehind = _v1.z > 1.0;
-                const margin = 0.9; // Trigger arrow if outside central 90% of screen
-                if (isBehind || _v1.x < -margin || _v1.x > margin || _v1.y < -margin || _v1.y > margin) {
-                    _fastUpdateDetail.waveIndicatorActive = true;
-                    let dirX = _v1.x;
-                    let dirY = -_v1.y; // Invert WebGL Y for CSS screen space
-                    if (isBehind) {
-                        dirX *= -1;
-                        dirY *= -1;
-                    }
-                    _fastUpdateDetail.waveIndicatorAngle = Math.atan2(dirY, dirX);
-                } else {
-                    _fastUpdateDetail.waveIndicatorActive = false;
+                _fastUpdateDetail.waveIndicatorActive = true;
+                let dirX = _v1.x;
+                let dirY = -_v1.y; // Invert WebGL Y for CSS screen space
+                if (isBehind) {
+                    dirX *= -1;
+                    dirY *= -1;
                 }
+                _fastUpdateDetail.waveIndicatorAngle = Math.atan2(dirY, dirX);
             } else {
                 _fastUpdateDetail.waveIndicatorActive = false;
             }
@@ -211,6 +213,41 @@ export const HudSystem = {
         _fastUpdateDetail.statusFlags = state.combat.statusFlags || 0;
         // Sync StatusStore flags with the main engine state (Zero-GC)
         StatusStore.setStatusFlags(state.combat.statusFlags || 0);
+
+        // --- Destroyable Obstacles Durability Tracking (Zero-GC Screen Projection) ---
+        let damagedObsCount = 0;
+        const ws = WinterEngine.getInstance().systems.worldStreamer;
+        if (ws && playerPos && camera) {
+            const poolIdx = ws.getObstaclePool().nextIndex();
+            ws.getNearbyObstacles(playerPos.x, playerPos.z, 20.0, poolIdx);
+            const obstacles = ws.getObstaclePool().getPool(poolIdx);
+            const count = ws.getObstaclePool().getCount(poolIdx);
+
+            for (let i = 0; i < count; i++) {
+                const obs = obstacles[i];
+                if (obs && obs.durability !== undefined && obs.durability < (obs.maxDurability || 100) && obs.durability > 0 && !obs.isMutated) {
+                    _v1.copy(obs.position);
+                    _v1.y += (obs.collider?.size?.y || 1.5) + 0.3; // Float above the collider top
+                    _v1.project(camera);
+
+                    if (_v1.z <= 1.0) {
+                        const screenX = (0.5 + _v1.x * 0.5) * _cachedWidth;
+                        const screenY = (0.5 - _v1.y * 0.5) * _cachedHeight;
+
+                        if (damagedObsCount < MAX_DAMAGED_OBS_HUD) {
+                            const item = _damagedObsHudPool[damagedObsCount];
+                            item.id = obs.id || `${obs.position.x}_${obs.position.z}`;
+                            item.x = screenX;
+                            item.y = screenY;
+                            item.progress = obs.durability / (obs.maxDurability || 100);
+                            _fastUpdateDetail.damagedObstacles[damagedObsCount] = item;
+                            damagedObsCount++;
+                        }
+                    }
+                }
+            }
+        }
+        _fastUpdateDetail.damagedObstacles.length = damagedObsCount;
 
         // ZERO-GC: Replaced CustomEvent with direct callback registry
         HudStore.emitFastUpdate(_fastUpdateDetail);
@@ -264,7 +301,7 @@ export const HudSystem = {
         }
 
         const sState2 = state.sectorState;
-        if (sState2 && sState2.waveActive) {
+        if (sState2 && sState2.waveActive && !sState2.waveDisabled) {
             _current.waveActive = true;
             _current.waveName = sState2.waveName || '';
             _current.waveProgress = sState2.waveProgress || 0;

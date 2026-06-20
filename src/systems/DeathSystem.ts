@@ -276,8 +276,8 @@ export class DeathSystem implements System {
                 this.fxCallbacks.spawnParticle(pgPos.x, 1.0, pgPos.z, FXParticleType.BLOOD_SPLATTER, 20);
                 this.fxCallbacks.spawnParticle(
                     pgPos.x, 1.5, pgPos.z,
-                    FXParticleType.GORE, 12,
-                    undefined, undefined,
+                    FXParticleType.GORE, 6,
+                    undefined, undefined, // TODO: calculate scaling based on player mesh?
                     0x990000,          // Explicit blood red for the player loop
                     baseScale * 2.0    // Proportional to player's geometric mass
                 );
@@ -296,7 +296,7 @@ export class DeathSystem implements System {
         const fmList = this.activeFamilyMembers.current;
         for (let i = 0; i < fmList.length; i++) {
             const fm = fmList[i];
-            if (!fm.mesh) continue;
+            if (!fm.mesh || (!fm.found && !fm.rescued)) continue;
             fm.following = false;
 
             // --- GATHER AROUND THE BODY (Zero-GC) ---

@@ -114,7 +114,9 @@ export const LOOT = {
 };
 
 export const PLAYER = {
-    BASE_SPEED: 20.0,
+    BASE_HP: 100,
+    BASE_STAMINA: 100,
+    BASE_SPEED: 20.0, // km/h
     DEATH_TIMER: 3000, // ms
     DEATH_VELOCITY_NORMAL: 12,
     DEATH_VELOCITY_RUSH: 15,

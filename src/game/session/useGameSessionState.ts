@@ -6,7 +6,7 @@ import { DeathPhase } from '../../types/SessionTypes';
 import { SectorBuildContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
-import { DialogueUIHandle } from '../../components/ui/hud/DialogueUI';
+import { DialogueUIHandle } from '../../components/ui/hud/game/DialogueUI';
 import { InteractionType } from '../../systems/ui/UIEventBridge';
 
 export interface GameSessionUiState {

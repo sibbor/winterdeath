@@ -308,7 +308,10 @@ export const EnemyAnimator = {
             else if (isMoving) {
                 const phaseOffset = mesh.position.x + mesh.position.z;
                 const speedFactor = (e.speed || 20.0) / 20.0;
-                const t = (renderTime * 0.008 * speedFactor) + phaseOffset;
+                
+                // Accumulate scaled walk time instead of using wall-clock renderTime
+                e.walkTime = (e.walkTime || 0) + simDelta * 1000;
+                const t = (e.walkTime * 0.008 * speedFactor) + phaseOffset;
 
                 // Hoisted Trig
                 const sinT = Math.sin(t);
@@ -331,30 +334,30 @@ export const EnemyAnimator = {
                 _animState.targetScaleZ = _animState.baseScale * _animState.widthScale * (1.0 - sinIdle * 0.01);
 
                 const s = e.originalScale;
-                e.baseY = THREE.MathUtils.lerp(e.baseY, 1.0 * s, 10 * simDelta);
+                e.baseY = THREE.MathUtils.lerp(e.baseY, 1.0 * s, Math.min(1.0, 10 * simDelta));
 
                 // Only apply procedural Y if physics isn't controlling it
                 if (!letPhysicsControlY) {
                     e.mesh.position.y = e.baseY;
                 }
 
-                e.animRotX = THREE.MathUtils.lerp(e.animRotX, 0, 10 * simDelta);
-                e.animRotZ = THREE.MathUtils.lerp(e.animRotZ, 0, 10 * simDelta);
+                e.animRotX = THREE.MathUtils.lerp(e.animRotX, 0, Math.min(1.0, 10 * simDelta));
+                e.animRotZ = THREE.MathUtils.lerp(e.animRotZ, 0, Math.min(1.0, 10 * simDelta));
                 e.mesh.rotation.x = e.animRotX;
                 e.mesh.rotation.z = e.animRotZ;
             }
         }
 
         // --- APPLY TRANSFORMS (SMOOTH LERPING) ---
-        e.animRotX += (_animState.targetRotX - e.animRotX) * 15 * simDelta;
-        e.animRotZ += (_animState.targetRotZ - e.animRotZ) * 15 * simDelta;
+        e.animRotX += (_animState.targetRotX - e.animRotX) * Math.min(1.0, 15 * simDelta);
+        e.animRotZ += (_animState.targetRotZ - e.animRotZ) * Math.min(1.0, 15 * simDelta);
 
         mesh.rotation.x = e.animRotX;
         mesh.rotation.z = e.animRotZ;
 
-        mesh.scale.x += (_animState.targetScaleX - mesh.scale.x) * 15 * simDelta;
-        mesh.scale.y += (_animState.targetScaleY - mesh.scale.y) * 15 * simDelta;
-        mesh.scale.z += (_animState.targetScaleZ - mesh.scale.z) * 15 * simDelta;
+        mesh.scale.x += (_animState.targetScaleX - mesh.scale.x) * Math.min(1.0, 15 * simDelta);
+        mesh.scale.y += (_animState.targetScaleY - mesh.scale.y) * Math.min(1.0, 15 * simDelta);
+        mesh.scale.z += (_animState.targetScaleZ - mesh.scale.z) * Math.min(1.0, 15 * simDelta);
 
         // Position (Y & Hijacked X/Z)
         if (_animState.hijackPhysics) {
@@ -376,13 +379,13 @@ export const EnemyAnimator = {
             } else {
                 // Standard lerp-to-height only if not airborne
                 if (!letPhysicsControlY) {
-                    mesh.position.y += (_animState.targetPosY - mesh.position.y) * 10 * simDelta;
+                    mesh.position.y += (_animState.targetPosY - mesh.position.y) * Math.min(1.0, 10 * simDelta);
                 }
             }
         } else {
             // Standard lerp-to-height only if not airborne
             if (!letPhysicsControlY) {
-                mesh.position.y += (_animState.targetPosY - mesh.position.y) * 15 * simDelta;
+                mesh.position.y += (_animState.targetPosY - mesh.position.y) * Math.min(1.0, 15 * simDelta);
             }
         }
 

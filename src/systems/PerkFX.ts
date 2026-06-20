@@ -219,13 +219,13 @@ export const PerkFX = {
             // Priority Color.
             if (hasShield) {
                 _shieldMaterial.color.setHex(COLORS.YELLOW.num);
-                _shieldMaterial.opacity = THREE.MathUtils.lerp(_shieldMaterial.opacity, 0.4 + Math.sin(renderTime * 0.01) * 0.1, 10 * delta);
+                _shieldMaterial.opacity = THREE.MathUtils.lerp(_shieldMaterial.opacity, 0.4 + Math.sin(renderTime * 0.01) * 0.1, Math.min(1.0, 10 * delta));
             } else if (hasGibMaster) {
                 _shieldMaterial.color.setHex(COLORS.PURPLE.num);
-                _shieldMaterial.opacity = THREE.MathUtils.lerp(_shieldMaterial.opacity, 0.5 + Math.sin(renderTime * 0.02) * 0.15, 10 * delta);
+                _shieldMaterial.opacity = THREE.MathUtils.lerp(_shieldMaterial.opacity, 0.5 + Math.sin(renderTime * 0.02) * 0.15, Math.min(1.0, 10 * delta));
             } else if (hasAdrenaline) {
                 _shieldMaterial.color.setHex(COLORS.GREEN.num);
-                _shieldMaterial.opacity = THREE.MathUtils.lerp(_shieldMaterial.opacity, 0.3 + Math.sin(renderTime * 0.008) * 0.05, 10 * delta);
+                _shieldMaterial.opacity = THREE.MathUtils.lerp(_shieldMaterial.opacity, 0.3 + Math.sin(renderTime * 0.008) * 0.05, Math.min(1.0, 10 * delta));
             }
 
             // Subtle scale pulse
@@ -233,7 +233,7 @@ export const PerkFX = {
             _shieldMesh.scale.set(pulse, 1.0, pulse);
         } else {
             if (_shieldMesh.visible) {
-                _shieldMaterial.opacity = THREE.MathUtils.lerp(_shieldMaterial.opacity, 0, 15 * delta);
+                _shieldMaterial.opacity = THREE.MathUtils.lerp(_shieldMaterial.opacity, 0, Math.min(1.0, 15 * delta));
                 if (_shieldMaterial.opacity < 0.01) {
                     _shieldMesh.visible = false;
                 }

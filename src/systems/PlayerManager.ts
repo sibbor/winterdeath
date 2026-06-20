@@ -43,9 +43,9 @@ export class PlayerManager implements System {
             const isCinematic = state.ui.cinematicActive;
             const isBossIntro = this.refs.bossIntroRef?.current?.active || false;
             const isDead = (state.combat.statusFlags & PlayerStatusFlags.DEAD) !== 0;
-            const isBusEvent = state.sectorState?.busEventState >= 1 && state.sectorState?.busEventState <= 3;
+            const isTeleportDisabled = state.sectorState?.isTeleportDisabled || false;
 
-            if (!isCinematic && !isBossIntro && !isDead && !isBusEvent) {
+            if (!isCinematic && !isBossIntro && !isDead && !isTeleportDisabled) {
                 this.teleportTo(session, props.teleportTarget.x, props.teleportTarget.z, props.teleportTarget.timestamp);
             }
         }

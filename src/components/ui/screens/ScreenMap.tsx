@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import { MapItem, MapItemType } from '../hud/HudTypes';
+import { MapItem, MapItemType } from '../hud/game/HudTypes';
 import { t } from '../../../utils/i18n';
 import { UISounds } from '../../../utils/audio/AudioLib';
 import ModalLayout, { TacticalCard } from './ModalLayout';

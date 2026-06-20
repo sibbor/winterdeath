@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorBuildContext, EnvironmentalZone, ChestType } from '../../game/session/SectorTypes';
+import { SectorDef, SectorBuildContext, EnvironmentalZone, ChestType, SectorEvent, SectorEventState, SectorEventConstraint } from '../../game/session/SectorTypes';
 import { GroundType } from '../../core/engine/EnvironmentalTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
@@ -98,8 +98,7 @@ const ROOM_CENTERS = [
 
 const LOCATIONS = {
     SPAWN: {
-        //PLAYER: { x: 0, z: 200, rot: Math.PI },
-        PLAYER: { x: 145, z: -80, rot: Math.PI },
+        PLAYER: { x: 0, z: 200, rot: Math.PI },
         FAMILY: { x: 25, z: -193, y: 0 },
         BOSS: { x: 74, z: -210 }
     },
@@ -193,6 +192,250 @@ async function createBoundries(ctx: SectorBuildContext, curve: THREE.Curve<THREE
         new THREE.Vector3(135, 0, -90),
     ], 'BoundryWall_RightOfCave');
 }
+
+const KEYS = {
+    jordanEventState: 'state',
+    jordanEventTimer: 'timer',
+    doorCloseSoundPlayed: 'b1',
+} as const;
+
+const jordanRescueEvent: SectorEvent = {
+    id: 'jordan_rescue',
+    onStart: (ctx, eventState) => {
+        eventState[KEYS.jordanEventState] = 0;
+        eventState[KEYS.jordanEventTimer] = 0;
+        eventState[KEYS.doorCloseSoundPlayed] = false;
+    },
+    onUpdate: (ctx, eventState) => {
+        const { delta, simTime, renderTime, playerPos, gameState, engine } = ctx;
+        const sectorState = gameState.sectorState;
+        let mask = SectorEventConstraint.NONE;
+
+        if (!eventState[KEYS.jordanEventState]) eventState[KEYS.jordanEventState] = 0;
+        const jcState = eventState[KEYS.jordanEventState];
+        const jcTimer = eventState[KEYS.jordanEventTimer] || 0;
+        const elapsed = simTime - jcTimer;
+
+        const scene = ctx.scene;
+
+        // --- ZERO-GC SCENE CACHING ---
+        if (!sectorState.jordanMesh && scene) {
+            sectorState.jordanMesh = scene.children.find(c => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Jordan');
+        }
+        if (!sectorState.doorL && scene) sectorState.doorL = scene.getObjectByName('s1_shelter_port_left');
+        if (!sectorState.doorR && scene) sectorState.doorR = scene.getObjectByName('s1_shelter_port_right');
+        if (!sectorState.doorFrame && scene) sectorState.doorFrame = scene.getObjectByName('s1_shelter_port_frame');
+
+        const jordan = sectorState.jordanMesh;
+        const doorL = sectorState.doorL;
+        const doorR = sectorState.doorR;
+        const doorFrame = sectorState.doorFrame;
+
+        if (scene) {
+            // Animate survivors in the shelter
+            const innerCave = scene.getObjectByName("Sector1_InnerCave");
+            if (innerCave) {
+                innerCave.traverse((child) => {
+                    if (child.userData.isShelterHuman) {
+                        const body = child.userData.cachedBody || child.children.find((c: any) => c.userData.isBody);
+                        if (body) {
+                            if (!child.userData.animState) {
+                                child.userData.animState = {
+                                    isMoving: false, isRushing: false, isDodging: false, dodgeStartTime: 0,
+                                    staminaRatio: 1.0, isSpeaking: false, isThinking: false,
+                                    isIdleLong: Math.random() > 0.5,
+                                    isSwimming: false, isWading: false, seed: Math.random() * 1000,
+                                    renderTime: 0, simTime: 0
+                                };
+                            }
+                            const animState = child.userData.animState;
+                            animState.renderTime = renderTime;
+                            animState.simTime = simTime;
+                            PlayerAnimator.update(body, animState, renderTime, delta);
+                        }
+                    }
+                });
+            }
+
+            if (sectorState.pendingTrigger === 'SPAWN_JORDAN') {
+                console.log("[Sector1] Processing SPAWN_JORDAN trigger");
+                sectorState.pendingTrigger = null;
+                eventState[KEYS.jordanEventState] = 3;
+                eventState[KEYS.jordanEventTimer] = simTime;
+                audioEngine.playSound(SoundID.DOOR_OPEN, 0.6);
+
+                UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 0, 0, simTime);
+
+                if (ctx.setCameraOverride) {
+                    ctx.setCameraOverride({
+                        active: true,
+                        targetPos: _fixedCamTarget,
+                        lookAtPos: _fixedCamLookAt,
+                        endTime: renderTime + 60000
+                    });
+                }
+            }
+
+            if (sectorState.pendingTrigger === 'CLOSE_DOORS') {
+                console.log("[Sector1] Processing CLOSE_DOORS trigger");
+                sectorState.pendingTrigger = null;
+                eventState[KEYS.jordanEventState] = 6;
+                eventState[KEYS.jordanEventTimer] = simTime;
+            }
+
+            if (jcState === 1) {
+                if (elapsed > 1500) {
+                    if (doorFrame && ctx.startCinematic) {
+                        ctx.startCinematic(doorFrame, 1, 0, { targetPos: _fixedCamTarget, lookAtPos: _fixedCamLookAt, rotationSpeed: 0 });
+                        eventState[KEYS.jordanEventState] = 2;
+                        eventState[KEYS.jordanEventTimer] = simTime;
+                    }
+                }
+            }
+            else if (jcState === 3) {
+                const openDist = Math.max(0, Math.min(10, elapsed * 0.005));
+                if (doorL) { doorL.position.x = -5 - openDist; doorL.matrixAutoUpdate = true; }
+                if (doorR) { doorR.position.x = 5 + openDist; doorR.matrixAutoUpdate = true; }
+
+                if (sectorState.doorObstacleL) sectorState.doorObstacleL.isMutated = true;
+                if (sectorState.doorObstacleR) sectorState.doorObstacleR.isMutated = true;
+                if (sectorState.doorObstacleFrame) {
+                    sectorState.doorObstacleFrame.isMutated = true;
+                    if (sectorState.doorObstacleFrame.collider.size) {
+                        sectorState.doorObstacleFrame.collider.size.set(0, 0, 0);
+                    }
+                }
+
+                if (elapsed > 2000) {
+                    eventState[KEYS.jordanEventState] = 4;
+                    eventState[KEYS.jordanEventTimer] = simTime;
+
+                    // Re-bake navigation cost map to clear pathfinding blocks
+                    NavigationSystem.init(ctx.ctx);
+
+                    // --- OPTIMIZATION: ZERO-GC VECTOR MATH ---
+                    if (!sectorState.walkTarget) sectorState.walkTarget = new THREE.Vector3();
+
+                    if (playerPos) {
+                        sectorState.walkTarget.set(playerPos.x, 0, playerPos.z);
+                        const jPos = jordan?.position || _fallbackJordanPos;
+
+                        _vS1.subVectors(playerPos, jPos).normalize();
+                        sectorState.walkTarget.sub(_vS1.multiplyScalar(2.0));
+                    } else {
+                        sectorState.walkTarget.copy(_fallbackWalkTarget);
+                    }
+                }
+            }
+            else if (jcState === 4) {
+                if (jordan) {
+                    if (playerPos) {
+                        if (!sectorState.walkTarget) sectorState.walkTarget = new THREE.Vector3();
+                        sectorState.walkTarget.set(playerPos.x, 0.06, playerPos.z);
+                        const jPos = jordan.position;
+                        _vS1.subVectors(playerPos, jPos);
+                        _vS1.y = 0;
+                        _vS1.normalize();
+                        sectorState.walkTarget.sub(_vS1.multiplyScalar(2.0));
+                    }
+                    const target = sectorState.walkTarget || _fallbackWalkTarget;
+                    const distToTarget = jordan.position.distanceTo(target);
+                    const distToPlayer = playerPos ? jordan.position.distanceTo(playerPos) : Infinity;
+
+                    jordan.position.lerp(target, 0.05);
+
+                    const body = jordan.userData.cachedBody || jordan.children.find((c: any) => c.userData.isBody);
+                    if (body) {
+                        _animState.isMoving = true;
+                        _animState.isRushing = false;
+                        _animState.isDodging = false;
+                        _animState.dodgeStartTime = 0;
+                        _animState.staminaRatio = 1.0;
+                        _animState.isSpeaking = gameState.speakingUntil > simTime;
+                        _animState.isThinking = false;
+                        _animState.isIdleLong = false;
+                        _animState.isSwimming = false;
+                        _animState.isWading = false;
+                        _animState.seed = jordan.userData.seed || 0;
+                        _animState.renderTime = renderTime;
+                        _animState.simTime = simTime;
+
+                        PlayerAnimator.update(body, _animState, renderTime, delta);
+                    }
+
+                    if (distToTarget < 1.5 || jordan.position.x > 38.0 || distToPlayer < 4.0) {
+                        eventState[KEYS.jordanEventState] = 5;
+                        eventState[KEYS.jordanEventTimer] = simTime;
+                        if (ctx.onAction) {
+                            ctx.onAction({ type: TriggerActionType.FAMILY_MEMBER_FOUND, payload: { id: FamilyMemberID.JORDAN } });
+                            ctx.onAction({ type: TriggerActionType.FAMILY_MEMBER_FOLLOW });
+                        }
+                        if (ctx.startCinematic) {
+                            ctx.startCinematic(jordan, 1, 1, { targetPos: _fixedCamTarget, lookAtPos: _fixedCamLookAt, rotationSpeed: 0 });
+                        }
+                    }
+                }
+            }
+            else if (jcState === 6) {
+                const closeProgress = Math.max(0, Math.min(1, elapsed / 800));
+                if (doorL) { doorL.position.x = -15 + (closeProgress * 10); doorL.matrixAutoUpdate = true; }
+                if (doorR) { doorR.position.x = 15 - (closeProgress * 10); doorR.matrixAutoUpdate = true; }
+
+                if (elapsed >= 800 && !eventState[KEYS.doorCloseSoundPlayed]) {
+                    audioEngine.playSound(SoundID.DOOR_SHUT, 0.6);
+                    eventState[KEYS.doorCloseSoundPlayed] = true;
+                }
+
+                if (elapsed > 1000) {
+                    eventState[KEYS.jordanEventState] = 7;
+                    eventState[KEYS.jordanEventTimer] = simTime;
+                    if (ctx.setCameraOverride) ctx.setCameraOverride(null);
+                    UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 1, 0, simTime);
+
+                    // --- OPTIMIZATION: SEQUENTIAL CALLS AVOIDING ARRAY ALLOCATIONS ---
+                    if (ctx.onAction) {
+                        ctx.onAction({ type: TriggerActionType.SPAWN_BOSS, payload: { pos: LOCATIONS.SPAWN.BOSS } });
+                    }
+                }
+            }
+        }
+
+        // Apply cinematic active constraint flags
+        if (jcState >= 1 && jcState < 7) {
+            mask |= SectorEventConstraint.DISABLE_INPUT | SectorEventConstraint.DISABLE_TELEPORT | SectorEventConstraint.HIDE_HUD;
+        }
+
+        return mask;
+    },
+    onInteract: (id, object, ctx, eventState) => {
+        const subType = object.userData.interactionSubType;
+        if (subType === InteractionSubType.KNOCK_ON_PORT) {
+            if (!eventState[KEYS.jordanEventState]) {
+                eventState[KEYS.jordanEventState] = 1;
+                eventState[KEYS.jordanEventTimer] = ctx.simTime;
+                object.userData.isInteractable = false;
+                if (ctx.setBubble) ctx.setBubble(ctx.t('ui.knocking'), 2000);
+                audioEngine.playSound(SoundID.DOOR_KNOCK, 0.6);
+                return true;
+            }
+        }
+        return false;
+    },
+    onPlayerRespawn: (ctx, state, engine, eventState) => {
+        eventState[KEYS.jordanEventState] = 0;
+        eventState[KEYS.jordanEventTimer] = 0;
+        eventState[KEYS.doorCloseSoundPlayed] = false;
+
+        const doorL = state.sectorState.doorL;
+        const doorR = state.sectorState.doorR;
+        if (doorL) doorL.position.x = -5;
+        if (doorR) doorR.position.x = 5;
+
+        // Reset doors interactable
+        const doorFrame = state.sectorState.doorFrame;
+        if (doorFrame) doorFrame.userData.isInteractable = true;
+    }
+};
 
 export const Sector1: SectorDef = {
     id: 1,
@@ -552,20 +795,6 @@ export const Sector1: SectorDef = {
         }
     },
 
-    onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {
-        const subType = object.userData.interactionSubType;
-
-        if (subType === InteractionSubType.KNOCK_ON_PORT) {
-            if (!state.sectorState.jordanEventState) {
-                state.sectorState.jordanEventState = 1;
-                state.sectorState.jordanEventTimer = state.simTime;
-                object.userData.isInteractable = false;
-                events.setBubble(events.t('ui.knocking'), 2000);
-                audioEngine.playSound(SoundID.DOOR_KNOCK, 0.6);
-            }
-        }
-    },
-
     onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
         // --- OPTIMIZATION: CACHED REVERB CHECK ---
         // Avoids continuous WebAudio node adjustments every frame
@@ -586,208 +815,6 @@ export const Sector1: SectorDef = {
 
                 const ground = scene.getObjectByName("GROUND");
                 if (ground) ground.visible = !insideCave;
-            }
-        }
-
-        if (!sectorState.jordanEventState) sectorState.jordanEventState = 0;
-        const jcState = sectorState.jordanEventState;
-
-        if (jcState >= 1 && jcState < 7) {
-            gameState.ui.cinematicActive = true;
-            if (events.setCameraOverride) {
-                events.setCameraOverride({
-                    active: true,
-                    targetPos: _fixedCamTarget,
-                    lookAtPos: _fixedCamLookAt,
-                    endTime: renderTime + 1000
-                });
-            }
-        }
-        const jcTimer = sectorState.jordanEventTimer || 0;
-        const elapsed = simTime - jcTimer;
-
-        const sceneHost = (events as any).scene || (gameState as any).scene;
-        const scene = sceneHost as THREE.Scene;
-
-        // --- ZERO-GC SCENE CACHING ---
-        if (!sectorState.jordanMesh && scene) {
-            sectorState.jordanMesh = scene.children.find(c => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Jordan');
-        }
-        if (!sectorState.doorL && scene) sectorState.doorL = scene.getObjectByName('s1_shelter_port_left');
-        if (!sectorState.doorR && scene) sectorState.doorR = scene.getObjectByName('s1_shelter_port_right');
-        if (!sectorState.doorFrame && scene) sectorState.doorFrame = scene.getObjectByName('s1_shelter_port_frame');
-
-        const jordan = sectorState.jordanMesh;
-        const doorL = sectorState.doorL;
-        const doorR = sectorState.doorR;
-        const doorFrame = sectorState.doorFrame;
-
-        if (scene) {
-            // Animate survivors in the shelter
-            const innerCave = scene.getObjectByName("Sector1_InnerCave");
-            if (innerCave) {
-                innerCave.traverse((child) => {
-                    if (child.userData.isShelterHuman) {
-                        const body = child.userData.cachedBody || child.children.find((c: any) => c.userData.isBody);
-                        if (body) {
-                            if (!child.userData.animState) {
-                                child.userData.animState = {
-                                    isMoving: false, isRushing: false, isDodging: false, dodgeStartTime: 0,
-                                    staminaRatio: 1.0, isSpeaking: false, isThinking: false,
-                                    isIdleLong: Math.random() > 0.5,
-                                    isSwimming: false, isWading: false, seed: Math.random() * 1000,
-                                    renderTime: 0, simTime: 0
-                                };
-                            }
-                            const animState = child.userData.animState;
-                            animState.renderTime = renderTime;
-                            animState.simTime = simTime;
-                            PlayerAnimator.update(body, animState, renderTime, delta);
-                        }
-                    }
-                });
-            }
-
-            if (sectorState.pendingTrigger === 'SPAWN_JORDAN') {
-                console.log("[Sector1] Processing SPAWN_JORDAN trigger");
-                sectorState.pendingTrigger = null;
-                sectorState.jordanEventState = 3;
-                sectorState.jordanEventTimer = simTime;
-                audioEngine.playSound(SoundID.DOOR_OPEN, 0.6);
-
-                UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 0, 0, simTime);
-
-                if (events.setCameraOverride) {
-                    events.setCameraOverride({
-                        active: true,
-                        targetPos: _fixedCamTarget,
-                        lookAtPos: _fixedCamLookAt,
-                        endTime: renderTime + 60000
-                    });
-                }
-            }
-
-            if (sectorState.pendingTrigger === 'CLOSE_DOORS') {
-                console.log("[Sector1] Processing CLOSE_DOORS trigger");
-                sectorState.pendingTrigger = null;
-                sectorState.jordanEventState = 6;
-                sectorState.jordanEventTimer = simTime;
-            }
-
-            if (jcState === 1) {
-                if (elapsed > 1500) {
-                    if (doorFrame && (events as any).startCinematic) {
-                        (events as any).startCinematic(doorFrame, 1, 0, { targetPos: _fixedCamTarget, lookAtPos: _fixedCamLookAt, rotationSpeed: 0 });
-                        sectorState.jordanEventState = 2;
-                        sectorState.jordanEventTimer = simTime;
-                    }
-                }
-            }
-            else if (jcState === 3) {
-                const openDist = Math.max(0, Math.min(10, elapsed * 0.005));
-                if (doorL) { doorL.position.x = -5 - openDist; doorL.matrixAutoUpdate = true; }
-                if (doorR) { doorR.position.x = 5 + openDist; doorR.matrixAutoUpdate = true; }
-
-                if (sectorState.doorObstacleL) sectorState.doorObstacleL.isMutated = true;
-                if (sectorState.doorObstacleR) sectorState.doorObstacleR.isMutated = true;
-                if (sectorState.doorObstacleFrame) {
-                    sectorState.doorObstacleFrame.isMutated = true;
-                    if (sectorState.doorObstacleFrame.collider.size) {
-                        sectorState.doorObstacleFrame.collider.size.set(0, 0, 0);
-                    }
-                }
-
-                if (elapsed > 2000) {
-                    sectorState.jordanEventState = 4;
-                    sectorState.jordanEventTimer = simTime;
-
-                    // Re-bake navigation cost map to clear pathfinding blocks
-                    NavigationSystem.init(ctx);
-
-                    // --- OPTIMIZATION: ZERO-GC VECTOR MATH ---
-                    if (!sectorState.walkTarget) sectorState.walkTarget = new THREE.Vector3();
-
-                    if (playerPos) {
-                        sectorState.walkTarget.set(playerPos.x, 0, playerPos.z);
-                        const jPos = jordan?.position || _fallbackJordanPos;
-
-                        _vS1.subVectors(playerPos, jPos).normalize();
-                        sectorState.walkTarget.sub(_vS1.multiplyScalar(2.0));
-                    } else {
-                        sectorState.walkTarget.copy(_fallbackWalkTarget);
-                    }
-                }
-            }
-            else if (jcState === 4) {
-                if (jordan) {
-                    if (playerPos) {
-                        if (!sectorState.walkTarget) sectorState.walkTarget = new THREE.Vector3();
-                        sectorState.walkTarget.set(playerPos.x, 0.06, playerPos.z);
-                        const jPos = jordan.position;
-                        _vS1.subVectors(playerPos, jPos);
-                        _vS1.y = 0;
-                        _vS1.normalize();
-                        sectorState.walkTarget.sub(_vS1.multiplyScalar(2.0));
-                    }
-                    const target = sectorState.walkTarget || _fallbackWalkTarget;
-                    const distToTarget = jordan.position.distanceTo(target);
-                    const distToPlayer = playerPos ? jordan.position.distanceTo(playerPos) : Infinity;
-
-                    jordan.position.lerp(target, 0.05);
-
-                    const body = jordan.userData.cachedBody || jordan.children.find((c: any) => c.userData.isBody);
-                    if (body) {
-                        _animState.isMoving = true;
-                        _animState.isRushing = false;
-                        _animState.isDodging = false;
-                        _animState.dodgeStartTime = 0;
-                        _animState.staminaRatio = 1.0;
-                        _animState.isSpeaking = gameState.speakingUntil > simTime;
-                        _animState.isThinking = false;
-                        _animState.isIdleLong = false;
-                        _animState.isSwimming = false;
-                        _animState.isWading = false;
-                        _animState.seed = jordan.userData.seed || 0;
-                        _animState.renderTime = renderTime;
-                        _animState.simTime = simTime;
-
-                        PlayerAnimator.update(body, _animState, renderTime, delta);
-                    }
-
-                    if (distToTarget < 1.5 || jordan.position.x > 28.0 || distToPlayer < 4.0) {
-                        sectorState.jordanEventState = 5;
-                        sectorState.jordanEventTimer = simTime;
-                        if (events.onAction) {
-                            events.onAction({ type: TriggerActionType.FAMILY_MEMBER_FOUND, payload: { id: FamilyMemberID.JORDAN } });
-                            events.onAction({ type: TriggerActionType.FAMILY_MEMBER_FOLLOW });
-                        }
-                        if (events.startCinematic) {
-                            events.startCinematic(jordan, 1, 1, { targetPos: _fixedCamTarget, lookAtPos: _fixedCamLookAt, rotationSpeed: 0 });
-                        }
-                    }
-                }
-            }
-            else if (jcState === 6) {
-                const closeProgress = Math.max(0, Math.min(1, elapsed / 800));
-                if (doorL) { doorL.position.x = -15 + (closeProgress * 10); doorL.matrixAutoUpdate = true; }
-                if (doorR) { doorR.position.x = 15 - (closeProgress * 10); doorR.matrixAutoUpdate = true; }
-
-                if (elapsed >= 800 && !sectorState.doorCloseSoundPlayed) {
-                    audioEngine.playSound(SoundID.DOOR_SHUT, 0.6);
-                    sectorState.doorCloseSoundPlayed = true;
-                }
-
-                if (elapsed > 1000) {
-                    sectorState.jordanEventState = 7;
-                    sectorState.jordanEventTimer = simTime;
-                    if (events.setCameraOverride) events.setCameraOverride(null);
-                    UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 1, 0, simTime);
-
-                    // --- OPTIMIZATION: SEQUENTIAL CALLS AVOIDING ARRAY ALLOCATIONS ---
-                    if (events.onAction) {
-                        events.onAction({ type: TriggerActionType.SPAWN_BOSS, payload: { pos: LOCATIONS.SPAWN.BOSS } });
-                    }
-                }
             }
         }
 
@@ -814,5 +841,7 @@ export const Sector1: SectorDef = {
                 }
             }
         }
-    }
+    },
+
+    events: [jordanRescueEvent]
 };

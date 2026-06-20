@@ -249,12 +249,12 @@ export class PlayerMovementSystem implements System {
 
                 const swimY = _buoyancyResult.waterLevel - PHYSICS.SWIM_Y_OFFSET;
                 const targetY = isSwimming ? swimY : groundY;
-                playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, targetY, 4 * delta);
+                playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, targetY, Math.min(1.0, 4 * delta));
             } else {
                 isSwimming = false;
                 isWading = false;
                 if (playerGroup.position.y !== groundY) {
-                    playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, groundY, 15 * delta);
+                    playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, groundY, Math.min(1.0, 15 * delta));
                     if (Math.abs(playerGroup.position.y - groundY) < 0.01) playerGroup.position.y = groundY;
                 }
             }
