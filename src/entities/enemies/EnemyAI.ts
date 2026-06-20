@@ -18,7 +18,7 @@ import { NavigationSystem } from '../../systems/NavigationSystem';
 import { applyCollisionResolution } from '../../core/world/CollisionResolution';
 import { FXParticleType } from '../../types/FXTypes';
 import { StatusEffectID } from '../../types/StatusEffects';
-import { COMBAT } from '../../content/constants';
+import { COMBAT, PHYSICS } from '../../content/constants';
 import { ENEMY_DETECTION } from '../../entities/enemies/EnemyTypes';
 import { SystemID } from '../../systems/SystemID';
 
@@ -1019,6 +1019,20 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
         e.mesh.position.y + _v3.y,
         e.mesh.position.z + _v3.z
     );
+
+    // --- PLAYER COLLISION RESOLUTION (Soft Shove Parity) ---
+    if (session && session.state && session.state.player) {
+        const playerPos = session.state.player.position;
+        const pdx = _v4.x - playerPos.x;
+        const pdz = _v4.z - playerPos.z;
+        const pDistSq = pdx * pdx + pdz * pdz;
+        if (pDistSq < PHYSICS.SOFT_SHOVE_RADIUS_SQ && pDistSq > 0.0001) {
+            const overlap = (PHYSICS.SOFT_SHOVE_RADIUS_SQ - pDistSq) * PHYSICS.SOFT_SHOVE_FORCE;
+            const pDist = Math.sqrt(pDistSq);
+            _v4.x += (pdx / pDist) * overlap;
+            _v4.z += (pdz / pDist) * overlap;
+        }
+    }
 
     // 6. COLLISION RESOLUTION: Harden path against world obstacles
     // Throttle queries: only re-query spatial grid if enemy moved >0.5m (0.25m^2)

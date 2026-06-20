@@ -642,7 +642,7 @@ export const FXSystem = {
                         p.rot.x += p.rotVel.x * 60 * safeDelta; p.rot.z += p.rotVel.z * 60 * safeDelta;
                     }
 
-                    // FIXED: Höj landningströskeln för GORE till 0.22 så de landar OVANPÅ snölagret
+                    // Gore lands on top of the ground layer
                     const floorY = (t === FXParticleType.GORE) ? 0.22 : (t === FXParticleType.SPLASH || t === FXParticleType.BLOOD_SPLATTER ? -5.0 : 0.05);
                     if (p.pos.y <= floorY) {
                         FXSystem._handleLanding(p, i, particlesList, callbacks);

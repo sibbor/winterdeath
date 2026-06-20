@@ -264,7 +264,6 @@ export class DeathSystem implements System {
         }
 
         // --- 3. Player Animation & Gibbing ---
-        // --- 3. Player Animation & Gibbing ---
         if (state.player.deathState === PlayerDeathState.GIBBED) {
             if (playerMesh) playerMesh.visible = false;
 
