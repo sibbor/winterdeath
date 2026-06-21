@@ -432,7 +432,7 @@ const ChallengesProgressPage: React.FC<{
         return (
             <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-zinc-800 rounded bg-zinc-950/20 text-center animate-in fade-in duration-300">
                 <span className="text-zinc-500 font-mono text-xs uppercase tracking-widest">
-                    {t('challenges.no_progress') || 'NO CHALLENGE PROGRESS REGISTERED THIS SESSION'}
+                    {t('ui.challenge_no_progress') || 'NO CHALLENGE PROGRESS REGISTERED THIS SESSION'}
                 </span>
             </div>
         );

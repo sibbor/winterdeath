@@ -330,7 +330,15 @@ export const WeaponFX = {
 
     createGrenadeImpact: (pos: THREE.Vector3, radius: number, hitWater: boolean, ctx: any) => {
         if (hitWater) {
-            ctx.spawnParticle(pos.x, pos.y, pos.z, FXParticleType.SPLASH, 85);
+            // Spawn a massive water column/geyser using SPLASH particles with high upward velocity
+            for (let i = 0; i < 85; i++) {
+                _v1.set(
+                    (Math.random() - 0.5) * 4.0, // horizontal spread
+                    15.0 + Math.random() * 20.0, // high upward velocity (water column)
+                    (Math.random() - 0.5) * 4.0
+                );
+                ctx.spawnParticle(pos.x, pos.y, pos.z, FXParticleType.SPLASH, 1, undefined, _v1, undefined, 4.0 + Math.random() * 4.0);
+            }
             return;
         }
         // Standardized to seconds-based life (0.1s flash, 0.4s shockwave, 1.2s blast)
@@ -393,7 +401,15 @@ export const WeaponFX = {
 
     createFlashbangImpact: (pos: THREE.Vector3, hitWater: boolean, ctx: any) => {
         if (hitWater) {
-            ctx.spawnParticle(pos.x, pos.y, pos.z, FXParticleType.SPLASH, 8);
+            // Spawn a small water column (1/10th size of grenade)
+            for (let i = 0; i < 10; i++) {
+                _v1.set(
+                    (Math.random() - 0.5) * 0.4, // 1/10th horizontal spread
+                    3.0 + Math.random() * 4.0,   // 1/10th upward velocity
+                    (Math.random() - 0.5) * 0.4
+                );
+                ctx.spawnParticle(pos.x, pos.y, pos.z, FXParticleType.SPLASH, 1, undefined, _v1, undefined, 0.4 + Math.random() * 0.4);
+            }
             return;
         }
 

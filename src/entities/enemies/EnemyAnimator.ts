@@ -265,10 +265,22 @@ export const EnemyAnimator = {
 
                             const flashFreq = 5.0 + (_animState.progress * _animState.progress * 40.0);
                             const pulse = Math.sin(renderTime * 0.01 * flashFreq) * 0.5 + 0.5;
-                            if (e.indicatorRing.material) {
-                                const mat = e.indicatorRing.material as any;
+                            const hexColor = pulse > 0.5 ? 0xffffff : 0xff0000;
+                            if (e.indicatorRing.userData.isEnemyRingGroup) {
+                                const fillMat = (e.indicatorRing.children[0] as any).material;
+                                const borderMat = (e.indicatorRing.children[1] as any).material;
+                                if (fillMat) {
+                                    fillMat.opacity = 0.15 + _animState.progress * 0.3;
+                                    fillMat.color.setHex(hexColor);
+                                }
+                                if (borderMat) {
+                                    borderMat.opacity = 0.4 + _animState.progress * 0.5;
+                                    borderMat.color.setHex(hexColor);
+                                }
+                            } else if ((e.indicatorRing as any).material) {
+                                const mat = (e.indicatorRing as any).material as any;
                                 mat.opacity = 0.3 + _animState.progress * 0.6;
-                                mat.color.setHex(pulse > 0.5 ? 0xffffff : 0xff0000);
+                                mat.color.setHex(hexColor);
                             }
                         } else {
                             e.indicatorRing.visible = false;

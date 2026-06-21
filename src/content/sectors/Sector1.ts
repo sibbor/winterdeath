@@ -26,6 +26,8 @@ import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuff
 import { isPointInPolygon } from '../../utils/math/GeometryUtils';
 import { NavigationSystem } from '../../systems/NavigationSystem';
 
+const _v1 = new THREE.Vector3();
+
 // ============================================================================
 // SECTOR CONSTANTS & ENVIRONMENTAL POLYGON
 // ============================================================================
@@ -363,13 +365,9 @@ const jordanRescueEvent: SectorEvent = {
                         PlayerAnimator.update(body, _animState, renderTime, delta);
                     }
 
-                    if (distToTarget < 1.5 || jordan.position.x > 38.0 || distToPlayer < 4.0) {
+                    if (distToTarget < 1.5 || distToPlayer < 4.0) {
                         eventState[KEYS.jordanEventState] = 5;
                         eventState[KEYS.jordanEventTimer] = simTime;
-                        if (ctx.onAction) {
-                            ctx.onAction({ type: TriggerActionType.FAMILY_MEMBER_FOUND, payload: { id: FamilyMemberID.JORDAN } });
-                            ctx.onAction({ type: TriggerActionType.FAMILY_MEMBER_FOLLOW });
-                        }
                         if (ctx.startCinematic) {
                             ctx.startCinematic(jordan, 1, 1, { targetPos: _fixedCamTarget, lookAtPos: _fixedCamLookAt, rotationSpeed: 0 });
                         }
@@ -391,6 +389,36 @@ const jordanRescueEvent: SectorEvent = {
                     eventState[KEYS.jordanEventTimer] = simTime;
                     if (ctx.setCameraOverride) ctx.setCameraOverride(null);
                     UIEventRingBuffer.push(UIEventType.HUD_VISIBILITY, 1, 0, simTime);
+
+                    // --- COLLISION RESTORATION: Re-enable door colliders ---
+                    const streamer = ctx.engine?.systems.worldStreamer;
+                    if (streamer) {
+                        if (sectorState.doorFrame) sectorState.doorFrame.updateMatrixWorld(true);
+
+                        if (sectorState.doorObstacleL) {
+                            sectorState.doorObstacleL.isMutated = false;
+                            if (doorL) {
+                                doorL.getWorldPosition(sectorState.doorObstacleL.position);
+                                doorL.getWorldQuaternion(sectorState.doorObstacleL.quaternion);
+                                streamer.updateObstacle(sectorState.doorObstacleL);
+                            }
+                        }
+                        if (sectorState.doorObstacleR) {
+                            sectorState.doorObstacleR.isMutated = false;
+                            if (doorR) {
+                                doorR.getWorldPosition(sectorState.doorObstacleR.position);
+                                doorR.getWorldQuaternion(sectorState.doorObstacleR.quaternion);
+                                streamer.updateObstacle(sectorState.doorObstacleR);
+                            }
+                        }
+                        if (sectorState.doorObstacleFrame) {
+                            sectorState.doorObstacleFrame.isMutated = false;
+                            if (sectorState.doorObstacleFrame.collider?.size) {
+                                sectorState.doorObstacleFrame.collider.size.set(22, 17, 4);
+                            }
+                            streamer.updateObstacle(sectorState.doorObstacleFrame);
+                        }
+                    }
 
                     // --- OPTIMIZATION: SEQUENTIAL CALLS AVOIDING ARRAY ALLOCATIONS ---
                     if (ctx.onAction) {
@@ -486,13 +514,6 @@ export const Sector1: SectorDef = {
         { id: CollectibleID.S1_COLLECTIBLE_1, x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
         { id: CollectibleID.S1_COLLECTIBLE_2, x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
     ],
-
-    cinematic: {
-        offset: { x: 20, y: 8, z: 0 },
-        lookAtOffset: { x: -20, y: -5, z: 0 },
-        rotationSpeed: 0,
-        zoom: 0.1
-    },
 
     setupProps: async (ctx: SectorBuildContext) => {
         let startTime = performance.now();
@@ -639,42 +660,7 @@ export const Sector1: SectorDef = {
         });
         await yieldIfBudgetExceeded();
 
-        // --- GRAVEL GROUND AREA ---
-        /* //TODO: Fix z fighting between gravel and snow ground; use GroundSystem?!
-        const gravelShape = new THREE.Shape();
-        gravelShape.moveTo(90, -70);
-        gravelShape.lineTo(158, -75);
-        gravelShape.lineTo(168, -45);
-        gravelShape.lineTo(110, -42);
-        gravelShape.closePath();
-
-        const gravelGeo = new THREE.ShapeGeometry(gravelShape);
-        gravelGeo.computeVertexNormals();
-        const gravelMat = MATERIALS.gravel.clone();
-        if (gravelMat.map) {
-            gravelMat.map = gravelMat.map.clone();
-            gravelMat.map.wrapS = THREE.RepeatWrapping;
-            gravelMat.map.wrapT = THREE.RepeatWrapping;
-            gravelMat.map.repeat.set(20, 20);
-        }
-        const gravelMesh = new THREE.Mesh(gravelGeo, gravelMat);
-        gravelMesh.rotation.x = -Math.PI / 2;
-        gravelMesh.position.y = 0.08;
-        gravelMesh.receiveShadow = true;
-        GeneratorUtils.freezeStatic(gravelMesh);
-        ctx.scene.add(gravelMesh);
-
-
-        // Register gravel footsteps in worldStreamer
-        for (let x = 95; x <= 165; x += 10) {
-            for (let z = -75; z <= -45; z += 10) {
-                ctx.worldStreamer.registerGroundMaterial(x, z, 8.0, MaterialType.GRAVEL);
-            }
-        }
-        */
-
         // --- VISUAL MOUNTAIN BLOCKS TO COVER THE VOID BEHIND THE MOUNTAIN (x > 158) ---
-        /*
         const rock1 = NaturePropGenerator.createRock(40, 45, 25);
         rock1.position.set(185, -2, -80);
         GeneratorUtils.freezeStatic(rock1);
@@ -691,7 +677,6 @@ export const Sector1: SectorDef = {
         ctx.scene.add(rock3);
 
         await yieldIfBudgetExceeded();
-        */
 
         // --- POI: BLOCKED TRAIN TUNNEL ---
         await SectorBuilder.spawnPoi(ctx, PoiType.TRAIN_TUNNEL, LOCATIONS.POIS.TRAIN_TUNNEL.x, LOCATIONS.POIS.TRAIN_TUNNEL.z, 0, {

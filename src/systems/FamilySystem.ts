@@ -13,6 +13,7 @@ const _v1 = new THREE.Vector3(); // Target Position / Offset
 const _v3 = new THREE.Vector3(); // Direction
 const _vAim = new THREE.Vector3();
 const _UP = new THREE.Vector3(0, 1, 0);
+const _q1 = new THREE.Quaternion();
 
 // Single reusable animation state — avoids per-frame object allocation
 const _animState = {
@@ -75,8 +76,6 @@ export class FamilySystem implements System {
         // Family follows at exactly the player's current speed
         let followSpeed = playerCurrentSpeed;
 
-        const maxFollowSpeed = followSpeed * 1.5;
-
         const activeVehicle = state.vehicle.active ? state.vehicle.mesh : null;
         const inVehicle = !!activeVehicle;
 
@@ -85,12 +84,26 @@ export class FamilySystem implements System {
 
         for (let i = 0; i < members.length; i++) {
             const familyMember = members[i];
-            if (!familyMember.mesh || !familyMember.found) continue;
+            if (!familyMember.mesh) continue;
 
             const fm = familyMember.mesh;
             const userData = fm.userData;
 
             if (!fm.visible) fm.visible = true;
+
+            // --- 1. Ring Pulse Visual (Render Time) ---
+            const ring = familyMember.ring;
+            if (ring) {
+                ring.visible = !familyMember.found && !isDead;
+
+                if (ring.visible) {
+                    const pulse = 1.0 + Math.sin(renderTime * 0.003) * 0.1;
+                    ring.scale.set(pulse, pulse, pulse);
+                    ring.updateMatrix();
+                }
+            }
+
+            if (!familyMember.found) continue;
 
             // --- 0. VEHICLE RIDING LOGIC ---
             if (inVehicle) {
@@ -159,18 +172,7 @@ export class FamilySystem implements System {
                 familyMember.lastMoveTime = simTime;
             }
 
-            // --- 1. Ring Pulse Visual (Render Time) ---
-            const ring = familyMember.ring;
-            if (ring) {
-                const isFollowing = familyMember.following;
-                ring.visible = !(isFollowing || isDead);
 
-                if (ring.visible) {
-                    const pulse = 1.0 + Math.sin(renderTime * 0.003) * 0.1;
-                    ring.scale.set(pulse, pulse, pulse);
-                    ring.updateMatrix();
-                }
-            }
 
             // --- 2. Following Logic (Simulation Time) ---
             let fmIsMoving = false;
@@ -179,9 +181,10 @@ export class FamilySystem implements System {
             if (familyMember.following && !isCinematicActive && !isDead) {
                 const row = Math.floor(i / 2) + 1;
 
-                const backDist = 2.0 + row * 1.2;
+                // Tighter formation behind the player
+                const backDist = 1.2 + row * 0.6;
                 const sideSign = i % 2 === 0 ? -1 : 1;
-                const sideDist = 1.5 + (i % 2) * 0.5;
+                const sideDist = 0.4 + (i % 2) * 0.3;
 
                 let localX = sideSign * sideDist;
                 let localZ = -backDist;
@@ -194,11 +197,10 @@ export class FamilySystem implements System {
                     if (camAngle !== 0) _vAim.applyAxisAngle(_UP, camAngle);
 
                     // Compute relative aim direction normalized to player rotation
-                    const pRot = this.playerGroup.rotation.y;
-                    const cosP = Math.cos(-pRot);
-                    const sinP = Math.sin(-pRot);
-                    const relAimX = _vAim.x * cosP + _vAim.z * sinP;
-                    const relAimZ = -_vAim.x * sinP + _vAim.z * cosP;
+                    _q1.copy(this.playerGroup.quaternion).invert();
+                    _v3.copy(_vAim).applyQuaternion(_q1);
+                    const relAimX = _v3.x;
+                    const relAimZ = _v3.z;
 
                     // If player is aiming backwards or towards the follower slot
                     const dotAim = (relAimX * (localX / sideDist)) + (relAimZ * (localZ / backDist));
@@ -211,13 +213,9 @@ export class FamilySystem implements System {
                     }
                 }
 
-                const pRot = this.playerGroup.rotation.y;
-                const cos = Math.cos(pRot);
-                const sin = Math.sin(pRot);
-
-                _v1.copy(this.playerGroup.position);
-                _v1.x += localX * cos + localZ * sin;
-                _v1.z += -localX * sin + localZ * cos;
+                _v1.set(localX, 0, localZ).applyQuaternion(this.playerGroup.quaternion);
+                _v1.y = 0;
+                _v1.add(this.playerGroup.position);
 
                 const distSq = fm.position.distanceToSquared(_v1);
 
@@ -291,10 +289,10 @@ export class FamilySystem implements System {
                 _animState.isSpeaking = simTime < (familyMember.speakingUntil || 0);
                 _animState.isThinking = simTime < (familyMember.thinkingUntil || 0);
 
-                if (engine?.ground) {
+                if (engine?.systems.ground) {
                     // Route through GroundSystem SSoT — cache + Y-gate + proximity gate.
                     // _buoyancyResult is populated as a side-effect when near water.
-                    const groundY = engine.ground.getGroundHeight(
+                    const groundY = engine.systems.ground.getGroundHeight(
                         fm.position.x, fm.position.z, { engine, state: _session.state }, fm.position.y
                     );
                     _animState.isSwimming = _buoyancyResult.depth > 1.2;
@@ -312,7 +310,7 @@ export class FamilySystem implements System {
                             const dz = fm.position.z - rz;
 
                             if (dx * dx + dz * dz > 0.5) {
-                                engine.water?.spawnRipple(fm.position.x, fm.position.z, _session.state.simTime, _animState.isSwimming ? 0.8 : 0.5);
+                                engine.systems.water?.spawnRipple(fm.position.x, fm.position.z, _session.state.simTime, _animState.isSwimming ? 0.8 : 0.5);
                                 familyMember.lastRippleX = fm.position.x;
                                 familyMember.lastRippleZ = fm.position.z;
                             }

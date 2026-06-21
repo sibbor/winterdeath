@@ -399,6 +399,7 @@ export const FXSystem = {
 
         p.color = req.color ?? (isInstanced ? (PARTICLE_COLORS[t] || 0x888888) : undefined);
         p.pos.set(req.x, req.y, req.z);
+        p.weight = req.weight;
 
         if (t === FXParticleType.ELECTRIC_FLASH && req.hasCustomVel) {
             _v1.set(req.x + req.customVel.x, req.y + req.customVel.y, req.z + req.customVel.z);
@@ -562,7 +563,7 @@ export const FXSystem = {
         FXSystem.decalQueue.push(req);
     },
 
-    spawnParticle: (scene: THREE.Scene, particlesList: ParticleState[], x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => {
+    spawnParticle: (scene: THREE.Scene, particlesList: ParticleState[], x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number, weight?: number) => {
         const isEssential = ESSENTIAL_FLAGS[type] === 1;
 
         if (!isEssential) {
@@ -581,7 +582,7 @@ export const FXSystem = {
             if (!req) break;
 
             req.scene = scene; req.x = x; req.y = y; req.z = z;
-            req.type = type; req.customMesh = customMesh; req.color = color; req.scale = scale; req.life = life;
+            req.type = type; req.customMesh = customMesh; req.color = color; req.scale = scale; req.life = life; req.weight = weight;
             if (customVel) {
                 req.customVel.copy(customVel); req.hasCustomVel = true;
             } else {
@@ -599,7 +600,7 @@ export const FXSystem = {
         const safeDelta = scaledDelta > 0.1 ? 0.1 : scaledDelta;
 
         const engine = WinterEngine.getInstance();
-        const wind = engine?.wind?.current;
+        const wind = engine?.systems.wind?.current;
         const windX = wind ? wind.x : 0;
         const windZ = wind ? wind.y : 0;
 
@@ -638,6 +639,13 @@ export const FXSystem = {
 
                 if (p.isPhysics) {
                     p.vel.y -= FX.GRAVITY * safeDelta;
+                    if (t === FXParticleType.GORE && p.weight !== undefined) {
+                        // Apply friction / drag scaled inversely by weight (heavier = flies further, lighter = slows down fast)
+                        const dragCoeff = 2.0 / Math.max(0.1, p.weight);
+                        const dragFriction = Math.max(0, 1.0 - (dragCoeff * safeDelta));
+                        p.vel.x *= dragFriction;
+                        p.vel.z *= dragFriction;
+                    }
                     if (t !== FXParticleType.SPLASH && t !== FXParticleType.BLOOD_SPLATTER) {
                         p.rot.x += p.rotVel.x * 60 * safeDelta; p.rot.z += p.rotVel.z * 60 * safeDelta;
                     }

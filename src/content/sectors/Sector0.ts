@@ -338,7 +338,8 @@ function explodeBus(delta: number, simTime: number, renderTime: number, gameStat
 const busExplosionEvent: SectorEvent = {
     id: 'bus_explosion',
     onUpdate: (ctx, eventState) => {
-        const { delta, simTime, renderTime, playerPos, gameState, triggerSystem, engine } = ctx;
+        const { delta, simTime, renderTime, playerPos, gameState, engine } = ctx;
+        const triggerSystem = engine.systems.triggerSystem;
         let mask = SectorEventConstraint.NONE;
 
         if (!eventState[KEYS.busEventState]) {
@@ -629,8 +630,9 @@ const busExplosionEvent: SectorEvent = {
                 }
             }
             if (!exists) {
-                if (ctx.worldStreamer && typeof ctx.worldStreamer.registerObstacle === 'function') {
-                    ctx.worldStreamer.registerObstacle(obstacle_bus);
+                const streamer = engine?.systems.worldStreamer || ctx.engine?.systems.worldStreamer;
+                if (streamer && typeof streamer.registerObstacle === 'function') {
+                    streamer.registerObstacle(obstacle_bus);
                 }
             }
         }
@@ -1240,7 +1242,7 @@ export const Sector0: SectorDef = {
         ]);
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, triggerSystem, ctx, engine, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, engine, ...events }) => {
         if (!sectorState.spawns) sectorState.spawns = {};
 
         if (!sectorState.spawns.initial && simTime - gameState.startTime > 0) {
@@ -1339,8 +1341,9 @@ export const Sector0: SectorDef = {
                 for (let i = 0; i < rubble.count; i++) {
                     const ix = i * 3;
 
-                    const groundY = (gameState.worldStreamer && gameState.worldStreamer.getGroundHeight)
-                        ? gameState.worldStreamer.getGroundHeight(data.positions[ix], data.positions[ix + 2])
+                    const streamer = engine?.systems.worldStreamer;
+                    const groundY = (streamer && streamer.getGroundHeight)
+                        ? streamer.getGroundHeight(data.positions[ix], data.positions[ix + 2])
                         : 0.1;
                     const minHeight = groundY + (isTire ? 0.8 : 0.2);
 

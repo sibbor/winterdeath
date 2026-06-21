@@ -89,7 +89,7 @@ export interface SetupContext {
         startCinematic: (mesh: any, sectorId?: number, dialogueId?: number, params?: any) => void;
         endCinematic: () => void;
         playCinematicLine: (index: number) => void;
-        spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
+        spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number, weight?: number) => void;
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
         showDamageText: (x: number, y: number, z: number, text: string, color?: number) => void;
         spawnZombie: (forcedType?: EnemyType, forcedPos?: THREE.Vector3) => void;
@@ -129,6 +129,9 @@ export class GameSessionSetup {
 
         // Centralized Zero-GC Reset
         GameSessionLogic.resetState(state, props);
+
+        // Clear HudStore map items count so opening the map during sector generation doesn't show old sector data
+        HudStore.patch({ mapItemsCount: 0 });
 
         // Purge Triggers to prevent sector pollution
         if (session.systems.triggerSystem) {
@@ -171,11 +174,11 @@ export class GameSessionSetup {
             const dynamicLights: any[] = [];
             const textures = createProceduralTextures();
 
-            const triggerSystem = new TriggerSystem(MAX_ENTITIES.TRIGGERS);
-            session.systems.triggerSystem = triggerSystem;
-
             const worldStreamer = new WorldStreamer();
-            session.systems.worldStreamer = worldStreamer;
+            session.attachSystem(worldStreamer);
+
+            const triggerSystem = new TriggerSystem(MAX_ENTITIES.TRIGGERS);
+            session.attachSystem(triggerSystem);
 
             // Attach the streamer to the TriggerSystem so generation can add triggers to it
             triggerSystem.setStreamer(worldStreamer);
@@ -256,7 +259,7 @@ export class GameSessionSetup {
             await yielder();
 
             // VINTERDÖD FIX: Ensure static light buckets are optimized post-build
-            engine.light.rebuildBuckets(sectorBuildContext.dynamicLights);
+            engine.systems.light?.rebuildBuckets(sectorBuildContext.dynamicLights);
             state.world.lights.push(...sectorBuildContext.dynamicLights);
 
             // If we are building LIVE (not warmup), activate systems immediately.
@@ -327,13 +330,11 @@ export class GameSessionSetup {
                     simTime: 0,
                     renderTime: 0,
                     playerPos: ctx.state.player.position,
-                    triggerSystem: ctx.engine.systems.triggerSystem,
                     state: ctx.state,
                     gameState: ctx.state,
                     sectorState: ctx.state.sectorState,
                     ctx: ctx,
                     engine: ctx.engine,
-                    worldStreamer: ctx.worldStreamer,
                     scene: ctx.scene,
                     onAction: ctx.onAction,
                     spawnZombie: ctx.spawnZombie,
@@ -371,8 +372,9 @@ export class GameSessionSetup {
 
         // --- VINTERDÖD FIX: RESET INITIALIZATION SPIKE ---
         // We do this last to ensure the QueryResultPool budget is 100% fresh for the first simulation tick.
-        if (ctx.worldStreamer) {
-            ctx.worldStreamer.resetQueryPools();
+        const worldStreamer = ctx.engine?.systems.worldStreamer;
+        if (worldStreamer) {
+            worldStreamer.resetQueryPools();
         }
     }
 
@@ -504,7 +506,6 @@ export class GameSessionSetup {
         };
         return {
             scene: engine.scene, engine, obstacles: state.world.obstacles, chests: state.world.chests,
-            worldStreamer: ctx.session.systems.worldStreamer,
             dynamicLights, burningObjects, rng, mapItems, debugMode: props.gameState.settings.debugMode,
             interactables: [], triggers: [], sectorId: props.gameState.currentSector, smokeEmitters: [],
             sectorState: state.sectorState, state: state, activeFamilyMembers: ctx.refs.activeFamilyMembers.current, yield: yielder,
@@ -835,10 +836,21 @@ export class GameSessionSetup {
                             if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
                         }
 
-                        // Removed .clone() on position.
-                        const currentFM = { mesh, found: false, following: false, rescued: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring, spawnPos: new THREE.Vector3(mesh.position.x, mesh.position.y, mesh.position.z) };
-                        refs.activeFamilyMembers.current.push(currentFM);
-                        refs.familyMemberRef.current = currentFM;
+                        const currentFamilyMember = { mesh, found: false, following: false, rescued: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring, spawnPos: new THREE.Vector3(mesh.position.x, mesh.position.y, mesh.position.z) };
+                        refs.activeFamilyMembers.current.push(currentFamilyMember);
+                        refs.familyMemberRef.current = currentFamilyMember;
+                    }
+                }
+            }
+        }
+        if (!refs.familyMemberRef.current) {
+            const fmId = DataResolver.getSectorFamilyMemberId(props.gameState.currentSector);
+            if (fmId !== undefined) {
+                const fmArr = refs.activeFamilyMembers.current;
+                for (let i = 0; i < fmArr.length; i++) {
+                    if (fmArr[i].id === fmId) {
+                        refs.familyMemberRef.current = fmArr[i];
+                        break;
                     }
                 }
             }
@@ -848,10 +860,10 @@ export class GameSessionSetup {
     private static setupSystems(ctx: SetupContext, playerGroup: THREE.Group, sectorCtx: SectorBuildContext, triggerSystem: TriggerSystem) {
         const { engine, session, state, callbacks, refs, props, ui } = ctx;
 
-        if (engine.water) {
-            engine.water.setPlayerRef(playerGroup);
-            engine.water.setCallbacks({
-                spawnParticle: (x, y, z, type, count) => callbacks.spawnParticle(x, y, z, type, count),
+        if (engine.systems.water) {
+            engine.systems.water.setPlayerRef(playerGroup);
+            engine.systems.water.setCallbacks({
+                spawnParticle: (x, y, z, type, count, mesh, vel, col, scl, lf, wt) => callbacks.spawnParticle(x, y, z, type, count, mesh, vel, col, scl, lf, wt),
                 makeNoise: (pos, type, rad) => session.makeNoise(pos, type as NoiseType, rad)
             });
         }
@@ -869,20 +881,8 @@ export class GameSessionSetup {
             particleRenderer.render();
         };
 
-        // TODO: should attachSystem not handle this automatically?
-        // so it's enough with session.attachSystem(new EnemyDetectionSystem());
-        const detectionSys = new EnemyDetectionSystem();
-        session.detectionSystem = detectionSys;
-        session.attachSystem(detectionSys);
-
-        // TriggerSystem and WorldStreamer are already instantiated in runSectorSetup
-        // so that SectorBuilder can populate them during generation.
-        if (session.systems.worldStreamer) {
-            session.attachSystem(session.systems.worldStreamer);
-        }
-        if (session.systems.triggerSystem) {
-            session.attachSystem(session.systems.triggerSystem);
-        }
+        // EnemyDetectionSystem
+        session.attachSystem(new EnemyDetectionSystem());
 
         // Batch register buffered triggers from construction phase
         if (sectorCtx.triggers && sectorCtx.triggers.length > 0) {
@@ -919,6 +919,7 @@ export class GameSessionSetup {
             rewardXP: callbacks.rewardXP,
             t: callbacks.t,
             onBossKilled: (id: number) => {
+                engine.camera.shake(10.0);
                 let seen = false;
                 for (let j = 0; j < state.enemies.bossesDefeated.length; j++) {
                     if (state.enemies.bossesDefeated[j] === id) { seen = true; break; }
@@ -1085,7 +1086,7 @@ export class GameSessionSetup {
      * Respawns the player with full HP, stamina, ammo etc.
      * Enemies are respawned. Chests already opened remain open.
      * */
-    static respawnPlayer(session: GameSessionLogic, engine: WinterEngine, state: GameSessionState, refs: any, props: any, setDeathPhase: (phase: DeathPhase) => void) {
+    static respawnPlayer(session: GameSessionLogic, engine: WinterEngine, state: GameSessionState, refs: any, props: any, setDeathPhase: (phase: DeathPhase) => void, atBossCheckpoint?: boolean) {
         const scene = engine.scene;
 
         // --- 1. RESET PLAYER STATE (DOD / Zero-GC) ---
@@ -1188,8 +1189,11 @@ export class GameSessionSetup {
         // --- 3. SYSTEM CLEARING ---
         ProjectileSystem.clear(scene, state.combat.projectiles, state.combat.fireZones);
         FXSystem.reset();
-        session.systems.triggerSystem.resetTriggerStates();
         EnemyManager.clear();
+        if (!atBossCheckpoint) {
+            // Keep trigger states at the boss checkpoint
+            session.systems.triggerSystem.resetTriggerStates();
+        }
 
         // --- 3.1 BOSS TEARDOWN ---
         // EnemyManager.clear() removes boss mesh from scene but does NOT reset

@@ -53,7 +53,7 @@ export const NavigationSystem = {
      */
     init: (ctx: SectorBuildContext) => {
         costMap.fill(0);
-        const streamer = ctx.worldStreamer;
+        const streamer = ctx.engine?.systems.worldStreamer;
         if (!streamer) return;
 
         // --- VINTERDÖD OPTIMIZATION: OBSTACLE-CENTRIC RASTERIZATION ---

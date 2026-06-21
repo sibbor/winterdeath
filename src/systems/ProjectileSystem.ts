@@ -290,19 +290,19 @@ export class ProjectileSystem implements System {
                     }
                 }
             }
-
+ 
             // 3. Enemy Hit Detection (Phase 7 Spatial Grid)
             if (!despawn) {
-                const groundY = session.engine.ground ? session.engine.ground.getGroundHeight(pool.posX[i], pool.posZ[i], session, pool.posY[i]) : 0;
+                const groundY = session.engine.systems.ground ? session.engine.systems.ground.getGroundHeight(pool.posX[i], pool.posZ[i], session, pool.posY[i]) : 0;
 
                 // --- WATER IMPACT DETECTION ---
-                if (session.engine.water) {
-                    session.engine.water.checkBuoyancy(pool.posX[i], pool.posY[i], pool.posZ[i], renderTime);
-                    const b = session.engine.water.getBuoyancyResult();
+                if (session.engine.systems.water) {
+                    session.engine.systems.water.checkBuoyancy(pool.posX[i], pool.posY[i], pool.posZ[i], renderTime);
+                    const b = session.engine.systems.water.getBuoyancyResult();
 
                     if (b.inWater && pool.posY[i] <= b.waterLevel + 0.1 && pool.velY[i] <= 0) {
                         despawn = true;
-                        session.engine.water.spawnRipple(pool.posX[i], pool.posZ[i], renderTime, 0.8);
+                        session.engine.systems.water.spawnRipple(pool.posX[i], pool.posZ[i], renderTime, 0.8);
                         this.session.spawnParticle(pool.posX[i], b.waterLevel + 0.1, pool.posZ[i], FXParticleType.SPLASH, 8);
                         this.triggerExplosion(i, true);
                     }
@@ -499,7 +499,7 @@ export class ProjectileSystem implements System {
             const dx = enemy.mesh.position.x - px;
             const dz = enemy.mesh.position.z - pz;
             const distSq = dx * dx + dz * dz;
-            
+
             const enemyHitRad = enemy.hitRadius || 0.8;
             const maxExplosionDist = radius + enemyHitRad;
             if (distSq < maxExplosionDist * maxExplosionDist) {
@@ -529,7 +529,7 @@ export class ProjectileSystem implements System {
             CareerStatsSystem.recordUniqueEnemiesHitByExplosive(this.session, hitCount);
         }
 
-        _v1.set(px, hitWater ? (this.session.engine.water?.getBuoyancyResult().waterLevel || 0.1) : 0.1, pz);
+        _v1.set(px, hitWater ? (this.session.engine.systems.water?.getBuoyancyResult().waterLevel || 0.1) : 0.1, pz);
 
         let noiseType = NoiseType.OTHER;
         if (pool.weaponId[idx] === DamageID.GRENADE) {
@@ -545,10 +545,14 @@ export class ProjectileSystem implements System {
 
         if (pool.weaponId[idx] === DamageID.GRENADE) {
             WeaponFX.createGrenadeImpact(_v1, radius, hitWater, this.session);
+            if (hitWater && this.session.engine.systems.water) {
+                this.session.engine.systems.water.spawnExplosionRipple(px, pz, this.session.state.renderTime, 5.0);
+            }
         } else if (pool.weaponId[idx] === DamageID.MOLOTOV) {
             WeaponFX.createMolotovImpact(_v1, radius, hitWater, this.session);
-
-            if (!hitWater) {
+            if (hitWater && this.session.engine.systems.water) {
+                this.session.engine.systems.water.spawnRipple(px, pz, this.session.state.renderTime, 1.2);
+            } else {
                 const fZones = this.session.state.combat.fireZones;
                 const fCount = this.session.state.combat.fireZoneCount | 0;
                 if (fCount < MAX_ENTITIES.FIRE_ZONES) {
@@ -560,7 +564,10 @@ export class ProjectileSystem implements System {
                 }
             }
         } else if (pool.weaponId[idx] === DamageID.FLASHBANG) {
-            WeaponFX.createFlashbangImpact(_v1, false, this.session);
+            WeaponFX.createFlashbangImpact(_v1, hitWater, this.session);
+            if (hitWater && this.session.engine.systems.water) {
+                this.session.engine.systems.water.spawnExplosionRipple(px, pz, this.session.state.renderTime, 1.8);
+            }
         }
     }
 
@@ -610,8 +617,8 @@ export class ProjectileSystem implements System {
                     }
                 }
 
-                if (ctx?.worldStreamer) {
-                    const streamer = ctx.worldStreamer;
+                if (ctx?.systems.worldStreamer) {
+                    const streamer = ctx.systems.worldStreamer;
                     const poolIdx = streamer.getEnemyPool().nextIndex();
                     // Hitbox/Collision fix: Pad query by 5.5m for bosses
                     streamer.getNearbyEnemies(fz.x, fz.z, fz.radius + 5.5, poolIdx);
@@ -627,7 +634,7 @@ export class ProjectileSystem implements System {
 
                         const dx = EnemyPoolState.posX[jIdx] - fz.x;
                         const dz = EnemyPoolState.posZ[jIdx] - fz.z;
-                        
+
                         const enemyHitRad = enemy.hitRadius || 0.8;
                         const maxFireDist = fz.radius + enemyHitRad;
                         if (dx * dx + dz * dz <= maxFireDist * maxFireDist) {

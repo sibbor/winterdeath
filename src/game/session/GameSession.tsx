@@ -47,7 +47,7 @@ export interface GameSessionHandle {
     getMergedSessionStats: () => any;
     spawnBoss: (type: number, pos?: THREE.Vector3) => any;
     spawnEnemies: (newEnemies: any[]) => void;
-    respawnPlayer: (atBoss?: boolean) => void;
+    respawnPlayer: (atBossCheckpoint?: boolean) => void;
     restartSector: () => Promise<void>;
 }
 
@@ -66,9 +66,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     });
 
     // --- CORE CALLBACKS ---
-    const spawnParticle = useCallback((x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number) => {
+    const spawnParticle = useCallback((x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number, life?: number, weight?: number) => {
         const engine = refs.engineRef.current;
-        if (engine) FXSystem.spawnParticle(engine.scene, refs.stateRef.current.combat.particles, x, y, z, type, count, customMesh, customVel, color, scale);
+        if (engine) FXSystem.spawnParticle(engine.scene, refs.stateRef.current.combat.particles, x, y, z, type, count, customMesh, customVel, color, scale, life, weight);
     }, [refs]);
 
     const spawnDecal = useCallback((x: number, z: number, scale: number, material?: any, type: FXDecalType = FXDecalType.DECAL) => {
@@ -383,8 +383,20 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
-                state.familyFound = true;
                 state.sectorState.familyFound = true;
+                state.world.familyFound = true;
+
+                if (targetId !== undefined) {
+                    const fms = refs.activeFamilyMembers.current;
+                    if (fms) {
+                        for (let i = 0; i < fms.length; i++) {
+                            if (fms[i].id === targetId) {
+                                fms[i].found = true;
+                                fms[i].following = true;
+                            }
+                        }
+                    }
+                }
 
                 if (!props.familyAlreadyRescued) {
                     UIEventRingBuffer.push(UIEventType.FAMILY_FOUND, targetId || 0, 0, state.simTime);
@@ -398,6 +410,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     if (targetName) {
                         setBubble(targetName + " " + t('ui.saved'), 3000);
                         audioEngine.playSound(SoundID.UI_CHIME);
+                    }
+                } else {
+                    // Even if already rescued, refresh passives for this session since their following status changed
+                    const perkSystem = refs.gameSessionRef.current?.systems.perkSystem;
+                    if (perkSystem) {
+                        perkSystem.refreshBaseStats(refs.gameSessionRef.current!);
                     }
                 }
                 break;
@@ -761,7 +779,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         changeEnvironment: (weather: any, overrides: any) => {
             const currentProps = latestStateRef.current.props;
             refs.stateRef.current.sectorState.envOverride = overrides;
-            if (refs.engineRef.current) refs.engineRef.current.weather.sync(weather, 1000);
+            if (refs.engineRef.current) refs.engineRef.current.systems.weather?.sync(weather, 1000);
             if (currentProps.onEnvironmentOverrideChange) currentProps.onEnvironmentOverrideChange(overrides, weather);
         },
         setBubble,
@@ -789,13 +807,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
                 const boss = refs.SectorBuildContextRef.current?.spawnBoss(bossType, pos);
                 if (boss) {
-                    const engineInst = WinterEngine.getInstance();
+                    const engine = WinterEngine.getInstance();
                     refs.bossIntroRef.current = {
                         active: true,
                         bossMesh: boss.mesh,
-                        startTime: engineInst.renderTime,
-                        startPos: new THREE.Vector3().copy(engineInst.camera.position),
-                        startLookAt: new THREE.Vector3().copy(engineInst.camera.lookAtTarget)
+                        startTime: engine.renderTime,
+                        startPos: new THREE.Vector3().copy(engine.camera.position),
+                        startLookAt: new THREE.Vector3().copy(engine.camera.lookAtTarget)
                     };
 
                     if (refs.engineRef.current) {
@@ -832,7 +850,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
                         // Start looping growl sound during the fight
                         //refs.bossGrowlLoopIndexRef.current = audioEngine.playLoop(SoundID.ZOMBIE_GROWL_TANK, 0.35);
-                    }, 3000);
+                    }, 4500);
                 }
                 break;
             }
@@ -904,6 +922,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
     useEffect(() => {
         const handleKeepCamera = (e: any) => {
+            const engine = WinterEngine.getInstance();
             const detail = e.detail || {};
             const targetPos = detail.targetPos;
             const lookAtPos = detail.lookAtPos;
@@ -914,7 +933,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     active: true,
                     targetPos: new THREE.Vector3(targetPos.x, targetPos.y || 30, targetPos.z),
                     lookAtPos: new THREE.Vector3(lookAtPos.x, lookAtPos.y || 0, lookAtPos.z),
-                    endTime: WinterEngine.getInstance().renderTime + (duration || 5000)
+                    endTime: engine.renderTime + (duration || 5000)
                 };
                 refs.engineRef.current.camera.setCinematic(true);
             }
@@ -1015,15 +1034,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 enemies.push(newEnemies[i]);
             }
         },
-        respawnPlayer: (atBoss?: boolean) => {
+        respawnPlayer: (atBossCheckpoint?: boolean) => {
             const engine = WinterEngine.getInstance();
             const state = refs.stateRef.current;
             const session = refs.gameSessionRef.current;
             if (session) {
-                if (atBoss !== undefined) {
-                    if (!atBoss && state.checkpoint) {
+                if (atBossCheckpoint !== undefined) {
+                    if (!atBossCheckpoint && state.checkpoint) {
                         state.checkpoint.active = false;
-                    } else if (atBoss) {
+                    } else if (atBossCheckpoint) {
                         if (!state.checkpoint) state.checkpoint = { active: true, x: 0, y: 0, z: 0 };
                         state.checkpoint.active = true;
 
@@ -1035,7 +1054,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         }
                     }
                 }
-                GameSessionSetup.respawnPlayer(session, engine, state, refs, props, (phase) => updateUiState({ deathPhase: phase }));
+                GameSessionSetup.respawnPlayer(session, engine, state, refs, props, (phase) => updateUiState({ deathPhase: phase }), atBossCheckpoint);
             }
         },
         restartSector: async () => {
@@ -1163,8 +1182,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     setBubble: (text: string, duration?: number) => {
                         UIEventRingBuffer.pushString(UIEventType.CHAT_BUBBLE, text, duration || 3000, refs.stateRef.current?.simTime || 0);
                     },
-                    spawnParticle: (x, y, z, type: FXParticleType, count, customMesh, customVel, color, scale) => {
-                        FXSystem.spawnParticle(engine.scene, refs.stateRef.current.combat.particles, x, y, z, type, count, customMesh, customVel, color, scale);
+                    spawnParticle: (x, y, z, type: FXParticleType, count, customMesh, customVel, color, scale, life, weight) => {
+                        FXSystem.spawnParticle(engine.scene, refs.stateRef.current.combat.particles, x, y, z, type, count, customMesh, customVel, color, scale, life, weight);
                     },
                     spawnDecal: (x, z, scale, material, type: FXDecalType = FXDecalType.DECAL) => {
                         FXSystem.spawnDecal(engine.scene, refs.stateRef.current.world.bloodDecals, x, z, scale, material, type);
@@ -1351,21 +1370,21 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 if (env.wind || overrides?.windStrength !== undefined) {
                     const dir = (overrides as any)?.wind?.direction || env.wind?.direction || WIND_SYSTEM.DIRECTION;
                     const windAngle = overrides?.windDirection ?? Math.atan2(dir.z, dir.x);
-                    engine.wind.setRandomWind(
+                    engine.systems.wind?.setRandomWind(
                         overrides?.windStrength ?? env.wind?.strengthMin ?? WIND_SYSTEM.MIN_STRENGTH,
                         overrides?.windStrength ?? env.wind?.strengthMax ?? WIND_SYSTEM.MAX_STRENGTH,
                         windAngle,
                         env.wind?.angleVariance || WIND_SYSTEM.ANGLE_VARIANCE
                     );
                 } else {
-                    engine.wind.setRandomWind(WIND_SYSTEM.MIN_STRENGTH, WIND_SYSTEM.MAX_STRENGTH);
+                    engine.systems.wind?.setRandomWind(WIND_SYSTEM.MIN_STRENGTH, WIND_SYSTEM.MAX_STRENGTH);
                 }
 
-                if (engine.weather) {
+                if (engine.systems.weather) {
                     const weatherType = overrides?.weather?.type || env?.weather?.type || props.gameState.environmental.weather.type;
                     const requestedParticles = overrides?.weather?.particles || env?.weather?.particles || WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES;
                     const finalWeatherCount = Math.max(0, Math.min(requestedParticles, WEATHER_SYSTEM.MAX_NUM_PARTICLES));
-                    engine.weather.sync(weatherType, finalWeatherCount, 120);
+                    engine.systems.weather.sync(weatherType, finalWeatherCount, 120);
                 }
             }
         }

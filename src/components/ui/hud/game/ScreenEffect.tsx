@@ -33,6 +33,7 @@ const ScreenEffect: React.FC = () => {
         // ZERO-GC: Snapshot locals — allocated once per mount, mutated in place
         let prevEffect = EFFECT_NONE;
         let prevCriticalOpacityIdx = -1;
+        let prevQuality = true;
 
         return HudStore.subscribeFastUpdate((data: any) => {
             if (!containerRef.current || !gradientRef.current) return;
@@ -49,6 +50,7 @@ const ScreenEffect: React.FC = () => {
             const hasReflexShield = (flags & PlayerStatusFlags.REFLEX_SHIELD) !== 0;
             const hasQuickFinger = (flags & PlayerStatusFlags.QUICK_FINGER) !== 0;
             const hasCriticalHp = data.hasCriticalHp as boolean;
+            const hudEffectsQuality = data.hudEffectsQuality !== false;
 
             // Priority-ordered ternary — resolves to an interned string constant
             // V8 treats module-level string literals as pointer-equal: zero allocation
@@ -64,12 +66,12 @@ const ScreenEffect: React.FC = () => {
                                                 EFFECT_NONE;
 
             // ================================================================
-            // INFREQUENT PATH: fires only on effect type transitions.
+            // INFREQUENT PATH: fires only on effect type or quality transitions.
             // All DOM writes, class mutations, and CSS property sets live here.
             // Continuous visual animation is delegated to CSS keyframes —
             // no JS string allocation at 60fps.
             // ================================================================
-            if (effect !== prevEffect) {
+            if (effect !== prevEffect || hudEffectsQuality !== prevQuality) {
                 const c = containerRef.current!;
                 const g = gradientRef.current!;
                 const b = blurOverlayRef.current;
@@ -88,65 +90,123 @@ const ScreenEffect: React.FC = () => {
                     b.style.opacity = '0';
                     b.style.transform = 'scale(1)';
                     b.style.animation = 'none';
+                    if (hudEffectsQuality) {
+                        b.style.backdropFilter = 'blur(5px)';
+                        b.style.webkitBackdropFilter = 'blur(5px)';
+                    } else {
+                        b.style.backdropFilter = 'none';
+                        b.style.webkitBackdropFilter = 'none';
+                    }
                     b.className = 'absolute inset-0 pointer-events-none transition-all duration-700 ease-out';
                 }
 
-                // 2. Apply new effect — CSS keyframes drive continuous animation,
+                // 2. Apply new effect — CSS keyframes drive continuous animation (high quality only),
                 //    JS only sets the class once
-                switch (effect) {
-                    case EFFECT_DISORIENTED:
-                        c.classList.add('screen-fx-disoriented');
-                        g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_PURPLE);
-                        g.classList.add('screen-fx-vignette-disoriented');
-                        if (b) b.classList.add('screen-fx-blur-disoriented');
-                        break;
+                if (hudEffectsQuality) {
+                    switch (effect) {
+                        case EFFECT_DISORIENTED:
+                            c.classList.add('screen-fx-disoriented');
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_PURPLE);
+                            g.classList.add('screen-fx-vignette-disoriented');
+                            if (b) b.classList.add('screen-fx-blur-disoriented');
+                            break;
 
-                    case EFFECT_BURNING:
-                        c.classList.add('screen-fx-burning');
-                        g.style.setProperty('--vignette-color', '249, 115, 22');
-                        g.classList.add('screen-fx-vignette-burning');
-                        if (b) b.classList.add('screen-fx-blur-burning');
-                        break;
+                        case EFFECT_BURNING:
+                            c.classList.add('screen-fx-burning');
+                            g.style.setProperty('--vignette-color', '249, 115, 22');
+                            g.classList.add('screen-fx-vignette-burning');
+                            if (b) b.classList.add('screen-fx-blur-burning');
+                            break;
 
-                    case EFFECT_BLEEDING:
-                        c.classList.add('screen-fx-bleeding');
-                        g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_RED);
-                        g.classList.add('screen-fx-vignette-bleeding');
-                        break;
+                        case EFFECT_BLEEDING:
+                            c.classList.add('screen-fx-bleeding');
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_RED);
+                            g.classList.add('screen-fx-vignette-bleeding');
+                            break;
 
-                    case EFFECT_GIB_MASTER:
-                        g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_PURPLE);
-                        g.style.opacity = OPACITY_STRINGS[45];
-                        break;
+                        case EFFECT_GIB_MASTER:
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_PURPLE);
+                            g.style.opacity = OPACITY_STRINGS[45];
+                            break;
 
-                    case EFFECT_ADRENALINE:
-                        g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_GREEN);
-                        g.style.opacity = OPACITY_STRINGS[45];
-                        break;
+                        case EFFECT_ADRENALINE:
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_GREEN);
+                            g.style.opacity = OPACITY_STRINGS[45];
+                            break;
 
-                    case EFFECT_REFLEX:
-                        g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_YELLOW);
-                        g.style.opacity = OPACITY_STRINGS[45];
-                        break;
+                        case EFFECT_REFLEX:
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_YELLOW);
+                            g.style.opacity = OPACITY_STRINGS[45];
+                            break;
 
-                    case EFFECT_QUICK_FINGER:
-                        g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_BLUE);
-                        g.style.opacity = OPACITY_STRINGS[45];
-                        if (b) { b.style.opacity = '1'; b.style.transform = 'scale(1.03)'; }
-                        break;
+                        case EFFECT_QUICK_FINGER:
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_BLUE);
+                            g.style.opacity = OPACITY_STRINGS[45];
+                            if (b) { b.style.opacity = '1'; b.style.transform = 'scale(1.03)'; }
+                            break;
 
-                    case EFFECT_CRITICAL:
-                        g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_RED);
-                        g.style.opacity = OPACITY_STRINGS[40]; // initial — updated below
-                        prevCriticalOpacityIdx = -1;           // force re-evaluation
-                        break;
+                        case EFFECT_CRITICAL:
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_RED);
+                            g.style.opacity = OPACITY_STRINGS[40]; // initial — updated below
+                            prevCriticalOpacityIdx = -1;           // force re-evaluation
+                            break;
 
-                    case EFFECT_NONE:
-                    default:
-                        break;
+                        case EFFECT_NONE:
+                        default:
+                            break;
+                    }
+                } else {
+                    // Low Quality Fallback: simple static opacity, no filters, no backdrop blurs, no animations
+                    switch (effect) {
+                        case EFFECT_DISORIENTED:
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_PURPLE);
+                            g.style.opacity = OPACITY_STRINGS[60];
+                            break;
+
+                        case EFFECT_BURNING:
+                            g.style.setProperty('--vignette-color', '249, 115, 22');
+                            g.style.opacity = OPACITY_STRINGS[45];
+                            break;
+
+                        case EFFECT_BLEEDING:
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_RED);
+                            g.style.opacity = OPACITY_STRINGS[40];
+                            break;
+
+                        case EFFECT_GIB_MASTER:
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_PURPLE);
+                            g.style.opacity = OPACITY_STRINGS[30];
+                            break;
+
+                        case EFFECT_ADRENALINE:
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_GREEN);
+                            g.style.opacity = OPACITY_STRINGS[30];
+                            break;
+
+                        case EFFECT_REFLEX:
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_YELLOW);
+                            g.style.opacity = OPACITY_STRINGS[30];
+                            break;
+
+                        case EFFECT_QUICK_FINGER:
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_BLUE);
+                            g.style.opacity = OPACITY_STRINGS[30];
+                            break;
+
+                        case EFFECT_CRITICAL:
+                            g.style.setProperty('--vignette-color', VIGNETTE_COLORS.VIGNETTE_RED);
+                            g.style.opacity = OPACITY_STRINGS[30];
+                            prevCriticalOpacityIdx = -1; // force re-evaluation for critical HP
+                            break;
+
+                        case EFFECT_NONE:
+                        default:
+                            break;
+                    }
                 }
 
                 prevEffect = effect;
+                prevQuality = hudEffectsQuality;
             }
 
             // ================================================================
@@ -155,8 +215,10 @@ const ScreenEffect: React.FC = () => {
             // ================================================================
             if (prevEffect === EFFECT_CRITICAL) {
                 const criticalSeverity = 1 - (data.hp / (data.maxHp * 0.3));
+                const baseOpacity = hudEffectsQuality ? 0.4 : 0.25;
+                const multiplier = hudEffectsQuality ? 0.4 : 0.25;
                 const opacityIdx = Math.max(0, Math.min(100,
-                    Math.round((0.4 + Math.max(0, Math.min(1, criticalSeverity)) * 0.4) * 100)
+                    Math.round((baseOpacity + Math.max(0, Math.min(1, criticalSeverity)) * multiplier) * 100)
                 ));
                 if (opacityIdx !== prevCriticalOpacityIdx) {
                     gradientRef.current!.style.opacity = OPACITY_STRINGS[opacityIdx];

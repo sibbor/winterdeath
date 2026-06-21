@@ -352,8 +352,9 @@ const busExplosionExperimentEvent: SectorEvent = {
                 ctx.obstacles.push(obstacle_bus);
             }
 
-            if (ctx.worldStreamer && typeof ctx.worldStreamer.registerObstacle === 'function') {
-                ctx.worldStreamer.registerObstacle(obstacle_bus);
+            const streamer = engine?.systems.worldStreamer || ctx.engine?.systems.worldStreamer;
+            if (streamer && typeof streamer.registerObstacle === 'function') {
+                streamer.registerObstacle(obstacle_bus);
             }
         }
     }
@@ -821,7 +822,7 @@ export const Sector4: SectorDef = {
 
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, handlePlayerHit, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, handlePlayerHit, engine, ...events }) => {
         // --- PERK ZONE LOGIC (Zero-GC) ---
         // Ambient visuals and frame-level player + enemy status effect processing
 
@@ -918,8 +919,9 @@ export const Sector4: SectorDef = {
                 obs.position.copy(ball.position);
 
                 // Update the WorldStreamer so physics match rendering
-                if (gameState.worldStreamer && typeof gameState.worldStreamer.updateObstacle === 'function') {
-                    gameState.worldStreamer.updateObstacle(obs);
+                const streamer = engine?.systems.worldStreamer;
+                if (streamer && typeof streamer.updateObstacle === 'function') {
+                    streamer.updateObstacle(obs);
                 }
             }
         }
@@ -947,9 +949,10 @@ export const Sector4: SectorDef = {
             for (let i = 0; i < rubble.count; i++) {
                 const ix = i * 3;
 
-                // [VINTERDÖD FIX] Dynamic ground height lookup
-                const groundY = (gameState.worldStreamer && gameState.worldStreamer.getGroundHeight)
-                    ? gameState.worldStreamer.getGroundHeight(data.positions[ix], data.positions[ix + 2])
+                // Dynamic ground height lookup
+                const streamer = engine?.systems.worldStreamer;
+                const groundY = (streamer && streamer.getGroundHeight)
+                    ? streamer.getGroundHeight(data.positions[ix], data.positions[ix + 2])
                     : 0.1;
                 const minHeight = groundY + (isTire ? 0.8 : 0.2);
 

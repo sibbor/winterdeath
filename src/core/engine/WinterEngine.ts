@@ -58,14 +58,7 @@ export class WinterEngine {
     public input: InputManager;
 
     // Environmental Systems (Persistent across scenes)
-    public wind: WindSystem;
-    public weather: WeatherSystem;
-    public fog: FogSystem;
-    public water: WaterSystem;
-    public light: LightSystem;
-    public sky: SkySystem;
-    public ground: GroundSystem;
-    public environment: EnvironmentManager;
+    public environmentManager: EnvironmentManager;
 
     private sceneStack: THREE.Scene[] = [];
     public settings: GameSettings;
@@ -150,41 +143,41 @@ export class WinterEngine {
         this.input.enable();
 
         this.camera = new CameraSystem();
-        this.light = new LightSystem(this.scene, this.maxVisibleLights, this.maxSafeShadows);
-        this.wind = new WindSystem();
-        this.weather = new WeatherSystem(this.scene, this.wind, this.camera.threeCamera);
-        this.fog = new FogSystem(this.scene, this.wind, this.camera.threeCamera);
-        this.water = new WaterSystem(this.scene);
-        this.sky = new SkySystem();
-        this.ground = new GroundSystem();
+        const lightSystem = new LightSystem(this.scene, this.maxVisibleLights, this.maxSafeShadows);
+        const windSystem = new WindSystem();
+        const weatherSystem = new WeatherSystem(this.scene, windSystem, this.camera.threeCamera);
+        const fogSystem = new FogSystem(this.scene, windSystem, this.camera.threeCamera);
+        const waterSystem = new WaterSystem(this.scene);
+        const skySystem = new SkySystem();
+        const groundSystem = new GroundSystem();
 
         // Wire GroundSystem into WaterSystem so each addWaterBody auto-registers its spatial
         // zone in GroundSystem — enabling the buoyancy proximity gate without extra plumbing.
-        this.water.setGroundRef(this.ground);
+        waterSystem.setGroundRef(groundSystem);
 
         // 3. Environment Orchestrator (The Master Sync System)
-        this.environment = new EnvironmentManager(
-            this.sky, this.fog, this.weather, this.water, this.light, this.wind, this.ground
+        this.environmentManager = new EnvironmentManager(
+            skySystem, fogSystem, weatherSystem, waterSystem, lightSystem, windSystem, groundSystem
         );
 
         // --- GATE SYSTEMS TO VARIABLE STEP (Visual Smoothness) ---
-        this.wind.isFixedStep = false;
-        this.weather.isFixedStep = false;
-        this.water.isFixedStep = false;
+        windSystem.isFixedStep = false;
+        weatherSystem.isFixedStep = false;
+        waterSystem.isFixedStep = false;
 
         (window as any).WinterEngineInstance = this;
 
         this.registerSystem(SystemID.CAMERA, this.camera);
         this.registerSystem(SystemID.INPUT, this.input);
-        this.registerSystem(SystemID.GROUND, this.ground, false);
-        this.registerSystem(SystemID.WATER, this.water, false);
-        this.registerSystem(SystemID.WEATHER, this.weather, false);
-        this.registerSystem(SystemID.FOG, this.fog, false);
-        this.registerSystem(SystemID.LIGHT, this.light, false);
-        this.registerSystem(SystemID.ENVIRONMENT_MANAGER, this.environment);
+        this.registerSystem(SystemID.GROUND, groundSystem, false);
+        this.registerSystem(SystemID.WATER, waterSystem, false);
+        this.registerSystem(SystemID.WEATHER, weatherSystem, false);
+        this.registerSystem(SystemID.FOG, fogSystem, false);
+        this.registerSystem(SystemID.LIGHT, lightSystem, false);
+        this.registerSystem(SystemID.ENVIRONMENT_MANAGER, this.environmentManager);
 
         // Perform init logic once system is assigned a property
-        this.sky.init();
+        skySystem.init();
 
         // Register the singleton monitor as a passive system
         this.registerSystem(SystemID.PERFORMANCE_MONITOR, PerformanceMonitor.getInstance());
@@ -484,7 +477,7 @@ export class WinterEngine {
 
         // --- VINTERDÖD FIX: Clear static chunk cache to prevent leaks across sectors ---
         ChunkManager.clear();
-        if (this.light) this.light.clear();
+        if (this.systems.light) this.systems.light.clear();
         clearEffects();
 
         monitor.end('cleanup');
@@ -503,11 +496,11 @@ export class WinterEngine {
 
         // --- CONSOLIDATED ENVIRONMENTAL LIFECYCLE ---
         // 1. Clear previous state (orphaned buffers, decals, etc.)
-        this.environment.clear();
+        this.environmentManager.clear();
 
         // 2. Synchronize new scene context
         if (env) {
-            this.environment.sync(env, groundType, scene, isWarmup);
+            this.environmentManager.sync(env, groundType, scene, isWarmup);
         }
 
         // 3. Re-attach all tickable systems (Footprints, FX, etc.)
@@ -693,7 +686,7 @@ export class WinterEngine {
                 this.onRenderOverride();
             } else if (this.renderTarget && this.settings.volumetricFog) {
                 // Prevent Feedback Loop
-                const fogMesh = this.fog?.fogMesh;
+                const fogMesh = this.systems.fog?.fogMesh;
                 const fogWasVisible = fogMesh ? fogMesh.visible : false;
 
                 if (fogMesh && fogWasVisible) {
@@ -995,7 +988,7 @@ export class WinterEngine {
         const isWarmup = !!targetScene && targetScene !== this.scene;
 
         // VINTERDÖD FIX: Delegation of Authority
-        this.environment.sync(env as EnvironmentConfig, groundType, scene, isWarmup);
+        this.environmentManager.sync(env as EnvironmentConfig, groundType, scene, isWarmup);
 
         // Update camera FOV if provided (managed by CameraSystem but synced here)
         if (env.fov !== undefined) {

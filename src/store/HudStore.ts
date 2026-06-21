@@ -113,6 +113,7 @@ export class HudStateSoA implements IHudState {
     public mapItems: MapItem[];
     public mapItemsCount = 0;
     public debugMode = false;
+    public hudEffectsQuality = true;
     public debugInfo: DebugInfoData = {
         aim: { x: 0, y: 0 },
         input: { w: 0, a: 0, s: 0, d: 0, fire: 0, reload: 0 },
@@ -264,6 +265,7 @@ export class HudStateSoA implements IHudState {
         }
 
         this.debugMode = src.debugMode;
+        this.hudEffectsQuality = src.hudEffectsQuality;
         this.debugInfo.enemies = src.debugInfo.enemies;
         this.debugInfo.objects = src.debugInfo.objects;
         this.debugInfo.drawCalls = src.debugInfo.drawCalls;

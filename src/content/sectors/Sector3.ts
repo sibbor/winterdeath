@@ -109,7 +109,7 @@ const epilogueEvent: SectorEvent = {
         eventState[KEYS.epilogueDone] = false;
     },
     onUpdate: (ctx, eventState) => {
-        const { delta, simTime, renderTime, playerPos, gameState, triggerSystem, engine } = ctx;
+        const { delta, simTime, renderTime, playerPos, gameState, engine } = ctx;
         const sectorState = gameState.sectorState;
         let mask = SectorEventConstraint.NONE;
 
@@ -532,14 +532,8 @@ export const Sector3: SectorDef = {
         { id: CollectibleID.S3_COLLECTIBLE_2, x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
     ],
 
-    cinematic: {
-        offset: LOCATIONS.CINEMATIC.OFFSET,
-        lookAtOffset: LOCATIONS.CINEMATIC.LOOK_AT,
-        rotationSpeed: 0.05
-    },
-
     setupProps: async (ctx: SectorBuildContext) => {
-        const { scene } = ctx;
+        //const { scene } = ctx;
 
         let startTime = performance.now();
         const yieldIfBudgetExceeded = async () => {
@@ -666,7 +660,8 @@ export const Sector3: SectorDef = {
         spawnSectorHordes(ctx);
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, triggerSystem, ctx, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, engine, ...events }) => {
+        const triggerSystem = engine.systems.triggerSystem;
         // --- SECTOR 3: NATHALIE MISSION LOGIC ---
         if (Math.random() < 0.015 && gameState.enemies.length < 12 && !sectorState.epilogueBossDefeated) {
             const angle = Math.random() * Math.PI * 2;

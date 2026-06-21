@@ -378,9 +378,9 @@ export class WaterSystem implements System {
 
     public update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number): void {
         // Auto-sync with Engine Wind
-        const engine = WinterEngine.getInstance();
-        if (engine && engine.wind) {
-            this.setWaterDynamics(engine.wind.strength, engine.wind.current);
+        const engine = session?.engine || WinterEngine.getInstance();
+        if (engine && engine.systems.wind) {
+            this.setWaterDynamics(engine.systems.wind.strength, engine.systems.wind.current);
         }
 
         // Bind strictly aquatic vegetation shaders

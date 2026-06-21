@@ -18,6 +18,8 @@ import { MAX_ENTITIES } from '../content/constants';
 
 // Performance Scratchpads (Zero-GC)
 const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
 
 // Cached screen dimensions to avoid DOM layout thrashing / window lookup overhead
 let _cachedWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
@@ -82,7 +84,8 @@ const _fastUpdateDetail = {
     interactionLabel: '',
     interactionX: 0,
     interactionY: 0,
-    damagedObstacles: [] as any[]
+    damagedObstacles: [] as any[],
+    hudEffectsQuality: true
 };
 
 export const HudSystem = {
@@ -90,7 +93,7 @@ export const HudSystem = {
     id: 'hud_system',
     enabled: true,
     persistent: true,
-    emitFastUpdate: (state: any, input: any, now: number, props: any, playerPos?: THREE.Vector3, camera?: THREE.Camera) => {
+    emitFastUpdate: (state: any, input: any, now: number, props: any, playerPos?: THREE.Vector3, camera?: THREE.Camera, engine?: any) => {
         const wep = DataResolver.getWeapons()[state.combat.activeWeapon];
         const stats = state.player.statsBuffer;
 
@@ -106,6 +109,11 @@ export const HudSystem = {
         const activeBoss = state.enemies.activeBoss;
         if (activeBoss) {
             bossHp = activeBoss.hp / activeBoss.maxHp;
+        } else if (state.enemies.bossDefeatedTime > 0) {
+            const timeSinceDefeat = (engine ? engine.simTime : state.simTime) - state.enemies.bossDefeatedTime;
+            if (timeSinceDefeat < 10000) {
+                bossHp = 0;
+            }
         }
 
         _fastUpdateDetail.hp = stats[StatID.HP] || 0;
@@ -151,11 +159,15 @@ export const HudSystem = {
             }
 
             if (nearestEnemy) {
+                // Determine if behind using camera world direction (Zero-GC dot-product)
+                _v2.copy(nearestEnemy.mesh.position).sub(camera.position);
+                camera.getWorldDirection(_v3);
+                const isBehind = _v2.dot(_v3) < 0;
+
                 _v1.copy(nearestEnemy.mesh.position);
                 _v1.y += 1.0; // Aim at chest height
                 _v1.project(camera);
 
-                const isBehind = _v1.z > 1.0;
                 _fastUpdateDetail.waveIndicatorActive = true;
                 let dirX = _v1.x;
                 let dirY = -_v1.y; // Invert WebGL Y for CSS screen space
@@ -198,7 +210,6 @@ export const HudSystem = {
             _fastUpdateDetail.interactionId = state.triggers.interaction.promptId;
             _fastUpdateDetail.interactionType = state.triggers.interaction.type;
             _fastUpdateDetail.interactionLabel = state.triggers.interaction.label;
-
             _fastUpdateDetail.interactionX = 0;
             _fastUpdateDetail.interactionY = 0;
 
@@ -211,12 +222,14 @@ export const HudSystem = {
         }
 
         _fastUpdateDetail.statusFlags = state.combat.statusFlags || 0;
+        _fastUpdateDetail.hudEffectsQuality = props.gameState.settings.hudEffectsQuality !== false;
+
         // Sync StatusStore flags with the main engine state (Zero-GC)
         StatusStore.setStatusFlags(state.combat.statusFlags || 0);
 
         // --- Destroyable Obstacles Durability Tracking (Zero-GC Screen Projection) ---
         let damagedObsCount = 0;
-        const ws = WinterEngine.getInstance().systems.worldStreamer;
+        const ws = (engine || WinterEngine.getInstance()).systems.worldStreamer;
         if (ws && playerPos && camera) {
             const poolIdx = ws.getObstaclePool().nextIndex();
             ws.getNearbyObstacles(playerPos.x, playerPos.z, 20.0, poolIdx);
@@ -262,7 +275,8 @@ export const HudSystem = {
         props: any,
         distanceTraveled: number,
         camera: THREE.Camera,
-        playerRotY: number
+        playerRotY: number,
+        engine?: any
     ) => {
         // Swap active buffer
         _useBufferA = !_useBufferA;
@@ -289,13 +303,25 @@ export const HudSystem = {
         }
 
         // --- 2. REST OF DATA SYNC ---
-        if (activeBoss) {
+        let isRecentlyDefeated = false;
+        if (!activeBoss && state.enemies.bossDefeatedTime > 0) {
+            const timeSinceDefeat = (engine ? engine.simTime : state.simTime) - state.enemies.bossDefeatedTime;
+            if (timeSinceDefeat < 10000) {
+                isRecentlyDefeated = true;
+            }
+        }
+
+        if (activeBoss || isRecentlyDefeated) {
             _current.bossActive = true;
-            _current.bossName = activeBoss.bossId !== undefined ? DataResolver.getBossName(activeBoss.bossId) : 'ui.boss';
-            _current.bossHp = activeBoss.hp;
-            _current.bossMaxHp = activeBoss.maxHp;
-            _current.bossPos!.x = activeBoss.mesh.position.x;
-            _current.bossPos!.z = activeBoss.mesh.position.z;
+            if (activeBoss) {
+                _current.bossName = activeBoss.bossId !== undefined ? DataResolver.getBossName(activeBoss.bossId) : 'ui.boss';
+                _current.bossHp = activeBoss.hp;
+                _current.bossMaxHp = activeBoss.maxHp;
+                _current.bossPos!.x = activeBoss.mesh.position.x;
+                _current.bossPos!.z = activeBoss.mesh.position.z;
+            } else {
+                _current.bossHp = 0;
+            }
         } else {
             _current.bossActive = false;
         }
@@ -421,7 +447,7 @@ export const HudSystem = {
         _current.activeWeapon = state.combat.activeWeapon;
         _current.isReloading = state.combat.isReloading;
         _current.bossSpawned = state.enemies.bossSpawned;
-        _current.bossDefeated = activeBoss ? activeBoss.dead : false;
+        _current.bossDefeated = activeBoss ? activeBoss.dead : (state.enemies.bossDefeatedTime > 0);
         _current.familyFound = state.world.familyFound;
         _current.familySignal = isFinite(famSignal) ? famSignal : 0;
         _current.level = state.player.statsBuffer[StatID.LEVEL] || 1;
@@ -497,7 +523,7 @@ export const HudSystem = {
             }
         }
         _current.mapItemsCount = mCount;
-        _current.fps = WinterEngine.getInstance().systems.performanceMonitor?.getFps() ?? 0;
+        _current.fps = (engine || WinterEngine.getInstance()).systems.performanceMonitor?.getFps() ?? 0;
         _current.hudVisible = state.ui.hudVisible ?? _current.hudVisible;
         _current.sectorName = state.world.sectorName || '';
         _current.currentSector = props.currentSector || 0;
@@ -608,7 +634,7 @@ export const HudSystem = {
             _current.debugInfo.aim.x = 0; _current.debugInfo.aim.y = 0;
         }
 
-        const perfMon = WinterEngine.getInstance().systems.performanceMonitor!;
+        const perfMon = (engine || WinterEngine.getInstance()).systems.performanceMonitor!;
         const gcInfo = perfMon.getFormattedGcInfo();
         const dbgActs = input.actions;
 

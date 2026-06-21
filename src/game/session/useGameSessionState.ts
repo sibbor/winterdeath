@@ -81,7 +81,14 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
     // Engine Control Refs
     const prevInputRef = useRef<boolean>(false);
     const cameraOverrideRef = useRef<any>(null);
-    const bossIntroRef = useRef<{ active: boolean, bossMesh: THREE.Object3D | null, startTime: number }>({ active: false, bossMesh: null, startTime: 0 });
+    const bossIntroRef = useRef<{
+        active: boolean;
+        bossMesh: THREE.Object3D | null;
+        startTime: number;
+        startPos?: THREE.Vector3;
+        startLookAt?: THREE.Vector3;
+        hasTriggeredPanelShake?: boolean;
+    }>({ active: false, bossMesh: null, startTime: 0 });
     const pendingBossSpawnRef = useRef<{ bossId: number; pos?: THREE.Vector3 } | null>(null);
     const bossGrowlLoopIndexRef = useRef<number>(-1);
 

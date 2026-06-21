@@ -110,7 +110,7 @@ export const SectorBuilder = {
             return;
         }
 
-        ctx.worldStreamer.registerObstacle(obstacle);
+        ctx.engine.systems.worldStreamer.registerObstacle(obstacle);
     },
 
     addInteractable: (ctx: SectorBuildContext, object: THREE.Object3D, params?: InteractableParams) => {
@@ -156,7 +156,7 @@ export const SectorBuilder = {
         if (!exists) ctx.interactables.push(object);
 
         const radius = object.userData.interactionRadius || 2.5;
-        ctx.worldStreamer.registerInteractable(object, object.position.x, object.position.z, radius);
+        ctx.engine.systems.worldStreamer.registerInteractable(object, object.position.x, object.position.z, radius);
     },
 
     generateAutomaticContent: async (ctx: SectorBuildContext, def: any) => {
@@ -206,6 +206,9 @@ export const SectorBuilder = {
         };
         const MOCK_ENGINE: any = {
             scene,
+            systems: {
+                worldStreamer: STUB_STREAMER
+            },
             water: { clear: NOOP, setLightPosition: NOOP, registerGround: NOOP, populateFlora: NOOP, setPlayerRef: NOOP, setCallbacks: NOOP },
             wind: { sync: NOOP, setOverride: NOOP, clearOverride: NOOP, setRandomWind: NOOP },
             weather: { sync: NOOP }, fog: { sync: NOOP },
@@ -220,7 +223,7 @@ export const SectorBuilder = {
             scene,
             sectorId,
             isWarmup: true,
-            worldStreamer: STUB_STREAMER,
+
             state: { sectorState: {} } as any,
             obstacles: [],
             chests: [],
@@ -262,16 +265,16 @@ export const SectorBuilder = {
         if (!ctx.environmentalZones) ctx.environmentalZones = [];
         ctx.environmentalZones.length = 0;
 
-        if (engine?.water) engine.water.clear();
+        if (engine?.systems.water) engine.systems.water.clear();
 
         // --- ATMOSPHERE REGISTRATION (Optimized via WorldStreamer) ---
-        if (ctx.worldStreamer) {
+        if (ctx.engine.systems.worldStreamer) {
             const staticZones = def.environmentalZones;
             if (staticZones) {
                 for (let i = 0; i < staticZones.length; i++) {
                     const aabb = SectorBuilder.getZoneAABB(staticZones[i]);
                     // Static indices are 0-999
-                    ctx.worldStreamer.registerEnvironmentalZone(i, aabb.minX, aabb.minZ, aabb.maxX, aabb.maxZ);
+                    ctx.engine.systems.worldStreamer.registerEnvironmentalZone(i, aabb.minX, aabb.minZ, aabb.maxX, aabb.maxZ);
                 }
             }
         }
@@ -333,11 +336,11 @@ export const SectorBuilder = {
         let mat = MaterialType.SNOW;
         if (type === GroundType.DIRT) mat = MaterialType.DIRT;
         else if (type === GroundType.GRAVEL) mat = MaterialType.GRAVEL;
-        ctx.worldStreamer.fillGroundMaterial(mat);
+        ctx.engine.systems.worldStreamer.fillGroundMaterial(mat);
 
         const engine = WinterEngine.getInstance();
-        if (engine && engine.water) {
-            engine.water.registerGround(ground);
+        if (engine && engine.systems.water) {
+            engine.systems.water.registerGround(ground);
         }
 
         if (ctx.yield) await ctx.yield();
@@ -845,8 +848,8 @@ export const SectorBuilder = {
 
     addWaterBody: (ctx: SectorBuildContext, type: WaterBodyType, x: number, z: number, width: number, depth: number, options?: { shape?: WaterShape; flowDirection?: THREE.Vector2; flowStrength?: number; maxDepth?: number; }): WaterBody | null => {
         const engine = WinterEngine.getInstance();
-        if (!engine?.water) return null;
-        return engine.water.addWaterBody(type, x, z, width, depth, options);
+        if (!engine?.systems.water) return null;
+        return engine.systems.water.addWaterBody(type, x, z, width, depth, options);
     },
 
     spawnLakeBed: (ctx: SectorBuildContext, x: number, z: number, width: number, depth: number, floorDepth: number = 4.0, shape: WaterShape = WaterShape.RECT) => {
@@ -865,10 +868,10 @@ export const SectorBuilder = {
         const idx = ctx.environmentalZones.length;
         ctx.environmentalZones.push(zone);
 
-        if (ctx.worldStreamer) {
+        if (ctx.engine.systems.worldStreamer) {
             const aabb = SectorBuilder.getZoneAABB(zone);
             // Dynamic indices are 1000+
-            ctx.worldStreamer.registerEnvironmentalZone(1000 + idx, aabb.minX, aabb.minZ, aabb.maxX, aabb.maxZ);
+            ctx.engine.systems.worldStreamer.registerEnvironmentalZone(1000 + idx, aabb.minX, aabb.minZ, aabb.maxX, aabb.maxZ);
         }
     },
 
@@ -947,8 +950,8 @@ export const SectorBuilder = {
         }
 
         const engine = WinterEngine.getInstance();
-        if (engine?.water) {
-            engine.water.populateFlora(floraInstances);
+        if (engine?.systems.water) {
+            engine.systems.water.populateFlora(floraInstances);
         }
 
         return water;

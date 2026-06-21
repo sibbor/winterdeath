@@ -13,6 +13,7 @@ import { UIEventType } from '../../../../systems/ui/UIEventRingBuffer';
 // MODULAR SUB-PANELS (Same-Folder Telemetry Layout Components)
 // ============================================================================
 import { ActionBarPanel } from './ActionBarPanel';
+import { VehiclePanel } from './VehiclePanel';
 import { VitalsPanel } from './VitalsPanel';
 import { CurrencyPanel } from './CurrencyPanel';
 import { KillsPanel } from './KillsPanel';
@@ -57,9 +58,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     onTogglePause, onToggleMap, onSelectWeapon, onOpenAdventureLog,
     isSectorBannerActive = false, onSectorBannerComplete
 }) => {
+    const { isLandscapeMode } = useOrientation();
+
     const isDead = useHudStore(s => s.isDead);
     const isDisoriented = useHudStore(s => s.isDisoriented);
-    const { isLandscapeMode } = useOrientation();
+    const isDriving = useHudStore(s => s.isDriving);
 
     // Context tooltips state (Cold Path — allocated during hovering interactions only)
     const [tooltipContent, setTooltipContent] = useState<string | null>(null);
@@ -364,13 +367,6 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 </div>
 
                 <div className={`absolute ${isMobileDevice ? 'top-20 px-12' : 'top-32'} left-1/2 -translate-x-1/2 flex flex-col items-center w-full max-w-[600px] gap-4`}>
-                    {/* BOSS PANEL */}
-                    <BossPanel
-                        isMobileDevice={isMobileDevice}
-                        isBossIntro={isBossIntro}
-                        bossHpBarRef={bossHpBarRef}
-                        bossHpTrailBarRef={bossHpTrailBarRef} />
-
                     {/* ENEMY WAVE PANEL */}
                     <EnemyWavePanel
                         isMobileDevice={isMobileDevice}
@@ -381,21 +377,27 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         waveTextRef={waveTextRef} />
                 </div>
 
-                {/* ACTION BAR PANEL */}
-                <ActionBarPanel
-                    loadout={loadout}
-                    isMobileDevice={isMobileDevice}
-                    onSelectWeapon={onSelectWeapon}
-                    showTooltip={showTooltip}
-                    clearTooltip={clearTooltip}
-                    ammoTextRef={ammoTextRef}
-                    reloadBarRef={reloadBarRef}
-                    speedTextRef={speedTextRef}
-                    speedArcRef={speedArcRef}
-                    gasPedalRef={gasPedalRef}
-                    skidPedalRef={skidPedalRef}
-                    brakePedalRef={brakePedalRef}
-                />
+                {/* VEHICLE PANEL or ACTIONBAR PANEL */}
+                {isDriving ? (
+                    <VehiclePanel
+                        isMobileDevice={isMobileDevice}
+                        speedTextRef={speedTextRef}
+                        speedArcRef={speedArcRef}
+                        gasPedalRef={gasPedalRef}
+                        skidPedalRef={skidPedalRef}
+                        brakePedalRef={brakePedalRef}
+                    />
+                ) : (
+                    <ActionBarPanel
+                        loadout={loadout}
+                        isMobileDevice={isMobileDevice}
+                        onSelectWeapon={onSelectWeapon}
+                        showTooltip={showTooltip}
+                        clearTooltip={clearTooltip}
+                        ammoTextRef={ammoTextRef}
+                        reloadBarRef={reloadBarRef}
+                    />
+                )}
 
                 {/* TOOLTIP */}
                 {tooltipContent && (
@@ -403,6 +405,15 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         <span className={`${isMobileDevice ? 'text-sm' : 'text-lg'} text-white font-bold uppercase tracking-widest whitespace-nowrap`}>{tooltipContent}</span>
                     </div>
                 )}
+            </div>
+
+            {/* BOSS PANEL (moved outside HUD_WRAPPER so it renders during Boss Intro) */}
+            <div className={`absolute ${isMobileDevice ? 'top-20 px-12' : 'top-32'} left-1/2 -translate-x-1/2 flex flex-col items-center w-full max-w-[600px] gap-4 pointer-events-none z-50`}>
+                <BossPanel
+                    isMobileDevice={isMobileDevice}
+                    isBossIntro={isBossIntro}
+                    bossHpBarRef={bossHpBarRef}
+                    bossHpTrailBarRef={bossHpTrailBarRef} />
             </div>
 
             {/* INTERACTION PROMPT — fully self-driving */}

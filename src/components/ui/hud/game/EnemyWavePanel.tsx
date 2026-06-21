@@ -26,28 +26,35 @@ export const EnemyWavePanel: React.FC<EnemyWavePanelProps> = React.memo(({
     // HOT PATH: Wave indicator DOM updates via subscribeFastUpdate
     // ============================================================================
     useEffect(() => {
-        const prevAngle = { active: false, angle: 0 };
+        let currentAngle = 0;
+        let isFirst = true;
 
         const handleFastUpdate = (data: any) => {
-            if (data.waveIndicatorActive !== prevAngle.active ||
-                (data.waveIndicatorActive && data.waveIndicatorAngle !== prevAngle.angle)) {
+            if (waveIndicatorRef.current) {
+                if (data.waveIndicatorActive) {
+                    waveIndicatorRef.current.style.opacity = '1';
+                    const targetAngle = data.waveIndicatorAngle;
 
-                if (waveIndicatorRef.current) {
-                    if (data.waveIndicatorActive) {
-                        waveIndicatorRef.current.style.opacity = '1';
-                        const r = Math.min(window.innerWidth, window.innerHeight) * 0.45;
-                        const cx = window.innerWidth / 2;
-                        const cy = window.innerHeight / 2;
-                        const x = cx + Math.cos(data.waveIndicatorAngle) * r;
-                        const y = cy + Math.sin(data.waveIndicatorAngle) * r;
-                        waveIndicatorRef.current.style.transform = `translate(${x}px, ${y}px) rotate(${(data.waveIndicatorAngle * (180 / Math.PI)) + 90}deg)`;
+                    if (isFirst) {
+                        currentAngle = targetAngle;
+                        isFirst = false;
                     } else {
-                        waveIndicatorRef.current.style.opacity = '0';
+                        // Shortest path angular lerp
+                        let diff = targetAngle - currentAngle;
+                        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+                        currentAngle += diff * 0.15; // Smooth interpolation speed
                     }
-                }
 
-                prevAngle.active = data.waveIndicatorActive;
-                prevAngle.angle = data.waveIndicatorAngle;
+                    const r = 120; // Hover closely around the player at screen center
+                    const cx = window.innerWidth / 2;
+                    const cy = window.innerHeight / 2;
+                    const x = cx + Math.cos(currentAngle) * r;
+                    const y = cy + Math.sin(currentAngle) * r;
+                    waveIndicatorRef.current.style.transform = `translate(${x}px, ${y}px) rotate(${(currentAngle * (180 / Math.PI)) + 90}deg)`;
+                } else {
+                    waveIndicatorRef.current.style.opacity = '0';
+                    isFirst = true;
+                }
             }
         };
 

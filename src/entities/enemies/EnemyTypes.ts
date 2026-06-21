@@ -71,6 +71,8 @@ export const ENEMY_XP = new Uint32Array(32);
 export const ENEMY_COLOR = new Uint32Array(32);
 export const ENEMY_SCALE = new Float32Array(32);
 export const ENEMY_WIDTH_SCALE = new Float32Array(32);
+export const ENEMY_BODY_MASS = new Float32Array(32);
+export const ENEMY_BODY_WEIGHT = new Float32Array(32);
 
 export const ENEMY_ATTACK_RANGE = new Float32Array(32);
 
@@ -89,6 +91,8 @@ for (let i = 0, len = zombieKeys.length; i < len; i = (i + 1) | 0) {
     ENEMY_COLOR[typeSMI] = data.color.num;
     ENEMY_SCALE[typeSMI] = data.scale;
     ENEMY_WIDTH_SCALE[typeSMI] = data.widthScale;
+    ENEMY_BODY_MASS[typeSMI] = data.bodyMass || (data.scale * data.widthScale);
+    ENEMY_BODY_WEIGHT[typeSMI] = data.bodyWeight || 70.0;
 
     // Derived detection ranges (default logic)
     if (typeSMI === EnemyType.WALKER) ENEMY_ATTACK_RANGE[typeSMI] = 1.5;
@@ -127,6 +131,8 @@ for (let i = 0, len = bossKeys.length; i < len; i = (i + 1) | 0) {
     ENEMY_COLOR[typeSMI] = data.color?.num || ENEMY_COLORS.BOSS_0.num;
     ENEMY_SCALE[typeSMI] = data.scale || 3.0;
     ENEMY_WIDTH_SCALE[typeSMI] = data.widthScale || 1.0;
+    ENEMY_BODY_MASS[typeSMI] = data.bodyMass || ((data.scale || 3.0) * (data.widthScale || 1.0));
+    ENEMY_BODY_WEIGHT[typeSMI] = data.bodyWeight || 350.0;
     ENEMY_ATTACK_RANGE[typeSMI] = 5.0;
 
     // Zero-GC force initialization for Boss attacks
@@ -163,6 +169,8 @@ export interface Enemy {
     hp: number;
     maxHp: number;
     speed: number;
+    bodyMass: number;
+    bodyWeight: number;
     xp: number;
     color: number;
 

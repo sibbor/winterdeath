@@ -114,9 +114,9 @@ export class GroundSystem implements System {
         //    registered water zone (+ 2m margin for smooth entry approach).
         const nearWater = !isAirborne && this._isNearWater(x, z);
 
-        if (nearWater && session.engine && session.engine.water) {
-            session.engine.water.checkBuoyancy(x, y, z, session.state.renderTime);
-            const b = session.engine.water.getBuoyancyResult();
+        if (nearWater && session.engine && session.engine.systems.water) {
+            session.engine.systems.water.checkBuoyancy(x, y, z, session.state.renderTime);
+            const b = session.engine.systems.water.getBuoyancyResult();
             if (b.inWater) {
                 result = b.groundY;
                 this._cache.set(cacheKey, result);
@@ -125,8 +125,8 @@ export class GroundSystem implements System {
         }
 
         // 4. Dry-land fallback — WorldStreamer is the authority for non-liquid terrain.
-        result = (session.state && session.state.worldStreamer)
-            ? session.state.worldStreamer.getGroundHeight(x, z)
+        result = (session.systems && session.systems.worldStreamer)
+            ? session.systems.worldStreamer.getGroundHeight(x, z)
             : 0;
         this._cache.set(cacheKey, result);
         return result;

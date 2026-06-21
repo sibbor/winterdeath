@@ -181,6 +181,7 @@ export const en = {
         buff: "BUFF",
         debuff: "DEBUFF",
         challenge_complete: "CHALLENGE COMPLETE",
+        challenge_no_progress: "NO CHALLENGE PROGRESS",
         challenges: {
             marathon: { title: "Marathon", desc: "Travel a total of {target} meters across all sectors." },
             scrapper: { title: "Scrapper", desc: "Collect a total of {target} scrap." },
@@ -420,6 +421,8 @@ export const en = {
         stm: "STM",
         show_fps: "Show FPS",
         show_fps_desc: "Display the frames per second monitor.",
+        hud_effects_quality: "HUD Effects Quality",
+        hud_effects_quality_desc: "Enable high-quality HUD blur, vignette, and pulse effects.",
         stamina: "STAMINA",
         low: "LOW",
         xp_gain: "+{amount} XP",

@@ -1125,15 +1125,19 @@ export const WeaponSounds = {
     playMagIn: () => audioEngine.playSound(SoundID.WEAPON_RELOAD, 0.5),
     playEmptyClick: () => audioEngine.playSound(SoundID.WEAPON_EMPTY, 0.4),
     playWeaponSwap: () => audioEngine.playSound(SoundID.WEAPON_SWITCH, 0.3),
-    playFlamethrowerEnd: () => audioEngine.playSound(SoundID.STEAM_HISS, 0.3),
+    playArcCannon: () => audioEngine.playLoop(SoundID.SHOT_ARC_CANNON, 0.5),
+    stopArcCannon: () => audioEngine.stopLoop(SoundID.SHOT_ARC_CANNON),
+    playFlamethrower: () => audioEngine.playLoop(SoundID.SHOT_FLAMETHROWER, 0.3, 1.0),
+    stopFlamethrower: () => audioEngine.stopLoop(SoundID.SHOT_FLAMETHROWER),
     playExplosion: (pos: THREE.Vector3) => audioEngine.playSpatialSound(SoundID.EXPLOSION, pos, 1.0, 120.0), // Extended spatial range to hit the high camera
+    playGrenadeDetonate: (pos: THREE.Vector3) => audioEngine.playSpatialSound(SoundID.EXPLOSION, pos, 1.0, 120.0), // Extended spatial range to hit the high camera
+    playMolotovDetonate: (pos: THREE.Vector3) => audioEngine.playSpatialSound(SoundID.EXPLOSION, pos, 1.0, 120.0), // Extended spatial range to hit the high camera
+    playFlashbangDetonate: (pos: THREE.Vector3) => audioEngine.playSpatialSound(SoundID.EXPLOSION, pos, 1.0, 120.0), // Extended spatial range to hit the high camera
     playGrenadeImpact: () => audioEngine.playSound(SoundID.GRENADE_IMPACT, 0.7),
     playMolotovImpact: () => audioEngine.playSound(SoundID.MOLOTOV_IMPACT, 0.7),
     playFlashbangImpact: () => audioEngine.playSound(SoundID.FLASHBANG_IMPACT, 0.7),
-    playArcCannonZap: () => audioEngine.playSound(SoundID.SHOT_ARC_CANNON, 0.5),
     playDash: () => audioEngine.playSound(SoundID.DODGE, 0.4, 0.9 + Math.random() * 0.2),
     playRadio: () => audioEngine.playSound(SoundID.RADIO, 0.3),
-    startFlamethrowerLoop: () => audioEngine.playLoop(SoundID.SHOT_FLAMETHROWER, 0.3, 1.0),
     startFireLoop: () => audioEngine.playLoop(SoundID.AMBIENT_FIRE, 0, 1.0),
 };
 

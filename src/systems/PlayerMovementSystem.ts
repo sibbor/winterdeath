@@ -220,11 +220,11 @@ export class PlayerMovementSystem implements System {
         let isSwimming = state.player.isSwimming || false;
         let isWading = false;
 
-        if (session.engine.ground) {
+        if (session.engine.systems.ground) {
             // getGroundHeight is the SSoT: it applies the frame-stamped cache, Y-height gate,
             // and water-proximity gate before calling checkBuoyancy — populating _buoyancyResult
             // as a side-effect. No direct checkBuoyancy call is needed here.
-            const groundY = session.engine.ground.getGroundHeight(
+            const groundY = session.engine.systems.ground.getGroundHeight(
                 playerGroup.position.x, playerGroup.position.z, session, playerGroup.position.y
             );
             inWater = _buoyancyResult.inWater && !state.vehicle.active;

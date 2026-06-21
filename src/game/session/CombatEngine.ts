@@ -121,6 +121,9 @@ export class CombatEngine {
         if (!session || !session.state) return false;
         const state = session.state;
 
+        // --- VEHICLE DAMAGE IMMUNITY ---
+        if (state.vehicle.active) return false;
+
         // --- INVINCIBILITY TERMINAL SETTING ---
         if (state.sectorState?.isInvincible) return false;
 

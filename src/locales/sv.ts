@@ -137,6 +137,7 @@ export const sv = {
         buff: "BUFF",
         debuff: "DEBUFF",
         challenge_complete: "UTMANING SLUTFÖRD",
+        challenge_no_progress: "INGA FRAMSTEG GÄLLANDE UTMANINGAR",
         challenges: {
             marathon: { title: "Maraton", desc: "Res totalt {target} meter över alla sektorer." },
             scrapper: { title: "Skrotsamlare", desc: "Samla totalt {target} skrot." },
@@ -400,6 +401,8 @@ export const sv = {
         stm: "STM",
         show_fps: "Visa FPS",
         show_fps_desc: "Visa bildrutor per sekund-mätaren.",
+        hud_effects_quality: "HUD-effektkvalitet",
+        hud_effects_quality_desc: "Aktivera högkvalitativa HUD-effekter såsom oskärpa, vinjett och pulsering.",
         stamina: "UTTHÅLLIGHET",
         low: "LÅG",
         xp_gain: "+{amount} XP",

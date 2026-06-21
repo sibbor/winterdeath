@@ -213,6 +213,7 @@ export interface HudState {
   mapItems: MapItem[];
   mapItemsCount: number;
   debugMode: boolean;
+  hudEffectsQuality: boolean;
   debugInfo: DebugInfoData;
   systems: any[]; // Consider typing if you pass specific System data to UI
 

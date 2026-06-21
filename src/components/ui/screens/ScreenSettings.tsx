@@ -173,6 +173,11 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
         UISounds.playClick();
     }, [setTempGraphics]);
 
+    const toggleHudEffects = useCallback(() => {
+        setTempGraphics(prev => ({ ...prev, hudEffectsQuality: !prev.hudEffectsQuality }));
+        UISounds.playClick();
+    }, [setTempGraphics]);
+
     return (
         <div className="flex flex-col items-center justify-start h-full max-w-2xl mx-auto space-y-6 overflow-y-auto pr-4 custom-scrollbar py-4 px-2">
             <TacticalCard color={0x3b82f6} className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
@@ -299,6 +304,33 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                     <TacticalButton
                         onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, antialias: false })); UISounds.playClick(); }}
                         variant={!tempGraphics.antialias ? 'primary' : 'secondary'}
+                        className="px-6 py-1"
+                    >
+                        {t('ui.off')}
+                    </TacticalButton>
+                </div>
+            </TacticalCard>
+
+            <TacticalCard
+                onClick={toggleHudEffects}
+                color={0x3b82f6}
+                className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+            >
+                <div>
+                    <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.hud_effects_quality')}</h3>
+                    <p className="text-gray-400 text-xs font-mono">{t('ui.hud_effects_quality_desc')}</p>
+                </div>
+                <div className="flex gap-2">
+                    <TacticalButton
+                        onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, hudEffectsQuality: true })); UISounds.playClick(); }}
+                        variant={tempGraphics.hudEffectsQuality !== false ? 'primary' : 'secondary'}
+                        className="px-6 py-1"
+                    >
+                        {t('ui.on')}
+                    </TacticalButton>
+                    <TacticalButton
+                        onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, hudEffectsQuality: false })); UISounds.playClick(); }}
+                        variant={tempGraphics.hudEffectsQuality === false ? 'primary' : 'secondary'}
                         className="px-6 py-1"
                     >
                         {t('ui.off')}

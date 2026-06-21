@@ -109,7 +109,6 @@ export interface SectorBuildContext {
     scene: THREE.Scene;
     engine: any;
     obstacles: any[];
-    worldStreamer: WorldStreamer;
     chests: any[];
     burningObjects: any[];
     triggers: SectorTrigger[]; // Buffered triggers for batch registration
@@ -145,7 +144,7 @@ export interface SectorBuildContext {
     // Required action bridge for triggers
     onAction: (action: TriggerAction | string | any[]) => void;
     handlePlayerHit?: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean;
-    spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D | null, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
+    spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D | null, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number, weight?: number) => void;
     spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
 }
 
@@ -232,13 +231,11 @@ export interface SectorUpdateContext {
     simTime: number;
     renderTime: number;
     playerPos: THREE.Vector3;
-    triggerSystem: TriggerSystem; // Live system for simulation checks
     state: any; // RuntimeState reference for systems
     gameState: any; // RuntimeState (Legacy compat)
     sectorState: SectorState;
     ctx: SectorBuildContext;
     engine: any;
-    worldStreamer: WorldStreamer;
     scene: THREE.Scene;
     handleDiscovery: (type: any, id: any, uiSmi?: number, titleKey?: string, detailsKey?: string, payload?: any) => boolean;
 
@@ -253,7 +250,7 @@ export interface SectorUpdateContext {
     playTone: (freq: number, type: ToneType, duration: number, vol?: number) => void;
     cameraShake: (amount: number, type?: CameraShakeType) => void;
     t: (key: string) => string;
-    spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D | null, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
+    spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D | null, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number, weight?: number) => void;
     spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
     handlePlayerHit: (damage: number, attacker: any, damageType: DamageType, damageSource: DamageID, isDoT?: boolean, effectType?: StatusEffectID, duration?: number, intensity?: number, specificAttackType?: EnemyAttackType) => boolean;
     startCinematic: (target?: THREE.Object3D | null, sectorId?: number, dialogueId?: number, params?: any) => void;

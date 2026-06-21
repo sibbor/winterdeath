@@ -77,6 +77,7 @@ export interface ParticleState {
     inUse: boolean;
     color?: number;
     _poolIdx: number;
+    weight?: number;
 }
 
 /**
@@ -96,4 +97,5 @@ export interface FXSpawnRequest {
     scale?: number;
     life?: number;
     material?: THREE.Material;
+    weight?: number;
 }

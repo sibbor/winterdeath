@@ -39,6 +39,8 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         story: 'enemies.zombies.WALKER.story',
         hp: 50,
         speed: 15,
+        bodyMass: 1.21,
+        bodyWeight: 70,
         xp: 20,
         color: ENEMY_COLORS.WALKER, // Pinkish
         scale: 1.0,
@@ -65,6 +67,8 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         story: 'enemies.zombies.RUNNER.story',
         hp: 30,
         speed: 20.0,
+        bodyMass: 0.8,
+        bodyWeight: 55,
         xp: 10,
         color: ENEMY_COLORS.RUNNER, // Green
         scale: 0.8,
@@ -91,6 +95,8 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         story: 'enemies.zombies.TANK.story',
         hp: 175,
         speed: 13.0,
+        bodyMass: 2.16,
+        bodyWeight: 90,
         xp: 50,
         color: ENEMY_COLORS.TANK, // Blue
         scale: 1.5,
@@ -115,6 +121,8 @@ export const ZOMBIE_TYPES: Partial<Record<EnemyType, ZombieTypeData>> & Record<s
         story: 'enemies.zombies.BLOATER.story',
         hp: 80,
         speed: 12,
+        bodyMass: 2.45,
+        bodyWeight: 120,
         xp: 30,
         color: ENEMY_COLORS.BLOATER,
         scale: 1.25,

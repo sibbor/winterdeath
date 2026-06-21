@@ -3,7 +3,7 @@ import { SystemID } from '../../systems/System';
 import { MATERIALS } from '../../utils/assets';
 import { KMH_TO_MS, AI_LOD } from '../../content/constants';
 import { EnemyPoolState, ENEMY_POOL_SIZE } from '../../core/pools/EnemyPool';
-import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_XP, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, EnemyFlags, NoiseType, EnemyDeathDecal, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
+import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType, ENEMY_MAX_HP, ENEMY_BASE_SPEED, ENEMY_XP, ENEMY_COLOR, ENEMY_SCALE, ENEMY_WIDTH_SCALE, ENEMY_BODY_MASS, ENEMY_BODY_WEIGHT, EnemyFlags, NoiseType, EnemyDeathDecal, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { COLORS, ENEMY_COLORS } from '../../utils/ui/ColorUtils';
 import { AbilityID, DamageID, DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { StatusEffectID } from '../../types/StatusEffects';
@@ -251,8 +251,8 @@ export const EnemyManager = {
 
         const isDead = (state.combat.statusFlags & PlayerStatusFlags.DEAD) !== 0;
         const playerStatusFlags = state.combat.statusFlags;
-        const water = session.engine.water;
-        const ground = session.engine.ground;
+        const water = session.engine.systems.water;
+        const ground = session.engine.systems.ground;
         const enemySystem = session.systems.enemySystem as any;
         const handlePlayerHit = enemySystem?.callbacks?.handlePlayerHit || state.callbacks?.handlePlayerHit;
         const spawnParticle = enemySystem?.callbacks?.spawnParticle || state.callbacks?.spawnParticle;
@@ -651,6 +651,8 @@ export const EnemyManager = {
         enemy.color = ENEMY_COLOR[newType];
         enemy.originalScale = ENEMY_SCALE[newType];
         enemy.widthScale = ENEMY_WIDTH_SCALE[newType];
+        enemy.bodyMass = ENEMY_BODY_MASS[newType];
+        enemy.bodyWeight = ENEMY_BODY_WEIGHT[newType];
 
         // Attack list initialization (Zero-GC pooling)
         const typeData = (newType === EnemyType.BOSS) ? BOSSES[0] : ((ZOMBIE_TYPES as any)[newType] || ZOMBIE_TYPES.WALKER);
@@ -859,7 +861,8 @@ export const EnemyManager = {
 
         // Enemy position, body mass and head position
         const enemyPos = enemy.mesh.position;
-        const enemyBodyMass = enemy.originalScale * enemy.widthScale;
+        const enemyBodyMass = enemy.bodyMass;
+        const enemyBodyWeight = enemy.bodyWeight;
         const enemyHeadPos = enemyPos.y + enemy.originalScale * 1.8;
         const isBoss = (enemy.statusFlags & EnemyFlags.BOSS) !== 0;
 
@@ -887,11 +890,8 @@ export const EnemyManager = {
         // --- 3. GORE ---
         // Based on enemy type & body mass
         const goreCount = (isBoss ? 12 : 6);
-        // Gore scale: boss uses raw body mass for proportional giant chunks.
-        // Zombies use a minimum floor (1.4) so chunks are always visible on snow — sub-unit
-        // meshes (Runner at 0.37-0.69) are near-invisible against the ground plane.
-        const goreScale = isBoss ? (enemyBodyMass * 1.2) : Math.max(1.4, enemyBodyMass * 1.2);
-
+        const goreScale = Math.max(4.0, (enemyBodyMass / goreCount) * 24.0);
+        const gorePartWeight = enemyBodyWeight / goreCount;
 
         // Gore physics
         _v1.set(0, 0, 0);
@@ -914,7 +914,7 @@ export const EnemyManager = {
                 // Add the death/impact vector to the random burst
                 _v2.addScaledVector(_v1, 0.6);
 
-                // Signature mapping: (x, y, z, type, count, customMesh, customVel, color, scale)
+                // Signature mapping: (x, y, z, type, count, customMesh, customVel, color, scale, life, weight)
                 callbacks.spawnParticle(
                     enemyPos.x,
                     enemyHeadPos,
@@ -924,7 +924,9 @@ export const EnemyManager = {
                     undefined,
                     _v2,
                     enemy.color,
-                    goreScale // Triggers proportional size inside FXSystem!
+                    goreScale,
+                    undefined,
+                    gorePartWeight
                 );
             }
         }
@@ -954,9 +956,9 @@ export const EnemyManager = {
         if (_v1.lengthSq() < 0.001) _v1.set(0, 0, 1);
         else _v1.normalize();
 
-        const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
-        const force = forceMag / Math.max(0.5, mass);
-        const lift = forceMag * liftRatio / Math.max(0.5, mass);
+        const weightRatio = enemy.bodyWeight / 75.0; // scale relative to player's 75kg
+        const force = forceMag / Math.max(0.2, weightRatio);
+        const lift = forceMag * liftRatio / Math.max(0.2, weightRatio);
 
         // --- 2. APPLY VELOCITY ---
         enemy.knockbackVel.set(_v1.x * force, lift, _v1.z * force);
@@ -1000,7 +1002,7 @@ export const EnemyManager = {
         damageSource: DamageID,
         direction?: THREE.Vector3
     ) => {
-        const streamer = ctx.worldStreamer;
+        const streamer = ctx.engine?.systems.worldStreamer;
         if (!streamer) return;
 
         let hasDir = false;
@@ -1045,7 +1047,6 @@ export const EnemyManager = {
                 const baseDamage = isRush ? (abilityRush?.damage ?? 10) : (isDodge ? (abilityDodge?.damage ?? 5) : 5);
                 const damage = (isRush || isDodge) ? baseDamage : Math.ceil(maxDamage * falloff);
 
-                // TODO: VALIDATE THIS!
                 // This is immediatley applied when the enemies are hit, but
                 // we're also applying fall damage once the enemies hit the ground:
                 if (damage > 0 || (isRush || isDodge)) {

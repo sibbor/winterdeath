@@ -346,6 +346,14 @@ export class AudioEngine {
         this.voicePool[index].stop();
     }
 
+    public stopLoop(id: SoundID) {
+        for (let i = 0; i < this.MAX_VOICES; i++) {
+            if (this.voicePool[i].isActive && this.voicePool[i].id === id) {
+                this.voicePool[i].stop();
+            }
+        }
+    }
+
     public registerBuffer(id: number | SoundID | MusicID, buffer: AudioBuffer, isMusic = false) {
         const cacheIdx = isMusic ? MAX_SOUND_ID + (id as number) : (id as number);
         this.bufferCache[cacheIdx] = buffer;

@@ -174,28 +174,43 @@ const vertexShader = `
         float baseWave = (w1 + w2) * uWaveStrength * edgeDampen;
         float noiseDetail = texture2D(uNoiseTexture, worldPosition.xz * 0.1).r;
         
-        // Process dynamic ripples
+        // Process dynamic ripples and columns
         float rippleSum = 0.0;
+        float columnSum = 0.0;
         for(int i = 0; i < ${WATER_SYSTEM.MAX_RIPPLES}; i++) {
             vec4 rip = uRipples[i];
             if (rip.z < -100.0) continue; 
             
             float d = distance(worldPosition.xz, rip.xy);
             float age = (uTime * 1000.0) - rip.z;
+            
+            // 1. Water Column / Splash Geyser (for strong impacts/explosions)
+            if (rip.w > 1.5 && age > 0.0 && age < 1200.0) {
+                float progress = age / 1200.0;
+                float colHeight = sin(progress * 3.14159) * (rip.w * 3.0); 
+                float colRadius = 0.5 + (1.0 - progress) * (rip.w * 0.6); 
+                
+                if (d < colRadius) {
+                    float radialFactor = 1.0 - (d / colRadius);
+                    float colNoise = texture2D(uNoiseTexture, worldPosition.xz * 0.15 + vec2(0.0, uTime * 2.0)).r;
+                    columnSum += colHeight * radialFactor * (0.6 + colNoise * 0.8);
+                }
+            }
+            
+            // 2. Normal expanding Ripple
             if (age > 0.0 && age < 3000.0) {
                 float radius = (age / 1000.0) * 4.0;
                 if (abs(d - radius) < 1.0) {
                     float decay = max(0.0, 1.0 - (age / 3000.0));
                     float ringNoise = texture2D(uNoiseTexture, worldPosition.xz * 0.05 + uTime * 0.1).r;
-                    // Clamp physics to avoid grenade explosions creating mountains of water
                     float safeStrength = clamp(rip.w, 0.0, 1.5); 
                     rippleSum += max(0.0, sin((d - radius) * 6.0 + ringNoise * 2.0)) * safeStrength * decay;
                 }
             }
         }
 
-        // Hard clamp to protect physics from wild math spikes
-        vWaveHeight = baseWave + clamp(rippleSum * 0.25, -0.6, 0.6) + (noiseDetail * 0.05) * edgeDampen;
+        // Hard clamp to protect physics from wild math spikes, but allow water column to rise
+        vWaveHeight = baseWave + clamp(rippleSum * 0.25, -0.6, 0.6) + columnSum + (noiseDetail * 0.05) * edgeDampen;
         worldPosition.y += vWaveHeight;
 
         vWorldPos = worldPosition.xyz;

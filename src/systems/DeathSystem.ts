@@ -70,7 +70,7 @@ export class DeathSystem implements System {
     private propsRef: React.MutableRefObject<any>;
     private distanceTraveledRef: React.MutableRefObject<number>;
     private fxCallbacks: {
-        spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number, life?: number) => void;
+        spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number, life?: number, weight?: number) => void;
         spawnDecal: (x: number, z: number, scale: number, material?: any, type?: FXDecalType) => void;
     };
     private setDeathPhase: (phase: any) => void;
@@ -86,7 +86,7 @@ export class DeathSystem implements System {
         propsRef: React.MutableRefObject<any>;
         distanceTraveledRef: React.MutableRefObject<number>;
         fxCallbacks: {
-            spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number, life?: number) => void;
+            spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number, life?: number, weight?: number) => void;
             spawnDecal: (x: number, z: number, scale: number, material?: any, type?: FXDecalType) => void;
         };
         setDeathPhase: (phase: any) => void;
@@ -106,6 +106,7 @@ export class DeathSystem implements System {
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         const state = session.state;
+        const stats = state.player.statsBuffer;
         if (!(state.combat.statusFlags & PlayerStatusFlags.DEAD)) return;
 
         const playerGroup = this.playerGroupRef.current;
@@ -170,7 +171,7 @@ export class DeathSystem implements System {
                 }
 
                 if (!isExploded && pgPos.distanceToSquared(state.player.lastTrailPos) > 2.25) {
-                    const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
+                    const baseScale = PLAYER.BASE_BODY_MASS;
                     this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, (0.8 + Math.random() * 0.4) * baseScale, MATERIALS.bloodDecal);
                     state.player.lastTrailPos.copy(pgPos);
                 }
@@ -183,7 +184,7 @@ export class DeathSystem implements System {
                 playerGroup.lookAt(_v1);
             } else if (!isExploded && !isBurning && !isDrowning && !isElectrocuted && !state.player.playerBloodSpawned && renderTime - state.player.deathStartTime > 350) {
                 state.player.playerBloodSpawned = true;
-                const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
+                const baseScale = PLAYER.BASE_BODY_MASS;
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 2.5 * baseScale, MATERIALS.bloodDecal);
                 this.fxCallbacks.spawnParticle(pgPos.x, 1.5, pgPos.z, FXParticleType.BLOOD_SPLATTER, 6);
             }
@@ -269,16 +270,18 @@ export class DeathSystem implements System {
 
             if (!state.player.playerBloodSpawned) {
                 state.player.playerBloodSpawned = true;
-                const baseScale = (playerMesh as any).userData.baseScale || 1.0;
+                const baseScale = PLAYER.BASE_BODY_MASS;
 
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 4.5 * baseScale, MATERIALS.bloodDecal);
                 this.fxCallbacks.spawnParticle(pgPos.x, 1.0, pgPos.z, FXParticleType.BLOOD_SPLATTER, 20);
                 this.fxCallbacks.spawnParticle(
                     pgPos.x, 1.5, pgPos.z,
                     FXParticleType.GORE, 6,
-                    undefined, undefined, // TODO: calculate scaling based on player mesh?
-                    0x990000,          // Explicit blood red for the player loop
-                    baseScale * 2.0    // Proportional to player's geometric mass
+                    undefined, undefined,
+                    0x990000,
+                    Math.max(1.4, (baseScale / 6.0) * 8.0),
+                    undefined,
+                    PLAYER.BASE_BODY_WEIGHT / 6.0
                 );
             }
         } else if (playerMesh) {

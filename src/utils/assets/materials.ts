@@ -376,6 +376,8 @@ export const MATERIALS = {
     // ---- FAMILY ----
     familyRingFill: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }),
     familyRingBorder: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
+    enemyRingFill: new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.15, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
+    enemyRingBorder: new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
 
     // ---- ZOMBIES ----
     zombie: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }),

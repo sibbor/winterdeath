@@ -104,8 +104,8 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
                 if (camYRef.current) camYRef.current.textContent = world.camY.toString();
                 if (camZRef.current) camZRef.current.textContent = world.camZ.toString();
 
-                if (engine && engine.sky) {
-                    const sky = engine.sky;
+                if (engine && engine.systems.sky) {
+                    const sky = engine.systems.sky;
                     const skyTime = sky.currentTime;
                     const skyFactor = sky.timeScale;
 
@@ -408,7 +408,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(() => {
                                     LOG
                                 </button>
                             )}
-                        <button
+                            <button
                                 onClick={(e) => { e.stopPropagation(); recActive ? monitor.stopRecording() : monitor.startRecording(); }}
                                 className={`px-1 py-0.5 rounded text-[9px] font-bold transition-all ${recActive ? 'bg-red-500 text-white animate-pulse-red shadow-[0_0_8px_rgba(239,68,68,0.5)]' : (recPending ? 'bg-orange-500 text-black' : 'bg-white/10 text-white/40')}`}
                             >

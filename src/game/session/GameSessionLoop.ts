@@ -33,7 +33,7 @@ interface LoopContext {
     propsRef: any;
     callbacks: {
         endSector: (val: boolean) => void;
-        spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
+        spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: THREE.Object3D, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number, weight?: number) => void;
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: FXDecalType) => void;
         showDamageText: (x: number, y: number, z: number, text: string, color?: number) => void;
         t: (k: string) => string;
@@ -109,7 +109,6 @@ const _sectorUpdateContext: SectorUpdateContext = {
     simTime: 0,
     renderTime: 0,
     playerPos: null as any,
-    triggerSystem: null as any,
     state: null,
     gameState: null,
     handleDiscovery: null as any,
@@ -125,7 +124,6 @@ const _sectorUpdateContext: SectorUpdateContext = {
     playTone: null,
     cameraShake: null,
     engine: null,
-    worldStreamer: null,
     t: null as any,
     spawnParticle: null as any,
     spawnDecal: null as any,
@@ -322,7 +320,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
         const now = renderTime;
 
-        const water = engine.water;
+        const water = engine.systems.water;
 
         const sf = state.combat.statusFlags;
         const isDead = (sf & PlayerStatusFlags.DEAD) !== 0;
@@ -373,7 +371,13 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 engine.camera.lookAt(_vInteraction);
             }
 
-            if (now - lastBossIntroShakeTime >= 83 && introTime < 3000) { // ~12Hz (every 83ms)
+            // Camera shake at 1000ms into intro sequence (BossPanel fade in)
+            if (introTime >= 1000 && !refs.bossIntroRef.current.hasTriggeredPanelShake) {
+                refs.bossIntroRef.current.hasTriggeredPanelShake = true;
+                engine.camera.shake(10.0);
+            }
+
+            if (now - lastBossIntroShakeTime >= 83 && introTime < 4500) { // ~12Hz (every 83ms)
                 lastBossIntroShakeTime = now;
                 bossMesh.rotation.y += (Math.random() - 0.5) * 0.2;
                 bossMesh.scale.setScalar(3.0 + Math.sin(now * 0.02) * 0.1);
@@ -499,7 +503,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         _sectorUpdateContext.state = state;
         _sectorUpdateContext.gameState = state;
         _sectorUpdateContext.playerPos = state.player.position;
-        _sectorUpdateContext.triggerSystem = session.systems.triggerSystem;
         _sectorUpdateContext.handleDiscovery = (type: any, id: any, smi?: number, title?: string, details?: string, payload?: any) => {
             if (!discoverySystem) discoverySystem = session.systems.discovery;
             return discoverySystem ? discoverySystem.handleDiscovery(session, type, id, smi, title, details, payload) : false;
@@ -519,9 +522,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
         _sectorUpdateContext.makeNoise = (pos: THREE.Vector3, type: any, radius?: number) => session.makeNoise(pos, type, radius);
 
         // --- ENVIRONMENT CONTROLS ---
-        _sectorUpdateContext.setWeather = (type: any, count?: number) => engine.weather.sync(type, count || 2000);
-        _sectorUpdateContext.setFog = (density: number, height?: number, color?: THREE.Color) => engine.fog.sync(density, height, color);
-        _sectorUpdateContext.setWindStrength = (strength: number) => engine.wind.sync(strength * 0.5, strength);
+        _sectorUpdateContext.setWeather = (type: any, count?: number) => engine.systems.weather?.sync(type, count || 2000);
+        _sectorUpdateContext.setFog = (density: number, height?: number, color?: THREE.Color) => engine.systems.fog?.sync(density, height, color);
+        _sectorUpdateContext.setWindStrength = (strength: number) => engine.systems.wind?.sync(strength * 0.5, strength);
         _sectorUpdateContext.setFOV = (fov: number) => engine.camera.set('fov', fov);
 
         monitor.end('sector_update');        // 8. Standard Gameplay State Updates and Animation delegated to PlayerManager and PlayerStatsSystem  }
@@ -805,7 +808,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             lastHudSyncTime = now;
             monitor.begin('hud_sync');
             const hudMesh = refs.playerMeshRef.current;
-            const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, state.player.statsBuffer[StatID.TOTAL_DISTANCE_TRAVELED], engine.camera.threeCamera, playerGroup.rotation.y);
+            const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, state.player.statsBuffer[StatID.TOTAL_DISTANCE_TRAVELED], engine.camera.threeCamera, playerGroup.rotation.y, engine);
             monitor.end('hud_sync');
 
             hudData.debugInfo.drawCalls = refs.lastDrawCallsRef.current;
@@ -814,6 +817,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             state.metrics.triangles = engine.renderer.info.render.triangles;
 
             (hudData as any).debugMode = propsRef.current.gameState.settings.debugMode;
+            (hudData as any).hudEffectsQuality = propsRef.current.gameState.settings.hudEffectsQuality !== false;
             (hudData as any).systems = session.getSystems();
             (hudData as any).interactionActive = HudStore.getState().interactionActive;
 

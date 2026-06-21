@@ -224,6 +224,8 @@ export const GEOMETRY = {
     petTail: createPetTailGeo(),
     familyRingFill: new THREE.CircleGeometry(5.0, 32),
     familyRingBorder: new THREE.RingGeometry(4.8, 5.0, 32),
+    enemyRingFill: new THREE.CircleGeometry(1.0, 32),
+    enemyRingBorder: new THREE.RingGeometry(0.95, 1.0, 32),
 
     // Chests
     chestBody: new THREE.BoxGeometry(1.5, 1.0, 1.0),

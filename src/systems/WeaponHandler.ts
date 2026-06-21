@@ -5,7 +5,6 @@ import { StatID } from '../types/CareerStats';
 import { ProjectileSystem } from './ProjectileSystem';
 import { WeaponSounds, UISounds } from '../utils/audio/AudioLib';
 import { haptic } from '../utils/HapticManager';
-import { WinterEngine } from '../core/engine/WinterEngine';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
 import { TOOLS } from '../content/tools';
 import { WeaponFX } from './WeaponFX';
@@ -189,6 +188,11 @@ export const WeaponHandler = {
                 const nextWep = _validWeaponsScratch[nextIdx];
 
                 if (nextWep !== state.combat.activeWeapon) {
+                    if (state.combat.activeWeapon === WeaponID.FLAMETHROWER) {
+                        WeaponSounds.stopFlamethrower();
+                    } else if (state.combat.activeWeapon === WeaponID.ARC_CANNON) {
+                        WeaponSounds.stopArcCannon();
+                    }
                     state.combat.activeWeapon = nextWep;
                     state.combat.isReloading = false;
                     state.combat.reloadEndTime = 0;
@@ -286,54 +290,58 @@ export const WeaponHandler = {
                 if (aimCrossMesh) aimCrossMesh.visible = false;
                 if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
-                if (input.actions[InputAction.FIRE]) {
-                    const isUnlimited = !!state.sectorState?.unlimitedAmmo;
-                    const hasAmmo = state.combat.weaponAmmo[wepId] > 0 || isUnlimited;
+                const isUnlimited = !!state.sectorState?.unlimitedAmmo;
+                const hasAmmo = state.combat.weaponAmmo[wepId] > 0 || isUnlimited;
+                const isFiring = input.actions[InputAction.FIRE] && hasAmmo;
 
-                    if (hasAmmo) {
-                        if (weapon.isEnergy) {
-                            state.combat.weaponAmmo[wepId] -= 20 * delta;
-                            if (state.combat.weaponAmmo[wepId] < 0) state.combat.weaponAmmo[wepId] = 0;
+                if (isFiring) {
+                    if (weapon.isEnergy) {
+                        state.combat.weaponAmmo[wepId] -= 20 * delta;
+                        if (state.combat.weaponAmmo[wepId] < 0) state.combat.weaponAmmo[wepId] = 0;
 
-                            const actualFireRate = (weapon.fireRate || 100);
-                            if (simTime > state.combat.lastShotTime + actualFireRate) {
-                                state.combat.lastShotTime = simTime;
-                                CareerStatsSystem.recordShot(session, wepId);
-                            }
-                        } else if (!isUnlimited) {
-                            const actualFireRate = (weapon.fireRate || 0) * (state.player.statsBuffer[StatID.MULTIPLIER_FIRERATE] || 1.0);
-                            if (simTime > state.combat.lastShotTime + actualFireRate) {
-                                state.combat.weaponAmmo[wepId]--;
-                                state.combat.lastShotTime = simTime;
+                        const actualFireRate = (weapon.fireRate || 100);
+                        if (simTime > state.combat.lastShotTime + actualFireRate) {
+                            if (wepId == WeaponID.FLAMETHROWER) WeaponSounds.playFlamethrower();
+                            else if (wepId == WeaponID.ARC_CANNON) WeaponSounds.playArcCannon();
+                            else WeaponSounds.playShot(wepId); // currently only the minigun
 
-                                if (state.combat.weaponAmmo[wepId] === 5) {
-                                    UIEventRingBuffer.push(UIEventType.AMMO_LOW, 5, 0, simTime);
-                                }
-
-                                CareerStatsSystem.recordShot(session, wepId);
-                            }
-                        }
-
-                        _v1.set(0.3, 1.4, 0.8).applyQuaternion(playerGroup.quaternion);
-                        _v2.copy(playerGroup.position).add(_v1);
-                        _v3.set(state.player.aimDirection.x, 0, state.player.aimDirection.y).normalize();
-
-                        if (WeaponHandler.consumeAmmo(state, wepId)) {
-                            WeaponFX.createMuzzleEffect(scene, wepId, _v2, _v3);
-                        }
-                    } else {
-                        if (wepId === WeaponID.FLAMETHROWER && (state.combat as any).lastFireState) {
-                            WeaponSounds.playFlamethrowerEnd();
-                        }
-
-                        if (input.actions[InputAction.FIRE] && simTime > state.combat.lastShotTime + 500) {
-                            WeaponSounds.playEmptyClick();
                             state.combat.lastShotTime = simTime;
+                            CareerStatsSystem.recordShot(session, wepId);
+                        }
+                    } else if (!isUnlimited) {
+                        const actualFireRate = (weapon.fireRate || 0) * (state.player.statsBuffer[StatID.MULTIPLIER_FIRERATE] || 1.0);
+                        if (simTime > state.combat.lastShotTime + actualFireRate) {
+                            state.combat.weaponAmmo[wepId]--;
+                            state.combat.lastShotTime = simTime;
+
+                            if (state.combat.weaponAmmo[wepId] === 5) {
+                                UIEventRingBuffer.push(UIEventType.AMMO_LOW, 5, 0, simTime);
+                            }
+
+                            CareerStatsSystem.recordShot(session, wepId);
                         }
                     }
+
+                    _v1.set(0.3, 1.4, 0.8).applyQuaternion(playerGroup.quaternion);
+                    _v2.copy(playerGroup.position).add(_v1);
+                    _v3.set(state.player.aimDirection.x, 0, state.player.aimDirection.y).normalize();
+
+                    if (WeaponHandler.consumeAmmo(state, wepId)) {
+                        WeaponFX.createMuzzleEffect(scene, wepId, _v2, _v3);
+                    }
                 } else {
+                    if (wepId === WeaponID.FLAMETHROWER) {
+                        WeaponSounds.stopFlamethrower();
+                    } else if (wepId === WeaponID.ARC_CANNON) {
+                        WeaponSounds.stopArcCannon();
+                    }
+
+                    if (input.actions[InputAction.FIRE] && !hasAmmo && simTime > state.combat.lastShotTime + 500) {
+                        WeaponSounds.playEmptyClick();
+                        state.combat.lastShotTime = simTime;
+                    }
+
                     if (wepId === WeaponID.FLAMETHROWER && (state.combat as any).lastFireState) {
-                        WeaponSounds.playFlamethrowerEnd();
                         const tip = state.player.nodes.barrelTip;
                         if (tip) {
                             tip.getWorldPosition(_v2);
@@ -344,7 +352,7 @@ export const WeaponHandler = {
                         WeaponFX.createMuzzleSmoke(_v2);
                     }
                 }
-                (state.combat as any).lastFireState = !!input.actions[InputAction.FIRE];
+                (state.combat as any).lastFireState = isFiring;
                 break;
             }
 
@@ -410,7 +418,7 @@ export const WeaponHandler = {
                             const actualReloadTime = (weapon.reloadTime || 0);
                             state.combat.reloadEndTime = simTime + actualReloadTime;
                             UIEventRingBuffer.push(UIEventType.RELOAD_WEAPON, actualReloadTime, 0, simTime);
-                            WeaponSounds.playMagOut();
+                            //WeaponSounds.playMagOut();
                         }
                     }
                 }
@@ -472,8 +480,8 @@ export const WeaponHandler = {
                         const posAttr = trajectoryLineMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
                         const width = 0.15;
 
-                        const engine = WinterEngine.getInstance();
-                        const water = engine?.water;
+                        const engine = session.engine;
+                        const water = engine?.systems.water;
 
                         const origInWater = _buoyancyResult.inWater;
                         const origWaterLevel = _buoyancyResult.waterLevel;

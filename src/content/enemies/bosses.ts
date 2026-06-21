@@ -26,7 +26,7 @@ Status effects are defined in the PERKS database.
 
 import { AttackDefinition, EnemyAttackType } from '../../entities/player/CombatTypes';
 
-export const BOSSES: Record<number, { id: number; name: string; story: string; deathStory: string; hp: number; speed: number; color: ColorPair; scale: number; widthScale?: number; attacks?: AttackDefinition[] }> = {
+export const BOSSES: Record<number, { id: number; name: string; story: string; deathStory: string; hp: number; speed: number; bodyMass?: number; bodyWeight?: number; color: ColorPair; scale: number; widthScale?: number; attacks?: AttackDefinition[] }> = {
     0: {
         id: 0,
         name: 'enemies.bosses.0.name',
@@ -34,6 +34,8 @@ export const BOSSES: Record<number, { id: number; name: string; story: string; d
         deathStory: 'enemies.bosses.0.deathStory',
         hp: 500,
         speed: 15.0,
+        bodyMass: 36.75,
+        bodyWeight: 350,
         color: ENEMY_COLORS.BOSS_0,
         scale: 3.0,
         widthScale: 3.5,
@@ -62,6 +64,8 @@ export const BOSSES: Record<number, { id: number; name: string; story: string; d
         deathStory: 'enemies.bosses.1.deathStory',
         hp: 800,
         speed: 20.0,
+        bodyMass: 6.75,
+        bodyWeight: 250,
         color: ENEMY_COLORS.BOSS_1,
         scale: 3.0,
         widthScale: 1.5,
@@ -89,6 +93,8 @@ export const BOSSES: Record<number, { id: number; name: string; story: string; d
         deathStory: 'enemies.bosses.2.deathStory',
         hp: 600,
         speed: 15.0,
+        bodyMass: 3.0,
+        bodyWeight: 200,
         color: ENEMY_COLORS.BOSS_2,
         scale: 3.0,
         widthScale: 1.0,
@@ -116,6 +122,8 @@ export const BOSSES: Record<number, { id: number; name: string; story: string; d
         deathStory: 'enemies.bosses.3.deathStory',
         hp: 1200,
         speed: 15.0,
+        bodyMass: 11.34,
+        bodyWeight: 280,
         color: ENEMY_COLORS.BOSS_3,
         scale: 3.5,
         widthScale: 1.8,

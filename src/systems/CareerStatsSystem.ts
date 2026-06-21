@@ -21,7 +21,6 @@ export class CareerStatsSystem implements System {
 
     init(session: GameSessionLogic) {
         CareerStatsSystem.currentKillstreak = 0;
-        session.careerStats = this;
     }
 
     update(session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {

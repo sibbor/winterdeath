@@ -77,6 +77,7 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             {
                 speaker: FamilyMemberID.UNKNOWN, type: DialogueLineType.ACTION, text: "dialogue.1_23",
                 trigger: [
+                    TriggerActionType.FAMILY_MEMBER_FOUND,
                     TriggerActionType.FAMILY_MEMBER_FOLLOW,
                     { type: TriggerActionType.SET_SECTOR_FLAG, payload: { flag: 'CLOSE_DOORS' } }
                 ]

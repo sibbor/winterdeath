@@ -661,6 +661,7 @@ export function resetGameSessionState(state: GameSessionState, props: any): void
         }
     }
     state.world.obstacles.length = 0;
+    state.world.mapItems.length = 0;
     state.world.isPlayground = props.gameState.currentSector === 4; // playground indicator
     state.world.clueActive = false;
     state.world.busUnlocked = false;

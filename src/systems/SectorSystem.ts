@@ -92,7 +92,7 @@ export class SectorSystem implements System {
         private callbacks: {
             setBubble: (text: string, duration?: number) => void;
             t: (key: string) => string;
-            spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: any, vel?: any, color?: number, scale?: number, life?: number) => void;
+            spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: any, vel?: any, color?: number, scale?: number, life?: number, weight?: number) => void;
             startCinematic: (target?: THREE.Object3D | null, sectorId?: number, dialogueId?: number, params?: any) => void;
             setInteraction: (interaction: any | null) => void;
             playSound: (id: SoundID) => void;
@@ -152,9 +152,9 @@ export class SectorSystem implements System {
         const scene = session.engine.scene;
         const pPos = this.playerGroup.position;
 
-        if (!this.waterInitialized && session.engine.water) {
-            session.engine.water.setPlayerRef(this.playerGroup);
-            session.engine.water.setCallbacks({
+        if (!this.waterInitialized && session.engine.systems.water) {
+            session.engine.systems.water.setPlayerRef(this.playerGroup);
+            session.engine.systems.water.setCallbacks({
                 spawnParticle: this.callbacks.spawnParticle,
                 makeNoise: this.callbacks.makeNoise
             });
@@ -201,13 +201,13 @@ export class SectorSystem implements System {
                 cameraShake: this.callbacks.cameraShake,
                 t: this.callbacks.t,
                 scene: scene,
-                spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number, life?: number) => this.callbacks.spawnParticle(x, y, z, type, count, customMesh, customVel, color, scale, life),
+                spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number, life?: number, weight?: number) => this.callbacks.spawnParticle(x, y, z, type, count, customMesh, customVel, color, scale, life, weight),
                 startCinematic: (target?: THREE.Object3D | null, sectorId?: number, dialogueId?: number, params?: any) => session.startCinematic(target, sectorId, dialogueId, params),
                 setCameraOverride: this.callbacks.setCameraOverride,
-                setWind: (direction: number, strength: number) => session.engine.wind.setOverride(direction, strength),
-                resetWind: () => session.engine.wind.clearOverride(),
-                setWindRandomized: (active: boolean) => session.engine.wind.setRandomWind(0.02, 0.05),
-                setWeather: (type: any, count?: number) => session.engine.weather.sync(type, count || 100),
+                setWind: (direction: number, strength: number) => session.engine.systems.wind?.setOverride(direction, strength),
+                resetWind: () => session.engine.systems.wind?.clearOverride(),
+                setWindRandomized: (active: boolean) => session.engine.systems.wind?.setRandomWind(0.02, 0.05),
+                setWeather: (type: any, count?: number) => session.engine.systems.weather?.sync(type, count || 100),
 
                 // Safe Lighting Adjustments
                 setLight: (params: any) => {
@@ -250,7 +250,7 @@ export class SectorSystem implements System {
                     session.engine.camera.set('fov', fov);
                 },
                 setFog: (density: number, height?: number, color?: THREE.Color) => {
-                    session.engine.fog.sync(density, height, color);
+                    session.engine.systems.fog?.sync(density, height, color);
                 },
                 setWater: (level?: number, waveHeight?: number) => {
                     // Future expansion: hook into engine.water for global level changes
@@ -281,11 +281,9 @@ export class SectorSystem implements System {
                 playerPos: pPos,
                 gameState: null,
                 sectorState: null,
-                triggerSystem: null,
                 ctx: null,
                 state: null,
                 engine: null,
-                worldStreamer: null,
                 scene: null,
                 ...this.cachedEvents
             };
@@ -331,11 +329,9 @@ export class SectorSystem implements System {
         ctx.playerPos = pPos;
         ctx.gameState = session.state;
         ctx.sectorState = session.state.sectorState;
-        ctx.triggerSystem = session.systems.triggerSystem;
         ctx.ctx = session.sectorCtx;
         ctx.state = session.state;
         ctx.engine = session.engine;
-        ctx.worldStreamer = session.systems.worldStreamer;
         ctx.scene = session.engine.scene;
 
         const eventsList = this.currentSector.events;
@@ -576,11 +572,11 @@ export class SectorSystem implements System {
         const heightFactor = 1.0 - Math.max(0, Math.min(1, (camY - FOG_HEIGHT_MIN) / (FOG_HEIGHT_MAX - FOG_HEIGHT_MIN)));
         const scaledFogDensity = this._currFogDensity * heightFactor;
 
-        engine.fog?.sync(scaledFogDensity, undefined, this._currFogColor);
+        engine.systems.fog?.sync(scaledFogDensity, undefined, this._currFogColor);
 
         // --- Ambient Light Sync ---
         // SkySystem owns the lights, but SectorSystem drives the intensity for zones
-        if (engine.sky) {
+        if (engine.systems.sky) {
             const hemi = engine.scene.getObjectByName(SKY_SYSTEM.HEMI_LIGHT) as THREE.HemisphereLight;
             if (hemi) hemi.intensity = this._currAmbient;
         }
@@ -600,13 +596,13 @@ export class SectorSystem implements System {
         const tWindMin = (target.maxWeight > 0.4 || override) ? (target.windStrength * 0.2) : defaultWindMin;
         const tWindMax = (target.maxWeight > 0.4 || override) ? target.windStrength : defaultWindMax;
 
-        if (engine.weather.type !== tWeather || Math.abs(this._currWeatherCount - tCount) > 10) {
-            engine.weather.sync(tWeather, tCount);
+        if (engine.systems.weather && (engine.systems.weather.type !== tWeather || Math.abs(this._currWeatherCount - tCount) > 10)) {
+            engine.systems.weather.sync(tWeather, tCount);
             this._currWeatherCount = tCount;
         }
 
         if (Math.abs(this._currWindMax - tWindMax) > 0.01) {
-            engine.wind.sync(tWindMin, tWindMax);
+            engine.systems.wind?.sync(tWindMin, tWindMax);
             this._currWindMax = tWindMax;
         }
     }

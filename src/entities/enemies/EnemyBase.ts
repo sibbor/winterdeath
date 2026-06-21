@@ -107,6 +107,8 @@ export interface ZombieTypeData {
     story: string;
     hp: number;
     speed: number;
+    bodyMass: number;
+    bodyWeight: number;
     xp: number;
     color: ColorPair;
     scale: number;

@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 import { ZOMBIE_TYPES, BOSSES } from '../../content/constants';
 import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
-import { Enemy, AIState, EnemyDeathState, EnemyType, EnemyFlags, ENEMY_HP, ENEMY_SPEED, ENEMY_XP, NoiseType, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
+import { Enemy, AIState, EnemyDeathState, EnemyType, EnemyFlags, ENEMY_HP, ENEMY_SPEED, ENEMY_XP, ENEMY_BODY_MASS, ENEMY_BODY_WEIGHT, NoiseType, EnemyGrowlType } from '../../entities/enemies/EnemyTypes';
 import { BossID } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { KMH_TO_MS } from '../../content/constants';
 import { DamageID } from '../../entities/player/CombatTypes';
+import { applyCollisionResolution } from '../../core/world/CollisionResolution';
 
 let _nextPoolId = 0;
+const _spawnResV = new THREE.Vector3();
 
 /**
  * EnemySpawner System
@@ -53,6 +55,8 @@ export const EnemySpawner = {
         // Visual Transformation Data
         e.originalScale = typeData.scale || 1.0;
         e.widthScale = typeData.widthScale || 1.0;
+        e.bodyMass = ENEMY_BODY_MASS[typeKey];
+        e.bodyWeight = ENEMY_BODY_WEIGHT[typeKey];
         // Normalize hitbox to prevent extremely thin hitboxes on high-widthScale variants
         e.hitRadius = 0.5 * e.originalScale * Math.max(0.7, e.widthScale);
         e.statusFlags = isBoss ? EnemyFlags.BOSS : 0;
@@ -98,6 +102,34 @@ export const EnemySpawner = {
         const typeKey = (forcedType !== undefined) ? forcedType : EnemySpawner.determineType(bossSpawned);
         const typeData = (ZOMBIE_TYPES as any)[typeKey] || ZOMBIE_TYPES.WALKER;
 
+        // Resolve collision at spawn point to prevent spawning inside objects (VINTERDÖD STABILIZATION)
+        if (!isWarmup) {
+            const engine = WinterEngine.getInstance();
+            const streamer = engine?.systems.worldStreamer;
+            if (streamer) {
+                const obsPool = streamer.getObstaclePool();
+                const poolIdx = obsPool.nextIndex();
+                streamer.getNearbyObstacles(x, z, 15.0, poolIdx);
+                const nearbyObs = obsPool.getPool(poolIdx);
+                const obsCount = obsPool.getCount(poolIdx);
+
+                _spawnResV.set(x, 0, z);
+                const rad = 0.5 * (typeData.scale || 1.0) * Math.max(0.7, typeData.widthScale || 1.0);
+
+                let resolved = false;
+                for (let i = 0; i < obsCount; i++) {
+                    const obs = nearbyObs[i];
+                    if (obs && applyCollisionResolution(_spawnResV, rad, obs)) {
+                        resolved = true;
+                    }
+                }
+                if (resolved) {
+                    x = _spawnResV.x;
+                    z = _spawnResV.z;
+                }
+            }
+        }
+
         const g = ModelFactory.createZombie(typeKey, typeData);
         g.position.set(x, 0, z);
         g.visible = true;
@@ -132,6 +164,8 @@ export const EnemySpawner = {
 
             originalScale: typeData.scale || 1.0,
             widthScale: typeData.widthScale || 1.0,
+            bodyMass: ENEMY_BODY_MASS[typeKey],
+            bodyWeight: ENEMY_BODY_WEIGHT[typeKey],
             hitRadius: 0.5 * (typeData.scale || 1.0) * Math.max(0.7, typeData.widthScale || 1.0),
             combatRadius: 1.2 * baseScale,
             state: AIState.IDLE,
@@ -210,12 +244,22 @@ export const EnemySpawner = {
         g.scale.set(s * w, s, s * w);
         g.userData.entity = enemy;
 
-        const enemyIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
+        const enemyIndicatorRing = new THREE.Group();
+        enemyIndicatorRing.userData.isEnemyRingGroup = true;
         enemyIndicatorRing.rotation.x = -Math.PI / 2;
         enemyIndicatorRing.position.y = 0.2; // Match family ring height
         enemyIndicatorRing.visible = false;
+
+        const fillMat = MATERIALS.enemyRingFill.clone();
+        const fill = new THREE.Mesh(GEOMETRY.enemyRingFill, fillMat);
+        enemyIndicatorRing.add(fill);
+
+        const borderMat = MATERIALS.enemyRingBorder.clone();
+        const border = new THREE.Mesh(GEOMETRY.enemyRingBorder, borderMat);
+        enemyIndicatorRing.add(border);
+
         g.add(enemyIndicatorRing);
-        enemy.indicatorRing = enemyIndicatorRing;
+        enemy.indicatorRing = enemyIndicatorRing as any;
 
         if (!isWarmup && (WinterEngine.getInstance().systems.performanceMonitor?.aiLoggingEnabled ?? true)) {
             console.log(`[EnemySpawner] Spawns ${EnemyType[typeKey]}_${enemy.id} at (${x.toFixed(1)}, ${z.toFixed(1)})`);
@@ -257,6 +301,8 @@ export const EnemySpawner = {
             color: bossData.color.num,
             originalScale: scale,
             widthScale: widthMod,
+            bodyMass: bossData.bodyMass || (scale * widthMod),
+            bodyWeight: bossData.bodyWeight || 350.0,
             hitRadius: 0.5 * scale * Math.max(0.8, widthMod),
             combatRadius: 1.2 * baseScale,
             state: AIState.IDLE,
@@ -335,12 +381,22 @@ export const EnemySpawner = {
         boss.userData.entity = enemy;
 
         // Ensure boss has an indicator ring for its special attacks
-        const bossIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
+        const bossIndicatorRing = new THREE.Group();
+        bossIndicatorRing.userData.isEnemyRingGroup = true;
         bossIndicatorRing.rotation.x = -Math.PI / 2;
         bossIndicatorRing.position.y = 0.2; // Match family ring height
         bossIndicatorRing.visible = false;
+
+        const fillMat = MATERIALS.enemyRingFill.clone();
+        const fill = new THREE.Mesh(GEOMETRY.enemyRingFill, fillMat);
+        bossIndicatorRing.add(fill);
+
+        const borderMat = MATERIALS.enemyRingBorder.clone();
+        const border = new THREE.Mesh(GEOMETRY.enemyRingBorder, borderMat);
+        bossIndicatorRing.add(border);
+
         boss.add(bossIndicatorRing);
-        enemy.indicatorRing = bossIndicatorRing;
+        enemy.indicatorRing = bossIndicatorRing as any;
 
         if (WinterEngine.getInstance().systems.performanceMonitor?.aiLoggingEnabled ?? true) {
             console.log(`[Spawner] Spawns BOSS at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`);

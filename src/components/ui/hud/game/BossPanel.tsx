@@ -26,15 +26,21 @@ export const BossPanel: React.FC<BossPanelProps> = React.memo(({
 
     // Stable ref keeps prop readable inside Zero-GC subscribe callback without closure staleness
     const isBossIntroRef = useRef(isBossIntro);
+    const showIntroPanelRef = useRef(false);
 
     // Sync prop → ref, then re-evaluate visibility without waiting for the next HudStore tick
     useEffect(() => {
         isBossIntroRef.current = isBossIntro;
         if (!containerRef.current) return;
         const state = HudStore.getState();
-        const isVisible = state.bossActive && !isBossIntroRef.current;
-        const next = isVisible ? (state.bossDefeated ? CLASS_KILLED : CLASS_APPEAR) : CLASS_HIDDEN;
-        if (containerRef.current.className !== next) containerRef.current.className = next;
+
+        if (isBossIntro) {
+            containerRef.current.className = CLASS_HIDDEN;
+        } else {
+            const isVisible = state.bossActive;
+            const next = isVisible ? (state.bossDefeated ? CLASS_KILLED : CLASS_APPEAR) : CLASS_HIDDEN;
+            if (containerRef.current.className !== next) containerRef.current.className = next;
+        }
     }, [isBossIntro]);
 
     // Single HudStore.subscribe — no React re-renders, no useHudStore
@@ -45,10 +51,16 @@ export const BossPanel: React.FC<BossPanelProps> = React.memo(({
             if (!containerRef.current) return;
 
             // Visibility class
-            const isVisible = state.bossActive && !isBossIntroRef.current;
-            const next = isVisible ? (state.bossDefeated ? CLASS_KILLED : CLASS_APPEAR) : CLASS_HIDDEN;
-            if (containerRef.current.className !== next) {
-                containerRef.current.className = next;
+            if (isBossIntroRef.current) {
+                if (containerRef.current.className !== CLASS_HIDDEN) {
+                    containerRef.current.className = CLASS_HIDDEN;
+                }
+            } else {
+                const isVisible = state.bossActive;
+                const next = isVisible ? (state.bossDefeated ? CLASS_KILLED : CLASS_APPEAR) : CLASS_HIDDEN;
+                if (containerRef.current.className !== next) {
+                    containerRef.current.className = next;
+                }
             }
 
             // Boss name (infrequent — only at spawn)

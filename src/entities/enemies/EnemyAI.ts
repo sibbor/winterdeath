@@ -36,10 +36,11 @@ const _wanderTarget = new THREE.Vector3();
 const TWO_PI = Math.PI * 2;
 const SEPARATION_RADIUS = 1.5;
 const SEPARATION_RADIUS_SQ = SEPARATION_RADIUS * SEPARATION_RADIUS;
-const INV_SEPARATION_RADIUS = 1.0 / SEPARATION_RADIUS;
 
 export const logStateChange = (simTime: number, e: Enemy, newState: AIState, reason?: string) => {
-    if (!(WinterEngine.getInstance().systems.performanceMonitor?.aiLoggingEnabled ?? true)) return;
+    const engine = WinterEngine.getInstance();
+
+    if (!(engine.systems.performanceMonitor?.aiLoggingEnabled ?? true)) return;
     const typeName = DataResolver.getEnemyName(e.type, e.bossId);
     console.log(`[EnemyAI] ${typeName} ${e.id} changed state: ${AIState[e.state]} -> ${AIState[newState]} ${reason ? `(${reason})` : ''}`);
 };
@@ -59,7 +60,7 @@ export const EnemyAI = {
             handleEnemyHit: (enemy: Enemy, amount: number, damageType: DamageType, damageSource: DamageID, isHighImpact?: boolean, attributionOverride?: DamageID) => boolean;
             onEffectTick: (e: Enemy, type: EnemyEffectType) => void;
             playSound: (id: SoundID) => void;
-            spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D | null, vel?: THREE.Vector3, color?: number, scale?: number, life?: number) => void;
+            spawnParticle: (x: number, y: number, z: number, type: FXParticleType, count: number, mesh?: THREE.Object3D | null, vel?: THREE.Vector3, color?: number, scale?: number, life?: number, weight?: number) => void;
             applyExternalForce?: (force: THREE.Vector3, factor: number) => void;
             queryEnemies?: (pos: THREE.Vector3, radius: number, outPoolIdx: number) => void;
         },
@@ -70,6 +71,8 @@ export const EnemyAI = {
         simTime: number,
         renderTime: number
     ) => {
+        const engine = session.engine;
+
         const dx0 = enemy.mesh.position.x - playerPos.x;
         const dz0 = enemy.mesh.position.z - playerPos.z;
         let distSq = dx0 * dx0 + dz0 * dz0;
@@ -103,7 +106,7 @@ export const EnemyAI = {
             const dmgType = enemy.lastDamageType;
             const weapon = (typeof dmgType === 'number' && dmgType < WEAPONS.length) ? WEAPONS[dmgType as number] : null;
 
-            if (WinterEngine.getInstance().systems.performanceMonitor?.aiLoggingEnabled ?? true) {
+            if (engine.systems.performanceMonitor?.aiLoggingEnabled ?? true) {
                 const isWeapon = !!weapon;
                 const enemyName = DataResolver.getEnemyName(enemy.type, enemy.bossId);
                 const cause = isWeapon
@@ -164,7 +167,10 @@ export const EnemyAI = {
                     } else if (weapon) {
                         finalDeathState = EnemyDeathState.SHOT;
                     }
-                    break;
+            }
+
+            if ((enemy.statusFlags & EnemyFlags.BOSS) !== 0) {
+                finalDeathState = EnemyDeathState.GIBBED;
             }
 
             enemy.deathState = finalDeathState;
@@ -215,7 +221,7 @@ export const EnemyAI = {
                                 }
                             }
                         }
-                        WinterEngine.getInstance()?.triggerHitStop(enemy.type === EnemyType.BLOATER ? 40 : 50);
+                        engine?.triggerHitStop(enemy.type === EnemyType.BLOATER ? 40 : 50);
                     }
                     break;
 
@@ -241,7 +247,7 @@ export const EnemyAI = {
 
             // Heavy Kill Hit-stop for Tanks
             if (enemy.type === EnemyType.TANK) {
-                WinterEngine.getInstance()?.triggerHitStop(45);
+                engine?.triggerHitStop(45);
                 haptic.impact(0.8);
             }
 
@@ -276,7 +282,7 @@ export const EnemyAI = {
             enemy.knockbackVel.y -= 65 * delta;
 
             // --- Friction (Horizontal only) ---
-            const mass = enemy.originalScale * enemy.widthScale;
+            const mass = enemy.bodyMass;
             // Increase friction significantly if ragdolling on ground to prevent "ice-skating"
             const frictionMult = ((enemy.statusFlags & EnemyFlags.RAGDOLLING) || !(enemy.statusFlags & EnemyFlags.AIRBORNE)) ? 12.0 : 2.5;
             const friction = 1.0 + (mass * frictionMult);
@@ -291,7 +297,6 @@ export const EnemyAI = {
             enemy.statusFlags |= EnemyFlags.AIRBORNE;
 
             // 4. Floor Collision & Landing Logic
-            // TODO: isRagdolling is not used here..?
             const isRagdolling = (enemy.statusFlags & EnemyFlags.RAGDOLLING) !== 0 || enemy.deathState !== EnemyDeathState.ALIVE;
             const floorY = ground.getGroundHeight(enemy.mesh.position.x, enemy.mesh.position.z, session);
             if (enemy.mesh.position.y <= floorY) {
@@ -312,16 +317,20 @@ export const EnemyAI = {
 
                 // Apply fall damage if not in water
                 const fallHeight = peakY - floorY;
-                if ((!water || !_buoyancyResult.inWater) && fallHeight > 0.5) {
-                    // Quadratic fall damage for high-impact RUSH feel
-                    const fallRatio = fallHeight;
+                if (isRagdolling && (!water || !_buoyancyResult.inWater) && fallHeight > 0.5) {
+                    // Quadratic fall damage for high-impact RUSH feel scaled by body weight
+                    const fallRatio = fallHeight * (enemy.bodyWeight / 75.0);
                     const fallDamage = Math.min(enemy.maxHp * 0.95, fallRatio * fallRatio * 15);
 
-                    // TODO: VALIDATE:
-                    // lastKnockback
-                    const sourceId = (enemy.lastKnockback === DamageID.RUSH || enemy.lastKnockback === DamageID.DODGE)
-                        ? enemy.lastKnockback
-                        : DamageID.PHYSICAL;
+                    const isAttributedSource = (
+                        enemy.lastKnockback === DamageID.RUSH ||
+                        enemy.lastKnockback === DamageID.DODGE ||
+                        enemy.lastKnockback === DamageID.VEHICLE ||
+                        enemy.lastKnockback === DamageID.VEHICLE_RAM ||
+                        enemy.lastKnockback === DamageID.VEHICLE_PUSH ||
+                        enemy.lastKnockback === DamageID.VEHICLE_SPLATTER
+                    );
+                    const sourceId = isAttributedSource ? enemy.lastKnockback : DamageID.PHYSICAL;
 
                     if (callbacks.handleEnemyHit) {
                         callbacks.handleEnemyHit(enemy, fallDamage, DamageType.PHYSICAL, sourceId, true);
@@ -418,7 +427,7 @@ export const EnemyAI = {
                 if (callbacks.handleEnemyHit) callbacks.handleEnemyHit(enemy, tickDmg, DamageType.DROWNING, DamageID.DROWNING);
 
                 if (enemy.hp <= 0 && enemy.deathState === EnemyDeathState.ALIVE) {
-                    if (WinterEngine.getInstance().systems.performanceMonitor?.aiLoggingEnabled ?? true) {
+                    if (engine.systems.performanceMonitor?.aiLoggingEnabled ?? true) {
                         console.log(`[AI] ${EnemyType[enemy.type]}_${enemy.id} killed by: Environment (DROWNED)`);
                     }
                     enemy.deathState = EnemyDeathState.DROWNED;
@@ -457,8 +466,8 @@ export const EnemyAI = {
 
             // Visual Perception
             if (distSq < ENEMY_DETECTION.VISUAL_RANGE_SQ) {
-                const detectionSys = (session as any).detectionSystem;
-                if (detectionSys && detectionSys.canSeePlayer(enemy, playerPos, streamer)) {
+                const enemyDetectionSystem = session.systems.enemyDetection;
+                if (enemyDetectionSystem && enemyDetectionSystem.canSeePlayer(enemy, playerPos, streamer)) {
                     enemy.awareness = 1.0;
                     enemy.lastSeenTime = simTime;
                     enemy.lastKnownPosition.copy(playerPos);
@@ -540,7 +549,7 @@ export const EnemyAI = {
 
         // --- 8. SENSORS & SEPARATION ---
         let seesPlayer = (simTime - (enemy.lastSeenTime || 0) < 500) && enemy.awareness > 0.8 && distSq < 2500;
-        
+
         // VINTERDÖD: Event tether logic for wave enemies (50m radius)
         const isTethered = enemy.isWaveEnemy && enemy.mesh.position.distanceToSquared(enemy.spawnPos) > 2500.0;
         if (isTethered) {
@@ -716,7 +725,7 @@ export const EnemyAI = {
                 }
 
                 const shouldGiveUp = isTethered || (!enemy.isWaveEnemy && ((!seesPlayer && simTime - enemy.lastSeenTime > 5000) || distSq > 2500));
-                
+
                 if (shouldGiveUp) {
                     logStateChange(simTime, enemy, AIState.SEARCH);
                     enemy.state = AIState.SEARCH;
@@ -1041,7 +1050,7 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     if (dqx * dqx + dqz * dqz > 0.25 || e.lastObsQueryPos.y < -500) {
         const obsPool = streamer.getObstaclePool();
         const poolIdx = obsPool.nextIndex();
-        streamer.getNearbyObstacles(_v4.x, _v4.z, 4.0, poolIdx);
+        streamer.getNearbyObstacles(_v4.x, _v4.z, 12.0, poolIdx);
 
         const nearbyObs = obsPool.getPool(poolIdx);
         const obsCount = obsPool.getCount(poolIdx);

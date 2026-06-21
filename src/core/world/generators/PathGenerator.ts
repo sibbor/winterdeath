@@ -176,7 +176,7 @@ export const PathGenerator = {
 
         // Register material for footstep audio
         for (let i = 0; i < pts.length; i++) {
-            ctx.worldStreamer.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, matType);
+            ctx.engine.systems.worldStreamer.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, matType);
             if (i % 10 === 0) {
                 ctx.mapItems.push({ id: `road_${Math.random()}`, x: pts[i].x, z: pts[i].z, type: MapItemType.ROAD, label: null, icon: null, radius: width / 2, color: '#333' });
             }
@@ -210,7 +210,7 @@ export const PathGenerator = {
         ctx.scene.add(path);
 
         for (let i = 0; i < pts.length; i++) {
-            ctx.worldStreamer.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, MaterialType.DIRT);
+            ctx.engine.systems.worldStreamer.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, MaterialType.DIRT);
         }
 
         _pathLayerIndex++;
@@ -302,7 +302,7 @@ export const PathGenerator = {
         ctx.scene.add(leftRail, rightRail);
 
         for (let i = 0; i < pts.length; i++) {
-            ctx.worldStreamer.registerGroundMaterial(pts[i].x, pts[i].z, 2.0, MaterialType.METAL);
+            ctx.engine.systems.worldStreamer.registerGroundMaterial(pts[i].x, pts[i].z, 2.0, MaterialType.METAL);
         }
 
         return curve;

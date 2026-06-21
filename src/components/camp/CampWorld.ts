@@ -137,6 +137,7 @@ const SMOKE_VARS = 5; // [life, px, py, pz, speed]
 const _c1 = new THREE.Color();
 const _flameStartColor = new THREE.Color(0xffaa22);
 const _flameEndColor = new THREE.Color(0xff2200);
+const _fallbackWind = new THREE.Vector2();
 
 // ============================================================================
 // SHARED CONSTANTS (Internal use)
@@ -341,8 +342,8 @@ export const CampWorld = {
 
     setupSky: (scene: THREE.Scene, config: any, textures: Textures) => {
         const engine = WinterEngine.getInstance();
-        engine.sky.reAttach(scene);
-        engine.sky.sync(config);
+        engine.systems.sky?.reAttach(scene);
+        engine.systems.sky?.sync(config);
     },
 
     build: async (scene: THREE.Scene, textures: Textures, weather: WeatherType, isWarmup = false) => {
@@ -369,11 +370,11 @@ export const CampWorld = {
         // Safe fallback for warmup phase (AssetPreloader)
         else {
             // FogSystem:
-            if (engine.fog) {
+            if (engine.systems.fog) {
                 const fogDefaultColor = 0x161629;
                 const fogConfig = CAMP_SCENE.fog || { color: fogDefaultColor, density: 25 };
                 _c1.setHex(fogConfig.color !== undefined ? fogConfig.color : fogDefaultColor);
-                engine.fog.sync(fogConfig.density, undefined, _c1);
+                engine.systems.fog.sync(fogConfig.density, undefined, _c1);
             }
             // Background color
             if (CAMP_SCENE && (CAMP_SCENE as any).bgColor !== undefined) {
@@ -644,7 +645,7 @@ export const CampWorld = {
 
     updateEffects: (scene: THREE.Scene, state: CampEffectsState, delta: number, now: number) => {
         const engine = WinterEngine.getInstance();
-        const wind = engine.wind.current;
+        const wind = engine.systems.wind?.current || _fallbackWind;
         const camera = engine.camera.threeCamera;
 
         const { flames, sparkles, smokes, flameData, sparkleData, smokeData } = state.particles;

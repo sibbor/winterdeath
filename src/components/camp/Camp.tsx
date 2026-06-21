@@ -69,8 +69,8 @@ const areEqual = (prevProps: CampProps, nextProps: CampProps) => {
 const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, settings, onCampLoaded, isMobileDevice, weather = WeatherType.SNOW, hasCheckpoint, isGameRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
     const rescuedFamilyIndices = StatsBridge.getRescuedFamilyIndices(stats);
     const rescuedFamilyIndicesStr = rescuedFamilyIndices.join(',');
-    const engineInstance = WinterEngine.getInstance();
-    const monitor = engineInstance.systems.performanceMonitor!;
+    const engine = WinterEngine.getInstance();
+    const monitor = engine.systems.performanceMonitor!;
 
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);

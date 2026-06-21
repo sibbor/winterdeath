@@ -31,7 +31,6 @@ export class FogSystem implements System {
     private scene: THREE.Scene;
     private wind: WindSystem;
     private camera: THREE.Camera;
-    private _engine: WinterEngine | null = null;
 
     public fogMesh: THREE.InstancedMesh | null = null;
     private fogMaterial: THREE.ShaderMaterial | null = null;
@@ -60,7 +59,7 @@ export class FogSystem implements System {
      * Manages baseline FogExp2 and Volumetric planes.
      */
     public sync(density: number, height?: number, color?: THREE.Color) {
-        const engine = this._engine || (this._engine = WinterEngine.getInstance());
+        const engine = WinterEngine.getInstance();
 
         // 1. BASELINE FOG (FogExp2)
         // VINTERDÖD FIX: Smart Density Normalization.
@@ -143,8 +142,8 @@ export class FogSystem implements System {
         }
     }
 
-    public update(_ctx: any, delta: number, simTime: number, renderTime: number): void {
-        const engine = this._engine || (this._engine = WinterEngine.getInstance());
+    public update(session: any, delta: number, simTime: number, renderTime: number): void {
+        const engine = session?.engine || WinterEngine.getInstance();
 
         // Settings Guard: Check for setting change mid-session
         const wantsVolumetric = engine?.settings?.volumetricFog ?? true;

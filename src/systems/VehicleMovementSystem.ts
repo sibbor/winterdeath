@@ -124,16 +124,16 @@ export class VehicleMovementSystem implements System {
             if (input.joystickMove) throttle += input.joystickMove.y * -1;
             if (input.joystickAim) steer += input.joystickAim.x;
 
-            if (def.category === VehicleCategory.BOAT && session.engine.ground) {
+            if (def.category === VehicleCategory.BOAT && session.engine.systems.ground) {
                 // Route through GroundSystem SSoT (cache + Y-height + proximity gate).
                 // _buoyancyResult is populated as a side-effect when near water.
-                session.engine.ground.getGroundHeight(vehicle.position.x, vehicle.position.z, session, vehicle.position.y);
+                session.engine.systems.ground.getGroundHeight(vehicle.position.x, vehicle.position.z, session, vehicle.position.y);
                 if (!_buoyancyResult.inWater || vehicle.position.y < _buoyancyResult.waterLevel - 2.0) {
                     if (throttle > 0.1 || throttle < -0.1) throttle = 0;
                 }
-            } else if (session.engine.ground) {
+            } else if (session.engine.systems.ground) {
                 // Terrain Alignment for Land Vehicles — pass Y for airborne gate
-                const groundY = session.engine.ground.getGroundHeight(vehicle.position.x, vehicle.position.z, session, vehicle.position.y);
+                const groundY = session.engine.systems.ground.getGroundHeight(vehicle.position.x, vehicle.position.z, session, vehicle.position.y);
                 const targetY = groundY;
 
                 // Simple gravity/ground snap
@@ -313,13 +313,13 @@ export class VehicleMovementSystem implements System {
                         _v1.copy(_forward).multiplyScalar(-def.size.z * 0.45);
                         const groundX = vehicle.position.x + _v1.x;
                         const groundZ = vehicle.position.z + _v1.z;
-                        
-                        const groundY = session.engine.ground?.getGroundHeight(groundX, groundZ, session, vehicle.position.y) || 0.1;
+
+                        const groundY = session.engine.systems.ground?.getGroundHeight(groundX, groundZ, session, vehicle.position.y) || 0.1;
                         const groundMat = session.systems.worldStreamer?.getGroundMaterial(groundX, groundZ) || 0;
-                        
+
                         let pType = FXParticleType.SMOKE;
                         let pColor = 0xaaaaaa;
-                        
+
                         if (groundMat === MaterialType.SNOW || groundMat === MaterialType.NONE) {
                             pType = FXParticleType.SNOW_PUFF;
                             pColor = 0xffffff;
@@ -333,8 +333,8 @@ export class VehicleMovementSystem implements System {
             } else if (speedSq > 4.0 && Math.random() < 0.4) {
                 _v1.copy(_forward).multiplyScalar(-def.size.z * 0.35);
                 _v1.addScaledVector(_right, (Math.random() - 0.5) * 2.0);
-                
-                const splashY = session.engine.water?.getBuoyancyResult().waterLevel || 0.1;
+
+                const splashY = session.engine.systems.water?.getBuoyancyResult().waterLevel || 0.1;
                 FXSystem.spawnParticle(session.engine.scene, state.combat.particles, vehicle.position.x + _v1.x, splashY + 0.05, vehicle.position.z + _v1.z, FXParticleType.SPLASH, 1, undefined, undefined, 0xffffff, 0.5 + Math.random() * 0.5);
             }
 

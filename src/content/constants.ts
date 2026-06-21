@@ -117,6 +117,8 @@ export const PLAYER = {
     BASE_HP: 100,
     BASE_STAMINA: 100,
     BASE_SPEED: 20.0, // km/h
+    BASE_BODY_MASS: 1.0,
+    BASE_BODY_WEIGHT: 75.0, // kg
     DEATH_TIMER: 3000, // ms
     DEATH_VELOCITY_NORMAL: 12,
     DEATH_VELOCITY_RUSH: 15,
@@ -211,7 +213,8 @@ export const SETTINGS_DEFAULT: GameSettings = {
     volumetricFog: true,
     showDiscoveryPopups: true,
     showFps: false,
-    debugMode: false
+    debugMode: false,
+    hudEffectsQuality: true
 };
 
 export enum FamilyMemberID {
@@ -233,7 +236,9 @@ export const PLAYER_CHARACTER = {
     gender: 'male',
     title: 'family.dad',
     color: { num: 0x3b82f6, str: '#3b82f6' } as const,
-    scale: 1.0
+    scale: 1.0,
+    bodyMass: 1.0,
+    bodyWeight: 75.0
 };
 
 /**
@@ -268,12 +273,12 @@ export const SPEAKER_ID_TO_KEY: Record<FamilyMemberID, string> = {
 };
 
 export const FAMILY_MEMBERS = [
-    { id: FamilyMemberID.LOKE, name: 'Loke', race: 'human', gender: 'male', title: 'family.son', color: { num: 0xfacc15, str: '#facc15' } as const, scale: 0.7 },
-    { id: FamilyMemberID.JORDAN, name: 'Jordan', race: 'human', gender: 'male', title: 'family.son', color: { num: 0x4ade80, str: '#4ade80' } as const, scale: 0.5 },
-    { id: FamilyMemberID.ESMERALDA, name: 'Esmeralda', race: 'human', gender: 'female', title: 'family.daughter', color: { num: 0xe879f9, str: '#e879f9' } as const, scale: 0.8 },
-    { id: FamilyMemberID.NATHALIE, name: 'Nathalie', race: 'human', gender: 'female', title: 'family.wife', color: { num: 0xf43f5e, str: '#f43f5e' } as const, scale: 0.95 },
-    { id: FamilyMemberID.SOTIS, name: 'Sotis', race: 'animal', gender: 'female', title: 'family.cat', color: { num: 0xcccccc, str: '#cccccc' } as const, scale: 0.6 },
-    { id: FamilyMemberID.PANTER, name: 'Panter', race: 'animal', gender: 'male', title: 'family.cat', color: { num: 0x222222, str: '#222222' } as const, scale: 0.6 }
+    { id: FamilyMemberID.LOKE, name: 'Loke', race: 'human', gender: 'male', title: 'family.son', color: { num: 0xfacc15, str: '#facc15' } as const, scale: 0.7, bodyMass: 0.7, bodyWeight: 50.0 },
+    { id: FamilyMemberID.JORDAN, name: 'Jordan', race: 'human', gender: 'male', title: 'family.son', color: { num: 0x4ade80, str: '#4ade80' } as const, scale: 0.5, bodyMass: 0.5, bodyWeight: 18.0 },
+    { id: FamilyMemberID.ESMERALDA, name: 'Esmeralda', race: 'human', gender: 'female', title: 'family.daughter', color: { num: 0xe879f9, str: '#e879f9' } as const, scale: 0.8, bodyMass: 0.8, bodyWeight: 50.0 },
+    { id: FamilyMemberID.NATHALIE, name: 'Nathalie', race: 'human', gender: 'female', title: 'family.wife', color: { num: 0xf43f5e, str: '#f43f5e' } as const, scale: 0.95, bodyMass: 0.95, bodyWeight: 69.0 },
+    { id: FamilyMemberID.SOTIS, name: 'Sotis', race: 'animal', gender: 'female', title: 'family.cat', color: { num: 0xcccccc, str: '#cccccc' } as const, scale: 0.6, bodyMass: 0.2, bodyWeight: 4.0 },
+    { id: FamilyMemberID.PANTER, name: 'Panter', race: 'animal', gender: 'male', title: 'family.cat', color: { num: 0x222222, str: '#222222' } as const, scale: 0.6, bodyMass: 0.2, bodyWeight: 4.0 }
 ];
 
 /**

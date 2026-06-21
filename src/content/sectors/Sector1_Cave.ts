@@ -437,6 +437,8 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
     frameGroup.add(rightPost);
     const frameObstacle = {
         mesh: frameGroup,
+        position: frameGroup.position,
+        quaternion: frameGroup.quaternion,
         collider: { type: ColliderType.BOX, size: new THREE.Vector3(22, 17, 4) }
     };
     SectorBuilder.addObstacle(ctx, frameObstacle);
@@ -449,22 +451,34 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
     doorL.position.set(-5, -1, 0); // Relative to frame, positioned to close gap
     frameGroup.add(doorL);
 
-    const doorObstacleL = {
-        mesh: doorL,
-        collider: { type: ColliderType.BOX, size: new THREE.Vector3(10, 17, 1) }
-    };
-    SectorBuilder.addObstacle(ctx, doorObstacleL);
-    (ctx as any).sectorState.doorObstacleL = doorObstacleL;
-
     const doorR = new THREE.Mesh(new THREE.BoxGeometry(10, 17, 1), MATERIALS.metalPanel);
     doorR.name = 's1_shelter_port_right';
     doorR.position.set(5, -1, 0); // Relative to frame, positioned to close gap
     frameGroup.add(doorR);
 
-    const doorObstacleR = {
-        mesh: doorR,
+    // Compute correct world matrix for parent group so we can extract exact world positions/rotations
+    frameGroup.updateMatrix();
+    frameGroup.updateMatrixWorld(true);
+
+    const doorObstacleL = {
+        mesh: doorL,
+        position: new THREE.Vector3(),
+        quaternion: new THREE.Quaternion(),
         collider: { type: ColliderType.BOX, size: new THREE.Vector3(10, 17, 1) }
     };
+    doorL.getWorldPosition(doorObstacleL.position);
+    doorL.getWorldQuaternion(doorObstacleL.quaternion);
+    SectorBuilder.addObstacle(ctx, doorObstacleL);
+    (ctx as any).sectorState.doorObstacleL = doorObstacleL;
+
+    const doorObstacleR = {
+        mesh: doorR,
+        position: new THREE.Vector3(),
+        quaternion: new THREE.Quaternion(),
+        collider: { type: ColliderType.BOX, size: new THREE.Vector3(10, 17, 1) }
+    };
+    doorR.getWorldPosition(doorObstacleR.position);
+    doorR.getWorldQuaternion(doorObstacleR.quaternion);
     SectorBuilder.addObstacle(ctx, doorObstacleR);
     (ctx as any).sectorState.doorObstacleR = doorObstacleR;
 

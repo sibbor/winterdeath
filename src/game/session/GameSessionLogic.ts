@@ -44,11 +44,6 @@ export class GameSessionLogic {
     public state!: GameSessionState;
     public sectorCtx!: SectorBuildContext; // Set during GameSessionSetup
 
-    public detectionSystem!: EnemyDetectionSystem;
-    public worldStreamer!: WorldStreamer;
-    public triggerSystem!: TriggerSystem;
-    public careerStats!: CareerStatsSystem;
-
     /**
      * Zero-GC Reset Logic
      * * Reuses an existing GameSessionState object to avoid massive re-allocations.
@@ -254,8 +249,8 @@ export class GameSessionLogic {
     }
 
     makeNoise(pos: THREE.Vector3, type: NoiseType = NoiseType.OTHER, radius?: number) {
-        if (this.detectionSystem) {
-            this.detectionSystem.makeNoise(pos, type, radius);
+        if (this.systems.enemyDetection) {
+            this.systems.enemyDetection.makeNoise(pos, type, radius);
         }
     }
 
@@ -365,8 +360,8 @@ export class GameSessionLogic {
 
             this.state.triggers.interaction.active = false;
 
-            if (this.worldStreamer) {
-                this.worldStreamer.clear();
+            if (this.systems.worldStreamer) {
+                this.systems.worldStreamer.clear();
             }
 
             FootprintSystem.clear();

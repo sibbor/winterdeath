@@ -68,8 +68,8 @@ export const TerrainGenerator = {
 
         // Register with water system to enable cutouts
         const engine = WinterEngine.getInstance();
-        if (engine && engine.water) {
-            engine.water.registerGround(mesh);
+        if (engine && engine.systems.water) {
+            engine.systems.water.registerGround(mesh);
         }
 
         return mesh;

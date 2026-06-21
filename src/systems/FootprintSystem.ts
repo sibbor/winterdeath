@@ -118,10 +118,10 @@ class FootprintSystemClass implements System {
                     FXParticleType.SPLASH,
                     10
                 );
-                session.engine.water?.spawnRipple(position.x, position.z, session.state.simTime, 4.0);
+                session.engine.systems.water?.spawnRipple(position.x, position.z, session.state.simTime, 4.0);
             } else {
                 GamePlaySounds.playFootstep(MaterialType.WATER, isRight, isRushing);
-                session.engine.water?.spawnRipple(position.x, position.z, session.state.simTime, 1.5);
+                session.engine.systems.water?.spawnRipple(position.x, position.z, session.state.simTime, 1.5);
             }
             return;
         }
@@ -162,7 +162,7 @@ class FootprintSystemClass implements System {
         this.index = (this.index + 1) % MAX_FOOTPRINTS;
 
         // 3. Audio & Particle Feedback
-        const groundMat = session.engine.ground ? session.engine.ground.getGroundMaterial(position.x, position.z, streamer) : groundMaterial;
+        const groundMat = session.engine.systems.ground ? session.engine.systems.ground.getGroundMaterial(position.x, position.z, streamer) : groundMaterial;
         let playMaterial: number = groundMat || MaterialType.SNOW;
         if (inWater || isSwimming) playMaterial = MaterialType.WATER;
 

@@ -457,7 +457,7 @@ const _placeTrees = async (ctx: SectorBuildContext, region: Region, spacing: num
         });
 
         // Register tree as vegetation for rustle sounds (radius based on scale)
-        ctx.worldStreamer.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
+        ctx.engine?.systems.worldStreamer?.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
     }
 
     for (const key in matrixBuckets) {
@@ -516,7 +516,7 @@ const _placeGroundCover = async (
         }
         bucket.push({ pos: p, mat: _mat.clone() });
 
-        ctx.worldStreamer.registerVegetation(x, z, 1.2, MaterialType.PLANT);
+        ctx.engine?.systems.worldStreamer?.registerVegetation(x, z, 1.2, MaterialType.PLANT);
     }
 
     // Create instanced mesh per chunk
@@ -576,7 +576,7 @@ const _placeSunflowers = async (ctx: SectorBuildContext, region: Region, density
         }
         bucket.push(_mat.clone());
 
-        ctx.worldStreamer.registerVegetation(x, z, 1.5, MaterialType.PLANT);
+        ctx.engine?.systems.worldStreamer?.registerVegetation(x, z, 1.5, MaterialType.PLANT);
     }
 
     for (const [key, matrices] of chunkBuckets) {
@@ -1037,7 +1037,7 @@ export const VegetationGenerator = {
             });
 
             // Register tree as vegetation for rustle sounds
-            ctx.worldStreamer.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
+            ctx.engine?.systems.worldStreamer?.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
         }
 
         for (const key in matrixBuckets) {
@@ -1106,7 +1106,7 @@ export const VegetationGenerator = {
                 });
 
                 // Register tree as vegetation for rustle sounds
-                ctx.worldStreamer.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
+                ctx.engine?.systems.worldStreamer?.registerVegetation(x, z, 2.5 * scale, MaterialType.PLANT);
             }
         }
 

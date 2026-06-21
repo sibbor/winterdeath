@@ -17,6 +17,7 @@ export interface GameSettings {
     showDiscoveryPopups: boolean;
     showFps: boolean;
     debugMode: boolean;
+    hudEffectsQuality: boolean;
 }
 
 export type SectorStats = SessionStats;

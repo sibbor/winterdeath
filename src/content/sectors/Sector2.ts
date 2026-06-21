@@ -81,6 +81,13 @@ const LOCATIONS = {
 // ─── Zero-GC Scratchpads ──────────────────────────────────────────────────────
 const _vS2 = new THREE.Vector3();
 
+// Camera cutscene scratch variables (Zero-GC)
+const _camStartPos = new THREE.Vector3();
+const _camStartLookAt = new THREE.Vector3();
+const _tempV1 = new THREE.Vector3();
+const _tempV2 = new THREE.Vector3();
+const _tempV3 = new THREE.Vector3();
+
 // Mast light
 
 const KEYS = {
@@ -93,6 +100,12 @@ const esmeraldaMissionEvent: SectorEvent = {
     onStart: (ctx, eventState) => {
         eventState[KEYS.mastEventState] = 0;
         eventState[KEYS.mastEventTimer] = 0;
+
+        // Make gate immune initially
+        const gate = ctx.sectorState.gateObstacle;
+        if (gate) {
+            gate.durability = undefined;
+        }
 
         const enemyWaveSystem = ctx.engine.systems.enemyWave;
         if (enemyWaveSystem) {
@@ -124,7 +137,7 @@ const esmeraldaMissionEvent: SectorEvent = {
                 attractorPos: { x: mastPos.x, z: mastPos.z }
             }], {
                 onWaveComplete: () => {
-                    eventState[KEYS.mastEventState] = 2;
+                    eventState[KEYS.mastEventState] = 5;
                     eventState[KEYS.mastEventTimer] = ctx.simTime;
                     if (ctx.setBubble) {
                         ctx.setBubble(ctx.t?.('sector_events.2.2.reaction') || 'The area is clear...', 3000);
@@ -134,7 +147,8 @@ const esmeraldaMissionEvent: SectorEvent = {
         }
     },
     onUpdate: (ctx, eventState) => {
-        const { delta, simTime, renderTime, playerPos, gameState, triggerSystem, engine } = ctx;
+        const { delta, simTime, renderTime, playerPos, gameState, engine } = ctx;
+        const triggerSystem = engine.systems.triggerSystem;
         const sectorState = gameState.sectorState;
         let mask = SectorEventConstraint.NONE;
 
@@ -145,33 +159,182 @@ const esmeraldaMissionEvent: SectorEvent = {
 
         const mastX = LOCATIONS.POIS.MAST.x;
         const mastZ = LOCATIONS.POIS.MAST.z;
+        const mastPos = LOCATIONS.POIS.MAST;
 
         const scene = ctx.scene;
 
         if (mes === 0) {
-            // Transition to state 1 once the wave becomes enabled
-            if (sectorState && sectorState.waveActive && !sectorState.waveDisabled) {
+            // Step 1: Reaching the mast triggers a speaking ChatBubble for 'pois.2.0.reaction'
+            const playerDist = _tempV1.set(playerPos.x, 0, playerPos.z).distanceTo(_tempV2.set(mastPos.x, 0, mastPos.z));
+            if (playerDist < 40) {
+                if (ctx.setBubble) {
+                    ctx.setBubble('pois.2.0.reaction', (2 << 16) | 4000); // 2 is ChatBubbleSubtype.SPEAK
+                }
                 eventState[KEYS.mastEventState] = 1;
                 eventState[KEYS.mastEventTimer] = simTime;
-                if (ctx.setBubble) {
-                    ctx.setBubble(ctx.t?.('sector_events.2.1.reaction') || 'Zombies inside the compound...', 3500);
-                }
             }
         }
         else if (mes === 1) {
-            // Safety fallback: if wave is finished but callback didn't trigger, move on
-            if (sectorState && !sectorState.waveActive) {
+            // Wait for ChatBubble to finish before starting camera handling
+            if (mesElapsed > 4000) {
+                _camStartPos.copy(engine.camera.position);
+                if (engine.camera.lookAtTarget) {
+                    _camStartLookAt.copy(engine.camera.lookAtTarget);
+                } else {
+                    _camStartLookAt.set(playerPos.x, 0, playerPos.z);
+                }
+                engine.camera.setCinematic(true);
+                gameState.ui.cinematicActive = true;
                 eventState[KEYS.mastEventState] = 2;
                 eventState[KEYS.mastEventTimer] = simTime;
-                if (ctx.setBubble) {
-                    ctx.setBubble(ctx.t?.('sector_events.2.2.reaction') || 'The area is clear...', 3000);
-                }
             }
         }
         else if (mes === 2) {
-            // Wait 1.5s, then walk Esmeralda out of the building toward the player
+            // Steps 2 & 3: Camera flies up to the top of the mast, settles/pans, flies down quickly, and pans compound
+            const basePos = _tempV1.set(mastPos.x - 15, 5, mastPos.z + 15);
+            const topPos = _tempV2.set(mastPos.x - 10, 65, mastPos.z + 10);
+            const lookAtTop = _tempV3.set(mastPos.x, 60, mastPos.z);
+
+            if (mesElapsed < 1500) {
+                // Phase 1: Fly to base
+                const p = mesElapsed / 1500;
+                const smoothP = THREE.MathUtils.smoothstep(p, 0, 1);
+                engine.camera.setPosition(
+                    THREE.MathUtils.lerp(_camStartPos.x, basePos.x, smoothP),
+                    THREE.MathUtils.lerp(_camStartPos.y, basePos.y, smoothP),
+                    THREE.MathUtils.lerp(_camStartPos.z, basePos.z, smoothP)
+                );
+                engine.camera.lookAt(
+                    _tempV3.set(
+                        THREE.MathUtils.lerp(_camStartLookAt.x, mastPos.x, smoothP),
+                        THREE.MathUtils.lerp(_camStartLookAt.y, 2, smoothP),
+                        THREE.MathUtils.lerp(_camStartLookAt.z, mastPos.z, smoothP)
+                    )
+                );
+            }
+            else if (mesElapsed < 3500) {
+                // Phase 2: Fly to top
+                const p = (mesElapsed - 1500) / 2000;
+                const smoothP = THREE.MathUtils.smoothstep(p, 0, 1);
+                engine.camera.setPosition(
+                    THREE.MathUtils.lerp(basePos.x, topPos.x, smoothP),
+                    THREE.MathUtils.lerp(basePos.y, topPos.y, smoothP),
+                    THREE.MathUtils.lerp(basePos.z, topPos.z, smoothP)
+                );
+                engine.camera.lookAt(
+                    _tempV3.set(
+                        THREE.MathUtils.lerp(mastPos.x, lookAtTop.x, smoothP),
+                        THREE.MathUtils.lerp(2, lookAtTop.y, smoothP),
+                        THREE.MathUtils.lerp(mastPos.z, lookAtTop.z, smoothP)
+                    )
+                );
+            }
+            else if (mesElapsed < 11500) {
+                // Phase 3: Settle at the top and pan around (8000 ms = 2000 ms longer than original 6000 ms)
+                const circleElapsed = mesElapsed - 3500;
+                const angle = circleElapsed * 0.0005;
+                const radius = 15;
+                const focusPosX = lookAtTop.x + Math.sin(angle) * radius;
+                const focusPosY = lookAtTop.y + 5;
+                const focusPosZ = lookAtTop.z + Math.cos(angle) * radius;
+
+                engine.camera.setPosition(focusPosX, focusPosY, focusPosZ);
+                engine.camera.lookAt(lookAtTop);
+            }
+            else if (mesElapsed < 12000) {
+                // Phase 4: Quickly fly down (~500 ms) to the base of the mast
+                const lastAngle = 8000 * 0.0005;
+                const lastPosX = lookAtTop.x + Math.sin(lastAngle) * 15;
+                const lastPosY = lookAtTop.y + 5;
+                const lastPosZ = lookAtTop.z + Math.cos(lastAngle) * 15;
+
+                const p = (mesElapsed - 11500) / 500;
+                const smoothP = THREE.MathUtils.smoothstep(p, 0, 1);
+                engine.camera.setPosition(
+                    THREE.MathUtils.lerp(lastPosX, basePos.x, smoothP),
+                    THREE.MathUtils.lerp(lastPosY, basePos.y, smoothP),
+                    THREE.MathUtils.lerp(lastPosZ, basePos.z, smoothP)
+                );
+                engine.camera.lookAt(
+                    _tempV3.set(
+                        THREE.MathUtils.lerp(lookAtTop.x, mastPos.x, smoothP),
+                        THREE.MathUtils.lerp(lookAtTop.y, 2, smoothP),
+                        THREE.MathUtils.lerp(lookAtTop.z, mastPos.z, smoothP)
+                    )
+                );
+            }
+            else if (mesElapsed < 15000) {
+                // Phase 5: Fly over compound showing base/building/enemies for 3000 ms
+                const p = (mesElapsed - 12000) / 3000;
+                const smoothP = THREE.MathUtils.smoothstep(p, 0, 1);
+                engine.camera.setPosition(
+                    THREE.MathUtils.lerp(basePos.x, mastPos.x - 25, smoothP),
+                    THREE.MathUtils.lerp(basePos.y, 15, smoothP),
+                    THREE.MathUtils.lerp(basePos.z, mastPos.z - 15, smoothP)
+                );
+                engine.camera.lookAt(
+                    _tempV3.set(
+                        THREE.MathUtils.lerp(mastPos.x, mastPos.x, smoothP),
+                        2,
+                        THREE.MathUtils.lerp(mastPos.z, mastPos.z - 15, smoothP)
+                    )
+                );
+            }
+            else if (mesElapsed < 16000) {
+                // Phase 6: Return smoothly to player camera (1000 ms)
+                const p = (mesElapsed - 15000) / 1000;
+                const smoothP = THREE.MathUtils.smoothstep(p, 0, 1);
+                const targetX = playerPos.x;
+                const targetY = playerPos.y + CAMERA_HEIGHT;
+                const targetZ = playerPos.z + 40;
+
+                engine.camera.setPosition(
+                    THREE.MathUtils.lerp(mastPos.x - 25, targetX, smoothP),
+                    THREE.MathUtils.lerp(15, targetY, smoothP),
+                    THREE.MathUtils.lerp(mastPos.z - 15, targetZ, smoothP)
+                );
+                engine.camera.lookAt(
+                    _tempV3.set(
+                        THREE.MathUtils.lerp(mastPos.x, playerPos.x, smoothP),
+                        THREE.MathUtils.lerp(2, playerPos.y, smoothP),
+                        THREE.MathUtils.lerp(mastPos.z - 15, playerPos.z, smoothP)
+                    )
+                );
+            }
+            else {
+                // End camera override, restore player control
+                engine.camera.setCinematic(false);
+                gameState.ui.cinematicActive = false;
+
+                // Step 4: Now the destroyable gate can take damage
+                const gate = sectorState.gateObstacle;
+                if (gate) {
+                    gate.durability = 120;
+                }
+
+                eventState[KEYS.mastEventState] = 3;
+                eventState[KEYS.mastEventTimer] = simTime;
+            }
+        }
+        else if (mes === 3) {
+            // Wait for the gate to be destroyed
+            const gate = sectorState.gateObstacle;
+            if (!gate || gate.isMutated || gate.durability <= 0) {
+                // Step 5: EnemyWave gets enabled (handled via gate's onDestroyObject callback)
+                eventState[KEYS.mastEventState] = 4;
+                eventState[KEYS.mastEventTimer] = simTime;
+            }
+        }
+        else if (mes === 4) {
+            // Wait for the EnemyWave to be defeated
+            if (sectorState && !sectorState.waveActive) {
+                eventState[KEYS.mastEventState] = 5;
+                eventState[KEYS.mastEventTimer] = simTime;
+            }
+        }
+        else if (mes === 5) {
+            // Step 6: Trigger the dialogue with Esmeralda. Esmeralda gets rescued and starts following.
             if (mesElapsed > 1500 && scene) {
-                // --- ZERO-GC SCENE CACHING ---
                 if (!sectorState.esmeraldaMesh) {
                     sectorState.esmeraldaMesh = scene.children.find(
                         (c: any) => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Esmeralda'
@@ -181,7 +344,6 @@ const esmeraldaMissionEvent: SectorEvent = {
 
                 if (esmeralda) {
                     if (!sectorState.esmeraldaWalkTarget) {
-                        // Reuse _vS2 for target calculation then store clone for persistence
                         _vS2.set(mastX, 0, mastZ + 20);
                         sectorState.esmeraldaWalkTarget = _vS2.clone();
                     }
@@ -189,15 +351,13 @@ const esmeraldaMissionEvent: SectorEvent = {
                     esmeralda.position.lerp(sectorState.esmeraldaWalkTarget, 0.04);
 
                     if (esmeralda.position.distanceTo(sectorState.esmeraldaWalkTarget) < 2.0) {
-                        // Esmeralda has reached her mark — start the cinematic
-                        eventState[KEYS.mastEventState] = 3;
+                        eventState[KEYS.mastEventState] = 6;
                         eventState[KEYS.mastEventTimer] = simTime;
 
                         if (ctx.startCinematic) {
                             ctx.startCinematic(esmeralda, 2, 0); // Sector 2, Dialogue 0
                         }
 
-                        // Activate the proximity trigger as a fallback (player walked in late)
                         const idx = triggerSystem.getTriggerById(FamilyMemberID.ESMERALDA, TriggerType.EVENT);
                         if (idx !== -1) {
                             triggerSystem.setStatusFlag(idx, TriggerStatus.ACTIVE, true);
@@ -205,39 +365,47 @@ const esmeraldaMissionEvent: SectorEvent = {
                         }
                     }
                 } else {
-                    // Esmeralda mesh not found — advance anyway after a timeout
                     if (mesElapsed > 5000) {
-                        eventState[KEYS.mastEventState] = 3;
+                        eventState[KEYS.mastEventState] = 6;
                         eventState[KEYS.mastEventTimer] = simTime;
                     }
                 }
             }
         }
-        else if (mes === 3) {
+        else if (mes === 6) {
+            // Wait for the cinematic dialogue to finish. Boss intro starts as a consequence.
             if (!gameState.ui.cinematicActive) {
-                eventState[KEYS.mastEventState] = 4;
+                eventState[KEYS.mastEventState] = 7;
                 eventState[KEYS.mastEventTimer] = simTime;
             }
         }
 
         // Apply cinematic active constraint flags
-        if (mes === 3 || gameState.ui.cinematicActive) {
+        if (mes === 1 || mes === 2 || mes === 6 || gameState.ui.cinematicActive) {
             mask |= SectorEventConstraint.DISABLE_INPUT | SectorEventConstraint.DISABLE_TELEPORT | SectorEventConstraint.HIDE_HUD;
         }
 
         return mask;
     },
     onPlayerRespawn: (ctx, state, engine, eventState) => {
+        // If checkpoint is active for Esmeralda, player respawns at boss (gate is already destroyed)
+        const isBossCheckpoint = state.checkpoint && state.checkpoint.active && state.checkpoint.familyMemberId === FamilyMemberID.ESMERALDA;
+        if (isBossCheckpoint) {
+            eventState[KEYS.mastEventState] = 7;
+            eventState[KEYS.mastEventTimer] = engine.simTime;
+            return;
+        }
+
+        // Otherwise reset everything back to start
         eventState[KEYS.mastEventState] = 0;
         eventState[KEYS.mastEventTimer] = 0;
         state.sectorState.waveActive = false;
         state.sectorState.waveDisabled = false;
         state.sectorState.esmeraldaWalkTarget = null;
 
-        // Reset the gate obstacle if it was destroyed
         const gate = state.sectorState.gateObstacle;
         if (gate) {
-            gate.durability = gate.maxDurability;
+            gate.durability = undefined; // starts immune again
             if (gate.isMutated) {
                 gate.isMutated = false;
                 if (gate.mesh) gate.mesh.visible = true;
@@ -248,7 +416,6 @@ const esmeraldaMissionEvent: SectorEvent = {
             }
         }
 
-        // Reset wave system and start dormant wave chain again
         const enemyWaveSystem = engine.systems.enemyWave;
         if (enemyWaveSystem) {
             enemyWaveSystem.reset();
@@ -261,12 +428,9 @@ const esmeraldaMissionEvent: SectorEvent = {
                     spawns: spawns,
                     attractorPos: { x: mastPos.x, z: mastPos.z }
                 }], {
-                    onWaveComplete: (session?: any) => {
-                        eventState[KEYS.mastEventState] = 2;
+                    onWaveComplete: () => {
+                        eventState[KEYS.mastEventState] = 5;
                         eventState[KEYS.mastEventTimer] = engine.simTime;
-                        if (session && session.callbacks && session.callbacks.setBubble) {
-                            session.callbacks.setBubble(t('sector_events.2.2.reaction') || 'The area is clear...', 3000);
-                        }
                     }
                 });
             }
@@ -626,7 +790,7 @@ export const Sector2: SectorDef = {
                 size: new THREE.Vector3(10, 2.5, 1.0),
                 center: new THREE.Vector3(0, 1.25, 0)
             },
-            durability: 120,
+            durability: undefined, // starts immune; set to 120 after camera flyover
             maxDurability: 120,
             excludedWeapons: [],
             onDestroyObject: (session: any, obstacle: any) => {
@@ -698,8 +862,7 @@ export const Sector2: SectorDef = {
                 content: "pois.2.0.reaction",
                 statusFlags: TriggerStatus.ACTIVE,
                 actions: [
-                    { type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } },
-                    { type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 2, dialogueId: 1, customPath: 'mast_flyover' } }
+                    { type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }
                 ]
             },
             { id: PoiID.S2_FARM, position: LOCATIONS.POIS.FARM, radius: 20, type: TriggerType.POI, content: "pois.2.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
@@ -726,7 +889,7 @@ export const Sector2: SectorDef = {
         }
     },
 
-    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, triggerSystem, ctx, ...events }) => {
+    onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
         // --- SECTOR 2: ESMERALDA MISSION LOGIC ---
         // Rotating mast warning light (every frame, Zero-GC)
         const mastLightHub = (ctx as any).mastLightHub;
