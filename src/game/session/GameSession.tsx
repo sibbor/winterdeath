@@ -468,7 +468,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
                 if (!target && (payload.targetName || payload.id)) {
                     const scene = engine?.scene;
-                    if (scene) {
+                    if (payload.targetName === 'PLAYER') {
+                        target = refs.playerGroupRef.current;
+                    } else if (scene) {
                         target = scene.getObjectByName(payload.targetName || payload.id);
 
                         if (!target && payload.id) {
@@ -650,7 +652,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             else if (type === DiscoveryType.COLLECTIBLE) HudStore.patch({ discoveredCollectiblesCount: hudState.discoveredCollectiblesCount + 1 });
 
             // 3. Process sound effects, prepare flat text layouts and cache payload for the bridge
-            if (currentProps.settings?.showDiscoveryPopups !== false) {
+            if (currentProps.gameState.settings?.showDiscoveryPopups !== false) {
                 // Extract dynamic progression data via StatsBridge layer and max capacity ceilings from DataResolver
                 const currentProgress = StatsBridge.getSectorDiscoveryCount(career, sector, type);
                 const maxProgress = DataResolver.getSectorMaxCapacity(sector, type);

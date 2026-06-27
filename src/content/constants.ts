@@ -212,6 +212,7 @@ export const SETTINGS_DEFAULT: GameSettings = {
     textureQuality: 1.0,
     volumetricFog: true,
     showDiscoveryPopups: true,
+    showChallengePopups: true,
     showFps: false,
     debugMode: false,
     hudEffectsQuality: true

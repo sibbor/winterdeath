@@ -201,7 +201,7 @@ export const NaturePropGenerator = {
             }
             for (let i = 0; i < matrices.length; i++) instMesh.setMatrixAt(i, matrices[i]);
             instMesh.instanceMatrix.needsUpdate = true;
-            GeneratorUtils.freezeStatic(instMesh);
+            GeneratorUtils.freeze(instMesh);
             ChunkManager.registerMesh(ix, iz, instMesh);
         }
     }

@@ -504,8 +504,29 @@ export const createProceduralDiffuse = () => {
         }
     });
 
+    const sand = draw(512, 512, (ctx, s) => {
+        const w = ctx.canvas.width; const h = ctx.canvas.height;
+        ctx.fillStyle = '#b59970'; ctx.fillRect(0, 0, w, h);
+        const count = Math.floor(12000 * s * s);
+        for (let i = 0; i < count; i++) {
+            ctx.fillStyle = Math.random() > 0.5 ? '#a38458' : '#c4aa83';
+            ctx.fillRect(Math.random() * w, Math.random() * h, 1, 1);
+        }
+    });
+
+    const sand_bump = draw(512, 512, (ctx, s) => {
+        const w = ctx.canvas.width; const h = ctx.canvas.height;
+        ctx.fillStyle = '#888888'; ctx.fillRect(0, 0, w, h);
+        const count = Math.floor(12000 * s * s);
+        for (let i = 0; i < count; i++) {
+            const val = Math.random() > 0.5 ? '#777777' : '#999999';
+            ctx.fillStyle = val;
+            ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+        }
+    });
+
     // Final cache population
-    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, map, dirt, snow, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint, scorchAlpha, treeLeaves, planks, planks_bump, roof_tiles_bump };
+    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, map, dirt, snow, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint, scorchAlpha, treeLeaves, planks, planks_bump, roof_tiles_bump, sand, sand_bump };
 
     return cachedTextures;
 };

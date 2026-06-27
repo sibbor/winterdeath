@@ -14,7 +14,8 @@ export enum MaterialType {
     GLASS = 10,
     PLANT = 11,
     SNOW = 12,
-    WATER = 13
+    WATER = 13,
+    SAND = 14
 }
 export type MATERIAL_TYPE = MaterialType;
 
@@ -32,7 +33,8 @@ export const FOOTSTEP_MAP: Partial<Record<MATERIAL_TYPE, SoundID>> = {
     [MaterialType.GRAVEL]: SoundID.FOOTSTEP_GRAVEL,
     [MaterialType.ASPHALT]: SoundID.FOOTSTEP_SNOW,
     [MaterialType.WATER]: SoundID.FOOTSTEP_WATER,
-    [MaterialType.PLANT]: SoundID.FOOTSTEP_VEGETATION
+    [MaterialType.PLANT]: SoundID.FOOTSTEP_VEGETATION,
+    [MaterialType.SAND]: SoundID.FOOTSTEP_DIRT // Fallback to dirt footstep for sand
 };
 
 // For impact sounds
@@ -45,7 +47,8 @@ export const IMPACT_MAP: Partial<Record<MATERIAL_TYPE, SoundID>> = {
     [MaterialType.STONE]: SoundID.IMPACT_STONE,
     [MaterialType.DIRT]: SoundID.IMPACT_STONE,
     [MaterialType.WATER]: SoundID.IMPACT_WATER,
-    [MaterialType.FLESH]: SoundID.IMPACT_FLESH
+    [MaterialType.FLESH]: SoundID.IMPACT_FLESH,
+    [MaterialType.SAND]: SoundID.IMPACT_STONE
 };
 
 /**

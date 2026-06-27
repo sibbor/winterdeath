@@ -8,16 +8,23 @@ import { DiscoveryType } from './HudTypes';
 import { HudStore } from '../../../../store/HudStore';
 import { InputAction, INPUT_KEY_MAP } from '../../../../core/engine/InputManager';
 import { TIER_COLORS } from '../../../../utils/ui/ColorUtils';
+import { GameSettings } from '../../../../types/StateTypes';
 
 interface ChallengePopupProps {
     onOpenAdventureLog?: (tab: any, itemId: string) => void;
+    settings?: GameSettings;
 }
 
 /**
  * ChallengePopup — Zero-GC DOM mutation pattern (same as DiscoveryPopup).
  * No useState, no React re-renders. Drives visibility and content via direct ref writes.
  */
-const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog }) => {
+const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog, settings }) => {
+    const settingsRef = useRef(settings);
+    useEffect(() => {
+        settingsRef.current = settings;
+    }, [settings]);
+
     // DOM node refs — never re-allocated
     const containerRef = useRef<HTMLDivElement>(null);
     const headerLabelRef = useRef<HTMLSpanElement>(null);
@@ -91,6 +98,7 @@ const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog }) =
     // UIEventBridge hot path — no allocations
     useUIEventBridge(useCallback((type, p1) => {
         if (type !== UIEventType.CHALLENGE_COMPLETE) return;
+        if (settingsRef.current?.showChallengePopups === false) return;
         if (p1 === lastProcessedP1.current) return;
         lastProcessedP1.current = p1;
 

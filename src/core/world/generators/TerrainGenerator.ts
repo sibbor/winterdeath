@@ -35,6 +35,7 @@ export const TerrainGenerator = {
         let mat: THREE.Material;
         if (type === GroundType.GRAVEL) mat = MATERIALS.gravelCutout;
         else if (type === GroundType.DIRT) mat = MATERIALS.dirtCutout;
+        else if (type === GroundType.SAND) mat = (MATERIALS as any).sandCutout || MATERIALS.dirtCutout;
         else mat = MATERIALS.snowCutout;
 
         // Ensure terrain material is fully initialized if textures were skipped during warmup
@@ -43,6 +44,7 @@ export const TerrainGenerator = {
             const procedural = createProceduralDiffuse();
             if (type === GroundType.GRAVEL) mMat.map = procedural.gravel;
             else if (type === GroundType.DIRT) mMat.map = procedural.dirt;
+            else if (type === GroundType.SAND) mMat.map = procedural.sand;
             else mMat.map = procedural.snow;
         }
 
@@ -57,14 +59,14 @@ export const TerrainGenerator = {
 
         const mesh = new THREE.Mesh(geo, mat);
         mesh.name = 'GROUND';
-        mesh.userData.materialId = type === GroundType.SNOW ? MaterialType.SNOW : (type === GroundType.GRAVEL ? MaterialType.GRAVEL : MaterialType.DIRT);
+        mesh.userData.materialId = type === GroundType.SNOW ? MaterialType.SNOW : (type === GroundType.GRAVEL ? MaterialType.GRAVEL : (type === GroundType.SAND ? MaterialType.SAND : MaterialType.DIRT));
         mesh.userData.physicsGroup = PhysicsGroup.GROUND;
         mesh.rotation.x = -Math.PI / 2;
         mesh.position.y = -0.05;
         mesh.receiveShadow = true;
 
         // Zero-GC: Static plane
-        GeneratorUtils.freezeStatic(mesh);
+        GeneratorUtils.freeze(mesh);
 
         // Register with water system to enable cutouts
         const engine = WinterEngine.getInstance();
@@ -128,7 +130,7 @@ export const TerrainGenerator = {
         mesh.userData.materialId = MaterialType.DIRT; // 
         mesh.userData.physicsGroup = PhysicsGroup.GROUND; // 
 
-        GeneratorUtils.freezeStatic(mesh);
+        GeneratorUtils.freeze(mesh);
 
         const repeatX = width / 8;
         const repeatY = depth / 8;

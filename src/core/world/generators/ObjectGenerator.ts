@@ -100,7 +100,7 @@ export const ObjectGenerator = {
         chest.add(chestGlow);
 
         // Exclude the lid so it can be animated
-        return GeneratorUtils.freezeStatic(chest, ['chestLid']);
+        return GeneratorUtils.freeze(chest, ['chestLid']);
     },
 
     createLocomotive: () => {
@@ -122,7 +122,7 @@ export const ObjectGenerator = {
 
         group.userData.colliders = [{ type: ColliderType.BOX, size: new THREE.Vector3(18, 12, 6) }];
 
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createStandardTunnel: (width: number = 6, height: number = 5, length: number = 10, wallThick: number = 0.5, roofThick: number = 0.5) => {
@@ -148,7 +148,7 @@ export const ObjectGenerator = {
             { type: ColliderType.BOX, size: new THREE.Vector3(wallThick, height, length), offset: new THREE.Vector3(width / 2 + wallThick / 2, 0, 0) }
         ];
 
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createFence: (length: number = 3.0) => {
@@ -169,7 +169,7 @@ export const ObjectGenerator = {
         const r2 = new THREE.Mesh(SHARED_GEO.fenceRail, fenceMat); r2.scale.z = length; r2.position.set(0, 0.9, 0); group.add(r2);
 
         group.userData.material = MaterialType.WOOD;
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createMeshFence: (length: number = 3.0, height: number = 2.5) => {
@@ -192,7 +192,7 @@ export const ObjectGenerator = {
         group.add(rail);
 
         group.userData.material = MaterialType.METAL;
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
 
@@ -205,7 +205,7 @@ export const ObjectGenerator = {
         mesh.castShadow = true;
         group.add(mesh);
         group.userData.material = MaterialType.METAL;
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createStreetLamp: () => {
@@ -241,7 +241,7 @@ export const ObjectGenerator = {
         group.add(light.target);
 
         group.userData.material = MaterialType.METAL;
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createBuilding: (width: number, height: number, depth: number, color: number, createRoof: boolean = true, withLights: boolean = false, lightProbability: number = 0.5) => {
@@ -353,7 +353,7 @@ export const ObjectGenerator = {
             material: MaterialType.CONCRETE
         };
 
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createScarecrow(x: number, z: number) {
@@ -387,7 +387,7 @@ export const ObjectGenerator = {
         group.add(hat);
 
         group.userData.material = MaterialType.PLANT;
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createFire: (ctx: SectorBuildContext, x: number, z: number, y: number = 0, scale: number = 1.0) => {
@@ -403,7 +403,7 @@ export const ObjectGenerator = {
             { type: SubEffectType.EMITTER, particle: FXParticleType.SMOKE, interval: 200, count: 1, offset: _FIRE_SMOKE_OFFSET, spread: 0.4 }
         ];
 
-        ctx.scene.add(GeneratorUtils.freezeStatic(group));
+        ctx.scene.add(GeneratorUtils.freeze(group));
         ctx.engine?.systems.worldStreamer?.registerObstacle({
             mesh: group,
             position: group.position,
@@ -422,7 +422,7 @@ export const ObjectGenerator = {
         group.add(mesh);
         group.scale.setScalar(scale);
         group.userData.material = MaterialType.PLANT;
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createTimberPile: (scale: number = 1.0) => {
@@ -446,7 +446,7 @@ export const ObjectGenerator = {
         group.receiveShadow = true;
         group.scale.setScalar(scale);
         group.userData.material = MaterialType.WOOD;
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createWheatStalk: (scale: number = 1.0) => {
@@ -465,7 +465,7 @@ export const ObjectGenerator = {
         group.add(p2);
 
         group.scale.setScalar(scale);
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createDeadBody: (type: EnemyType | 'PLAYER' | 'HUMAN', rot: number = 0, blood?: boolean) => {
@@ -486,7 +486,7 @@ export const ObjectGenerator = {
         corpse.position.set(0, 0.1, 0);
         group.add(corpse);
         group.userData.material = MaterialType.FLESH;
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createContainer: (colorOverride?: number, addSnow: boolean = true) => {
@@ -514,7 +514,7 @@ export const ObjectGenerator = {
         }
 
         group.userData.material = MaterialType.METAL;
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createNeonSign: (text: string, color: number = 0x00ffff, withBacking: boolean = true, scale: number = 1.0, backgroundColor: number = 0x050505) => {
@@ -537,7 +537,7 @@ export const ObjectGenerator = {
         EffectManager.attachEffect(group, EffectType.NEON_SIGN, { color, intensity: 15, distance: 20 });
         group.scale.setScalar(scale);
         group.userData.material = MaterialType.METAL;
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createCaveLamp: () => {
@@ -565,7 +565,7 @@ export const ObjectGenerator = {
             flickerRate: 0.5
         }];
 
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createElectricPole: (withWires: boolean = false) => {
@@ -590,7 +590,7 @@ export const ObjectGenerator = {
         }
 
         group.userData.material = MaterialType.WOOD;
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
 
@@ -613,7 +613,7 @@ export const ObjectGenerator = {
 
         EffectManager.attachEffect(group, EffectType.FLICKER_LIGHT, { color: 0x88ccff, intensity: 10, distance: 15 });
         group.userData.material = MaterialType.GLASS;
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createStorefrontBuilding: (width: number, height: number, depth: number, opts: {
@@ -815,7 +815,7 @@ export const ObjectGenerator = {
         }
 
         group.userData = { size: new THREE.Vector3(width, height + (withRoof ? 3 : 0), depth), material: MaterialType.GLASS };
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createNeonHeart: (color: number = 0xff0000, scale: number = 1.0) => {
@@ -852,7 +852,7 @@ export const ObjectGenerator = {
         }];
 
         group.scale.setScalar(scale);
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     // Note: Grass should be fully handled by VegetationGenerator, but keeping this optimized just in case.
@@ -861,7 +861,7 @@ export const ObjectGenerator = {
         mesh.frustumCulled = false;
         mesh.castShadow = false;
         mesh.receiveShadow = true;
-        GeneratorUtils.freezeStatic(mesh);
+        GeneratorUtils.freeze(mesh);
 
         for (let i = 0; i < count; i++) {
             _position.set(x + (Math.random() - 0.5) * width, 0, z + (Math.random() - 0.5) * depth);
@@ -916,6 +916,6 @@ export const ObjectGenerator = {
         screen.rotation.x = -Math.PI / 6;
         group.add(screen);
 
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 };

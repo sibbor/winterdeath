@@ -57,7 +57,7 @@ const initTypedArrays = () => {
         FXParticleType.FROST_NOVA, FXParticleType.SCREECH_WAVE, FXParticleType.ELECTRIC_BEAM,
         FXParticleType.MAGNETIC_SPARKS, FXParticleType.IMPACT, FXParticleType.BLAST_RADIUS,
         FXParticleType.BLACK_SMOKE, FXParticleType.DEBRIS_TRAIL, FXParticleType.BLOOD_SPLATTER,
-        FXParticleType.SCRAP, FXParticleType.SNOW_PUFF
+        FXParticleType.SCRAP, FXParticleType.SNOW_PUFF, FXParticleType.DEBRIS, FXParticleType.GLASS
     ].forEach(t => INSTANCED_FLAGS[t] = 1);
 
     // --- ESSENTIAL FLAGS ---

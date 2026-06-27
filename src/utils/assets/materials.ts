@@ -440,7 +440,8 @@ export const MATERIALS = {
     gore: new THREE.MeshStandardMaterial({
         color: 0x880000,
         roughness: 0.5,
-        metalness: 0.1
+        metalness: 0.1,
+        vertexColors: true
     }), splash: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false, vertexColors: true }),
     bloodSplatter: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false, vertexColors: true }),
     impactSplat: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false, vertexColors: true, side: THREE.DoubleSide }),
@@ -614,6 +615,24 @@ export const MATERIALS = {
         roughness: 1.0,
         bumpMap: TEXTURES.stone_bump,
         bumpScale: 2.8,
+        polygonOffset: true,
+        polygonOffsetFactor: -1
+    })),
+    sand: new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        map: DIFFUSE.sand,
+        roughness: 1.0,
+        bumpMap: (DIFFUSE as any).sand_bump,
+        bumpScale: 1.5,
+        polygonOffset: true,
+        polygonOffsetFactor: -1
+    }),
+    sandCutout: patchCutoutMaterial(new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        map: DIFFUSE.sand,
+        roughness: 1.0,
+        bumpMap: (DIFFUSE as any).sand_bump,
+        bumpScale: 1.5,
         polygonOffset: true,
         polygonOffsetFactor: -1
     })),

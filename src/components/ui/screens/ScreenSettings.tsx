@@ -180,7 +180,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
 
     return (
         <div className="flex flex-col items-center justify-start h-full max-w-2xl mx-auto space-y-6 overflow-y-auto pr-4 custom-scrollbar py-4 px-2">
-            <TacticalCard color={0x3b82f6} className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
+            <TacticalCard color={0x3b82f6} className="w-full shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
                 <div className="flex-1">
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.resolution')}</h3>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.resolution_sub')}</p>
@@ -208,7 +208,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                 </div>
             </TacticalCard>
 
-            <TacticalCard color={0x3b82f6} className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
+            <TacticalCard color={0x3b82f6} className="w-full shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.shadow_quality')}</h3>
                     <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">{t('ui.needs_reload')}</p>
@@ -235,7 +235,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
                 </div>
             </TacticalCard>
 
-            <TacticalCard color={0x3b82f6} className="w-full flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
+            <TacticalCard color={0x3b82f6} className="w-full shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center group gap-4 p-4 md:p-6">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.texture_quality')}</h3>
                     <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">{t('ui.needs_reload')}</p>
@@ -258,7 +258,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
             <TacticalCard
                 onClick={toggleVolumetricFog}
                 color={0x3b82f6}
-                className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+                className="w-full shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
             >
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.volumetric_fog')}</h3>
@@ -286,7 +286,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
             <TacticalCard
                 onClick={toggleAntialias}
                 color={0x3b82f6}
-                className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+                className="w-full shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
             >
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.antialias')}</h3>
@@ -314,7 +314,7 @@ const GraphicsTab: React.FC<GraphicsTabProps> = React.memo(({ tempGraphics, setT
             <TacticalCard
                 onClick={toggleHudEffects}
                 color={0x3b82f6}
-                className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+                className="w-full shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
             >
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.hud_effects_quality')}</h3>
@@ -352,7 +352,7 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ tempGraphics, setTem
         <TacticalCard
             onClick={() => { const current = getLocale(); setLocale(current === 'en' ? 'sv' : 'en'); setTick(t => t + 1); UISounds.playClick(); }}
             color={0x3b82f6}
-            className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+            className="w-full shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
         >
             <div>
                 <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.language')}</h3>
@@ -367,7 +367,7 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ tempGraphics, setTem
         <TacticalCard
             onClick={() => { setTempGraphics(prev => ({ ...prev, showFps: !prev.showFps })); UISounds.playClick(); }}
             color={0x3b82f6}
-            className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+            className="w-full shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
         >
             <div>
                 <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.show_fps')}</h3>
@@ -382,7 +382,7 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ tempGraphics, setTem
         <TacticalCard
             onClick={() => { setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: !prev.showDiscoveryPopups })); UISounds.playClick(); }}
             color={0x3b82f6}
-            className="w-full flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+            className="w-full shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
         >
             <div>
                 <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.discovery_popups')}</h3>
@@ -391,6 +391,21 @@ const GeneralTab: React.FC<GeneralTabProps> = React.memo(({ tempGraphics, setTem
             <div className="flex gap-2">
                 <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: true })); UISounds.playClick(); }} variant={tempGraphics.showDiscoveryPopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
                 <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showDiscoveryPopups: false })); UISounds.playClick(); }} variant={!tempGraphics.showDiscoveryPopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
+            </div>
+        </TacticalCard>
+
+        <TacticalCard
+            onClick={() => { setTempGraphics(prev => ({ ...prev, showChallengePopups: !prev.showChallengePopups })); UISounds.playClick(); }}
+            color={0x3b82f6}
+            className="w-full shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center cursor-pointer group p-4 md:p-6"
+        >
+            <div>
+                <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.challenge_popups')}</h3>
+                <p className="text-gray-400 text-xs font-mono">{t('ui.challenge_popups_sub')}</p>
+            </div>
+            <div className="flex gap-2">
+                <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showChallengePopups: true })); UISounds.playClick(); }} variant={tempGraphics.showChallengePopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.on')}</TacticalButton>
+                <TacticalButton onClick={(e) => { e.stopPropagation(); setTempGraphics(prev => ({ ...prev, showChallengePopups: false })); UISounds.playClick(); }} variant={!tempGraphics.showChallengePopups ? 'primary' : 'secondary'} className="px-6 py-1">{t('ui.off')}</TacticalButton>
             </div>
         </TacticalCard>
     </div>

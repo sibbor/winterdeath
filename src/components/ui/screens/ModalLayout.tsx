@@ -363,7 +363,10 @@ const ModalLayout: React.FC<ModalLayoutProps> = React.memo(({
     );
 });
 
-// --- CENTRALIZED TACTICAL COMPONENTS ---
+// ============================================================================
+// CENTRALIZED TACTICAL COMPONENTS
+// Hardened against iOS WebKit flexbox compression (shrink)
+// ============================================================================
 
 export const TacticalButton: React.FC<{
     onClick: () => void;
@@ -374,7 +377,8 @@ export const TacticalButton: React.FC<{
     style?: React.CSSProperties;
     showHatching?: boolean;
 }> = React.memo(({ onClick, children, className = '', variant = 'primary', disabled = false, style, showHatching = true }) => {
-    const baseStyle = "group/tbtn relative px-8 py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden";
+    // VINTERDÖD HARDENING: Added shrink-0 as a baseline default for critical tactile buttons
+    const baseStyle = "group/tbtn relative px-8 py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden shrink-0";
 
     let variantClasses = "";
     let hatchingStyle = HORIZONTAL_HATCHING_STYLE;
@@ -422,14 +426,20 @@ export const TacticalCard: React.FC<{
     style?: React.CSSProperties
 }> = React.memo(({ children, isLocked, color = COLORS.BLUE, id, className = '', showHatching = false, showHover = false, onClick, style }) => {
     const colorStr = typeof color === 'string' ? color : color.str;
+
+    // VINTERDÖD HARDENING: Check if the consumer explicitly specified a shrink utility.
+    // If not, we default to shrink-0 to guarantee that cards do not compress on iOS Safari viewports.
+    const hasExplicitShrink = className.includes('shrink-') || className.includes('flex-shrink-');
+    const defaultShrinkClass = hasExplicitShrink ? '' : 'shrink-0';
+
     return (
         <div
             id={id}
             onClick={onClick}
-            className={`p-6 border-2 relative overflow-hidden transition-all duration-300 backdrop-blur-md shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800 bg-black/60' : ''} ${onClick ? 'cursor-pointer' : ''} group/tcard ${className}`}
+            className={`p-6 border-2 relative overflow-hidden transition-all duration-300 backdrop-blur-md shadow-2xl active:scale-[0.98] ${defaultShrinkClass} ${isLocked ? 'border-zinc-800 bg-black/60' : ''} ${onClick ? 'cursor-pointer' : ''} group/tcard ${className}`}
             style={{
                 borderColor: isLocked ? '#1f2937' : `${colorStr}66`,
-                backgroundColor: isLocked ? undefined : `${colorStr}0A`, // Very subtle themed background (approx 4% opacity)
+                backgroundColor: isLocked ? undefined : `${colorStr}0A`,
                 ...style
             }}
         >
@@ -448,7 +458,6 @@ export const TacticalCard: React.FC<{
         </div>
     );
 });
-
 
 export const TacticalTab: React.FC<{
     label: string | React.ReactNode,
@@ -470,7 +479,7 @@ export const TacticalTab: React.FC<{
             className={`${baseStyle} ${activeStyle} ${orientationStyle} ${className}`}
             style={isActive ? {
                 backgroundColor: colorStr + '33',
-                borderColor: typeof color !== 'string' ? adjustColor(color.num, -60) : color, // Fallback for string
+                borderColor: typeof color !== 'string' ? adjustColor(color.num, -60) : color,
                 '--pulse-color': colorStr
             } as any : {}}
         >

@@ -5,11 +5,17 @@ const _v2 = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 
 export const GeneratorUtils = {
-    freezeStatic: <T extends THREE.Object3D>(obj: T, excludeNames: string[] = []): T => {
+    freeze: <T extends THREE.Object3D>(obj: T, excludeNames: string[] = []): T => {
         obj.traverse((child) => {
             if (excludeNames.length > 0 && excludeNames.indexOf(child.name) !== -1) return;
             child.matrixAutoUpdate = false;
             child.updateMatrix();
+        });
+        return obj;
+    },
+    unfreeze: <T extends THREE.Object3D>(obj: T): T => {
+        obj.traverse((child) => {
+            child.matrixAutoUpdate = true;
         });
         return obj;
     },

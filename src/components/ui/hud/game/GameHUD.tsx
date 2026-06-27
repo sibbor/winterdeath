@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { WeaponID } from '../../../../entities/player/CombatTypes';
+import { GameSettings } from '../../../../types/StateTypes';
 import { t } from '../../../../utils/i18n';
 import { useHudStore } from '../../../../hooks/useHudStore';
 import { useOrientation } from '../../../../hooks/useOrientation';
@@ -49,6 +50,7 @@ interface GameHUDProps {
     onOpenAdventureLog?: (tab?: any, itemId?: string) => void;
     isSectorBannerActive?: boolean;
     onSectorBannerComplete?: () => void;
+    settings?: GameSettings;
 }
 
 const HUD_WRAPPER = "absolute inset-0 pointer-events-none transition-all duration-500 ease-in z-[110]";
@@ -56,7 +58,7 @@ const HUD_WRAPPER = "absolute inset-0 pointer-events-none transition-all duratio
 const GameHUD: React.FC<GameHUDProps> = React.memo(({
     loadout, isBossIntro = false, isMobileDevice = false,
     onTogglePause, onToggleMap, onSelectWeapon, onOpenAdventureLog,
-    isSectorBannerActive = false, onSectorBannerComplete
+    isSectorBannerActive = false, onSectorBannerComplete, settings
 }) => {
     const { isLandscapeMode } = useOrientation();
 
@@ -312,10 +314,10 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             <FloatingDurabilityBars />
 
             {/* DISCOVERY POPUP */}
-            <DiscoveryPopup onOpenAdventureLog={onOpenAdventureLog} />
+            <DiscoveryPopup onOpenAdventureLog={onOpenAdventureLog} settings={settings} />
 
             {/* CHALLENGE POPUP */}
-            <ChallengePopup onOpenAdventureLog={onOpenAdventureLog} />
+            <ChallengePopup onOpenAdventureLog={onOpenAdventureLog} settings={settings} />
 
             {/* SIDE BANNERS */}
             <SideBanner

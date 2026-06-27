@@ -18,7 +18,8 @@ export enum GroundType {
   WOOD = 4,
   METAL = 5,
   ICE = 6,
-  WATER = 7
+  WATER = 7,
+  SAND = 8
 }
 
 export interface EnvironmentalFog {

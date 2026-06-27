@@ -596,7 +596,6 @@ export const Sector1: SectorDef = {
                 const geom = new THREE.BufferGeometry().setFromPoints(points);
                 const wireLine = new THREE.Line(geom, wireMaterial);
 
-                GeneratorUtils.freezeStatic(wireLine);
                 ctx.scene.add(wireLine);
             }
             await yieldIfBudgetExceeded();
@@ -663,17 +662,14 @@ export const Sector1: SectorDef = {
         // --- VISUAL MOUNTAIN BLOCKS TO COVER THE VOID BEHIND THE MOUNTAIN (x > 158) ---
         const rock1 = NaturePropGenerator.createRock(40, 45, 25);
         rock1.position.set(185, -2, -80);
-        GeneratorUtils.freezeStatic(rock1);
         ctx.scene.add(rock1);
 
         const rock2 = NaturePropGenerator.createRock(50, 50, 30);
         rock2.position.set(195, -2, -40);
-        GeneratorUtils.freezeStatic(rock2);
         ctx.scene.add(rock2);
 
         const rock3 = NaturePropGenerator.createRock(45, 45, 25);
         rock3.position.set(175, -2, -10);
-        GeneratorUtils.freezeStatic(rock3);
         ctx.scene.add(rock3);
 
         await yieldIfBudgetExceeded();

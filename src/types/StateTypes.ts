@@ -15,6 +15,7 @@ export interface GameSettings {
     textureQuality: number;
     volumetricFog: boolean;
     showDiscoveryPopups: boolean;
+    showChallengePopups: boolean;
     showFps: boolean;
     debugMode: boolean;
     hudEffectsQuality: boolean;

@@ -7,16 +7,23 @@ import { useUIEventBridge } from '../../../../hooks/useUIEventBridge';
 import { UIEventType } from '../../../../systems/ui/UIEventRingBuffer';
 import { DataResolver } from '../../../../core/data/DataResolver';
 import { MetaActionId } from '../../../../systems/ui/UIEventBridge';
+import { GameSettings } from '../../../../types/StateTypes';
 
 interface DiscoveryPopupProps {
   onOpenAdventureLog: (tab?: DiscoveryType, itemId?: string) => void;
+  settings?: GameSettings;
 }
 
 /**
  * DiscoveryPopup - ZERO-GC PRESENTATION LAYER
  * Mutates the DOM directly to prevent V8 heap allocations and React rendering cycles.
  */
-const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdventureLog }) => {
+const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdventureLog, settings }) => {
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
   // DOM Element References to bypass React reconciliation completely
   const containerRef = useRef<HTMLDivElement>(null);
   const iconRef = useRef<HTMLSpanElement>(null);
@@ -63,6 +70,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
   // UI Event Bridge Handler - Executed on the main animation cadence
   const handleUIEvent = useCallback((type: UIEventType, id: any, discoveryType: number, timestamp: number) => {
     if (type !== UIEventType.DISCOVERY) return;
+    if (settingsRef.current?.showDiscoveryPopups === false) return;
 
     // Critical guard against reprocessing duplicate execution frames
     if (timestamp <= lastTimestamp.current) return;

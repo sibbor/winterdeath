@@ -34,7 +34,11 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.0_11" },
             {
                 speaker: FamilyMemberID.LOKE, text: "dialogue.0_12",
-                trigger: [TriggerActionType.FAMILY_MEMBER_FOUND, TriggerActionType.FAMILY_MEMBER_FOLLOW, { type: TriggerActionType.SPAWN_BOSS, payload: { bossId: BossID.SECTOR_0 } }]
+                trigger: [
+                    TriggerActionType.FAMILY_MEMBER_FOUND,
+                    TriggerActionType.FAMILY_MEMBER_FOLLOW,
+                    { type: TriggerActionType.SPAWN_BOSS, payload: { bossId: BossID.SECTOR_0 } }
+                ]
             }
         ]
     },
@@ -111,10 +115,6 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
                     { type: TriggerActionType.SPAWN_BOSS, payload: { bossId: BossID.SECTOR_2 } }
                 ]
             }
-        ],
-        // TODO: remove this and swap it out for a ChatBubble 
-        1: [
-            { speaker: FamilyMemberID.ROBERT, text: "pois.2.0.reaction", duration: 13000 }
         ]
     },
 

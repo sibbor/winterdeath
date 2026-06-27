@@ -171,7 +171,7 @@ export const PathGenerator = {
         road.userData.isEngineStatic = true;
         road.userData.materialId = matType;
 
-        GeneratorUtils.freezeStatic(road);
+        GeneratorUtils.freeze(road);
         ctx.scene.add(road);
 
         // Register material for footstep audio
@@ -206,11 +206,38 @@ export const PathGenerator = {
         path.userData.isEngineStatic = true;
         path.userData.materialId = MaterialType.DIRT;
 
-        GeneratorUtils.freezeStatic(path);
+        GeneratorUtils.freeze(path);
         ctx.scene.add(path);
 
         for (let i = 0; i < pts.length; i++) {
             ctx.engine.systems.worldStreamer.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, MaterialType.DIRT);
+        }
+
+        _pathLayerIndex++;
+        return curve;
+    },
+
+    createSandPath: async (ctx: SectorBuildContext, points: THREE.Vector3[], width: number = 4): Promise<THREE.CatmullRomCurve3> => {
+        if (points.length < 2) return null;
+
+        const curve = new THREE.CatmullRomCurve3(points);
+        const len = curve.getLength();
+        const segments = Math.floor(len / 1.5);
+        const pts = curve.getSpacedPoints(segments);
+
+        const yOff = 0.14 + (_pathLayerIndex * 0.001);
+        const geo = buildRibbonGeometry(pts, width, yOff);
+
+        const path = new THREE.Mesh(geo, (MATERIALS as any).sand || MATERIALS.dirt);
+        path.receiveShadow = true;
+        path.userData.isEngineStatic = true;
+        path.userData.materialId = MaterialType.SAND;
+
+        GeneratorUtils.freeze(path);
+        ctx.scene.add(path);
+
+        for (let i = 0; i < pts.length; i++) {
+            ctx.engine.systems.worldStreamer.registerGroundMaterial(pts[i].x, pts[i].z, width / 2, MaterialType.SAND);
         }
 
         _pathLayerIndex++;
@@ -236,8 +263,8 @@ export const PathGenerator = {
         const snowMesh = new THREE.Mesh(snowGeo, MATERIALS.frost);
         snowMesh.receiveShadow = true;
 
-        GeneratorUtils.freezeStatic(gravelMesh);
-        GeneratorUtils.freezeStatic(snowMesh);
+        GeneratorUtils.freeze(gravelMesh);
+        GeneratorUtils.freeze(snowMesh);
         ctx.scene.add(gravelMesh, snowMesh);
 
         // 2. Sleepers (Chunked InstancedMesh)
@@ -280,7 +307,7 @@ export const PathGenerator = {
             mesh.userData.isEngineStatic = true;
             for (let i = 0; i < matrices.length; i++) mesh.setMatrixAt(i, matrices[i]);
             mesh.instanceMatrix.needsUpdate = true;
-            GeneratorUtils.freezeStatic(mesh);
+            GeneratorUtils.freeze(mesh);
             ChunkManager.registerMesh(ix, iz, mesh);
         }
 
@@ -296,8 +323,8 @@ export const PathGenerator = {
         leftRail.receiveShadow = true;
         rightRail.receiveShadow = true;
 
-        GeneratorUtils.freezeStatic(leftRail);
-        GeneratorUtils.freezeStatic(rightRail);
+        GeneratorUtils.freeze(leftRail);
+        GeneratorUtils.freeze(rightRail);
 
         ctx.scene.add(leftRail, rightRail);
 
@@ -364,7 +391,7 @@ export const PathGenerator = {
             im.renderOrder = 5;
             for (let i = 0; i < matrices.length; i++) im.setMatrixAt(i, matrices[i]);
             im.instanceMatrix.needsUpdate = true;
-            GeneratorUtils.freezeStatic(im);
+            GeneratorUtils.freeze(im);
             ChunkManager.registerMesh(ix, iz, im);
         }
 
@@ -455,7 +482,7 @@ export const PathGenerator = {
                 posts.castShadow = true;
                 for (let i = 0; i < data.posts.length; i++) posts.setMatrixAt(i, data.posts[i]);
                 posts.instanceMatrix.needsUpdate = true;
-                GeneratorUtils.freezeStatic(posts);
+                GeneratorUtils.freeze(posts);
                 ChunkManager.registerMesh(ix, iz, posts);
             }
 
@@ -465,7 +492,7 @@ export const PathGenerator = {
                 rails.castShadow = true;
                 for (let i = 0; i < data.rails.length; i++) rails.setMatrixAt(i, data.rails[i]);
                 rails.instanceMatrix.needsUpdate = true;
-                GeneratorUtils.freezeStatic(rails);
+                GeneratorUtils.freeze(rails);
                 ChunkManager.registerMesh(ix, iz, rails);
             }
         }
@@ -498,14 +525,14 @@ export const PathGenerator = {
             rail.quaternion.copy(_quat);
             rail.scale.x = dist;
             rail.castShadow = true;
-            GeneratorUtils.freezeStatic(rail);
+            GeneratorUtils.freeze(rail);
             ctx.scene.add(rail);
 
             if (!floating) {
                 const post = new THREE.Mesh(new THREE.BoxGeometry(0.15, height, 0.15), MATERIALS.steel);
                 post.position.copy(p1);
                 post.position.y += height / 2;
-                GeneratorUtils.freezeStatic(post);
+                GeneratorUtils.freeze(post);
                 ctx.scene.add(post);
             }
 
@@ -565,7 +592,7 @@ export const PathGenerator = {
             // Scale Z slightly more than dist to seamlessly overlap outer curve gaps
             mesh.scale.set(width, height, dist * 1.1);
             mesh.receiveShadow = true;
-            GeneratorUtils.freezeStatic(mesh);
+            GeneratorUtils.freeze(mesh);
             ctx.scene.add(mesh);
 
             // Match Collision Obstacle to the visual mesh

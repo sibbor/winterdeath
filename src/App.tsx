@@ -946,6 +946,7 @@ const App: React.FC = () => {
                                         onOpenAdventureLog={handleOpenAdventureLogAction}
                                         isSectorBannerActive={isSectorBannerActive}
                                         onSectorBannerComplete={() => setIsSectorBannerActive(false)}
+                                        settings={gameState.settings}
                                     />
                                 )}
                             </>

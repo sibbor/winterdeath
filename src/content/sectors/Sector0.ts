@@ -134,7 +134,6 @@ async function createExplodingBus(ctx: any) {
     const bus = VehicleGenerator.createBus(0x009ddb, false);
     bus.position.set(LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.y, LOCATIONS.TRIGGERS.BUS.z);
     bus.rotation.set(Math.PI / 2, Math.PI / 2, 0);
-    GeneratorUtils.freezeStatic(bus);
 
     const busBox = new THREE.Box3().setFromObject(bus);
     const busSize = new THREE.Vector3();
@@ -145,7 +144,7 @@ async function createExplodingBus(ctx: any) {
     const colMesh = new THREE.Mesh(new THREE.BoxGeometry(busSize.x, busSize.y, busSize.z));
     colMesh.position.copy(busCenter);
     colMesh.visible = false;
-    GeneratorUtils.freezeStatic(colMesh);
+    GeneratorUtils.freeze(colMesh);
     scene.add(colMesh);
     scene.add(bus);
     SectorBuilder.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });

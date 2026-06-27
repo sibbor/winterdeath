@@ -533,7 +533,7 @@ const _placeGroundCover = async (
         }
 
         mesh.instanceMatrix.needsUpdate = true;
-        GeneratorUtils.freezeStatic(mesh);
+        GeneratorUtils.freeze(mesh);
         ChunkManager.registerMesh(ix, iz, mesh);
     }
 };
@@ -600,7 +600,7 @@ const _placeSunflowers = async (ctx: SectorBuildContext, region: Region, density
         for (const m of [sStem, sHead, sCent]) {
             m.userData.windAffected = true;
             m.instanceMatrix.needsUpdate = true;
-            GeneratorUtils.freezeStatic(m);
+            GeneratorUtils.freeze(m);
             ChunkManager.registerMesh(ix, iz, m);
         }
     }
@@ -629,7 +629,7 @@ export const VegetationGenerator = {
         group.userData.mass = 0.5;
         group.userData.floatOffset = 0.06;
 
-        GeneratorUtils.freezeStatic(group);
+        GeneratorUtils.freeze(group);
         return group;
     },
 
@@ -654,7 +654,7 @@ export const VegetationGenerator = {
         _v1.set(width * 0.8, height * 1.5, width * 0.8);
         group.userData.size = _v1.clone();
 
-        GeneratorUtils.freezeStatic(group);
+        GeneratorUtils.freeze(group);
         return group;
     },
 
@@ -718,7 +718,7 @@ export const VegetationGenerator = {
         const mesh = new THREE.Mesh(merged || new THREE.BufferGeometry(), MATERIALS.hedge);
         mesh.castShadow = true;
 
-        GeneratorUtils.freezeStatic(mesh);
+        GeneratorUtils.freeze(mesh);
 
         for (let i = 0; i < geometries.length; i++) geometries[i].dispose();
 
@@ -750,7 +750,7 @@ export const VegetationGenerator = {
             hedge.quaternion.copy(_quat);
             hedge.scale.set(dist, height, thickness);
             hedge.castShadow = true;
-            GeneratorUtils.freezeStatic(hedge);
+            GeneratorUtils.freeze(hedge);
             ctx.scene.add(hedge);
 
             _pos.copy(_v1).setY(_v1.y + height / 2);
@@ -771,7 +771,7 @@ export const VegetationGenerator = {
         wall.scale.set(length, height, thickness);
         wall.position.y += height / 2;
         wall.castShadow = true;
-        GeneratorUtils.freezeStatic(wall);
+        GeneratorUtils.freeze(wall);
         return wall;
     },
 
@@ -800,7 +800,7 @@ export const VegetationGenerator = {
             wall.quaternion.copy(_quat);
             wall.scale.set(dist, height, thickness);
             wall.castShadow = true;
-            GeneratorUtils.freezeStatic(wall);
+            GeneratorUtils.freeze(wall);
             ctx.scene.add(wall);
 
             _pos.copy(_v1).setY(_v1.y + height / 2);
@@ -851,7 +851,7 @@ export const VegetationGenerator = {
         }
 
         group.scale.setScalar(scale);
-        GeneratorUtils.freezeStatic(group);
+        GeneratorUtils.freeze(group);
 
         return group;
     },
@@ -904,7 +904,7 @@ export const VegetationGenerator = {
             trunkMesh.receiveShadow = !materialOverride;
             trunkMesh.userData.windAffected = true;
             trunkMesh.userData.isEngineStatic = true;
-            GeneratorUtils.freezeStatic(trunkMesh);
+            GeneratorUtils.freeze(trunkMesh);
 
             let leavesMesh: THREE.InstancedMesh | undefined;
             if (proto.leavesGeo) {
@@ -914,7 +914,7 @@ export const VegetationGenerator = {
                 leavesMesh.receiveShadow = !materialOverride;
                 leavesMesh.userData.windAffected = true;
                 leavesMesh.userData.isEngineStatic = true;
-                GeneratorUtils.freezeStatic(leavesMesh);
+                GeneratorUtils.freeze(leavesMesh);
 
                 if (!materialOverride) {
                     leavesMesh.customDepthMaterial = getTreeDepthMaterial(leavesMat);
@@ -928,7 +928,7 @@ export const VegetationGenerator = {
                 snowMesh.castShadow = true;
                 snowMesh.userData.windAffected = true;
                 snowMesh.userData.isEngineStatic = true;
-                GeneratorUtils.freezeStatic(snowMesh);
+                GeneratorUtils.freeze(snowMesh);
             }
 
             for (let i = 0; i < chunkMatrices.length; i++) {
@@ -1122,7 +1122,7 @@ export const VegetationGenerator = {
             tree.position.y = 0.5 * scale;
         }
 
-        GeneratorUtils.freezeStatic(tree);
+        GeneratorUtils.freeze(tree);
         return tree;
     },
 

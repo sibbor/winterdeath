@@ -390,13 +390,35 @@ export class CinematicSystem implements System {
                 } else {
                     // Mesh orbit: smooth entry from player camera into midpoint orbit between
                     // the player and the target NPC.
-                    cinematic.target.getWorldPosition(_v3);
+                    // Special case for Sector 3 Dialogues 0 & 1, or when target is the player group:
+                    // Focus on the player and following family members.
+                    const isSector3IntroDialogue = cinematic.sectorId === 3 && (cinematic.dialogueId === 0 || cinematic.dialogueId === 1);
+                    const isPlayerTarget = cinematic.target === (session as any).playerGroup || cinematic.target?.userData?.isPlayer;
 
-                    _v1.set(
-                        (_v3.x + playerPos.x) * 0.5,
-                        (_v3.y + playerPos.y) * 0.5,
-                        (_v3.z + playerPos.z) * 0.5
-                    );
+                    if (isSector3IntroDialogue || isPlayerTarget) {
+                        _v3.copy(playerPos);
+                        let count = 1;
+                        const family = this.activeFamilyMembers.current;
+                        if (family) {
+                            for (let i = 0; i < family.length; i++) {
+                                const fm = family[i];
+                                if (fm.mesh && fm.following && fm.mesh.visible) {
+                                    _v1.setFromMatrixPosition(fm.mesh.matrixWorld);
+                                    _v3.add(_v1);
+                                    count++;
+                                }
+                            }
+                        }
+                        _v3.divideScalar(count);
+                        _v1.copy(_v3);
+                    } else {
+                        cinematic.target.getWorldPosition(_v3);
+                        _v1.set(
+                            (_v3.x + playerPos.x) * 0.5,
+                            (_v3.y + playerPos.y) * 0.5,
+                            (_v3.z + playerPos.z) * 0.5
+                        );
+                    }
 
                     const zoomFactor = 1.0 - (t * (cinematic.zoom || 0.4));
                     const angle = totalElapsed * (cinematic.rotationSpeed || 0.00015);

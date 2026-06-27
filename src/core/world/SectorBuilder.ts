@@ -127,6 +127,9 @@ export const SectorBuilder = {
             object.userData.interactionShape = params.collider.type;
             if (params.collider.type === InteractionShape.BOX && params.collider.size) {
                 object.userData.interactionSize = params.collider.size;
+                const size = params.collider.size;
+                const margin = params.collider.margin ?? 0;
+                object.userData.interactionRadius = Math.sqrt(size.x * size.x + size.y * size.y + size.z * size.z) * 0.5 + margin;
             } else if (params.collider.type === InteractionShape.SPHERE && params.collider.radius) {
                 object.userData.interactionRadius = params.collider.radius;
             }
@@ -462,6 +465,7 @@ export const SectorBuilder = {
             position: stone.position,
             collider: { type: ColliderType.SPHERE, radius: width * 0.5 }
         });
+        GeneratorUtils.freeze(stone);
         return stone;
     },
 
@@ -637,7 +641,7 @@ export const SectorBuilder = {
     spawnDeadBody: (ctx: SectorBuildContext, x: number, z: number, type: EnemyType | 'PLAYER' | 'HUMAN', rot: number = 0, blood: boolean = true) => {
         const body = ObjectGenerator.createDeadBody(type, rot, blood);
         body.position.set(x, 0, z);
-        GeneratorUtils.freezeStatic(body);
+        GeneratorUtils.freeze(body);
         ctx.scene.add(body);
         return body;
     },
@@ -646,7 +650,7 @@ export const SectorBuilder = {
         const bale = ObjectGenerator.createHaybale(scale);
         bale.position.set(x, 0, z);
         bale.rotation.y = rotation;
-        GeneratorUtils.freezeStatic(bale);
+        GeneratorUtils.freeze(bale);
         ctx.scene.add(bale);
 
         SectorBuilder.addObstacle(ctx, {
@@ -660,7 +664,7 @@ export const SectorBuilder = {
         const timber = ObjectGenerator.createTimberPile(scale);
         timber.position.set(x, 0, z);
         timber.rotation.y = rotation;
-        GeneratorUtils.freezeStatic(timber);
+        GeneratorUtils.freeze(timber);
         ctx.scene.add(timber);
 
         _v1_sg.set(2.5, 1.5, 6.0); // baseSize
@@ -683,7 +687,7 @@ export const SectorBuilder = {
         building.rotation.y = rotation;
         building.castShadow = true;
         building.receiveShadow = true;
-        GeneratorUtils.freezeStatic(building);
+        GeneratorUtils.freeze(building);
 
         // Manual sync for frozen objects
         building.updateMatrix();
@@ -751,7 +755,7 @@ export const SectorBuilder = {
 
         vehicle.position.set(x, 0, z);
         vehicle.rotation.y = rotation;
-        GeneratorUtils.freezeStatic(vehicle);
+        GeneratorUtils.freeze(vehicle);
 
         if (ctx.isWarmup) {
             const warmedSet = (ctx as any)._warmedVehicles || (new Set<number>());
@@ -929,7 +933,7 @@ export const SectorBuilder = {
             if (rand < 0.3) {
                 const rock = NaturePropGenerator.createRock(1.5 + Math.random() * 2, 1 + Math.random() * 1.5);
                 rock.position.set(pX, -currentDepth + 0.2, pZ);
-                GeneratorUtils.freezeStatic(rock);
+                GeneratorUtils.freeze(rock);
                 ctx.scene.add(rock);
             } else if (rand < 0.7) {
                 floraInstances.push({
@@ -961,7 +965,7 @@ export const SectorBuilder = {
         const container = ObjectGenerator.createContainer(colorOverride, addSnow);
         container.position.set(x, 0, z);
         container.rotation.y = rotation;
-        GeneratorUtils.freezeStatic(container);
+        GeneratorUtils.freeze(container);
         ctx.scene.add(container);
 
         _v1_sg.set(8.0, 3.0, 2.5);
@@ -986,7 +990,7 @@ export const SectorBuilder = {
 
         sign.position.set(x, 5.5, z);
         sign.rotation.y = rotation;
-        GeneratorUtils.freezeStatic(sign);
+        GeneratorUtils.freeze(sign);
         ctx.scene.add(sign);
 
         return sign;
@@ -996,7 +1000,7 @@ export const SectorBuilder = {
         const lightGroup = ObjectGenerator.createStreetLamp();
         lightGroup.position.set(x, 0, z);
         lightGroup.rotation.y = rotation;
-        GeneratorUtils.freezeStatic(lightGroup);
+        GeneratorUtils.freeze(lightGroup);
         ctx.scene.add(lightGroup);
 
         SectorBuilder.addObstacle(ctx, {
@@ -1012,7 +1016,7 @@ export const SectorBuilder = {
     spawnCaveLamp: (ctx: SectorBuildContext, x: number, y: number, z: number) => {
         const lamp = ObjectGenerator.createCaveLamp();
         lamp.position.set(x, y, z);
-        GeneratorUtils.freezeStatic(lamp);
+        GeneratorUtils.freeze(lamp);
         ctx.scene.add(lamp);
 
         if (lamp.userData.logicalLights && ctx.dynamicLights) {
@@ -1042,7 +1046,7 @@ export const SectorBuilder = {
         const building = ObjectGenerator.createStorefrontBuilding(width, height, depth, opts);
         building.position.set(x, 0, z);
         building.rotation.y = rotation;
-        GeneratorUtils.freezeStatic(building);
+        GeneratorUtils.freeze(building);
         ctx.scene.add(building);
 
         const size = building.userData.size as THREE.Vector3;
@@ -1080,7 +1084,7 @@ export const SectorBuilder = {
         const heart = ObjectGenerator.createNeonHeart(color, scale);
         heart.position.set(x, y, z);
         heart.rotation.y = rotation;
-        GeneratorUtils.freezeStatic(heart);
+        GeneratorUtils.freeze(heart);
         ctx.scene.add(heart);
         return heart;
     },
@@ -1090,7 +1094,7 @@ export const SectorBuilder = {
 
         stairs.position.set(x, 0, z);
         stairs.rotation.y = rotation;
-        GeneratorUtils.freezeStatic(stairs);
+        GeneratorUtils.freeze(stairs);
         ctx.scene.add(stairs);
 
         _v1_sg.set(width, height, depth);
@@ -1108,7 +1112,7 @@ export const SectorBuilder = {
         const pole = ObjectGenerator.createElectricPole();
         pole.position.set(x, 0, z);
         pole.rotation.y = rotation;
-        GeneratorUtils.freezeStatic(pole);
+        GeneratorUtils.freeze(pole);
         ctx.scene.add(pole);
 
         SectorBuilder.addObstacle(ctx, { mesh: pole, collider: { type: ColliderType.SPHERE, radius: 1 } });
@@ -1128,7 +1132,7 @@ export const SectorBuilder = {
             group.add(container);
         }
 
-        GeneratorUtils.freezeStatic(group);
+        GeneratorUtils.freeze(group);
 
         _v1_sg.set(6.0, 2.6 * stackHeight, 2.4);
         SectorBuilder.addObstacle(ctx, {
@@ -1172,7 +1176,7 @@ export const SectorBuilder = {
             currentY += vehicleHeight;
         }
 
-        GeneratorUtils.freezeStatic(vehicleStack);
+        GeneratorUtils.freeze(vehicleStack);
         ctx.scene.add(vehicleStack);
 
         _box_sg.setFromObject(vehicleStack);
@@ -1193,7 +1197,7 @@ export const SectorBuilder = {
         const tree = VegetationGenerator.createTree(genType, scaleMultiplier);
         tree.position.set(x, 0, z);
         tree.rotation.y = Math.random() * Math.PI * 2;
-        GeneratorUtils.freezeStatic(tree);
+        GeneratorUtils.freeze(tree);
         ctx.scene.add(tree);
 
         SectorBuilder.addObstacle(ctx, {
@@ -1213,7 +1217,7 @@ export const SectorBuilder = {
     spawnBarrel: (ctx: SectorBuildContext, x: number, z: number, explosive: boolean = false, logicId?: number) => {
         const barrel = ObjectGenerator.createBarrel(explosive);
         barrel.position.set(x, 0, z);
-        GeneratorUtils.freezeStatic(barrel);
+        GeneratorUtils.freeze(barrel);
         ctx.scene.add(barrel);
         SectorBuilder.addObstacle(ctx, {
             mesh: barrel,
@@ -1266,6 +1270,9 @@ export const SectorBuilder = {
             x: points[0].x, z: points[0].z,
             type: MapItemType.MOUNTAIN, label: 'ui.mountain', icon: null, color: '#64748b', radius: null, points: pts
         });
+
+        // TODO: Automatically add boundry borders to the mountain on both sides of it...
+        SectorBuilder.createBoundry(ctx, points, "mountain", true);
 
         TerrainGenerator.createMountain(ctx, points, depth, height, caveConfig);
     },

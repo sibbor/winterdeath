@@ -720,7 +720,6 @@ export const Sector4: SectorDef = {
         const bus = VehicleGenerator.createBus(0x009ddb, false);
         bus.position.set(EXPLODING_BUS_POS.x, EXPLODING_BUS_POS.y, EXPLODING_BUS_POS.z);
         bus.rotation.set(Math.PI / 2, Math.PI / 2, 0); // On its side
-        GeneratorUtils.freezeStatic(bus);
         scene.add(bus);
 
         const busBox = new THREE.Box3().setFromObject(bus);
@@ -732,7 +731,7 @@ export const Sector4: SectorDef = {
         const colMesh = new THREE.Mesh(new THREE.BoxGeometry(busSize.x, busSize.y, busSize.z));
         colMesh.position.copy(busCenter);
         colMesh.visible = false;
-        GeneratorUtils.freezeStatic(colMesh);
+        GeneratorUtils.freeze(colMesh);
         scene.add(colMesh);
 
         const obstacle_bus = { id: EXPLODING_BUS_ID, mesh: colMesh, collider: { type: ColliderType.BOX, size: busSize } };

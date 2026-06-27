@@ -19,6 +19,9 @@ import { VehicleID } from '../../entities/vehicles/VehicleTypes';
 import { FamilyMemberID } from '../constants';
 import { WeatherType } from '../../core/engine/EnvironmentalTypes';
 import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
+import { PathGenerator } from '../../core/world/generators/PathGenerator';
+import { MATERIALS } from '../../utils/assets/materials';
+import { ColliderType } from '../../core/world/CollisionResolution';
 
 // ─── Zero-GC Scratchpads ──────────────────────────────────────────────────────
 const _vS3a = new THREE.Vector3();
@@ -29,8 +32,8 @@ const _animState = {
     isSwimming: false, isWading: false, seed: 0, renderTime: 0, simTime: 0
 };
 const _familyMembers: THREE.Object3D[] = [];
-const _camOnBuilding = new THREE.Vector3(-40, 14, -140);
-const _camLookBuilding = new THREE.Vector3(-40, 1, -155);
+const _camOnBuilding = new THREE.Vector3(-100, 14, -190);
+const _camLookBuilding = new THREE.Vector3(-100, 1, -205);
 const _carPos = new THREE.Vector3(); // Initialized in onSectorUpdate or constant
 
 // ─── Epilogue state enum (stored as integer in sectorState.epilogueState) ─────
@@ -52,32 +55,32 @@ const EP = {
 
 const LOCATIONS = {
     SPAWN: {
-        PLAYER: { x: 0, z: 0 },
-        FAMILY: { x: -40, z: -150, y: 0 },
-        BOSS: { x: -40, z: -150 }
+        PLAYER: { x: 41, z: 77 },
+        FAMILY: { x: -100, z: -200, y: 0 },
+        BOSS: { x: -100, z: -200 }
     },
     CINEMATIC: {
         OFFSET: { x: 15, y: 12, z: 15 },
         LOOK_AT: { x: 0, y: 1.5, z: 0 }
     },
     COLLECTIBLES: {
-        C1: { x: 40, z: -80 },
-        C2: { x: -20, z: -60 }
+        C1: { x: -25, z: -80 },     // Sand Area badge
+        C2: { x: -80, z: -180 }     // Scrapyard area freely placed
     },
     TRIGGERS: {
-        NOISE: { x: 0, z: -50 },
-        SHED_SIGHT: { x: -20, z: -120 },
-        FOUND_NATHALIE: { x: -40, z: -150 },
-        DIALOGUE_1: { x: 0, z: -20 },
-        DIALOGUE_2: { x: 0, z: -50 }
+        NOISE: { x: -30, z: -80 },
+        SHED_SIGHT: { x: -100, z: -120 },
+        FOUND_NATHALIE: { x: -100, z: -100 }, // at the Scrapyard gate
+        DIALOGUE_1: { x: 20, z: 0 },        // Connection gravel road/asphalt road
+        DIALOGUE_2: { x: -40, z: 0 }        // 50~60 m into asphalt road
     },
     POIS: {
-        SHED: { x: -40, z: -150 }
+        SHED: { x: -100, z: -200 }
     },
     // Escape car parked next to the dealership building
-    ESCAPE_CAR: { x: -60, z: -150, rot: Math.PI / 2 },
+    ESCAPE_CAR: { x: -120, z: -200, rot: Math.PI / 2 },
     // Ring positions for the reunion (around a centre point)
-    REUNION_CENTER: { x: -42, z: -148 }
+    REUNION_CENTER: { x: -102, z: -198 }
 } as const;
 
 // Ring offsets for the 5 characters: Loke, Jordan, Esmeralda, Nathalie, Robert
@@ -484,19 +487,19 @@ const epilogueEvent: SectorEvent = {
 export const Sector3: SectorDef = {
     id: 3,
     environment: {
-        bgColor: 0x110500,
+        bgColor: 0x071b0c,
         fog: {
-            density: 200,
-            color: 0x020208,
+            density: 250,
+            color: 0x020a05,
             height: 10
         },
         groundColor: 0x2a1a11,
-        ambient: 0.6,
+        ambient: 0.4,
         fov: 40,
         sky: {
             time: 0.5,
             timeScale: 0.05,
-            atmosphereColor: 0x110500,
+            atmosphereColor: 0x071b0c,
             celestial: {
                 radius: 20,
                 color: 0xffffff,
@@ -504,16 +507,16 @@ export const Sector3: SectorDef = {
             },
             light: {
                 visible: true,
-                color: 0xffaa00,
-                intensity: 3.0,
+                color: 0x88ffaa,
+                intensity: 1.5,
                 castShadow: true
             }
         },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: {
-            type: WeatherType.EMBER,
-            particles: 2000
+            type: WeatherType.NONE,
+            particles: 0
         },
         wind: {
             strengthMin: 0.05,
@@ -532,9 +535,13 @@ export const Sector3: SectorDef = {
         { id: CollectibleID.S3_COLLECTIBLE_2, x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
     ],
 
-    setupProps: async (ctx: SectorBuildContext) => {
-        //const { scene } = ctx;
+    cinematic: {
+        offset: { x: 6, y: 5, z: 6 },
+        lookAtOffset: { x: 0, y: 1.5, z: 0 },
+        rotationSpeed: 0.015
+    },
 
+    setupProps: async (ctx: SectorBuildContext) => {
         let startTime = performance.now();
         const yieldIfBudgetExceeded = async () => {
             if (performance.now() - startTime > 12) {
@@ -543,37 +550,345 @@ export const Sector3: SectorDef = {
             }
         };
 
-        // Reward Chest at boss spawn
+        // Helper function for segment distance checks to avoid placing trees on roads/features
+        const distanceToSegment = (x: number, z: number, x1: number, z1: number, x2: number, z2: number): number => {
+            const dx = x2 - x1;
+            const dz = z2 - z1;
+            const lenSq = dx * dx + dz * dz;
+            if (lenSq === 0) return Math.sqrt((x - x1) * (x - x1) + (z - z1) * (z - z1));
+            let t = ((x - x1) * dx + (z - z1) * dz) / lenSq;
+            t = Math.max(0, Math.min(1, t));
+            const projX = x1 + t * dx;
+            const projZ = z1 + t * dz;
+            return Math.sqrt((x - projX) * (x - projX) + (z - projZ) * (z - projZ));
+        };
+
+        const isNearPath = (x: number, z: number) => {
+            // Gravel road: curve from (50, 100) -> (30, 50) -> (20, 12)
+            if (distanceToSegment(x, z, 50, 100, 30, 50) < 6) return true;
+            if (distanceToSegment(x, z, 30, 50, 20, 12) < 6) return true;
+
+            // Highway: from x = 80 to -120 at z = 0 (width 24, so half width is 12 + margin = 14)
+            if (Math.abs(z) < 14 && x > -150 && x < 100) return true;
+
+            // Tiny asphalt road: from (-100, 0) -> (-90, -50) -> (-100, -100)
+            if (distanceToSegment(x, z, -100, 0, -90, -50) < 6) return true;
+            if (distanceToSegment(x, z, -90, -50, -100, -100) < 6) return true;
+
+            // Sand area: centered at (-25, -80), radius 20
+            const dx = x - (-25);
+            const dz = z - (-80);
+            if (dx * dx + dz * dz < 20 * 20) return true;
+
+            // Scrapyard area: from x = -160 to -40, z = -100 to -260
+            if (x > -165 && x < -35 && z > -265 && z < -95) return true;
+
+            return false;
+        };
+
+        // --- 1. ROADS AND PATHS ---
+        // Gravel road slightly curved ~100m - ends at z = 12 (highway edge) to avoid flickering
+        const gravelCurve = await PathGenerator.createGravelRoad(ctx, [
+            new THREE.Vector3(50, 0, 100),
+            new THREE.Vector3(30, 0, 50),
+            new THREE.Vector3(20, 0, 12)
+        ], 5);
+        await yieldIfBudgetExceeded();
+
+        // Old Highway (asphalt road ~200m) - width tripled from 8 to 24
+        await PathGenerator.createRoad(ctx, [
+            new THREE.Vector3(80, 0, 0),
+            new THREE.Vector3(-120, 0, 0)
+        ], 24);
+        await yieldIfBudgetExceeded();
+
+        // Add highway lines to the road (double yellow line in center, white dashed lines on the sides)
+        const yellowLineMat = new THREE.MeshBasicMaterial({ color: 0xffcc00, side: THREE.DoubleSide });
+        const whiteLineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+        const centerLineGeo = new THREE.PlaneGeometry(200, 0.15);
+
+        const yellowLineLeft = new THREE.Mesh(centerLineGeo, yellowLineMat);
+        yellowLineLeft.rotation.x = -Math.PI / 2;
+        yellowLineLeft.position.set(-20, 0.16, -0.15);
+        yellowLineLeft.matrixAutoUpdate = false;
+        yellowLineLeft.updateMatrix();
+        ctx.scene.add(yellowLineLeft);
+
+        const yellowLineRight = new THREE.Mesh(centerLineGeo, yellowLineMat);
+        yellowLineRight.rotation.x = -Math.PI / 2;
+        yellowLineRight.position.set(-20, 0.16, 0.15);
+        yellowLineRight.matrixAutoUpdate = false;
+        yellowLineRight.updateMatrix();
+        ctx.scene.add(yellowLineRight);
+
+        const dashGeo = new THREE.PlaneGeometry(3, 0.15);
+        for (let x = -120; x <= 80; x += 6) {
+            const dash1 = new THREE.Mesh(dashGeo, whiteLineMat);
+            dash1.rotation.x = -Math.PI / 2;
+            dash1.position.set(x + 1.5, 0.16, 6);
+            dash1.matrixAutoUpdate = false;
+            dash1.updateMatrix();
+            ctx.scene.add(dash1);
+
+            const dash2 = new THREE.Mesh(dashGeo, whiteLineMat);
+            dash2.rotation.x = -Math.PI / 2;
+            dash2.position.set(x + 1.5, 0.16, -6);
+            dash2.matrixAutoUpdate = false;
+            dash2.updateMatrix();
+            ctx.scene.add(dash2);
+        }
+        await yieldIfBudgetExceeded();
+
+        // Tiny asphalt road lightly curved from Highway to Scrapyard Gate
+        const scrapyardRoadCurve = await PathGenerator.createRoad(ctx, [
+            new THREE.Vector3(-100, 0, 0),
+            new THREE.Vector3(-90, 0, -50),
+            new THREE.Vector3(-100, 0, -100)
+        ], 5, null, 8); // Asphalt
+        await yieldIfBudgetExceeded();
+
+        // --- 2. SAND AREA & PATH ---
+        // Sand Area centered at (-25, -80) - Organic blob shape stretching to (-55, -70)
+        const sandShape = new THREE.Shape();
+        const numPoints = 24;
+        const baseRadius = 18;
+        for (let i = 0; i < numPoints; i++) {
+            const angle = (i / numPoints) * Math.PI * 2;
+            let r = baseRadius + Math.sin(angle * 3) * 4 + Math.cos(angle * 5) * 2;
+
+            // Project direction onto target vector (-30, 10) in local space to stretch westwards to (-55, -70)
+            const targetDir = new THREE.Vector2(-30, 10).normalize();
+            const currentDir = new THREE.Vector2(Math.cos(angle), Math.sin(angle));
+            const dot = currentDir.dot(targetDir);
+            if (dot > 0) {
+                r += dot * 15;
+            }
+
+            const x = Math.cos(angle) * r;
+            const y = Math.sin(angle) * r;
+            if (i === 0) {
+                sandShape.moveTo(x, y);
+            } else {
+                sandShape.lineTo(x, y);
+            }
+        }
+        sandShape.closePath();
+        const sandGeo = new THREE.ShapeGeometry(sandShape);
+        const sandMesh = new THREE.Mesh(sandGeo, (MATERIALS as any).sand || MATERIALS.dirt);
+        sandMesh.rotation.x = -Math.PI / 2;
+        sandMesh.position.set(-25, 0.05, -80);
+        sandMesh.receiveShadow = true;
+        ctx.scene.add(sandMesh);
+        ctx.engine.systems.worldStreamer.registerGroundMaterial(-25, -80, 20, 14); // 14 = MaterialType.SAND
+        await yieldIfBudgetExceeded();
+
+        // Sand path starting at (-9, -12) and lingering up to the sand area
+        await PathGenerator.createSandPath(ctx, [
+            new THREE.Vector3(-9, 0, -12),
+            new THREE.Vector3(2, 0, -33),
+            new THREE.Vector3(6, 0, -54),
+            new THREE.Vector3(1, 0, -69),
+            new THREE.Vector3(-13, 0, -74),
+        ], 4);
+        await yieldIfBudgetExceeded();
+
+        // Sand path lingering through the dead wood area, from the west side of the sand area to (-94, -86)
+        await PathGenerator.createSandPath(ctx, [
+            new THREE.Vector3(-55, 0, -80),
+            new THREE.Vector3(-75, 0, -83),
+            new THREE.Vector3(-94, 0, -86)
+        ], 3.5);
+        await yieldIfBudgetExceeded();
+
+        // Spawn Sand piles (rubble) in the sand area
+        for (let i = 0; i < 4; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 5 + Math.random() * 8;
+            await SectorBuilder.spawnRubble(ctx, -25 + Math.cos(angle) * dist, -80 + Math.sin(angle) * dist, 5, (MATERIALS as any).sand || MATERIALS.dirt);
+            await yieldIfBudgetExceeded();
+        }
+
+        // Spawn Stones around the sand area
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const dist = 17 + Math.random() * 3;
+            const rWidth = 2 + Math.random() * 3;
+            const rHeight = 1.5 + Math.random() * 2;
+            const stone = await SectorBuilder.spawnRock(ctx, -25 + Math.cos(angle) * dist, -80 + Math.sin(angle) * dist, rWidth, rHeight);
+            stone.position.y = -rHeight * 0.1;
+            stone.updateMatrix();
+            await yieldIfBudgetExceeded();
+        }
+
+        // Spawn one even larger rock, one large rock, multiple medium rocks, and lots of small rocks around (12, -75)
+        const rockCenter = new THREE.Vector2(12, -75);
+        const placedRocks: { x: number, z: number, r: number }[] = [];
+
+        const tryPlaceRock = async (scale: number, height: number) => {
+            const minDistanceFactor = 0.7; // Allow up to 30% overlap for natural look
+            for (let attempt = 0; attempt < 50; attempt++) {
+                const angle = Math.random() * Math.PI * 2;
+                // Square root of random number ensures uniform distribution within the circle
+                const dist = Math.sqrt(Math.random()) * 20;
+                const x = rockCenter.x + Math.cos(angle) * dist;
+                const z = rockCenter.y + Math.sin(angle) * dist;
+
+                let overlaps = false;
+                for (const other of placedRocks) {
+                    const dx = x - other.x;
+                    const dz = z - other.z;
+                    const distSq = dx * dx + dz * dz;
+                    const minDist = (scale + other.r) * minDistanceFactor;
+                    if (distSq < minDist * minDist) {
+                        overlaps = true;
+                        break;
+                    }
+                }
+
+                if (!overlaps) {
+                    placedRocks.push({ x, z, r: scale });
+                    const stone = await SectorBuilder.spawnRock(ctx, x, z, scale, height);
+                    stone.position.y = -height * 0.1;
+                    stone.updateMatrix();
+                    await yieldIfBudgetExceeded();
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // 1 Even Larger Rock
+        await tryPlaceRock(16 + Math.random() * 4, 10 + Math.random() * 4);
+
+        // 1 Large Rock (100% larger than original 6-8 range)
+        await tryPlaceRock(12 + Math.random() * 4, 8 + Math.random() * 4);
+
+        // 5 Medium Rocks (100% larger than original 3-4.5 range)
+        for (let i = 0; i < 5; i++) {
+            await tryPlaceRock(6 + Math.random() * 3, 4 + Math.random() * 3);
+        }
+
+        // 15 Small Rocks (100% larger than original 1-2 range)
+        for (let i = 0; i < 15; i++) {
+            await tryPlaceRock(2 + Math.random() * 2, 1.6 + Math.random() * 1.4);
+        }
+
+        // Three (3) chests around the sand area
+        await SectorBuilder.spawnChest(ctx, -15, -90, ChestType.STANDARD);
+        await SectorBuilder.spawnChest(ctx, -30, -70, ChestType.STANDARD);
+        await SectorBuilder.spawnChest(ctx, -10, -75, ChestType.STANDARD);
+        await yieldIfBudgetExceeded();
+
+        // --- 3. SCRAPYARD BOUNDS, FENCE & GATE ---
+        // Scrapyard Dealership Building (POI) moved northwest
+        await SectorBuilder.spawnPoi(ctx, PoiType.DEALERSHIP, -100, -200, 0);
+        await yieldIfBudgetExceeded();
+
+        // Reward Chest at boss spawn (next to Dealership POI)
         await SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, ChestType.BIG);
         await yieldIfBudgetExceeded();
 
-        // Stacks of Cars (Maze) — Sektor 4 Bilskroten
-        for (let i = 0; i < 60; i++) {
-            const x = (Math.random() - 0.5) * 160;
-            const z = -20 - Math.random() * 140;
-            if (Math.abs(x) < 10 && z > -100) continue;
+        // Five (5) chests around the scrapyard section
+        await SectorBuilder.spawnChest(ctx, -140, -150, ChestType.STANDARD);
+        await SectorBuilder.spawnChest(ctx, -60, -220, ChestType.STANDARD);
+        await SectorBuilder.spawnChest(ctx, -70, -120, ChestType.STANDARD);
+        await SectorBuilder.spawnChest(ctx, -130, -240, ChestType.STANDARD);
+        await SectorBuilder.spawnChest(ctx, -120, -110, ChestType.STANDARD);
+        await yieldIfBudgetExceeded();
+
+        // Scrapyard fence
+        await SectorBuilder.createFence(ctx, [
+            new THREE.Vector3(-160, 0, -100),
+            new THREE.Vector3(-160, 0, -260),
+            new THREE.Vector3(-40, 0, -260),
+            new THREE.Vector3(-40, 0, -100),
+            new THREE.Vector3(-95, 0, -100)
+        ], 'mesh', 2.5);
+        await yieldIfBudgetExceeded();
+
+        await SectorBuilder.createFence(ctx, [
+            new THREE.Vector3(-160, 0, -100),
+            new THREE.Vector3(-105, 0, -100)
+        ], 'mesh', 2.5);
+        await yieldIfBudgetExceeded();
+
+        // Gate that can be opened manually
+        const gateGroup = new THREE.Group();
+        gateGroup.position.set(-100, 0, -100);
+        gateGroup.name = 's3_scrapyard_gate';
+
+        const postGeo = new THREE.BoxGeometry(0.3, 2.5, 0.3);
+        const postMat = MATERIALS.blackMetal || new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8 });
+        const postLeft = new THREE.Mesh(postGeo, postMat);
+        postLeft.position.set(-5, 1.25, 0);
+        gateGroup.add(postLeft);
+
+        const postRight = new THREE.Mesh(postGeo, postMat);
+        postRight.position.set(5, 1.25, 0);
+        gateGroup.add(postRight);
+
+        const gateFrameGeo = new THREE.BoxGeometry(9.6, 0.15, 0.15);
+        const frameTop = new THREE.Mesh(gateFrameGeo, postMat);
+        frameTop.position.set(0, 2.3, 0);
+        gateGroup.add(frameTop);
+
+        const frameBottom = new THREE.Mesh(gateFrameGeo, postMat);
+        frameBottom.position.set(0, 0.2, 0);
+        gateGroup.add(frameBottom);
+
+        const barGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.1, 8);
+        for (let i = -4.5; i <= 4.5; i += 0.9) {
+            const bar = new THREE.Mesh(barGeo, postMat);
+            bar.position.set(i, 1.25, 0);
+            gateGroup.add(bar);
+        }
+        ctx.scene.add(gateGroup);
+
+        const gateObstacle = {
+            mesh: gateGroup,
+            position: gateGroup.position,
+            collider: {
+                type: ColliderType.BOX,
+                size: new THREE.Vector3(10, 2.5, 1.0),
+                center: new THREE.Vector3(0, 1.25, 0)
+            },
+            isMutated: false
+        };
+        ctx.sectorState.gateObstacle = gateObstacle;
+        SectorBuilder.addObstacle(ctx, gateObstacle);
+
+        SectorBuilder.addInteractable(ctx, gateGroup, {
+            id: 's3_scrapyard_gate',
+            type: InteractionType.SECTOR_SPECIFIC,
+            label: 'ui.interact',
+            collider: {
+                type: InteractionShape.BOX,
+                size: new THREE.Vector3(10, 2.5, 1.0),
+                margin: 4.0
+            }
+        });
+        await yieldIfBudgetExceeded();
+
+        // Stacks of Cars (Maze) - moved northwest and fits inside fence
+        for (let i = 0; i < 50; i++) {
+            const x = -150 + Math.random() * 100;
+            const z = -250 + Math.random() * 140;
+            // Don't spawn on dealership building, escape car, or gate path
+            const dxShed = x - (-100);
+            const dzShed = z - (-200);
+            if (dxShed * dxShed + dzShed * dzShed < 350) continue;
+
+            const dxGate = x - (-100);
+            const dzGate = z - (-100);
+            if (dxGate * dxGate + dzGate * dzGate < 200) continue;
+
             const carStackHeight = 1 + Math.floor(Math.random() * 3);
             const rotY = Math.random() * Math.PI * 2;
             await SectorBuilder.spawnVehicleStack(ctx, x, z, rotY, carStackHeight);
             await yieldIfBudgetExceeded();
         }
 
-        // Perimeter Trees
-        for (let i = 0; i < 80; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const r = 100 + Math.random() * 60;
-            const x = Math.cos(angle) * r;
-            const z = -80 + Math.sin(angle) * r;
-            await SectorBuilder.spawnTree(ctx, 'spruce', x, z, 1.0 + Math.random() * 0.5);
-            await yieldIfBudgetExceeded();
-        }
-
-        // The Dealership Building (Nathalie hiding here)
-        await SectorBuilder.spawnPoi(ctx, PoiType.DEALERSHIP, -40, -150, 0);
-        await yieldIfBudgetExceeded();
-
-        // Escape car parked next to the building — starts NOT interactable.
-        // It becomes interactable during the epilogue car zoom.
+        // Escape car parked next to building
         const escapeCar = await SectorBuilder.spawnDriveableVehicle(
             ctx,
             LOCATIONS.ESCAPE_CAR.x,
@@ -581,48 +896,196 @@ export const Sector3: SectorDef = {
             LOCATIONS.ESCAPE_CAR.rot,
             VehicleID.STATION_WAGON,
             0x223344,
-            false  // addInteractable = false initially
+            false
         );
         if (escapeCar) {
             escapeCar.name = 's3_escape_car';
-            escapeCar.userData.isInteractable = false; // locked until epilogue
+            escapeCar.userData.isInteractable = false;
         }
         await yieldIfBudgetExceeded();
 
-        // ── Industrial Decay ──
-        const industrialWeeds = [
-            new THREE.Vector3(-20, 0, -20),
-            new THREE.Vector3(20, 0, -20),
-            new THREE.Vector3(20, 0, 20),
-            new THREE.Vector3(-20, 0, 20)
-        ];
-        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.GRASS, industrialWeeds, 0.4);
+        // Street sign reading "Borås Bildemontering" at the intersection
+        await SectorBuilder.spawnNeonSign(ctx, -106, 0.5, Math.PI / 2, 'Borås Bildemontering', 0x00ff88, true, 1.2);
         await yieldIfBudgetExceeded();
 
-        for (let i = 0; i < 15; i++) {
+        // --- 4. ENVIRONMENT AND TREES ---
+        // Dense Spruce Wood Polygons
+        // Coordinates adjusted to start at z = 18 (avoid highway overlap) and end at x = 10 (avoid gravel road/forest overlap)
+        const spruceSouthHighway = [
+            new THREE.Vector3(-150, 0, 18),
+            new THREE.Vector3(10, 0, 18),
+            new THREE.Vector3(10, 0, 45),
+            new THREE.Vector3(-150, 0, 45)
+        ];
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, spruceSouthHighway, 8);
+        await yieldIfBudgetExceeded();
+
+        const forestOffset = 8;
+        const forestDepth = 60;
+        const forestSamples = 40;
+        const fPoints = gravelCurve.getSpacedPoints(forestSamples);
+
+        const gravelForestLeft = [
+            ...PathGenerator.getOffsetPoints(fPoints, -forestOffset),
+            ...PathGenerator.getOffsetPoints(fPoints, -(forestOffset + forestDepth)).reverse()
+        ];
+        const gravelForestRight = [
+            ...PathGenerator.getOffsetPoints(fPoints, forestOffset),
+            ...PathGenerator.getOffsetPoints(fPoints, forestOffset + forestDepth).reverse()
+        ];
+
+        for (let i = 0; i < gravelForestLeft.length; i++) gravelForestLeft[i].y = 0;
+        for (let i = 0; i < gravelForestRight.length; i++) gravelForestRight[i].y = 0;
+
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, gravelForestLeft, 8);
+        await yieldIfBudgetExceeded();
+
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, gravelForestRight, 8);
+        await yieldIfBudgetExceeded();
+
+        // TODO: fix so it aligns well on the north side of the sand area
+        const spruceSouthSand = [
+            new THREE.Vector3(-45, 0, -45),
+            new THREE.Vector3(10, 0, -45),
+            new THREE.Vector3(10, 0, -62),
+            new THREE.Vector3(-45, 0, -62)
+        ];
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, spruceSouthSand, 8);
+        await yieldIfBudgetExceeded();
+
+        // TODO: fix so it aligns well on the north side of the sand area
+        const spruceNorthSand = [
+            new THREE.Vector3(-45, 0, -98),
+            new THREE.Vector3(10, 0, -98),
+            new THREE.Vector3(10, 0, -82),
+            new THREE.Vector3(-45, 0, -82)
+        ];
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, spruceNorthSand, 8);
+        await yieldIfBudgetExceeded();
+
+        const spruceEastSand = [
+            new THREE.Vector3(-2, 0, -14),
+            new THREE.Vector3(7, 0, -34),
+            new THREE.Vector3(10, 0, -55),
+            new THREE.Vector3(27, 0, -63),
+            new THREE.Vector3(47, 0, -63),
+            new THREE.Vector3(80, 0, -63),
+            new THREE.Vector3(80, 0, -14),
+        ];
+        await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, spruceEastSand, 8);
+        await yieldIfBudgetExceeded();
+
+        // Dead trees around sand area
+        for (let i = 0; i < 10; i++) {
             const deadTree = VegetationGenerator.createDeadTree('standing', 0.6 + Math.random() * 0.4);
             const angle = Math.random() * Math.PI * 2;
-            const dist = 30 + Math.random() * 40;
-            deadTree.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
+            const dist = 14 + Math.random() * 8;
+            deadTree.position.set(-25 + Math.cos(angle) * dist, 0, -80 + Math.sin(angle) * dist);
             ctx.scene.add(deadTree);
             await yieldIfBudgetExceeded();
         }
 
-        // Nathalie - At the dealership, not following yet
+        // Dead trees (brown area in Image 1):
+        // Carved dynamically as an offset along the right (east) side of the scrapyard road.
+        // We split it into two zones to allow the sand path to pass through cleanly at z = -80 to -86.
+        const deadwoodOffset = 5;
+        const deadwoodDepth = 30; // Reduced from 55 to stop around x = -60 to -65
+        const deadwoodSamples = 20;
+        const sPoints = scrapyardRoadCurve.getSpacedPoints(deadwoodSamples);
+
+        const rawPointsLeft = PathGenerator.getOffsetPoints(sPoints, deadwoodOffset);
+        const rawPointsRight = PathGenerator.getOffsetPoints(sPoints, deadwoodOffset + deadwoodDepth);
+
+        // Zone 1: South of the sand path (z from -15 to -75)
+        const deadWoodPolySouth: THREE.Vector3[] = [];
+        // Zone 2: North of the sand path (z from -89 to -98)
+        const deadWoodPolyNorth: THREE.Vector3[] = [];
+
+        // Build South Poly
+        for (let i = 0; i < rawPointsLeft.length; i++) {
+            const p = rawPointsLeft[i];
+            if (p.z > -75 && p.z < -15) {
+                const limitEast = p.z < -45 ? -58 : -48;
+                deadWoodPolySouth.push(new THREE.Vector3(Math.min(p.x, limitEast), 0, p.z));
+            }
+        }
+        for (let i = rawPointsRight.length - 1; i >= 0; i--) {
+            const p = rawPointsRight[i];
+            if (p.z > -75 && p.z < -15) {
+                const limitEast = p.z < -45 ? -58 : -48;
+                deadWoodPolySouth.push(new THREE.Vector3(Math.min(p.x, limitEast), 0, p.z));
+            }
+        }
+
+        // Build North Poly
+        for (let i = 0; i < rawPointsLeft.length; i++) {
+            const p = rawPointsLeft[i];
+            if (p.z < -89 && p.z > -98) {
+                deadWoodPolyNorth.push(new THREE.Vector3(Math.min(p.x, -58), 0, p.z));
+            }
+        }
+        for (let i = rawPointsRight.length - 1; i >= 0; i--) {
+            const p = rawPointsRight[i];
+            if (p.z < -89 && p.z > -98) {
+                deadWoodPolyNorth.push(new THREE.Vector3(Math.min(p.x, -58), 0, p.z));
+            }
+        }
+
+        if (deadWoodPolySouth.length >= 3) {
+            await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.DEAD_TREE, deadWoodPolySouth, 6);
+            await yieldIfBudgetExceeded();
+        }
+        if (deadWoodPolyNorth.length >= 3) {
+            await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.DEAD_TREE, deadWoodPolyNorth, 6);
+            await yieldIfBudgetExceeded();
+        }
+
+        // Highway blocked to the East (right) by burning cars in line standing in both lines
+        const car1 = await SectorBuilder.spawnVehicle(ctx, 39, 2, Math.PI, VehicleID.STATION_WAGON, 0x111111);
+        await SectorBuilder.setOnFire(ctx, car1, { smoke: true, intensity: 3 });
+        await yieldIfBudgetExceeded();
+
+        const car2 = await SectorBuilder.spawnVehicle(ctx, 39, -2, -Math.PI / 2, VehicleID.SEDAN, 0x222222);
+        await SectorBuilder.setOnFire(ctx, car2, { smoke: true, intensity: 3 });
+        await yieldIfBudgetExceeded();
+
+        const car3 = await SectorBuilder.spawnVehicle(ctx, 41, 1.5, Math.PI / 1.3 + 0.2, VehicleID.STATION_WAGON, 0x111111);
+        await SectorBuilder.setOnFire(ctx, car3, { smoke: true, intensity: 2.5 });
+        await yieldIfBudgetExceeded();
+
+        const car4 = await SectorBuilder.spawnVehicle(ctx, 41, -2.5, -Math.PI / 1.5 - 0.2, VehicleID.SEDAN, 0x222222);
+        await SectorBuilder.setOnFire(ctx, car4, { smoke: true, intensity: 2.5 });
+        await yieldIfBudgetExceeded();
+
+        // TODO: FIX THIS
+        // Dynamic Environmental zone with dark light and ember weather covering the scrapyard
+        SectorBuilder.addEnvironmentalZone(ctx, {
+            label: 'Scrapyard Ember Zone',
+            x: -100,
+            z: -180,
+            outerRadius: 120,
+            weather: WeatherType.EMBER,
+            weatherDensity: 2000,
+            bgColor: 0x110500, // Dark amber/red background
+            fogDensity: 30,    // Thick fog
+            ambient: 0.6
+        });
+
+        // Nathalie - At the dealership
         await SectorBuilder.spawnFamily(ctx, FamilyMemberID.NATHALIE, LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.z, Math.PI, { following: false, found: false, visible: true });
     },
 
     setupContent: async (ctx: SectorBuildContext) => {
         if (ctx.isWarmup) return;
         SectorBuilder.addTriggers(ctx, [
-            // Part 1 — on the gravel path
+            // Part 1 — on the gravel path connection
             {
                 id: SectorEventID.S3_DIALOGUE_1,
                 position: LOCATIONS.TRIGGERS.DIALOGUE_1,
                 radius: 15,
                 type: TriggerType.EVENT,
                 statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 3, dialogueId: 0 } }]
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 3, dialogueId: 0, targetName: 'PLAYER' } }]
             },
             // Part 2 — deeper into the scrapyard
             {
@@ -631,7 +1094,7 @@ export const Sector3: SectorDef = {
                 radius: 15,
                 type: TriggerType.EVENT,
                 statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
-                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 3, dialogueId: 1 } }]
+                actions: [{ type: TriggerActionType.START_CINEMATIC, payload: { sectorId: 3, dialogueId: 1, targetName: 'PLAYER' } }]
             },
             // Part 3 — close to the building where Nathalie is hiding.
             // Starts INACTIVE so it only fires after the player has explored.
@@ -648,20 +1111,60 @@ export const Sector3: SectorDef = {
 
             { id: ClueID.S3_CREEPY_NOISE, position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: TriggerType.CLUE, content: "clues.3.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.PLAY_SOUND, payload: { id: SoundID.AMBIENT_METAL } }, { type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
             { id: PoiID.S3_SHED, position: LOCATIONS.TRIGGERS.SHED_SIGHT, radius: 25, type: TriggerType.POI, content: "pois.3.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-            { id: PoiID.S3_SCRAPYARD, position: { x: 0, z: -100 }, radius: 100, type: TriggerType.POI, content: "pois.3.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
+            { id: PoiID.S3_SCRAPYARD, position: { x: -100, z: -180 }, radius: 100, type: TriggerType.POI, content: "pois.3.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
         ]);
     },
 
     setupZombies: async (ctx: SectorBuildContext) => {
         if (ctx.isWarmup) return;
+        // Keep zombies in the scrapyard
         for (let i = 0; i < 5; i++) {
-            ctx.spawnZombie(EnemyType.WALKER);
+            ctx.spawnZombie(EnemyType.WALKER, new THREE.Vector3(-100 + (Math.random() - 0.5) * 50, 0, -180 + (Math.random() - 0.5) * 50));
         }
-        spawnSectorHordes(ctx);
+
+        // Spawn 5-10 zombies in the sand area
+        const sandZombieCount = 7 + Math.floor(ctx.rng() * 3);
+        for (let i = 0; i < sandZombieCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * 12;
+            ctx.spawnZombie(EnemyType.WALKER, new THREE.Vector3(
+                -25 + Math.cos(angle) * dist,
+                0,
+                -80 + Math.sin(angle) * dist
+            ));
+        }
+
+        // Hordes
+        const hordeSpots = [
+            new THREE.Vector3(-65, 0, -50),
+            new THREE.Vector3(-120, 0, -130),
+            new THREE.Vector3(-70, 0, -200),
+        ];
+
+        for (let i = 0; i < hordeSpots.length; i++) {
+            const count = 6 + Math.floor(ctx.rng() * 4);
+            ctx.spawnHorde(count, undefined, hordeSpots[i]);
+        }
     },
 
     onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, engine, ...events }) => {
         const triggerSystem = engine.systems.triggerSystem;
+
+        // Scrapyard gate opening logic when player interacts
+        if (gameState.triggers.interactionRequest.active && gameState.triggers.interactionRequest.id === 's3_scrapyard_gate') {
+            gameState.triggers.interactionRequest.active = false;
+            const gate = sectorState.gateObstacle;
+            if (gate) {
+                gate.isMutated = true; // Disable collision
+                if (gate.mesh) {
+                    // Open gate: rotate it
+                    gate.mesh.rotation.y += Math.PI / 2;
+                    gate.mesh.updateMatrixWorld(true);
+                }
+                audioEngine.playSound(SoundID.DOOR_OPEN, 1.0);
+            }
+        }
+
         // --- SECTOR 3: NATHALIE MISSION LOGIC ---
         if (Math.random() < 0.015 && gameState.enemies.length < 12 && !sectorState.epilogueBossDefeated) {
             const angle = Math.random() * Math.PI * 2;
@@ -695,20 +1198,3 @@ export const Sector3: SectorDef = {
 
     events: [epilogueEvent]
 };
-
-function spawnSectorHordes(ctx: SectorBuildContext) {
-    if (!ctx.spawnHorde) return;
-
-    const hordeSpots = [
-        new THREE.Vector3(0, 0, -50),
-        new THREE.Vector3(-20, 0, -130),
-        new THREE.Vector3(30, 0, -200),
-        new THREE.Vector3(80, 0, -80),
-        new THREE.Vector3(-80, 0, -80)
-    ];
-
-    for (let i = 0; i < hordeSpots.length; i++) {
-        const count = 6 + Math.floor(ctx.rng() * 4);
-        ctx.spawnHorde(count, undefined, hordeSpots[i]);
-    }
-}

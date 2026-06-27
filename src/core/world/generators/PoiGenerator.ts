@@ -57,7 +57,7 @@ export const PoiGenerator = {
             ]
         };
 
-        return GeneratorUtils.freezeStatic(churchGroup);
+        return GeneratorUtils.freeze(churchGroup);
     },
 
     createCafe: () => {
@@ -81,7 +81,7 @@ export const PoiGenerator = {
             neonSign: { text: "CAFÉ", color: 0xffaa00, offset: new THREE.Vector3(0, 6, -6) },
             colliders: [{ type: ColliderType.BOX, size: new THREE.Vector3(18, 20, 12) }]
         };
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createGroceryStore: () => {
@@ -111,7 +111,7 @@ export const PoiGenerator = {
         group.userData.neonHeart = { offset: new THREE.Vector3(-7.7, 7.5, 6), rot: -Math.PI / 2 };
         group.userData.colliders = [{ type: ColliderType.BOX, size: new THREE.Vector3(15, 10, 30) }];
 
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createGym: () => {
@@ -131,7 +131,7 @@ export const PoiGenerator = {
         group.userData.neonSign = { text: "Gånghester Gym", color: 0xffaa00, offset: new THREE.Vector3(-10, 4.5, 10.1) };
         group.userData.colliders = [{ type: ColliderType.BOX, size: new THREE.Vector3(40, 12, 20) }];
 
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createPizzeria: () => {
@@ -146,7 +146,7 @@ export const PoiGenerator = {
         group.userData.neonSign = { text: "Gånghester Pizzera", color: 0xffffff, backingColor: 0x000000, offset: new THREE.Vector3(0, 4.0, 7.6), rot: Math.PI };
         group.userData.colliders = [{ type: ColliderType.BOX, size: new THREE.Vector3(20, 8, 15) }];
 
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createDealership: () => {
@@ -156,7 +156,7 @@ export const PoiGenerator = {
         group.add(shed);
 
         group.userData.colliders = [{ type: ColliderType.BOX, size: new THREE.Vector3(20, 8, 20) }];
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createFarm: () => {
@@ -215,7 +215,7 @@ export const PoiGenerator = {
         group.add(lightHub);
         group.userData.colliders = [{ type: ColliderType.BOX, size: new THREE.Vector3(10, 60, 10) }];
 
-        return GeneratorUtils.freezeStatic(group, ["mastWarningLights"]);
+        return GeneratorUtils.freeze(group, ["mastWarningLights"]);
     },
 
     createTrainTunnel: (points: THREE.Vector3[]) => {
@@ -274,7 +274,7 @@ export const PoiGenerator = {
         floor.position.y = 0.02;
         tunnelGroup.add(floor);
 
-        return GeneratorUtils.freezeStatic(tunnelGroup);
+        return GeneratorUtils.freeze(tunnelGroup);
     },
 
 
@@ -323,7 +323,7 @@ export const PoiGenerator = {
             { type: EffectType.FIRE, smoke: true, intensity: 120, distance: 35, onRoof: true }
         ];
 
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     },
 
     createCampfire: (scale: number = 1.0) => {
@@ -370,6 +370,6 @@ export const PoiGenerator = {
             { type: ColliderType.SPHERE, radius: 0.8 * scale }
         ];
 
-        return GeneratorUtils.freezeStatic(group);
+        return GeneratorUtils.freeze(group);
     }
 };
