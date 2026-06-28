@@ -351,6 +351,11 @@ export const WeaponFX = {
         ctx.spawnParticle(pos.x, pos.y + 0.5, pos.z, FXParticleType.DEBRIS, 15);
         ctx.spawnDecal(pos.x, pos.z, radius * 1.5, MATERIALS.scorchDecal, FXDecalType.SCORCH);
 
+        // Bending vegetation outward (Grenade: lots of bending)
+        if (ctx.systems?.wind) {
+            ctx.systems.wind.addExplosion(pos.x, pos.y, pos.z, radius * 1.8, 0.6);
+        }
+
         // Massive Intensity Buff (5.0 -> 25.0)
         WeaponFX.spawnDynamicLight(ctx.scene, pos, COLORS.FIRE_ORANGE.num, 25.0, radius * 6, 0.5, WeaponLightType.FIRE);
     },
@@ -417,6 +422,11 @@ export const WeaponFX = {
         for (let i = 0; i < 3; i++) {
             const delay = i * 0.08;
             ctx.spawnParticle(pos.x, pos.y + 2, pos.z, FXParticleType.FLASH, 1, undefined, _v2.set(0, 0, 0), undefined, 6.0 + i * 2, 0.1, delay);
+        }
+
+        // Bending vegetation outward (Flashbang: less bending)
+        if (ctx.systems?.wind) {
+            ctx.systems.wind.addExplosion(pos.x, pos.y, pos.z, 5.0, 0.4);
         }
 
         // Blinding Intensity (10.0 -> 45.0)

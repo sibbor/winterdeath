@@ -82,12 +82,12 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
         if (floorMat.map) {
             floorMat.map.wrapS = THREE.RepeatWrapping;
             floorMat.map.wrapT = THREE.RepeatWrapping;
-            floorMat.map.repeat.set(s.w / 4, s.d / 4);
+            floorMat.map.repeat.set(s.w / 16, s.d / 16);
         }
         if (floorMat.bumpMap) {
             floorMat.bumpMap.wrapS = THREE.RepeatWrapping;
             floorMat.bumpMap.wrapT = THREE.RepeatWrapping;
-            floorMat.bumpMap.repeat.set(s.w / 4, s.d / 4);
+            floorMat.bumpMap.repeat.set(s.w / 16, s.d / 16);
         }
 
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), floorMat);
@@ -207,9 +207,9 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
             const v = uvAttribute.getY(i);
 
             if (width > depth) {
-                uvAttribute.setXY(i, u * (width / 4), v * (height / 4));
+                uvAttribute.setXY(i, u * (width / 16), v * (height / 16));
             } else {
-                uvAttribute.setXY(i, u * (depth / 4), v * (height / 4));
+                uvAttribute.setXY(i, u * (depth / 16), v * (height / 16));
             }
         }
 
@@ -355,9 +355,14 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
                     isLogicalLight: true,
                     position: worldPos,
                     color: 0xff0000,
-                    intensity: 100.0,
-                    distance: 50.0,
-                    flickerRate: 0.05
+                    intensity: 0,
+                    distance: 25.0,
+                    flickerRate: 0.8,
+                    originalIntensity: 60.0,
+                    isCaveLight: true,
+                    flickerSpeed: 40.0,
+                    flickerSpread: 45.0,
+                    decay: 1.6
                 } as any);
             }
 

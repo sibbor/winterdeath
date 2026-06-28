@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorBuildContext, ChestType, SectorEvent, SectorEventState, SectorEventConstraint } from '../../game/session/SectorTypes';
+import { SectorDef, SectorBuildContext, ChestType, SectorEvent, SectorEventState, SectorEventConstraint, BossID } from '../../game/session/SectorTypes';
 import { GroundType } from '../../core/engine/EnvironmentalTypes';
 import { t } from '../../utils/i18n';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
@@ -350,7 +350,41 @@ const esmeraldaMissionEvent: SectorEvent = {
 
                     esmeralda.position.lerp(sectorState.esmeraldaWalkTarget, 0.04);
 
+                    // Update camera override to follow Esmeralda
+                    if (ctx.setCameraOverride) {
+                        ctx.setCameraOverride({
+                            active: true,
+                            targetPos: new THREE.Vector3(esmeralda.position.x - 8, esmeralda.position.y + 12, esmeralda.position.z + 18),
+                            lookAtPos: esmeralda.position.clone(),
+                            endTime: simTime + 100
+                        });
+                    }
+
                     if (esmeralda.position.distanceTo(sectorState.esmeraldaWalkTarget) < 2.0) {
+                        eventState[KEYS.mastEventState] = 55;
+                        eventState[KEYS.mastEventTimer] = simTime;
+
+                        if (ctx.setCameraOverride) {
+                            ctx.setCameraOverride(null);
+                        }
+                    }
+                } else {
+                    if (mesElapsed > 5000) {
+                        eventState[KEYS.mastEventState] = 55;
+                        eventState[KEYS.mastEventTimer] = simTime;
+                    }
+                }
+            }
+        }
+        else if (mes === 55) {
+            // Wait for player to get close to Esmeralda
+            if (scene) {
+                const esmeralda = sectorState.esmeraldaMesh || scene.children.find(
+                    (c: any) => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Esmeralda'
+                );
+                if (esmeralda) {
+                    const dist = playerPos.distanceTo(esmeralda.position);
+                    if (dist < 4.0) {
                         eventState[KEYS.mastEventState] = 6;
                         eventState[KEYS.mastEventTimer] = simTime;
 
@@ -364,11 +398,6 @@ const esmeraldaMissionEvent: SectorEvent = {
                             triggerSystem.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);
                         }
                     }
-                } else {
-                    if (mesElapsed > 5000) {
-                        eventState[KEYS.mastEventState] = 6;
-                        eventState[KEYS.mastEventTimer] = simTime;
-                    }
                 }
             }
         }
@@ -377,6 +406,12 @@ const esmeraldaMissionEvent: SectorEvent = {
             if (!gameState.ui.cinematicActive) {
                 eventState[KEYS.mastEventState] = 7;
                 eventState[KEYS.mastEventTimer] = simTime;
+            }
+        }
+        else if (mes === 7) {
+            if (!sectorState.bossSpawned) {
+                sectorState.bossSpawned = true;
+                ctx.onAction({ type: TriggerActionType.SPAWN_BOSS, payload: { bossId: BossID.SECTOR_2 } });
             }
         }
 
@@ -393,6 +428,7 @@ const esmeraldaMissionEvent: SectorEvent = {
         if (isBossCheckpoint) {
             eventState[KEYS.mastEventState] = 7;
             eventState[KEYS.mastEventTimer] = engine.simTime;
+            state.sectorState.bossSpawned = false; // Reset so boss spawns again
             return;
         }
 
@@ -402,6 +438,7 @@ const esmeraldaMissionEvent: SectorEvent = {
         state.sectorState.waveActive = false;
         state.sectorState.waveDisabled = false;
         state.sectorState.esmeraldaWalkTarget = null;
+        state.sectorState.bossSpawned = false;
 
         const gate = state.sectorState.gateObstacle;
         if (gate) {
@@ -721,6 +758,38 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(150, 0, -53),
             new THREE.Vector3(233, 0, -106)
         ], 10, 7);
+
+        // Generate contiguous physical bounding boxes along the mountain's spline curve
+        const mountainCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(124, 0, 16),
+            new THREE.Vector3(139, 0, -22),
+            new THREE.Vector3(150, 0, -53),
+            new THREE.Vector3(233, 0, -106)
+        ]);
+        const mLength = mountainCurve.getLength();
+        const mSteps = Math.ceil(mLength / 6.0); // Step every 6 meters for overlapping coverage
+        const mPt = new THREE.Vector3();
+        const mTan = new THREE.Vector3();
+
+        for (let i = 0; i <= mSteps; i++) {
+            const t = i / mSteps;
+            mountainCurve.getPointAt(t, mPt);
+            mountainCurve.getTangentAt(t, mTan).normalize();
+
+            // Rotate collider to align with the local direction of the mountain ridge
+            const angle = Math.atan2(mTan.x, mTan.z);
+            const quat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+
+            ctx.obstacles.push({
+                position: mPt.clone(),
+                quaternion: quat,
+                collider: {
+                    type: ColliderType.BOX,
+                    size: new THREE.Vector3(12, 15, 12), // 12m width and depth to match visual base
+                    center: new THREE.Vector3(0, 7.5, 0)
+                }
+            });
+        }
         await yieldIfBudgetExceeded();
 
         // --- 6. THE MAST ---

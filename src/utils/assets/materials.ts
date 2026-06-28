@@ -238,11 +238,11 @@ export const MATERIALS = {
         // Clone so the repeat settings don't affect MATERIALS.stone
         const mountainMap = DIFFUSE.stone.clone();
         mountainMap.wrapS = mountainMap.wrapT = THREE.RepeatWrapping;
-        mountainMap.repeat.set(12, 12); // Large rock face tiling
+        mountainMap.repeat.set(3, 3); // Large rock face tiling
         mountainMap.needsUpdate = true;
         const mountainBump = TEXTURES.stone_bump.clone();
         mountainBump.wrapS = mountainBump.wrapT = THREE.RepeatWrapping;
-        mountainBump.repeat.set(12, 12);
+        mountainBump.repeat.set(3, 3);
         mountainBump.needsUpdate = true;
         return new THREE.MeshStandardMaterial({
             vertexColors: true,   // Vertex colors tint/modulate the texture

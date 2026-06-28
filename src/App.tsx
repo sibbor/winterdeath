@@ -544,9 +544,10 @@ const App: React.FC = () => {
 
         setGameState(prev => {
             const bossKilled = StatsBridge.isSectorBossDefeated(stats);
+            const isScrapyard = prev.currentSector === SectorID.SCRAPYARD;
             return {
                 ...prev,
-                screen: bossKilled ? GameScreen.BOSS_KILLED : GameScreen.RECAP
+                screen: (bossKilled && !isScrapyard) ? GameScreen.BOSS_KILLED : GameScreen.RECAP
             };
         });
     }, []);

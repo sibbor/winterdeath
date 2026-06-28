@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { MATERIALS, ModelFactory } from '../../utils/assets';
 import { EffectType, SubEffectType } from '../../systems/EffectManager';
 import { FXParticleType } from '../../types/FXTypes';
-import { SectorBuildContext, ChestType, NatureFillType, EnvironmentalZone, TerminalType } from '../../game/session/SectorTypes';
+import { SectorBuildContext, ChestType, NatureFillType, EnvironmentalZone, TerminalType, SectorID } from '../../game/session/SectorTypes';
 import { ObjectGenerator } from './generators/ObjectGenerator';
 import { VehicleGenerator } from './generators/VehicleGenerator';
 import { TerrainGenerator } from './generators/TerrainGenerator';
@@ -1021,6 +1021,7 @@ export const SectorBuilder = {
 
         if (lamp.userData.logicalLights && ctx.dynamicLights) {
             const len = lamp.userData.logicalLights.length;
+            const isCaveSector1 = (ctx.sectorId === SectorID.MOUNTAIN_VAULT);
             for (let i = 0; i < len; i++) {
                 const lData = lamp.userData.logicalLights[i];
                 _v1_sg.copy(lData.offset);
@@ -1030,10 +1031,15 @@ export const SectorBuilder = {
                 ctx.dynamicLights.push({
                     isLogicalLight: true,
                     position: new THREE.Vector3(_v1_sg.x, _v1_sg.y, _v1_sg.z),
-                    color: lData.color,
-                    intensity: lData.intensity,
-                    distance: lData.distance,
-                    flickerRate: lData.flickerRate
+                    color: isCaveSector1 ? 0xffa955 : lData.color,
+                    intensity: isCaveSector1 ? 0 : lData.intensity,
+                    distance: isCaveSector1 ? 18 : lData.distance,
+                    flickerRate: isCaveSector1 ? 0.4 : lData.flickerRate,
+                    originalIntensity: isCaveSector1 ? 30 : lData.intensity,
+                    isCaveLight: isCaveSector1,
+                    flickerSpeed: isCaveSector1 ? 35.0 : undefined,
+                    flickerSpread: isCaveSector1 ? 25.0 : undefined,
+                    decay: isCaveSector1 ? 1.8 : undefined
                 } as any);
             }
             lamp.userData.logicalLights = null;
@@ -1227,6 +1233,41 @@ export const SectorBuilder = {
         });
     },
 
+    spawnGenerator: (ctx: SectorBuildContext, x: number, z: number, rotation: number = 0) => {
+        const group = new THREE.Group();
+        group.name = 'cave_generator';
+
+        const baseGeo = new THREE.BoxGeometry(1.6, 1.2, 1.0);
+        const base = new THREE.Mesh(baseGeo, MATERIALS.blackMetal);
+        base.position.y = 0.6;
+        base.castShadow = true;
+        base.receiveShadow = true;
+        group.add(base);
+
+        const panelGeo = new THREE.BoxGeometry(0.8, 0.4, 0.2);
+        const panel = new THREE.Mesh(panelGeo, MATERIALS.steel);
+        panel.position.set(0, 1.0, 0.35);
+        group.add(panel);
+
+        const buttonGeo = new THREE.SphereGeometry(0.08);
+        const button = new THREE.Mesh(buttonGeo, new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+        button.position.set(-0.2, 1.0, 0.45);
+        button.name = 'generator_light';
+        group.add(button);
+
+        group.position.set(x, 0, z);
+        group.rotation.y = rotation;
+        GeneratorUtils.freeze(group);
+        ctx.scene.add(group);
+
+        SectorBuilder.addObstacle(ctx, {
+            mesh: group,
+            collider: { type: ColliderType.BOX, size: new THREE.Vector3(1.6, 1.2, 1.0) }
+        });
+
+        return group;
+    },
+
 
     fillArea: async (ctx: SectorBuildContext, center: { x: number, z: number }, size: { width: number, height: number } | number, count: number, type: NatureFillType, avoidCenterRadius: number = 0, exclusionZones: { pos: THREE.Vector3, radius: number }[] = []) => {
         await NaturePropGenerator.fillArea(ctx, center, size, count, type, avoidCenterRadius);
@@ -1270,9 +1311,6 @@ export const SectorBuilder = {
             x: points[0].x, z: points[0].z,
             type: MapItemType.MOUNTAIN, label: 'ui.mountain', icon: null, color: '#64748b', radius: null, points: pts
         });
-
-        // TODO: Automatically add boundry borders to the mountain on both sides of it...
-        SectorBuilder.createBoundry(ctx, points, "mountain", true);
 
         TerrainGenerator.createMountain(ctx, points, depth, height, caveConfig);
     },

@@ -271,6 +271,8 @@ export interface CareerStats {
 
     // --- STORY & PROGRESSION ---
     prologueSeen?: boolean;
+    epilogueSeen?: boolean;
+    gameCompleted?: boolean;
     deadBossIndices: number[];
     rescuedFamilyIndices: number[];
     familyFoundCount: number;
@@ -494,6 +496,8 @@ export const INITIAL_STATS: CareerStats = {
     deadBossIndices: [],
 
     prologueSeen: false,
+    epilogueSeen: false,
+    gameCompleted: false,
     rescuedFamilyIndices: [],
     familyFoundCount: 0,
     mostUsedWeapon: DamageID.NONE,

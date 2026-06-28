@@ -422,6 +422,10 @@ export class TriggerSystem implements System {
         }
     }
 
+    public fireTrigger(index: number, session: any): void {
+        this.trigger(index, session);
+    }
+
     public update(session: GameSessionLogic, delta: number): void {
         if (!this.enabled || !session.state) return;
 

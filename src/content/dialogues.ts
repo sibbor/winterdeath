@@ -110,9 +110,8 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             {
                 speaker: FamilyMemberID.ROBERT, text: "dialogue.2_13",
                 trigger: [
-                    TriggerActionType.FAMILY_MEMBER_FOUND,
-                    TriggerActionType.FAMILY_MEMBER_FOLLOW,
-                    { type: TriggerActionType.SPAWN_BOSS, payload: { bossId: BossID.SECTOR_2 } }
+                    { type: TriggerActionType.FAMILY_MEMBER_FOUND, payload: { id: FamilyMemberID.ESMERALDA, name: 'Esmeralda' } },
+                    TriggerActionType.FAMILY_MEMBER_FOLLOW
                 ]
             }
         ]
@@ -159,10 +158,9 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
             {
                 speaker: FamilyMemberID.ROBERT, text: "dialogue.3_26",
                 trigger: [
-                    TriggerActionType.FAMILY_MEMBER_FOUND,
+                    { type: TriggerActionType.FAMILY_MEMBER_FOUND, payload: { id: FamilyMemberID.NATHALIE, name: 'Nathalie' } },
                     TriggerActionType.FAMILY_MEMBER_FOLLOW,
-                    { type: TriggerActionType.SET_SECTOR_FLAG, payload: { flag: 'RUSH_TO_NATHALIE' } },
-                    { type: TriggerActionType.SPAWN_BOSS, payload: { bossId: BossID.SECTOR_3 } }
+                    { type: TriggerActionType.SET_SECTOR_FLAG, payload: { flag: 'RUSH_TO_NATHALIE' } }
                 ]
             }
         ]

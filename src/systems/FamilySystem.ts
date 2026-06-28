@@ -178,7 +178,7 @@ export class FamilySystem implements System {
             let fmIsMoving = false;
             let fmIsRushing = false;
 
-            if (familyMember.following && !isCinematicActive && !isDead) {
+            if (familyMember.following && !isCinematicActive && !isDead && !fm.userData.overrideFollowing) {
                 const row = Math.floor(i / 2) + 1;
 
                 // Tighter formation behind the player
@@ -244,7 +244,7 @@ export class FamilySystem implements System {
                 }
             }
 
-            if (!isCinematicActive && !inVehicle && !isDead && familyMember.spawnPos) {
+            if (!isCinematicActive && !inVehicle && !isDead && familyMember.spawnPos && !fm.userData.overrideFollowing) {
                 const distSq = fm.position.distanceToSquared(familyMember.spawnPos);
                 if (distSq > 1.0) {
                     fmIsMoving = true;

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorBuildContext, ChestType, SectorEvent, SectorEventState, SectorEventConstraint } from '../../game/session/SectorTypes';
+import { SectorDef, SectorBuildContext, ChestType, SectorEvent, SectorEventState, SectorEventConstraint, BossID } from '../../game/session/SectorTypes';
 import { GroundType } from '../../core/engine/EnvironmentalTypes';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
@@ -22,6 +22,7 @@ import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuff
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { MATERIALS } from '../../utils/assets/materials';
 import { ColliderType } from '../../core/world/CollisionResolution';
+import { FXParticleType } from '../../types/FXTypes';
 
 // ─── Zero-GC Scratchpads ──────────────────────────────────────────────────────
 const _vS3a = new THREE.Vector3();
@@ -51,6 +52,7 @@ const EP = {
     CAR_ZOOM: 9,   // Camera pans to car (1500 ms)
     DRIVE: 10,  // Player enters car + driving (5000 ms)
     DONE: 11,
+    AWAIT_CAR_ENTER: 12,
 } as const;
 
 const LOCATIONS = {
@@ -219,6 +221,12 @@ const epilogueEvent: SectorEvent = {
             if (elapsed > 2000) {
                 eventState[KEYS.epilogueState] = EP.BOSS_FIGHT;
                 eventState[KEYS.epilogueTimer] = simTime;
+            }
+        }
+        else if (ep === EP.BOSS_FIGHT) {
+            if (!sectorState.bossSpawned) {
+                sectorState.bossSpawned = true;
+                ctx.onAction({ type: TriggerActionType.SPAWN_BOSS, payload: { bossId: BossID.SECTOR_3 } });
             }
         }
         else if (ep === EP.FAMILY_EXIT) {
@@ -408,7 +416,7 @@ const epilogueEvent: SectorEvent = {
             }
 
             if (elapsed > 3500) {
-                eventState[KEYS.epilogueState] = EP.CAR_ZOOM;
+                eventState[KEYS.epilogueState] = EP.AWAIT_CAR_ENTER;
                 eventState[KEYS.epilogueTimer] = simTime;
 
                 if (scene) {
@@ -427,6 +435,13 @@ const epilogueEvent: SectorEvent = {
                         );
                     }
                 }
+            }
+        }
+        else if (ep === EP.AWAIT_CAR_ENTER) {
+            // Once the player enters the car, start the car zoom camera sequence!
+            if (gameState.vehicle && gameState.vehicle.active) {
+                eventState[KEYS.epilogueState] = EP.CAR_ZOOM;
+                eventState[KEYS.epilogueTimer] = simTime;
             }
         }
         else if (ep === EP.CAR_ZOOM) {
@@ -469,6 +484,26 @@ const epilogueEvent: SectorEvent = {
         return mask;
     },
     onPlayerRespawn: (ctx, state, engine, eventState) => {
+        const isBossCheckpoint = state.checkpoint && state.checkpoint.active && state.checkpoint.familyMemberId === FamilyMemberID.NATHALIE;
+        if (isBossCheckpoint) {
+            eventState[KEYS.epilogueState] = EP.BOSS_FIGHT;
+            eventState[KEYS.epilogueTimer] = engine.simTime;
+            state.sectorState.bossSpawned = false; // Reset so boss spawns again
+
+            // Keep family members inside the building and hidden during boss fight
+            const shedPos = LOCATIONS.POIS.SHED;
+            const ch = ctx.scene.children;
+            for (let i = 0; i < ch.length; i++) {
+                const c = ch[i];
+                if (c.userData.isFamilyMember || c.userData.type === 'family') {
+                    c.position.set(shedPos.x, 0, shedPos.z - 5);
+                    c.userData.overrideFollowing = true;
+                    c.visible = false;
+                }
+            }
+            return;
+        }
+
         eventState[KEYS.epilogueState] = EP.IDLE;
         eventState[KEYS.epilogueTimer] = 0;
         eventState[KEYS.cheerSoundPlayed] = false;
@@ -476,10 +511,56 @@ const epilogueEvent: SectorEvent = {
         eventState[KEYS.epilogueBossDefeated] = false;
         eventState[KEYS.epilogueDone] = false;
         state.sectorState.part2Played = false;
+        state.sectorState.nathalieUnlocked = false;
+        state.sectorState.bossSpawned = false;
 
         const escapeCar = ctx.scene.getObjectByName('s3_escape_car');
         if (escapeCar) {
             escapeCar.userData.isInteractable = false;
+        }
+
+        // Put Nathalie back to her spawn position inside the building, set following=false
+        const ch = ctx.scene.children;
+        for (let i = 0; i < ch.length; i++) {
+            const c = ch[i];
+            if (c.userData.isFamilyMember || c.userData.type === 'family') {
+                if (c.userData.name === 'Nathalie') {
+                    c.position.set(LOCATIONS.SPAWN.FAMILY.x, 0, LOCATIONS.SPAWN.FAMILY.z);
+                    c.userData.overrideFollowing = false;
+                    c.visible = true;
+                } else {
+                    // Reset following and overrideFollowing for Jordan, Loke, Esmeralda
+                    c.userData.overrideFollowing = false;
+                    c.visible = true;
+                }
+            }
+        }
+
+        // Reset Nathalie's found/following state in activeFamilyMembers
+        const fms = state.activeFamilyMembers;
+        if (fms) {
+            for (let i = 0; i < fms.length; i++) {
+                if (fms[i].id === FamilyMemberID.NATHALIE) {
+                    fms[i].found = false;
+                    fms[i].following = false;
+                } else {
+                    fms[i].found = true;
+                    fms[i].following = true;
+                }
+            }
+        }
+
+        // Reset trigger states for dialogues so they can trigger again
+        const triggerSystem = engine.systems.triggerSystem;
+        if (triggerSystem) {
+            const triggersToReset = [FamilyMemberID.NATHALIE, SectorEventID.S3_DIALOGUE_2];
+            for (const tid of triggersToReset) {
+                const idx = triggerSystem.getTriggerById(tid, TriggerType.EVENT);
+                if (idx !== -1) {
+                    triggerSystem.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);
+                    triggerSystem.setStatusFlag(idx, TriggerStatus.ACTIVE, tid !== FamilyMemberID.NATHALIE); // Nathalie starts inactive
+                }
+            }
         }
     }
 };
@@ -852,21 +933,19 @@ export const Sector3: SectorDef = {
                 size: new THREE.Vector3(10, 2.5, 1.0),
                 center: new THREE.Vector3(0, 1.25, 0)
             },
-            isMutated: false
+            durability: 120,
+            maxDurability: 120,
+            excludedWeapons: [],
+            onDestroyObject: (session: any, obstacle: any) => {
+                obstacle.isMutated = true;
+                if (obstacle.mesh) obstacle.mesh.visible = false;
+                const gp = obstacle.position;
+                session.callbacks.spawnParticle(gp.x, 1.25, gp.z, FXParticleType.DEBRIS, 30);
+                audioEngine.playSound(SoundID.EXPLOSION, 0.8);
+            }
         };
         ctx.sectorState.gateObstacle = gateObstacle;
         SectorBuilder.addObstacle(ctx, gateObstacle);
-
-        SectorBuilder.addInteractable(ctx, gateGroup, {
-            id: 's3_scrapyard_gate',
-            type: InteractionType.SECTOR_SPECIFIC,
-            label: 'ui.interact',
-            collider: {
-                type: InteractionShape.BOX,
-                size: new THREE.Vector3(10, 2.5, 1.0),
-                margin: 4.0
-            }
-        });
         await yieldIfBudgetExceeded();
 
         // Stacks of Cars (Maze) - moved northwest and fits inside fence
@@ -1149,21 +1228,6 @@ export const Sector3: SectorDef = {
 
     onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, engine, ...events }) => {
         const triggerSystem = engine.systems.triggerSystem;
-
-        // Scrapyard gate opening logic when player interacts
-        if (gameState.triggers.interactionRequest.active && gameState.triggers.interactionRequest.id === 's3_scrapyard_gate') {
-            gameState.triggers.interactionRequest.active = false;
-            const gate = sectorState.gateObstacle;
-            if (gate) {
-                gate.isMutated = true; // Disable collision
-                if (gate.mesh) {
-                    // Open gate: rotate it
-                    gate.mesh.rotation.y += Math.PI / 2;
-                    gate.mesh.updateMatrixWorld(true);
-                }
-                audioEngine.playSound(SoundID.DOOR_OPEN, 1.0);
-            }
-        }
 
         // --- SECTOR 3: NATHALIE MISSION LOGIC ---
         if (Math.random() < 0.015 && gameState.enemies.length < 12 && !sectorState.epilogueBossDefeated) {

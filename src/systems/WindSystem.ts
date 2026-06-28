@@ -4,13 +4,30 @@ import { WindUniforms } from '../utils/assets/materials_wind';
 import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
+interface ActiveExplosion {
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  maxRadius: number;
+  elapsed: number;
+  duration: number;
+  active: boolean;
+}
+
+const MAX_EXPLOSIONS = 8;
+const _explosionPool: ActiveExplosion[] = Array.from({ length: MAX_EXPLOSIONS }, () => ({
+  x: 0, y: 0, z: 0, radius: 0, maxRadius: 0, elapsed: 0, duration: 0, active: false
+}));
+
+const _tempInteractors = Array.from({ length: 8 }, () => new THREE.Vector4());
+
 export class WindSystem implements System {
   readonly systemId = SystemID.WIND;
   public id = 'wind';
   public enabled = true;
   public persistent = true;
   public isFixedStep?: boolean;
-
 
   public current = new THREE.Vector2(0, 0);
   public direction = new THREE.Vector3(0, 0, 0);
@@ -82,6 +99,23 @@ export class WindSystem implements System {
     }
   }
 
+  public addExplosion(x: number, y: number, z: number, maxRadius: number, duration: number = 0.5) {
+    for (let i = 0; i < MAX_EXPLOSIONS; i++) {
+      const exp = _explosionPool[i];
+      if (!exp.active) {
+        exp.x = x;
+        exp.y = y;
+        exp.z = z;
+        exp.radius = 0.1;
+        exp.maxRadius = maxRadius;
+        exp.elapsed = 0;
+        exp.duration = duration;
+        exp.active = true;
+        break;
+      }
+    }
+  }
+
   public sync(minStrength: number, maxStrength: number, baseAngle: number = 0.0, angleVariance: number = Math.PI) {
     this.setRandomWind(minStrength, maxStrength, baseAngle, angleVariance);
   }
@@ -93,6 +127,7 @@ export class WindSystem implements System {
       this.bindMaterial(MATERIALS.grass);
       this.bindMaterial(MATERIALS.flower);
       this.bindMaterial(MATERIALS.wheat);
+      this.bindMaterial(MATERIALS.grassTuft); // Added grassTuft so standard ground cover bends
       this.bindMaterial(MATERIALS.treeFirNeedles);
       this.bindMaterial(MATERIALS.treeLeavesOak);
       this.bindMaterial(MATERIALS.treeLeavesBirch);
@@ -126,10 +161,45 @@ export class WindSystem implements System {
     this.direction.set(this.current.x, 0, this.current.y).normalize();
     this.strength = this.current.length();
 
+    // Update active explosions
+    for (let i = 0; i < MAX_EXPLOSIONS; i++) {
+      const exp = _explosionPool[i];
+      if (exp.active) {
+        exp.elapsed += delta;
+        if (exp.elapsed >= exp.duration) {
+          exp.active = false;
+        } else {
+          const t = exp.elapsed / exp.duration;
+          // Sine curve expansion (outward wave, then shrinking/parting fades)
+          exp.radius = exp.maxRadius * Math.sin(t * Math.PI);
+        }
+      }
+    }
+
     // High-performance iteration loop for this specific WindSystem
     const timeSec = renderTime * 0.001; // renderTime is already small and synchronized
     const windX = this.current.x;
     const windY = this.current.y;
+
+    // Merge static/dynamic interactors with transient explosions into pre-allocated scratchpad
+    let slot = 0;
+    for (let j = 0; j < 8; j++) {
+      const inter = this.currentInteractors[j];
+      if (inter.w > 0.01) {
+        _tempInteractors[slot++].copy(inter);
+      }
+    }
+
+    for (let i = 0; i < MAX_EXPLOSIONS && slot < 8; i++) {
+      const exp = _explosionPool[i];
+      if (exp.active) {
+        _tempInteractors[slot++].set(exp.x, exp.y, exp.z, exp.radius);
+      }
+    }
+
+    for (let j = slot; j < 8; j++) {
+      _tempInteractors[j].set(0, 0, 0, 0);
+    }
 
     const binds = this.boundUniforms;
     const len = binds.length;
@@ -141,7 +211,7 @@ export class WindSystem implements System {
 
       // Update interactors
       for (let j = 0; j < 8; j++) {
-        b.uInteractors.value[j].copy(this.currentInteractors[j]);
+        b.uInteractors.value[j].copy(_tempInteractors[j]);
       }
     }
 
@@ -152,6 +222,9 @@ export class WindSystem implements System {
     this.boundUniforms.length = 0;
     this.overrideActive = false;
     this.materialsBound = false;
+    for (let i = 0; i < MAX_EXPLOSIONS; i++) {
+      _explosionPool[i].active = false;
+    }
   }
 
 }

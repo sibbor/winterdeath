@@ -279,8 +279,8 @@ export class LightSystem implements System {
             currentIntensity *= (fadeFactor < 0.0 ? 0.0 : (fadeFactor > 1.0 ? 1.0 : fadeFactor));
         }
 
-        // --- VINTERDÖD FLICKER LOGIC ---
-        if (logicLight.flickerSpeed !== undefined) {
+        // --- FLICKER LOGIC ---
+        if (logicLight.intensity > 0 && logicLight.flickerSpeed !== undefined) {
             const speed = logicLight.flickerSpeed;
             const spread = logicLight.flickerSpread || 0;
             const rate = logicLight.flickerRate || 1;

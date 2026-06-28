@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorBuildContext, EnvironmentalZone, ChestType, SectorEvent, SectorEventState, SectorEventConstraint } from '../../game/session/SectorTypes';
+import { SectorDef, SectorBuildContext, EnvironmentalZone, ChestType, SectorEvent, SectorEventState, SectorEventConstraint, BossID } from '../../game/session/SectorTypes';
 import { GroundType } from '../../core/engine/EnvironmentalTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
@@ -15,7 +15,7 @@ import { ClueID } from '../../content/clues';
 import { CollectibleID } from '../../content/collectibles';
 import { generateCaveSystem } from './Sector1_Cave';
 import { audioEngine } from '../../utils/audio/AudioEngine';
-import { SoundID } from '../../utils/audio/AudioTypes';
+import { SoundID, FXID } from '../../utils/audio/AudioTypes';
 import { CAMERA_HEIGHT } from '../constants';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
@@ -23,6 +23,7 @@ import { FamilyMemberID } from '../constants';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { WeatherType } from '../../core/engine/EnvironmentalTypes';
 import { UIEventRingBuffer, UIEventType } from '../../systems/ui/UIEventRingBuffer';
+import { FXParticleType } from '../../types/FXTypes';
 import { isPointInPolygon } from '../../utils/math/GeometryUtils';
 import { NavigationSystem } from '../../systems/NavigationSystem';
 
@@ -133,13 +134,15 @@ const LOCATIONS = {
 async function addProps(ctx: SectorBuildContext) {
     await SectorBuilder.spawnPoi(ctx, PoiType.CAMPFIRE, LOCATIONS.POIS.CAMPFIRE.x, LOCATIONS.POIS.CAMPFIRE.z, 0, { scale: 1.0, y: 0 });
 
-    await SectorBuilder.spawnBarrel(ctx, 106, -65);
-    await SectorBuilder.spawnBarrel(ctx, 108, -67);
+    await SectorBuilder.spawnBarrel(ctx, 106, -55);
+    await SectorBuilder.spawnBarrel(ctx, 108, -57);
 
-    await SectorBuilder.spawnTimberPile(ctx, 80, -60, Math.PI * 0.25, 2);
-    await SectorBuilder.spawnTimberPile(ctx, 77, -51, Math.PI * 0.20, 1.5);
+    await SectorBuilder.spawnTimberPile(ctx, 80, -55, Math.PI * 0.25, 2);
+    await SectorBuilder.spawnTimberPile(ctx, 77, -50, Math.PI * 0.20, 1.5);
 
-    await SectorBuilder.spawnVehicle(ctx, 113, -43, Math.PI * 2.15, VehicleID.TIMBER_TRUCK, undefined, true);
+    await SectorBuilder.spawnVehicle(ctx, 101, -54, Math.PI * 3.15, VehicleID.TIMBER_TRUCK, undefined, true);
+
+    await SectorBuilder.spawnTimberPile(ctx, 77, -51, Math.PI * 1.26, 1.5);
 
     await VegetationGenerator.createDeforestation(ctx, 135, -75, 50, 30, 25);
 }
@@ -199,6 +202,7 @@ const KEYS = {
     jordanEventState: 'state',
     jordanEventTimer: 'timer',
     doorCloseSoundPlayed: 'b1',
+    generatorOn: 'b2',
 } as const;
 
 const jordanRescueEvent: SectorEvent = {
@@ -207,6 +211,7 @@ const jordanRescueEvent: SectorEvent = {
         eventState[KEYS.jordanEventState] = 0;
         eventState[KEYS.jordanEventTimer] = 0;
         eventState[KEYS.doorCloseSoundPlayed] = false;
+        eventState[KEYS.generatorOn] = false;
     },
     onUpdate: (ctx, eventState) => {
         const { delta, simTime, renderTime, playerPos, gameState, engine } = ctx;
@@ -426,6 +431,12 @@ const jordanRescueEvent: SectorEvent = {
                     }
                 }
             }
+            else if (jcState === 7) {
+                if (!sectorState.bossSpawned) {
+                    sectorState.bossSpawned = true;
+                    ctx.onAction({ type: TriggerActionType.SPAWN_BOSS, payload: { bossId: BossID.SECTOR_1 } });
+                }
+            }
         }
 
         // Apply cinematic active constraint flags
@@ -447,12 +458,105 @@ const jordanRescueEvent: SectorEvent = {
                 return true;
             }
         }
+
+        if (id === 'cave_generator') {
+            const isCurrentlyOn = !!eventState[KEYS.generatorOn];
+            const nextState = !isCurrentlyOn;
+            eventState[KEYS.generatorOn] = nextState;
+
+            // Turn light color to green (on) or red (off)
+            const light = object.getObjectByName('generator_light') as THREE.Mesh;
+            if (light && light.material) {
+                (light.material as THREE.MeshBasicMaterial).color.setHex(nextState ? 0x00ff00 : 0xff0000);
+            }
+
+            if (nextState) {
+                // Play electric spark sound & spawn sparks
+                ctx.playSound(SoundID.UI_UPGRADE);
+                ctx.spawnParticle(object.position.x, object.position.y + 1, object.position.z + 0.45, FXParticleType.SPARK, 15);
+            } else {
+                // Play off switch click sound
+                ctx.playSound(SoundID.UI_CONFIRM);
+            }
+
+            // Turn on/off all cave lights!
+            const lights = ctx.gameState.world.lights;
+            if (lights) {
+                for (let i = 0; i < lights.length; i++) {
+                    const l = lights[i];
+                    if (l.isCaveLight) {
+                        l.intensity = nextState ? (l.originalIntensity || 45) : 0;
+                    }
+                }
+                if (ctx.engine && ctx.engine.systems.light) {
+                    ctx.engine.systems.light.rebuildBuckets(lights);
+                }
+            }
+
+            // Fire the clue trigger programmatically only the first time it is turned on
+            if (nextState) {
+                const triggerSystem = ctx.engine?.systems.triggerSystem;
+                if (triggerSystem) {
+                    const idx = triggerSystem.getTriggerById(ClueID.S1_CAVE_LIGHTS, TriggerType.CLUE);
+                    if (idx !== -1 && !triggerSystem.isTriggered(idx)) {
+                        triggerSystem.fireTrigger(idx, ctx.engine.onUpdateContext);
+                    }
+                }
+            }
+
+            return true;
+        }
+
         return false;
     },
     onPlayerRespawn: (ctx, state, engine, eventState) => {
+        // If checkpoint is active for Jordan, player respawns at boss (doors closed, not interactable, etc.)
+        const isBossCheckpoint = state.checkpoint && state.checkpoint.active && state.checkpoint.familyMemberId === FamilyMemberID.JORDAN;
+        if (isBossCheckpoint) {
+            eventState[KEYS.jordanEventState] = 7;
+            eventState[KEYS.jordanEventTimer] = engine.simTime;
+            state.sectorState.bossSpawned = false; // Reset so boss spawns again on reload
+
+            // Keep doors closed!
+            const doorL = state.sectorState.doorL;
+            const doorR = state.sectorState.doorR;
+            if (doorL) doorL.position.x = -5;
+            if (doorR) doorR.position.x = 5;
+
+            // Disable doors interactable
+            const doorFrame = state.sectorState.doorFrame;
+            if (doorFrame) doorFrame.userData.isInteractable = false;
+            return;
+        }
+
         eventState[KEYS.jordanEventState] = 0;
         eventState[KEYS.jordanEventTimer] = 0;
         eventState[KEYS.doorCloseSoundPlayed] = false;
+        eventState[KEYS.generatorOn] = false;
+        state.sectorState.bossSpawned = false;
+
+        const generator = engine.scene.getObjectByName('cave_generator');
+        if (generator) {
+            generator.userData.isInteractable = true;
+            const light = generator.getObjectByName('generator_light') as THREE.Mesh;
+            if (light && light.material) {
+                (light.material as THREE.MeshBasicMaterial).color.setHex(0xff0000);
+            }
+        }
+
+        // Also reset all cave lights back to 0 intensity
+        const lights = state.world.lights;
+        if (lights) {
+            for (let i = 0; i < lights.length; i++) {
+                const l = lights[i];
+                if (l.isCaveLight) {
+                    l.intensity = 0;
+                }
+            }
+            if (engine.systems.light) {
+                engine.systems.light.rebuildBuckets(lights);
+            }
+        }
 
         const doorL = state.sectorState.doorL;
         const doorR = state.sectorState.doorR;
@@ -538,6 +642,9 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(200, 0, -53)
         ];
         const railTrackCurve = await PathGenerator.createRailTrack(ctx, railRoadPath);
+        if ((ctx as any).sectorState) {
+            (ctx as any).sectorState.railTrackCurve = railTrackCurve;
+        }
         await yieldIfBudgetExceeded();
 
         // Poles
@@ -749,12 +856,12 @@ export const Sector1: SectorDef = {
             SectorBuilder.addTriggers(ctx, [
                 { id: ClueID.S1_START, position: LOCATIONS.TRIGGERS.START, radius: 10, type: TriggerType.CLUE, content: "clues.1.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
                 { id: ClueID.S1_COMBAT, position: LOCATIONS.TRIGGERS.COMBAT, radius: 10, type: TriggerType.CLUE, content: "clues.1.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
-                { id: ClueID.S1_CAVE_LIGHTS, position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: TriggerType.CLUE, content: "clues.1.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+                { id: ClueID.S1_CAVE_LIGHTS, position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: TriggerType.CLUE, content: "clues.1.2.reaction", statusFlags: TriggerStatus.NONE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
                 { id: ClueID.S1_CAVE_LOOT, position: LOCATIONS.TRIGGERS.CAVE_LOOT_1, radius: 15, type: TriggerType.CLUE, content: "clues.1.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
                 { id: ClueID.S1_CAVE_LOOT_MORE, position: LOCATIONS.TRIGGERS.CAVE_LOOT_2, radius: 15, type: TriggerType.CLUE, content: "clues.1.4.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
                 { id: PoiID.S1_CAMPFIRE, position: LOCATIONS.POIS.CAMPFIRE, radius: 10, type: TriggerType.POI, content: "pois.1.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
                 { id: PoiID.S1_TRAIN_TUNNEL, position: LOCATIONS.POIS.TRAIN_TUNNEL, radius: 15, type: TriggerType.POI, content: "pois.1.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
-                { id: PoiID.S1_CAVE_ENTRANCE, position: LOCATIONS.POIS.CAVE_ENTRANCE, radius: 15, type: TriggerType.POI, content: "pois.1.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
+                { id: PoiID.S1_CAVE_ENTRANCE, position: LOCATIONS.POIS.CAVE_ENTRANCE, radius: 12, type: TriggerType.POI, content: "pois.1.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
                 { id: PoiID.S1_MOUNTAIN_VAULT, position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: TriggerType.POI, content: "pois.1.3.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] }
             ]);
         }
@@ -774,6 +881,16 @@ export const Sector1: SectorDef = {
                 collider: { type: InteractionShape.SPHERE, radius: 12.0 }
             });
         }
+
+        // Spawn interactable generator in first room
+        const generator = SectorBuilder.spawnGenerator(ctx, 83, -100);
+        SectorBuilder.addInteractable(ctx, generator, {
+            id: 'cave_generator',
+            type: InteractionType.SECTOR_SPECIFIC,
+            label: 'ui.interact_turn_on_generator',
+            collider: { type: InteractionShape.SPHERE, radius: 4.0 }
+        });
+
     },
 
     onSectorUpdate: ({ delta, simTime, renderTime, playerPos, gameState, sectorState, ctx, ...events }) => {
@@ -799,15 +916,52 @@ export const Sector1: SectorDef = {
             }
         }
 
-        // --- OPTIMIZATION: HOISTED ROOM CENTERS SPAWN CHECK ---
-        if (!sectorState.spawnedRooms) sectorState.spawnedRooms = {};
+        // Spawn zombies once at the beginning of gameplay (after EnemyManager init)
+        if (!sectorState.zombiesSpawned) {
+            sectorState.zombiesSpawned = true;
 
-        for (let j = 0; j < ROOM_CENTERS.length; j++) {
-            const r = ROOM_CENTERS[j];
-            if (!sectorState.spawnedRooms[r.id]) {
-                const dist = Math.sqrt((playerPos.x - r.x) ** 2 + (playerPos.z - r.z) ** 2);
-                if (dist < 30) {
-                    sectorState.spawnedRooms[r.id] = true;
+            // Spawn forest zombies on both sides of track
+            if (sectorState.railTrackCurve && events.spawnZombie) {
+                const tempV = new THREE.Vector3();
+                const samples = 15;
+                const curve = sectorState.railTrackCurve;
+                for (let i = 0; i < samples; i++) {
+                    const t = i / (samples - 1);
+                    const trackPoint = curve.getPointAt(t);
+                    const tangent = curve.getTangentAt(t);
+
+                    const normX = -tangent.z;
+                    const normZ = tangent.x;
+                    const len = Math.sqrt(normX * normX + normZ * normZ);
+                    const dirX = normX / len;
+                    const dirZ = normZ / len;
+
+                    // Spawn on left side (woods)
+                    const leftDist = 12 + Math.random() * 33;
+                    const leftX = trackPoint.x - dirX * leftDist;
+                    const leftZ = trackPoint.z - dirZ * leftDist;
+                    if (!(leftX > 86 && leftZ < -62) && leftZ > -55) {
+                        tempV.set(leftX, 0, leftZ);
+                        const type = Math.random() > 0.8 ? EnemyType.RUNNER : EnemyType.WALKER;
+                        events.spawnZombie(type, tempV);
+                    }
+
+                    // Spawn on right side (woods)
+                    const rightDist = 12 + Math.random() * 33;
+                    const rightX = trackPoint.x + dirX * rightDist;
+                    const rightZ = trackPoint.z + dirZ * rightDist;
+                    if (rightZ > -55) {
+                        tempV.set(rightX, 0, rightZ);
+                        const type = Math.random() > 0.8 ? EnemyType.RUNNER : EnemyType.WALKER;
+                        events.spawnZombie(type, tempV);
+                    }
+                }
+            }
+
+            // Spawn cave zombies at all times (immediately on load)
+            if (events.spawnZombie) {
+                for (let j = 0; j < ROOM_CENTERS.length; j++) {
+                    const r = ROOM_CENTERS[j];
                     for (let i = 0; i < r.zombies; i++) {
                         const offX = (Math.random() - 0.5) * 20;
                         const offZ = (Math.random() - 0.5) * 20;
@@ -816,8 +970,8 @@ export const Sector1: SectorDef = {
                         if (r.id === 5 && Math.random() > 0.7) type = EnemyType.BLOATER;
                         else if (Math.random() > 0.7) type = EnemyType.RUNNER;
 
-                        _vS1.set(r.x + offX, 0, r.z + offZ);
-                        events.spawnZombie(type, _vS1);
+                        const pos = new THREE.Vector3(r.x + offX, 0, r.z + offZ);
+                        events.spawnZombie(type, pos);
                     }
                 }
             }

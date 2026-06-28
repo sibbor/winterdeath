@@ -154,69 +154,85 @@ const DialogueUI = forwardRef<DialogueUIHandle, DialogueUIProps>(({ isMobileDevi
     }));
 
     return (
-        <div
-            ref={containerRef}
-            className={`${isVisible ? CONTAINER_VISIBLE : CONTAINER_HIDDEN} pointer-events-auto cursor-pointer`}
-            onClick={() => {
-                if (isVisible) {
-                    const wasTyping = finishTyping();
-                    if (!wasTyping) {
-                        if (onComplete) onComplete();
-                    }
-                }
-            }}
-        >
-            <div
-                ref={innerBoxRef}
-                className={`w-[90%] md:w-[60%] max-w-4xl relative ${isMobileDevice ? 'scale-90 origin-bottom' : ''}`}
-                style={{ willChange: 'transform, opacity, filter' }}
-            >
-                {/* SMOKY CINEMATIC BACKGROUND */}
+        <>
+            {isVisible && (
                 <div
-                    className="absolute inset-0 pointer-events-none"
-                    style={{
-                        background: 'radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 60%, transparent 100%)',
-                        filter: 'blur(16px)',
-                        transform: 'scaleX(1.4) scaleY(1.05)'
+                    className="fixed inset-0 z-[99] cursor-pointer pointer-events-auto"
+                    style={{ background: 'transparent' }}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        const wasTyping = finishTyping();
+                        if (!wasTyping) {
+                            if (onComplete) onComplete();
+                        }
                     }}
                 />
+            )}
+            <div
+                ref={containerRef}
+                className={`${isVisible ? CONTAINER_VISIBLE : CONTAINER_HIDDEN} pointer-events-auto cursor-pointer`}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    if (isVisible) {
+                        const wasTyping = finishTyping();
+                        if (!wasTyping) {
+                            if (onComplete) onComplete();
+                        }
+                    }
+                }}
+            >
+                <div
+                    ref={innerBoxRef}
+                    className={`w-[90%] md:w-[60%] max-w-4xl relative ${isMobileDevice ? 'scale-90 origin-bottom' : ''}`}
+                    style={{ willChange: 'transform, opacity, filter' }}
+                >
+                    {/* SMOKY CINEMATIC BACKGROUND */}
+                    <div
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                            background: 'radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 60%, transparent 100%)',
+                            filter: 'blur(16px)',
+                            transform: 'scaleX(1.4) scaleY(1.05)'
+                        }}
+                    />
 
-                <div className="relative p-6 md:p-8 flex flex-col items-center justify-center text-center z-10 w-full">
-                    <p className="text-zinc-100 text-sm md:text-xl font-mono leading-relaxed drop-shadow-md">
-                        {speakerName && (
-                            <span className="font-bold font-mono mr-2 tracking-wider uppercase" style={{ color: bgColor }}>
-                                {speakerName}:
-                            </span>
+                    <div className="relative p-6 md:p-8 flex flex-col items-center justify-center text-center z-10 w-full">
+                        <p className="text-zinc-100 text-sm md:text-xl font-mono leading-relaxed drop-shadow-md">
+                            {speakerName && (
+                                <span className="font-bold font-mono mr-2 tracking-wider uppercase" style={{ color: bgColor }}>
+                                    {speakerName}:
+                                </span>
+                            )}
+                            <span ref={textContainerRef} className="hud-text-glow font-mono"></span>
+                        </p>
+
+                        {isFinished && isVisible && (
+                            <div className="absolute bottom-[-24px] right-1/2 translate-x-1/2 flex items-center opacity-40 hover:opacity-75 transition-opacity">
+                                <span className="text-white text-[9px] uppercase tracking-[0.3em] font-mono font-bold mr-2">
+                                    {isMobileDevice ? t('ui.tap') : t('ui.continue')}
+                                </span>
+                                <div className="w-1.5 h-1.5 bg-[#bfa979] rotate-45" />
+                            </div>
                         )}
-                        <span ref={textContainerRef} className="hud-text-glow font-mono"></span>
-                    </p>
-
-                    {isFinished && isVisible && (
-                        <div className="absolute bottom-[-24px] right-1/2 translate-x-1/2 flex items-center opacity-40 hover:opacity-75 transition-opacity">
-                            <span className="text-white text-[9px] uppercase tracking-[0.3em] font-mono font-bold mr-2">
-                                {isMobileDevice ? t('ui.tap') : t('ui.continue')}
-                            </span>
-                            <div className="w-1.5 h-1.5 bg-[#bfa979] rotate-45" />
-                        </div>
-                    )}
+                    </div>
                 </div>
-            </div>
 
-            <style>{`
-                @keyframes dialogue-box-appear {
-                    0% {
-                        opacity: 0;
-                        filter: blur(12px);
-                        transform: scale(0.97);
+                <style>{`
+                    @keyframes dialogue-box-appear {
+                        0% {
+                            opacity: 0;
+                            filter: blur(12px);
+                            transform: scale(0.97);
+                        }
+                        100% {
+                            opacity: 1;
+                            filter: blur(0px);
+                            transform: scale(1);
+                        }
                     }
-                    100% {
-                        opacity: 1;
-                        filter: blur(0px);
-                        transform: scale(1);
-                    }
-                }
-            `}</style>
-        </div>
+                `}</style>
+            </div>
+        </>
     );
 });
 

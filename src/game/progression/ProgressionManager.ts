@@ -64,6 +64,10 @@ export const aggregateStats = (
     if (!died && !aborted) {
         s.sectorsCompleted = Math.max(s.sectorsCompleted || 0, currentSector + 1);
         sb[StatID.TOTAL_SECTORS_COMPLETED] = s.sectorsCompleted | 0;
+        if (currentSector === SectorID.SCRAPYARD) {
+            s.gameCompleted = true;
+            s.epilogueSeen = true;
+        }
     }
 
     // 2. Resource Collection & Stats

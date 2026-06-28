@@ -193,8 +193,11 @@ export class PlayerMovementSystem implements System {
 
             // Handle Rush Elevation (Hold Space)
             if (state.inputState.spaceDepressed && !state.player.isDodging) {
-                if (simTime - state.player.spacePressTime >= PLAYER.RUSH_HOLD_THRESHOLD) { // Increased threshold to avoid accidental dodge blocking
-                    if (stats[StatID.STAMINA] >= 1.0) { // Check for minimal stamina to CONTINUE rushing
+                if (simTime - state.player.spacePressTime >= PLAYER.RUSH_HOLD_THRESHOLD) {
+                    const rushCost = ABILITIES[AbilityID.RUSH].staminaCost || 25;
+                    const canStartOrContinue = state.player.isRushing ? (stats[StatID.STAMINA] > 0) : (stats[StatID.STAMINA] >= rushCost);
+
+                    if (canStartOrContinue) {
                         if (!state.player.isRushing) {
                             state.player.isRushing = true;
                             state.player.rushCostPaid = true;

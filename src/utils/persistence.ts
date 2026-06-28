@@ -23,6 +23,8 @@ export const getPersistentState = (state: GameState) => {
             mostUsedWeapon: s.mostUsedWeapon,
             totalEnemiesKilled: s.totalEnemiesKilled,
             prologueSeen: s.prologueSeen,
+            epilogueSeen: s.epilogueSeen,
+            gameCompleted: s.gameCompleted,
             rescuedFamilyIndices: [...s.rescuedFamilyIndices],
             deadBossIndices: [...s.deadBossIndices],
             familyFoundCount: s.familyFoundCount,
