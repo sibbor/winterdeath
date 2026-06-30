@@ -78,16 +78,18 @@ export const generateCaveSystem = async (ctx: SectorBuildContext, innerCave: THR
     for (let i = 0; i < allSpaces.length; i++) {
         const s = allSpaces[i];
         const floorMat = MATERIALS.gravel.clone();
-        floorMat.bumpScale = 3.0;
+        floorMat.bumpScale = 0.5;
         if (floorMat.map) {
+            floorMat.map = floorMat.map.clone();
             floorMat.map.wrapS = THREE.RepeatWrapping;
             floorMat.map.wrapT = THREE.RepeatWrapping;
-            floorMat.map.repeat.set(s.w / 16, s.d / 16);
+            floorMat.map.repeat.set(s.w / 48, s.d / 48);
         }
         if (floorMat.bumpMap) {
+            floorMat.bumpMap = floorMat.bumpMap.clone();
             floorMat.bumpMap.wrapS = THREE.RepeatWrapping;
             floorMat.bumpMap.wrapT = THREE.RepeatWrapping;
-            floorMat.bumpMap.repeat.set(s.w / 16, s.d / 16);
+            floorMat.bumpMap.repeat.set(s.w / 48, s.d / 48);
         }
 
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), floorMat);

@@ -18,16 +18,17 @@ interface ScreenBossKilledProps {
 
 const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProceed, onExplore, stats, isMobileDevice }) => {
     const bossName = t(DataResolver.getBossName(sectorIndex)).toUpperCase();
+    const activeStats = (stats as any)?.bossFightStats || stats;
 
     useEffect(() => {
         UISounds.playVictory();
     }, []);
 
     const weaponDamageList = React.useMemo(() => {
-        if (!stats) return [];
+        if (!activeStats) return [];
         const list: { idx: number; amount: number; nameKey: string }[] = [];
         for (let idx = 0; idx < StatWeaponIndex.COUNT; idx++) {
-            const amount = StatsBridge.getWeaponDamageDealt(stats, idx);
+            const amount = StatsBridge.getWeaponDamageDealt(activeStats, idx);
             if (amount > 0) {
                 list.push({
                     idx,
@@ -37,14 +38,14 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
             }
         }
         return list;
-    }, [stats]);
+    }, [activeStats]);
 
     const incomingDamageList = React.useMemo(() => {
-        if (!stats) return [];
+        if (!activeStats) return [];
         const list: { attackId: number; amount: number; nameKey: string }[] = [];
         const sourceId = TelemetrySourceOffset.BOSS + sectorIndex;
         for (let attackId = 0; attackId < TELEMETRY_ATTACKS_PER_SOURCE; attackId++) {
-            const amount = StatsBridge.getIncomingDamage(stats, sourceId, attackId);
+            const amount = StatsBridge.getIncomingDamage(activeStats, sourceId, attackId);
             if (amount > 0) {
                 list.push({
                     attackId,
@@ -54,7 +55,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
             }
         }
         return list;
-    }, [stats, sectorIndex]);
+    }, [activeStats, sectorIndex]);
 
     return (
         <ModalLayout
@@ -72,11 +73,11 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
         >
 
             <TacticalCard color={COLORS.RED} className={`${isMobileDevice ? 'p-4' : 'p-8'} mb-6 md:mb-10 shadow-[0_0_30px_rgba(153,27,27,0.2)]`}>
-                <p className={`${isMobileDevice ? 'text-lg' : 'text-lg'} leading-relaxed font-light italic mb-4 md:mb-8 text-gray-200`}>
+                <p className={`${isMobileDevice ? 'text-sm' : 'text-lg'} leading-relaxed font-light italic mb-4 md:mb-8 text-gray-200`}>
                     "{t(DataResolver.getBossDeathStory(sectorIndex))}"
                 </p>
 
-                {stats && (
+                {activeStats && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-t border-red-900/50 pt-6">
                         {/* Damage Dealt (Outgoing) */}
                         <div className="flex flex-col">
@@ -90,12 +91,12 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                                 ))}
                                 <div className="flex justify-between items-center pt-2 border-t border-gray-800 mt-2">
                                     <span className="text-xs font-black text-white uppercase">{t('ui.total')}</span>
-                                    <span className="text-xl font-black text-blue-400">{Math.floor(StatsBridge.getSectorDamageDealt(stats)).toLocaleString()}</span>
+                                    <span className="text-xl font-black text-blue-400">{Math.floor(StatsBridge.getSectorDamageDealt(activeStats)).toLocaleString()}</span>
                                 </div>
-                                {stats.killingBlowWeapon !== undefined && (
+                                {activeStats.killingBlowWeapon !== undefined && (
                                     <div className="flex justify-between items-center pt-2 mt-1">
                                         <span className="text-[10px] font-bold text-blue-400 uppercase tracking-tighter">{t('ui.killing_blow')}</span>
-                                        <span className="text-[10px] font-black text-white uppercase">{t(DataResolver.getDamageName(stats.killingBlowWeapon))}</span>
+                                        <span className="text-[10px] font-black text-white uppercase">{t(DataResolver.getDamageName(activeStats.killingBlowWeapon))}</span>
                                     </div>
                                 )}
                             </div>
@@ -113,7 +114,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
                                 ))}
                                 <div className="flex justify-between items-center pt-2 border-t border-gray-800 mt-2">
                                     <span className="text-xs font-black text-white uppercase">{t('ui.total')}</span>
-                                    <span className="text-xl font-black text-red-400">{Math.floor(StatsBridge.getSectorDamageTaken(stats)).toLocaleString()}</span>
+                                    <span className="text-xl font-black text-red-400">{Math.floor(StatsBridge.getSectorDamageTaken(activeStats)).toLocaleString()}</span>
                                 </div>
                             </div>
                         </div>

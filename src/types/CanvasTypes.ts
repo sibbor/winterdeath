@@ -37,5 +37,5 @@ export interface GameCanvasProps {
   disableInput?: boolean;
   isWarmup?: boolean;
   currentSectorData?: any;
-  isSectorBannerActive?: boolean;
+  isSideBannerActive?: boolean;
 }

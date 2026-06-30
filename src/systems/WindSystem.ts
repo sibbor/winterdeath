@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../utils/assets/materials';
-import { WindUniforms } from '../utils/assets/materials_wind';
+import { WindUniforms, TREE_WIND_UNIFORMS, GRASS_WIND_UNIFORMS, HEDGE_WIND_UNIFORMS } from '../utils/assets/materials_wind';
 import { System, SystemID } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 
@@ -21,6 +21,9 @@ const _explosionPool: ActiveExplosion[] = Array.from({ length: MAX_EXPLOSIONS },
 }));
 
 const _tempInteractors = Array.from({ length: 8 }, () => new THREE.Vector4());
+const _flatFloatScratchA = new Float32Array(32);
+const _flatFloatScratchB = new Float32Array(32);
+let _useBufferA = true;
 
 export class WindSystem implements System {
   readonly systemId = SystemID.WIND;
@@ -170,8 +173,9 @@ export class WindSystem implements System {
           exp.active = false;
         } else {
           const t = exp.elapsed / exp.duration;
-          // Sine curve expansion (outward wave, then shrinking/parting fades)
-          exp.radius = exp.maxRadius * Math.sin(t * Math.PI);
+          // Linear expansion from 0.1 to maxRadius, instead of a symmetrical sine curve
+          // that would shrink back to 0 at the end of the duration.
+          exp.radius = 0.1 + (exp.maxRadius - 0.1) * t;
         }
       }
     }
@@ -201,6 +205,41 @@ export class WindSystem implements System {
       _tempInteractors[j].set(0, 0, 0, 0);
     }
 
+    // Flatten _tempInteractors into the active scratchpad buffer
+    const activeScratch = _useBufferA ? _flatFloatScratchA : _flatFloatScratchB;
+    _useBufferA = !_useBufferA;
+
+    for (let j = 0; j < 8; j++) {
+      const v = _tempInteractors[j];
+      const idx = j * 4;
+      activeScratch[idx] = v.x;
+      activeScratch[idx + 1] = v.y;
+      activeScratch[idx + 2] = v.z;
+      activeScratch[idx + 3] = v.w;
+    }
+
+    // Direct uniform updates across the shared structs
+    // 1. Tree Uniforms
+    TREE_WIND_UNIFORMS.uTime.value = timeSec;
+    TREE_WIND_UNIFORMS.uWind.value.set(windX, windY);
+    TREE_WIND_UNIFORMS.uInteractors.value = activeScratch;
+    // Force Three.js to re-upload the TypedArray contents each frame.
+    // Without this, Three.js sees the same Float32Array reference and skips the upload.
+    (TREE_WIND_UNIFORMS.uInteractors as any).needsUpdate = true;
+
+    // 2. Grass Uniforms
+    GRASS_WIND_UNIFORMS.uTime.value = timeSec;
+    GRASS_WIND_UNIFORMS.uWind.value.set(windX, windY);
+    GRASS_WIND_UNIFORMS.uInteractors.value = activeScratch;
+    (GRASS_WIND_UNIFORMS.uInteractors as any).needsUpdate = true;
+
+    // 3. Hedge Uniforms
+    HEDGE_WIND_UNIFORMS.uTime.value = timeSec;
+    HEDGE_WIND_UNIFORMS.uWind.value.set(windX, windY);
+    HEDGE_WIND_UNIFORMS.uInteractors.value = activeScratch;
+    (HEDGE_WIND_UNIFORMS.uInteractors as any).needsUpdate = true;
+
+    // Keep updating the dynamic binds for custom/extra instances of materials
     const binds = this.boundUniforms;
     const len = binds.length;
     for (let i = 0; i < len; i++) {
@@ -208,11 +247,8 @@ export class WindSystem implements System {
       b.uTime.value = timeSec;
       b.uWind.value.x = windX;
       b.uWind.value.y = windY;
-
-      // Update interactors
-      for (let j = 0; j < 8; j++) {
-        b.uInteractors.value[j].copy(_tempInteractors[j]);
-      }
+      b.uInteractors.value = activeScratch;
+      (b.uInteractors as any).needsUpdate = true;
     }
 
     return this.current;

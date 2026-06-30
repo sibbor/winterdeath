@@ -1,12 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { t } from '../../../utils/i18n';
 import { UISounds } from '../../../utils/audio/AudioLib';
-import { HudStore } from '../../../store/HudStore';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { HORIZONTAL_HATCHING_STYLE_DARK } from './ModalLayout';
 import { StatusEffectID } from '../../../types/StatusEffects';
-import { MetaActionId } from '../../../systems/ui/UIEventBridge';
+import { EnemyAttackType } from '../../../entities/player/CombatTypes';
 
 interface ScreenPlayerDiedProps {
     onContinue: () => void;
@@ -59,10 +58,17 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
             if (lethalStatusEffect !== StatusEffectID.NONE) {
                 // Killed by Enemy via DoT (e.g. Walker (Bite [Bleeding]))
                 const effectName = t(DataResolver.getPerkName(lethalStatusEffect));
-                const attackType = lethalStatusEffect === StatusEffectID.BLEEDING ? 'BITE' : 'HIT'; // Improved mapping
-                const attackName = t(DataResolver.getAttackName(attackType as any));
+                let attackType = EnemyAttackType.HIT;
+                if (lethalStatusEffect === StatusEffectID.BLEEDING) {
+                    attackType = EnemyAttackType.BITE;
+                } else if (lethalStatusEffect === StatusEffectID.ELECTRIFIED) {
+                    attackType = EnemyAttackType.ELECTRIC_BEAM;
+                } else if (lethalStatusEffect === StatusEffectID.FREEZING) {
+                    attackType = EnemyAttackType.FREEZE_JUMP;
+                }
+                const attackName = t(DataResolver.getAttackName(attackType));
                 displayName = `${nameResolved.toUpperCase()} (${attackName} [${effectName}])`;
-            } else if (deathReason && deathReason !== 'HIT' && deathReason !== 'HIDDEN') {
+            } else if (deathReason && deathReason !== 'attacks.HIT.title' && deathReason !== 'HIDDEN') {
                 // Killed by Enemy via direct attack
                 displayName = `${nameResolved.toUpperCase()} (${attackResolved})`;
             }

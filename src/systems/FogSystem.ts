@@ -88,7 +88,8 @@ export class FogSystem implements System {
 
         // 2. VOLUMETRIC FOG (Instanced Planes)
         const wantsVolumetric = engine?.settings?.volumetricFog ?? true;
-        this.fogCount = wantsVolumetric ? Math.floor(Math.min(density, MAX_FOG_PLANES)) : 0;
+        const countDensity = density < 1.0 ? density * 10000 : density;
+        this.fogCount = wantsVolumetric ? Math.floor(Math.min(countDensity * 0.125, MAX_FOG_PLANES)) : 0;
 
         if (this.fogCount <= 0) {
             if (this.fogMesh) this.fogMesh.visible = false;
@@ -177,7 +178,8 @@ export class FogSystem implements System {
             if (engine.depthTexture && uniforms.uDepthTexture.value !== engine.depthTexture) {
                 uniforms.uDepthTexture.value = engine.depthTexture;
             }
-            uniforms.uResolution.value.set(engine.screenWidth, engine.screenHeight);
+            const dpr = engine.renderer ? engine.renderer.getPixelRatio() : 1;
+            uniforms.uResolution.value.set(engine.screenWidth * dpr, engine.screenHeight * dpr);
 
             if (this.camera instanceof THREE.PerspectiveCamera) {
                 uniforms.uCameraNear.value = this.camera.near;

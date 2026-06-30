@@ -65,6 +65,8 @@ export interface WaterUniforms {
     uRipples: { value: THREE.Vector4[] };
     uObjectPositions: { value: THREE.Vector4[] };
     uLightPosition: { value: THREE.Vector3 };
+    uSkyLightColor: { value: THREE.Color };
+    uSkyLightIntensity: { value: number };
     uWaterDirection: { value: THREE.Vector2 };
     uNoiseTexture: { value: THREE.Texture };
     [key: string]: THREE.IUniform;
@@ -156,11 +158,13 @@ const vertexShader = `
         vec4 worldPosition = modelMatrix * vec4(position, 1.0);
         
         float waveScale = 0.45;
-        float phaseXZ = worldPosition.x + worldPosition.z;
+        // Incorporate wind direction/force into wave movement
+        float windDot = dot(worldPosition.xz, normalize(uWaterDirection));
+        float phaseWind = windDot * waveScale;
+        float speedFactor = 0.5 + uWaveStrength * 0.5;
         
-        // [VINTERDÖD REVERT] Original wave math with diagonal phase and slower speed
-        float w1 = pow(max(0.0, sin(phaseXZ * waveScale - uTime * 1.0) * 0.5 + 0.5), 3.2) * 0.45;
-        float w2 = pow(max(0.0, sin(phaseXZ * 0.7 - uTime * 0.8) * 0.5 + 0.5), 2.5) * 0.35;
+        float w1 = pow(max(0.0, sin(phaseWind - uTime * 1.2 * speedFactor) * 0.5 + 0.5), 3.2) * 0.45;
+        float w2 = pow(max(0.0, sin(phaseWind * 0.7 - uTime * 0.9 * speedFactor) * 0.5 + 0.5), 2.5) * 0.35;
         
         // Edge dampening to keep shores calm
         float edgeDist = 0.0;
@@ -229,6 +233,8 @@ const fragmentShader = `
     uniform vec3 uShallowColor;
     uniform vec3 uFoamColor;
     uniform vec3 uLightPosition;
+    uniform vec3 uSkyLightColor;
+    uniform float uSkyLightIntensity;
     uniform vec4 uObjectPositions[${WATER_SYSTEM.MAX_FLOATING_OBJECTS}];
     uniform vec2 uPlaneSize;
     uniform float uIsCircle;
@@ -262,13 +268,19 @@ const fragmentShader = `
         vec3 lightDir = normalize(uLightPosition);
         vec3 halfDir = normalize(lightDir + viewDir);
         
-        // LIGHTING
+        // LIGHTING & WAVE SHIMMERING
         float lightDot = max(dot(normal, lightDir), 0.0);
         float faceGlow = pow(lightDot, 5.0) * 0.3; 
-        float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.8;
+        
+        // Dynamic spec based on sky intensity and noise for a shimmering/sparkling wave effect
+        float shimmerNoise = texture2D(uNoiseTexture, vWorldPos.xz * 0.5 + vec2(uTime * 0.1, uTime * 0.08)).r;
+        float specSize = mix(32.0, 128.0, shimmerNoise);
+        float spec = pow(max(dot(normal, halfDir), 0.0), specSize) * (0.8 + shimmerNoise * 0.4);
         float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), 4.0) * 1.5; // Fresnel
         
-        vec3 specularCol = vec3(1.0) * (faceGlow + spec + rim * 0.5);
+        // Absorb light from SkySystem (intensity & color)
+        vec3 reflectedSkyColor = uSkyLightColor * uSkyLightIntensity;
+        vec3 specularCol = (reflectedSkyColor + vec3(1.0)) * (faceGlow + spec + rim * 0.5);
         
         // Base Color interpolation
         vec3 waterColor = mix(uShallowColor, uBaseColor, depthFactor);
@@ -282,18 +294,16 @@ const fragmentShader = `
         float crestNoise = texture2D(uNoiseTexture, vWorldPos.xz * 0.15 - uTime * 0.05).r;
         crestLine *= smoothstep(0.2, 0.8, crestNoise);
         
-        // Mix in a bright turquoise/white color strictly at the peaks
-        vec3 crestColor = mix(uShallowColor, vec3(1.0), 0.8);
+        // Mix in a bright color strictly at the peaks, modulated by sky light
+        vec3 crestColor = mix(uShallowColor, mix(vec3(1.0), uSkyLightColor, 0.5), 0.8);
         waterColor += crestColor * crestLine * max(0.2, lightDot);
         
         // --- OPTIMIZED FOAM CALCULATION ---
-        // Calculate combined object proximity FIRST (Fast O(1) inside loop)
         float objProximity = 0.0;
         for(int i = 0; i < ${WATER_SYSTEM.MAX_FLOATING_OBJECTS}; i++) {
             vec4 op = uObjectPositions[i];
             if (op.w > 0.0) {
                 float dist = distance(vWorldPos.xz, op.xy);
-                // op.z is radius. Create a soft proximity gradient
                 float prox = 1.0 - smoothstep(op.z * 0.2, op.z * 1.5, dist);
                 objProximity += prox * op.w;
             }
@@ -353,6 +363,8 @@ export function createWaterMaterial(
         uRipples: { value: ripples },
         uObjectPositions: { value: objectPositions },
         uLightPosition: { value: _mkV3(10, 20, 10) },
+        uSkyLightColor: { value: new THREE.Color(0xffffff) },
+        uSkyLightIntensity: { value: 1.0 },
         uWaterDirection: { value: _mkV2(1, 0) },
         uNoiseTexture: { value: TEXTURES.water_ripple || dummyNoise }
     };

@@ -20,19 +20,19 @@ const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete, isBossIntro
     const sectorName = useHudStore(s => s.sectorName);
     const bossNameKey = useHudStore(s => s.bossName);
 
-    const isSectorBanner = active && !isBossIntro;
+    const isSideBanner = active && !isBossIntro;
 
     const title = useMemo(() => {
-        if (isSectorBanner) return sectorName ? t(sectorName) : t(DataResolver.getSectorName(currentSector));
+        if (isSideBanner) return sectorName ? t(sectorName) : t(DataResolver.getSectorName(currentSector));
         if (isBossIntro) return bossNameKey ? t(bossNameKey) : t(DataResolver.getBossName(currentSector));
         return '';
-    }, [isSectorBanner, isBossIntro, currentSector, sectorName, bossNameKey]);
+    }, [isSideBanner, isBossIntro, currentSector, sectorName, bossNameKey]);
 
     const subtitle = useMemo(() => {
-        if (isSectorBanner) return `Sector ${String(currentSector).padStart(3, '0')}`;
+        if (isSideBanner) return `Sector ${String(currentSector).padStart(3, '0')}`;
         if (isBossIntro) return t('ui.boss_encounter');
         return '';
-    }, [isSectorBanner, isBossIntro, currentSector]);
+    }, [isSideBanner, isBossIntro, currentSector]);
 
     const onCompleteRef = React.useRef(onComplete);
     useEffect(() => {

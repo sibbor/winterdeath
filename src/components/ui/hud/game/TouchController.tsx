@@ -314,8 +314,8 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
                 />
             </div>
 
-            {/* PAUSE BUTTON — top-right, always accessible */}
-            <div ref={pauseZoneRef} className="absolute top-3 right-4 z-40 pr-safe pt-safe" style={{ pointerEvents: 'none' }}>
+            {/* PAUSE BUTTON — top-center, always accessible */}
+            <div ref={pauseZoneRef} className="absolute top-3 left-1/2 -translate-x-1/2 z-40 pt-safe" style={{ pointerEvents: 'none' }}>
                 <button
                     className="w-12 h-12 rounded-full border border-white/20 bg-black/60 text-white font-bold backdrop-blur-sm flex items-center justify-center active:scale-95 transition-transform"
                     onTouchStart={(e) => { e.stopPropagation(); onPause?.(); }}

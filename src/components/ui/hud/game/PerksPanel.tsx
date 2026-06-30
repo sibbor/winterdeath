@@ -1,4 +1,4 @@
-import React, { useRef, useImperativeHandle, forwardRef, useEffect, useMemo } from 'react';
+import React, { useRef, useImperativeHandle, forwardRef, useEffect, useMemo, useState } from 'react';
 import { t } from '../../../../utils/i18n';
 import { DataResolver } from '../../../../core/data/DataResolver';
 import { StatusEffectID } from '../../../../types/StatusEffects';
@@ -41,7 +41,6 @@ const PooledPerkBubble = forwardRef(({ isPassive, isMobileDevice, isLandscapeMod
     const currentPulse = useRef<string>('');
 
     useImperativeHandle(ref, () => ({
-        // color is just a string we are told to apply
         update: (type: StatusEffectID | null, progress: number, color: string, pulseClass: string) => {
             if (!containerRef.current || !iconRef.current) return;
 
@@ -72,27 +71,96 @@ const PooledPerkBubble = forwardRef(({ isPassive, isMobileDevice, isLandscapeMod
         }
     }));
 
-    const handleEnter = () => {
+    // Keep track of mobile auto-hide timeout
+    const mobileTimeout = useRef<any>(null);
+
+    const handleEnter = (e: React.MouseEvent | React.PointerEvent | React.TouchEvent) => {
         const text = containerRef.current?.dataset.tooltip;
-        if (text) showTooltip(text);
+        if (text) {
+            e.stopPropagation();
+
+            // Clean up any pending mobile timeout
+            if (mobileTimeout.current) {
+                clearTimeout(mobileTimeout.current);
+                mobileTimeout.current = null;
+            }
+
+            // Trigger Shimmer Visual (starts the linear gradient slide)
+            if (containerRef.current) {
+                containerRef.current.classList.remove('hud-perk-shimmer');
+                void containerRef.current.offsetWidth; // Force Reflow
+                containerRef.current.classList.add('hud-perk-shimmer');
+
+                // Add persistent hover border-glow class for PC
+                if (!isMobileDevice) {
+                    containerRef.current.classList.add('hud-perk-hovered');
+                }
+            }
+
+            showTooltip(text);
+
+            // On mobile, auto-clear the tooltip after a short while
+            if (isMobileDevice) {
+                mobileTimeout.current = setTimeout(() => {
+                    clearTooltip();
+                    if (containerRef.current) {
+                        containerRef.current.classList.remove('hud-perk-shimmer');
+                    }
+                }, 2000);
+            }
+        }
     };
 
-    const handleTouch = (e: React.TouchEvent) => {
-        e.preventDefault();
-        const text = containerRef.current?.dataset.tooltip;
-        if (text) showTooltip(text);
+    const handleLeave = () => {
+        if (!isMobileDevice) {
+            clearTooltip();
+            if (containerRef.current) {
+                containerRef.current.classList.remove('hud-perk-hovered', 'hud-perk-shimmer');
+            }
+        }
     };
 
     return (
         <div ref={containerRef}
-            className={`shrink-0 ${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-10 h-10 text-[14px]'} flex items-center justify-center bg-black/80 border-2 ${isPassive ? 'rounded-full' : 'rounded-sm'} relative cursor-help`}
+            className={`shrink-0 ${isMobileDevice ? 'w-[30px] h-[30px] text-xs' : 'w-10 h-10 text-[14px]'} flex items-center justify-center bg-black/80 border-2 ${isPassive ? 'rounded-full' : 'rounded-sm'} relative cursor-help pointer-events-auto overflow-hidden`}
             style={{ display: 'none' }}
             onMouseEnter={!isMobileDevice ? handleEnter : undefined}
-            onMouseLeave={!isMobileDevice ? clearTooltip : undefined}
-            onTouchStart={isMobileDevice ? handleTouch : undefined}>
-            <span ref={iconRef}>❓</span>
+            onMouseLeave={handleLeave}
+            onTouchStart={handleEnter}
+            onPointerDown={handleEnter}>
+
+            {/* Custom Shimmer Effect CSS Inject */}
+            <style dangerouslySetInnerHTML={{
+                __html: `
+                @keyframes perkShimmerSlide {
+                    0% { transform: translateX(-150%) skewX(-15deg); }
+                    100% { transform: translateX(250%) skewX(-15deg); }
+                }
+                .hud-perk-shimmer-overlay {
+                    position: absolute;
+                    inset: 0;
+                    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+                    width: 60%;
+                    height: 100%;
+                    transform: translateX(-150%);
+                    pointer-events: none;
+                    z-index: 5;
+                }
+                .hud-perk-shimmer .hud-perk-shimmer-overlay {
+                    animation: perkShimmerSlide 0.5s ease-out forwards;
+                }
+                .hud-perk-hovered {
+                    border-color: rgba(251, 146, 60, 0.8) !important;
+                    box-shadow: 0 0 8px rgba(251, 146, 60, 0.4);
+                }
+            `}} />
+
+            {/* Linear Shimmer Overlay Element */}
+            <div className="hud-perk-shimmer-overlay" />
+
+            <span ref={iconRef} className="relative z-10">❓</span>
             {!isPassive && (
-                <div className="absolute -bottom-2 left-0 w-full h-0.5 bg-black/40">
+                <div className="absolute -bottom-2 left-0 w-full h-0.5 bg-black/40 z-10">
                     <div ref={barRef} className="w-full h-full origin-left will-change-transform" style={{ transform: 'scaleX(1)' }} />
                 </div>
             )}
@@ -105,21 +173,19 @@ interface PerksPanelProps {
     isLandscapeMode: boolean;
     showTooltip: (text: string) => void;
     clearTooltip: () => void;
+    tooltipContent: string | null;
 }
 
 export const PerksPanel: React.FC<PerksPanelProps> = React.memo(({
     isMobileDevice,
     isLandscapeMode,
     showTooltip,
-    clearTooltip
+    clearTooltip,
+    tooltipContent
 }) => {
-    // ============================================================================
-    // POOL REFS — all owned here, not in GameHUD
-    // ============================================================================
     const passiveRefs = useRef<any[]>([]);
     const effectRefs = useRef<{ buffs: any[]; debuffs: any[] }>({ buffs: [], debuffs: [] });
 
-    // Stable ref callback arrays — never reallocated after mount
     const passivePoolRefs = useMemo(() =>
         getCachedArray(MAX_PASSIVES).map(i => (el: any) => { if (el) passiveRefs.current[i] = el; }), []);
     const buffPoolRefs = useMemo(() =>
@@ -127,10 +193,6 @@ export const PerksPanel: React.FC<PerksPanelProps> = React.memo(({
     const debuffPoolRefs = useMemo(() =>
         getCachedArray(MAX_DEBUFFS).map(i => (el: any) => { if (el) effectRefs.current.debuffs[i] = el; }), []);
 
-    // ============================================================================
-    // HOT PATH: Perk bubble updates via subscribeFastUpdate
-    // Mirrors the Zero-GC loop that previously lived in GameHUD.handleFastUpdate
-    // ============================================================================
     useEffect(() => {
         const handleFastUpdate = (_data: any) => {
             const hudState = HudStore.getState();
@@ -177,7 +239,7 @@ export const PerksPanel: React.FC<PerksPanelProps> = React.memo(({
                 }
             }
 
-            // 3. Clear remaining slots (Zero-GC cleanup)
+            // 3. Clear remaining slots
             for (let i = buffIdx; i < MAX_BUFFS; i++) {
                 const el = effectRefs.current.buffs[i];
                 if (el) el.update(null, 0, '', '');
@@ -192,38 +254,59 @@ export const PerksPanel: React.FC<PerksPanelProps> = React.memo(({
     }, []);
 
     return (
-        <div className="flex flex-row items-center gap-2 mt-2 ml-1 pointer-events-auto overflow-visible whitespace-nowrap">
-            {passivePoolRefs.map((refPointer, i) => (
-                <PooledPerkBubble
-                    isPassive
-                    key={`pass-pool-${i}`}
-                    ref={refPointer}
-                    isMobileDevice={isMobileDevice}
-                    isLandscapeMode={isLandscapeMode}
-                    showTooltip={showTooltip}
-                    clearTooltip={clearTooltip}
-                />
-            ))}
-            {buffPoolRefs.map((refPointer, i) => (
-                <PooledPerkBubble
-                    key={`buff-pool-${i}`}
-                    ref={refPointer}
-                    isMobileDevice={isMobileDevice}
-                    isLandscapeMode={isLandscapeMode}
-                    showTooltip={showTooltip}
-                    clearTooltip={clearTooltip}
-                />
-            ))}
-            {debuffPoolRefs.map((refPointer, i) => (
-                <PooledPerkBubble
-                    key={`debuff-pool-${i}`}
-                    ref={refPointer}
-                    isMobileDevice={isMobileDevice}
-                    isLandscapeMode={isLandscapeMode}
-                    showTooltip={showTooltip}
-                    clearTooltip={clearTooltip}
-                />
-            ))}
+        <div className="flex flex-col gap-2 pointer-events-auto">
+            <div className="flex flex-row items-center gap-2 mt-2 pointer-events-auto overflow-visible whitespace-nowrap">
+                {passivePoolRefs.map((refPointer, i) => (
+                    <PooledPerkBubble
+                        isPassive
+                        key={`pass-pool-${i}`}
+                        ref={refPointer}
+                        isMobileDevice={isMobileDevice}
+                        isLandscapeMode={isLandscapeMode}
+                        showTooltip={showTooltip}
+                        clearTooltip={clearTooltip}
+                    />
+                ))}
+                {buffPoolRefs.map((refPointer, i) => (
+                    <PooledPerkBubble
+                        key={`buff-pool-${i}`}
+                        ref={refPointer}
+                        isMobileDevice={isMobileDevice}
+                        isLandscapeMode={isLandscapeMode}
+                        showTooltip={showTooltip}
+                        clearTooltip={clearTooltip}
+                    />
+                ))}
+                {debuffPoolRefs.map((refPointer, i) => (
+                    <PooledPerkBubble
+                        key={`debuff-pool-${i}`}
+                        ref={refPointer}
+                        isMobileDevice={isMobileDevice}
+                        isLandscapeMode={isLandscapeMode}
+                        showTooltip={showTooltip}
+                        clearTooltip={clearTooltip}
+                    />
+                ))}
+            </div>
+            {/* INLINE PERK TOOLTIP (Drawn right below the actual perk icons, with wrapping text) */}
+            {tooltipContent && (
+                <div className="mt-1 px-3 py-2 bg-zinc-950/90 border border-white/10 backdrop-blur-md rounded-md shadow-lg max-w-[280px] text-left pointer-events-none animate-fadeIn">
+                    <p className={`text-white leading-tight font-mono tracking-wide text-wrap break-words ${isMobileDevice ? 'text-[10px]' : 'text-[13px] md:text-[14px]'}`}>
+                        {(() => {
+                            const parts = tooltipContent.split(':');
+                            if (parts.length > 1) {
+                                return (
+                                    <>
+                                        <strong className="font-extrabold text-orange-400">{parts[0]}</strong>
+                                        {parts.slice(1).join(':')}
+                                    </>
+                                );
+                            }
+                            return tooltipContent;
+                        })()}
+                    </p>
+                </div>
+            )}
         </div>
     );
 });

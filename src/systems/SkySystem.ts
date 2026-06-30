@@ -110,7 +110,7 @@ export class SkySystem implements System {
     private moonHaloBaseScale: number = 0;
 
     private hemiLight!: THREE.HemisphereLight;
-    private skyLight!: THREE.DirectionalLight;
+    public skyLight!: THREE.DirectionalLight;
 
     // High-Performance Instanced Cloud Engine
     private cloudMesh: THREE.InstancedMesh | null = null;

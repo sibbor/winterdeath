@@ -23,7 +23,7 @@ export const FloatingReloadBar: React.FC = React.memo(() => {
             if (data.reloadProgress === prevProgress.current) return;
             prevProgress.current = data.reloadProgress;
 
-            const active = data.reloadProgress > 0 && data.reloadProgress < 1;
+            const active = data.reloadProgress < 1;
 
             if (containerRef.current) {
                 containerRef.current.style.opacity = active ? '1' : '0';

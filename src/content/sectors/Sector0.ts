@@ -25,7 +25,7 @@ import { EnemyWaveSystem, EnemyWaveConfig } from '../../systems/EnemyWaveSystem'
 
 const LOCATIONS = {
     SPAWN: {
-        PLAYER: { x: -21, z: 15, rot: Math.PI / 1.25 },
+        PLAYER: { x: -21, z: 15, rot: Math.PI / 4 },
         FAMILY: { x: 153, z: 404 },
         BOSS: { x: 174, z: 380 }
     },

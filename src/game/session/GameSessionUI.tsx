@@ -95,7 +95,7 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
                 VINTERDÖD FIX: Corrected prop name mismatch (isRushing -> isGameRunning).
                 Also ensured inputState is safely derived from either the store or the engine ref. */}
             {/* Mobile Controls Overlay */}
-            {gameProps.isMobileDevice && gameProps.isGameRunning && !gameProps.isPaused && !uiState.bossIntroActive && !gameProps.isSectorBannerActive && (
+            {gameProps.isMobileDevice && gameProps.isGameRunning && !gameProps.isPaused && !uiState.bossIntroActive && !gameProps.isSideBannerActive && (
                 <div className="absolute inset-0 pointer-events-none z-[120] animate-hudFadeIn">
                     <TouchController
                         inputState={refs.engineRef.current?.input.state}

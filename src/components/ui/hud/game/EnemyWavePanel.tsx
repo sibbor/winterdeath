@@ -1,6 +1,15 @@
 import React, { useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { HudStore } from '../../../../store/HudStore';
-import { t } from '../../../../utils/i18n';
+
+// ─── Compass geometry constants ───────────────────────────────────────────────
+const RING_RADIUS   = 100; // px — half the ring's diameter (200px)
+const ARROW_HEIGHT  = 15;  // px — CSS border-bottom of the triangle
+const ARROW_HALF_W  = 7;   // px — CSS border-left / border-right of the triangle
+
+// ─── Module-Level Zero-GC Scratchpad ─────────────────────────────────────────
+// Only a rotate() string is needed now — one numeric slot, joined once per frame.
+const _tb = ['rotate(', 0, 'deg)'];
 
 interface EnemyWavePanelProps {
     isMobileDevice: boolean;
@@ -19,50 +28,139 @@ export const EnemyWavePanel: React.FC<EnemyWavePanelProps> = React.memo(({
     waveTrailBarRef,
     waveTextRef
 }) => {
-    // Wave compass indicator — fully owned here
-    const waveIndicatorRef = useRef<HTMLDivElement>(null);
+    // compassPivotRef: sits permanently at viewport center, only its rotation changes.
+    // The arrow child is offset at -(RING_RADIUS + ARROW_HEIGHT) from it, so the
+    // arrow's base rides on the ring edge and its tip always points outward.
+    const compassPivotRef = useRef<HTMLDivElement>(null);
+    const waveTrackRef    = useRef<HTMLDivElement>(null);
 
     // ============================================================================
-    // HOT PATH: Wave indicator DOM updates via subscribeFastUpdate
+    // HOT PATH: Wave indicator DOM updates (60 fps, zero GC)
     // ============================================================================
     useEffect(() => {
         let currentAngle = 0;
         let isFirst = true;
 
         const handleFastUpdate = (data: any) => {
-            if (waveIndicatorRef.current) {
-                if (data.waveIndicatorActive) {
-                    waveIndicatorRef.current.style.opacity = '1';
-                    const targetAngle = data.waveIndicatorAngle;
+            const pivot = compassPivotRef.current;
+            const track = waveTrackRef.current;
+            if (!pivot) return;
 
-                    if (isFirst) {
-                        currentAngle = targetAngle;
-                        isFirst = false;
-                    } else {
-                        // Shortest path angular lerp
-                        let diff = targetAngle - currentAngle;
-                        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-                        currentAngle += diff * 0.15; // Smooth interpolation speed
-                    }
+            if (data.waveIndicatorActive) {
+                pivot.style.opacity = '1';
+                if (track) track.style.opacity = '1';
 
-                    const r = 120; // Hover closely around the player at screen center
-                    const cx = window.innerWidth / 2;
-                    const cy = window.innerHeight / 2;
-                    const x = cx + Math.cos(currentAngle) * r;
-                    const y = cy + Math.sin(currentAngle) * r;
-                    waveIndicatorRef.current.style.transform = `translate(${x}px, ${y}px) rotate(${(currentAngle * (180 / Math.PI)) + 90}deg)`;
+                const targetAngle = data.waveIndicatorAngle;
+                if (isFirst) {
+                    currentAngle = targetAngle;
+                    isFirst = false;
                 } else {
-                    waveIndicatorRef.current.style.opacity = '0';
-                    isFirst = true;
+                    // Shortest-path angular lerp (zero-GC)
+                    let diff = targetAngle - currentAngle;
+                    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+                    currentAngle += diff * 0.15;
                 }
+
+                // The pivot sits at the viewport center via CSS (top:50%, left:50%).
+                // Only rotate it — no position calculation needed, no translate, no drift.
+                // +90° maps trig angle 0 (→ east) to CSS 90° (pointing east from a "top" pivot).
+                _tb[1] = (currentAngle * (180 / Math.PI)) + 90;
+                pivot.style.transform = _tb.join('');
+            } else {
+                pivot.style.opacity = '0';
+                if (track) track.style.opacity = '0';
+                isFirst = true;
             }
         };
 
         return HudStore.subscribeFastUpdate(handleFastUpdate);
     }, []);
 
+    // ============================================================================
+    // PORTAL: document.body — no transformed ancestor, fixed = true viewport coords
+    // ============================================================================
+    const compassPortal = ReactDOM.createPortal(
+        <>
+            {/* WAVE COMPASS TRACK RING — grey, 3px border, 10% opacity */}
+            <div
+                ref={waveTrackRef}
+                style={{
+                    position:     'fixed',
+                    top:          '50%',
+                    left:         '50%',
+                    width:        `${RING_RADIUS * 2}px`,
+                    height:       `${RING_RADIUS * 2}px`,
+                    marginTop:    `${-RING_RADIUS}px`,
+                    marginLeft:   `${-RING_RADIUS}px`,
+                    borderRadius: '50%',
+                    border:       '3px solid rgba(160, 160, 160, 0.1)',
+                    pointerEvents: 'none',
+                    zIndex:       9998,
+                    opacity:      0,
+                    transition:   'opacity 0.3s'
+                }}
+            />
+
+            {/*
+             * WAVE COMPASS PIVOT
+             *
+             * Strategy: a 0×0 div permanently anchored at the viewport center
+             * (top:50%, left:50%). Only its CSS `rotate()` changes each frame.
+             * `transform-origin: 0 0` makes rotation happen around the 50%/50%
+             * viewport point (the pivot's own top-left after positioning).
+             *
+             * The arrow child uses `position:absolute; top:-(RING_RADIUS+ARROW_HEIGHT)`
+             * so its BASE (wide end of ▲) sits exactly on the ring edge and its TIP
+             * always points radially outward. Geometry is invariant as the pivot rotates.
+             *
+             * Angle mapping (currentAngle is standard math atan2):
+             *   currentAngle = 0     → east  (3 o'clock) → pivotDeg = 90
+             *   currentAngle = PI/2  → south (6 o'clock) → pivotDeg = 180
+             *   currentAngle = PI    → west  (9 o'clock) → pivotDeg = 270
+             *   currentAngle = -PI/2 → north (12 o'clock) → pivotDeg = 0
+             */}
+            <div
+                ref={compassPivotRef}
+                style={{
+                    position:        'fixed',
+                    top:             '50%',
+                    left:            '50%',
+                    width:           0,
+                    height:          0,
+                    transformOrigin: '0 0',
+                    pointerEvents:   'none',
+                    zIndex:          9999,
+                    opacity:         0,
+                    transition:      'opacity 0.3s',
+                    willChange:      'transform, opacity'
+                }}
+            >
+                {/*
+                 * Arrow: ▲ tip at top, base at bottom.
+                 * `top: -(RING_RADIUS + ARROW_HEIGHT)` → tip at (RING_RADIUS + ARROW_HEIGHT) above pivot.
+                 * `left: -ARROW_HALF_W` → horizontally centers the (ARROW_HALF_W*2)-wide triangle on the pivot.
+                 * After the pivot rotates, the tip points away from screen center.
+                 */}
+                <div style={{
+                    position:    'absolute',
+                    top:         `${-(RING_RADIUS + ARROW_HEIGHT)}px`,
+                    left:        `${-ARROW_HALF_W}px`,
+                    width:       0,
+                    height:      0,
+                    borderLeft:  `${ARROW_HALF_W}px solid transparent`,
+                    borderRight: `${ARROW_HALF_W}px solid transparent`,
+                    borderBottom:`${ARROW_HEIGHT}px solid rgba(220, 38, 38, 0.95)`,
+                    filter:      'drop-shadow(0 0 10px rgba(220,38,38,0.6))',
+                }} />
+            </div>
+        </>,
+        document.body
+    );
+
     return (
         <>
+            {compassPortal}
+
             {/* WAVE PROGRESS PANEL */}
             <div ref={wavePanelRef} className="relative w-full flex justify-center transition-all duration-700 ease-out opacity-0 -translate-y-4 blur-md pointer-events-none" style={{ display: 'none' }}>
                 <div className="relative p-6 flex flex-col items-center justify-center w-full min-w-[320px] max-w-[500px] text-center">
@@ -87,7 +185,7 @@ export const EnemyWavePanel: React.FC<EnemyWavePanelProps> = React.memo(({
                                 className="absolute inset-y-0 left-0 w-full origin-left bg-orange-400/50"
                                 style={{ transform: 'scaleX(1)', transition: 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s' }}
                             />
-                            {/* Main Progress Bar (Zombies Remaining) */}
+                            {/* Main Progress Bar */}
                             <div
                                 ref={waveBarRef}
                                 className="absolute inset-y-0 left-0 w-full origin-left bg-gradient-to-r from-orange-600 to-amber-500"
@@ -98,22 +196,6 @@ export const EnemyWavePanel: React.FC<EnemyWavePanelProps> = React.memo(({
                             0 / 0
                         </span>
                     </div>
-                </div>
-            </div>
-
-            {/* WAVE COMPASS INDICATOR — positioned absolutely over the viewport */}
-            <div
-                ref={waveIndicatorRef}
-                className="fixed pointer-events-none z-[150] opacity-0 transition-opacity duration-300"
-                style={{ top: 0, left: 0, willChange: 'transform, opacity' }}
-            >
-                <div className="w-6 h-6 flex items-center justify-center -translate-x-1/2 -translate-y-1/2">
-                    <div className="w-0 h-0" style={{
-                        borderLeft: '8px solid transparent',
-                        borderRight: '8px solid transparent',
-                        borderBottom: '16px solid rgba(251, 146, 60, 0.9)',
-                        filter: 'drop-shadow(0 0 6px rgba(251, 146, 60, 0.8))'
-                    }} />
                 </div>
             </div>
         </>

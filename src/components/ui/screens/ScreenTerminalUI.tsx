@@ -160,7 +160,7 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
         UIEventRingBuffer.push(UIEventType.LEVEL_UP, levelUpVal, 0, simTime);
     };
 
-    const handleTriggerSectorBanner = () => {
+    const handleTriggerSideBanner = () => {
         window.dispatchEvent(
             new CustomEvent('trigger-side-banner-preview', {
                 detail: { title: sectorTitle, subtitle: sectorSubtitle }
@@ -483,7 +483,7 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
                                         />
                                     </div>
                                 </div>
-                                <TacticalButton variant="primary" onClick={handleTriggerSectorBanner} className="mt-2">
+                                <TacticalButton variant="primary" onClick={handleTriggerSideBanner} className="mt-2">
                                     Trigger Sector Splash Banner
                                 </TacticalButton>
                             </div>

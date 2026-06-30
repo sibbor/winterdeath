@@ -91,6 +91,7 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
     }>({ active: false, bossMesh: null, startTime: 0 });
     const pendingBossSpawnRef = useRef<{ bossId: number; pos?: THREE.Vector3 } | null>(null);
     const bossGrowlLoopIndexRef = useRef<number>(-1);
+    const bossStatsSnapshotRef = useRef<any>(null);
 
     // Cinematic Complex Ref
     const cinematicRef = useRef({
@@ -167,7 +168,7 @@ export const useGameSessionUiState = (props: GameCanvasProps) => {
         lastTeleportRef, lastDrawCallsRef, hasPlayedIntroRef, lastHeartbeatRef, bossIntroTimerRef,
         gameContextRef, setupIdRef, discoveryQueueRef, prevPosRef, hasSetPrevPosRef, playerGroupRef, playerMeshRef, dialogueRef, cinematicRef,
         skyLightRef, skyLightOffsetRef, prevInputRef, cameraOverrideRef, bossIntroRef, familyMemberRef, activeFamilyMembers,
-        flashlightRef, isMounted, pendingBossSpawnRef, bossGrowlLoopIndexRef
+        flashlightRef, isMounted, pendingBossSpawnRef, bossGrowlLoopIndexRef, bossStatsSnapshotRef
     }), []);
 
     return {

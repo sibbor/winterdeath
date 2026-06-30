@@ -12,21 +12,20 @@ import { EnemyType, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { FamilyMemberID } from '../constants';
 import { PoiType, PoiID } from '../../content/pois';
 import { ClueID } from '../../content/clues';
-import { SectorEventID } from '../../content/sector_events';
 import { CollectibleID } from '../../content/collectibles';
 import { TriggerType, TriggerActionType, TriggerStatus } from '../../types/TriggerTypes';
 import { WeatherType } from '../../core/engine/EnvironmentalTypes';
 import { MATERIALS } from '../../utils/assets';
 import { ColliderType } from '../../core/world/CollisionResolution';
 import { FXParticleType } from '../../types/FXTypes';
-import { EnemyWaveConfig } from '../../systems/EnemyWaveSystem';
+import { SectorEventID } from '../sector_events';
 
 const LOCATIONS = {
     SPAWN: {
-        PLAYER: { x: 0, z: 0 },
+        PLAYER: { x: 0, z: 0, rot: Math.PI / 1.35 },
         //PLAYER: { x: 145, z: -70 },
         FAMILY: { x: 215, z: -25 },
-        BOSS: { x: 220, z: -10 }
+        BOSS: { x: 192, z: -40 }
     },
     CINEMATIC: {
         OFFSET: { x: 15, y: 15, z: -10 },
@@ -49,11 +48,13 @@ const LOCATIONS = {
     },
     PATHS: {
         FOREST_TRAIL: [
+            new THREE.Vector3(-17, 0, 31),
+            new THREE.Vector3(-14, 0, 21),
             new THREE.Vector3(0, 0, 0),
             new THREE.Vector3(40, 0, -30),
             new THREE.Vector3(80, 0, -10),
             new THREE.Vector3(120, 0, -50),
-            new THREE.Vector3(125, 0, -79)
+            new THREE.Vector3(125, 0, -79),
         ],
         HAGLAREDSVAGEN: [
             new THREE.Vector3(64, 0, -83),
@@ -61,13 +62,14 @@ const LOCATIONS = {
             new THREE.Vector3(180, 0, -120),
             new THREE.Vector3(250, 0, -150),
             new THREE.Vector3(320, 0, -120),
-            new THREE.Vector3(400, 0, -80)
+            new THREE.Vector3(400, 0, -80),
         ],
         ROAD_TO_MAST: [
             new THREE.Vector3(300, 0, -130),
             new THREE.Vector3(289, 0, -92),
             new THREE.Vector3(245, 0, -75),
-            new THREE.Vector3(215, 0, -25)
+            new THREE.Vector3(220, 0, -71),
+            new THREE.Vector3(216, 0, -54),
         ],
         FARM_PATH: [
             new THREE.Vector3(159, 0, -142),
@@ -140,7 +142,7 @@ const esmeraldaMissionEvent: SectorEvent = {
                     eventState[KEYS.mastEventState] = 5;
                     eventState[KEYS.mastEventTimer] = ctx.simTime;
                     if (ctx.setBubble) {
-                        ctx.setBubble(ctx.t?.('sector_events.2.2.reaction') || 'The area is clear...', 3000);
+                        ctx.setBubble(ctx.t('sector_events.2.2.reaction'), 3000);
                     }
                 }
             });
@@ -168,7 +170,7 @@ const esmeraldaMissionEvent: SectorEvent = {
             const playerDist = _tempV1.set(playerPos.x, 0, playerPos.z).distanceTo(_tempV2.set(mastPos.x, 0, mastPos.z));
             if (playerDist < 40) {
                 if (ctx.setBubble) {
-                    ctx.setBubble('pois.2.0.reaction', (2 << 16) | 4000); // 2 is ChatBubbleSubtype.SPEAK
+                    ctx.setBubble('pois.2.0.reaction', (2 << 16) | 3000); // 2 is ChatBubbleSubtype.SPEAK
                 }
                 eventState[KEYS.mastEventState] = 1;
                 eventState[KEYS.mastEventTimer] = simTime;
@@ -176,7 +178,7 @@ const esmeraldaMissionEvent: SectorEvent = {
         }
         else if (mes === 1) {
             // Wait for ChatBubble to finish before starting camera handling
-            if (mesElapsed > 4000) {
+            if (mesElapsed > 2000) {
                 _camStartPos.copy(engine.camera.position);
                 if (engine.camera.lookAtTarget) {
                     _camStartLookAt.copy(engine.camera.lookAtTarget);
@@ -533,12 +535,6 @@ export const Sector2: SectorDef = {
         { id: CollectibleID.S2_COLLECTIBLE_2, x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
     ],
 
-    cinematic: {
-        offset: LOCATIONS.CINEMATIC.OFFSET,
-        lookAtOffset: LOCATIONS.CINEMATIC.LOOK_AT,
-        rotationSpeed: 0.02
-    },
-
     setupProps: async (ctx: SectorBuildContext) => {
         const { scene } = ctx;
 
@@ -557,6 +553,14 @@ export const Sector2: SectorDef = {
         await yieldIfBudgetExceeded();
         await PathGenerator.createGravelRoad(ctx, [...LOCATIONS.PATHS.ROAD_TO_MAST], 6);
         await yieldIfBudgetExceeded();
+
+        // Rocks around the mast
+        SectorBuilder.spawnRock(ctx, 223, -93, 20, 15);
+        SectorBuilder.spawnRock(ctx, 224, -90, 15, 25);
+        SectorBuilder.spawnRock(ctx, 211, -80, 22, 10);
+        SectorBuilder.spawnRock(ctx, 203, -62, 11, 18);
+        SectorBuilder.spawnRock(ctx, 233, -64, 10, 8);
+        SectorBuilder.spawnRock(ctx, 233, -64, 10, 8);
 
         // Farm path bending SOUTH
         const farmCurve = await PathGenerator.createDirtPath(ctx, [...LOCATIONS.PATHS.FARM_PATH], 3);
@@ -715,12 +719,16 @@ export const Sector2: SectorDef = {
         await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, birchPolyL, 15);
         await yieldIfBudgetExceeded();
 
-        // 4.5 Dead Trees (Wrapping House 2)
+        // 4.5 Dead Trees (soth & east the mast)
         const deadForestPoly = [
-            new THREE.Vector3(270, 0, 60),
-            new THREE.Vector3(340, 0, 60),
-            new THREE.Vector3(340, 0, 110),
-            new THREE.Vector3(270, 0, 110)
+            new THREE.Vector3(185, 0, 16),
+            new THREE.Vector3(185, 0, 50),
+            new THREE.Vector3(285, 0, 50),
+            new THREE.Vector3(302, 0, -60),
+            new THREE.Vector3(270, 0, -70),
+            new THREE.Vector3(252, 0, -67),
+            new THREE.Vector3(245, 0, -46),
+            new THREE.Vector3(245, 0, 16),
         ];
         await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.DEAD_TREE, deadForestPoly, 18);
         await yieldIfBudgetExceeded();
@@ -729,10 +737,12 @@ export const Sector2: SectorDef = {
         const lakeCoords = { x: 255, z: -117 };
         const lake = SectorBuilder.addLake(ctx, lakeCoords.x, lakeCoords.z, 25, 7.0);
 
-        const stone = SectorBuilder.spawnRock(ctx, lakeCoords.x - 20, lakeCoords.z + 10, 25, 25, 15);
-        if (lake && stone) lake.registerSplashSource(stone);
+        // Rock in the lake
+        const rockInLake = SectorBuilder.spawnRock(ctx, lakeCoords.x - 20, lakeCoords.z + 10, 25, 25, 15);
+        if (lake && rockInLake) lake.registerSplashSource(rockInLake);
         await yieldIfBudgetExceeded();
 
+        // Boat
         const boatGroup = await SectorBuilder.spawnFloatableVehicle(ctx, lakeCoords.x - 12.5, lakeCoords.z, Math.random() * Math.PI);
         if (lake && boatGroup) {
             lake.registerFloatingProp(boatGroup);
@@ -819,7 +829,7 @@ export const Sector2: SectorDef = {
         // --- 6.1 DESTROYABLE COMPOUND GATE ---
         const gateGroup = new THREE.Group();
         gateGroup.position.set(mastPos.x, 0, mastPos.z - 30);
-        
+
         const postGeo = new THREE.BoxGeometry(0.2, 2.5, 0.2);
         const postMat = MATERIALS.blackMetal || new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8 });
         const postLeft = new THREE.Mesh(postGeo, postMat);
@@ -854,8 +864,8 @@ export const Sector2: SectorDef = {
         const gateObstacle = {
             mesh: gateGroup,
             position: gateGroup.position,
-            collider: { 
-                type: ColliderType.BOX, 
+            collider: {
+                type: ColliderType.BOX,
                 size: new THREE.Vector3(10, 2.5, 1.0),
                 center: new THREE.Vector3(0, 1.25, 0)
             },
@@ -867,7 +877,7 @@ export const Sector2: SectorDef = {
                 if (waveSystem) {
                     waveSystem.enableActiveWave();
                 }
-                
+
                 // Spawn debris particles / sparks / sounds when gate is destroyed
                 if (session.systems.weaponFX) {
                     const pos = obstacle.position;
@@ -918,11 +928,12 @@ export const Sector2: SectorDef = {
                 position: LOCATIONS.TRIGGERS.POI_MAST,
                 radius: 40,
                 type: TriggerType.EVENT,
-                content: '',
+                content: "pois.2.0.reaction",
                 statusFlags: TriggerStatus.ACTIVE | TriggerStatus.ONCE,
                 actions: [] // Consumed in onUpdate via mastEventState
             },
             { id: ClueID.S2_FOREST_NOISE, position: LOCATIONS.TRIGGERS.FOREST_AMBIENT, radius: 8, type: TriggerType.CLUE, content: "clues.2.0.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
+            /*
             {
                 id: PoiID.S2_MAST,
                 position: LOCATIONS.TRIGGERS.POI_MAST,
@@ -934,6 +945,7 @@ export const Sector2: SectorDef = {
                     { type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }
                 ]
             },
+            */
             { id: PoiID.S2_FARM, position: LOCATIONS.POIS.FARM, radius: 20, type: TriggerType.POI, content: "pois.2.1.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },
             { id: ClueID.S2_TRACTOR, position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: TriggerType.CLUE, content: "clues.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 50 } }] },
             { id: PoiID.S2_EGG_FARM, position: LOCATIONS.POIS.EGG_FARM, radius: 20, type: TriggerType.POI, content: "pois.2.2.reaction", statusFlags: TriggerStatus.ACTIVE, actions: [{ type: TriggerActionType.GIVE_REWARD, payload: { xp: 500 } }] },

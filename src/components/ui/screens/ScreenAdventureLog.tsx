@@ -350,7 +350,10 @@ const ChallengeCard: React.FC<{
     const value = StatsBridge.getChallengeValue(stats, challenge.id);
     const nextTier = tier < 3 ? tier + 1 : 3;
     const target = challenge.targets[nextTier - 1] || 1;
-    const progress = Math.min(100, (value / target) * 100) || 0;
+    const maxTarget = challenge.targets[2] || 1;
+    const progress = Math.min(100, (value / maxTarget) * 100) || 0;
+    const t1Pos = ((challenge.targets[0] || 0) / maxTarget) * 100;
+    const t2Pos = ((challenge.targets[1] || 0) / maxTarget) * 100;
     const isMaxed = tier >= 3;
     const categoryColor = CHALLENGE_CATEGORY_COLORS[challenge.categoryId] || COLORS.GRAY;
 
@@ -404,9 +407,9 @@ const ChallengeCard: React.FC<{
             <div className={`mt-4 space-y-1 relative z-10 ${isHero ? 'scale-105 origin-left' : ''}`}>
                 <div className="flex justify-between text-[10px] font-mono text-zinc-400">
                     <span className={isHero ? 'text-white font-bold' : ''}>{Math.floor(value || 0).toLocaleString()}</span>
-                    <span>{target.toLocaleString()}</span>
+                    <span>{maxTarget.toLocaleString()}</span>
                 </div>
-                <div className={`h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden ${isHero ? 'h-2 border border-white/10' : ''}`}>
+                <div className={`h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden relative ${isHero ? 'h-2 border border-white/10' : ''}`}>
                     <div
                         className={`h-full transition-all duration-1000 ${isMaxed ? 'bg-yellow-500' : ''}`}
                         style={{
@@ -414,6 +417,9 @@ const ChallengeCard: React.FC<{
                             backgroundColor: !isMaxed ? categoryColor.str : undefined
                         }}
                     />
+                    {/* Visual Dividers for Tiers */}
+                    <div className="absolute top-0 bottom-0 w-[2px] bg-zinc-950/60 z-10" style={{ left: `${t1Pos}%` }} />
+                    <div className="absolute top-0 bottom-0 w-[2px] bg-zinc-950/60 z-10" style={{ left: `${t2Pos}%` }} />
                 </div>
             </div>
         </TacticalCard>

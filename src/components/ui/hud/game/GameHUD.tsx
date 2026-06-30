@@ -48,8 +48,8 @@ interface GameHUDProps {
     onSelectWeapon?: (slot: string) => void;
     onRotateCamera?: (dir: number) => void;
     onOpenAdventureLog?: (tab?: any, itemId?: string) => void;
-    isSectorBannerActive?: boolean;
-    onSectorBannerComplete?: () => void;
+    isSideBannerActive?: boolean;
+    onSideBannerComplete?: () => void;
     settings?: GameSettings;
 }
 
@@ -58,7 +58,7 @@ const HUD_WRAPPER = "absolute inset-0 pointer-events-none transition-all duratio
 const GameHUD: React.FC<GameHUDProps> = React.memo(({
     loadout, isBossIntro = false, isMobileDevice = false,
     onTogglePause, onToggleMap, onSelectWeapon, onOpenAdventureLog,
-    isSectorBannerActive = false, onSectorBannerComplete, settings
+    isSideBannerActive = false, onSideBannerComplete, settings
 }) => {
     const { isLandscapeMode } = useOrientation();
 
@@ -164,7 +164,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 cache.xp = data.currentXp; cache.maxXp = data.nextLevelXp;
             }
 
-            if (ammoTextRef.current) {
+            if (ammoTextRef.current && data.ammo !== undefined && data.ammo !== null) {
                 const state = HudStore.getState();
                 const activeId = state.activeWeapon;
                 const wep = DataResolver.getWeapons()[activeId];
@@ -173,7 +173,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             }
 
             if (data.reloadProgress !== cache.reloadProgress) {
-                if (reloadBarRef.current) reloadBarRef.current.style.transform = `scaleY(${data.reloadProgress})`;
+                if (reloadBarRef.current) reloadBarRef.current.style.transform = `scaleX(${data.reloadProgress})`;
                 cache.reloadProgress = data.reloadProgress;
             }
 
@@ -289,9 +289,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
     const clearTooltip = useCallback(() => setTooltipContent(null), []);
 
-    const showRestOfHUD = useHudStore(s => s.hudVisible) && !isSectorBannerActive;
+    const showRestOfHUD = useHudStore(s => s.hudVisible) && !isSideBannerActive;
 
-    useEffect(() => { HudStore.setHudVisible(!isSectorBannerActive); }, [isSectorBannerActive]);
+    useEffect(() => { HudStore.setHudVisible(!isSideBannerActive); }, [isSideBannerActive]);
 
     return (
         <div ref={hudContainerRef} className="absolute inset-0 pointer-events-none">
@@ -321,8 +321,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
             {/* SIDE BANNERS */}
             <SideBanner
-                active={isSectorBannerActive || isBossIntro}
-                onComplete={isBossIntro ? (() => { }) : (onSectorBannerComplete || (() => { }))}
+                active={isSideBannerActive || isBossIntro}
+                onComplete={isBossIntro ? (() => { }) : (onSideBannerComplete || (() => { }))}
                 isBossIntro={isBossIntro}
                 isMobileDevice={isMobileDevice} />
 
@@ -348,6 +348,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             isLandscapeMode={isLandscapeMode}
                             showTooltip={showTooltip}
                             clearTooltip={clearTooltip}
+                            tooltipContent={tooltipContent}
                         />
                     </div>
 
@@ -399,13 +400,6 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         ammoTextRef={ammoTextRef}
                         reloadBarRef={reloadBarRef}
                     />
-                )}
-
-                {/* TOOLTIP */}
-                {tooltipContent && (
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[1000] px-8 py-4 bg-zinc-950/90 border-2 border-white/20 backdrop-blur-3xl rounded-full shadow-[0_0_50px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in duration-300">
-                        <span className={`${isMobileDevice ? 'text-sm' : 'text-lg'} text-white font-bold uppercase tracking-widest whitespace-nowrap`}>{tooltipContent}</span>
-                    </div>
                 )}
             </div>
 

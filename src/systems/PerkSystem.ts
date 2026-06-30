@@ -57,9 +57,12 @@ export class PerkSystem implements System {
         const isAlreadyActive = state.combat.effectDurations[id] > 0;
 
         // 1. Duration Management (Zero-GC Array Access)
-        const finalDuration = duration || perk.duration || 3000;
-        state.combat.effectDurations[id] = finalDuration;
-        state.combat.effectMaxDurations[id] = finalDuration;
+        // If the player is affected by the status, the timer should not reset.
+        if (!isAlreadyActive) {
+            const finalDuration = duration || perk.duration || 3000;
+            state.combat.effectDurations[id] = finalDuration;
+            state.combat.effectMaxDurations[id] = finalDuration;
+        }
         state.combat.effectIntensities[id] = intensity !== undefined ? intensity : 1;
 
         if (perk.damageResistModifier) {

@@ -102,7 +102,7 @@ export const HudSystem = {
         const reloadRemaining = state.combat.reloadEndTime - now;
         const reloadProgress = state.combat.isReloading
             ? Math.max(0, Math.min(1, 1 - (reloadRemaining / reloadDuration)))
-            : 0;
+            : 1;
 
         // Boss logic
         let bossHp = -1;
@@ -357,7 +357,7 @@ export const HudSystem = {
         const wep = DataResolver.getWeapons()[state.combat.activeWeapon];
         _current.reloadProgress = state.combat.isReloading
             ? 1 - ((state.combat.reloadEndTime - now) / ((wep?.reloadTime || 1000) + (input.actions[InputAction.FIRE] ? 1000 : 0)))
-            : 0;
+            : 1;
 
         const spGained = state.sessionStats.spGained;
 
@@ -526,7 +526,7 @@ export const HudSystem = {
         _current.fps = (engine || WinterEngine.getInstance()).systems.performanceMonitor?.getFps() ?? 0;
         _current.hudVisible = state.ui.hudVisible ?? _current.hudVisible;
         _current.sectorName = state.world.sectorName || '';
-        _current.currentSector = props.currentSector || 0;
+        _current.currentSector = props.gameState?.currentSector ?? 0;
 
         // --- ZERO-GC SECTOR-SPECIFIC DISCOVERY TALLYING ---
         let cCount = 0;

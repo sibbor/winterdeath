@@ -327,17 +327,21 @@ export class PlayerMovementSystem implements System {
         // Update Speed Ratio for Animation Sync (Base = 1.0)
         state.player.currentSpeedRatio = speed / Math.max(0.001, currentSpeed);
 
+        // Calculate unscaled delta for regeneration when time is dilated (Quick Finger perk, etc.)
+        const globalTimeScale = state.metrics?.globalTimeScale || 1.0;
+        const regenDelta = globalTimeScale > 0.001 ? (delta / globalTimeScale) : delta;
+
         if (!state.player.isDodging && !state.player.isRushing && waterStaminaDrain === 0) {
             // Natural regeneration only if idle/walking and not soon after stamina use
             if (simTime - state.player.lastStaminaUseTime > COMBAT.STAMINA_REGEN_DELAY) {
-                stats[StatID.STAMINA] = Math.min(stats[StatID.MAX_STAMINA], stats[StatID.STAMINA] + COMBAT.STAMINA_REGEN_IDLE * delta);
+                stats[StatID.STAMINA] = Math.min(stats[StatID.MAX_STAMINA], stats[StatID.STAMINA] + COMBAT.STAMINA_REGEN_IDLE * regenDelta);
             }
         }
 
         if (stats[StatID.HP] < stats[StatID.MAX_HP] &&
             !(state.combat.statusFlags & PlayerStatusFlags.DEAD) &&
             simTime - state.player.lastDamageTime > COMBAT.HP_REGEN_DELAY) {
-            stats[StatID.HP] = Math.min(stats[StatID.MAX_HP], stats[StatID.HP] + COMBAT.HP_REGEN_IDLE * delta);
+            stats[StatID.HP] = Math.min(stats[StatID.MAX_HP], stats[StatID.HP] + COMBAT.HP_REGEN_IDLE * regenDelta);
         }
 
         let isMovingVal = false;

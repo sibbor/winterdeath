@@ -435,11 +435,16 @@ export class WaterSystem implements System {
         for (let i = objIdx; i < WATER_SYSTEM.MAX_FLOATING_OBJECTS; i++) this.objectPositions[i].set(0, 0, 0, 0);
 
         // --- 2. Update Surfaces ---
+        let skyLightColor: THREE.Color | null = null;
+        let skyLightIntensity = 1.0;
+        if (engine && engine.systems.sky) {
+            skyLightColor = engine.systems.sky.skyLight.color;
+            skyLightIntensity = engine.systems.sky.skyLight.intensity;
+        }
+
         for (let i = 0; i < this.surfaces.length; i++) {
             this.surfaces[i].update(renderTime);
 
-            // Zero-GC: uObjectPositions is a pre-allocated array whose elements are mutated in-place.
-            // Assigning it every frame is redundant and triggers uniform lookup thrashing.
             if (this.surfaces[i].material.uniforms.uClarity) {
                 this.surfaces[i].material.uniforms.uClarity.value = this.clarity;
             }
@@ -449,6 +454,12 @@ export class WaterSystem implements System {
             if (this.surfaces[i].material.uniforms.uWaterDirection) {
                 this.surfaces[i].material.uniforms.uWaterDirection.value.copy(this.waterDirection);
             }
+
+            // Sync sky lighting color & intensity
+            if (skyLightColor) {
+                this.surfaces[i].material.uniforms.uSkyLightColor.value.copy(skyLightColor);
+            }
+            this.surfaces[i].material.uniforms.uSkyLightIntensity.value = skyLightIntensity;
         }
 
         // --- 3. Body Physics & Splashes ---
@@ -721,17 +732,24 @@ export class WaterSystem implements System {
                 _buoyancyResult.inWater = true;
                 _buoyancyResult.maxDepth = body.def.maxDepth;
 
-                // Sync perfectly with the diagonal phase (x + z) and original timing
+                // Sync perfectly with the wind-influenced wave logic in the vertex shader
                 const waveScale = 0.45;
-                const phaseXZ = x + z;
+                const dirX = this.waterDirection.x;
+                const dirY = this.waterDirection.y;
+                const lenSq = dirX * dirX + dirY * dirY;
+                const normX = lenSq > 0.0001 ? dirX / Math.sqrt(lenSq) : 1.0;
+                const normY = lenSq > 0.0001 ? dirY / Math.sqrt(lenSq) : 0.0;
+                
+                const windDot = x * normX + z * normY;
+                const phaseWind = windDot * waveScale;
+                const waveStrength = 0.4 + (this.waterStrength * 0.1);
+                const speedFactor = 0.5 + waveStrength * 0.5;
 
-                const sin1 = Math.sin(phaseXZ * waveScale - now * 0.001) * 0.5 + 0.5;
-                const sin2 = Math.sin(phaseXZ * 0.7 - now * 0.0008) * 0.5 + 0.5;
+                const sin1 = Math.sin(phaseWind - now * 0.0012 * speedFactor) * 0.5 + 0.5;
+                const sin2 = Math.sin(phaseWind * 0.7 - now * 0.0009 * speedFactor) * 0.5 + 0.5;
 
                 const w1 = pow(sin1, 3.2) * 0.45;
                 const w2 = pow(sin2, 2.5) * 0.35;
-
-                const waveStrength = 0.4 + (this.waterStrength);
 
                 let edgeDampen = 1.0;
                 if (edgeDist <= 0) edgeDampen = 0;

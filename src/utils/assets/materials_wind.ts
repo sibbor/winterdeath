@@ -11,29 +11,26 @@ import * as THREE from 'three';
 export interface WindUniforms {
     uTime: { value: number };
     uWind: { value: THREE.Vector2 };
-    uInteractors: { value: THREE.Vector4[] };
+    uInteractors: { value: Float32Array };
 }
 
-const _buildInteractors = (): THREE.Vector4[] =>
-    Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0));
-
-// One pre-allocated struct per wind behavior variant — no allocation ever at patch-time
+// One pre-allocated flat Float32Array per wind behavior variant — forces WebGL uniform uploads
 export const TREE_WIND_UNIFORMS: WindUniforms = {
     uTime: { value: 0 },
     uWind: { value: new THREE.Vector2() },
-    uInteractors: { value: _buildInteractors() }
+    uInteractors: { value: new Float32Array(32) }
 };
 
 export const GRASS_WIND_UNIFORMS: WindUniforms = {
     uTime: { value: 0 },
     uWind: { value: new THREE.Vector2() },
-    uInteractors: { value: _buildInteractors() }
+    uInteractors: { value: new Float32Array(32) }
 };
 
 export const HEDGE_WIND_UNIFORMS: WindUniforms = {
     uTime: { value: 0 },
     uWind: { value: new THREE.Vector2() },
-    uInteractors: { value: _buildInteractors() }
+    uInteractors: { value: new Float32Array(32) }
 };
 
 /**
@@ -79,6 +76,7 @@ export const patchTreeWindMaterial = <T extends THREE.Material>(material: T): T 
 
             // Calculate repulsion from interactors
             vec2 bendVec = vec2(0.0);
+            float explosionShake = 0.0;
             for (int i = 0; i < 8; i++) {
                 vec4 interactor = uInteractors[i];
                 if (interactor.w <= 0.01) continue;
@@ -86,8 +84,16 @@ export const patchTreeWindMaterial = <T extends THREE.Material>(material: T): T 
                 vec2 diff = wPos.xz - interactor.xz;
                 float d = length(diff);
                 if (d < interactor.w) {
-                    float push = (1.0 - (d / interactor.w)) * 0.35; // Reduced push for stiff trees
-                    bendVec += normalize(diff) * push;
+                    float pushFactor = 1.0 - (d / interactor.w);
+                    float push = pushFactor * 0.45; // Stiffer push for trees
+                    vec2 dir = d > 0.001 ? normalize(diff) : vec2(0.0, 1.0);
+                    bendVec += dir * push;
+                    
+                    // Explosions are highly intense short-range triggers.
+                    // If the push radius is large (e.g. > 3.0), we shake the tree violently.
+                    if (interactor.w > 3.0) {
+                        explosionShake += pushFactor * sin(uTime * 35.0 + wPos.x * 5.0) * 0.35;
+                    }
                 }
             }
 
@@ -104,7 +110,14 @@ export const patchTreeWindMaterial = <T extends THREE.Material>(material: T): T 
             vWind += vec3(windDir.x * sway, 0.0, windDir.y * sway) * (0.5 + bendFactor * 0.5);
             vWind += vec3(flutter, 0.0, -flutter) * (0.2 + bendFactor * 0.2); // Perpendicular flutter
             
+            // Apply explosion shaking force perpendicular to the push direction or as isotropic wobble
             vec3 vBend = vec3(bendVec.x, 0.0, bendVec.y);
+            if (length(bendVec) > 0.001) {
+                vec2 perp = vec2(-normalize(bendVec).y, normalize(bendVec).x);
+                vBend += vec3(perp.x, 0.0, perp.y) * explosionShake;
+            } else {
+                vBend += vec3(explosionShake, 0.0, -explosionShake);
+            }
             
             // Transform vectors from World Space to the Instance's Local Space
             mat3 basis = mat3(iMat);
@@ -178,7 +191,8 @@ export const patchGrassWindMaterial = <T extends THREE.Material>(material: T): T
                 if (d < interactor.w) {
                     // Dramatic parting effect
                     float push = (1.0 - (d / interactor.w)) * 1.8; 
-                    bendVec += normalize(diff) * push;
+                    vec2 dir = d > 0.001 ? normalize(diff) : vec2(0.0, 1.0);
+                    bendVec += dir * push;
                 }
             }
 
@@ -259,18 +273,52 @@ export const patchHedgeWindMaterial = <T extends THREE.Material>(material: T): T
             float stiffness = 0.05;
             float swayFactor = max(0.0, position.y) * stiffness;
 
+            // Calculate interactor bending (explosions, vehicles)
+            vec2 bendVec = vec2(0.0);
+            float explosionShake = 0.0;
+            for (int i = 0; i < 8; i++) {
+                vec4 interactor = uInteractors[i];
+                if (interactor.w <= 0.01) continue;
+
+                vec2 diff = wPos.xz - interactor.xz;
+                float d = length(diff);
+                if (d < interactor.w) {
+                    float pushFactor = 1.0 - (d / interactor.w);
+                    // Hedges push away slightly stiffer
+                    float push = pushFactor * 0.15; 
+                    vec2 dir = d > 0.001 ? normalize(diff) : vec2(0.0, 1.0);
+                    bendVec += dir * push;
+
+                    // Hedges shake on big explosions
+                    if (interactor.w > 3.0) {
+                        explosionShake += pushFactor * sin(uTime * 40.0 + wPos.x * 12.0) * 0.12;
+                    }
+                }
+            }
+
             // Global wind vector (scaled for visibility)
             vec3 vWind = vec3(uWind.x, 0.0, uWind.y) * 2.5; 
 
-            // Transform wind to local space
+            // Combine interactor force + shake
+            vec3 vBend = vec3(bendVec.x, 0.0, bendVec.y);
+            if (length(bendVec) > 0.001) {
+                vec2 perp = vec2(-normalize(bendVec).y, normalize(bendVec).x);
+                vBend += vec3(perp.x, 0.0, perp.y) * explosionShake;
+            } else {
+                vBend += vec3(explosionShake, 0.0, -explosionShake);
+            }
+
+            // Transform wind and bend to local space
             mat3 basis = mat3(iMat);
             mat3 normalMatrix = mat3(normalize(basis[0]), normalize(basis[1]), normalize(basis[2]));
             mat3 invRot = transpose(normalMatrix);
+
             vec3 localWind = invRot * vWind;
+            vec3 localBend = invRot * vBend;
 
             // Calculate final displacement and CLAMP it to prevent unrealistic bending.
             // Max displacement in local X/Z plane is 0.2 meters.
-            vec3 disp = localWind * swayFactor;
+            vec3 disp = (localWind + localBend) * swayFactor;
             float maxDisp = 0.2;
             
             // Smoothly clamp the displacement

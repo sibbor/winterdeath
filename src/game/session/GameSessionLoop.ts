@@ -74,6 +74,7 @@ const _traverseStack: THREE.Object3D[] = []; // Used for Zero-GC scene traversal
 // --- INTERACTIVE VEGETATION BENDING ---
 const _bendInteractors = new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0));
 const _bendDistSq = new Float32Array(8);
+const _vector4Scratch = new THREE.Vector4();
 
 // Pre-define ALL properties to lock V8 Hidden Classes (Shapes)
 const _fxCallbacks = {
@@ -298,6 +299,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
         const isCinematic = state.ui.cinematicActive;
         const isBossIntro = refs.bossIntroRef.current?.active;
+        state.ui.bossIntroActive = !!isBossIntro;
         const isHardPaused = propsRef.current.isPaused || propsRef.current.isClueOpen;
         const isInteractionPaused = state.triggers.isInteractionOpen && !isCinematic;
 
@@ -397,7 +399,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 if (!target || !target.visible) continue;
 
                 if (EffectPool.type[i] !== SubEffectType.EMITTER) continue;
-                if (Math.random() > 0.3) continue;
+                if (Math.random() > 0.85) continue;
 
                 _vInteraction.set(EffectPool.offsetX[i], EffectPool.offsetY[i], EffectPool.offsetZ[i]);
                 _vInteraction.add(target.position);
@@ -414,6 +416,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                 for (let k = 0; k < count; k++) {
                     _v1.copy(_vInteraction);
 
+                    let distFactor = 1.0;
                     if (areaX > 0 || areaZ > 0) {
                         const cos = Math.cos(target.rotation.y);
                         const sin = Math.sin(target.rotation.y);
@@ -421,13 +424,18 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                         const lz = (Math.random() - 0.5) * areaZ;
                         _v1.x += lx * cos + lz * sin;
                         _v1.z += -lx * sin + lz * cos;
+
+                        const maxDist = Math.max(0.1, Math.sqrt((areaX * areaX + areaZ * areaZ) / 4));
+                        const currentDist = Math.sqrt(lx * lx + lz * lz);
+                        const isLarge = (areaX * areaZ) > 20;
+                        distFactor = isLarge ? (1.0 + (1.0 - currentDist / maxDist) * 1.5) : 1.0;
                     } else {
                         const spread = EffectPool.spread[i] || 0.4;
                         _v1.x += (Math.random() - 0.5) * spread;
                         _v1.z += (Math.random() - 0.5) * spread;
                     }
 
-                    callbacks.spawnParticle(_v1.x, _v1.y, _v1.z, pType, 1, undefined, undefined, color);
+                    callbacks.spawnParticle(_v1.x, _v1.y, _v1.z, pType, 1, undefined, undefined, color, distFactor);
                 }
             }
 
@@ -753,30 +761,35 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
 
             let count = 0;
 
-            if (pPos && count < 8) {
-                _bendInteractors[count].set(pPos.x, pPos.y, pPos.z, 1.2);
-                _bendDistSq[count] = 0;
+            // Collect all potential interactors
+            // 1. Player — 2.5m influence radius: grass visibly parts as they walk
+            if (pPos) {
+                _bendInteractors[count].set(pPos.x, pPos.y, pPos.z, 2.5);
+                _bendDistSq[count] = 0; // Prioritize player
                 count++;
             }
 
+            // 2. Vehicle — 4.5m influence radius: crushes a wide swathe of vegetation
             if (vehicle && count < 8) {
-                _bendInteractors[count].set(vehicle.position.x, vehicle.position.y, vehicle.position.z, 2.5);
-                _bendDistSq[count] = 0;
+                _bendInteractors[count].set(vehicle.position.x, vehicle.position.y, vehicle.position.z, 4.5);
+                _bendDistSq[count] = 0; // Prioritize vehicle
                 count++;
             }
 
-            if (refMember && Array.isArray(refMember) && count < 8) {
+            // 3. Family Members — 2.0m influence radius
+            if (refMember && Array.isArray(refMember)) {
                 const fLen = refMember.length;
                 for (let i = 0; i < fLen && count < 8; i++) {
                     const m = refMember[i];
                     if (m && m.mesh && m.following) {
-                        _bendInteractors[count].set(m.mesh.position.x, m.mesh.position.y, m.mesh.position.z, 1.2);
-                        _bendDistSq[count] = 0;
+                        _bendInteractors[count].set(m.mesh.position.x, m.mesh.position.y, m.mesh.position.z, 2.0);
+                        _bendDistSq[count] = pPos ? m.mesh.position.distanceToSquared(pPos) : 0;
                         count++;
                     }
                 }
             }
 
+            // 4. Enemies
             const grid = session.systems.worldStreamer;
             if (grid && count < 8 && pPos) {
                 const enPool = grid.getEnemyPool();
@@ -794,9 +807,29 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
                     const dz = e.mesh.position.z - pPos.z;
                     const dSq = dx * dx + dz * dz;
 
-                    _bendInteractors[count].set(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, (e.statusFlags & EnemyFlags.BOSS) !== 0 ? 2.0 : 1.0);
+                    // Boss enemies push a large 3.5m swathe; regulars 1.8m
+                    const bendRadius = (e.statusFlags & EnemyFlags.BOSS) !== 0 ? 3.5 : 1.8;
+                    _bendInteractors[count].set(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, bendRadius);
                     _bendDistSq[count] = dSq;
                     count++;
+                }
+            }
+
+            // Sort the populated slots (up to count) so the closest interactors are in the first slots.
+            // Unused slots remain at the end with w = 0.0.
+            for (let i = 0; i < count; i++) {
+                for (let j = i + 1; j < count; j++) {
+                    if (_bendDistSq[j] < _bendDistSq[i]) {
+                        // Swap distance
+                        const tempDist = _bendDistSq[i];
+                        _bendDistSq[i] = _bendDistSq[j];
+                        _bendDistSq[j] = tempDist;
+
+                        // Swap Vector4 values
+                        _vector4Scratch.copy(_bendInteractors[i]);
+                        _bendInteractors[i].copy(_bendInteractors[j]);
+                        _bendInteractors[j].copy(_vector4Scratch);
+                    }
                 }
             }
 

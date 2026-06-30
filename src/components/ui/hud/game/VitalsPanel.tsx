@@ -3,7 +3,7 @@ import { COLORS } from '../../../../utils/ui/ColorUtils';
 
 export const VitalsPanel = React.memo(({ isMobileDevice, hpBarRef, hpTextRef, stBarRef, stTextRef, xpBarRef, xpTextRef }: any) => {
     return (
-        <div className={`relative flex flex-col gap-2 p-4 ${isMobileDevice ? 'w-40' : 'w-80'}`}>
+        <div className={`relative flex flex-col gap-2 ${isMobileDevice ? 'w-40' : 'w-80'}`}>
             {/* SMOKY CINEMATIC BACKGROUND */}
             <div
                 className="absolute inset-0 pointer-events-none animate-fadeIn"

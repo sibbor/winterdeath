@@ -424,7 +424,8 @@ export const MATERIALS = {
     landingMarker: new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.8, side: THREE.DoubleSide }),
     fire: new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8, depthWrite: false }),
     fireZone: new THREE.MeshBasicMaterial({ color: 0xff3300, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }),
-    smoke: new THREE.MeshBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.6, depthWrite: false }),
+
+    smoke: new THREE.MeshLambertMaterial({ color: 0x555555, transparent: true, opacity: 0.6, depthWrite: false }),
     shockwave: new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }),
     blastRadius: new THREE.MeshBasicMaterial({
         color: 0xff0000,

@@ -99,6 +99,19 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         stats.accuracy = (stats.shotsFired > 0 ? (stats.shotsHit / stats.shotsFired) : 1) * 100;
         stats.distanceTraveled = refs.distanceTraveledRef.current;
 
+        // Calculate boss fight specific stats delta if a snapshot exists
+        if (refs.bossStatsSnapshotRef.current) {
+            const snap = refs.bossStatsSnapshotRef.current;
+            const bossStats = {
+                ...stats,
+                damageDealt: stats.damageDealt - snap.damageDealt,
+                damageTaken: stats.damageTaken - snap.damageTaken,
+                weaponDamageDealt: stats.weaponDamageDealt.map((val, idx) => Math.max(0, val - (snap.weaponDamageDealt[idx] || 0))),
+                incomingDamage: stats.incomingDamage.map((val, idx) => Math.max(0, val - (snap.incomingDamage[idx] || 0)))
+            };
+            (stats as any).bossFightStats = bossStats;
+        }
+
         // --- PERK TELEMETRY SYNC (Sector-specific delta calculations) ---
         const pStats = state.stats;
         if (pStats) {
@@ -426,28 +439,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 let target: THREE.Object3D | null = null;
                 const currentFMDef = refs.familyMemberRef.current;
 
-                let isFollowing = false;
-                const activeMembers = refs.activeFamilyMembers.current;
-                if (activeMembers) {
-                    const mLen = activeMembers.length;
-                    for (let i = 0; i < mLen; i++) {
-                        if (activeMembers[i].id === currentFMDef?.id && activeMembers[i].following) {
-                            isFollowing = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (isFollowing) {
-                    const sectorData = props.currentSectorData || (window as any).SectorSystem?.getSector(props.gameState.currentSector || 0);
-                    const bossPos = sectorData?.bossSpawn;
-
-                    if (bossPos) {
-                        onAction({ type: TriggerActionType.SPAWN_BOSS, payload: { pos: bossPos } });
-                    }
-                    return;
-                }
-
                 if (payload.familyId === undefined && !payload.targetName && !payload.id) {
                     const currentFM = refs.familyMemberRef.current;
                     if (currentFM && currentFM.mesh) {
@@ -560,7 +551,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (!state || !state.sessionStats || !state.careerStats) return;
 
         const career = state.careerStats;
-        const sector = state.currentSector || 0;
+        const sector = currentProps.gameState.currentSector || 0;
         let isNewDiscovery = false;
 
         titleKey = titleKey || payload?.titleKey || '';
@@ -809,6 +800,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
                 const boss = refs.SectorBuildContextRef.current?.spawnBoss(bossType, pos);
                 if (boss) {
+                    const state = refs.stateRef.current;
+                    if (state && state.sessionStats) {
+                        refs.bossStatsSnapshotRef.current = {
+                            damageDealt: state.sessionStats.damageDealt || 0,
+                            damageTaken: state.sessionStats.damageTaken || 0,
+                            weaponDamageDealt: Array.from(state.sessionStats.weaponDamageDealt || []),
+                            incomingDamage: Array.from(state.sessionStats.incomingDamage || [])
+                        };
+                    }
+
                     const engine = WinterEngine.getInstance();
                     refs.bossIntroRef.current = {
                         active: true,

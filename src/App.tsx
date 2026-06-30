@@ -80,7 +80,7 @@ const App: React.FC = () => {
 
     const [isInitialBoot, setIsInitialBoot] = useState(true);
     const [isLoadingSector, setIsLoadingSector] = useState(false);
-    const [isSectorBannerActive, setIsSectorBannerActive] = useState(false);
+    const [isSideBannerActive, setIsSideBannerActive] = useState(false);
     const [isLoadingCamp, setIsLoadingCamp] = useState(false);
     const [loadingTargetIsCamp, setLoadingTargetIsCamp] = useState(false);
     const [showLoadingOverlay, setShowLoadingOverlay] = useState(true);
@@ -132,8 +132,8 @@ const App: React.FC = () => {
             handleOpenStatisticsAction(tab, itemId);
         };
 
-        const handleSectorBannerPreviewEvent = () => {
-            setIsSectorBannerActive(true);
+        const handleSideBannerPreviewEvent = () => {
+            setIsSideBannerActive(true);
         };
 
         window.addEventListener('resize', checkMobile);
@@ -141,7 +141,7 @@ const App: React.FC = () => {
         window.addEventListener('ctrl-inspect-mode', handleCtrlInspect);
         window.addEventListener('open-adventure-log', handleOpenAdventureLogEvent);
         window.addEventListener('open-statistics', handleOpenStatisticsEvent);
-        window.addEventListener('trigger-side-banner-preview', handleSectorBannerPreviewEvent);
+        window.addEventListener('trigger-side-banner-preview', handleSideBannerPreviewEvent);
 
         // --- IMMERSIVE PC: Disable Context Menu ---
         const handleContextMenu = (e: MouseEvent) => e.preventDefault();
@@ -159,7 +159,7 @@ const App: React.FC = () => {
             window.removeEventListener('ctrl-inspect-mode', handleCtrlInspect);
             window.removeEventListener('open-adventure-log', handleOpenAdventureLogEvent);
             window.removeEventListener('open-statistics', handleOpenStatisticsEvent);
-            window.removeEventListener('trigger-side-banner-preview', handleSectorBannerPreviewEvent);
+            window.removeEventListener('trigger-side-banner-preview', handleSideBannerPreviewEvent);
             window.removeEventListener('contextmenu', handleContextMenu);
         };
     }, []);
@@ -212,7 +212,7 @@ const App: React.FC = () => {
         } else {
             setIsLoadingSector(true);
             if (type === 'SECTOR') {
-                setIsSectorBannerActive(true);
+                setIsSideBannerActive(true);
             }
             if (targetSector !== undefined) {
                 setLoadingSectorIndex(targetSector);
@@ -931,7 +931,7 @@ const App: React.FC = () => {
                                     onBossKilled={handleBossDefeatedAction}
                                     onFamilyRescued={handleFamilyRescuedAction}
                                     onPerkDiscovered={handlePerkDiscoveredAction}
-                                    isSectorBannerActive={isSectorBannerActive}
+                                    isSideBannerActive={isSideBannerActive}
                                 />
 
                                 {showHUD && (
@@ -945,8 +945,8 @@ const App: React.FC = () => {
                                         onSelectWeapon={handleSelectWeaponAction}
                                         onRotateCamera={handleRotateCameraAction}
                                         onOpenAdventureLog={handleOpenAdventureLogAction}
-                                        isSectorBannerActive={isSectorBannerActive}
-                                        onSectorBannerComplete={() => setIsSectorBannerActive(false)}
+                                        isSideBannerActive={isSideBannerActive}
+                                        onSideBannerComplete={() => setIsSideBannerActive(false)}
                                         settings={gameState.settings}
                                     />
                                 )}

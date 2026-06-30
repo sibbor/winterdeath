@@ -567,18 +567,21 @@ export const SectorBuilder = {
 
     setOnFire: (ctx: SectorBuildContext, object: THREE.Object3D, opts?: { smoke?: boolean, color?: number, intensity?: number, distance?: number, offset?: THREE.Vector3, onRoof?: boolean, area?: THREE.Vector3 }) => {
         // Direct assignment avoiding Object Spread GC allocation
-        const targetArea = opts?.area || object.userData.size as THREE.Vector3;
+        _box_sg.setFromObject(object);
+
+        let targetArea = opts?.area || object.userData.size as THREE.Vector3;
+        if (!targetArea) {
+            const sizeVec = new THREE.Vector3();
+            _box_sg.getSize(sizeVec);
+            targetArea = sizeVec.clone();
+        }
+
         let targetOffset = opts?.offset;
 
         if (opts?.onRoof && !targetOffset) {
-            let height = 0;
-            if (object.userData.size) {
-                height = (object.userData.size as THREE.Vector3).y;
-            } else {
-                _box_sg.setFromObject(object);
-                height = _box_sg.max.y - _box_sg.min.y;
-            }
-            targetOffset = new THREE.Vector3(0, height, 0);
+            const absoluteRoofY = _box_sg.max.y;
+            const relativeRoofY = absoluteRoofY - object.position.y;
+            targetOffset = new THREE.Vector3(0, relativeRoofY, 0);
         }
 
         EffectManager.attachEffect(object, EffectType.FIRE, {

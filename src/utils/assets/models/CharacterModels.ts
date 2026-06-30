@@ -106,9 +106,8 @@ export const CharacterModels = {
         const assets = getLaserAssets();
         const laserSight = new THREE.Mesh(assets.geometry, assets.material);
         laserSight.position.set(0.3, 0.4, 0.5);
-
         laserSight.frustumCulled = false;
-        laserSight.renderOrder = 6;
+        laserSight.renderOrder = 1000;
         (laserSight.material as THREE.Material).depthTest = false;
 
         laserSight.userData.isLaserSight = true;

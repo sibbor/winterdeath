@@ -137,7 +137,9 @@ export class EffectManager {
                 const smokeInterval = isLarge ? 50 : 200;
 
                 // Light: Base offset Y + 1.0
-                allocateSubEffect(object, SubEffectType.LIGHT, 0xff7722, opts?.intensity || 40, opts?.distance || 50, optOffX, optOffY + 1.0, optOffZ, 1);
+                const lightIntensity = opts?.intensity || (isLarge ? 80 : 40);
+                const lightDistance = opts?.distance || (isLarge ? Math.max(70, Math.sqrt(areaX * areaX + areaZ * areaZ) * 1.5) : 50);
+                allocateSubEffect(object, SubEffectType.LIGHT, 0xff7722, lightIntensity, lightDistance, optOffX, optOffY + 1.0, optOffZ, 1);
 
                 // Fire Emitter: Base offset Y + 0.5
                 allocateSubEffect(object, SubEffectType.EMITTER, 0xffaa00, 0, 0, optOffX, optOffY + 0.5, optOffZ, 0, firePart, fireInterval, largeCount, 0.3, areaX, areaZ);

@@ -832,14 +832,16 @@ export const FXSystem = {
                     mat = (type === FXParticleType.ENEMY_EFFECT_FLAME) ? MATERIALS.enemy_effect_flame :
                         (type === FXParticleType.FLAMETHROWER_FIRE) ? MATERIALS.flamethrower_flame :
                             MATERIALS.fire;
-                    break;
                 case FXParticleType.SPARK:
-                case FXParticleType.SMOKE:
                 case FXParticleType.CAMPFIRE_SPARK:
-                case FXParticleType.CAMPFIRE_SMOKE:
                 case FXParticleType.ENEMY_EFFECT_SPARK:
                     mat = (type === FXParticleType.ENEMY_EFFECT_SPARK) ? MATERIALS.enemy_effect_spark : MATERIALS.bullet;
                     break;
+                case FXParticleType.SMOKE:
+                case FXParticleType.CAMPFIRE_SMOKE:
+                    mat = MATERIALS.smoke;
+                    break;
+
                 case FXParticleType.DEBRIS:
                     mat = MATERIALS.stone;
                     break;
