@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { GameState, SectorStats } from './types/StateTypes';
 import { GameScreen } from './types/SessionTypes';
 import { CareerStats, StatID } from './types/CareerStats';
@@ -167,26 +167,29 @@ const App: React.FC = () => {
     const transitionTaskRef = useRef(false);
     const sceneReadyRef = useRef(false);
 
+    // --- ZERO-GC: LATEST STATE REF ---
+    // Declared early (before all effects) so closures below capture the ref binding,
+    // not a stale value. hasInteracted added to support the stable root pointer handler.
+    const latestStateRef = useRef({ gameState, isMobileDevice, activeOverlay, hasInteracted });
+    latestStateRef.current.gameState = gameState;
+    latestStateRef.current.isMobileDevice = isMobileDevice;
+    latestStateRef.current.activeOverlay = activeOverlay;
+    latestStateRef.current.hasInteracted = hasInteracted;
+
     // ============================================================================
     // STATS THROTTLING SYSTEM (Vinterdöd Optimization)
-    // Buffers and updates career telemetry and session stats to a steady 300ms tick.
+    // Issue 1 Fix: Stable 300ms interval reads live stats via latestStateRef.
+    // Prior closure over `gameState.stats` in dep array caused this effect to
+    // re-fire on every setGameState call (loadout saves, settings, screen changes).
     // ============================================================================
     const [throttledStats, setThrottledStats] = useState(gameState.stats);
-    const lastStatsUpdate = useRef(0);
 
     useEffect(() => {
-        const now = Date.now();
-        if (now - lastStatsUpdate.current >= 300) {
-            setThrottledStats(gameState.stats);
-            lastStatsUpdate.current = now;
-        } else {
-            const timeout = setTimeout(() => {
-                setThrottledStats(gameState.stats);
-                lastStatsUpdate.current = Date.now();
-            }, 300 - (now - lastStatsUpdate.current));
-            return () => clearTimeout(timeout);
-        }
-    }, [gameState.stats]);
+        const interval = setInterval(() => {
+            setThrottledStats(latestStateRef.current.gameState.stats);
+        }, 300);
+        return () => clearInterval(interval);
+    }, []); // stable — no deps, always reads latest value via ref
 
     const [mergedStats, setMergedStats] = useState(() => gameState.stats);
 
@@ -200,12 +203,6 @@ const App: React.FC = () => {
         const interval = setInterval(updateMerged, 300);
         return () => clearInterval(interval);
     }, [activeOverlay]);
-
-    // --- ZERO-GC: LATEST STATE REF ---
-    const latestStateRef = useRef({ gameState, isMobileDevice, activeOverlay });
-    latestStateRef.current.gameState = gameState;
-    latestStateRef.current.isMobileDevice = isMobileDevice;
-    latestStateRef.current.activeOverlay = activeOverlay;
 
     useEffect(() => {
         saveGameState(gameState);
@@ -852,12 +849,78 @@ const App: React.FC = () => {
     }, []);
     const handleOverlayClose = useCallback(() => setActiveOverlay(OverlayType.NONE), []);
 
+    // Issue 4: Stable start handler — was inline arrow on ScreenStartGame.
+    const handleStart = useCallback(() => setHasInteracted(true), []);
+
+    // Issue 5: Stable banner-complete handler — was inline arrow on GameHUD.
+    const handleSideBannerComplete = useCallback(() => setIsSideBannerActive(false), []);
+
+    // Issue 6: Stable discovery handler — was inline arrow on ScreenStatistics.
+    const handleOpenDiscoveryFromStats = useCallback(() => handleOpenAdventureLogAction(DiscoveryType.CLUE), [handleOpenAdventureLogAction]);
+
+    // Issue 2: Stable root pointer-down handler — eliminates per-render closure on the root div.
+    // Reads all reactive values via latestStateRef to keep dep array empty.
+    const handleRootPointerDown = useCallback(() => {
+        const { hasInteracted: interacted, gameState: gs, activeOverlay: ao, isMobileDevice: mobile } = latestStateRef.current;
+        if (!interacted) setHasInteracted(true);
+        if (gs.screen === GameScreen.SECTOR && ao === OverlayType.NONE && !mobile && !document.pointerLockElement) {
+            gameCanvasRef.current?.requestPointerLock();
+        }
+    }, []);
+
+    // Issue 3: Stable respawn handlers — were long inline arrows on ScreenPlayerDied (always mounted).
+    const handleRespawnPlayer = useCallback(() => {
+        UISounds.playConfirm();
+        gameCanvasRef.current?.respawnPlayer(false);
+        setActiveOverlay(OverlayType.NONE);
+        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+        setSectorStats(null);
+        setDeathDetails(null);
+        setActiveCollectible(null);
+        HudStore.update({ ...HudStore.getState(), hudVisible: true, isDead: false });
+    }, []);
+
+    const handleRespawnPlayerAtBoss = useCallback(() => {
+        UISounds.playConfirm();
+        gameCanvasRef.current?.respawnPlayer(true);
+        setActiveOverlay(OverlayType.NONE);
+        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+        setSectorStats(null);
+        setDeathDetails(null);
+        setActiveCollectible(null);
+        HudStore.update({ ...HudStore.getState(), hudVisible: true, isDead: false });
+    }, []);
+
+    // Issue 7: Memoized static refs for useInput — the engine is a singleton, refs never change.
+    const _useInputStaticRefs = useMemo(() => ({
+        engineRef,
+        engine: engineRef.current,
+        cinematicRef: { current: { active: false } },
+        bossIntroTimerRef: { current: null },
+        stateRef: { current: null }
+    }), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleInputPauseToggle = useCallback((pause: boolean) => {
+        if (pause) {
+            handleTogglePauseAction();
+            if (document.pointerLockElement) document.exitPointerLock();
+        } else {
+            handleResumeAction();
+        }
+    }, [handleTogglePauseAction, handleResumeAction]);
+
+    const handleInputRequestPointerLock = useCallback(() => {
+        if (!latestStateRef.current.isMobileDevice && gameCanvasRef.current) {
+            gameCanvasRef.current.requestPointerLock();
+        }
+    }, []);
+
     // ============================================================================
     // UNIFIED GAME INPUT ENGINE BRIDGE
     // Centralized Zero-GC pipeline synchronized directly to the engine frame ticks.
     // ============================================================================
     useInput(
-        { engineRef, engine: engineRef.current, cinematicRef: { current: { active: false } }, bossIntroTimerRef: { current: null }, stateRef: { current: null } },
+        _useInputStaticRefs,
         {
             isPaused: activeOverlay !== OverlayType.NONE,
             isGameRunning: !isInitialBoot && !isLoadingSector && !isLoadingCamp,
@@ -868,20 +931,9 @@ const App: React.FC = () => {
         {
             setActiveOverlay,
             setTeleportInitialCoords,
-            onPauseToggle: (pause: boolean) => {
-                if (pause) {
-                    handleTogglePauseAction();
-                    if (document.pointerLockElement) document.exitPointerLock();
-                } else {
-                    handleResumeAction();
-                }
-            },
+            onPauseToggle: handleInputPauseToggle,
             onCollectibleClose: handleCollectibleClose,
-            requestPointerLock: () => {
-                if (!isMobileDevice && gameCanvasRef.current) {
-                    gameCanvasRef.current.requestPointerLock();
-                }
-            }
+            requestPointerLock: handleInputRequestPointerLock
         }
     );
 
@@ -898,16 +950,11 @@ const App: React.FC = () => {
     return (
         <div
             className="relative w-full h-full overflow-hidden bg-black select-none cursor-none"
-            onPointerDown={() => {
-                if (!hasInteracted) setHasInteracted(true);
-                if (gameState.screen === GameScreen.SECTOR && activeOverlay === OverlayType.NONE && !isMobileDevice && !document.pointerLockElement) {
-                    gameCanvasRef.current?.requestPointerLock();
-                }
-            }}
+            onPointerDown={handleRootPointerDown}
         >
             {!hasInteracted ? (
                 <ScreenStartGame
-                    onStart={() => setHasInteracted(true)}
+                    onStart={handleStart}
                     isMobileDevice={isMobileDevice}
                 />
             ) : (
@@ -1002,7 +1049,7 @@ const App: React.FC = () => {
                                         onRotateCamera={handleRotateCameraAction}
                                         onOpenAdventureLog={handleOpenAdventureLogAction}
                                         isSideBannerActive={isSideBannerActive}
-                                        onSideBannerComplete={() => setIsSideBannerActive(false)}
+                                        onSideBannerComplete={handleSideBannerComplete}
                                         settings={gameState.settings}
                                     />
                                 )}
@@ -1060,7 +1107,7 @@ const App: React.FC = () => {
                         <ScreenStatistics
                             stats={gameState.screen === GameScreen.SECTOR ? mergedStats : throttledStats}
                             onClose={handleCloseAction}
-                            onOpenDiscovery={() => handleOpenAdventureLogAction(DiscoveryType.CLUE)}
+                            onOpenDiscovery={handleOpenDiscoveryFromStats}
                             isMobileDevice={isMobileDevice}
                             debugMode={gameState.settings.debugMode}
                             initialTab={initialStatisticsTab as any}
@@ -1166,26 +1213,8 @@ const App: React.FC = () => {
 
                     <div className={(gameState.screen === GameScreen.DEATH || activeOverlay === OverlayType.DEATH) ? "" : "hidden"}>
                         <ScreenPlayerDied
-                            onRespawn={() => {
-                                UISounds.playConfirm();
-                                gameCanvasRef.current?.respawnPlayer(false);
-                                setActiveOverlay(OverlayType.NONE);
-                                setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
-                                setSectorStats(null);
-                                setDeathDetails(null);
-                                setActiveCollectible(null);
-                                HudStore.update({ ...HudStore.getState(), hudVisible: true, isDead: false });
-                            }}
-                            onRespawnAtBoss={() => {
-                                UISounds.playConfirm();
-                                gameCanvasRef.current?.respawnPlayer(true);
-                                setActiveOverlay(OverlayType.NONE);
-                                setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
-                                setSectorStats(null);
-                                setDeathDetails(null);
-                                setActiveCollectible(null);
-                                HudStore.update({ ...HudStore.getState(), hudVisible: true, isDead: false });
-                            }}
+                            onRespawn={handleRespawnPlayer}
+                            onRespawnAtBoss={handleRespawnPlayerAtBoss}
                             onContinue={handleContinueFromDeath}
                             isMobileDevice={isMobileDevice}
                         />
