@@ -106,8 +106,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 ...stats,
                 damageDealt: stats.damageDealt - snap.damageDealt,
                 damageTaken: stats.damageTaken - snap.damageTaken,
-                weaponDamageDealt: stats.weaponDamageDealt.map((val, idx) => Math.max(0, val - (snap.weaponDamageDealt[idx] || 0))),
-                incomingDamage: stats.incomingDamage.map((val, idx) => Math.max(0, val - (snap.incomingDamage[idx] || 0)))
+                outgoingDamageBuffer: stats.outgoingDamageBuffer.map((val, idx) => Math.max(0, val - (snap.weaponDamageDealt[idx] || 0))),
+                incomingDamageBuffer: stats.incomingDamageBuffer.map((val, idx) => Math.max(0, val - (snap.incomingDamage[idx] || 0)))
             };
             (stats as any).bossFightStats = bossStats;
         }
@@ -805,8 +805,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         refs.bossStatsSnapshotRef.current = {
                             damageDealt: state.sessionStats.damageDealt || 0,
                             damageTaken: state.sessionStats.damageTaken || 0,
-                            weaponDamageDealt: Array.from(state.sessionStats.weaponDamageDealt || []),
-                            incomingDamage: Array.from(state.sessionStats.incomingDamage || [])
+                            weaponDamageDealt: Array.from(state.sessionStats.outgoingDamageBuffer || []),
+                            incomingDamage: Array.from(state.sessionStats.incomingDamageBuffer || [])
                         };
                     }
 
@@ -832,8 +832,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     // Trigger UI state change via context callback to alert App.tsx
                     setupContextRef.current?.ui.setBossIntroActive(true);
 
-                    // TODO: play boss fight music instead
-                    //audioEngine.playSound(SoundID.ZOMBIE_GROWL_TANK);
+                    // Play boss fight music immediately on intro start
+                    audioEngine.playMusic(MusicID.BOSS_FIGHT);
+                    audioEngine.stopAmbience();
 
                     if (refs.bossIntroTimerRef.current) clearTimeout(refs.bossIntroTimerRef.current);
                     refs.bossIntroTimerRef.current = setTimeout(() => {
@@ -843,16 +844,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         if (refs.engineRef.current) {
                             refs.engineRef.current.camera.setCinematic(false);
                         }
-
-                        // Boss Music
-                        audioEngine.stopMusic();
-                        audioEngine.playMusic(MusicID.BOSS_FIGHT);
-                        //const currentProps = latestStateRef.current.props;
-                        //const sectorData = (currentProps as any).currentSectorData || { environment: { bossMusic: MusicID.BOSS_FIGHT } };
-                        //audioEngine.playMusic(sectorData.environment.bossMusic || MusicID.BOSS_FIGHT);
-
-                        // Start looping growl sound during the fight
-                        //refs.bossGrowlLoopIndexRef.current = audioEngine.playLoop(SoundID.ZOMBIE_GROWL_TANK, 0.35);
                     }, 4500);
                 }
                 break;

@@ -165,19 +165,22 @@ export const EnemyAttackHandler = {
                         callbacks.spawnParticle(pos.x, 0.1, pos.z, FXParticleType.SHOCKWAVE, 1, undefined, undefined, undefined, effectiveRange);
                     }
                 }
-                callbacks.playSound(SoundID.ZOMBIE_ATTACK_SMASH);
+                callbacks.playSound(att.type === EnemyAttackType.FREEZE_JUMP ? SoundID.BOSS_ATTACK_FREEZE_JUMP : SoundID.ZOMBIE_ATTACK_SMASH);
                 break;
 
             case EnemyAttackType.SCREECH:
                 if (inRange) callbacks.handlePlayerHit(att.damage, e, DamageType.PHYSICAL, DamageID.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
                 if (callbacks.spawnParticle) callbacks.spawnParticle(pos.x, pos.y + 1.8, pos.z, FXParticleType.SCREECH_WAVE, 1, undefined, undefined, undefined, effectiveRange);
-                callbacks.playSound(SoundID.ZOMBIE_GROWL_RUNNER);
+                callbacks.playSound(SoundID.BOSS_ATTACK_SCREECH);
                 break;
 
             case EnemyAttackType.ELECTRIC_BEAM:
+                if (inRange) callbacks.handlePlayerHit(att.damage, e, DamageType.ELECTRIC, DamageID.ELECTRIC, false, att.effect, att.effectDuration, att.effectDamage, att.type);
+                callbacks.playSound(SoundID.BOSS_ATTACK_ELECTRIC_BEAM);
+                break;
             case EnemyAttackType.MAGNETIC_CHAIN:
                 if (inRange) callbacks.handlePlayerHit(att.damage, e, DamageType.ELECTRIC, DamageID.ELECTRIC, false, att.effect, att.effectDuration, att.effectDamage, att.type);
-                callbacks.playSound(SoundID.SHOT_ARC_CANNON);
+                callbacks.playSound(SoundID.BOSS_ATTACK_MAGNETIC_CHAIN);
                 break;
         }
 

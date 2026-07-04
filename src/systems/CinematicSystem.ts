@@ -77,10 +77,7 @@ export class CinematicSystem implements System {
     public startCinematic(session: GameSessionLogic, target: THREE.Object3D, sectorId: number, dialogueId?: number, params: any = {}) {
         const sectorScripts = STORY_SCRIPTS[sectorId];
 
-        console.log(`[CinematicSystem] startCinematic called: Sector=${sectorId}, Dialogue=${dialogueId}`);
-
         if (!sectorScripts) {
-            console.error(`[CinematicSystem] Critical error: No script found for Sector ${sectorId}!`);
             this.callbacks.setCinematicActive(false);
             return;
         }
@@ -89,23 +86,14 @@ export class CinematicSystem implements System {
         const script = (sectorScripts as any)[safeDialogueId];
 
         if (!script || script.length === 0) {
-            console.error(`[CinematicSystem] Critical error: Dialogue ${safeDialogueId} missing in Sector ${sectorId}!`, {
-                passedDialogueId: dialogueId,
-                safeDialogueId,
-                sectorScriptsKeys: Object.keys(sectorScripts),
-                storyScriptsKeys: Object.keys(STORY_SCRIPTS)
-            });
             this.callbacks.setCinematicActive(false);
             return;
         }
 
         const cinematic = this.cinematicRef.current;
         if (!cinematic) {
-            console.error("[CinematicSystem] Critical error: cinematicRef.current is null!");
             return;
         }
-
-        console.log(`[CinematicSystem] Starting cinematic: Sector ${sectorId}, Dialogue ${safeDialogueId}, Script Length: ${script.length}`);
 
         cinematic.active = true;
         cinematic.isClosing = false;
@@ -140,10 +128,8 @@ export class CinematicSystem implements System {
 
         const startLine = params.lineIndex || 0;
         if (cinematic.script && cinematic.script.length > 0) {
-            console.log(`[CinematicSystem] Playing initial line: ${startLine}`);
             this.playLine(startLine);
         } else {
-            console.log(`[CinematicSystem] No script found or empty script. Ending.`);
             cinematic.lineIndex = 0;
             cinematic.lineStartTime = currentNow;
             cinematic.lineDuration = cinematic.pathDuration || 5500;
@@ -160,25 +146,19 @@ export class CinematicSystem implements System {
 
         if (!cinematic || !cinematic.active) return;
 
-        console.log(`[CinematicSystem] playLine called: index=${index}, CurrentIndex=${cinematic.lineIndex}`);
-
-        // 1. Debounce and bounds checking (RPG Fast-Forward Guard)
+        // Debounce and bounds checking (RPG Fast-Forward Guard)
         if (cinematic.lineIndex === index && (currentNow - cinematic.lineStartTime) < 100) {
-            console.log(`[CinematicSystem] playLine debounced for index=${index}`);
             return;
         }
 
+        // End cinematic
         if (index >= cinematic.script.length) {
-            console.log(`[CinematicSystem] End of script reached at index=${index}`);
-            this.stop(); // End cinematic if we reach the end
+            this.stop();
             return;
         }
 
         const line = cinematic.script[index];
-        if (!line) {
-            console.warn(`[CinematicSystem] No line found at index=${index}`);
-            return;
-        }
+        if (!line) return;
 
         // Run triggers immediately when the line starts to ensure state changes (e.g. boss spawn, family found) execute.
         if (line.trigger) {
@@ -192,13 +172,11 @@ export class CinematicSystem implements System {
         }
 
         // --- LINE ACTIVATION ---
-        console.log(`[CinematicSystem] Activating line ${index}: "${line.text}"`);
-
         cinematic.lineIndex = index;
         cinematic.lineStartTime = currentNow;
         cinematic.fadingOut = false;
 
-        // 4. Calculate durations (Zero-GC word counting)
+        // Calculate durations (Zero-GC word counting)
         const text = line.text || '';
         let wordCount = 0;
         let inWord = false;
@@ -246,7 +224,6 @@ export class CinematicSystem implements System {
 
         VoiceSounds.stopAllDialogueBeeps?.();
 
-        console.log(`[CinematicSystem] Stopping cinematic.`);
         cinematic.active = false;
         cinematic.isClosing = true;
         cinematic.closeStartTime = this.state.renderTime;
@@ -516,9 +493,9 @@ export class CinematicSystem implements System {
             }
         }
 
+        // Auto-advance line
         if (timeInLine > cinematic.lineDuration && !cinematic.fadingOut) {
             const nextIdx = cinematic.lineIndex + 1;
-            console.log(`[CinematicSystem] Auto-advancing to index ${nextIdx} (TimeInLine: ${timeInLine}, Duration: ${cinematic.lineDuration})`);
             this.playLine(nextIdx);
         }
     }

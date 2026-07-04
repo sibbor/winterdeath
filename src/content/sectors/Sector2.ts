@@ -192,7 +192,7 @@ const esmeraldaMissionEvent: SectorEvent = {
             }
         }
         else if (mes === 2) {
-            // Steps 2 & 3: Camera flies up to the top of the mast, settles/pans, flies down quickly, and pans compound
+            // Steps 2 & 3: Camera flies up to the top of the mast, settles/pans, flies down quickly, and pans compound showing building/zombies
             const basePos = _tempV1.set(mastPos.x - 15, 5, mastPos.z + 15);
             const topPos = _tempV2.set(mastPos.x - 10, 65, mastPos.z + 10);
             const lookAtTop = _tempV3.set(mastPos.x, 60, mastPos.z);
@@ -232,7 +232,7 @@ const esmeraldaMissionEvent: SectorEvent = {
                 );
             }
             else if (mesElapsed < 11500) {
-                // Phase 3: Settle at the top and pan around (8000 ms = 2000 ms longer than original 6000 ms)
+                // Phase 3: Settle at the top and pan around
                 const circleElapsed = mesElapsed - 3500;
                 const angle = circleElapsed * 0.0005;
                 const radius = 15;
@@ -266,7 +266,7 @@ const esmeraldaMissionEvent: SectorEvent = {
                 );
             }
             else if (mesElapsed < 15000) {
-                // Phase 5: Fly over compound showing base/building/enemies for 3000 ms
+                // Phase 5: Fly over compound showing building and surrounding zombies
                 const p = (mesElapsed - 12000) / 3000;
                 const smoothP = THREE.MathUtils.smoothstep(p, 0, 1);
                 engine.camera.setPosition(
@@ -304,16 +304,29 @@ const esmeraldaMissionEvent: SectorEvent = {
                 );
             }
             else {
-                // End camera override, restore player control
+                // Camera reaches ground level: end camera override, restore player control
                 engine.camera.setCinematic(false);
                 gameState.ui.cinematicActive = false;
 
-                // Step 4: Now the destroyable gate can take damage
-                const gate = sectorState.gateObstacle;
-                if (gate) {
-                    gate.durability = 120;
+                // Step 3: Trigger Dialogue Part 1 (Sector 2, Dialogue ID 0)
+                if (ctx.startCinematic) {
+                    const loke = scene?.children.find(
+                        (c: any) => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Loke'
+                    );
+                    ctx.startCinematic(loke || null, 2, 0); // Sector 2, Dialogue 0 (Part 1)
                 }
 
+                eventState[KEYS.mastEventState] = 2.5;
+                eventState[KEYS.mastEventTimer] = simTime;
+            }
+        }
+        else if (mes === 2.5) {
+            // Step 4: Wait for Dialogue Part 1 to finish. Then player can destroy the gate.
+            if (!gameState.ui.cinematicActive) {
+                const gate = sectorState.gateObstacle;
+                if (gate) {
+                    gate.durability = 120; // Now gate can take damage
+                }
                 eventState[KEYS.mastEventState] = 3;
                 eventState[KEYS.mastEventTimer] = simTime;
             }
@@ -322,21 +335,21 @@ const esmeraldaMissionEvent: SectorEvent = {
             // Wait for the gate to be destroyed
             const gate = sectorState.gateObstacle;
             if (!gate || gate.isMutated || gate.durability <= 0) {
-                // Step 5: EnemyWave gets enabled (handled via gate's onDestroyObject callback)
+                // Gate is destroyed, enable the active zombie wave
                 eventState[KEYS.mastEventState] = 4;
                 eventState[KEYS.mastEventTimer] = simTime;
             }
         }
         else if (mes === 4) {
-            // Wait for the EnemyWave to be defeated
+            // Wait for the ZombieWave to be defeated
             if (sectorState && !sectorState.waveActive) {
                 eventState[KEYS.mastEventState] = 5;
                 eventState[KEYS.mastEventTimer] = simTime;
             }
         }
         else if (mes === 5) {
-            // Step 6: Trigger the dialogue with Esmeralda. Esmeralda gets rescued and starts following.
-            if (mesElapsed > 1500 && scene) {
+            // Step 5: Esmeralda walks out of the building
+            if (mesElapsed > 1000 && scene) {
                 if (!sectorState.esmeraldaMesh) {
                     sectorState.esmeraldaMesh = scene.children.find(
                         (c: any) => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Esmeralda'
@@ -352,7 +365,7 @@ const esmeraldaMissionEvent: SectorEvent = {
 
                     esmeralda.position.lerp(sectorState.esmeraldaWalkTarget, 0.04);
 
-                    // Update camera override to follow Esmeralda
+                    // Camera override to follow Esmeralda walking out
                     if (ctx.setCameraOverride) {
                         ctx.setCameraOverride({
                             active: true,
@@ -371,46 +384,40 @@ const esmeraldaMissionEvent: SectorEvent = {
                         }
                     }
                 } else {
-                    if (mesElapsed > 5000) {
-                        eventState[KEYS.mastEventState] = 55;
-                        eventState[KEYS.mastEventTimer] = simTime;
-                    }
+                    eventState[KEYS.mastEventState] = 55;
+                    eventState[KEYS.mastEventTimer] = simTime;
                 }
             }
         }
         else if (mes === 55) {
-            // Wait for player to get close to Esmeralda
+            // Step 6: Wait for player to reach Esmeralda
             if (scene) {
                 const esmeralda = sectorState.esmeraldaMesh || scene.children.find(
                     (c: any) => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Esmeralda'
                 );
                 if (esmeralda) {
                     const dist = playerPos.distanceTo(esmeralda.position);
-                    if (dist < 4.0) {
+                    if (dist < 5.0) {
                         eventState[KEYS.mastEventState] = 6;
                         eventState[KEYS.mastEventTimer] = simTime;
 
+                        // Start 2nd part of dialogue (Sector 2, Dialogue ID 1)
                         if (ctx.startCinematic) {
-                            ctx.startCinematic(esmeralda, 2, 0); // Sector 2, Dialogue 0
-                        }
-
-                        const idx = triggerSystem.getTriggerById(FamilyMemberID.ESMERALDA, TriggerType.EVENT);
-                        if (idx !== -1) {
-                            triggerSystem.setStatusFlag(idx, TriggerStatus.ACTIVE, true);
-                            triggerSystem.setStatusFlag(idx, TriggerStatus.TRIGGERED, false);
+                            ctx.startCinematic(esmeralda, 2, 1); // Sector 2, Dialogue 1 (Part 2)
                         }
                     }
                 }
             }
         }
         else if (mes === 6) {
-            // Wait for the cinematic dialogue to finish. Boss intro starts as a consequence.
+            // Step 7: Dialogue part 2 finishes, Esmeralda starts following, then boss spawns
             if (!gameState.ui.cinematicActive) {
                 eventState[KEYS.mastEventState] = 7;
                 eventState[KEYS.mastEventTimer] = simTime;
             }
         }
         else if (mes === 7) {
+            // Step 8: Boss spawns
             if (!sectorState.bossSpawned) {
                 sectorState.bossSpawned = true;
                 ctx.onAction({ type: TriggerActionType.SPAWN_BOSS, payload: { bossId: BossID.SECTOR_2 } });
@@ -430,7 +437,8 @@ const esmeraldaMissionEvent: SectorEvent = {
         if (isBossCheckpoint) {
             eventState[KEYS.mastEventState] = 7;
             eventState[KEYS.mastEventTimer] = engine.simTime;
-            state.sectorState.bossSpawned = false; // Reset so boss spawns again
+            // The main GameSessionSetup.ts clears state.enemies.bossSpawned, so we match it here
+            state.sectorState.bossSpawned = false; 
             return;
         }
 
@@ -790,7 +798,7 @@ export const Sector2: SectorDef = {
             const angle = Math.atan2(mTan.x, mTan.z);
             const quat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
 
-            ctx.obstacles.push({
+            SectorBuilder.addObstacle(ctx, {
                 position: mPt.clone(),
                 quaternion: quat,
                 collider: {

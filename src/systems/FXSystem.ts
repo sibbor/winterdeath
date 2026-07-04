@@ -3,7 +3,7 @@ import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { GamePlaySounds } from '../utils/audio/AudioLib';
 import { MaterialType } from '../content/environment';
 import { FXParticleType, FXDecalType, ParticleState, FXSpawnRequest } from '../types/FXTypes';
-import { COLORS } from '../utils/ui/ColorUtils';
+import { COLORS, ENEMY_COLORS } from '../utils/ui/ColorUtils';
 import { MAX_ENTITIES, FX } from '../content/constants';
 import { SystemID } from './SystemID';
 import { WinterEngine } from '../core/engine/WinterEngine';
@@ -28,6 +28,11 @@ const _lastSpawnZ = new Float32Array(NUM_PARTICLE_TYPES);
 const REQUEST_POOL: FXSpawnRequest[] = [];
 const DECAL_REQUEST_POOL: FXSpawnRequest[] = [];
 
+// --- O(1) INPLACE GORE RECYCLER ---
+const _goreStatesBuffer = new Array<ParticleState | null>(800).fill(null);
+let _goreBufferHead = 0;
+let _goreBufferCount = 0;
+
 /**
  * FX System Initialization
  * Populates TypedArrays strictly indexed by the FXParticleType enum.
@@ -40,34 +45,62 @@ const initTypedArrays = () => {
     _lastSpawnZ.fill(-999);
 
     // --- PHYSICS FLAGS (1 = true) ---
-    [
-        FXParticleType.DEBRIS, FXParticleType.GLASS, FXParticleType.GORE,
-        FXParticleType.SPLASH, FXParticleType.BLOOD_SPLATTER, FXParticleType.BLACK_SMOKE,
-        FXParticleType.SCRAP
-    ].forEach(t => PHYSICS_FLAGS[t] = 1);
+    PHYSICS_FLAGS[FXParticleType.DEBRIS] = 1;
+    PHYSICS_FLAGS[FXParticleType.GLASS] = 1;
+    PHYSICS_FLAGS[FXParticleType.GORE] = 1;
+    PHYSICS_FLAGS[FXParticleType.SPLASH] = 1;
+    PHYSICS_FLAGS[FXParticleType.BLOOD_SPLATTER] = 1;
+    PHYSICS_FLAGS[FXParticleType.BLACK_SMOKE] = 1;
+    PHYSICS_FLAGS[FXParticleType.SCRAP] = 1;
 
     // --- INSTANCED FLAGS ---
-    [
-        FXParticleType.FIRE, FXParticleType.FLAME, FXParticleType.LARGE_FIRE, FXParticleType.SMOKE,
-        FXParticleType.SPARK, FXParticleType.MUZZLE, FXParticleType.ENEMY_EFFECT_STUN,
-        FXParticleType.ELECTRIC_FLASH, FXParticleType.ENEMY_EFFECT_FLAME, FXParticleType.ENEMY_EFFECT_SPARK,
-        FXParticleType.GORE, FXParticleType.SPLASH, FXParticleType.IMPACT_SPLAT,
-        FXParticleType.CAMPFIRE_FLAME, FXParticleType.CAMPFIRE_SPARK, FXParticleType.CAMPFIRE_SMOKE,
-        FXParticleType.FLAMETHROWER_FIRE, FXParticleType.GROUND_IMPACT, FXParticleType.SHOCKWAVE,
-        FXParticleType.FROST_NOVA, FXParticleType.SCREECH_WAVE, FXParticleType.ELECTRIC_BEAM,
-        FXParticleType.MAGNETIC_SPARKS, FXParticleType.IMPACT, FXParticleType.BLAST_RADIUS,
-        FXParticleType.BLACK_SMOKE, FXParticleType.DEBRIS_TRAIL, FXParticleType.BLOOD_SPLATTER,
-        FXParticleType.SCRAP, FXParticleType.SNOW_PUFF, FXParticleType.DEBRIS, FXParticleType.GLASS
-    ].forEach(t => INSTANCED_FLAGS[t] = 1);
+    INSTANCED_FLAGS[FXParticleType.FIRE] = 1;
+    INSTANCED_FLAGS[FXParticleType.FLAME] = 1;
+    INSTANCED_FLAGS[FXParticleType.LARGE_FIRE] = 1;
+    INSTANCED_FLAGS[FXParticleType.SMOKE] = 1;
+    INSTANCED_FLAGS[FXParticleType.SPARK] = 1;
+    INSTANCED_FLAGS[FXParticleType.MUZZLE] = 1;
+    INSTANCED_FLAGS[FXParticleType.ENEMY_EFFECT_STUN] = 1;
+    INSTANCED_FLAGS[FXParticleType.ELECTRIC_FLASH] = 1;
+    INSTANCED_FLAGS[FXParticleType.ENEMY_EFFECT_FLAME] = 1;
+    INSTANCED_FLAGS[FXParticleType.ENEMY_EFFECT_SPARK] = 1;
+    INSTANCED_FLAGS[FXParticleType.GORE] = 1;
+    INSTANCED_FLAGS[FXParticleType.SPLASH] = 1;
+    INSTANCED_FLAGS[FXParticleType.IMPACT_SPLAT] = 1;
+    INSTANCED_FLAGS[FXParticleType.CAMPFIRE_FLAME] = 1;
+    INSTANCED_FLAGS[FXParticleType.CAMPFIRE_SPARK] = 1;
+    INSTANCED_FLAGS[FXParticleType.CAMPFIRE_SMOKE] = 1;
+    INSTANCED_FLAGS[FXParticleType.FLAMETHROWER_FIRE] = 1;
+    INSTANCED_FLAGS[FXParticleType.GROUND_IMPACT] = 1;
+    INSTANCED_FLAGS[FXParticleType.SHOCKWAVE] = 1;
+    INSTANCED_FLAGS[FXParticleType.FROST_NOVA] = 1;
+    INSTANCED_FLAGS[FXParticleType.SCREECH_WAVE] = 1;
+    INSTANCED_FLAGS[FXParticleType.ELECTRIC_BEAM] = 1;
+    INSTANCED_FLAGS[FXParticleType.MAGNETIC_SPARKS] = 1;
+    INSTANCED_FLAGS[FXParticleType.IMPACT] = 1;
+    INSTANCED_FLAGS[FXParticleType.BLAST_RADIUS] = 1;
+    INSTANCED_FLAGS[FXParticleType.BLACK_SMOKE] = 1;
+    INSTANCED_FLAGS[FXParticleType.DEBRIS_TRAIL] = 1;
+    INSTANCED_FLAGS[FXParticleType.BLOOD_SPLATTER] = 1;
+    INSTANCED_FLAGS[FXParticleType.SCRAP] = 1;
+    INSTANCED_FLAGS[FXParticleType.SNOW_PUFF] = 1;
+    INSTANCED_FLAGS[FXParticleType.DEBRIS] = 1;
+    INSTANCED_FLAGS[FXParticleType.GLASS] = 1;
 
     // --- ESSENTIAL FLAGS ---
-    [
-        FXParticleType.FLASH, FXParticleType.ELECTRIC_FLASH, FXParticleType.SPARK,
-        FXParticleType.SPLASH, FXParticleType.BLOOD_SPLATTER, FXParticleType.BLOOD_SPLAT,
-        FXParticleType.IMPACT, FXParticleType.ENEMY_EFFECT_STUN, FXParticleType.MUZZLE,
-        FXParticleType.MUZZLE_FLASH, FXParticleType.MUZZLE_SPARK, FXParticleType.MUZZLE_SMOKE,
-        FXParticleType.GORE
-    ].forEach(t => ESSENTIAL_FLAGS[t] = 1);
+    ESSENTIAL_FLAGS[FXParticleType.FLASH] = 1;
+    ESSENTIAL_FLAGS[FXParticleType.ELECTRIC_FLASH] = 1;
+    ESSENTIAL_FLAGS[FXParticleType.SPARK] = 1;
+    ESSENTIAL_FLAGS[FXParticleType.SPLASH] = 1;
+    ESSENTIAL_FLAGS[FXParticleType.BLOOD_SPLATTER] = 1;
+    ESSENTIAL_FLAGS[FXParticleType.BLOOD_SPLAT] = 1;
+    ESSENTIAL_FLAGS[FXParticleType.IMPACT] = 1;
+    ESSENTIAL_FLAGS[FXParticleType.ENEMY_EFFECT_STUN] = 1;
+    ESSENTIAL_FLAGS[FXParticleType.MUZZLE] = 1;
+    ESSENTIAL_FLAGS[FXParticleType.MUZZLE_FLASH] = 1;
+    ESSENTIAL_FLAGS[FXParticleType.MUZZLE_SPARK] = 1;
+    ESSENTIAL_FLAGS[FXParticleType.MUZZLE_SMOKE] = 1;
+    ESSENTIAL_FLAGS[FXParticleType.GORE] = 1;
 
     // --- COLORS ---
     PARTICLE_COLORS[FXParticleType.FLAME] = COLORS.FIRE_ORANGE.num;
@@ -79,6 +112,7 @@ const initTypedArrays = () => {
     PARTICLE_COLORS[FXParticleType.ENEMY_EFFECT_STUN] = COLORS.ELECTRIC_FLASH.num;
     PARTICLE_COLORS[FXParticleType.CAMPFIRE_SPARK] = COLORS.ELECTRIC_FLASH.num;
     PARTICLE_COLORS[FXParticleType.ENEMY_EFFECT_SPARK] = COLORS.ELECTRIC_FLASH.num;
+    PARTICLE_COLORS[FXParticleType.ELECTRIC_BEAM] = ENEMY_COLORS.ELECTRIC_ARC_FLASH.num;
     PARTICLE_COLORS[FXParticleType.MAGNETIC_SPARKS] = COLORS.ELECTRIC_FLASH.num;
     PARTICLE_COLORS[FXParticleType.SPARK] = COLORS.YELLOW.num;
     PARTICLE_COLORS[FXParticleType.IMPACT] = COLORS.YELLOW.num;
@@ -193,6 +227,10 @@ export const FXSystem = {
         FXSystem._essentialQueueHead = 0;
         FXSystem._ambientQueueHead = 0;
         FXSystem._decalQueueHead = 0;
+
+        _goreStatesBuffer.fill(null);
+        _goreBufferHead = 0;
+        _goreBufferCount = 0;
 
         // Initialize pool if empty
         if (FXSystem._registryArrayPool.length === 0) {
@@ -383,13 +421,42 @@ export const FXSystem = {
     _spawnParticleImmediate: (req: FXSpawnRequest, particlesList: ParticleState[]) => {
         if (isNaN(req.x) || isNaN(req.y) || isNaN(req.z)) return;
 
+        const t = req.type as FXParticleType;
+
+        // Bounded list safety checks
         if (particlesList.length >= 6000) {
-            FXSystem._killParticle(0, particlesList);
+            let killed = false;
+            for (let idx = 0; idx < particlesList.length; idx++) {
+                if (particlesList[idx].type !== FXParticleType.GORE) {
+                    FXSystem._killParticle(idx, particlesList);
+                    killed = true;
+                    break;
+                }
+            }
+            if (!killed) {
+                FXSystem._killParticle(0, particlesList);
+            }
         }
 
-        const t = req.type as FXParticleType;
         const isInstanced = INSTANCED_FLAGS[t] === 1;
-        const p = FXSystem.getPooledState();
+
+        // Inplace circular tracking and recycling for GORE (Swap-and-Pop immune)
+        let p: ParticleState;
+        let isNewGore = false;
+
+        if (t === FXParticleType.GORE) {
+            if (_goreBufferCount < 800) {
+                p = FXSystem.getPooledState();
+                _goreStatesBuffer[_goreBufferCount] = p;
+                _goreBufferCount++;
+                isNewGore = true;
+            } else {
+                p = _goreStatesBuffer[_goreBufferHead]!;
+                _goreBufferHead = (_goreBufferHead + 1) % 800;
+            }
+        } else {
+            p = FXSystem.getPooledState();
+        }
 
         p.type = t;
         p.landed = false;
@@ -401,7 +468,7 @@ export const FXSystem = {
         p.pos.set(req.x, req.y, req.z);
         p.weight = req.weight;
 
-        if (t === FXParticleType.ELECTRIC_FLASH && req.hasCustomVel) {
+        if ((t === FXParticleType.ELECTRIC_FLASH || t === FXParticleType.ELECTRIC_BEAM) && req.hasCustomVel) {
             _v1.set(req.x + req.customVel.x, req.y + req.customVel.y, req.z + req.customVel.z);
             _dummyMatrix.lookAt(p.pos, _v1, _UP);
             _dummyQuat.setFromRotationMatrix(_dummyMatrix);
@@ -466,7 +533,13 @@ export const FXSystem = {
                 p.scaleVec.set(fs, fs, fs);
                 break;
             case FXParticleType.ELECTRIC_BEAM:
-                p.scaleVec.set(0.2, 0.2, 5.0);
+                if (req.hasCustomVel) {
+                    const dist = req.customVel.length();
+                    // Z-scale equals distance to stretch exactly from emitter to target
+                    p.scaleVec.set((0.1 + Math.random() * 0.1) * s, (0.1 + Math.random() * 0.1) * s, dist);
+                } else {
+                    p.scaleVec.set(0.2, 0.2, 5.0);
+                }
                 break;
             case FXParticleType.SNOW_PUFF:
                 fs = (0.2 + Math.random() * 0.3) * s;
@@ -513,7 +586,9 @@ export const FXSystem = {
         p.maxLife = p.life;
         p.rotVel.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
 
-        particlesList.push(p);
+        if (t !== FXParticleType.GORE || isNewGore) {
+            particlesList.push(p);
+        }
     },
 
     // --- INTERFACE ---
@@ -618,7 +693,18 @@ export const FXSystem = {
         for (let i = particlesList.length - 1; i >= 0; i--) {
             const p = particlesList[i];
             p.life -= decay;
-            if (p.life <= 0) { FXSystem._killParticle(i, particlesList); continue; }
+            if (p.life <= 0) {
+                if (p.type === FXParticleType.GORE) {
+                    p.life = 0;
+                    p.vel.set(0, 0, 0);
+                    p.rotVel.set(0, 0, 0);
+                    p.landed = true;
+                    p.pos.y = 0.22;
+                } else {
+                    FXSystem._killParticle(i, particlesList);
+                    continue;
+                }
+            }
 
             if (!p.landed) {
                 const t = p.type;
@@ -779,7 +865,12 @@ export const FXSystem = {
     _killParticle: (index: number, list: ParticleState[]) => {
         const p = list[index];
         p.inUse = false; FXSystem.FREE_STATE_INDICES.push(p._poolIdx);
-        list[index] = list[list.length - 1]; list.pop();
+
+        const lastIdx = list.length - 1;
+        if (index < lastIdx) {
+            list[index] = list[lastIdx];
+        }
+        list.pop();
     },
 
     _handleLanding: (p: ParticleState, index: number, list: ParticleState[], callbacks: any) => {
@@ -797,6 +888,7 @@ export const FXSystem = {
                 if (Math.random() < 0.40) callbacks.spawnDecal(p.pos.x, p.pos.z, 0.8 + Math.random() * 0.5, MATERIALS.bloodDecal);
                 GamePlaySounds.playImpact(MaterialType.FLESH);
                 p.vel.set(0, 0, 0);
+                p.rotVel.set(0, 0, 0);
                 break;
             case FXParticleType.DEBRIS:
                 if (p.vel.y < -8) {

@@ -125,8 +125,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         if (isGameRunning) {
             audioEngine.resume();
             AmbientSounds.startCampfire();
+            audioEngine.playMusic(5); // MusicID.CAMP_CALM
         }
-        return () => AmbientSounds.stopCampfire();
+        return () => {
+            AmbientSounds.stopCampfire();
+            audioEngine.stopMusic();
+        };
     }, [isGameRunning]);
 
     // Idle Timer

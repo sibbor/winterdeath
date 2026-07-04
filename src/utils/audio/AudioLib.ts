@@ -1288,11 +1288,17 @@ export function registerSoundGenerators() {
     map(SoundID.RADIO, Generators.radio);
     map(SoundID.DODGE, Generators.dash);
 
-    // Enemies
+    // Enemies -> Zombies
     map(SoundID.ZOMBIE_GROWL_WALKER, Generators.walker_groan);
     map(SoundID.ZOMBIE_GROWL_RUNNER, Generators.runner_scream);
     map(SoundID.ZOMBIE_GROWL_TANK, Generators.tank_roar);
     map(SoundID.ZOMBIE_GROWL_BLOATER, Generators.bloater_beep);
+
+    // Enemies -> Bosses
+    map(SoundID.BOSS_ATTACK_ELECTRIC_BEAM, boss_electric_beam);
+    map(SoundID.BOSS_ATTACK_MAGNETIC_CHAIN, boss_magnetic_chain);
+    map(SoundID.BOSS_ATTACK_FREEZE_JUMP, boss_freeze_jump);
+    map(SoundID.BOSS_ATTACK_SCREECH, boss_screech);
 
     // Enemy Death
     map(SoundID.ZOMBIE_DEATH_SHOT, Generators.zombie_death_shot);
@@ -1423,14 +1429,120 @@ function createRoar(ctx: AudioContext, start: number, end: number, duration: num
     const sr = ctx.sampleRate;
     const buf = ctx.createBuffer(1, sr * duration, sr);
     const d = buf.getChannelData(0);
+    let lp = 0;
     for (let i = 0; i < sr * duration; i++) {
         const t = i / sr;
-        const sq = Math.sin(2 * Math.PI * start * t) > 0 ? 0.3 : -0.3;
-        const n = (Math.random() * 2 - 1) * 0.1;
-        d[i] = (sq + n) * (1 - t / duration);
+
+        // Pitch sweep
+        const progress = t / duration;
+        const freq = start + (end - start) * progress;
+
+        // Growl flutter LFO (around 14Hz) for chesty resonance
+        const flutter = 1.0 + 0.35 * Math.sin(2 * Math.PI * 14 * t);
+
+        // Base waves: blend of triangle and filtered noise
+        const phase = 2 * Math.PI * freq * t * flutter;
+        const tri = Math.abs(2 * (phase / Math.PI % 2 - 1)) - 1;
+        const noise = (Math.random() * 2 - 1) * 0.4;
+
+        // Mix base and low-pass filter it dynamically to create a warm, non-metallic chesty roar
+        const raw = tri * 0.5 + noise * 0.5;
+        lp = lp + 0.15 * (raw - lp);
+
+        const env = Math.exp(-2.5 * progress) * (1 - progress);
+        d[i] = lp * 0.65 * env;
     }
     return buf;
 }
+
+const boss_electric_beam = (ctx: AudioContext) => {
+    const duration = 0.5;
+    const sr = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, sr * duration, sr);
+    const d = buf.getChannelData(0);
+    let lp = 0;
+    for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        const hum = Math.sin(2 * Math.PI * 90 * t) + 0.3 * Math.sin(2 * Math.PI * 180 * t);
+        let crackle = 0;
+        if (Math.random() > 0.96) crackle = (Math.random() * 2 - 1) * 0.8;
+        const noise = (Math.random() * 2 - 1) * 0.2;
+
+        const raw = hum * 0.4 + crackle + noise;
+        lp = lp + 0.25 * (raw - lp);
+        const env = Math.exp(-6 * t);
+        d[i] = lp * 0.7 * env;
+    }
+    return buf;
+};
+
+const boss_magnetic_chain = (ctx: AudioContext) => {
+    const duration = 0.6;
+    const sr = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, sr * duration, sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        const lfo = Math.sin(2 * Math.PI * 8 * t);
+        const drone = Math.sin(2 * Math.PI * (70 + lfo * 15) * t) * 0.5;
+        const phase = Math.sin(2 * Math.PI * 140 * t) * 0.25;
+        const noise = (Math.random() * 2 - 1) * 0.05;
+        const env = Math.exp(-4 * t) * (1 - (t / duration));
+        d[i] = (drone + phase + noise) * 0.8 * env;
+    }
+    return buf;
+};
+
+const boss_freeze_jump = (ctx: AudioContext) => {
+    const duration = 1.0;
+    const sr = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, sr * duration, sr);
+    const d = buf.getChannelData(0);
+    let lp = 0;
+    for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        let slam = 0;
+        if (t < 0.4) {
+            slam = Math.sin(2 * Math.PI * 65 * t) * Math.exp(-12 * t) * 0.6;
+        }
+        let ice = 0;
+        if (t > 0.1) {
+            const dt = t - 0.1;
+            const env = Math.exp(-3 * dt);
+            let crackle = 0;
+            if (Math.random() > 0.97) crackle = (Math.random() * 2 - 1) * 0.6;
+            const hiss = (Math.random() * 2 - 1) * 0.15;
+            ice = (crackle + hiss) * env;
+        }
+        const raw = slam + ice;
+        lp = lp + 0.3 * (raw - lp);
+        d[i] = lp * 0.8;
+    }
+    return buf;
+};
+
+const boss_screech = (ctx: AudioContext) => {
+    const duration = 0.8;
+    const sr = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, sr * duration, sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        const progress = t / duration;
+        // Dual sweeping frequencies for raw discordance/screeching
+        const freq1 = 800 - 400 * progress + Math.sin(2 * Math.PI * 45 * t) * 150;
+        const freq2 = 1200 - 600 * progress + Math.sin(2 * Math.PI * 65 * t) * 200;
+
+        const osc1 = Math.sin(2 * Math.PI * freq1 * t);
+        const osc2 = (Math.sin(2 * Math.PI * freq2 * t) > 0 ? 0.25 : -0.25); // square components for throat raspiness
+        const noise = (Math.random() * 2 - 1) * 0.35;
+
+        const raw = osc1 * 0.35 + osc2 * 0.35 + noise * 0.3;
+        const env = Math.exp(-3.5 * progress) * (1.0 - progress);
+        d[i] = raw * 0.75 * env;
+    }
+    return buf;
+};
 
 function _genMusicBoss(ctx: AudioContext): AudioBuffer {
     const sr = ctx.sampleRate;

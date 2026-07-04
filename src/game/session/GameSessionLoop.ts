@@ -68,6 +68,9 @@ const _vCamera = new THREE.Vector3();
 const _vInteraction = new THREE.Vector3();
 const _vLerpPos = new THREE.Vector3();
 const _vLerpLookAt = new THREE.Vector3();
+const _tempV1 = new THREE.Vector3();
+const _tempV2 = new THREE.Vector3();
+const _tempV3 = new THREE.Vector3();
 const _interactionScreenPosScratch = { x: 0, y: 0 };
 const _traverseStack: THREE.Object3D[] = []; // Used for Zero-GC scene traversal
 
@@ -351,26 +354,41 @@ export function createGameLoop(ctx: LoopContext): (dt: number, simTime: number, 
             const bossPos = bossMesh.position;
             const introTime = renderTime - refs.bossIntroRef.current.startTime;
 
-            _vCamera.set(bossPos.x, 12, bossPos.z + 20);
-            _vInteraction.set(bossPos.x, bossPos.y + 3, bossPos.z);
+            // Define camera position stages:
+            // Fly stage final view: elevated view slightly back
+            const flyPos = _tempV1.set(bossPos.x, 18, bossPos.z + 28);
+            // Final close zoom-in view: closer, lower angle
+            const zoomPos = _tempV2.set(bossPos.x, 10, bossPos.z + 14);
 
-            // Smooth interpolation over 1500ms
-            const duration = 1500;
-            const tVal = Math.min(1.0, introTime / duration);
-            // Ease in-out quadratic
-            const easeT = tVal < 0.5 ? 2 * tVal * tVal : 1 - Math.pow(-2 * tVal + 2, 2) / 2;
+            // Targets: Look at base or head of boss
+            const startLookAtTarget = _tempV3.set(bossPos.x, bossPos.y + 1, bossPos.z);
+            const closeLookAtTarget = _v1.set(bossPos.x, bossPos.y + 3.5, bossPos.z);
 
             const startPos = refs.bossIntroRef.current.startPos;
             const startLookAt = refs.bossIntroRef.current.startLookAt;
 
-            if (startPos && startLookAt) {
-                _vLerpPos.lerpVectors(startPos, _vCamera, easeT);
-                _vLerpLookAt.lerpVectors(startLookAt, _vInteraction, easeT);
+            if (introTime < 1500) {
+                // Phase 1: Fly over to the overview position (1500ms)
+                const tVal = introTime / 1500;
+                const easeT = THREE.MathUtils.smoothstep(tVal, 0, 1);
+                if (startPos && startLookAt) {
+                    _vLerpPos.lerpVectors(startPos, flyPos, easeT);
+                    _vLerpLookAt.lerpVectors(startLookAt, startLookAtTarget, easeT);
+                    engine.camera.setPosition(_vLerpPos);
+                    engine.camera.lookAt(_vLerpLookAt);
+                } else {
+                    engine.camera.setPosition(flyPos);
+                    engine.camera.lookAt(startLookAtTarget);
+                }
+            } else {
+                // Phase 2: Zoom in closer and adjust the angle / height simultaneously (3000ms)
+                const tVal = Math.min(1.0, (introTime - 1500) / 3000);
+                // Slow smooth zoom in ease
+                const easeT = THREE.MathUtils.smoothstep(tVal, 0, 1);
+                _vLerpPos.lerpVectors(flyPos, zoomPos, easeT);
+                _vLerpLookAt.lerpVectors(startLookAtTarget, closeLookAtTarget, easeT);
                 engine.camera.setPosition(_vLerpPos);
                 engine.camera.lookAt(_vLerpLookAt);
-            } else {
-                engine.camera.setPosition(_vCamera);
-                engine.camera.lookAt(_vInteraction);
             }
 
             // Camera shake at 1000ms into intro sequence (BossPanel fade in)

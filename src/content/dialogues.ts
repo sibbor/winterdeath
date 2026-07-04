@@ -93,22 +93,41 @@ export const STORY_SCRIPTS: Record<number, Record<number, CinematicLine[]>> = {
     // SECTOR 2
     // ==========================================
     2: {
+        // Part 1
         0: [
-            { speaker: FamilyMemberID.ROBERT, text: "dialogue.2_0" },
-            { speaker: FamilyMemberID.ESMERALDA, text: "dialogue.2_1" },
+            { speaker: FamilyMemberID.LOKE, text: "dialogue.2_0" },
+            { speaker: FamilyMemberID.JORDAN, text: "dialogue.2_1" },
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.2_2" },
-            { speaker: FamilyMemberID.ROBERT, text: "dialogue.2_3" },
-            { speaker: FamilyMemberID.UNKNOWN, type: DialogueLineType.ACTION, text: "dialogue.2_4" },
-            { speaker: FamilyMemberID.ESMERALDA, text: "dialogue.2_5" },
+            { speaker: FamilyMemberID.ESMERALDA, text: "dialogue.2_3" },
+            { speaker: FamilyMemberID.ESMERALDA, text: "dialogue.2_4" },
+            { speaker: FamilyMemberID.LOKE, text: "dialogue.2_5" },
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.2_6" },
-            { speaker: FamilyMemberID.ESMERALDA, text: "dialogue.2_7" },
-            { speaker: FamilyMemberID.ESMERALDA, type: DialogueLineType.ACTION, text: "dialogue.2_8" },
-            { speaker: FamilyMemberID.RADIO, type: DialogueLineType.SOUND, text: "dialogue.2_9" },
+            { speaker: FamilyMemberID.LOKE, text: "dialogue.2_7" },
+            { speaker: FamilyMemberID.JORDAN, text: "dialogue.2_8" },
+            { speaker: FamilyMemberID.ROBERT, text: "dialogue.2_9" },
+        ],
+
+        // Part 2
+        1: [
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.2_10" },
-            { speaker: FamilyMemberID.RADIO, text: "dialogue.2_11" },
+            { speaker: FamilyMemberID.ESMERALDA, text: "dialogue.2_11" },
             { speaker: FamilyMemberID.ROBERT, text: "dialogue.2_12" },
+            { speaker: FamilyMemberID.LOKE, text: "dialogue.2_14" },
+            { speaker: FamilyMemberID.JORDAN, text: "dialogue.2_15" },
+            { speaker: FamilyMemberID.ESMERALDA, text: "dialogue.2_16" },
+            { speaker: FamilyMemberID.ESMERALDA, text: "dialogue.2_17" },
+            { speaker: FamilyMemberID.LOKE, text: "dialogue.2_18" },
+            { speaker: FamilyMemberID.ESMERALDA, text: "dialogue.2_19" },
+            { speaker: FamilyMemberID.ROBERT, type: DialogueLineType.ACTION, text: "dialogue.2_20" },
+            { speaker: FamilyMemberID.RADIO, type: DialogueLineType.SOUND, text: "dialogue.2_21" },
+            { speaker: FamilyMemberID.ROBERT, type: DialogueLineType.SOUND, text: "dialogue.2_22" },
+            { speaker: FamilyMemberID.NATHALIE, text: "dialogue.2_23" },
+            { speaker: FamilyMemberID.ROBERT, text: "dialogue.2_24" },
+            { speaker: FamilyMemberID.LOKE, text: "dialogue.2_25" },
+            { speaker: FamilyMemberID.ESMERALDA, text: "dialogue.2_26" },
+            { speaker: FamilyMemberID.ROBERT, text: "dialogue.2_27" },
             {
-                speaker: FamilyMemberID.ROBERT, text: "dialogue.2_13",
+                speaker: FamilyMemberID.JORDAN, text: "dialogue.2_28",
                 trigger: [
                     { type: TriggerActionType.FAMILY_MEMBER_FOUND, payload: { id: FamilyMemberID.ESMERALDA, name: 'Esmeralda' } },
                     TriggerActionType.FAMILY_MEMBER_FOLLOW

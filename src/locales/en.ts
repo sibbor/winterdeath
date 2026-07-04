@@ -1051,7 +1051,8 @@ export const en = {
         "0_11": "Come on, let's go to the camp I built so we can prepare to find the others!",
         "0_12": "WOW! A camp? Is there food? Heat? WEAPONS?!",
 
-        // Dialogue: Sector 1 (part 1)
+        // Dialogue: Sector 1
+        // Part 1
         "1_0": "(Knocks heavily on the steel ports)",
         "1_1": "Stop right there! It's full! GO TO HELL!",
         "1_2": "(Pops out a gun barrel out from a small hatch in the port, aiming at Robert)",
@@ -1070,7 +1071,8 @@ export const en = {
         "1_15": "OPEN THE PORT.",
         "1_16": "(Opens the heavy metal ports leading in to the shelter)",
 
-        // Dialogue: Sector 1 (part 2) 
+        // Dialogue: Sector 1
+        // Part 2 
         "1_17": "DAD! LOKE!",
         "1_18": "Oh, JORDAN!",
         "1_19": "Our brave lil' boy.",
@@ -1080,20 +1082,38 @@ export const en = {
         "1_23": "(Slams the ports shut with a deafening boom)",
 
         // Dialogue: Sector 2
-        "2_0": "HELLO? Is anyone here?",
-        "2_1": "DAD! I never thought... I couldn't see you in the dark...",
-        "2_2": "Oh, ESMERALDA! Open the door, I have Loke and Jordan with me!",
-        "2_3": "I am so damn happy to see you! I love you, kids!",
-        "2_4": "(Group hug)",
-        "2_5": "Dad, we were trying to start the mast to reach YOU! Me and Nathalie were chased by two monsters... Nathalie sprang iväg för att locka bort dem.",
-        "2_6": "We will solve this - together!",
-        "2_7": "I'll just do some final adjustments... then!",
-        "2_8": "(Pushes buttons & pulls levers... *hits* the control panel *high pitched noise*)",
-        "2_9": "*radio static*",
-        "2_10": "(Speaks into radio) NATHALIE. COME IN.",
-        "2_11": "HONEY! I... *radio static*",
-        "2_12": "SHIT! That was Nathalie. We need to find better reception!",
-        "2_13": "Follow me kids.",
+        // Part 1
+        "2_0": "Damn it! So many zombies.",
+        "2_1": "ZOMB!",
+        "2_2": "ESMERALDA?? ARE YOU THERE?!",
+        "2_3": "DAAAD!!!",
+        "2_4": "I'M INSIDE THE CONTROL ROOM. I'VE BARRICADED THE DOOR!",
+        "2_5": "Shit, we need to get to her quick!",
+        "2_6": "WE'RE COMING FOR YOU!",
+        "2_7": "LET'S SLAUGHTER THESE ASSHOLES!!",
+        "2_8": "ASCH.. HOLES",
+        "2_9": "Boys, ready? Let's rescue Esmeralda!",
+
+        // Dialogue: Sector 2
+        // Part 2
+        "2_10": "Oh, ESMERALDA! My wonderful girl, come here! (hugs Esmeralda)",
+        "2_11": "DAD! LOKE! JORDAN!! I thought I'd never... (sob)... see you again...",
+        "2_12": "Kids, I'm so glad we're together again! (group hug)",
+        "2_14": "Esmeralda, what where you doing here? Where's Natta?",
+        "2_15": "NATA? MAMA!!",
+        "2_16": "Me and Nathalie tried to get the mast up and running, to reach YOU! ...but...",
+        "2_17": "... we were chased by two MONSTERS... Nathalie distracted them and told me to hide here.",
+        "2_18": "So... Nathalie is not here?",
+        "2_19": "No, but I think I've FIXED THE MAST. Let's see if we've got radio signal!",
+        "2_20": "We'll be alright... (reaches for the radio)",
+        "2_21": "*RADIO STATIC NOISE*",
+        "2_22": "(Speaks into radio) NATHALIE. COME IN.",
+        "2_23": "HONEY!!! I... *RADIO STATIC NOISE*",
+        "2_24": "NATHALIE!! *RADIO STATIC NOISE*",
+        "2_25": "YEEEAH! She's ALIVE!",
+        "2_26": "Aww... I knew it! She's a fucking QUEEN!",
+        "2_27": "Let's move. We need to find better reception!",
+        "2_28": "COME! COME!",
 
         // Dialogue: Sector 3
         "3_0": "(Whispering in radio) /Must whisper.../ *static* /scrapyard.../ *static* /monsters.../",

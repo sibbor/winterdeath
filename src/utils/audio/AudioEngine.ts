@@ -250,7 +250,10 @@ export class AudioEngine {
     }
 
     public playSpatialSound(id: SoundID, pos: THREE.Vector3, volume: number = 1.0, maxDist: number = 40.0) {
-        const distSq = pos.distanceToSquared(this.listenerPos);
+        // Zero-GC: 2D distance check (X-Z plane) to prevent camera height attenuation
+        const dx = pos.x - this.listenerPos.x;
+        const dz = pos.z - this.listenerPos.z;
+        const distSq = dx * dx + dz * dz;
         if (distSq > maxDist * maxDist) return;
 
         const attenuation = 1.0 - (Math.sqrt(distSq) / maxDist);
@@ -258,23 +261,43 @@ export class AudioEngine {
     }
 
     // --- BACKGROUND BUS TRIGGERS ---
-    public playMusic(id: MusicID, fadeTime: number = 2.0) {
+    public playMusic(id: MusicID | SoundID, fadeTime: number = 2.0) {
         if (id === MusicID.NONE) {
             this.musicBus.stop(fadeTime);
             return;
         }
-        const buffer = this.bufferCache[MAX_SOUND_ID + id];
-        if (buffer) this.musicBus.play(id, buffer, 0.35, fadeTime);
+        this.resume();
+        const musicBuffer = this.bufferCache[MAX_SOUND_ID + id];
+        if (musicBuffer) {
+            this.musicBus.play(id as MusicID, musicBuffer, 0.35, fadeTime);
+        } else {
+            // Fallback: if it's registered as a SoundID, play it on the ambient bus instead
+            const ambientBuffer = this.bufferCache[id];
+            if (ambientBuffer) {
+                this.ambientBus.play(id as SoundID, ambientBuffer, 0.25, fadeTime);
+            }
+        }
     }
 
-    public playAmbience(id: SoundID, fadeTime: number = 2.0) {
+    public playAmbience(id: SoundID | MusicID, fadeTime: number = 2.0) {
         if (id === SoundID.NONE) {
             this.ambientBus.stop(fadeTime);
             return;
         }
-        const buffer = this.bufferCache[id];
-        if (buffer) this.ambientBus.play(id, buffer, 0.25, fadeTime);
+        this.resume();
+        const ambientBuffer = this.bufferCache[id];
+        if (ambientBuffer) {
+            this.ambientBus.play(id as SoundID, ambientBuffer, 0.25, fadeTime);
+        } else {
+            // Fallback: if it's registered as a MusicID, play it on the music bus instead
+            const musicBuffer = this.bufferCache[MAX_SOUND_ID + id];
+            if (musicBuffer) {
+                this.musicBus.play(id as MusicID, musicBuffer, 0.35, fadeTime);
+            }
+        }
     }
+
+
 
     public playTone(freq: number, type: ToneType | OscillatorType = ToneType.SINE, duration: number = 0.1, volume: number = 0.2) {
         this.resume();
@@ -320,6 +343,7 @@ export class AudioEngine {
     }
 
     public playLoop(id: SoundID, volume: number = 1.0, rate: number = 1.0): number {
+        this.resume();
         for (let i = 0; i < this.MAX_VOICES; i++) {
             if (this.voicePool[i].isActive && this.voicePool[i].id === id) return i;
         }

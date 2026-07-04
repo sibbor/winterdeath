@@ -488,6 +488,10 @@ export class GameSessionSetup {
         };
 
         const spawnBoss = (bossId: BossID, pos?: THREE.Vector3) => {
+            if (state.enemies.bossSpawned) {
+                console.warn("[GameSessionSetup] spawnBoss skipped: Boss is already spawned!");
+                return null;
+            }
             const pSpawn = currentSector.playerSpawn;
             const bossPos = pos || (currentSector.bossSpawn ? new THREE.Vector3(currentSector.bossSpawn.x, 0, currentSector.bossSpawn.z) : new THREE.Vector3(pSpawn.x || 0, 0, pSpawn.z || 0));
             const bossData = (BOSSES as any)[bossId];
