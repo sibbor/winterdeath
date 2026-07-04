@@ -47,7 +47,6 @@ const _up = new THREE.Vector3(0, 5, 0);
 const _whiteColor = new THREE.Color(COLORS.WHITE.num);
 const _blackColor = new THREE.Color(0x111111);
 const _cyanColor = new THREE.Color(COLORS.ELECTRIC_FLASH.num);
-const _flashColor = new THREE.Color();
 const _color = new THREE.Color();
 
 const _syncList: Enemy[] = [];
@@ -57,7 +56,6 @@ const inactiveEnemies: Enemy[] = [];
 let activeCount = 0;
 
 const EMPTY_ATTACKS: any[] = [];
-
 
 // Shared iterative stack to avoid recursive stack frames and closures
 const _traverseStack: THREE.Object3D[] = [];
@@ -75,25 +73,17 @@ const _queryEnemies = (pos: THREE.Vector3, rad: number, outPoolIdx: number) => {
     if (_currentStreamer) _currentStreamer.getNearbyEnemies(pos.x, pos.z, rad, outPoolIdx);
 };
 
-
-// --- ZERO-GC MATERIAL HELPERS ---
-function applyElectrifiedGlow(root: any, colorObj: THREE.Color, intensity: number) {
+// --- FLAT CHILD MESH CACHING PIPELINE ---
+function cacheEnemyChildMeshes(enemy: Enemy) {
+    enemy.childMeshes = [];
     _traverseStack.length = 0;
-    _traverseStack.push(root);
+    _traverseStack.push(enemy.mesh);
 
     while (_traverseStack.length > 0) {
-        const obj = _traverseStack.pop() as any;
-
-        if (obj.isMesh && obj.material) {
-            if (obj.material.emissive) {
-                obj.material.emissive.copy(colorObj);
-                obj.material.emissiveIntensity = intensity;
-            }
-            if (obj.material.color) {
-                obj.material.color.copy(colorObj);
-            }
+        const obj = _traverseStack.pop()!;
+        if (obj instanceof THREE.Mesh) {
+            enemy.childMeshes.push(obj);
         }
-
         if (obj.children) {
             for (let i = 0; i < obj.children.length; i++) {
                 _traverseStack.push(obj.children[i]);
@@ -102,40 +92,57 @@ function applyElectrifiedGlow(root: any, colorObj: THREE.Color, intensity: numbe
     }
 }
 
-function resetMaterialEmissive(root: any) {
-    _traverseStack.length = 0;
-    _traverseStack.push(root);
-
-    while (_traverseStack.length > 0) {
-        const obj = _traverseStack.pop() as any;
-
-        if (obj.isMesh && obj.material && obj.material.emissive) {
-            obj.material.emissive.setHex(0x000000);
-            obj.material.emissiveIntensity = 0;
-        }
-
-        if (obj.children) {
-            for (let i = 0; i < obj.children.length; i++) {
-                _traverseStack.push(obj.children[i]);
+// --- ZERO-GC MATERIAL HELPERS (Bypasses recursive .traverse() entirely) ---
+function applyElectrifiedGlow(enemy: Enemy, colorObj: THREE.Color, intensity: number) {
+    if (!enemy.childMeshes) {
+        cacheEnemyChildMeshes(enemy);
+    }
+    const meshes = enemy.childMeshes!;
+    for (let i = 0; i < meshes.length; i++) {
+        const mesh = meshes[i];
+        if (mesh.material) {
+            const mat = mesh.material as any;
+            if (mat.emissive) {
+                mat.emissive.copy(colorObj);
+                mat.emissiveIntensity = intensity;
+            }
+            if (mat.color) {
+                mat.color.copy(colorObj);
             }
         }
     }
 }
 
-function setBaseColor(root: any, colorObj: THREE.Color) {
-    _traverseStack.length = 0;
-    _traverseStack.push(root);
-
-    while (_traverseStack.length > 0) {
-        const obj = _traverseStack.pop() as any;
-
-        if (obj.isMesh && obj.material && obj.material.color) {
-            obj.material.color.copy(colorObj);
+// Emissive reset helper
+function resetMaterialEmissive(enemy: Enemy) {
+    if (!enemy.childMeshes) {
+        cacheEnemyChildMeshes(enemy);
+    }
+    const meshes = enemy.childMeshes!;
+    for (let i = 0; i < meshes.length; i++) {
+        const mesh = meshes[i];
+        if (mesh.material) {
+            const mat = mesh.material as any;
+            if (mat.emissive) {
+                mat.emissive.setHex(0x000000);
+                mat.emissiveIntensity = 0;
+            }
         }
+    }
+}
 
-        if (obj.children) {
-            for (let i = 0; i < obj.children.length; i++) {
-                _traverseStack.push(obj.children[i]);
+// Base color modifier
+function setBaseColor(enemy: Enemy, colorObj: THREE.Color) {
+    if (!enemy.childMeshes) {
+        cacheEnemyChildMeshes(enemy);
+    }
+    const meshes = enemy.childMeshes!;
+    for (let i = 0; i < meshes.length; i++) {
+        const mesh = meshes[i];
+        if (mesh.material) {
+            const mat = mesh.material as any;
+            if (mat.color) {
+                mat.color.copy(colorObj);
             }
         }
     }
@@ -371,7 +378,7 @@ export const EnemyManager = {
                                 enemy.mesh.visible = false;
                                 enemy.mesh.matrixAutoUpdate = false;
                             } else if (isVisible && !isTelegraphing) {
-                                enemy.mesh.visible = false;
+                                enemy.mesh.visible = true;
                                 enemy.mesh.matrixAutoUpdate = false;
                                 enemy.mesh.updateMatrix();
                             } else {
@@ -396,15 +403,15 @@ export const EnemyManager = {
                             const isArc = enemy.lastDamageType === DamageID.ARC_CANNON;
                             if (isArc) {
                                 enemy.color = ENEMY_COLORS.ELECTRIC_ARC_FLASH.num;
-                                if (isBoss) applyElectrifiedGlow(enemy.mesh, _cyanColor, 2.0); // Using scratchpad _cyan
+                                if (isBoss) applyElectrifiedGlow(enemy, _cyanColor, 2.0); // Using scratchpad _cyan
                             } else {
                                 enemy.color = ENEMY_COLORS.HIT_FLASH.num;
-                                if (isBoss) applyElectrifiedGlow(enemy.mesh, _whiteColor, 1.0); // Using scratchpad _white
+                                if (isBoss) applyElectrifiedGlow(enemy, _whiteColor, 1.0); // Using scratchpad _white
                             }
                         }
                     } else if (enemy.statusFlags & EnemyFlags.FLASH_ACTIVE) {
                         enemy.statusFlags &= ~EnemyFlags.FLASH_ACTIVE;
-                        if (isBoss) resetMaterialEmissive(enemy.mesh);
+                        if (isBoss) resetMaterialEmissive(enemy);
                         else enemy.color = enemy.originalColor;
                     }
                 }
@@ -430,8 +437,15 @@ export const EnemyManager = {
         for (let i = 0; i < ENEMY_POOL_SIZE; i++) {
             if (activeEnemies[i]) {
                 activeEnemies[i].mesh.removeFromParent();
+                activeEnemies[i].childMeshes = undefined;
             }
             activeEnemies[i] = null!;
+        }
+
+        for (let i = 0; i < inactiveEnemies.length; i++) {
+            if (inactiveEnemies[i]) {
+                inactiveEnemies[i].childMeshes = undefined;
+            }
         }
 
         inactiveEnemies.length = 0;
@@ -732,9 +746,12 @@ export const EnemyManager = {
             body.visible = (enemy.statusFlags & EnemyFlags.BOSS) !== 0;
         }
 
+        // Cache child meshes on setup
+        cacheEnemyChildMeshes(enemy);
+
         _color.setHex(enemy.color);
-        setBaseColor(enemy.mesh, _color);
-        resetMaterialEmissive(enemy.mesh);
+        setBaseColor(enemy, _color);
+        resetMaterialEmissive(enemy);
 
         enemy.stunDuration = 0;
         enemy.slowDuration = 0;
@@ -851,7 +868,6 @@ export const EnemyManager = {
     },
 
     explodeEnemy: (enemy: Enemy, callbacks: any, forceDir?: THREE.Vector3) => {
-        //if (enemy.statusFlags & EnemyFlags.EXPLODED) return;
         if (enemy.deathState === EnemyDeathState.GIBBED) {
             enemy.statusFlags |= EnemyFlags.GIBBED;
             CareerStatsSystem.recordGib(callbacks.session, enemy.lastDamageType);
@@ -869,7 +885,6 @@ export const EnemyManager = {
         if (enemy.mesh.parent) enemy.mesh.parent.remove(enemy.mesh);
 
         // --- 1. BLOOD DECAL ---
-        // Scaled based on weapon type & enemy type:
         const dmgType = enemy.lastDamageType;
         let weaponBurstScale = 1.0;
         if (dmgType === DamageID.GRENADE) weaponBurstScale = 3.0;
@@ -881,14 +896,12 @@ export const EnemyManager = {
         }
 
         // --- 2. BLOOD SPLATTER ---
-        // Based on enemy type
         const bloodCount = (isBoss ? 12 : 6);
         if (callbacks.spawnParticle) {
             callbacks.spawnParticle(enemyPos.x, enemyHeadPos, enemyPos.z, FXParticleType.BLOOD_SPLATTER, bloodCount);
         }
 
         // --- 3. GORE ---
-        // Based on enemy type & body mass
         const goreCount = (isBoss ? 12 : 6);
         const goreScale = Math.max(4.0, (enemyBodyMass / goreCount) * 24.0);
         const gorePartWeight = enemyBodyWeight / goreCount;
@@ -904,7 +917,6 @@ export const EnemyManager = {
         }
         if (callbacks.spawnParticle) {
             for (let i = 0; i < goreCount; i++) {
-                // Isolated physics vector calculation completely free of stale scratchpad garbage
                 _v2.set(
                     (Math.random() - 0.5) * 10,
                     3.0 + Math.random() * 6,
@@ -914,7 +926,6 @@ export const EnemyManager = {
                 // Add the death/impact vector to the random burst
                 _v2.addScaledVector(_v1, 0.6);
 
-                // Signature mapping: (x, y, z, type, count, customMesh, customVel, color, scale, life, weight)
                 callbacks.spawnParticle(
                     enemyPos.x,
                     enemyHeadPos,
@@ -932,11 +943,6 @@ export const EnemyManager = {
         }
     },
 
-    /**
-     * UNIFIED PERFORMANCE PHYSICS: The single source of truth for sending zombies flying.
-     * Handles horizontal knockback, vertical lift, ragdoll state initialization and spinning.
-     * Works for RUSH, DODGE, VEHICLE & applies PHYSICAL damage
-     */
     applyImpactForce: (
         enemy: Enemy,
         impactSourcePos: THREE.Vector3,
@@ -988,10 +994,6 @@ export const EnemyManager = {
         }
     },
 
-    /**
-     * Handles the physics and logic for multiple enemies being hit by
-     * player's Rush or Dodge.
-     */
     knockbackEnemies: (
         ctx: SectorBuildContext | SectorUpdateContext,
         center: THREE.Vector3,
@@ -1085,7 +1087,7 @@ export const EnemyManager = {
 
     /**
      * Handles the physics and logic for a single enemy being hit by a vehicle.
-      */
+     */
     ramEnemies: (
         enemy: Enemy,
         knockDir: THREE.Vector3,
@@ -1160,13 +1162,10 @@ export const EnemyManager = {
         } else {
             enemy.lastDamageType = DamageID.VEHICLE_PUSH;
 
-            // Use dedicated V3 and V4 to avoid aliasing with V1 and V2 inside applyKnockback
             _v3.copy(knockDir).multiplyScalar(speedMS);
             _v4.copy(enemy.mesh.position).addScaledVector(knockDir, -1.0);
 
-            // Unified Physics Impact for vehicles
-            const liftRatio = 0.4 + (speedMS * 0.02); // Faster = more lift
-            // [VINTERDÖD FIX] Attribution to the unified VEHICLE category
+            const liftRatio = 0.4 + (speedMS * 0.02);
             EnemyManager.applyImpactForce(enemy, _v4, speedMS * 15, liftRatio, 1.5, speedMS * 2.0, DamageID.VEHICLE);
 
             enemy.slowDuration = 0.5;
@@ -1218,11 +1217,9 @@ export const EnemyManager = {
 
                 enemy.mesh.scale.set(s * w * shrink, s * shrink, s * w * shrink);
 
-                // FIXED: Lerp base color to charcoal black instead of white for carbonization feel
                 _color.setHex(enemy.color).lerp(_blackColor, progress);
-                setBaseColor(enemy.mesh, _color);
+                setBaseColor(enemy, _color);
 
-                // Zero-GC: Continuously spawn residual flame particles while crisping up
                 if (progress < 0.85 && Math.random() > 0.4 && callbacks.spawnParticle) {
                     _v1.set(enemy.mesh.position.x + (Math.random() - 0.5) * 0.4, enemy.mesh.position.y + 0.4 * shrink, enemy.mesh.position.z + (Math.random() - 0.5) * 0.4);
                     callbacks.spawnParticle(_v1.x, _v1.y, _v1.z, FXParticleType.ENEMY_EFFECT_FLAME, 1);
@@ -1233,7 +1230,6 @@ export const EnemyManager = {
                         enemy.statusFlags |= EnemyFlags.ASH_PERMANENT;
                         if (enemy.mesh.parent) enemy.mesh.parent.remove(enemy.mesh);
 
-                        // Zero-GC: Trigger a final smoke puff when the body is completely consumed
                         if (callbacks.spawnParticle) {
                             callbacks.spawnParticle(enemy.mesh.position.x, enemy.mesh.position.y + 0.1, enemy.mesh.position.z, FXParticleType.SMOKE, 4);
                         }
@@ -1245,14 +1241,14 @@ export const EnemyManager = {
             case EnemyDeathState.ELECTROCUTED:
                 if (!(enemy.statusFlags & EnemyFlags.ELECTROCUTED)) {
                     enemy.statusFlags |= EnemyFlags.ELECTROCUTED;
-                    enemy.targetPos.copy(enemy.mesh.position); // Reusing as deathPos
-                    enemy.baseY = enemy.mesh.position.y; // Reusing as deathPosY
+                    enemy.targetPos.copy(enemy.mesh.position);
+                    enemy.baseY = enemy.mesh.position.y;
 
-                    enemy.stunDuration = 400 + Math.random() * 200; // Reusing for fallDuration
-                    enemy.slowDuration = 1800 + Math.random() * 500; // Reusing for twitchDuration
+                    enemy.stunDuration = 400 + Math.random() * 200;
+                    enemy.slowDuration = 1800 + Math.random() * 500;
 
-                    enemy.swingX = -Math.PI / 2.1; // Reusing for targetRotX
-                    enemy.swingZ = (Math.random() - 0.5) * 0.5; // Reusing for targetRotZ
+                    enemy.swingX = -Math.PI / 2.1;
+                    enemy.swingZ = (Math.random() - 0.5) * 0.5;
                 }
 
                 const fallDur = enemy.stunDuration;
@@ -1267,7 +1263,7 @@ export const EnemyManager = {
 
                     const pulse = Math.sin(renderTime * 0.05) * 0.5 + 0.5;
                     _color.setHex(ENEMY_COLORS.ELECTRIC_ARC_FLASH.num);
-                    applyElectrifiedGlow(enemy.mesh, _color, 1.0 + pulse * 4.0);
+                    applyElectrifiedGlow(enemy, _color, 1.0 + pulse * 4.0);
 
                     const jitter = (1.0 - fallProgress * 0.5) * 0.2;
                     enemy.mesh.rotation.y += (Math.random() - 0.5) * jitter;
@@ -1284,8 +1280,8 @@ export const EnemyManager = {
                     }
                 } else {
                     _color.setHex(enemy.color || 0xffffff).multiplyScalar(0.3);
-                    resetMaterialEmissive(enemy.mesh);
-                    setBaseColor(enemy.mesh, _color);
+                    resetMaterialEmissive(enemy);
+                    setBaseColor(enemy, _color);
 
                     const floorY = ground.getGroundHeight(enemy.targetPos.x, enemy.targetPos.z, session);
                     enemy.mesh.position.x = enemy.targetPos.x;
@@ -1347,20 +1343,17 @@ export const EnemyManager = {
         const rewardXP = enemySystem?.callbacks?.rewardXP || state.callbacks?.rewardXP;
         const onBossKilled = enemySystem?.callbacks?.onBossKilled || state.callbacks?.onBossKilled;
 
-        // --- CONTIGUOUS CLEANUP ---
         let i = 0;
         while (i < activeCount) {
             const enemy = activeEnemies[i];
 
             if (enemy.deathState === EnemyDeathState.ALIVE) {
-                // Out-of-bounds check (Zero-GC ambient hibernation recycling)
                 const playerPos = state.player.position;
                 if (playerPos && (enemy.statusFlags & EnemyFlags.BOSS) === 0) {
                     const dx = enemy.mesh.position.x - playerPos.x;
                     const dz = enemy.mesh.position.z - playerPos.z;
                     const distSq = dx * dx + dz * dz;
 
-                    // If beyond simulation/hibernation range, recycle immediately
                     if (distSq > SPATIAL_CONFIG.AI_HIBERNATION_RADIUS_SQ) {
                         EnemyManager.recycleEnemy(i);
                         continue;
@@ -1413,7 +1406,6 @@ export const EnemyManager = {
             }
         }
     }
-
 };
 
 // --- INITIALIZE AI CALLBACKS ---

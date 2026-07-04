@@ -280,4 +280,5 @@ export interface Enemy {
     isWaveEnemy?: boolean;
     localSearchTarget?: THREE.Vector3;
     walkTime?: number;
+    childMeshes?: THREE.Mesh[]; // Flat array of child mesh nodes for Zero-GC visual modifiers
 }

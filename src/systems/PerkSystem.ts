@@ -14,6 +14,33 @@ import { KMH_TO_MS, MAX_ENTITIES, COMBAT } from '../content/constants';
 import { CombatEngine } from '../game/session/CombatEngine';
 import { CareerStatsSystem } from './CareerStatsSystem';
 
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
+// Module-level allocation ensures a single fixed hidden class for the lifetime of the module.
+const _v1 = new THREE.Vector3();
+
+// Pre-baked lookup tables: DamageID and DamageType per StatusEffectID.
+// Eliminates runtime switch branching on every DoT tick path.
+const _DEBUFF_DAMAGE_ID = new Int32Array(MAX_ENTITIES.PERKS);
+const _DEBUFF_DAMAGE_TYPE = new Int32Array(MAX_ENTITIES.PERKS);
+
+// Initialize all slots to fallback values
+_DEBUFF_DAMAGE_ID.fill(DamageID.OTHER);
+_DEBUFF_DAMAGE_TYPE.fill(DamageType.PHYSICAL);
+
+// Populate known mappings
+_DEBUFF_DAMAGE_ID[StatusEffectID.BURNING]    = DamageID.BURN;
+_DEBUFF_DAMAGE_ID[StatusEffectID.BLEEDING]   = DamageID.BLEED;
+_DEBUFF_DAMAGE_ID[StatusEffectID.ELECTRIFIED]= DamageID.ELECTRIC;
+_DEBUFF_DAMAGE_ID[StatusEffectID.FREEZING]   = DamageID.FROST;
+_DEBUFF_DAMAGE_ID[StatusEffectID.DROWNING]   = DamageID.DROWNING;
+
+_DEBUFF_DAMAGE_TYPE[StatusEffectID.BURNING]    = DamageType.BURN;
+_DEBUFF_DAMAGE_TYPE[StatusEffectID.BLEEDING]   = DamageType.BLEED;
+_DEBUFF_DAMAGE_TYPE[StatusEffectID.ELECTRIFIED]= DamageType.ELECTRIC;
+_DEBUFF_DAMAGE_TYPE[StatusEffectID.FREEZING]   = DamageType.FROST;
+_DEBUFF_DAMAGE_TYPE[StatusEffectID.DROWNING]   = DamageType.DROWNING;
+
+
 /**
  * PerkSystem
  * 
@@ -27,7 +54,6 @@ export class PerkSystem implements System {
     persistent = false;
     isFixedStep = true;
 
-    private _v1 = new THREE.Vector3();
     private _effectNextTicks = new Float32Array(MAX_ENTITIES.PERKS);
 
 
@@ -383,8 +409,9 @@ export class PerkSystem implements System {
         const intensity = state.combat.effectIntensities[i] || 1.0;
         const totalDamage = perk.dotDamage * intensity;
 
-        const dmgID = this.getDebuffDamageID(i);
-        const dmgType = this.getDebuffDamageType(i);
+        // Zero-GC O(1) lookup: pre-baked typed arrays replace runtime switch branching.
+        const dmgID: DamageID = _DEBUFF_DAMAGE_ID[i];
+        const dmgType: DamageType = _DEBUFF_DAMAGE_TYPE[i];
 
         CombatEngine.handlePlayerHit(session, totalDamage, null, dmgType, dmgID, true, i);
 
@@ -402,46 +429,22 @@ export class PerkSystem implements System {
                 FXSystem.spawnParticle(scene, state.combat.particles, pos.x, 1.5, pos.z, FXParticleType.BLOOD_SPLATTER, 3);
                 break;
             case StatusEffectID.BURNING:
-                this._v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.2, pos.z + (Math.random() - 0.5) * 0.5);
-                FXSystem.spawnParticle(scene, state.combat.particles, this._v1.x, this._v1.y, this._v1.z, FXParticleType.FLAME, 4 + Math.floor(Math.random() * 3));
+                _v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.2, pos.z + (Math.random() - 0.5) * 0.5);
+                FXSystem.spawnParticle(scene, state.combat.particles, _v1.x, _v1.y, _v1.z, FXParticleType.FLAME, 4 + Math.floor(Math.random() * 3));
                 break;
             case StatusEffectID.ELECTRIFIED:
-                this._v1.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 1.2, pos.z + (Math.random() - 0.5) * 0.4);
-                FXSystem.spawnParticle(scene, state.combat.particles, this._v1.x, this._v1.y, this._v1.z, FXParticleType.SPARK, 3);
+                _v1.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 1.2, pos.z + (Math.random() - 0.5) * 0.4);
+                FXSystem.spawnParticle(scene, state.combat.particles, _v1.x, _v1.y, _v1.z, FXParticleType.SPARK, 3);
                 break;
             case StatusEffectID.FREEZING:
-                this._v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.5, pos.z + (Math.random() - 0.5) * 0.5);
-                FXSystem.spawnParticle(scene, state.combat.particles, this._v1.x, this._v1.y, this._v1.z, FXParticleType.SNOW_PUFF, 3);
+                _v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.5, pos.z + (Math.random() - 0.5) * 0.5);
+                FXSystem.spawnParticle(scene, state.combat.particles, _v1.x, _v1.y, _v1.z, FXParticleType.SNOW_PUFF, 3);
                 break;
             case StatusEffectID.DROWNING:
                 FXSystem.spawnParticle(scene, state.combat.particles, pos.x, 0.2, pos.z, FXParticleType.SPLASH, 3);
                 break;
         }
     }
-
-    private getDebuffDamageID(effectId: StatusEffectID): DamageID {
-        switch (effectId) {
-            case StatusEffectID.BURNING: return DamageID.BURN;
-            case StatusEffectID.BLEEDING: return DamageID.BLEED;
-            case StatusEffectID.ELECTRIFIED: return DamageID.ELECTRIC;
-            case StatusEffectID.FREEZING: return DamageID.FROST;
-            case StatusEffectID.DROWNING: return DamageID.DROWNING;
-            default: return DamageID.OTHER;
-        }
-    }
-
-    private getDebuffDamageType(effectId: StatusEffectID): DamageType {
-        switch (effectId) {
-            case StatusEffectID.BURNING: return DamageType.BURN;
-            case StatusEffectID.BLEEDING: return DamageType.BLEED;
-            case StatusEffectID.ELECTRIFIED: return DamageType.ELECTRIC;
-            case StatusEffectID.FREEZING: return DamageType.FROST;
-            case StatusEffectID.DROWNING: return DamageType.DROWNING;
-            default: return DamageType.PHYSICAL;
-        }
-    }
-
-
 
     clear() { }
 }

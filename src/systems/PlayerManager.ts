@@ -20,7 +20,34 @@ export class PlayerManager implements System {
     isFixedStep = false; // Runs at variable render rates for visual animation smoothness
 
     private lastTeleportTimestamp = 0;
-    private animStateScratch: any = {};
+
+    // Pre-shaped scratchpad: all fields declared at construction to lock V8 hidden class.
+    // Prevents JIT de-optimization caused by dynamic property addition during first update.
+    private animStateScratch: any = {
+        staminaRatio: 0,
+        isMoving: false,
+        isRushing: false,
+        isDodging: false,
+        dodgeStartTime: 0,
+        isSpeaking: false,
+        isThinking: false,
+        isIdleLong: false,
+        isWading: false,
+        isSwimming: false,
+        isDead: false,
+        deathStartTime: 0,
+        isBurning: false,
+        isBurningDead: false,
+        isElectrocuted: false,
+        isBiting: false,
+        renderTime: 0,
+        simTime: 0,
+        currentSpeedRatio: 1,
+        seed: 0,
+        nodes: null,
+        baseScale: 1,
+        baseY: 0
+    };
 
     constructor(
         private playerGroup: THREE.Group,
@@ -136,6 +163,29 @@ export class PlayerManager implements System {
     }
 
     clear() {
-        this.animStateScratch = {};
+        // Zero all fields individually to preserve V8 hidden class — do NOT replace with {}.
+        this.animStateScratch.staminaRatio = 0;
+        this.animStateScratch.isMoving = false;
+        this.animStateScratch.isRushing = false;
+        this.animStateScratch.isDodging = false;
+        this.animStateScratch.dodgeStartTime = 0;
+        this.animStateScratch.isSpeaking = false;
+        this.animStateScratch.isThinking = false;
+        this.animStateScratch.isIdleLong = false;
+        this.animStateScratch.isWading = false;
+        this.animStateScratch.isSwimming = false;
+        this.animStateScratch.isDead = false;
+        this.animStateScratch.deathStartTime = 0;
+        this.animStateScratch.isBurning = false;
+        this.animStateScratch.isBurningDead = false;
+        this.animStateScratch.isElectrocuted = false;
+        this.animStateScratch.isBiting = false;
+        this.animStateScratch.renderTime = 0;
+        this.animStateScratch.simTime = 0;
+        this.animStateScratch.currentSpeedRatio = 1;
+        this.animStateScratch.seed = 0;
+        this.animStateScratch.nodes = null;
+        this.animStateScratch.baseScale = 1;
+        this.animStateScratch.baseY = 0;
     }
 }

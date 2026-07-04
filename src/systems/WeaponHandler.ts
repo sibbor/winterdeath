@@ -269,17 +269,23 @@ export const WeaponHandler = {
         }
 
         // --- OPTIMIZED ENERGY REGENERATION ---
-        if (loadout.primary && (WEAPONS as any)[loadout.primary]?.isEnergy) {
+        // Zero-GC: Hoist property chain lookups to local booleans evaluated once per frame.
+        // Eliminates 3x repeated `(WEAPONS as any)[loadout.X]?.isEnergy` chain on every tick.
+        const isPrimaryEnergy   = !!(loadout.primary   && (WEAPONS as any)[loadout.primary]?.isEnergy);
+        const isSecondaryEnergy = !!(loadout.secondary && (WEAPONS as any)[loadout.secondary]?.isEnergy);
+        const isSpecialEnergy   = !!(loadout.special   && (WEAPONS as any)[loadout.special]?.isEnergy);
+
+        if (isPrimaryEnergy) {
             if (!(input.actions[InputAction.FIRE] && wepId === loadout.primary)) {
                 state.combat.weaponAmmo[loadout.primary] = Math.min(100, (state.combat.weaponAmmo[loadout.primary] || 0) + 10 * delta);
             }
         }
-        if (loadout.secondary && (WEAPONS as any)[loadout.secondary]?.isEnergy) {
+        if (isSecondaryEnergy) {
             if (!(input.actions[InputAction.FIRE] && wepId === loadout.secondary)) {
                 state.combat.weaponAmmo[loadout.secondary] = Math.min(100, (state.combat.weaponAmmo[loadout.secondary] || 0) + 10 * delta);
             }
         }
-        if (loadout.special && (WEAPONS as any)[loadout.special]?.isEnergy) {
+        if (isSpecialEnergy) {
             if (!(input.actions[InputAction.FIRE] && wepId === loadout.special)) {
                 state.combat.weaponAmmo[loadout.special] = Math.min(100, (state.combat.weaponAmmo[loadout.special] || 0) + 10 * delta);
             }

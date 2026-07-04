@@ -29,8 +29,12 @@ const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
-const _v5 = new THREE.Vector3();
 const _wanderTarget = new THREE.Vector3();
+
+// --- RE-ENTRANCY SAFE ISOLATED REGISTERS FOR moveEntity ---
+const _mv1 = new THREE.Vector3();
+const _mv2 = new THREE.Vector3();
+const _mv3 = new THREE.Vector3();
 
 // --- PRE-CALCULATED CONSTANTS ---
 const TWO_PI = Math.PI * 2;
@@ -76,7 +80,6 @@ export const EnemyAI = {
         const dx0 = enemy.mesh.position.x - playerPos.x;
         const dz0 = enemy.mesh.position.z - playerPos.z;
         let distSq = dx0 * dx0 + dz0 * dz0;
-
 
         if (enemy.deathState === EnemyDeathState.DEAD || !enemy.mesh) return;
 
@@ -213,7 +216,7 @@ export const EnemyAI = {
                                 const totalRad = radius + (other.originalScale * 0.5);
 
                                 if (dSq < totalRad * totalRad) {
-                                    if (callbacks.handleEnemyHit) callbacks.handleEnemyHit(other, damage, DamageType.EXPLOSION, DamageID.EXPLOSION, true);
+                                    callbacks.handleEnemyHit(other, damage, DamageType.EXPLOSION, DamageID.EXPLOSION, true);
                                     const force = 25.0 * (1.0 - Math.min(1.0, dSq / radSq));
                                     const mass = other.originalScale * other.widthScale;
                                     _v2.copy(_v1).normalize().multiplyScalar(force / mass).setY(2.0);
@@ -283,7 +286,6 @@ export const EnemyAI = {
 
             // --- Friction (Horizontal only) ---
             const mass = enemy.bodyMass;
-            // Increase friction significantly if ragdolling on ground to prevent "ice-skating"
             const frictionMult = ((enemy.statusFlags & EnemyFlags.RAGDOLLING) || !(enemy.statusFlags & EnemyFlags.AIRBORNE)) ? 12.0 : 2.5;
             const friction = 1.0 + (mass * frictionMult);
             const drag = Math.max(0, 1 - friction * delta);
@@ -318,7 +320,6 @@ export const EnemyAI = {
                 // Apply fall damage if not in water
                 const fallHeight = peakY - floorY;
                 if (isRagdolling && (!water || !_buoyancyResult.inWater) && fallHeight > 0.5) {
-                    // Quadratic fall damage for high-impact RUSH feel scaled by body weight
                     const fallRatio = fallHeight * (enemy.bodyWeight / 75.0);
                     const fallDamage = Math.min(enemy.maxHp * 0.95, fallRatio * fallRatio * 15);
 
@@ -444,27 +445,23 @@ export const EnemyAI = {
         if (enemy.burnDuration > 0) {
             enemy.burnDuration -= delta;
             if (enemy.burnDuration <= 0) {
-                // Bitwise extinguish when duration expires
                 enemy.statusFlags &= ~EnemyFlags.BURNING;
             }
         }
 
-        // Decoupled Attack & Ability timers (Standardized to seconds)
         if (enemy.attackTimer > 0) {
             enemy.attackTimer -= (delta * (session.state.isTimeFrozen ? 0 : 1));
-            if (isNaN(enemy.attackTimer)) enemy.attackTimer = 0; // NaN Guard
+            if (isNaN(enemy.attackTimer)) enemy.attackTimer = 0;
             if (enemy.attackTimer < 0) enemy.attackTimer = 0;
         }
 
         // --- VINTERDÖD STABILIZATION: PERCEPTION UPDATE (Visual + Noise) ---
-        // Staggered perception check (once every 15 frames) to minimize CPU overhead
         const waveDisabled = enemy.isWaveEnemy && session.state?.sectorState?.waveDisabled;
         if (!waveDisabled && (enemy.poolId + Math.floor(simTime * 60)) % 15 === 0 && enemy.hp > 0) {
             const dx = playerPos.x - enemy.mesh.position.x;
             const dz = playerPos.z - enemy.mesh.position.z;
             const distSq = dx * dx + dz * dz;
 
-            // Visual Perception
             if (distSq < ENEMY_DETECTION.VISUAL_RANGE_SQ) {
                 const enemyDetectionSystem = session.systems.enemyDetection;
                 if (enemyDetectionSystem && enemyDetectionSystem.canSeePlayer(enemy, playerPos, streamer)) {
@@ -475,7 +472,6 @@ export const EnemyAI = {
             }
         }
 
-        // Decay awareness over time if player is lost
         if (enemy.awareness > 0 && !session.state.isTimeFrozen) {
             enemy.awareness = Math.max(0, enemy.awareness - delta * 0.15);
         }
@@ -494,7 +490,6 @@ export const EnemyAI = {
         if (enemy.stunDuration > 0) {
             if (!(enemy.statusFlags & EnemyFlags.STUNNED)) {
                 enemy.statusFlags |= EnemyFlags.STUNNED;
-                // Immediate interruption of all attacks on stun start
                 if (enemy.state === AIState.ATTACK_CHARGE || enemy.state === AIState.ATTACKING) {
                     enemy.state = AIState.IDLE;
                     enemy.attackTimer = 0;
@@ -550,13 +545,12 @@ export const EnemyAI = {
         // --- 8. SENSORS & SEPARATION ---
         let seesPlayer = (simTime - (enemy.lastSeenTime || 0) < 500) && enemy.awareness > 0.8 && distSq < 2500;
 
-        // VINTERDÖD: Event tether logic for wave enemies (50m radius)
         const isTethered = enemy.isWaveEnemy && enemy.mesh.position.distanceToSquared(enemy.spawnPos) > 2500.0;
         if (isTethered) {
-            seesPlayer = false; // Ignore player while returning to event area
+            seesPlayer = false;
         }
 
-        _v5.set(0, 0, 0);
+        _v4.set(0, 0, 0);
 
         let shouldCheckSeparation = isTier1;
         if (isTier2) shouldCheckSeparation = (frameOffset % 5 === 0);
@@ -579,28 +573,21 @@ export const EnemyAI = {
                 const odSq = odx * odx + odz * odz;
 
                 if (odSq < SEPARATION_RADIUS_SQ && odSq > 0.001) {
-                    // Sqrt Purge! 
-                    // Using squared falloff for push strength. No sqrt needed.
-                    // (1.0 - (odSq / SEPARATION_RADIUS_SQ)) * 5.0 (tuning factor)
                     const pushFactor = (1.0 - (odSq / SEPARATION_RADIUS_SQ)) * 5.0;
-                    _v5.x += odx * pushFactor;
-                    _v5.z += odz * pushFactor;
+                    _v4.x += odx * pushFactor;
+                    _v4.z += odz * pushFactor;
                 }
             }
-            if (Math.abs(_v5.x) > 0.001 || Math.abs(_v5.z) > 0.001) {
-                // Limit the shove force using lengthSq
-                const shoveSq = _v5.x * _v5.x + _v5.z * _v5.z;
-                if (shoveSq > 16.0) { // Limit to 4.0 units
-                    const invShove = 4.0 / Math.sqrt(shoveSq); // Still one sqrt but only once per enemy, NOT per neighbor!
-                    _v5.x *= invShove;
-                    _v5.z *= invShove;
+            if (Math.abs(_v4.x) > 0.001 || Math.abs(_v4.z) > 0.001) {
+                const shoveSq = _v4.x * _v4.x + _v4.z * _v4.z;
+                if (shoveSq > 16.0) {
+                    const invShove = 4.0 / Math.sqrt(shoveSq);
+                    _v4.x *= invShove;
+                    _v4.z *= invShove;
                 }
             }
         }
 
-        // AI Movement Lock: Do not allow base AI movement if currently being heavily displaced by physics.
-        // Optimized: Bypassing null-check since V8 shape guarantees knockbackVel exists.
-        // Using inline lengthSq on X and Z to avoid Math.sqrt() and Y-axis jumping interference.
         const isKnockedBackH = (enemy.knockbackVel.x * enemy.knockbackVel.x + enemy.knockbackVel.z * enemy.knockbackVel.z) > 0.05;
 
         // --- 9. STATE MACHINE ---
@@ -626,9 +613,8 @@ export const EnemyAI = {
                     logStateChange(simTime, enemy, AIState.WANDER);
                     enemy.state = AIState.WANDER;
 
-                    // Choose a wander target within 5 to 10 meters of spawnPos
                     const angle = Math.random() * (TWO_PI);
-                    const wanderRadius = 5.0 + Math.random() * 5.0; // 5-10 meters
+                    const wanderRadius = 5.0 + Math.random() * 5.0;
                     const spawnY = ground.getGroundHeight(enemy.spawnPos.x, enemy.spawnPos.z, session);
                     _v1.set(enemy.spawnPos.x + Math.cos(angle) * wanderRadius, spawnY, enemy.spawnPos.z + Math.sin(angle) * wanderRadius);
                     enemy.velocity.subVectors(_v1, enemy.mesh.position).normalize().multiplyScalar(enemy.speed * 0.5);
@@ -640,14 +626,12 @@ export const EnemyAI = {
                 enemy.searchTimer -= delta;
                 _wanderTarget.set(enemy.mesh.position.x + enemy.velocity.x * delta, enemy.mesh.position.y + enemy.velocity.y * delta, enemy.mesh.position.z + enemy.velocity.z * delta);
 
-                // Movement Lock Guard applied ONLY to physical displacement
                 if (!isTier4 && !isKnockedBackH) {
-                    moveEntity(enemy, _wanderTarget, delta, enemy.speed * 0.5, streamer, ground, session, _v5, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                    moveEntity(enemy, _wanderTarget, delta, enemy.speed * 0.5, streamer, ground, session, _v4, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                 }
 
-                // If wandering takes us too far from spawn pos, return towards it
                 const distToSpawnSq = enemy.mesh.position.distanceToSquared(enemy.spawnPos);
-                if (distToSpawnSq > 144.0) { // 12m limit threshold (squared)
+                if (distToSpawnSq > 144.0) {
                     enemy.velocity.subVectors(enemy.spawnPos, enemy.mesh.position).normalize().multiplyScalar(enemy.speed * 0.5);
                 }
 
@@ -682,16 +666,13 @@ export const EnemyAI = {
                     enemy.idleTimer = 1.0 + Math.random() * 2.0;
                 } else {
                     const distToLastSq = enemy.mesh.position.distanceToSquared(enemy.lastKnownPosition);
-                    if (distToLastSq > 4.0) { // 2.0m threshold (squared)
-                        // Movement Lock Guard
+                    if (distToLastSq > 4.0) {
                         if (!isTier4 && !isKnockedBackH) {
-                            moveEntity(enemy, enemy.lastKnownPosition, delta, enemy.speed * 0.8, streamer, ground, session, _v5, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                            moveEntity(enemy, enemy.lastKnownPosition, delta, enemy.speed * 0.8, streamer, ground, session, _v4, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                         }
                     } else {
-                        // Once they reach the player's last known location, they wander locally within 4-8m of it searching
-                        if (!enemy.localSearchTarget) {
-                            enemy.localSearchTarget = new THREE.Vector3();
-                        }
+                        // --- SELF-HEALING LAZY INITIALIZATION ---
+                        enemy.localSearchTarget = enemy.localSearchTarget || new THREE.Vector3();
 
                         const timeInSec = Math.floor(simTime / 1000);
                         if (enemy.localSearchTarget.lengthSq() === 0 || (timeInSec % 3 === 0 && Math.random() > 0.7)) {
@@ -706,7 +687,7 @@ export const EnemyAI = {
                         }
 
                         if (!isTier4 && !isKnockedBackH) {
-                            moveEntity(enemy, enemy.localSearchTarget, delta, enemy.speed * 0.6, streamer, ground, session, _v5, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                            moveEntity(enemy, enemy.localSearchTarget, delta, enemy.speed * 0.6, streamer, ground, session, _v4, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                         }
                         enemy.mesh.rotation.y += delta * 1.5;
                     }
@@ -717,8 +698,6 @@ export const EnemyAI = {
                 if (seesPlayer) {
                     updateLastSeen(enemy, playerPos, simTime);
                 } else if (enemy.isWaveEnemy && !isTethered && enemy.mesh.position.distanceToSquared(enemy.lastKnownPosition) < 100.0) {
-                    // Wave enemies become hyper-aggressive and lock onto the player 
-                    // once they reach their initial attractor location.
                     updateLastSeen(enemy, playerPos, simTime);
                 } else if (enemy.awareness === 1.0) {
                     updateLastSeen(enemy, enemy.lastKnownPosition, simTime);
@@ -730,10 +709,10 @@ export const EnemyAI = {
                     logStateChange(simTime, enemy, AIState.SEARCH);
                     enemy.state = AIState.SEARCH;
                     if (isTethered) {
-                        enemy.lastKnownPosition.copy(enemy.spawnPos); // Walk back to event area
+                        enemy.lastKnownPosition.copy(enemy.spawnPos);
                     }
                     const baseTime = enemy.lastHeardNoiseType !== NoiseType.NONE ? (SEARCH_TIMERS[enemy.lastHeardNoiseType] || 5.0) : 5.0;
-                    enemy.searchTimer = isTethered ? 15.0 : baseTime; // Give plenty of time to return
+                    enemy.searchTimer = isTethered ? 15.0 : baseTime;
                 }
                 else {
                     if (isDead) {
@@ -746,9 +725,8 @@ export const EnemyAI = {
                     const target = (seesPlayer) ? playerPos : enemy.lastKnownPosition;
                     let chaseSpeed = ((enemy.statusFlags & EnemyFlags.WADING) !== 0 ? enemy.speed * 0.6 : enemy.speed);
 
-                    // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(enemy, target, delta, chaseSpeed, streamer, ground, session, _v5, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                        moveEntity(enemy, target, delta, chaseSpeed, streamer, ground, session, _v4, simTime, renderTime, true, isTier1, isTier2, frameOffset);
 
                         const dx = enemy.mesh.position.x - playerPos.x;
                         const dz = enemy.mesh.position.z - playerPos.z;
@@ -768,12 +746,10 @@ export const EnemyAI = {
                             if (cooldown > 0) continue;
 
                             const rawRange = (att.type === EnemyAttackType.HIT && !att.range) ? ENEMY_ATTACK_RANGE[enemy.type] : (att.range || ENEMY_ATTACK_RANGE[enemy.type]);
-                            // VINTERDÖD STABILIZATION: buffer prevents "running-in-place" stalls
                             const bufferedRangeSq = (rawRange * COMBAT.HYSTERESIS) * (rawRange * COMBAT.HYSTERESIS);
 
                             if (distSq < bufferedRangeSq) {
                                 bestAttackIndex = i;
-                                // Prioritize special attacks (Bite, Smash, etc.)
                                 if (att.type !== EnemyAttackType.HIT) break;
                             }
                         }
@@ -787,16 +763,14 @@ export const EnemyAI = {
                             if (att.chargeTime && att.chargeTime > 0) {
                                 logStateChange(simTime, enemy, AIState.ATTACK_CHARGE);
                                 enemy.state = AIState.ATTACK_CHARGE;
-                                enemy.attackTimer = Math.max(0.016, att.chargeTime * 0.001); // Harden: Ensure timer is non-zero (min 1 frame)
+                                enemy.attackTimer = Math.max(0.016, att.chargeTime * 0.001);
                             } else {
-                                // Immediate execution for 0-charge attacks (HIT, etc.)
                                 const success = EnemyAttackHandler.executeAttack(enemy, att, distSq, playerPos, streamer, callbacks, delta, simTime, renderTime);
 
-                                // Ensure we transition to ATTACKING if executeAttack succeeded and didn't switch to a special state (like GRAPPLE)
                                 if (success && enemy.state === AIState.CHASE) {
                                     logStateChange(simTime, enemy, AIState.ATTACKING);
                                     enemy.state = AIState.ATTACKING;
-                                    enemy.attackTimer = Math.max(0.016, (att.activeTime || 500) * 0.001); // Harden: Min 1 frame active
+                                    enemy.attackTimer = Math.max(0.016, (att.activeTime || 500) * 0.001);
                                 }
                             }
                         }
@@ -808,9 +782,8 @@ export const EnemyAI = {
                 if (enemy.attackTimer !== -1) {
                     const att = enemy.attacks[enemy.currentAttackIndex!];
 
-                    // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(enemy, playerPos, delta, enemy.speed * 0.25, streamer, ground, session, _v5, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                        moveEntity(enemy, playerPos, delta, enemy.speed * 0.25, streamer, ground, session, _v4, simTime, renderTime, true, isTier1, isTier2, frameOffset);
 
                         const dx = enemy.mesh.position.x - playerPos.x;
                         const dz = enemy.mesh.position.z - playerPos.z;
@@ -818,16 +791,14 @@ export const EnemyAI = {
                     }
 
                     if (enemy.attackTimer <= 0) {
-                        // State-Guard for charge-finish
                         const prevState = enemy.state;
                         const success = EnemyAttackHandler.executeAttack(enemy, att, distSq, playerPos, streamer, callbacks, delta, simTime, renderTime);
 
                         if (success && enemy.state === prevState) {
                             logStateChange(simTime, enemy, AIState.ATTACKING);
                             enemy.state = AIState.ATTACKING;
-                            enemy.attackTimer = Math.max(0.016, (att.activeTime || 100) * 0.001); // Harden: Min 1 frame active
+                            enemy.attackTimer = Math.max(0.016, (att.activeTime || 100) * 0.001);
                         } else if (!success && enemy.state === prevState) {
-                            // If attack failed (out of range?), go back to chase
                             logStateChange(simTime, enemy, AIState.CHASE, 'ATTACK_FAILED_RANGE');
                             enemy.state = AIState.CHASE;
                         }
@@ -839,9 +810,8 @@ export const EnemyAI = {
                 if (enemy.attackTimer !== -1) {
                     const att = enemy.attacks[enemy.currentAttackIndex!];
 
-                    // Movement Lock Guard
                     if (!isTier4 && !isKnockedBackH) {
-                        moveEntity(enemy, playerPos, delta, enemy.speed * 0.15, streamer, ground, session, _v5, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                        moveEntity(enemy, playerPos, delta, enemy.speed * 0.15, streamer, ground, session, _v4, simTime, renderTime, true, isTier1, isTier2, frameOffset);
 
                         const dx = enemy.mesh.position.x - playerPos.x;
                         const dz = enemy.mesh.position.z - playerPos.z;
@@ -861,7 +831,7 @@ export const EnemyAI = {
                                     enemy.state = AIState.GRAPPLE;
                                     enemy.statusFlags |= EnemyFlags.GRAPPLING;
                                     enemy.grappleDuration = 1.5 + Math.random() * 0.5;
-                                    enemy.attackTimer = -1; // Yield control to Grapple system
+                                    enemy.attackTimer = -1;
                                     enemy.attackCooldowns[att.type] = att.cooldown;
                                     break;
                                 }
@@ -875,10 +845,8 @@ export const EnemyAI = {
                 break;
 
             case AIState.GRAPPLE:
-                // Advanced attachment & Inertia-driven Pendulum
                 enemy.grappleDuration -= delta;
 
-                // 1. Break Check (Rush = 1<<4, Dodge = 1<<8)
                 const isRushing = (playerStatusFlags & 16) !== 0;
                 const isDodging = (playerStatusFlags & 256) !== 0;
 
@@ -894,78 +862,57 @@ export const EnemyAI = {
                     _v1.copy(enemy.mesh.position);
                     _v2.copy(enemy.prevP);
                     enemy.prevP.copy(_v1);
-                    enemy.prevP.set(0, -1000, 0); // Reset inertia marker
+                    enemy.prevP.set(0, -1000, 0);
                     break;
                 }
 
-                // 2. High-Fidelity Physics (Zero-GC Pendulum)
-                // Pivot point: Neck Region (playerPos + 1.6 height)
                 const neckHeight = 1.6;
                 const orbitDist = enemy.attackOffset;
-
-                // Track player displacement for inertia
                 const prevP = enemy.prevP;
 
-                // Check for reset marker (y = -1000) to prevent first-frame physics explosion
                 if (prevP.y < -500) {
                     prevP.copy(playerPos);
                     _v1.set(0, 0, 0);
                 } else {
-                    _v1.subVectors(playerPos, prevP); // _v1 = frame displacement
+                    _v1.subVectors(playerPos, prevP);
                     prevP.copy(playerPos);
                 }
 
-                // Pivot direction (Horizontal plane)
                 _v2.subVectors(enemy.mesh.position, playerPos);
                 _v2.y = 0;
 
-                // V8/Math Optimization: NaN Safety Check (Prevents disappearing enemies)
                 const currentDistSq = _v2.lengthSq();
                 if (currentDistSq > 0.0001) {
                     _v2.divideScalar(Math.sqrt(currentDistSq));
                 } else {
-                    // Fallback to current forward or random if overlapping
                     _v2.set(0, 0, 1);
                 }
 
-                // Target position (Horizontal orbit)
                 _v3.copy(_v2).multiplyScalar(orbitDist).add(playerPos);
 
-                // Inertia: Calculate "Hanging" angle based on player motion
-                const dot = _v1.dot(_v2); // Positive if player moves away from zombie
-                const sideDot = _v1.x * _v2.z - _v1.z * _v2.x; // Cross-product (Vertical component proxy)
+                const dot = _v1.dot(_v2);
+                const sideDot = _v1.x * _v2.z - _v1.z * _v2.x;
 
-                // Update swing angles (Smoothed pendulum)
                 const targetTilt = -dot * 3.5;
                 const targetSwing = -sideDot * 5.0;
 
-                // V8/Math Optimization: NaN Safety Check
                 if (isNaN(enemy.swingX)) enemy.swingX = 0;
                 if (isNaN(enemy.swingZ)) enemy.swingZ = 0;
 
                 enemy.swingX = THREE.MathUtils.lerp(enemy.swingX, targetTilt, 5.0 * delta);
                 enemy.swingZ = THREE.MathUtils.lerp(enemy.swingZ, targetSwing, 5.0 * delta);
 
-                // 3. Final Mesh Transform
                 enemy.mesh.position.set(_v3.x, playerPos.y + neckHeight, _v3.z);
-
-                // Rotation: Look at player (Y-axis facing)
-                // Note: X and Z tilt is handled by EnemyAnimator.updateAttackAnim using swingX/Z
                 enemy.mesh.rotation.y = Math.atan2(playerPos.x - enemy.mesh.position.x, playerPos.z - enemy.mesh.position.z);
-
-                // Vertical offset so zombie head is at pivot point
                 enemy.mesh.position.y -= (enemy.originalScale * 0.82);
 
-                // FINAL SAFETY: Clamp Y to ground to prevent "disappearing" below floor
                 if (enemy.mesh.position.y < -0.5) enemy.mesh.position.y = 0.1;
 
-                // 4. Periodic Damage & Visuals
                 if (simTime > (enemy.lastGrappleDmg || 0) + 600) {
                     enemy.lastGrappleDmg = simTime;
                     callbacks.handlePlayerHit(4, enemy, DamageType.PHYSICAL, DamageID.BITE, true, undefined, undefined, undefined, EnemyAttackType.GRAPPLE_BITE);
 
                     if (callbacks.spawnParticle) {
-                        // Improved blood feedback for grapple
                         callbacks.spawnParticle(playerPos.x, 1.5, playerPos.z, FXParticleType.BLOOD_SPLATTER, 6);
                     }
                 }
@@ -979,78 +926,65 @@ export const EnemyAI = {
 
 // --- HELPERS ---
 function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, streamer: WorldStreamer, ground: any, session: any, sepForce: THREE.Vector3, simTime: number, renderTime: number, isChasing: boolean, isTier1: boolean, isTier2: boolean, frameOffset: number) {
-    // 1. NAVIGATION: Get desired steering vector from FlowField (only when actively chasing the player)
     if (isChasing) {
-        NavigationSystem.getFlowVector(e.mesh.position.x, e.mesh.position.z, _v1);
+        NavigationSystem.getFlowVector(e.mesh.position.x, e.mesh.position.z, _mv1);
     } else {
-        _v1.set(0, 0, 0);
+        _mv1.set(0, 0, 0);
     }
 
-    // Fallback to straight-line to target if outside flow grid, target reached, or not chasing
-    if (_v1.x === 0 && _v1.z === 0) {
-        _v1.set(target.x, e.mesh.position.y, target.z);
-        _v1.sub(e.mesh.position);
-        _v1.y = 0;
-        const distSq = _v1.lengthSq();
-        if (distSq > 0.0001) _v1.normalize();
+    if (_mv1.x === 0 && _mv1.z === 0) {
+        _mv1.set(target.x, e.mesh.position.y, target.z);
+        _mv1.sub(e.mesh.position);
+        _mv1.y = 0;
+        const distSq = _mv1.lengthSq();
+        if (distSq > 0.0001) _mv1.normalize();
     }
 
-    // 2. STATUS EFFECTS: Apply Slows (50% reduction for materials/flags, 20% for projectile slowDuration)
     const isSlowingMaterial = (e.statusFlags & (EnemyFlags.SLOWED | EnemyFlags.WADING)) !== 0;
     if (isSlowingMaterial) {
         speed *= 0.5;
     } else if (e.slowDuration > 0) {
-        speed *= 0.8; // 20% slower
+        speed *= 0.8;
     }
 
-    // 3. SET BASE VELOCITY (Steering Vector * Target Speed)
-    _v3.copy(_v1).multiplyScalar(speed);
+    _mv2.copy(_mv1).multiplyScalar(speed);
 
-    // 4. SEPARATION: Apply push force from neighboring enemies
     if (Math.abs(sepForce.x) > 0.001 || Math.abs(sepForce.z) > 0.001) {
-        _v3.addScaledVector(sepForce, 1.2);
+        _mv2.addScaledVector(sepForce, 1.2);
 
-        // CLAMP: Prevent "Crowd Surfing" at high density
-        if (_v3.lengthSq() > speed * speed) {
-            _v3.normalize().multiplyScalar(speed);
+        if (_mv2.lengthSq() > speed * speed) {
+            _mv2.normalize().multiplyScalar(speed);
         }
     }
 
-    // Save actual physics velocity for other systems (FX, ragdolls)
-    e.velocity.copy(_v3);
+    e.velocity.copy(_mv2);
+    _mv2.multiplyScalar(delta);
 
-    // 5. DISPLACEMENT: Velocity -> Frame Delta
-    _v3.multiplyScalar(delta);
-
-    // New Trial position (_v4)
-    _v4.set(
-        e.mesh.position.x + _v3.x,
-        e.mesh.position.y + _v3.y,
-        e.mesh.position.z + _v3.z
+    _mv3.set(
+        e.mesh.position.x + _mv2.x,
+        e.mesh.position.y + _mv2.y,
+        e.mesh.position.z + _mv2.z
     );
 
-    // --- PLAYER COLLISION RESOLUTION (Soft Shove Parity) ---
     if (session && session.state && session.state.player) {
         const playerPos = session.state.player.position;
-        const pdx = _v4.x - playerPos.x;
-        const pdz = _v4.z - playerPos.z;
+        const pdx = _mv3.x - playerPos.x;
+        const pdz = _mv3.z - playerPos.z;
         const pDistSq = pdx * pdx + pdz * pdz;
         if (pDistSq < PHYSICS.SOFT_SHOVE_RADIUS_SQ && pDistSq > 0.0001) {
             const overlap = (PHYSICS.SOFT_SHOVE_RADIUS_SQ - pDistSq) * PHYSICS.SOFT_SHOVE_FORCE;
             const pDist = Math.sqrt(pDistSq);
-            _v4.x += (pdx / pDist) * overlap;
-            _v4.z += (pdz / pDist) * overlap;
+            _mv3.x += (pdx / pDist) * overlap;
+            _mv3.z += (pdz / pDist) * overlap;
         }
     }
 
-    // 6. COLLISION RESOLUTION: Harden path against world obstacles
-    // Throttle queries: only re-query spatial grid if enemy moved >0.5m (0.25m^2)
-    const dqx = _v4.x - e.lastObsQueryPos.x;
-    const dqz = _v4.z - e.lastObsQueryPos.z;
+    const dqx = _mv3.x - e.lastObsQueryPos.x;
+    const dqz = _mv3.z - e.lastObsQueryPos.z;
     if (dqx * dqx + dqz * dqz > 0.25 || e.lastObsQueryPos.y < -500) {
         const obsPool = streamer.getObstaclePool();
         const poolIdx = obsPool.nextIndex();
-        streamer.getNearbyObstacles(_v4.x, _v4.z, 12.0, poolIdx);
+        streamer.getNearbyObstacles(_mv3.x, _mv3.z, 12.0, poolIdx);
 
         const nearbyObs = obsPool.getPool(poolIdx);
         const obsCount = obsPool.getCount(poolIdx);
@@ -1059,20 +993,18 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
             e.cachedObstacles[i] = nearbyObs[i];
         }
         e.cachedObstacleCount = limit;
-        e.lastObsQueryPos.copy(_v4);
+        e.lastObsQueryPos.copy(_mv3);
     }
 
     const rad = (e.originalScale || 1.0) * (e.widthScale || 1.0) * 0.5;
     const count = e.cachedObstacleCount;
     for (let i = 0; i < count; i++) {
         const obs = e.cachedObstacles[i];
-        if (obs) applyCollisionResolution(_v4, rad, obs);
+        if (obs) applyCollisionResolution(_mv3, rad, obs);
     }
 
-    // 7. ANIMATION & ROTATION
-    // Steering direction (_v1) is already normalized and reliable for rotation
-    if (isChasing) e.mesh.rotation.y = Math.atan2(_v1.x, _v1.z);
-    else e.mesh.rotation.y = THREE.MathUtils.lerp(e.mesh.rotation.y, Math.atan2(_v1.x, _v1.z), 5 * delta);
+    if (isChasing) e.mesh.rotation.y = Math.atan2(_mv1.x, _mv1.z);
+    else e.mesh.rotation.y = THREE.MathUtils.lerp(e.mesh.rotation.y, Math.atan2(_mv1.x, _mv1.z), 5 * delta);
 
     const speedRatio = speed / (e.speed || 1);
     const animFreq = isChasing ? 0.055 * speedRatio : 0.035 * speedRatio;
@@ -1080,11 +1012,11 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
 
     const hijackY = e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING;
     if ((e.statusFlags & EnemyFlags.AIRBORNE) === 0 && !hijackY) {
-        const groundHeight = ground.getGroundHeight(_v4.x, _v4.z, session);
-        _v4.y = groundHeight + bounceOffset;
+        const groundHeight = ground.getGroundHeight(_mv3.x, _mv3.z, session);
+        _mv3.y = groundHeight + bounceOffset;
     }
 
-    e.mesh.position.copy(_v4);
+    e.mesh.position.copy(_mv3);
 }
 
 function updateLastSeen(e: Enemy, pos: THREE.Vector3, simTime: number) {
@@ -1095,7 +1027,6 @@ function updateLastSeen(e: Enemy, pos: THREE.Vector3, simTime: number) {
 function handleStatusEffects(e: Enemy, delta: number, simTime: number, callbacks: any) {
     const flags = e.statusFlags;
 
-    // 1. BURNING: Damage + Flame Particles
     if ((flags & EnemyFlags.BURNING) !== 0) {
         if (Math.random() < 0.3) {
             if (callbacks.spawnParticle) {
@@ -1112,7 +1043,6 @@ function handleStatusEffects(e: Enemy, delta: number, simTime: number, callbacks
         }
     }
 
-    // 2. STUNNED: Constant visual check (not damage)
     if ((flags & EnemyFlags.STUNNED) !== 0) {
         if (Math.random() < 0.1) {
             if (callbacks.onEffectTick) callbacks.onEffectTick(e, EnemyEffectType.STUN);
@@ -1122,7 +1052,6 @@ function handleStatusEffects(e: Enemy, delta: number, simTime: number, callbacks
         }
     }
 
-    // 3. ELECTROCUTED: Spark particles
     if ((flags & EnemyFlags.ELECTROCUTED) !== 0) {
         if (Math.random() < 0.2) {
             if (callbacks.onEffectTick) callbacks.onEffectTick(e, EnemyEffectType.SPARK);

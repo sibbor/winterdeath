@@ -21,6 +21,10 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _traverseStack: THREE.Object3D[] = [];
 
+// Scratchpad for effect offset accumulation in collectible animation loop.
+// Eliminates new THREE.Vector3() inside the animation tick.
+const _effOffsetScratch = new THREE.Vector3();
+
 // Shared object for detection returns to eliminate garbage allocation
 const _detectionResult = {
     type: InteractionType.NONE,
@@ -69,6 +73,9 @@ export class InteractionSystem implements System {
     private chestPool: ActiveChestAnimation[] = [];
 
     private readonly EMPTY_ARRAY: any[] = []; // Immutable fallback
+
+    // Cache of ownerId -> scene object to avoid scene.getObjectByName() full traversal on 10hz detection tick.
+    private readonly ownerCache: Map<string, THREE.Object3D> = new Map();
 
     constructor(
         private playerGroup: THREE.Group,
@@ -265,9 +272,11 @@ export class InteractionSystem implements System {
                 for (let k = 0; k < effects.length; k++) {
                     const eff = effects[k];
                     if (!eff.originalOffset) {
-                        eff.originalOffset = eff.offset ? eff.offset.clone() : new THREE.Vector3();
+                        // Zero-GC: Copy into module-level scratchpad instead of new THREE.Vector3().
+                        _effOffsetScratch.copy(eff.offset || _v1.set(0, 0, 0));
+                        eff.originalOffset = _effOffsetScratch;
                     }
-                    if (!eff.offset) eff.offset = new THREE.Vector3();
+                    if (!eff.offset) { eff.offset = new THREE.Vector3(); }
                     eff.offset.copy(eff.originalOffset);
                     eff.offset.y += fxTargetY;
                 }
@@ -481,7 +490,12 @@ export class InteractionSystem implements System {
                         }
                     }
                 } else if (meta.ownerId && this.scene) {
-                    const obj = this.scene.getObjectByName(meta.ownerId);
+                    // Zero-GC: Lazy-populate owner cache to avoid scene.getObjectByName() full traversal on each 10hz tick.
+                    let obj = this.ownerCache.get(meta.ownerId);
+                    if (!obj) {
+                        obj = this.scene.getObjectByName(meta.ownerId) || undefined;
+                        if (obj) this.ownerCache.set(meta.ownerId, obj);
+                    }
                     if (obj) {
                         tx = obj.position.x;
                         tz = obj.position.z;

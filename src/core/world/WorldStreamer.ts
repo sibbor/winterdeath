@@ -112,8 +112,7 @@ export class WorldStreamer implements System {
     persistent = true;
     isFixedStep = true;
 
-    // Active simulation grids indexed by Chunk Key
-    private chunks = new Map<number, ChunkLocalGrid>();
+    // Flat representation of chunk grid - entirely replaces this.chunks Map
     private chunkArray = new Array<ChunkLocalGrid | null>(GRID_DIM * GRID_DIM).fill(null);
     private _chunkPool: ChunkLocalGrid[];
     private _poolPtr: number = 0;
@@ -121,7 +120,6 @@ export class WorldStreamer implements System {
     // Fast Key-Tracking (Zero-GC: Bypasses MapIterator allocations)
     private readonly _activeChunkKeys = new Int32Array(CHUNK_POOL_SIZE);
     private _activeChunkCount = 0;
-
 
     // Re-entrant Query Pools to prevent result corruption
     private enemyPool = new QueryResultPool<Enemy>(QUERY_POOL_CAPACITY, 512);
@@ -153,7 +151,9 @@ export class WorldStreamer implements System {
         // Safe pool restoration: do not recreate the array, just reset the pointer
         for (let i = 0; i < this._activeChunkCount; i++) {
             const key = this._activeChunkKeys[i];
-            const grid = this.chunks.get(key);
+            const ix = ChunkManager.getIxFromKey(key);
+            const iz = ChunkManager.getIzFromKey(key);
+            const grid = this.chunkArray[(iz * GRID_DIM) + ix];
             if (grid) {
                 grid.clear();
                 if (this._poolPtr < CHUNK_POOL_SIZE) {
@@ -161,7 +161,6 @@ export class WorldStreamer implements System {
                 }
             }
         }
-        this.chunks.clear();
         this.chunkArray.fill(null);
         this._activeChunkCount = 0;
         this._queryFrame = 0;
@@ -175,7 +174,9 @@ export class WorldStreamer implements System {
     public clearTriggers(): void {
         for (let i = 0; i < this._activeChunkCount; i++) {
             const key = this._activeChunkKeys[i];
-            const grid = this.chunks.get(key);
+            const ix = ChunkManager.getIxFromKey(key);
+            const iz = ChunkManager.getIzFromKey(key);
+            const grid = this.chunkArray[(iz * GRID_DIM) + ix];
             if (grid) {
                 grid.triggerCounts.fill(0);
                 for (let j = 0; j < grid.triggerBuckets.length; j++) {
@@ -212,43 +213,6 @@ export class WorldStreamer implements System {
         this._queryFrame = (this._queryFrame + 1) % 1000000;
         this.resetQueryPools();
 
-        // --- AUTOMATIC HIBERNATION ---
-        // VINTERDÖD AUDIT FIX: Disabled automatic hibernation.
-        // Static props (obstacles, interactables, triggers) are registered once during sector setup.
-        // Hibernating chunk grids removes these static colliders and triggers, leaving meshes visible but without physical collision when the player returns.
-        // Since sector dimensions are bounded and grids are pooled, maintaining active grids for the session is safe, high-performance, and Zero-GC.
-        /*
-        const playerPos = session.state?.player?.position || (session.playerGroup?.position);
-
-        if (playerPos && this.chunks.size > 0) {
-            const pX = playerPos.x;
-            const pZ = playerPos.z;
-            const HIBERNATION_RADIUS_SQ = SPATIAL_CONFIG.AI_HIBERNATION_RADIUS_SQ;
-
-            _hibernateKeyCount = 0;
-            for (let i = 0; i < this._activeChunkCount; i++) {
-                const key = this._activeChunkKeys[i];
-
-                const ix = ChunkManager.getIxFromKey(key);
-                const iz = ChunkManager.getIzFromKey(key);
-                const chunkX = ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR + (SPATIAL_CONFIG.CHUNK_SIZE / 2);
-                const chunkZ = iz * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR + (SPATIAL_CONFIG.CHUNK_SIZE / 2);
-
-                const dx = chunkX - pX;
-                const dz = chunkZ - pZ;
-                if (dx * dx + dz * dz > HIBERNATION_RADIUS_SQ) {
-                    if (_hibernateKeyCount < _hibernateKeyScratch.length) {
-                        _hibernateKeyScratch[_hibernateKeyCount++] = key;
-                    }
-                }
-            }
-
-            for (let i = 0; i < _hibernateKeyCount; i++) {
-                this.hibernateChunk(_hibernateKeyScratch[i]);
-            }
-        }
-        */
-
         // --- STRESS HARNESS: MONITOR EXECUTION BUDGET ---
         RuntimeStressHarness.monitorFrame(startTime);
         RuntimeStressHarness.tickMemory();
@@ -260,7 +224,9 @@ export class WorldStreamer implements System {
      * recycles the grid instance to the pool.
      */
     public hibernateChunk(key: number): void {
-        const grid = this.chunks.get(key);
+        const ix = ChunkManager.getIxFromKey(key);
+        const iz = ChunkManager.getIzFromKey(key);
+        const grid = this.chunkArray[(iz * GRID_DIM) + ix];
         if (!grid) return;
 
         // 1. Scan logic buckets for mutations before clearing
@@ -295,9 +261,6 @@ export class WorldStreamer implements System {
         FXSystem.hibernateChunkDecals(key);
 
         // 3. Detach and recycle using pointer assignment (No .push())
-        this.chunks.delete(key);
-        const ix = ChunkManager.getIxFromKey(key);
-        const iz = ChunkManager.getIzFromKey(key);
         this.chunkArray[(iz * GRID_DIM) + ix] = null;
 
         // Tracking Sync: O(1) Swap-and-Pop to avoid MapIterator/GC
@@ -398,11 +361,9 @@ export class WorldStreamer implements System {
         const idx = (iz * GRID_DIM) + ix;
         let grid = this.chunkArray[idx];
         if (!grid) {
-            // Pop from pre-allocated pool using pointer tracking (No .pop())
             if (this._poolPtr > 0) {
                 grid = this._chunkPool[--this._poolPtr];
             } else {
-                // Emergency fallback: only happens if simulation range exceeds CHUNK_POOL_SIZE chunks
                 grid = new ChunkLocalGrid();
             }
 
@@ -412,7 +373,6 @@ export class WorldStreamer implements System {
             grid.clear();
             this.chunkArray[idx] = grid;
             const key = ChunkManager.getSmiKey(ix, iz);
-            this.chunks.set(key, grid);
 
             // Tracking Sync: Ensure we can iterate keys without MapIterator GC
             if (this._activeChunkCount < CHUNK_POOL_SIZE) {
@@ -492,7 +452,9 @@ export class WorldStreamer implements System {
     public fillGroundMaterial(material: number) {
         for (let i = 0; i < this._activeChunkCount; i++) {
             const key = this._activeChunkKeys[i];
-            const grid = this.chunks.get(key);
+            const ix = ChunkManager.getIxFromKey(key);
+            const iz = ChunkManager.getIzFromKey(key);
+            const grid = this.chunkArray[(iz * GRID_DIM) + ix];
             if (grid) {
                 grid.ground.fill(material);
             }
@@ -507,7 +469,6 @@ export class WorldStreamer implements System {
         const x = obstacle.position.x;
         const z = obstacle.position.z;
 
-        // Calculate correct bounding radius based on collider type if not pre-defined (VINTERDÖD FIX)
         if (obstacle.radius === undefined) {
             const col = obstacle.collider;
             if (col) {
@@ -521,7 +482,6 @@ export class WorldStreamer implements System {
         const radius = obstacle.radius || 2.0;
 
         // --- HYDRATION CHECK (Phase 5) ---
-        // If the obstacle has a logicId, check if it was previously mutated (destroyed)
         if (obstacle.logicId !== undefined) {
             const ix = ChunkManager.getCoordIndex(x);
             const iz = ChunkManager.getCoordIndex(z);
@@ -532,28 +492,51 @@ export class WorldStreamer implements System {
                 if (obstacle.mesh) {
                     obstacle.mesh.visible = false;
                 }
-                // Do not register active physics for destroyed objects
                 return;
             }
         }
 
-        // Multi-bucket registration for large obstacles (Walls, Rocks, Buildings)
-        this.registerEntity(obstacle, x, z, radius, (grid, bIdx, entity) => {
-            const count = grid.obstacleCounts[bIdx];
-            if (count < BUCKET_CAPACITY) {
-                grid.obstacleBuckets[bIdx][count] = entity;
-                grid.obstacleCounts[bIdx]++;
+        // Direct inlined registration loop (Zero-GC, no closures)
+        const startX = x - radius;
+        const endX = x + radius;
+        const startZ = z - radius;
+        const endZ = z + radius;
 
-                // Track identifying metadata for the primary bucket (for update/removal)
-                // Note: we only store the metadata once for the "main" bucket,
-                // but the object is present in all relevant buckets for queries.
-                if (entity._currentChunkKey === undefined || entity._currentChunkKey === -1) {
-                    entity._currentChunkKey = this.getSmiKeyFromWorld(x, z);
-                    entity._bucketIndex = bIdx;
-                    entity._internalBucketIdx = count;
+        const ixStart = ChunkManager.getCoordIndex(startX);
+        const ixEnd = ChunkManager.getCoordIndex(endX);
+        const izStart = ChunkManager.getCoordIndex(startZ);
+        const izEnd = ChunkManager.getCoordIndex(endZ);
+
+        for (let ix = ixStart; ix <= ixEnd; ix++) {
+            for (let iz = izStart; iz <= izEnd; iz++) {
+                const grid = this.getOrCreateGrid(ix, iz);
+                const chunkX = ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
+                const chunkZ = iz * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
+
+                const lxStart = Math.max(0, Math.floor((startX - chunkX) / LOGIC_CELL_SIZE));
+                const lxEnd = Math.min(LOGIC_CELLS_PER_CHUNK - 1, Math.floor((endX - chunkX) / LOGIC_CELL_SIZE));
+                const lzStart = Math.max(0, Math.floor((startZ - chunkZ) / LOGIC_CELL_SIZE));
+                const lzEnd = Math.min(LOGIC_CELLS_PER_CHUNK - 1, Math.floor((endZ - chunkZ) / LOGIC_CELL_SIZE));
+
+                for (let bz = lzStart; bz <= lzEnd; bz++) {
+                    const row = bz * LOGIC_CELLS_PER_CHUNK;
+                    for (let bx = lxStart; bx <= lxEnd; bx++) {
+                        const bIdx = row + bx;
+                        const count = grid.obstacleCounts[bIdx];
+                        if (count < BUCKET_CAPACITY) {
+                            grid.obstacleBuckets[bIdx][count] = obstacle;
+                            grid.obstacleCounts[bIdx]++;
+
+                            if (obstacle._currentChunkKey === undefined || obstacle._currentChunkKey === -1) {
+                                obstacle._currentChunkKey = this.getSmiKeyFromWorld(x, z);
+                                obstacle._bucketIndex = bIdx;
+                                obstacle._internalBucketIdx = count;
+                            }
+                        }
+                    }
                 }
             }
-        });
+        }
     }
 
     public updateObstacle(obstacle: Obstacle) {
@@ -650,7 +633,6 @@ export class WorldStreamer implements System {
      * Registers an interactable object (Station, Chest, etc).
      */
     public registerInteractable(interactable: any, x: number, z: number, radius: number = 2.0) {
-        // --- FIX 4: Guard interactable._sqf Initialization ---
         if (interactable.userData && interactable.userData._sqf === undefined) {
             interactable.userData._sqf = 0;
         }
@@ -663,29 +645,53 @@ export class WorldStreamer implements System {
 
             if (worldStateRegistry.isMutated(key, interactable.userData.logicId)) {
                 interactable.userData.isMutated = true;
-                // Note: Specific visual hydration (e.g. opening a chest lid) is 
-                // typically handled by the object's update logic or specific 
-                // hydration helpers in SectorBuilder.
             }
         }
         const ix = ChunkManager.getCoordIndex(x);
         const iz = ChunkManager.getCoordIndex(z);
         this.getOrCreateGrid(ix, iz);
 
-        this.registerEntity(interactable, x, z, radius, (grid, bIdx, entity) => {
-            const count = grid.interactableCounts[bIdx];
-            if (count < BUCKET_CAPACITY) {
-                grid.interactableBuckets[bIdx][count] = entity;
-                grid.interactableCounts[bIdx]++;
+        // Direct inlined registration loop (Zero-GC, no closures)
+        const startX = x - radius;
+        const endX = x + radius;
+        const startZ = z - radius;
+        const endZ = z + radius;
 
-                // Track logic indices for removal and dynamic updates (Zero-GC)
-                if (entity._currentChunkKey === undefined || entity._currentChunkKey === -1) {
-                    entity._currentChunkKey = this.getSmiKeyFromWorld(x, z);
-                    entity._bucketIndex = bIdx;
-                    entity._internalBucketIdx = count;
+        const ixStart = ChunkManager.getCoordIndex(startX);
+        const ixEnd = ChunkManager.getCoordIndex(endX);
+        const izStart = ChunkManager.getCoordIndex(startZ);
+        const izEnd = ChunkManager.getCoordIndex(endZ);
+
+        for (let ixCoord = ixStart; ixCoord <= ixEnd; ixCoord++) {
+            for (let izCoord = izStart; izCoord <= izEnd; izCoord++) {
+                const grid = this.getOrCreateGrid(ixCoord, izCoord);
+                const chunkX = ixCoord * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
+                const chunkZ = izCoord * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
+
+                const lxStart = Math.max(0, Math.floor((startX - chunkX) / LOGIC_CELL_SIZE));
+                const lxEnd = Math.min(LOGIC_CELLS_PER_CHUNK - 1, Math.floor((endX - chunkX) / LOGIC_CELL_SIZE));
+                const lzStart = Math.max(0, Math.floor((startZ - chunkZ) / LOGIC_CELL_SIZE));
+                const lzEnd = Math.min(LOGIC_CELLS_PER_CHUNK - 1, Math.floor((endZ - chunkZ) / LOGIC_CELL_SIZE));
+
+                for (let bz = lzStart; bz <= lzEnd; bz++) {
+                    const row = bz * LOGIC_CELLS_PER_CHUNK;
+                    for (let bx = lxStart; bx <= lxEnd; bx++) {
+                        const bIdx = row + bx;
+                        const count = grid.interactableCounts[bIdx];
+                        if (count < BUCKET_CAPACITY) {
+                            grid.interactableBuckets[bIdx][count] = interactable;
+                            grid.interactableCounts[bIdx]++;
+
+                            if (interactable._currentChunkKey === undefined || interactable._currentChunkKey === -1) {
+                                interactable._currentChunkKey = this.getSmiKeyFromWorld(x, z);
+                                interactable._bucketIndex = bIdx;
+                                interactable._internalBucketIdx = count;
+                            }
+                        }
+                    }
                 }
             }
-        });
+        }
     }
 
     /**
@@ -717,41 +723,6 @@ export class WorldStreamer implements System {
                             grid.triggerBuckets[bIdx][count] = triggerId;
                             grid.triggerCounts[bIdx]++;
                         }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Internal helper to map entities to chunk-local logic buckets.
-     */
-    private registerEntity(entity: any, x: number, z: number, radius: number, insertFn: (grid: ChunkLocalGrid, bIdx: number, entity: any) => void) {
-        const startX = x - radius;
-        const endX = x + radius;
-        const startZ = z - radius;
-        const endZ = z + radius;
-
-        const ixStart = ChunkManager.getCoordIndex(startX);
-        const ixEnd = ChunkManager.getCoordIndex(endX);
-        const izStart = ChunkManager.getCoordIndex(startZ);
-        const izEnd = ChunkManager.getCoordIndex(endZ);
-
-        for (let ix = ixStart; ix <= ixEnd; ix++) {
-            for (let iz = izStart; iz <= izEnd; iz++) {
-                const grid = this.getOrCreateGrid(ix, iz);
-                const chunkX = ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
-                const chunkZ = iz * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
-
-                const lxStart = Math.max(0, Math.floor((startX - chunkX) / LOGIC_CELL_SIZE));
-                const lxEnd = Math.min(LOGIC_CELLS_PER_CHUNK - 1, Math.floor((endX - chunkX) / LOGIC_CELL_SIZE));
-                const lzStart = Math.max(0, Math.floor((startZ - chunkZ) / LOGIC_CELL_SIZE));
-                const lzEnd = Math.min(LOGIC_CELLS_PER_CHUNK - 1, Math.floor((endZ - chunkZ) / LOGIC_CELL_SIZE));
-
-                for (let bz = lzStart; bz <= lzEnd; bz++) {
-                    const row = bz * LOGIC_CELLS_PER_CHUNK;
-                    for (let bx = lxStart; bx <= lxEnd; bx++) {
-                        insertFn(grid, row + bx, entity);
                     }
                 }
             }
@@ -979,14 +950,18 @@ export class WorldStreamer implements System {
         const izEnd = ChunkManager.getCoordIndex(endZ);
 
         for (let ix = ixStart; ix <= ixEnd; ix++) {
+            // Hoist static boundary calculations (Zero-GC optimize query)
+            const chunkX = ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
             for (let iz = izStart; iz <= izEnd; iz++) {
                 const grid = this.chunkArray[(iz * GRID_DIM) + ix];
                 if (!grid) continue;
 
-                const lxStart = Math.max(0, Math.floor((startX - (ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR)) / LOGIC_CELL_SIZE));
-                const lxEnd = Math.min(LOGIC_CELLS_PER_CHUNK - 1, Math.floor((endX - (ix * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR)) / LOGIC_CELL_SIZE));
-                const lzStart = Math.max(0, Math.floor((startZ - (iz * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR)) / LOGIC_CELL_SIZE));
-                const lzEnd = Math.min(LOGIC_CELLS_PER_CHUNK - 1, Math.floor((endZ - (iz * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR)) / LOGIC_CELL_SIZE));
+                const chunkZ = iz * SPATIAL_CONFIG.CHUNK_SIZE - HALF_SECTOR;
+
+                const lxStart = Math.max(0, Math.floor((startX - chunkX) / LOGIC_CELL_SIZE));
+                const lxEnd = Math.min(LOGIC_CELLS_PER_CHUNK - 1, Math.floor((endX - chunkX) / LOGIC_CELL_SIZE));
+                const lzStart = Math.max(0, Math.floor((startZ - chunkZ) / LOGIC_CELL_SIZE));
+                const lzEnd = Math.min(LOGIC_CELLS_PER_CHUNK - 1, Math.floor((endZ - chunkZ) / LOGIC_CELL_SIZE));
 
                 for (let bz = lzStart; bz <= lzEnd; bz++) {
                     const row = (bz * LOGIC_CELLS_PER_CHUNK) | 0;
@@ -996,7 +971,6 @@ export class WorldStreamer implements System {
                         const count = grid.atmosphereZoneCounts[bIdx];
                         for (let i = 0; i < count; i++) {
                             const zoneIdx = bucket[i];
-                            // Fix 3: Zone Index De-duplication
                             if (_zoneQueryStamp[zoneIdx] === _zoneQueryFrame) continue;
                             _zoneQueryStamp[zoneIdx] = _zoneQueryFrame;
 

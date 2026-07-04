@@ -23,23 +23,44 @@ import { worldStateRegistry } from '../core/world/WorldStateRegistry';
 // White material for flashing damaged destroyable objects
 const _whiteFlashMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
 
+const _traverseStack: THREE.Object3D[] = [];
+
 function applyWhiteFlash(mesh: THREE.Object3D, obs: Obstacle) {
     if (!mesh) return;
 
-    if (!obs.originalMaterials) {
-        obs.originalMaterials = [];
-        mesh.traverse((child: any) => {
-            if (child.isMesh) {
-                obs.originalMaterials.push({ mesh: child, material: child.material });
+    // --- CACHED FLAT MESH ITERATION (Bypasses .traverse() overhead) ---
+    if (!obs.flatMeshes) {
+        obs.flatMeshes = [];
+        _traverseStack.length = 0;
+        _traverseStack.push(mesh);
+
+        while (_traverseStack.length > 0) {
+            const child = _traverseStack.pop()!;
+            if (child instanceof THREE.Mesh) {
+                obs.flatMeshes.push(child);
             }
-        });
+            if (child.children) {
+                for (let i = 0; i < child.children.length; i++) {
+                    _traverseStack.push(child.children[i]);
+                }
+            }
+        }
     }
 
-    mesh.traverse((child: any) => {
-        if (child.isMesh) {
-            child.material = _whiteFlashMaterial;
+    // --- PARALLEL CACHED ARRAYS (Zero-GC replacement for object literals) ---
+    if (!obs.originalMeshes) {
+        obs.originalMeshes = [];
+        obs.originalMats = [];
+        for (let i = 0; i < obs.flatMeshes.length; i++) {
+            const child = obs.flatMeshes[i];
+            obs.originalMeshes.push(child);
+            obs.originalMats.push(child.material);
         }
-    });
+    }
+
+    for (let i = 0; i < obs.flatMeshes.length; i++) {
+        obs.flatMeshes[i].material = _whiteFlashMaterial;
+    }
 
     obs.lastHitTime = performance.now();
 
@@ -48,11 +69,11 @@ function applyWhiteFlash(mesh: THREE.Object3D, obs: Obstacle) {
     }
 
     obs.flashTimer = setTimeout(() => {
-        if (obs.originalMaterials) {
-            for (let i = 0; i < obs.originalMaterials.length; i++) {
-                const entry = obs.originalMaterials[i];
-                if (entry.mesh) {
-                    entry.mesh.material = entry.material;
+        if (obs.originalMeshes && obs.originalMats) {
+            for (let i = 0; i < obs.originalMeshes.length; i++) {
+                const targetMesh = obs.originalMeshes[i];
+                if (targetMesh) {
+                    targetMesh.material = obs.originalMats[i];
                 }
             }
         }
@@ -63,14 +84,31 @@ function applyWhiteFlash(mesh: THREE.Object3D, obs: Obstacle) {
 function damageObstacle(session: GameSessionLogic, obs: Obstacle, damage: number, weaponId: number) {
     if (obs.isMutated || obs.durability === undefined || obs.durability <= 0) return;
 
-    if (obs.excludedWeapons && obs.excludedWeapons.indexOf(weaponId) !== -1) {
-        return;
+    // --- HIGH-PERFORMANCE DIRECT COMPARISON (Bypasses .indexOf() O(N) search) ---
+    if (obs.excludedWeapons) {
+        let isExcluded = false;
+        for (let i = 0; i < obs.excludedWeapons.length; i++) {
+            if (obs.excludedWeapons[i] === weaponId) {
+                isExcluded = true;
+                break;
+            }
+        }
+        if (isExcluded) return;
     }
 
     obs.durability = Math.max(0, obs.durability - damage);
 
     if (obs.durability <= 0) {
         obs.isMutated = true;
+
+        // Cleanup cached references and timers upon deactivation/mutation
+        if (obs.flashTimer) {
+            clearTimeout(obs.flashTimer);
+            obs.flashTimer = null;
+        }
+        obs.flatMeshes = undefined;
+        obs.originalMeshes = undefined;
+        obs.originalMats = undefined;
 
         const streamer = session.systems.worldStreamer;
         if (streamer) {
@@ -290,7 +328,7 @@ export class ProjectileSystem implements System {
                     }
                 }
             }
- 
+
             // 3. Enemy Hit Detection (Phase 7 Spatial Grid)
             if (!despawn) {
                 const groundY = session.engine.systems.ground ? session.engine.systems.ground.getGroundHeight(pool.posX[i], pool.posZ[i], session, pool.posY[i]) : 0;
@@ -700,10 +738,10 @@ export class ProjectileSystem implements System {
     }
 
     /**
-         * High-performance continuous weapon simulation loop.
-         * Implements Loop Inversion (Loop-Switch Unrolling) to guarantee perfect 
-         * hardware branch prediction and enable V8 TurboFan auto-vectorization.
-         */
+     * High-performance continuous weapon simulation loop.
+     * Implements Loop Inversion (Loop-Switch Unrolling) to guarantee perfect 
+     * hardware branch prediction and enable V8 TurboFan auto-vectorization.
+     */
     private handleContinuousFire(delta: number, time: number) {
         const state = this.session.state;
         if (!state.inputState.fire || state.combat.isReloading) return;

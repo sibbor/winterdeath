@@ -19,6 +19,12 @@ const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 
+// Pre-allocated cinematic position scratchpads — eliminates new THREE.Vector3() and .clone() on every startCinematic() call.
+const _cinematicLookAtPos = new THREE.Vector3();
+const _cinematicTargetPos = new THREE.Vector3();
+const _startPos = new THREE.Vector3();
+const _startLookAt = new THREE.Vector3();
+
 // Locked V8 Hidden Class for animator data
 const _animState = {
     isMoving: false, isRushing: false, isDodging: false,
@@ -115,13 +121,21 @@ export class CinematicSystem implements System {
         cinematic.rotationSpeed = params.rotationSpeed !== undefined ? params.rotationSpeed : 0.00015;
         cinematic.customPath = params.customPath || null;
         cinematic.pathDuration = params.pathDuration || 0;
-        cinematic.lookAtPos = params.lookAtPos ? new THREE.Vector3().copy(params.lookAtPos) : null;
-        cinematic.targetPos = params.targetPos ? new THREE.Vector3().copy(params.targetPos) : null;
+
+        // Zero-GC: Copy into pre-allocated module scratchpads instead of allocating new Vector3s.
+        if (params.lookAtPos) { _cinematicLookAtPos.copy(params.lookAtPos); cinematic.lookAtPos = _cinematicLookAtPos; }
+        else { cinematic.lookAtPos = null; }
+        if (params.targetPos) { _cinematicTargetPos.copy(params.targetPos); cinematic.targetPos = _cinematicTargetPos; }
+        else { cinematic.targetPos = null; }
 
         this.camera.setCinematic(true);
 
-        cinematic.startPos = this.camera.position.clone();
-        cinematic.startLookAt = this.camera.lookAtTarget ? this.camera.lookAtTarget.clone() : new THREE.Vector3();
+        // Zero-GC: Copy camera state into pre-allocated scratchpads instead of .clone() heap allocs.
+        _startPos.copy(this.camera.position);
+        cinematic.startPos = _startPos;
+        if (this.camera.lookAtTarget) { _startLookAt.copy(this.camera.lookAtTarget); }
+        else { _startLookAt.set(0, 0, 0); }
+        cinematic.startLookAt = _startLookAt;
 
         this.state.ui.cinematicActive = true;
         this.callbacks.setCinematicActive(true);
@@ -162,13 +176,15 @@ export class CinematicSystem implements System {
 
         // Run triggers immediately when the line starts to ensure state changes (e.g. boss spawn, family found) execute.
         if (line.trigger) {
+            // Zero-GC: Standard for loop avoids closure allocation from forEach.
             const triggers = Array.isArray(line.trigger) ? line.trigger : [line.trigger];
-            triggers.forEach(t => {
+            for (let ti = 0; ti < triggers.length; ti++) {
                 if (this.callbacks.onAction) {
+                    const t = triggers[ti];
                     const actionObj = (typeof t === 'string' || typeof t === 'number') ? { type: t } : t;
                     this.callbacks.onAction(actionObj);
                 }
-            });
+            }
         }
 
         // --- LINE ACTIVATION ---
@@ -480,7 +496,19 @@ export class CinematicSystem implements System {
             const isSpeaking = isCurrentSpeaker && timeInLine < cinematic.typingDuration;
             const isThinking = isCurrentSpeaker && activeScriptLine?.type === DialogueLineType.THOUGHT;
 
-            const body = mesh.userData.isBody ? mesh : mesh.children.find((c: any) => c.userData?.isBody);
+            // Zero-GC: Lazy-cache body mesh to avoid mesh.children.find() closure allocation each frame.
+            let body = mesh.userData.cachedBody;
+            if (!body) {
+                const children = mesh.children;
+                for (let ci = 0; ci < children.length; ci++) {
+                    if ((children[ci] as any).userData?.isBody) {
+                        body = children[ci];
+                        mesh.userData.cachedBody = body;
+                        break;
+                    }
+                }
+                if (!body && mesh.userData.isBody) body = mesh;
+            }
 
             if (body) {
                 _animState.isSpeaking = isSpeaking;

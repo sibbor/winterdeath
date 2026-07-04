@@ -206,12 +206,23 @@ export const FXSystem = {
     systemId: SystemID.FX,
     id: 'fx_system',
 
-    essentialQueue: [] as FXSpawnRequest[],
-    ambientQueue: [] as FXSpawnRequest[],
-    decalQueue: [] as FXSpawnRequest[],
+    // --- ZERO-GC CIRCULAR RING BUFFERS FOR QUEUES ---
+    essentialQueue: new Array<FXSpawnRequest | null>(MAX_PARTICLE_REQUESTS).fill(null),
+    ambientQueue: new Array<FXSpawnRequest | null>(MAX_PARTICLE_REQUESTS).fill(null),
+    decalQueue: new Array<FXSpawnRequest | null>(MAX_DECALS).fill(null),
+
     _essentialQueueHead: 0,
+    _essentialQueueTail: 0,
+    _essentialQueueCount: 0,
+
     _ambientQueueHead: 0,
+    _ambientQueueTail: 0,
+    _ambientQueueCount: 0,
+
     _decalQueueHead: 0,
+    _decalQueueTail: 0,
+    _decalQueueCount: 0,
+    
     _decalPoolIdx: 0,
 
     // --- SPATIAL DISPOSAL REGISTRY (Phase 5) ---
@@ -219,14 +230,21 @@ export const FXSystem = {
     _decalRegistry: new Map<number, THREE.Mesh[]>(),
     _registryArrayPool: [] as THREE.Mesh[][],
 
-
     reset: () => {
-        FXSystem.essentialQueue.length = 0;
-        FXSystem.ambientQueue.length = 0;
-        FXSystem.decalQueue.length = 0;
         FXSystem._essentialQueueHead = 0;
+        FXSystem._essentialQueueTail = 0;
+        FXSystem._essentialQueueCount = 0;
+        FXSystem.essentialQueue.fill(null);
+
         FXSystem._ambientQueueHead = 0;
+        FXSystem._ambientQueueTail = 0;
+        FXSystem._ambientQueueCount = 0;
+        FXSystem.ambientQueue.fill(null);
+
         FXSystem._decalQueueHead = 0;
+        FXSystem._decalQueueTail = 0;
+        FXSystem._decalQueueCount = 0;
+        FXSystem.decalQueue.fill(null);
 
         _goreStatesBuffer.fill(null);
         _goreBufferHead = 0;
@@ -237,7 +255,6 @@ export const FXSystem = {
             for (let i = 0; i < 256; i++) FXSystem._registryArrayPool.push([]);
         }
     },
-
 
     MESH_POOL: [] as THREE.Mesh<THREE.BufferGeometry, THREE.Material>[],
     FREE_MESH_INDICES: [] as number[],
@@ -308,8 +325,6 @@ export const FXSystem = {
             req.material = undefined; req.hasCustomVel = false;
             return req;
         }
-        // [VINTERDÖD FIX] If the pool is exhausted, return null to drop the request
-        // and avoid shared mutation bugs or transient allocations.
         return null;
     },
 
@@ -339,7 +354,6 @@ export const FXSystem = {
             d = decalList[FXSystem._decalPoolIdx] as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
 
             // --- SPATIAL RECYCLING (Phase 5) ---
-            // If reusing a decal, remove it from its previous chunk's registry
             if (d.userData._chunkKey !== undefined) {
                 const prevRegistry = FXSystem._decalRegistry.get(d.userData._chunkKey);
                 if (prevRegistry) {
@@ -370,14 +384,12 @@ export const FXSystem = {
         if (!registryArr) {
             registryArr = FXSystem._registryArrayPool.pop();
             if (!registryArr) {
-                // Emergency allocation if pool is exhausted (should be rare)
                 registryArr = [];
             }
             FXSystem._decalRegistry.set(chunkKey, registryArr);
         }
         d.userData._registryIdx = registryArr.length;
         registryArr.push(d);
-
 
         d.position.set(req.x, 0.2 + Math.random() * 0.05, req.z);
         d.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
@@ -392,27 +404,18 @@ export const FXSystem = {
         d.renderOrder = (req.material === MATERIALS.scorchDecal) ? -1 : 50;
     },
 
-    /**
-     * Hibernates and culled all decals associated with a specific chunk.
-     * Called during WorldStreamer hibernation to ensure Zero-GC disposal of 
-     * out-of-range visual effects.
-     */
     hibernateChunkDecals: (chunkKey: number) => {
         const decals = FXSystem._decalRegistry.get(chunkKey);
         if (!decals) return;
 
         for (let i = 0; i < decals.length; i++) {
             const d = decals[i];
-            // Instantly hide and move to prevent traversal/frustum overhead
             d.visible = false;
             d.position.set(0, -1000, 0);
-
-            // Mark as un-assigned to a chunk so it's not double-culled if recycled
             d.userData._chunkKey = undefined;
             d.userData._registryIdx = undefined;
         }
 
-        // Zero-GC: Clear the array reference and return to pool
         decals.length = 0;
         FXSystem._registryArrayPool.push(decals);
         FXSystem._decalRegistry.delete(chunkKey);
@@ -527,15 +530,12 @@ export const FXSystem = {
                 p.scaleVec.set(fs, fs, fs);
                 break;
             case FXParticleType.GORE:
-                // Establish strict linear scalability from the enemy's structural mass profile (s)
-                // Individual meat chunks deviate by a tight 40% margin to prevent BOSS vs RUNNER scale inversion.
                 fs = s * (0.8 + Math.random() * 0.4);
                 p.scaleVec.set(fs, fs, fs);
                 break;
             case FXParticleType.ELECTRIC_BEAM:
                 if (req.hasCustomVel) {
                     const dist = req.customVel.length();
-                    // Z-scale equals distance to stretch exactly from emitter to target
                     p.scaleVec.set((0.1 + Math.random() * 0.1) * s, (0.1 + Math.random() * 0.1) * s, dist);
                 } else {
                     p.scaleVec.set(0.2, 0.2, 5.0);
@@ -635,7 +635,15 @@ export const FXSystem = {
 
         req.scene = scene; req.x = x; req.z = z; req.type = type;
         req.scale = scale; req.material = material;
-        FXSystem.decalQueue.push(req);
+
+        // Circular queue push
+        if (FXSystem._decalQueueCount < MAX_DECALS) {
+            FXSystem.decalQueue[FXSystem._decalQueueTail] = req;
+            FXSystem._decalQueueTail = (FXSystem._decalQueueTail + 1) % MAX_DECALS;
+            FXSystem._decalQueueCount++;
+        } else {
+            DECAL_REQUEST_POOL.push(req);
+        }
     },
 
     spawnParticle: (scene: THREE.Scene, particlesList: ParticleState[], x: number, y: number, z: number, type: FXParticleType, count: number, customMesh?: any, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number, weight?: number) => {
@@ -664,8 +672,24 @@ export const FXSystem = {
                 req.customVel.set(0, 0, 0); req.hasCustomVel = false;
             }
 
-            if (isEssential) FXSystem.essentialQueue.push(req);
-            else if (FXSystem.ambientQueue.length < AMBIENT_QUEUE_HARD_CAP) FXSystem.ambientQueue.push(req);
+            // Circular queue push
+            if (isEssential) {
+                if (FXSystem._essentialQueueCount < MAX_PARTICLE_REQUESTS) {
+                    FXSystem.essentialQueue[FXSystem._essentialQueueTail] = req;
+                    FXSystem._essentialQueueTail = (FXSystem._essentialQueueTail + 1) % MAX_PARTICLE_REQUESTS;
+                    FXSystem._essentialQueueCount++;
+                } else {
+                    REQUEST_POOL.push(req);
+                }
+            } else {
+                if (FXSystem._ambientQueueCount < AMBIENT_QUEUE_HARD_CAP) {
+                    FXSystem.ambientQueue[FXSystem._ambientQueueTail] = req;
+                    FXSystem._ambientQueueTail = (FXSystem._ambientQueueTail + 1) % MAX_PARTICLE_REQUESTS;
+                    FXSystem._ambientQueueCount++;
+                } else {
+                    REQUEST_POOL.push(req);
+                }
+            }
         }
     },
 
@@ -726,7 +750,6 @@ export const FXSystem = {
                 if (p.isPhysics) {
                     p.vel.y -= FX.GRAVITY * safeDelta;
                     if (t === FXParticleType.GORE && p.weight !== undefined) {
-                        // Apply friction / drag scaled inversely by weight (heavier = flies further, lighter = slows down fast)
                         const dragCoeff = 2.0 / Math.max(0.1, p.weight);
                         const dragFriction = Math.max(0, 1.0 - (dragCoeff * safeDelta));
                         p.vel.x *= dragFriction;
@@ -736,14 +759,12 @@ export const FXSystem = {
                         p.rot.x += p.rotVel.x * 60 * safeDelta; p.rot.z += p.rotVel.z * 60 * safeDelta;
                     }
 
-                    // Gore lands on top of the ground layer
                     const floorY = (t === FXParticleType.GORE) ? 0.22 : (t === FXParticleType.SPLASH || t === FXParticleType.BLOOD_SPLATTER ? -5.0 : 0.05);
                     if (p.pos.y <= floorY) {
                         FXSystem._handleLanding(p, i, particlesList, callbacks);
                         if (!p.inUse) continue;
                     }
                 } else {
-                    // --- ZERO-GC PARTICLE SHRINK & GROWTH JUMP TABLE ---
                     p.vel.x *= safeAirFriction; p.vel.y *= safeAirFriction; p.vel.z *= safeAirFriction;
                     const pScale = p.scaleVec;
                     switch (t) {
@@ -773,7 +794,6 @@ export const FXSystem = {
                             pScale.x += smGrow; pScale.y += smGrow; pScale.z += smGrow;
                             break;
                         case FXParticleType.GORE:
-                            // Let them retain 95% of their size until they hit the ground and pool away.
                             const safeGoreShrink = Math.max(0, 1.0 - (0.5 * safeDelta));
                             pScale.x *= safeGoreShrink;
                             pScale.y *= safeGoreShrink;
@@ -793,9 +813,7 @@ export const FXSystem = {
                 }
             }
 
-            // --- PHYSICS & INSTANCING PIPELINE UNROLL ---
             if (p.isInstanced) {
-                // If a heavy gore chunk has landed, shrink it toward 0 over its remaining TTL
                 if (p.landed && p.type === FXParticleType.GORE) {
                     p.scaleVec.multiplyScalar(Math.max(0, 1.0 - (0.8 * safeDelta)));
                 }
@@ -818,31 +836,41 @@ export const FXSystem = {
             }
         }
 
-        const eQueue = FXSystem.essentialQueue;
-        for (let i = 0; i < eQueue.length; i++) {
-            const req = eQueue[i]; req.scene = scene;
+        // Circular queue dequeue
+        const essentialCount = FXSystem._essentialQueueCount;
+        for (let i = 0; i < essentialCount; i++) {
+            const req = FXSystem.essentialQueue[FXSystem._essentialQueueHead]!;
+            FXSystem.essentialQueue[FXSystem._essentialQueueHead] = null;
+            FXSystem._essentialQueueHead = (FXSystem._essentialQueueHead + 1) % MAX_PARTICLE_REQUESTS;
+            FXSystem._essentialQueueCount--;
+
+            req.scene = scene;
             FXSystem._spawnParticleImmediate(req, particlesList);
             REQUEST_POOL.push(req);
         }
-        eQueue.length = 0;
 
-        const aQueue = FXSystem.ambientQueue;
-        const pEnd = Math.min(aQueue.length, FXSystem._ambientQueueHead + MAX_AMBIENT_SPAWNS_PER_FRAME);
-        for (let i = FXSystem._ambientQueueHead; i < pEnd; i++) {
-            const req = aQueue[i]; req.scene = scene;
+        const ambientSpawns = Math.min(FXSystem._ambientQueueCount, MAX_AMBIENT_SPAWNS_PER_FRAME);
+        for (let i = 0; i < ambientSpawns; i++) {
+            const req = FXSystem.ambientQueue[FXSystem._ambientQueueHead]!;
+            FXSystem.ambientQueue[FXSystem._ambientQueueHead] = null;
+            FXSystem._ambientQueueHead = (FXSystem._ambientQueueHead + 1) % MAX_PARTICLE_REQUESTS;
+            FXSystem._ambientQueueCount--;
+
+            req.scene = scene;
             FXSystem._spawnParticleImmediate(req, particlesList);
             REQUEST_POOL.push(req);
         }
-        FXSystem._ambientQueueHead = pEnd;
-        if (FXSystem._ambientQueueHead >= aQueue.length) { aQueue.length = 0; FXSystem._ambientQueueHead = 0; }
 
-        const dQueue = FXSystem.decalQueue;
-        for (let i = 0; i < dQueue.length; i++) {
-            const req = dQueue[i];
+        const decalCount = FXSystem._decalQueueCount;
+        for (let i = 0; i < decalCount; i++) {
+            const req = FXSystem.decalQueue[FXSystem._decalQueueHead]!;
+            FXSystem.decalQueue[FXSystem._decalQueueHead] = null;
+            FXSystem._decalQueueHead = (FXSystem._decalQueueHead + 1) % MAX_DECALS;
+            FXSystem._decalQueueCount--;
+
             FXSystem._spawnDecalImmediate(req, decalList);
             DECAL_REQUEST_POOL.push(req);
         }
-        dQueue.length = 0;
 
         for (let i = 0; i < decalList.length; i++) {
             const m = decalList[i];
@@ -924,6 +952,7 @@ export const FXSystem = {
                     mat = (type === FXParticleType.ENEMY_EFFECT_FLAME) ? MATERIALS.enemy_effect_flame :
                         (type === FXParticleType.FLAMETHROWER_FIRE) ? MATERIALS.flamethrower_flame :
                             MATERIALS.fire;
+                    break;
                 case FXParticleType.SPARK:
                 case FXParticleType.CAMPFIRE_SPARK:
                 case FXParticleType.ENEMY_EFFECT_SPARK:

@@ -181,14 +181,17 @@ export class EnemyDetectionSystem implements System {
                 continue;
             }
 
-            // 2. VISUAL CHECK (Staggered)
+            // Zero-GC: hoist isAggressive once per enemy to avoid duplicate branch evaluation
+            // in both the visual and audio check blocks below.
+            const isAggressive = e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING || e.state === AIState.GRAPPLE;
+
+            // 2. VISUAL CHECK (Staggered 3-frame spread)
             if ((i % 3) === frameIndex) {
                 if (this.canSeePlayer(e, playerPos, streamer)) {
                     e.lastKnownPosition.copy(playerPos);
                     e.searchTimer = 0;
                     e.awareness = 1.0;
                     e.lastSeenTime = simTime;
-                    const isAggressive = e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING || e.state === AIState.GRAPPLE;
                     if (!isAggressive) e.state = AIState.CHASE;
 
                     // --- Discovery Logic ---
@@ -202,7 +205,6 @@ export class EnemyDetectionSystem implements System {
             }
 
             // 3. AUDIO CHECK - Skip if currently attacking, grappling, OR if currently seeing the player
-            const isAggressive = e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING || e.state === AIState.GRAPPLE;
             const seesPlayer = simTime - (e.lastSeenTime || 0) < 500 && e.awareness > 0.8;
 
             if (!isAggressive && !seesPlayer && this.activeNoiseCount > 0) {
@@ -232,27 +234,22 @@ export class EnemyDetectionSystem implements System {
                             evt.type === NoiseType.MOLOTOV ||
                             evt.type === NoiseType.FLASHBANG;
 
-                        // If it's a throwable distraction, force them to search/investigate the noise position, even if in CHASE
+                        // If it's a throwable distraction, force them to search/investigate the noise position, even if in CHASE.
+                        // Zero-GC: Write directly to rotation.y (deferred yaw) instead of calling
+                        // setFromEuler inside the inner loop — EnemyAI.update() syncs quaternions each frame.
                         if (isDistraction) {
                             e.state = AIState.SEARCH;
                             e.searchTimer = SEARCH_TIMERS[evt.type] || ENEMY_DETECTION.SEARCH_DURATION;
-                            e.lastSeenTime = 0; // Clear last seen time so distraction isn't instantly overridden
-
-                            const angle = Math.atan2(dx, dz);
-                            e.mesh.rotation.y = angle;
-                            e.mesh.quaternion.setFromEuler(e.mesh.rotation);
+                            e.lastSeenTime = 0;
+                            e.mesh.rotation.y = Math.atan2(dx, dz);
                             break;
                         }
 
                         if (e.state === AIState.IDLE || e.state === AIState.WANDER || e.state === AIState.SEARCH) {
                             e.state = AIState.SEARCH;
                             e.searchTimer = ENEMY_DETECTION.SEARCH_DURATION;
-                            e.lastSeenTime = 0; // Clear last seen time so distraction isn't instantly overridden
-
-                            const angle = Math.atan2(dx, dz);
-                            e.mesh.rotation.y = angle;
-                            e.mesh.quaternion.setFromEuler(e.mesh.rotation);
-
+                            e.lastSeenTime = 0;
+                            e.mesh.rotation.y = Math.atan2(dx, dz);
                             break;
                         }
                     }
