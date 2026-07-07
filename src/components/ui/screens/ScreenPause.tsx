@@ -202,7 +202,7 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
 
             {/* TOOLTIP OVERLAY */}
             {tooltipContent && (
-                <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[1000] px-6 py-3 bg-zinc-950/90 border border-white/20 backdrop-blur-xl rounded-full shadow-2xl animate-in fade-in zoom-in duration-200 pointer-events-none">
+                <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[1000] px-6 py-3 bg-zinc-950/95 border border-white/20 rounded-full shadow-2xl animate-in fade-in zoom-in duration-200 pointer-events-none">
                     <span className="text-sm text-white font-bold uppercase tracking-widest whitespace-nowrap">
                         {tooltipContent}
                     </span>

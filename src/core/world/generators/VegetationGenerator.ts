@@ -688,6 +688,33 @@ export const VegetationGenerator = {
         }
     },
 
+    initNaturePrototypesSync: () => {
+        const VARIANTS = 3;
+        const types = [
+            VEGETATION_TYPE.PINE,
+            VEGETATION_TYPE.SPRUCE,
+            VEGETATION_TYPE.OAK,
+            VEGETATION_TYPE.BIRCH,
+            VEGETATION_TYPE.DEAD_TREE
+        ];
+
+        for (let i = 0; i < VARIANTS; i++) {
+            for (let t = 0; t < types.length; t++) {
+                const type = types[t];
+                const name = VTYPE_NAME[type];
+                const key = `${name}_${i}`;
+
+                if (!prototypes[key]) {
+                    if (type === VEGETATION_TYPE.PINE) prototypes[key] = generatePinePrototype(i);
+                    else if (type === VEGETATION_TYPE.SPRUCE) prototypes[key] = generateSprucePrototype(i);
+                    else if (type === VEGETATION_TYPE.OAK) prototypes[key] = generateOakPrototype(i);
+                    else if (type === VEGETATION_TYPE.BIRCH) prototypes[key] = generateBirchPrototype(i);
+                    else if (type === VEGETATION_TYPE.DEAD_TREE) prototypes[key] = generateDeadTreePrototype(i);
+                }
+            }
+        }
+    },
+
     initPrototypes: async (yieldToMain?: () => Promise<void>) => {
         return VegetationGenerator.initNaturePrototypes(yieldToMain);
     },
@@ -820,7 +847,12 @@ export const VegetationGenerator = {
         const group = new THREE.Group();
         const typeName = VTYPE_NAME[type] || 'PINE';
         const key = `${typeName}_${variant % 3}`;
-        const proto = prototypes[key] || prototypes[`${typeName}_0`] || prototypes['PINE_0'];
+        
+        let proto = prototypes[key];
+        if (!proto) {
+            VegetationGenerator.initNaturePrototypesSync();
+            proto = prototypes[key] || prototypes[`${typeName}_0`] || prototypes['PINE_0'];
+        }
 
         if (!proto) return group;
 
@@ -859,9 +891,20 @@ export const VegetationGenerator = {
     addInstancedTrees: (ctx: SectorBuildContext | { scene: THREE.Scene, uniqueMeshes?: any[] }, typeKey: string, matrices: THREE.Matrix4[], materialOverride?: THREE.Material) => {
         if (matrices.length === 0) return;
 
-        const proto = prototypes[typeKey];
+        let proto = prototypes[typeKey];
         if (!proto) {
-            console.warn(`[VegetationGenerator] Missing tree prototype for key: ${typeKey}. Forest will not render.`);
+            VegetationGenerator.initNaturePrototypesSync();
+            proto = prototypes[typeKey];
+        }
+
+        if (!proto) {
+            const baseType = typeKey.split('_')[0];
+            const fallbackKey = `${baseType}_0`;
+            proto = prototypes[fallbackKey] || prototypes['PINE_0'];
+        }
+
+        if (!proto) {
+            console.warn(`[VegetationGenerator] Missing tree prototype for key: ${typeKey} and fallbacks. Forest will not render.`);
             return;
         }
 

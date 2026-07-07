@@ -30,7 +30,7 @@ const TooltipOverlay: React.FC<{ data: { rect: DOMRect, items: MapItem[] } | nul
     if (!data) return null;
     return (
         <div
-            className="fixed z-[100] bg-black/95 backdrop-blur-md text-white text-xs font-mono p-3 border border-white/30 shadow-2xl pointer-events-none"
+            className="fixed z-[100] bg-black/95 text-white text-xs font-mono p-3 border border-white/30 shadow-2xl pointer-events-none"
             style={{
                 top: Math.max(10, data.rect.top - 120),
                 left: Math.min(window.innerWidth - 210, Math.max(10, data.rect.left - 100))

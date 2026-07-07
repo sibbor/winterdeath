@@ -145,9 +145,10 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = ({ isMobileDevice })
     const handleTouchEnd = useCallback((e: React.TouchEvent) => {
         e.stopPropagation();
         if (e.cancelable) e.preventDefault();
-        HudStore.triggerInteraction(false);
+        if (clickTimeoutRef.current !== null) clearTimeout(clickTimeoutRef.current);
+        clickTimeoutRef.current = window.setTimeout(executeClickRelease, 120);
         setTimeout(() => { isTouchInteraction.current = false; }, 300);
-    }, []);
+    }, [executeClickRelease]);
 
     const handleClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();

@@ -1,8 +1,9 @@
+import * as THREE from 'three';
 import { GameState, DEFAULT_STATE as DEFAULT_GAME_STATE } from '../types/StateTypes';
 import { GameScreen } from '../types/SessionTypes';
 import { OVERRIDE_DEFAULT_SECTOR, MAX_ENTITIES } from '../content/constants';
 import { StatID, StatWeaponIndex, StatEnemyIndex, StatPerkIndex, TELEMETRY_BUFFER_SIZE } from '../types/CareerStats';
-import { SECTOR_THEMES } from '../game/session/SectorTypes';
+import { SECTOR_THEMES, MAX_SECTOR_EVENTS } from '../game/session/SectorTypes';
 
 export const getPersistentState = (state: GameState) => {
     const s = state.stats;
@@ -65,6 +66,18 @@ export const getPersistentState = (state: GameState) => {
                 // Skip the ephemeral context and any Three.js objects that might have leaked
                 if (key === 'ctx' || (val && (val.isObject3D || val.isMesh || val.isTexture))) continue;
 
+                if (key === 'eventStates' && Array.isArray(val)) {
+                    cleaned[key] = val.map((es: any) => ({
+                        state: es.state,
+                        timer: es.timer,
+                        n1: es.n1, n2: es.n2, n3: es.n3, n4: es.n4,
+                        b1: es.b1, b2: es.b2, b3: es.b3, b4: es.b4,
+                        v1: { x: es.v1.x, y: es.v1.y, z: es.v1.z },
+                        v2: { x: es.v2.x, y: es.v2.y, z: es.v2.z }
+                    }));
+                    continue;
+                }
+
                 const t = typeof val;
                 if (val === null || t === 'string' || t === 'number' || t === 'boolean') {
                     cleaned[key] = val;
@@ -95,6 +108,27 @@ export const loadGameState = (): GameState => {
         try {
             const loaded = JSON.parse(saved);
             const loadedStats = loaded.careerStats || {};
+            const loadedSectorState = loaded.sectorState || {};
+
+            // Reconstruct eventStates with proper Vector3 classes (Zero-GC deserialization helper)
+            const eventStates = Array.from({ length: MAX_SECTOR_EVENTS }, (_, idx) => {
+                const src = loadedSectorState.eventStates?.[idx];
+                return {
+                    state: src?.state ?? 0,
+                    timer: src?.timer ?? 0,
+                    n1: src?.n1 ?? 0,
+                    n2: src?.n2 ?? 0,
+                    n3: src?.n3 ?? 0,
+                    n4: src?.n4 ?? 0,
+                    b1: src?.b1 ?? false,
+                    b2: src?.b2 ?? false,
+                    b3: src?.b3 ?? false,
+                    b4: src?.b4 ?? false,
+                    v1: new THREE.Vector3(src?.v1?.x ?? 0, src?.v1?.y ?? 0, src?.v1?.z ?? 0),
+                    v2: new THREE.Vector3(src?.v2?.x ?? 0, src?.v2?.y ?? 0, src?.v2?.z ?? 0)
+                };
+            });
+
             gameState = {
                 ...DEFAULT_GAME_STATE,
                 ...loaded,
@@ -137,7 +171,11 @@ export const loadGameState = (): GameState => {
                     debugMode: loaded.settings?.debugMode !== undefined ? loaded.settings.debugMode : (loaded.debugMode !== undefined ? loaded.debugMode : DEFAULT_GAME_STATE.settings.debugMode),
                 },
                 environmental: loaded.environmental || DEFAULT_GAME_STATE.environmental,
-                sectorState: loaded.sectorState || DEFAULT_GAME_STATE.sectorState,
+                sectorState: {
+                    ...DEFAULT_GAME_STATE.sectorState,
+                    ...loadedSectorState,
+                    eventStates
+                },
             };
         } catch (e) {
             console.error('Save file corrupted, resetting.');

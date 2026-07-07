@@ -57,6 +57,7 @@ export class InputManager implements System {
     public state: InputState;
     private physicalActions: Uint8Array;
     private prevActions: Uint8Array;
+    private latchedActions: Uint8Array;
     private isEnabled: boolean = false;
     private virtualAimPos: THREE.Vector2 = new THREE.Vector2(0, -200);
     private ctrlHeld: boolean = false;
@@ -89,6 +90,7 @@ export class InputManager implements System {
 
         this.physicalActions = new Uint8Array(InputAction.COUNT);
         this.prevActions = new Uint8Array(InputAction.COUNT);
+        this.latchedActions = new Uint8Array(InputAction.COUNT);
 
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handleKeyUp = this.handleKeyUp.bind(this);
@@ -112,6 +114,7 @@ export class InputManager implements System {
         this.state.actions.fill(0);
         this.physicalActions.fill(0);
         this.prevActions.fill(0);
+        this.latchedActions.fill(0);
         this.state.joystickMove.set(0, 0);
         this.state.joystickAim.set(0, 0);
     }
@@ -126,6 +129,9 @@ export class InputManager implements System {
     public handleVirtualAction(action: InputAction, pressed: boolean) {
         if (action >= 0 && action < InputAction.COUNT) {
             this.physicalActions[action] = pressed ? 1 : 0;
+            if (pressed) {
+                this.latchedActions[action] = 1;
+            }
         }
     }
 
@@ -171,6 +177,14 @@ export class InputManager implements System {
         }
 
         this.state.actions.set(this.physicalActions);
+
+        // Merge latched virtual touch actions that might have started and ended in the same tick
+        for (let i = 0; i < InputAction.COUNT; i++) {
+            if (this.latchedActions[i] === 1) {
+                this.state.actions[i] = 1;
+            }
+        }
+        this.latchedActions.fill(0);
 
         if (UIEventBridge.getInteractionTrigger()) {
             this.state.actions[InputAction.INTERACT] = 1;

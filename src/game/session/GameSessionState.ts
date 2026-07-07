@@ -639,7 +639,18 @@ export function resetGameSessionState(state: GameSessionState, props: any): void
 
     // 7. World & Collision
     if (props.gameState.sectorState) {
-        state.sectorState = props.gameState.sectorState;
+        const src = props.gameState.sectorState;
+        const dest = state.sectorState;
+        dest.unlimitedAmmo = src.unlimitedAmmo ?? false;
+        dest.noReload = src.noReload ?? false;
+        dest.unlimitedThrowables = src.unlimitedThrowables ?? false;
+        dest.isInvincible = src.isInvincible ?? false;
+        dest.isInputDisabled = src.isInputDisabled ?? false;
+        dest.isEnemyUpdateDisabled = src.isEnemyUpdateDisabled ?? false;
+        dest.isTeleportDisabled = src.isTeleportDisabled ?? false;
+        dest.isHudHidden = src.isHudHidden ?? false;
+        dest.envOverride = src.envOverride;
+        if (src.lokeUnlocked !== undefined) dest.lokeUnlocked = src.lokeUnlocked;
     } else {
         state.sectorState.isInputDisabled = false;
         state.sectorState.isEnemyUpdateDisabled = false;

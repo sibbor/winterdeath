@@ -95,7 +95,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespa
 
     return (
         <div
-            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/70 backdrop-blur-md p-4 sm:p-8 text-white font-sans select-none overflow-hidden transition-opacity duration-500"
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/85 p-4 sm:p-8 text-white font-sans select-none overflow-hidden transition-opacity duration-500"
             style={{ opacity: isVisible ? 1 : 0 }}
         >
             {/* Background Aesthetic */}

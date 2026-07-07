@@ -126,7 +126,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = React.memo(({ onClose, set
             </div>
 
             {showReloadConfirm && (
-                <div className="absolute inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm font-mono">
+                <div className="absolute inset-0 z-[110] flex items-center justify-center bg-black/95 font-mono">
                     <div className="bg-zinc-950 border-2 border-blue-600 p-8 md:p-12 max-w-xl w-full mx-4 shadow-[0_0_50px_rgba(37,99,235,0.3)] flex flex-col gap-6 scale-animation origin-center">
                         <h2 className="text-3xl md:text-5xl font-black uppercase text-blue-600 tracking-tighter leading-none italic">
                             {t('ui.reload_required')}

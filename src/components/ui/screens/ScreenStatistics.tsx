@@ -257,7 +257,7 @@ const OverviewTab: React.FC<{
     }, [rescuedMemberIds, FAMILY_MEMBERS]);
 
     return (
-        <div className="flex flex-col h-full gap-6 pb-12 overflow-y-auto pr-2 custom-scrollbar bg-zinc-950/20 backdrop-blur-sm rounded-lg p-1">
+        <div className="flex flex-col h-full gap-6 pb-12 overflow-y-auto pr-2 custom-scrollbar bg-zinc-950/60 rounded-lg p-1">
             <div className={`grid ${isMobileDevice ? 'grid-cols-1' : 'grid-cols-2'} gap-6`}>
                 <TacticalCard color={0x3b82f6} showHover={true} className="flex flex-col items-center text-center shadow-[inset_0_0_50px_rgba(59,130,246,0.1)]" style={{ borderColor: 'transparent' }}>
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent opacity-50 relative z-10" />
@@ -930,7 +930,7 @@ const PerksTab: React.FC<{ stats: CareerStats, t: (key: string) => string, effec
 });
 
 const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: string, id?: string, className?: string }> = React.memo(({ children, isLocked, color = COLORS.GRAY.str, id, className = '' }) => (
-    <div id={id} className={`p-6 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 backdrop-blur-md shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800' : ''} ${className}`}
+    <div id={id} className={`p-6 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800' : ''} ${className}`}
         style={{ borderColor: isLocked ? '#1f2937' : `${color}66` }}
     >
         <div className="">

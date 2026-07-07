@@ -60,7 +60,7 @@ const LevelUpBanner: React.FC = () => {
                         </span>
                     </div>
 
-                    <span ref={levelTextRef} className="text-3xl font-mono font-black text-white uppercase tracking-widest leading-tight drop-shadow-lg">
+                    <span ref={levelTextRef} className="text-2xl font-mono font-black text-white uppercase tracking-widest leading-tight drop-shadow-lg">
                         LEVEL --
                     </span>
                 </div>

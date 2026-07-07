@@ -112,7 +112,7 @@ const ModalLayout: React.FC<ModalLayoutProps> = React.memo(({
     isSmallScreen = false,
     fullHeight = false,
     transparent = false,
-    blurClass = "backdrop-blur-sm",
+    blurClass = "",
     titleColorClass = "text-white",
     borderColorClass = "border-zinc-800",
     contentClass = "",
@@ -242,7 +242,7 @@ const ModalLayout: React.FC<ModalLayoutProps> = React.memo(({
     const mobileScaling = isMobileDevice ? "" : "transform scale-50 md:scale-100";
 
     return (
-        <div className={`${OVERLAY_BASE} ${transparent ? '' : `bg-black/60 ${blurClass}`}`}>
+        <div className={`${OVERLAY_BASE} ${transparent ? '' : `bg-black/85 ${blurClass}`}`}>
             <div className={`${MODAL_BOX_BASE} ${borderColorClass} ${adaptiveWidth} ${adaptiveHeight} ${mobileScaling}`}>
                 <style>{`
                     @keyframes shimmer {
@@ -436,7 +436,7 @@ export const TacticalCard: React.FC<{
         <div
             id={id}
             onClick={onClick}
-            className={`p-6 border-2 relative overflow-hidden transition-all duration-300 backdrop-blur-md shadow-2xl active:scale-[0.98] ${defaultShrinkClass} ${isLocked ? 'border-zinc-800 bg-black/60' : ''} ${onClick ? 'cursor-pointer' : ''} group/tcard ${className}`}
+            className={`p-6 border-2 relative overflow-hidden transition-all duration-300 shadow-2xl active:scale-[0.98] ${defaultShrinkClass} ${isLocked ? 'border-zinc-800 bg-black/60' : ''} ${onClick ? 'cursor-pointer' : ''} group/tcard ${className}`}
             style={{
                 borderColor: isLocked ? '#1f2937' : `${colorStr}66`,
                 backgroundColor: isLocked ? undefined : `${colorStr}0A`,

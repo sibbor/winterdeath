@@ -43,6 +43,7 @@ const ChallengePopup: React.FC<ChallengePopupProps> = ({ onOpenAdventureLog, set
     const hide = useCallback(() => {
         isVisibleRef.current = false;
         activeChallengeIdRef.current = -1;
+        lastProcessedP1.current = -1;
         if (containerRef.current) {
             containerRef.current.style.display = 'none';
             containerRef.current.style.animation = 'none';

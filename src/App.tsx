@@ -941,6 +941,7 @@ const App: React.FC = () => {
     const showHUD = hasInteracted && (activeOverlay === OverlayType.NONE || activeOverlay === OverlayType.INTRO) && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && gameState.screen === GameScreen.SECTOR;
 
     const shouldKeepSessionAlive =
+        !isInitialBoot &&
         (gameState.screen === GameScreen.SECTOR ||
             gameState.screen === GameScreen.PROLOGUE ||
             gameState.screen === GameScreen.RECAP ||

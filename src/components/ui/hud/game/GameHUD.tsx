@@ -214,7 +214,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     wavePanelRef.current.classList.remove('animate-wave-appear');
                     wavePanelRef.current.classList.add('animate-wave-disappear');
                     const ref = wavePanelRef.current;
-                    setTimeout(() => { if (!prevTelemetry.current.waveActive && ref) { ref.style.display = 'none'; ref.classList.remove('animate-wave-disappear'); } }, 800);
+                    setTimeout(() => { if (!prevTelemetry.current.waveActive && ref) { ref.style.display = 'none'; ref.classList.remove('animate-wave-disappear'); } }, 1000);
                 }
                 if (waveNameRef.current) waveNameRef.current.classList.remove('hud-wave-cleared-text');
                 if (waveBarRef.current) waveBarRef.current.classList.remove('hud-wave-cleared-bar');

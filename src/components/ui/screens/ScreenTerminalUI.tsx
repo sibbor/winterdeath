@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { t } from '../../../utils/i18n';
 import ModalLayout, { TacticalButton, TacticalTab } from './ModalLayout';
 import { UIEventRingBuffer, UIEventType, ChatBubbleSubtype } from '../../../systems/ui/UIEventRingBuffer';
@@ -8,16 +8,155 @@ import { HudStore } from '../../../store/HudStore';
 import { DataResolver } from '../../../core/data/DataResolver';
 import { StatusEffectID } from '../../../types/StatusEffects';
 import { CHALLENGES } from '../../../content/challenges';
+import { UISounds } from '../../../utils/audio/AudioLib';
+import { PlayerStatusFlags } from '../../../types/CareerStats';
 
 interface ScreenTerminalUIProps {
     onClose: () => void;
     isMobileDevice?: boolean;
 }
 
-type TabType = 'popups' | 'feedback' | 'dialogue_prompt';
+type TabType = 'popups' | 'feedback' | 'dialogue_prompt' | 'effects';
+
+const ToggleButton: React.FC<{ 
+    isActive: boolean; 
+    onClick: () => void; 
+    label: string; 
+}> = ({ isActive, onClick, label }) => (
+    <button
+        onClick={onClick}
+        className={`w-full py-2.5 px-4 border uppercase text-xs font-mono font-bold tracking-wider transition-all duration-150 flex items-center justify-between ${
+            isActive 
+                ? 'border-emerald-500 bg-emerald-950/20 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.1)]' 
+                : 'border-zinc-800 bg-zinc-900/10 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+        }`}
+    >
+        <span>{label}</span>
+        <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800 text-zinc-600'}`}>
+            {isActive ? 'ENABLED' : 'DISABLED'}
+        </span>
+    </button>
+);
 
 export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isMobileDevice }) => {
     const [activeTab, setActiveTab] = useState<TabType>('popups');
+    const [keepAlive, setKeepAlive] = useState<boolean>(() => {
+        return (window as any).terminalKeepAlive !== undefined ? (window as any).terminalKeepAlive : true;
+    });
+
+    const getGlobalLoops = (): any[] => {
+        if (!(window as any).terminalLoops) {
+            (window as any).terminalLoops = [];
+        }
+        return (window as any).terminalLoops;
+    };
+
+    const clearGlobalLoops = () => {
+        const loops = getGlobalLoops();
+        loops.forEach(clearInterval);
+        (window as any).terminalLoops = [];
+    };
+
+    const getSavedToggleStates = () => {
+        return (window as any).terminalToggleStates || {
+            discovery: false,
+            challenge: false,
+            levelUp: false,
+            combatLog: false,
+            chatBubble: false,
+            dialogue: false,
+            interaction: false,
+            sectorBanner: false,
+            effects: false
+        };
+    };
+
+    const saveToggleStates = (states: any) => {
+        (window as any).terminalToggleStates = states;
+    };
+
+    const [toggleStates, setToggleStates] = useState(() => getSavedToggleStates());
+
+    const updateToggle = (key: string, val: boolean) => {
+        const next = { ...toggleStates, [key]: val };
+        setToggleStates(next);
+        saveToggleStates(next);
+    };
+
+    const handleClose = () => {
+        (window as any).terminalKeepAlive = keepAlive;
+        clearGlobalLoops();
+
+        const runActions: Array<() => void> = [];
+
+        if (toggleStates.discovery) runActions.push(runTriggerDiscovery);
+        if (toggleStates.challenge) runActions.push(runTriggerChallenge);
+        if (toggleStates.levelUp) runActions.push(runTriggerLevelUp);
+        if (toggleStates.combatLog) runActions.push(runTriggerCombatLog);
+        if (toggleStates.chatBubble) runActions.push(runTriggerChatBubble);
+        if (toggleStates.dialogue) runActions.push(runTriggerDialogue);
+        if (toggleStates.interaction) runActions.push(runTriggerInteraction);
+        if (toggleStates.sectorBanner) runActions.push(runTriggerSideBanner);
+        if (toggleStates.effects) {
+            runActions.push(runApplyScreenEffects);
+        } else {
+            runActions.push(() => {
+                HudStore.patch({ statusFlags: 0, hasCriticalHp: false });
+            });
+        }
+
+        runActions.forEach(action => {
+            action();
+            if (keepAlive) {
+                const interval = setInterval(action, 3000);
+                getGlobalLoops().push(interval);
+            }
+        });
+
+        onClose();
+    };
+
+    const handleResetUI = () => {
+        clearGlobalLoops();
+        
+        const initialToggles = {
+            discovery: false,
+            challenge: false,
+            levelUp: false,
+            combatLog: false,
+            chatBubble: false,
+            dialogue: false,
+            interaction: false,
+            sectorBanner: false,
+            effects: false
+        };
+        setToggleStates(initialToggles);
+        saveToggleStates(initialToggles);
+        
+        HudStore.patch({
+            cinematicActive: false,
+            dialogueActive: false,
+            dialogueSpeaker: '',
+            dialogueText: '',
+            interactionActive: false,
+            interactionId: InteractionPromptId.NONE,
+            statusFlags: 0,
+            hasCriticalHp: false
+        });
+        
+        setEffectDisoriented(false);
+        setEffectBurning(false);
+        setEffectBleeding(false);
+        setEffectGibMaster(false);
+        setEffectAdrenaline(false);
+        setEffectReflex(false);
+        setEffectQuickFinger(false);
+        setEffectCriticalHp(false);
+        
+        setKeepAlive(true);
+        (window as any).terminalKeepAlive = true;
+        UISounds.playConfirm();
+    };
 
     // 1. Discovery popup states
     const [discoveryType, setDiscoveryType] = useState<DiscoveryType>(DiscoveryType.CLUE);
@@ -52,12 +191,22 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
     const [sectorTitle, setSectorTitle] = useState('THE PLAYGROUND');
     const [sectorSubtitle, setSectorSubtitle] = useState('Sector 004');
 
+    // 9. Screen Effect states
+    const [effectDisoriented, setEffectDisoriented] = useState(false);
+    const [effectBurning, setEffectBurning] = useState(false);
+    const [effectBleeding, setEffectBleeding] = useState(false);
+    const [effectGibMaster, setEffectGibMaster] = useState(false);
+    const [effectAdrenaline, setEffectAdrenaline] = useState(false);
+    const [effectReflex, setEffectReflex] = useState(false);
+    const [effectQuickFinger, setEffectQuickFinger] = useState(false);
+    const [effectCriticalHp, setEffectCriticalHp] = useState(false);
+
     const getSimTime = () => {
         // Safe access to running engine simulation time
         return (window as any).inputManager?.stateRef?.current?.simTime || Date.now();
     };
 
-    const handleTriggerDiscovery = () => {
+    const runTriggerDiscovery = () => {
         const simTime = getSimTime();
         // Register dummy info in resolver cache so DiscoveryPopup can lookup
         const dummyId = 9999 + discoveryType;
@@ -72,7 +221,7 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
         UIEventRingBuffer.push(UIEventType.DISCOVERY, dummyId, discoveryType, simTime);
     };
 
-    const handleTriggerChallenge = () => {
+    const runTriggerChallenge = () => {
         const simTime = getSimTime();
         const challenge = CHALLENGES[selectedChallengeIdx];
         if (challenge) {
@@ -82,7 +231,7 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
         }
     };
 
-    const handleTriggerChatBubble = () => {
+    const runTriggerChatBubble = () => {
         const simTime = getSimTime();
         const duration = 3000;
         UIEventRingBuffer.pushString(
@@ -93,7 +242,7 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
         );
     };
 
-    const handleTriggerCombatLog = () => {
+    const runTriggerCombatLog = () => {
         const simTime = getSimTime();
         switch (combatLogType) {
             case 'XP':
@@ -117,7 +266,7 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
         }
     };
 
-    const handleTriggerDialogue = () => {
+    const runTriggerDialogue = () => {
         HudStore.update({
             ...HudStore.getState(),
             cinematicActive: true,
@@ -126,7 +275,7 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
             dialogueText: dialogueText
         });
 
-        // Auto dismiss after 4 seconds
+        // Auto dismiss after 2.5 seconds
         setTimeout(() => {
             HudStore.update({
                 ...HudStore.getState(),
@@ -135,10 +284,10 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
                 dialogueSpeaker: '',
                 dialogueText: ''
             });
-        }, 4000);
+        }, 2500);
     };
 
-    const handleTriggerInteraction = () => {
+    const runTriggerInteraction = () => {
         HudStore.patch({
             interactionActive: true,
             interactionType: InteractionType.SECTOR_SPECIFIC,
@@ -146,21 +295,21 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
             interactionId: interactionPrompt
         });
 
-        // Auto hide after 4 seconds
+        // Auto hide after 2.5 seconds
         setTimeout(() => {
             HudStore.patch({
                 interactionActive: false,
                 interactionId: InteractionPromptId.NONE
             });
-        }, 4000);
+        }, 2500);
     };
 
-    const handleTriggerLevelUp = () => {
+    const runTriggerLevelUp = () => {
         const simTime = getSimTime();
         UIEventRingBuffer.push(UIEventType.LEVEL_UP, levelUpVal, 0, simTime);
     };
 
-    const handleTriggerSideBanner = () => {
+    const runTriggerSideBanner = () => {
         window.dispatchEvent(
             new CustomEvent('trigger-side-banner-preview', {
                 detail: { title: sectorTitle, subtitle: sectorSubtitle }
@@ -168,38 +317,100 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
         );
     };
 
+    const runApplyScreenEffects = () => {
+        let flags = PlayerStatusFlags.NONE;
+        if (effectDisoriented) flags |= PlayerStatusFlags.DISORIENTED;
+        if (effectBurning) flags |= PlayerStatusFlags.BURNING;
+        if (effectBleeding) flags |= PlayerStatusFlags.BLEEDING;
+        if (effectGibMaster) flags |= PlayerStatusFlags.GIB_MASTER;
+        if (effectAdrenaline) flags |= PlayerStatusFlags.ADRENALINE_PATCH;
+        if (effectReflex) flags |= PlayerStatusFlags.REFLEX_SHIELD;
+        if (effectQuickFinger) flags |= PlayerStatusFlags.QUICK_FINGER;
+
+        HudStore.patch({
+            statusFlags: flags,
+            hasCriticalHp: effectCriticalHp
+        });
+    };
+
+    // Render Deck helper JSX to avoid duplication
+    const renderDevDeck = () => (
+        <div className="p-4 border border-zinc-800 bg-zinc-950/60 rounded-md flex flex-col gap-3 font-mono text-xs">
+            <div className="text-zinc-400 font-bold uppercase tracking-wider border-b border-zinc-800 pb-1.5 mb-1 text-[10px]">
+                Debug Trigger Options
+            </div>
+            
+            {/* Keep Alive Loop */}
+            <div className="flex flex-col gap-1.5">
+                <span className="text-zinc-500 uppercase text-[9px] font-black">Spawn Mode (On Close)</span>
+                <button 
+                    onClick={() => setKeepAlive(!keepAlive)}
+                    className={`w-full py-1.5 px-2 border uppercase text-[9px] font-black tracking-wider transition-all duration-150 flex items-center justify-center gap-1.5 ${keepAlive ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-zinc-800 bg-zinc-900/20 text-zinc-500 hover:text-zinc-300'}`}
+                >
+                    {keepAlive ? '● Loop Active (3s)' : '○ Single Spawn'}
+                </button>
+            </div>
+
+            {/* Reset UI */}
+            <button 
+                onClick={handleResetUI}
+                className="mt-2 w-full py-2 px-2 border border-red-500 bg-red-950/20 text-red-400 uppercase text-[9px] font-black tracking-widest hover:bg-red-900/40 transition-colors"
+            >
+                Reset UI
+            </button>
+        </div>
+    );
+
     return (
         <ModalLayout
             title={t('terminals.ui')}
             isMobileDevice={isMobileDevice}
-            onClose={onClose}
+            onClose={handleClose}
             titleColorClass="text-purple-600"
         >
             <div className="flex flex-col md:flex-row gap-6 h-full min-h-[500px]">
                 {/* Side Navigation Tabs */}
-                <div className="flex flex-row md:flex-col gap-2 shrink-0 md:w-56 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0">
-                    <TacticalTab
-                        label="Popups & Info"
-                        isActive={activeTab === 'popups'}
-                        onClick={() => setActiveTab('popups')}
-                        orientation={isMobileDevice ? 'horizontal' : 'vertical'}
-                    />
-                    <TacticalTab
-                        label="Log & Floating Feedback"
-                        isActive={activeTab === 'feedback'}
-                        onClick={() => setActiveTab('feedback')}
-                        orientation={isMobileDevice ? 'horizontal' : 'vertical'}
-                    />
-                    <TacticalTab
-                        label="Dialogues & Prompts"
-                        isActive={activeTab === 'dialogue_prompt'}
-                        onClick={() => setActiveTab('dialogue_prompt')}
-                        orientation={isMobileDevice ? 'horizontal' : 'vertical'}
-                    />
+                <div className="flex flex-col gap-2 shrink-0 md:w-56">
+                    <div className="flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0">
+                        <TacticalTab
+                            label="Popups & Info"
+                            isActive={activeTab === 'popups'}
+                            onClick={() => setActiveTab('popups')}
+                            orientation={isMobileDevice ? 'horizontal' : 'vertical'}
+                        />
+                        <TacticalTab
+                            label="Log & Floating Feedback"
+                            isActive={activeTab === 'feedback'}
+                            onClick={() => setActiveTab('feedback')}
+                            orientation={isMobileDevice ? 'horizontal' : 'vertical'}
+                        />
+                        <TacticalTab
+                            label="Dialogues & Prompts"
+                            isActive={activeTab === 'dialogue_prompt'}
+                            onClick={() => setActiveTab('dialogue_prompt')}
+                            orientation={isMobileDevice ? 'horizontal' : 'vertical'}
+                        />
+                        <TacticalTab
+                            label="Screen Effects"
+                            isActive={activeTab === 'effects'}
+                            onClick={() => setActiveTab('effects')}
+                            orientation={isMobileDevice ? 'horizontal' : 'vertical'}
+                        />
+                    </div>
+                    
+                    {/* Desktop Dev Deck */}
+                    <div className="hidden md:block mt-4">
+                        {renderDevDeck()}
+                    </div>
                 </div>
 
                 {/* Content Area */}
                 <div className="flex-1 min-w-0 bg-zinc-950/40 border border-zinc-800 rounded-lg p-6 overflow-y-auto custom-scrollbar">
+                    {/* Mobile Dev Deck */}
+                    <div className="md:hidden mb-6">
+                        {renderDevDeck()}
+                    </div>
+
                     {activeTab === 'popups' && (
                         <div className="flex flex-col gap-8">
                             {/* DISCOVERY POPUP */}
@@ -249,9 +460,11 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
                                         </div>
                                     </div>
                                 </div>
-                                <TacticalButton variant="primary" onClick={handleTriggerDiscovery} className="mt-2">
-                                    Trigger Discovery Popup
-                                </TacticalButton>
+                                <ToggleButton 
+                                    label="Queue Discovery Popup" 
+                                    isActive={toggleStates.discovery} 
+                                    onClick={() => updateToggle('discovery', !toggleStates.discovery)} 
+                                />
                             </div>
 
                             {/* CHALLENGE POPUP */}
@@ -285,9 +498,11 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
                                         </select>
                                     </div>
                                 </div>
-                                <TacticalButton variant="primary" onClick={handleTriggerChallenge} className="mt-2">
-                                    Trigger Challenge Popup
-                                </TacticalButton>
+                                <ToggleButton 
+                                    label="Queue Challenge Popup" 
+                                    isActive={toggleStates.challenge} 
+                                    onClick={() => updateToggle('challenge', !toggleStates.challenge)} 
+                                />
                             </div>
 
                             {/* LEVEL UP BANNER */}
@@ -303,9 +518,13 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
                                             className="bg-black border border-zinc-700 text-white p-2 font-mono text-xs w-24"
                                         />
                                     </div>
-                                    <TacticalButton variant="primary" onClick={handleTriggerLevelUp}>
-                                        Trigger Level Up
-                                    </TacticalButton>
+                                    <div className="flex-1">
+                                        <ToggleButton 
+                                            label="Queue Level Up Banner" 
+                                            isActive={toggleStates.levelUp} 
+                                            onClick={() => updateToggle('levelUp', !toggleStates.levelUp)} 
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -353,15 +572,17 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
                                                 {Object.entries(DataResolver.getPerks()).map(([id, perk]) => (
                                                     <option key={id} value={id}>
                                                         {t(perk.displayName)} ({perk.category})
-                                                    </option>
+                                                     </option>
                                                 ))}
                                             </select>
                                         </div>
                                     )}
                                 </div>
-                                <TacticalButton variant="primary" onClick={handleTriggerCombatLog} className="mt-2">
-                                    Trigger Combat Float Log
-                                </TacticalButton>
+                                <ToggleButton 
+                                    label="Queue Combat Float Log" 
+                                    isActive={toggleStates.combatLog} 
+                                    onClick={() => updateToggle('combatLog', !toggleStates.combatLog)} 
+                                />
                             </div>
 
                             {/* CHAT BUBBLES */}
@@ -390,9 +611,11 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
                                         />
                                     </div>
                                 </div>
-                                <TacticalButton variant="primary" onClick={handleTriggerChatBubble} className="mt-2">
-                                    Trigger Chat Bubble
-                                </TacticalButton>
+                                <ToggleButton 
+                                    label="Queue Chat Bubble" 
+                                    isActive={toggleStates.chatBubble} 
+                                    onClick={() => updateToggle('chatBubble', !toggleStates.chatBubble)} 
+                                />
                             </div>
                         </div>
                     )}
@@ -429,15 +652,17 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
                                         />
                                     </div>
                                 </div>
-                                <TacticalButton variant="primary" onClick={handleTriggerDialogue} className="mt-2">
-                                    Trigger dialogue (4s Auto-dismiss)
-                                </TacticalButton>
+                                <ToggleButton 
+                                    label="Queue Dialogue Box" 
+                                    isActive={toggleStates.dialogue} 
+                                    onClick={() => updateToggle('dialogue', !toggleStates.dialogue)} 
+                                />
                             </div>
 
                             {/* INTERACTION PROMPT */}
                             <div className="flex flex-col gap-4 border-b border-zinc-800 pb-6">
                                 <h3 className="text-zinc-400 font-bold uppercase tracking-wider text-sm">Interaction Prompt (Center HUD Indicator)</h3>
-                                <div className="flex gap-4 items-end">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                                     <div className="flex flex-col gap-1">
                                         <label className="text-zinc-600 uppercase text-[9px] font-black">Prompt Subtype</label>
                                         <select
@@ -454,9 +679,13 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
                                             <option value={InteractionPromptId.KNOCK_ON_PORT}>Knock on Door</option>
                                         </select>
                                     </div>
-                                    <TacticalButton variant="primary" onClick={handleTriggerInteraction}>
-                                        Trigger Prompt (4s Auto-hide)
-                                    </TacticalButton>
+                                    <div className="flex-1">
+                                        <ToggleButton 
+                                            label="Queue Interaction Prompt" 
+                                            isActive={toggleStates.interaction} 
+                                            onClick={() => updateToggle('interaction', !toggleStates.interaction)} 
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -483,10 +712,133 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
                                         />
                                     </div>
                                 </div>
-                                <TacticalButton variant="primary" onClick={handleTriggerSideBanner} className="mt-2">
-                                    Trigger Sector Splash Banner
-                                </TacticalButton>
+                                <ToggleButton 
+                                    label="Queue Sector Splash Banner" 
+                                    isActive={toggleStates.sectorBanner} 
+                                    onClick={() => updateToggle('sectorBanner', !toggleStates.sectorBanner)} 
+                                />
                             </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'effects' && (
+                        <div className="flex flex-col gap-6">
+                            <h3 className="text-zinc-400 font-bold uppercase tracking-wider text-sm">Vignette & Screen Visual Effects</h3>
+                            <p className="text-zinc-500 text-xs font-mono">
+                                Select status flags to apply to the player model and view the corresponding HUD post-processing vignette filters.
+                            </p>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border border-zinc-800 bg-zinc-950/20 p-6 rounded-md">
+                                <label className="flex items-center gap-3 cursor-pointer text-zinc-300 font-mono text-xs hover:text-white transition-colors">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={effectDisoriented} 
+                                        onChange={(e) => setEffectDisoriented(e.target.checked)}
+                                        className="accent-purple-600 rounded border-zinc-800 bg-black w-4 h-4" 
+                                    />
+                                    <div>
+                                        <div className="font-bold uppercase text-zinc-200">Disoriented</div>
+                                        <div className="text-[10px] text-zinc-500">Pulsing double-blur effect (Debuff)</div>
+                                    </div>
+                                </label>
+
+                                <label className="flex items-center gap-3 cursor-pointer text-zinc-300 font-mono text-xs hover:text-white transition-colors">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={effectBurning} 
+                                        onChange={(e) => setEffectBurning(e.target.checked)}
+                                        className="accent-purple-600 rounded border-zinc-800 bg-black w-4 h-4" 
+                                    />
+                                    <div>
+                                        <div className="font-bold uppercase text-zinc-200">Burning</div>
+                                        <div className="text-[10px] text-zinc-500">Bright orange-red flame vignette (Debuff)</div>
+                                    </div>
+                                </label>
+
+                                <label className="flex items-center gap-3 cursor-pointer text-zinc-300 font-mono text-xs hover:text-white transition-colors">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={effectBleeding} 
+                                        onChange={(e) => setEffectBleeding(e.target.checked)}
+                                        className="accent-purple-600 rounded border-zinc-800 bg-black w-4 h-4" 
+                                    />
+                                    <div>
+                                        <div className="font-bold uppercase text-zinc-200">Bleeding</div>
+                                        <div className="text-[10px] text-zinc-500">Dark crimson pulse vignette (Debuff)</div>
+                                    </div>
+                                </label>
+
+                                <label className="flex items-center gap-3 cursor-pointer text-zinc-300 font-mono text-xs hover:text-white transition-colors">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={effectGibMaster} 
+                                        onChange={(e) => setEffectGibMaster(e.target.checked)}
+                                        className="accent-purple-600 rounded border-zinc-800 bg-black w-4 h-4" 
+                                    />
+                                    <div>
+                                        <div className="font-bold uppercase text-zinc-200">Gib Master</div>
+                                        <div className="text-[10px] text-zinc-500">Dark violet gory splash (Buff)</div>
+                                    </div>
+                                </label>
+
+                                <label className="flex items-center gap-3 cursor-pointer text-zinc-300 font-mono text-xs hover:text-white transition-colors">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={effectAdrenaline} 
+                                        onChange={(e) => setEffectAdrenaline(e.target.checked)}
+                                        className="accent-purple-600 rounded border-zinc-800 bg-black w-4 h-4" 
+                                    />
+                                    <div>
+                                        <div className="font-bold uppercase text-zinc-200">Adrenaline Patch</div>
+                                        <div className="text-[10px] text-zinc-500">Deep golden-yellow flash vignette (Buff)</div>
+                                    </div>
+                                </label>
+
+                                <label className="flex items-center gap-3 cursor-pointer text-zinc-300 font-mono text-xs hover:text-white transition-colors">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={effectReflex} 
+                                        onChange={(e) => setEffectReflex(e.target.checked)}
+                                        className="accent-purple-600 rounded border-zinc-800 bg-black w-4 h-4" 
+                                    />
+                                    <div>
+                                        <div className="font-bold uppercase text-zinc-200">Reflex Shield</div>
+                                        <div className="text-[10px] text-zinc-500">Electric blue energy aura (Buff)</div>
+                                    </div>
+                                </label>
+
+                                <label className="flex items-center gap-3 cursor-pointer text-zinc-300 font-mono text-xs hover:text-white transition-colors">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={effectQuickFinger} 
+                                        onChange={(e) => setEffectQuickFinger(e.target.checked)}
+                                        className="accent-purple-600 rounded border-zinc-800 bg-black w-4 h-4" 
+                                    />
+                                    <div>
+                                        <div className="font-bold uppercase text-zinc-200">Quick Finger</div>
+                                        <div className="text-[10px] text-zinc-500">Slight green visual enhancement (Buff)</div>
+                                    </div>
+                                </label>
+
+                                <label className="flex items-center gap-3 cursor-pointer text-zinc-300 font-mono text-xs hover:text-white transition-colors">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={effectCriticalHp} 
+                                        onChange={(e) => setEffectCriticalHp(e.target.checked)}
+                                        className="accent-purple-600 rounded border-zinc-800 bg-black w-4 h-4" 
+                                    />
+                                    <div>
+                                        <div className="font-bold uppercase text-zinc-200">Critical HP Alert</div>
+                                        <div className="text-[10px] text-zinc-500">Slow breathing red boundary vignette (System Alert)</div>
+                                    </div>
+                                </label>
+                            </div>
+                            
+                            <ToggleButton 
+                                label="Apply Screen Effects on Close" 
+                                isActive={toggleStates.effects} 
+                                onClick={() => updateToggle('effects', !toggleStates.effects)} 
+                            />
                         </div>
                     )}
                 </div>

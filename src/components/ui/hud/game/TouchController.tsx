@@ -317,7 +317,7 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
             {/* PAUSE BUTTON — top-center, always accessible */}
             <div ref={pauseZoneRef} className="absolute top-3 left-1/2 -translate-x-1/2 z-40 pt-safe" style={{ pointerEvents: 'none' }}>
                 <button
-                    className="w-12 h-12 rounded-full border border-white/20 bg-black/60 text-white font-bold backdrop-blur-sm flex items-center justify-center active:scale-95 transition-transform"
+                    className="w-12 h-12 rounded-full border border-white/20 bg-black/75 text-white font-bold flex items-center justify-center active:scale-95 transition-transform"
                     onTouchStart={(e) => { e.stopPropagation(); onPause?.(); }}
                 >
                     ||
@@ -327,15 +327,15 @@ const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState
             {/* Action Buttons */}
             <div ref={actionZoneRef} className={`absolute flex z-40 pr-safe pb-safe ${isLandscapeMode ? 'bottom-4 right-4 flex-col gap-3' : 'bottom-24 right-4 flex-col gap-3'}`} style={{ pointerEvents: 'none' }}>
                 <div className="flex justify-end">
-                    <button data-action={InputAction.FLASHLIGHT} className="w-14 h-14 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2.5 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd} onTouchCancel={handleActionTouchEnd}>
+                    <button data-action={InputAction.FLASHLIGHT} className="w-14 h-14 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/60 flex items-center justify-center p-2.5 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd} onTouchCancel={handleActionTouchEnd}>
                         <img src="/assets/icons/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain pointer-events-none" />
                     </button>
                 </div>
                 <div className="flex items-end gap-3">
-                    <button data-action={InputAction.RELOAD} className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3.5 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd} onTouchCancel={handleActionTouchEnd}>
+                    <button data-action={InputAction.RELOAD} className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-white/20 bg-black/60 flex items-center justify-center p-3.5 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd} onTouchCancel={handleActionTouchEnd}>
                         <img src="/assets/icons/ui/icon_reload.png" alt="R" className="w-full h-full object-contain pointer-events-none" />
                     </button>
-                    <button data-action={InputAction.DODGE} className="w-20 h-20 md:w-24 md:h-24 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4.5 shadow-[0_0_20px_rgba(255,0,0,0.4)] opacity-80 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd} onTouchCancel={handleActionTouchEnd}>
+                    <button data-action={InputAction.DODGE} className="w-20 h-20 md:w-24 md:h-24 rounded-full border border-white/20 bg-black/60 flex items-center justify-center p-4.5 shadow-[0_0_20px_rgba(255,0,0,0.4)] opacity-80 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd} onTouchCancel={handleActionTouchEnd}>
                         <img src="/assets/icons/ui/icon_dodge.png" alt="Dodge" className="w-full h-full object-contain pointer-events-none" />
                     </button>
                 </div>

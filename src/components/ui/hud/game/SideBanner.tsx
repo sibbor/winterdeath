@@ -12,6 +12,8 @@ interface SideBannerProps {
 
 const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete, isBossIntro, isMobileDevice }) => {
     const [animationState, setAnimationState] = useState<'idle' | 'in' | 'visible' | 'out'>('idle');
+    const [customTitle, setCustomTitle] = useState<string>('');
+    const [customSubtitle, setCustomSubtitle] = useState<string>('');
 
     // ============================================================================
     // Banner content derived here — no longer delegated to GameHUD
@@ -23,16 +25,18 @@ const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete, isBossIntro
     const isSideBanner = active && !isBossIntro;
 
     const title = useMemo(() => {
+        if (customTitle) return customTitle;
         if (isSideBanner) return sectorName ? t(sectorName) : t(DataResolver.getSectorName(currentSector));
         if (isBossIntro) return bossNameKey ? t(bossNameKey) : t(DataResolver.getBossName(currentSector));
         return '';
-    }, [isSideBanner, isBossIntro, currentSector, sectorName, bossNameKey]);
+    }, [isSideBanner, isBossIntro, currentSector, sectorName, bossNameKey, customTitle]);
 
     const subtitle = useMemo(() => {
+        if (customSubtitle) return customSubtitle;
         if (isSideBanner) return `Sector ${String(currentSector).padStart(3, '0')}`;
         if (isBossIntro) return t('ui.boss_encounter');
         return '';
-    }, [isSideBanner, isBossIntro, currentSector]);
+    }, [isSideBanner, isBossIntro, currentSector, customSubtitle]);
 
     const onCompleteRef = React.useRef(onComplete);
     useEffect(() => {
@@ -40,8 +44,25 @@ const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete, isBossIntro
     }, [onComplete]);
 
     useEffect(() => {
+        const handlePreview = (e: any) => {
+            if (e.detail?.title) {
+                setCustomTitle(e.detail.title);
+            }
+            if (e.detail?.subtitle) {
+                setCustomSubtitle(e.detail.subtitle);
+            }
+        };
+        window.addEventListener('trigger-side-banner-preview', handlePreview);
+        return () => {
+            window.removeEventListener('trigger-side-banner-preview', handlePreview);
+        };
+    }, []);
+
+    useEffect(() => {
         if (!active) {
             setAnimationState('idle');
+            setCustomTitle('');
+            setCustomSubtitle('');
             return;
         }
 
@@ -58,11 +79,11 @@ const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete, isBossIntro
 
         const t2 = setTimeout(() => {
             setAnimationState('out');
-        }, 3000);
+        }, 2500);
 
         const t3 = setTimeout(() => {
             onCompleteRef.current();
-        }, 3250);
+        }, 2750);
 
         return () => {
             clearTimeout(t1);
@@ -98,19 +119,19 @@ const SideBanner: React.FC<SideBannerProps> = ({ active, onComplete, isBossIntro
                 {/* CONTENT */}
                 <div className="relative z-10 flex flex-col items-start">
                     {/* TITLE (Gold/Yellow project color) */}
-                    <span className={`font-mono ${isMobileDevice ? 'text-3xl' : 'text-4xl'} mb-3 font-black text-[#bfa979] tracking-widest uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]`}>
+                    <span className={`font-mono ${isMobileDevice ? 'text-3xl' : 'text-4xl'} mt-10 text-[#ffffff] tracking-[0.1em] uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]`}>
                         {title}
                     </span>
 
                     {/* DIVIDER LINE (Gold fading out with decorative tick on left) */}
                     <div className="w-full relative h-[1px] my-3 overflow-visible min-w-[300px]">
-                        <div className="absolute inset-0 bg-gradient-to-r from-[#bfa979]/80 via-[#bfa979]/40 to-transparent" />
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-[#bfa979] rotate-45" />
+                        <div className="absolute inset-0 bg-gradient-to-r from-[#ffffff]/80 via-[#ffffff]/40 to-transparent" />
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-[#ffffff] rotate-45" />
                     </div>
 
                     {/* SUBTITLE (Teal/Cyan capsule indented) */}
                     {subtitle && subtitle.trim() !== '' && (
-                        <div className="relative mt-1 ml-8 px-4 py-1 flex items-center justify-center rounded bg-[#132224]/90 border border-[#2dd4bf]/30 backdrop-blur-md shadow-[0_0_15px_rgba(45,212,212,0.15)]">
+                        <div className="relative mt-1 ml-8 px-4 py-1 flex items-center justify-center rounded bg-[#000000]/40 border border-[#ff0000]/30 backdrop-blur-md shadow-[0_0_15px_rgba(45,212,212,0.15)]">
                             <span className="text-[11px] font-mono font-bold text-[#cccccc] tracking-[0.3em] uppercase">
                                 {subtitle}
                             </span>
