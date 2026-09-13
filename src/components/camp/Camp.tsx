@@ -31,6 +31,7 @@ const weaponName = (id: number): string => DataResolver.getDamageName(id);
 import CampHUD from '../ui/hud/camp/CampHUD';
 import { OverlayType } from '../ui/hud/game/HudTypes';
 import { StatsBridge } from '../../core/data/StatsBridge';
+import { useHudStore } from '../../hooks/useHudStore';
 
 interface CampProps {
     stats: CareerStats;
@@ -67,6 +68,7 @@ const areEqual = (prevProps: CampProps, nextProps: CampProps) => {
 };
 
 const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, settings, onCampLoaded, isMobileDevice, weather = WeatherType.SNOW, hasCheckpoint, isGameRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
+    const isHudVisible = useHudStore(s => s.hudVisible);
     const rescuedFamilyIndices = StatsBridge.getRescuedFamilyIndices(stats);
     const rescuedFamilyIndicesStr = rescuedFamilyIndices.join(',');
     const engine = WinterEngine.getInstance();
@@ -603,7 +605,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 </div>
             ))}
 
-            {!activeOverlay && (
+            {!activeOverlay && isHudVisible && (
                 <CampHUD
                     stats={stats} hoveredStation={hoveredStation} currentSectorName={t(DataResolver.getSectorName(currentSector))} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
                     currentLoadoutNames={{ pri: t(weaponName(currentLoadout.primary)), sec: t(weaponName(currentLoadout.secondary)), thr: t(weaponName(currentLoadout.throwable)) }}

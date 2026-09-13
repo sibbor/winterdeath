@@ -11,26 +11,28 @@ import * as THREE from 'three';
 export interface WindUniforms {
     uTime: { value: number };
     uWind: { value: THREE.Vector2 };
-    uInteractors: { value: Float32Array };
+    uInteractors: { value: THREE.Vector4[] };
 }
 
-// One pre-allocated flat Float32Array per wind behavior variant — forces WebGL uniform uploads
+const createInteractorsArray = (): THREE.Vector4[] =>
+    Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 0, 0));
+
 export const TREE_WIND_UNIFORMS: WindUniforms = {
     uTime: { value: 0 },
     uWind: { value: new THREE.Vector2() },
-    uInteractors: { value: new Float32Array(32) }
+    uInteractors: { value: createInteractorsArray() }
 };
 
 export const GRASS_WIND_UNIFORMS: WindUniforms = {
     uTime: { value: 0 },
     uWind: { value: new THREE.Vector2() },
-    uInteractors: { value: new Float32Array(32) }
+    uInteractors: { value: createInteractorsArray() }
 };
 
 export const HEDGE_WIND_UNIFORMS: WindUniforms = {
     uTime: { value: 0 },
     uWind: { value: new THREE.Vector2() },
-    uInteractors: { value: new Float32Array(32) }
+    uInteractors: { value: createInteractorsArray() }
 };
 
 /**

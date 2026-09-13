@@ -334,7 +334,11 @@ class HudStoreClass {
      * call signatures to guard V8 Hidden Class shapes from breaking layout optimizations.
      */
     public patch(changes: Partial<IHudState>): void {
-        Object.assign(this.activeBuffer, changes);
+        for (const key in changes) {
+            if (Object.prototype.hasOwnProperty.call(changes, key)) {
+                (this.activeBuffer as any)[key] = (changes as any)[key];
+            }
+        }
         if (changes.debugMode !== undefined) {
             this.emitFastUpdate({ debugMode: changes.debugMode });
         }

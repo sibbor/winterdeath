@@ -414,7 +414,10 @@ export class AudioEngine {
     }
 
     public stopAll() {
-        this.voicePool.forEach(v => v.stop());
+        const len = this.voicePool.length;
+        for (let i = 0; i < len; i++) {
+            this.voicePool[i].stop();
+        }
         this.musicBus.stop(0.1);
         this.ambientBus.stop(0.1);
     }

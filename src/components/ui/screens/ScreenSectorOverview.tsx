@@ -120,7 +120,6 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
         if (!debugMode && (index > SectorID.VILLAGE && index !== SectorID.PLAYGROUND && !deadBossIndices.includes(index - 1))) return;
         UISounds.playClick();
         setSelectedSectorIndex(index);
-        onSelectSector(index);
     };
 
     const handleDeploy = () => {

@@ -205,39 +205,24 @@ export class WindSystem implements System {
       _tempInteractors[j].set(0, 0, 0, 0);
     }
 
-    // Flatten _tempInteractors into the active scratchpad buffer
-    const activeScratch = _useBufferA ? _flatFloatScratchA : _flatFloatScratchB;
-    _useBufferA = !_useBufferA;
-
+    // Direct uniform updates across the shared structs
     for (let j = 0; j < 8; j++) {
-      const v = _tempInteractors[j];
-      const idx = j * 4;
-      activeScratch[idx] = v.x;
-      activeScratch[idx + 1] = v.y;
-      activeScratch[idx + 2] = v.z;
-      activeScratch[idx + 3] = v.w;
+      TREE_WIND_UNIFORMS.uInteractors.value[j].copy(_tempInteractors[j]);
+      GRASS_WIND_UNIFORMS.uInteractors.value[j].copy(_tempInteractors[j]);
+      HEDGE_WIND_UNIFORMS.uInteractors.value[j].copy(_tempInteractors[j]);
     }
 
-    // Direct uniform updates across the shared structs
     // 1. Tree Uniforms
     TREE_WIND_UNIFORMS.uTime.value = timeSec;
     TREE_WIND_UNIFORMS.uWind.value.set(windX, windY);
-    TREE_WIND_UNIFORMS.uInteractors.value = activeScratch;
-    // Force Three.js to re-upload the TypedArray contents each frame.
-    // Without this, Three.js sees the same Float32Array reference and skips the upload.
-    (TREE_WIND_UNIFORMS.uInteractors as any).needsUpdate = true;
 
     // 2. Grass Uniforms
     GRASS_WIND_UNIFORMS.uTime.value = timeSec;
     GRASS_WIND_UNIFORMS.uWind.value.set(windX, windY);
-    GRASS_WIND_UNIFORMS.uInteractors.value = activeScratch;
-    (GRASS_WIND_UNIFORMS.uInteractors as any).needsUpdate = true;
 
     // 3. Hedge Uniforms
     HEDGE_WIND_UNIFORMS.uTime.value = timeSec;
     HEDGE_WIND_UNIFORMS.uWind.value.set(windX, windY);
-    HEDGE_WIND_UNIFORMS.uInteractors.value = activeScratch;
-    (HEDGE_WIND_UNIFORMS.uInteractors as any).needsUpdate = true;
 
     // Keep updating the dynamic binds for custom/extra instances of materials
     const binds = this.boundUniforms;
@@ -247,8 +232,9 @@ export class WindSystem implements System {
       b.uTime.value = timeSec;
       b.uWind.value.x = windX;
       b.uWind.value.y = windY;
-      b.uInteractors.value = activeScratch;
-      (b.uInteractors as any).needsUpdate = true;
+      for (let j = 0; j < 8; j++) {
+        b.uInteractors.value[j].copy(_tempInteractors[j]);
+      }
     }
 
     return this.current;

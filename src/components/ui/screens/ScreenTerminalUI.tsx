@@ -53,7 +53,9 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
 
     const clearGlobalLoops = () => {
         const loops = getGlobalLoops();
-        loops.forEach(clearInterval);
+        for (let i = 0; i < loops.length; i++) {
+            clearInterval(loops[i]);
+        }
         (window as any).terminalLoops = [];
     };
 
@@ -105,13 +107,14 @@ export const ScreenTerminalUI: React.FC<ScreenTerminalUIProps> = ({ onClose, isM
             });
         }
 
-        runActions.forEach(action => {
+        for (let i = 0; i < runActions.length; i++) {
+            const action = runActions[i];
             action();
             if (keepAlive) {
                 const interval = setInterval(action, 3000);
                 getGlobalLoops().push(interval);
             }
-        });
+        }
 
         onClose();
     };

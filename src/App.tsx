@@ -39,6 +39,7 @@ import { checkIsMobileDevice } from './utils/device';
 import { AssetPreloader } from './systems/AssetPreloader';
 import { WinterEngine, GameSettings } from './core/engine/WinterEngine';
 import { HudStore } from './store/HudStore';
+import { useHudStore } from './hooks/useHudStore';
 import { SectorSystem } from './systems/SectorSystem';
 import { OverlayType, DiscoveryType } from './components/ui/hud/game/HudTypes';
 import { StatsBridge } from './core/data/StatsBridge';
@@ -937,8 +938,9 @@ const App: React.FC = () => {
         }
     );
 
+    const isHudVisible = useHudStore(s => s.hudVisible);
     const cursorHidden = !isCtrlInspect && (isMobileDevice || isPointerLocked || (hasInteracted && gameState.screen === GameScreen.SECTOR && activeOverlay === OverlayType.NONE));
-    const showHUD = hasInteracted && (activeOverlay === OverlayType.NONE || activeOverlay === OverlayType.INTRO) && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && gameState.screen === GameScreen.SECTOR;
+    const showHUD = isHudVisible && hasInteracted && (activeOverlay === OverlayType.NONE || activeOverlay === OverlayType.INTRO) && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && gameState.screen === GameScreen.SECTOR;
 
     const shouldKeepSessionAlive =
         !isInitialBoot &&

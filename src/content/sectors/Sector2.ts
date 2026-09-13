@@ -644,7 +644,7 @@ export const Sector2: SectorDef = {
             ...filterTrailNorth(PathGenerator.getOffsetPoints(trailPts, -forestOffset)),
             ...filterTrailNorth(PathGenerator.getOffsetPoints(trailPts, -(forestOffset + forestDepth))).reverse()
         ];
-        sprucePolyNorth.forEach(p => p.y = 0);
+        for (let i = 0; i < sprucePolyNorth.length; i++) sprucePolyNorth[i].y = 0;
         await SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.PINE], sprucePolyNorth, 12);
         await yieldIfBudgetExceeded();
 
@@ -654,7 +654,7 @@ export const Sector2: SectorDef = {
             ...filterTrailSouth(PathGenerator.getOffsetPoints(trailPts, forestOffset)),
             ...filterTrailSouth(PathGenerator.getOffsetPoints(trailPts, forestOffset + forestDepth)).reverse()
         ];
-        deadTreePoly.forEach(p => p.y = 0);
+        for (let i = 0; i < deadTreePoly.length; i++) deadTreePoly[i].y = 0;
         await SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.DEAD_TREE], deadTreePoly, 12);
         await yieldIfBudgetExceeded();
 
@@ -678,7 +678,7 @@ export const Sector2: SectorDef = {
             ...filterWheat2(PathGenerator.getOffsetPoints(hagPts, wheatOffset)),
             ...filterWheat2(PathGenerator.getOffsetPoints(hagPts, wheatOffset + wheatDepth)).reverse()
         ];
-        wheatPoly2.forEach(p => p.y = 0);
+        for (let i = 0; i < wheatPoly2.length; i++) wheatPoly2[i].y = 0;
         await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.WHEAT, wheatPoly2, 0.4);
         await yieldIfBudgetExceeded();
         await SectorBuilder.createScarecrow(ctx, 205, -135);
@@ -692,7 +692,7 @@ export const Sector2: SectorDef = {
             ...filterFlowersFarm(PathGenerator.getOffsetPoints(farmPathPts, 4)),       // Outer south boundary of farm path
             ...filterFlowersHag(PathGenerator.getOffsetPoints(hagPts, -4)).reverse()   // Inner north boundary of Haglaredsvägen
         ];
-        flowerPoly.forEach(p => p.y = 0);
+        for (let i = 0; i < flowerPoly.length; i++) flowerPoly[i].y = 0;
         await SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.FLOWER, flowerPoly, 0.9);
         await yieldIfBudgetExceeded();
 

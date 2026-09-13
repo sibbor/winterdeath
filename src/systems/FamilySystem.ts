@@ -63,6 +63,10 @@ export class FamilySystem implements System {
         this.callbacks = callbacks;
     }
 
+    public getMembers(): any[] {
+        return this.activeFamilyMembers ? this.activeFamilyMembers.current : [];
+    }
+
     update(_session: GameSessionLogic, delta: number, simTime: number, renderTime: number) {
         const members = this.activeFamilyMembers.current;
         const isCinematicActive = this.isCinematicRef.current.active;

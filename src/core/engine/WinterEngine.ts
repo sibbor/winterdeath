@@ -19,6 +19,7 @@ import { System, SystemID } from '../../systems/System';
 import { GroundType, EnvironmentConfig, EnvironmentOverride } from '../../core/engine/EnvironmentalTypes';
 import { ChunkManager } from '../world/ChunkManager';
 import { clearEffects } from '../../systems/EffectManager';
+import { checkIsMobileDevice } from '../../utils/device';
 
 // Module-level scratchpads for Zero-GC operations
 const _traverseStack: THREE.Object3D[] = [];
@@ -135,6 +136,9 @@ export class WinterEngine {
 
     constructor(initialSettings?: Partial<GameSettings>) {
         this.settings = { ...SETTINGS_DEFAULT, ...initialSettings };
+        if (checkIsMobileDevice()) {
+            this.settings.volumetricFog = false;
+        }
         this.scene = new THREE.Scene();
 
         this.initRenderer();
@@ -205,31 +209,74 @@ export class WinterEngine {
      * Initializes the WebGLRenderer with high-performance parameters.
      */
     private initRenderer() {
-        const params: THREE.WebGLRendererParameters = {
-            antialias: this.settings.antialias,
-            powerPreference: 'high-performance',
-            precision: 'highp',
-            alpha: false,       // Optimization: Canvas is opaque
-            stencil: false,     // Optimization: No stencil buffer needed
-            depth: true,
-            preserveDrawingBuffer: false
-        };
+        const isMobile = checkIsMobileDevice();
+        const canvas = document.createElement('canvas');
+        let gl: WebGL2RenderingContext | WebGLRenderingContext | null = null;
 
-        this.renderer = new THREE.WebGLRenderer(params);
+        // 1. Try WebGL2 with compatible parameters
+        try {
+            gl = canvas.getContext('webgl2', {
+                alpha: true,
+                depth: true,
+                stencil: false,
+                antialias: false,
+                powerPreference: 'default',
+                preserveDrawingBuffer: false
+            }) as WebGL2RenderingContext | null;
+        } catch (e) {
+            console.warn('[WinterEngine] WebGL2 context with attributes failed:', e);
+        }
+
+        // 2. Try WebGL2 basic
+        if (!gl) {
+            try {
+                gl = canvas.getContext('webgl2') as WebGL2RenderingContext | null;
+            } catch (e) {
+                console.warn('[WinterEngine] WebGL2 basic context failed:', e);
+            }
+        }
+
+        // 3. Fallback to WebGL1 (webgl / experimental-webgl)
+        if (!gl) {
+            try {
+                gl = (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')) as WebGLRenderingContext | null;
+            } catch (e) {
+                console.warn('[WinterEngine] WebGL1 context failed:', e);
+            }
+        }
+
+        if (!gl) {
+            throw new Error('WebGL is not supported or disabled on this device/browser.');
+        }
+
+        const rendererInstance = new THREE.WebGLRenderer({
+            canvas,
+            context: gl,
+            antialias: false,
+            alpha: true,
+            depth: true
+        });
+
+        this.renderer = rendererInstance;
         this._setHardwareLimits();
 
-        // Strictly respect the user's graphical settings from the UI
-        this.renderer.setPixelRatio(this.settings.pixelRatio || 1);
+        // Strictly respect graphical settings with mobile DPR capping (Max 1.0 on mobile)
+        const rawRatio = this.settings.pixelRatio || 1;
+        const targetDpr = isMobile ? Math.min(1.0, rawRatio) : rawRatio;
+
+        this.renderer.setPixelRatio(targetDpr);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
 
-        this.renderer.shadowMap.enabled = this.settings.shadows;
+        this.renderer.shadowMap.enabled = this.settings.shadows && !isMobile;
         this.renderer.shadowMap.type = this.settings.shadowMapType as THREE.ShadowMapType;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-        // Depth Texture Support for Soft Fog/Particles
-        if (this.settings.volumetricFog) {
-            this.depthTexture = new THREE.DepthTexture(window.innerWidth, window.innerHeight);
-            this.renderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+        // Depth Texture Support for Soft Fog/Particles (Downscaled target on mobile to protect fill-rate)
+        if (this.settings.volumetricFog && !isMobile) {
+            const targetW = isMobile ? Math.floor(window.innerWidth * 0.5) : window.innerWidth;
+            const targetH = isMobile ? Math.floor(window.innerHeight * 0.5) : window.innerHeight;
+            this.depthTexture = new THREE.DepthTexture(targetW, targetH);
+            this.renderTarget = new THREE.WebGLRenderTarget(targetW, targetH, {
                 depthTexture: this.depthTexture,
                 depthBuffer: true
             });
@@ -244,6 +291,16 @@ export class WinterEngine {
         // All interactions are captured by the GameSessionUI click-catcher overlay,
         // ensuring the HUD and custom cursors remain reachable.
         this.renderer.domElement.style.pointerEvents = 'none';
+
+        this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
+            e.preventDefault();
+            console.warn('[WinterEngine] WebGL context lost!');
+        }, false);
+
+        this.renderer.domElement.addEventListener('webglcontextrestored', () => {
+            console.log('[WinterEngine] WebGL context restored!');
+            this.recreateRenderer();
+        }, false);
 
         // Vinterdöd Fix: Disable auto-reset to allow accumulation across multiple passes
         // (Volumetric Fog, UI overlays, etc.) in a single engine frame.
@@ -292,7 +349,10 @@ export class WinterEngine {
     }
 
     private applySettings() {
-        this.renderer.setPixelRatio(this.settings.pixelRatio || 1);
+        const isMobile = checkIsMobileDevice();
+        const rawRatio = this.settings.pixelRatio || 1;
+        const targetDpr = isMobile ? Math.min(1.0, rawRatio) : rawRatio;
+        this.renderer.setPixelRatio(targetDpr);
 
         const shadowsEnabled = this.settings.shadows;
         const shadowType = this.settings.shadowMapType as THREE.ShadowMapType;
@@ -568,14 +628,21 @@ export class WinterEngine {
         this.screenWidth = width;
         this.screenHeight = height;
 
+        const isMobile = checkIsMobileDevice();
+        const rawRatio = this.settings.pixelRatio || 1;
+        const targetDpr = isMobile ? Math.min(1.0, rawRatio) : rawRatio;
+        this.renderer.setPixelRatio(targetDpr);
+
         this.camera.set('aspect', width / height);
         this.renderer.setSize(width, height);
 
         if (this.renderTarget) {
-            this.renderTarget.setSize(width, height);
+            const targetW = isMobile ? Math.floor(width * 0.5) : width;
+            const targetH = isMobile ? Math.floor(height * 0.5) : height;
+            this.renderTarget.setSize(targetW, targetH);
             if (this.depthTexture) {
-                this.depthTexture.image.width = width;
-                this.depthTexture.image.height = height;
+                this.depthTexture.image.width = targetW;
+                this.depthTexture.image.height = targetH;
             }
         }
     };

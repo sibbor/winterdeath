@@ -1,5 +1,21 @@
 import * as THREE from 'three';
 
+const createFallbackTexture = (): THREE.CanvasTexture => {
+    const canvas = typeof document !== 'undefined' ? document.createElement('canvas') : ({ width: 16, height: 16 } as any);
+    if (canvas.getContext) {
+        canvas.width = 16;
+        canvas.height = 16;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#888888';
+        ctx.fillRect(0, 0, 16, 16);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.matrixAutoUpdate = false;
+    return tex;
+};
+
 export class AssetLoader {
     private static instance: AssetLoader;
     private textureLoader: THREE.TextureLoader;
@@ -32,6 +48,8 @@ export class AssetLoader {
             return this.textureCacheSource.get(cacheKey)!;
         }
 
+        const fallback = createFallbackTexture();
+
         const loadPromise = new Promise<void>((resolve) => {
             this.textureLoader.load(
                 path,
@@ -46,12 +64,24 @@ export class AssetLoader {
                     }
                 },
                 undefined,
-                () => resolve()
+                (err) => {
+                    console.warn(`[AssetLoader] Texture load failed for "${path}", using fallback.`, err);
+                    resolve();
+                }
             );
         });
         this.pendingPromises.push(loadPromise);
 
-        const texture = this.textureLoader.load(path);
+        const texture = this.textureLoader.load(
+            path,
+            undefined,
+            undefined,
+            () => {
+                // On 404 / load error, assign valid fallback image to prevent WebGL texImage2D crash
+                (texture as any).image = fallback.image;
+                texture.needsUpdate = true;
+            }
+        );
         if (isColorTexture) texture.colorSpace = THREE.SRGBColorSpace;
         else texture.colorSpace = THREE.NoColorSpace;
 
@@ -77,12 +107,12 @@ export class AssetLoader {
     public clearCache() {
         const keysToRemove: string[] = [];
 
-        this.textureCacheSource.forEach((texture, key) => {
+        for (const [key, texture] of this.textureCacheSource) {
             if (!texture.userData.isPersistent) {
                 texture.dispose();
                 keysToRemove.push(key);
             }
-        });
+        }
 
         for (let i = 0; i < keysToRemove.length; i++) {
             this.textureCacheSource.delete(keysToRemove[i]);
@@ -100,5 +130,5 @@ export const TEXTURES = {
     bark_birch_bump: loader.loadTexture('/assets/textures/bark_birch_bump.png'),
     concrete_bump: loader.loadTexture('/assets/textures/concrete_bump.png'),
     brick_bump: loader.loadTexture('/assets/textures/brick_bump.png'),
-    water_ripple: loader.loadTexture('/assets/textures/water_ripple.png'),
+    water_ripple: createFallbackTexture(),
 };

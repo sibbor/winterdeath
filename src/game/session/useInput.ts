@@ -58,11 +58,16 @@ export const useInput = (
         wasPausedRef.current = props.isPaused;
     });
 
-    // 1. Camera Directional Keys (Debug controls layer layout boundary)
+    // 1. Camera Directional Keys & Global HUD Toggle (Debug controls layer layout boundary)
     useEffect(() => {
         if (props.isMobileDevice) return;
 
         const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'h' || e.key === 'H') {
+                HudStore.setHudVisible(!HudStore.getState().hudVisible);
+                return;
+            }
+
             if (props.isPaused) return;
 
             const action = INPUT_KEY_MAP[e.key];

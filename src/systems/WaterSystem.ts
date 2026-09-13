@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createWaterMaterial, WaterGeometryPool, SHARED_WATER_VEG_UNIFORMS } from '../utils/assets';
 import { WATER_SYSTEM } from '../content/constants';
 import { MATERIALS } from '../utils/assets/materials';
-import { NoiseType } from '../entities/enemies/EnemyTypes';
+import { NoiseType, EnemyDeathState, EnemyFlags } from '../entities/enemies/EnemyTypes';
 import { System, SystemID } from './System';
 import { FXParticleType } from '../types/FXTypes';
 import { ChunkManager } from '../core/world/ChunkManager';
@@ -397,12 +397,12 @@ export class WaterSystem implements System {
         let objIdx = 0;
         const bLen = this.waterBodies.length;
 
-        // --- 1. Fill Object Positions for Stationary Foam ---
+        // --- 1. Fill Object Positions for Foam ---
         if (this.playerGroup) {
             const pPos = this.playerGroup.position;
-            const isMoving = pPos.distanceToSquared(this.lastPlayerPos) > 0.001;
-            if (!isMoving) {
-                this.objectPositions[objIdx++].set(pPos.x, pPos.z, 1.6, 1.0);
+            this.checkBuoyancy(pPos.x, pPos.y, pPos.z, renderTime);
+            if (_buoyancyResult.inWater && objIdx < WATER_SYSTEM.MAX_FLOATING_OBJECTS) {
+                this.objectPositions[objIdx++].set(pPos.x, pPos.z, 1.8, 1.0);
             }
         }
 
@@ -411,12 +411,8 @@ export class WaterSystem implements System {
             for (let j = 0; j < props.length; j++) {
                 if (objIdx < WATER_SYSTEM.MAX_FLOATING_OBJECTS) {
                     const p = props[j];
-                    const vel = p.userData.velocity as THREE.Vector3;
-                    const isMoving = vel && vel.lengthSq() > 0.01;
-                    if (!isMoving) {
-                        const radius = p.userData.radius || (p.userData.isBoat ? 3.8 : 1.8);
-                        this.objectPositions[objIdx++].set(p.position.x, p.position.z, radius, 1.0);
-                    }
+                    const radius = p.userData.radius || (p.userData.isBoat ? 3.8 : 1.8);
+                    this.objectPositions[objIdx++].set(p.position.x, p.position.z, radius, 1.0);
                 }
             }
 
@@ -424,7 +420,6 @@ export class WaterSystem implements System {
             for (let j = 0; j < sources.length; j++) {
                 if (objIdx < WATER_SYSTEM.MAX_FLOATING_OBJECTS) {
                     const p = sources[j];
-                    // O(1) Check replacing O(N) array includes
                     if (p.userData.isRegisteredWaterProp) continue;
 
                     const radius = p.userData.radius || 3.0;
@@ -469,7 +464,7 @@ export class WaterSystem implements System {
             this.updateSplashSources(body, delta, renderTime);
         }
 
-        if (this.playerGroup) this.updatePlayerLogic(delta, renderTime);
+        this.updateEntitiesWaterLogic(session, delta, renderTime);
 
         this.updateInstancedLilies(delta, renderTime);
 
@@ -581,29 +576,114 @@ export class WaterSystem implements System {
         // Ambient ripples completely silenced for calm lake surface
     }
 
-    private updatePlayerLogic(dt: number, now: number): void {
-        const pos = this.playerGroup!.position;
-        this.checkBuoyancy(pos.x, pos.y, pos.z, now);
-        if (_buoyancyResult.inWater) {
-            const distSq = pos.distanceToSquared(this.lastPlayerPos);
+    private updateEntitiesWaterLogic(session: GameSessionLogic, dt: number, now: number): void {
+        // 1. Player
+        if (this.playerGroup) {
+            const pos = this.playerGroup.position;
+            this.checkBuoyancy(pos.x, pos.y, pos.z, now);
+            if (_buoyancyResult.inWater) {
+                const distSq = pos.distanceToSquared(this.lastPlayerPos);
 
-            if (distSq > 0.49) { // ~0.7m (0.7 * 0.7 = 0.49)
-                // Distance-based: spawn a ripple every ~0.7 units of movement.
-                // FPS-independent — the ripple always anchors to the current position.
-                this.spawnRipple(pos.x, pos.z, now, 0.7);
-                this.lastPlayerPos.copy(pos);
-                this.stepTimer = 0;
-            } else if (distSq < 0.001) {
-                // Gentle rhythmic idle pulse — time-based is fine when not moving
-                this.stepTimer += dt;
-                if (this.stepTimer > 0.4) {
-                    this.spawnRipple(pos.x, pos.z, now, 0.5);
-                    this.stepTimer = 0;
+                if (distSq > 0.49) { // ~0.7m movement threshold
+                    this.spawnRipple(pos.x, pos.z, now, 0.7);
+                    if (this.spawnParticleCb && Math.random() < 0.4) {
+                        this.spawnParticleCb(pos.x, _buoyancyResult.waterLevel, pos.z, FXParticleType.SPLASH, 2);
+                    }
                     this.lastPlayerPos.copy(pos);
+                    this.stepTimer = 0;
+                } else if (distSq < 0.001) {
+                    this.stepTimer += dt;
+                    if (this.stepTimer > 0.4) {
+                        this.spawnRipple(pos.x, pos.z, now, 0.5);
+                        this.stepTimer = 0;
+                        this.lastPlayerPos.copy(pos);
+                    }
+                }
+            } else {
+                this.lastPlayerPos.copy(pos);
+            }
+        }
+
+        if (!session) return;
+
+        // 2. Vehicle interaction
+        const vehicleMesh = session.state?.vehicle?.mesh;
+        if (vehicleMesh) {
+            const vPos = vehicleMesh.position;
+            this.checkBuoyancy(vPos.x, vPos.y, vPos.z, now);
+            if (_buoyancyResult.inWater) {
+                const vel = vehicleMesh.userData.velocity as THREE.Vector3;
+                const speedSq = vel ? vel.lengthSq() : 0;
+                if (speedSq > 0.1) {
+                    if (!vehicleMesh.userData.nextWaterRipple || now > vehicleMesh.userData.nextWaterRipple) {
+                        this.spawnRipple(vPos.x, vPos.z, now, 1.4);
+                        if (this.spawnParticleCb && speedSq > 4.0) {
+                            this.spawnParticleCb(vPos.x, _buoyancyResult.waterLevel + 0.1, vPos.z, FXParticleType.SPLASH, 4);
+                        }
+                        vehicleMesh.userData.nextWaterRipple = now + 150;
+                    }
                 }
             }
-        } else {
-            this.lastPlayerPos.copy(pos);
+        }
+
+        // 3. Family Members
+        const engine = session?.engine || WinterEngine.getInstance();
+        const familySys = session?.systems?.family || engine?.systems?.family;
+        const familyMembers = familySys?.getMembers();
+        if (familyMembers && Array.isArray(familyMembers)) {
+            for (let i = 0; i < familyMembers.length; i++) {
+                const member = familyMembers[i];
+                if (member && member.mesh && member.following) {
+                    const mPos = member.mesh.position;
+                    this.checkBuoyancy(mPos.x, mPos.y, mPos.z, now);
+                    if (_buoyancyResult.inWater) {
+                        if (!member.mesh.userData.lastWaterPos) member.mesh.userData.lastWaterPos = mPos.clone();
+                        const dSq = mPos.distanceToSquared(member.mesh.userData.lastWaterPos);
+                        if (dSq > 0.49) {
+                            this.spawnRipple(mPos.x, mPos.z, now, 0.6);
+                            if (this.spawnParticleCb && Math.random() < 0.3) {
+                                this.spawnParticleCb(mPos.x, _buoyancyResult.waterLevel, mPos.z, FXParticleType.SPLASH, 1);
+                            }
+                            member.mesh.userData.lastWaterPos.copy(mPos);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Nearby Enemies (Zombies & Bosses)
+        const grid = session.systems?.worldStreamer;
+        const pPos = this.playerGroup?.position;
+        if (grid && pPos) {
+            const enPool = grid.getEnemyPool();
+            const enPoolIdx = enPool.nextIndex();
+            grid.getNearbyEnemies(pPos.x, pPos.z, 30, enPoolIdx);
+
+            const nearby = enPool.getPool(enPoolIdx);
+            const nLen = enPool.getCount(enPoolIdx);
+
+            for (let i = 0; i < nLen; i++) {
+                const e = nearby[i];
+                if (!e || e.deathState !== EnemyDeathState.ALIVE) continue;
+
+                const ePos = e.mesh.position;
+                this.checkBuoyancy(ePos.x, ePos.y, ePos.z, now);
+                if (_buoyancyResult.inWater) {
+                    if (!e.mesh.userData.lastWaterPos) e.mesh.userData.lastWaterPos = ePos.clone();
+                    const dSq = ePos.distanceToSquared(e.mesh.userData.lastWaterPos);
+
+                    if (dSq > 0.49) {
+                        const isBoss = (e.statusFlags & EnemyFlags.BOSS) !== 0;
+                        const rippleStrength = isBoss ? 2.0 : 0.6; // High strength triggers geyser in water shader
+                        this.spawnRipple(ePos.x, ePos.z, now, rippleStrength);
+
+                        if (this.spawnParticleCb && Math.random() < (isBoss ? 0.8 : 0.3)) {
+                            this.spawnParticleCb(ePos.x, _buoyancyResult.waterLevel, ePos.z, FXParticleType.SPLASH, isBoss ? 5 : 1);
+                        }
+                        e.mesh.userData.lastWaterPos.copy(ePos);
+                    }
+                }
+            }
         }
     }
 
