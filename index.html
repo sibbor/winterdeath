@@ -3,18 +3,47 @@
 
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Vinterdöd</title>
   <link rel="icon" href="/favicon.ico" />
   <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#050505" />
 
-  <!-- iOS PWA Support -->
+  <!-- Mobile & PWA Support -->
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Vinterdöd" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
   <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
   <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
+
+  <!-- Diagnostic Mobile Error Overlay -->
+  <script>
+    (function() {
+      function showErr(msg) {
+        var errDiv = document.getElementById('on-screen-error-log');
+        if (!errDiv) {
+          errDiv = document.createElement('div');
+          errDiv.id = 'on-screen-error-log';
+          errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:rgba(180,0,0,0.95);color:#fff;padding:10px 14px;font-family:monospace;font-size:11px;word-break:break-all;max-height:40vh;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,0.8);border-bottom:2px solid #ff4444;';
+          if (document.body) document.body.appendChild(errDiv);
+          else window.addEventListener('DOMContentLoaded', function() { document.body.appendChild(errDiv); });
+        }
+        var item = document.createElement('div');
+        item.style.marginBottom = '4px';
+        item.textContent = msg;
+        errDiv.appendChild(item);
+      }
+      window.addEventListener('error', function(e) {
+        showErr('[ERROR] ' + (e.message || e.reason) + ' (' + (e.filename || '').split('/').pop() + ':' + (e.lineno || '?') + ')');
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        var reason = e.reason ? (e.reason.message || e.reason) : 'Unknown Promise Rejection';
+        showErr('[UNHANDLED PROMISE] ' + reason);
+      });
+    })();
+  </script>
 
   <style>
     /* Force hide cursor everywhere */
